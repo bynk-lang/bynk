@@ -6274,7 +6274,7 @@ fn validate_handler_annotations(
                 // be stored is not only a `GET`'s. Another protocol, or an agent, has no
                 // response to stamp, so it stays `cache_on_non_get`.
                 let is_http = matches!(handler.kind, HandlerKind::Http { .. });
-                if !is_get && !(is_http && handler.cache_no_store()) {
+                if !(is_get || is_http && handler.cache_no_store()) {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_on_non_get",
