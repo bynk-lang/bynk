@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.652.1** | `bynk` reports wrangler's own error, not "Broken pipe", when wrangler exits before reading a piped secret |
 | **v0.652.0** | A `Cron` refinement predicate and the `CronSchedule` type admit exactly Cloudflare's cron syntax; a schedule's fields are now checked, with `bynk.cron.numeric_weekday` and `bynk.cron.uneven_step` warnings |
 | **v0.651.0** | A `Duration` literal uses the singular unit with `1` and the plural otherwise (`1.hour`, `5.hours`), and an unknown unit is `bynk.duration.unknown_unit` |
 | **v0.650.0** | A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`) admits named calling contexts, checked at compile time (`bynk.actor.caller_not_admitted`, `bynk.actor.unknown_context`) and again at the callee (`403`) |

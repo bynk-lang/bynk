@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk` reports wrangler's own error, not "Broken pipe", when wrangler exits before reading a piped secret
----
+# 0904 — A wrangler that exits before reading its piped stdin is reported by its exit, not by the broken pipe
 
-## ADR: wrangler-exit-before-stdin-is-wranglers-failure
-title: A wrangler that exits before reading its piped stdin is reported by its exit, not by the broken pipe
-summary: Wrangler::feed carries on past EPIPE to wrangler's exit and streams
+- **Status:** Accepted (v0.652.1)
 
 **Context.** `bynk deploy` and `bynk migrate` pipe a secret's value to `wrangler secret put` (and the sweep key
 to `secret put`/`delete --name`). When wrangler failed early (auth, config, a bad Worker name) it exited without
