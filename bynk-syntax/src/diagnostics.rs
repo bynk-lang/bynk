@@ -155,6 +155,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   on call bump() -> Effect[Int] {                // ✓ the service in front of it holds the `by`",
     },
     Explain {
+        code: "bynk.actor.caller_not_admitted",
+        blurb: "A refinement over `Caller`, such as `actor Admin = Caller where IsContext(shop.admin)`, names the contexts that may call a service. The compiler sees every call in the project, so a call from any other context is refused here, at the call, before anything is deployed. The wire format still checks the caller at run time (a `403`), because signing keys are per pair of contexts and a caller from before the restriction may still be deployed. In a test, a call-site `by Admin(\"shop.web\")` is checked the same way. Call a service the context may call, or add the context to the actor's `IsContext(…)`.",
+        example: "// shop/billing.bynk\ncontext shop.billing\n\nactor Admin = Caller where IsContext(shop.admin)\n\nservice refunds {\n\x20 on call(id: String) -> Effect[Int] by Admin {\n\x20   Effect.pure(1)\n\x20 }\n}\n\nservice quote {\n\x20 on call(id: String) -> Effect[Int] by Caller {\n\x20   Effect.pure(2)\n\x20 }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes shop.billing\n\nservice place {\n\x20 on call(id: String) -> Effect[Int] by Caller {\n\x20   shop.billing.refunds(id)   // ✗ `shop.orders` is not `shop.admin`\n\x20   shop.billing.quote(id)   // ✓ `quote` admits any consuming context\n\x20 }\n}",
+    },
+    Explain {
         code: "bynk.actor.duplicate_sum_scheme",
         blurb: "Peers in a `by who: A | B` clause are told apart by their authentication scheme, so two peers of the same scheme can't both be reached: the second would never be chosen. Keep one peer per scheme, or fold the two into a single actor. A catch-all peer placed too early is a different mistake, `bynk.actor.unreachable_sum_arm`.",
         example: "type UserId = String where NonEmpty\nactor One { auth = Bearer(secret = \"KEY_A\"), identity = UserId }\nactor Two { auth = Bearer(secret = \"KEY_B\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Two {   // ✗ two `Bearer` peers\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: One | Visitor {   // ✓ one peer per scheme",
@@ -440,6 +445,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                 Fix the spelling, or declare the actor first with `actor Name { auth = … }`.",
         example: "on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitr {     // ✗ no actor of that name\n\n\
                   on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ the prelude actor",
+    },
+    Explain {
+        code: "bynk.actor.unknown_context",
+        blurb: "`IsContext(…)` names the project's own contexts, written as qualified names rather than strings, so that a typo is an error here and not a restriction that silently admits nobody. A name that is no context of the project is usually misspelt, or names a context that was renamed. Foreign callers are not contexts of the project: they have their own `Foreign` actors.",
+        example: "// shop/admin.bynk\ncontext shop.admin\n\nservice audit {\n\x20 on call(id: String) -> Effect[Int] by Caller {\n\x20   Effect.pure(1)\n\x20 }\n}\n\n// shop/billing.bynk\ncontext shop.billing\n\nactor Admin = Caller where IsContext(shop.admn)   // ✗ no such context\n\nactor Admin = Caller where IsContext(shop.admin)   // ✓\n\nservice refunds {\n\x20 on call(id: String) -> Effect[Int] by Admin {\n\x20   Effect.pure(1)\n\x20 }\n}",
     },
     Explain {
         code: "bynk.actor.unknown_scheme",
@@ -4474,7 +4484,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.service.duplicate_call_handler",
-        blurb: "A service with no `from` clause is called by its name, `svc.call(…)`, so it has one entry: exactly one `on call` handler. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
+        blurb: "A service with no `from` clause is a call service with one entry: exactly one `on call` handler, which another context calls by the service's name (`payment.authorise(…)`) and a test addresses as `svc.call(…)`. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
         example: "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] by Caller { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] by Caller { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] by Caller { … }\n}",
     },
     Explain {
@@ -6704,6 +6714,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `by` actor clause was placed on an agent `on call` handler, which has no actor.",
     ),
     d(
+        "bynk.actor.caller_not_admitted",
+        "A call is made from a context the callee's `Caller` refinement does not admit.",
+    ),
+    d(
         "bynk.actor.duplicate_sum_scheme",
         "Two peers in a multi-actor sum share an authentication scheme.",
     ),
@@ -6898,6 +6912,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.unknown_actor",
         "A handler's `by` clause names an actor that is not declared.",
+    ),
+    d(
+        "bynk.actor.unknown_context",
+        "`IsContext(…)` names something that is not a context of the project.",
     ),
     d(
         "bynk.actor.unknown_scheme",

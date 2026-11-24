@@ -766,6 +766,8 @@ pub(super) fn check_unit_files(
             unit_callees.extend(typed.callees.iter().filter_map(|(id, c)| {
                 let keep = match c {
                     bynk_check::checker::Callee::D1Sql(_) => true,
+                    // #3890: the cross-context call edges, for the call-admission phase.
+                    bynk_check::checker::Callee::Cross { .. } => true,
                     bynk_check::checker::Callee::Const(_, site) => site.is_some(),
                     // #3355: an inbound email handler's `Forward(...)`.
                     bynk_check::checker::Callee::Ctor { sum, tag } => {

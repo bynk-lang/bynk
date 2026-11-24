@@ -297,6 +297,10 @@ pub fn complete_in(
     if is_constraint_position(line_prefix) {
         return constraint_candidates();
     }
+    // 4g'. #3890: `actor A = Caller where <cursor>` — the `Caller` predicate.
+    if is_caller_refinement_where(line_prefix) {
+        return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
+    }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
     // (#472) a match arm's `_ where <cursor>`; both reuse the same closed
@@ -1712,6 +1716,13 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
     };
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
+}
+
+/// #3890: the cursor follows `where` in an `actor <Name> = Caller where …`
+/// refinement, whose predicate is `IsContext(…)` (not the type predicates).
+fn is_caller_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Caller where")
 }
 
 /// v0.124 (slice 3): the cursor is completing the argument to a leading clause

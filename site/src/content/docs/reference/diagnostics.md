@@ -17,6 +17,7 @@ There are **904** codes in total. Every code is an error unless it is marked **W
 - [`bynk.actor.bearer_missing_secret`](/reference/diagnostics/bynk.actor.bearer_missing_secret/) — A `Bearer` actor does not name its signing secret.
 - [`bynk.actor.binder_shadows_param`](/reference/diagnostics/bynk.actor.binder_shadows_param/) — A `by` actor binder collides with a handler parameter of the same name.
 - [`bynk.actor.by_on_agent`](/reference/diagnostics/bynk.actor.by_on_agent/) — A `by` actor clause was placed on an agent `on call` handler, which has no actor.
+- [`bynk.actor.caller_not_admitted`](/reference/diagnostics/bynk.actor.caller_not_admitted/) — A call is made from a context the callee's `Caller` refinement does not admit.
 - [`bynk.actor.duplicate_sum_scheme`](/reference/diagnostics/bynk.actor.duplicate_sum_scheme/) — Two peers in a multi-actor sum share an authentication scheme.
 - [`bynk.actor.foreign_context_name_unkeyable`](/reference/diagnostics/bynk.actor.foreign_context_name_unkeyable/) — A context declaring a `Foreign` actor has a name no call key can be named from.
 - [`bynk.actor.foreign_duplicate_secret`](/reference/diagnostics/bynk.actor.foreign_duplicate_secret/) — A `Foreign` actor's secret is also another actor's secret in the same context.
@@ -66,6 +67,7 @@ There are **904** codes in total. Every code is an error unless it is marked **W
 - [`bynk.actor.signed_cookie_write_literal`](/reference/diagnostics/bynk.actor.signed_cookie_write_literal/) — An untyped `Cookie` literal is named like a `SignedCookie` actor's session cookie.
 - [`bynk.actor.sum_requires_binder`](/reference/diagnostics/bynk.actor.sum_requires_binder/) — A multi-actor sum `by` clause has no binder to match the resolved actor.
 - [`bynk.actor.unknown_actor`](/reference/diagnostics/bynk.actor.unknown_actor/) — A handler's `by` clause names an actor that is not declared.
+- [`bynk.actor.unknown_context`](/reference/diagnostics/bynk.actor.unknown_context/) — `IsContext(…)` names something that is not a context of the project.
 - [`bynk.actor.unknown_scheme`](/reference/diagnostics/bynk.actor.unknown_scheme/) — An actor declares an authentication scheme that is not compiler-known.
 - [`bynk.actor.unreachable_sum_arm`](/reference/diagnostics/bynk.actor.unreachable_sum_arm/) — A multi-actor sum has an arm unreachable after a catch-all (`None`) peer.
 

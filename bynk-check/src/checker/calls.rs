@@ -4947,6 +4947,10 @@ fn resolve_actor_identity(name: &str, ctx: &Ctx) -> ActorIdentity {
     let tys = ctx.tys;
     use crate::actors::{Identity, prelude_actor};
     if let Some(decl) = ctx.test_actors.get(name) {
+        // #3890: a refinement over the prelude `Caller` carries a `CallerId`.
+        if crate::actors::caller_refinement(decl, &ctx.test_actors).is_some() {
+            return ActorIdentity::CallerString;
+        }
         // #2019: a refinement (`actor Admin = User where …`) narrows its base by
         // a claim and inherits the base's identity: the Worker's Bearer seam
         // follows the refinement to its base and mints the base identity
@@ -5309,6 +5313,10 @@ pub(crate) fn check_effect_let_principal(
         return;
     }
 
+    if let Some(p) = principal {
+        check_principal_admitted(&handler, p, ctx);
+    }
+
     // #2020: a sum (`by who: User | Visitor`) runs as whichever member
     // resolves, so the case may act as any member, each with its own identity.
     if let Some(by) = handler.by_clause.as_ref().filter(|by| by.is_sum()) {
@@ -5519,9 +5527,57 @@ fn handler_binds_caller(handler: &TestHandler, ctx: &Ctx) -> bool {
     let name = &by.primary().name;
     matches!(handler.kind, bynk_syntax::ast::HandlerKind::Call)
         && !by.is_sum()
-        && !ctx.test_actors.contains_key(name)
-        && prelude_actor(name).map(|c| c.identity) == Some(Identity::CallerId)
+        && (!ctx.test_actors.contains_key(name)
+            && prelude_actor(name).map(|c| c.identity) == Some(Identity::CallerId)
+            // #3890: a refinement over `Caller` binds the same `CallerId`.
+            || ctx.test_actors.get(name).is_some_and(|d| {
+                crate::actors::caller_refinement(d, &ctx.test_actors).is_some()
+            }))
         && !handler.params.iter().any(|p| p.name.name == binder.name)
+}
+
+/// #3890: a call-site `by <Actor>("<context>")` names a calling context. When the
+/// handler's actor, or the named one, is a refinement over `Caller` whose
+/// predicate refuses that context, the case could never be admitted:
+/// `bynk.actor.caller_not_admitted`, as at a call site in the program.
+fn check_principal_admitted(
+    handler: &TestHandler,
+    p: &bynk_syntax::ast::CallSiteActor,
+    ctx: &mut Ctx,
+) {
+    let Some(idv) = &p.identity else {
+        return;
+    };
+    let ExprKind::StrLit(context) = &idv.kind else {
+        return;
+    };
+    let mut names = vec![p.actor.name.clone()];
+    if let Some(by) = handler.by_clause.as_ref().filter(|by| !by.is_sum()) {
+        names.push(by.primary().name.clone());
+    }
+    names.dedup();
+    for name in names {
+        let Some(pred) = ctx
+            .test_actors
+            .get(&name)
+            .and_then(|d| crate::actors::caller_refinement(d, &ctx.test_actors))
+        else {
+            continue;
+        };
+        if !pred.admits(context) {
+            ctx.errors.push(
+                CompileError::new(
+                    "bynk.actor.caller_not_admitted",
+                    idv.span,
+                    format!("`{name}` does not admit calls from `{context}`"),
+                )
+                .with_note(format!(
+                    "the actor is `Caller` refined by `IsContext(…)`, which names the contexts that may call; this case names `{context}`"
+                )),
+            );
+            return;
+        }
+    }
 }
 
 /// Resolve a call-site principal actor for its own diagnostics (v0.182).

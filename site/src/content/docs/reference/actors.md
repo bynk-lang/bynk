@@ -234,14 +234,29 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   their own context, so they name no caller.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.
   Peers are distinguished by scheme (no duplicates), a `None` catch-all is last,
-  refinements are not members, and total failure is `401`. On `call`, a sum
-  admits a Bynk context (`Caller`) and declared foreign callers, each told apart
-  by name: `by who: Caller | Legacy | Ledger`. Several `Foreign` peers may share
-  a sum; each has its own secret.
+  `Bearer` refinements are not members, and total failure is `401`. On `call`, a
+  sum admits a Bynk context (`Caller`, or one refinement over it) and declared
+  foreign callers, each told apart by name: `by who: Caller | Legacy | Ledger`.
+  A sum has at most one `Internal` member (`bynk.actor.duplicate_sum_scheme`).
+  Several `Foreign` peers may share a sum; each has its own secret.
 - **Refinement actors** (`<Admin> = <User> where <pred>`) add an authorisation
   invariant over a `Bearer` base: scheme failure is `401`, predicate failure is
   `403`. The predicate is a closed set — `hasClaim("n")`, `claimEquals("n","v")`,
   composed with `&&`/`||`/`!`. An `Admin` is usable wherever its base is.
+  `Caller` is a refinement base too, with its own predicate (next bullet).
+- **Refinements over `Caller`** (`actor Admin = Caller where IsContext(shop.admin)`)
+  name the contexts that may call a service. `IsContext(<context>, …)` takes one
+  or more qualified context names, written as names rather than strings; each
+  must be a context of the project (`bynk.actor.unknown_context`). The
+  predicate is admissible only over `Caller` (`hasClaim` and `claimEquals` stay
+  `Bearer`'s, and `IsContext` over a `Bearer` actor is
+  `bynk.actor.refinement_predicate_unsupported`), and composes with `&&`, `||`
+  and `!`, so `!IsContext(shop.legacy)` is a deny-list. The refinement inherits
+  `Caller`'s scheme, its identity (`CallerId`) and its admissibility (`on call`
+  only). A call from a context it does not admit is
+  `bynk.actor.caller_not_admitted` at the call, in a case's `by Admin("…")` too;
+  the callee also answers such a call `403` (wire format check 6). See
+  [Restrict who may call](/book/guides/actors/cross-context-callers/#restrict-who-may-call).
 - **`Caller`** (on `on call`) yields the calling context's qualified name as
   `CallerId`. It admits Bynk contexts only: a foreign caller is admitted by its
   own actor, never by `Caller`, so a handler that names only `Caller` refuses
@@ -262,6 +277,7 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
 All `bynk.actor.*` codes are in the [diagnostic index](/reference/diagnostics/) — among
 them `missing_by_on_http`, `scheme_not_admissible`, `signature_requires_body`,
 `sum_requires_binder`, `duplicate_sum_scheme`, `unreachable_sum_arm`,
+`caller_not_admitted`, `unknown_context`,
 `refinement_base_unsupported`, `refinement_predicate_unsupported`,
 `oidc_missing_issuer`, `oidc_missing_audience`, `oidc_missing_jwks`,
 `oidc_identity_not_string_constructible`, `oidc_not_in_sum`,

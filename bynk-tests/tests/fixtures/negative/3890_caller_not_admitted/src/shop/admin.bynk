@@ -1,0 +1,7 @@
+context shop.admin
+
+service refund {
+  on call(id: String) -> Effect[Result[String, String]] by Caller {
+    Ok(id)
+  }
+}

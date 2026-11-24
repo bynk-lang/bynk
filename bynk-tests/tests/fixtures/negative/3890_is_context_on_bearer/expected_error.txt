@@ -1,0 +1,2 @@
+bynk.actor.refinement_predicate_unsupported
+a refinement predicate must be

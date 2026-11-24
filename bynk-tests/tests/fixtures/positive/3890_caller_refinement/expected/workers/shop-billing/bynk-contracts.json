@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "provides": {
+    "book": "d2ffe9d089a8381d",
+    "refunds": "84d7a2e7ac0ea079",
+    "ship": "3055a7305438dd37",
+    "status": "226b9939f85e69ea"
+  },
+  "expects": {},
+  "foreign": {
+    "Ledger": {
+      "book": "d2ffe9d089a8381d"
+    }
+  },
+  "provides_shapes": {
+    "book": "Svc(\"book\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))",
+    "refunds": "Svc(\"refunds\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))",
+    "ship": "Svc(\"ship\",P(\"order\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))",
+    "status": "Svc(\"status\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  }
+}

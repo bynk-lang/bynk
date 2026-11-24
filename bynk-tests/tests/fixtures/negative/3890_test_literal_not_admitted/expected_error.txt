@@ -1,0 +1,2 @@
+bynk.actor.caller_not_admitted
+`Admin` does not admit calls from `shop.orders`
