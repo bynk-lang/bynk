@@ -31,6 +31,8 @@ checked separately). A `package.json` carrying adapter dependencies is compared.
 - **Positive** fixtures compare emitted files byte-for-byte against `expected/`
   (or `expected.ts`), trailing newlines included. A file that differs only in
   trailing whitespace fails like any other difference; the failure says so.
+  Standard-library and test-runtime regions are the exception to "in the
+  fixture": see [Shared snapshots](#shared-snapshots).
 - **Negative** fixtures match by **substring**: each non-blank, non-`#` line of
   `expected_error.txt` must appear somewhere in the concatenated
   `"{code} {message}"` of the diagnostics. So a line is usually just a code, e.g.
@@ -70,13 +72,49 @@ set, it recompiles each positive fixture and overwrites `expected/`. **Always
 review the resulting diff** — blessing is how a regression silently becomes the
 new "expected" if you are not careful. A project fixture's `expected/` is
 deleted and rewritten, so a bless also removes the goldens of files the emitter
-no longer writes. Because the comparison is byte-exact, a bless leaves the tree
+no longer writes. The same bless rewrites `tests/fixtures/shared/` (see
+[Shared snapshots](#shared-snapshots)). Because the comparison is byte-exact, a bless leaves the tree
 clean unless emission actually changed, in content or in which files are
 emitted.
 
 `BYNK_BLESS` is the project's shared regenerate switch: the same run also
 refreshes the generated reference pages (see [Working on the docs](/project/contributing/documentation/)).
 Scope it to a specific test when you only mean to bless one thing.
+
+## Shared snapshots
+
+Some of a fixture's emitted output is not the fixture's own: the standard
+library's adapters and commons (`bynk.ts`, `bynk-cloudflare.ts`, `bynk/**`) and
+the test runtime spliced into every `tests/*.test.ts`. Copying them into each
+`expected/` meant a one-line change to `bynk.bynk` or to
+`bynk-emit/runtime/src/testing/expectation.ts` rewrote hundreds of snapshots, and
+made every open PR that added a fixture stale.
+
+In `expected/`, such a region is a single marker line naming the shared module,
+with no content hash:
+
+```text
+<<bynk-shared: std/bynk.ts#bytes+errors+result>>
+<<bynk-shared: testing/expectation>>
+```
+
+The region itself lives once under `bynk-tests/tests/fixtures/shared/`. The
+harness still checks every emitted byte: the region a fixture really emits must be
+identical to that shared snapshot, and the rest of the file must match the
+fixture's own snapshot. The emitter's output, and the output fixtures run, are
+unchanged. A bless writes each shared snapshot once, and fails if two fixtures
+emit different bytes for the same module and variant.
+
+- A std adapter or commons is a whole file, found by its emitted path and header.
+  Its variant is the sorted set of `__bynk_runtime/*` modules it imports (the
+  emitter prunes per project). Adding or removing such an import renames the
+  variant, which re-blesses the fixtures that use it.
+- A test-runtime fragment has no emitted delimiter, so it is found by exact match of
+  `bynk-emit/src/testgen/test_runtime/<name>.ts`. A changed or partial copy is not
+  elided and fails the comparison with a full diff.
+
+So changing `bynk.bynk` or a test-runtime module re-blesses its shared snapshot
+only, plus any fixture whose own output changed.
 
 ## The `tsc` verification gate
 
