@@ -5,7 +5,7 @@ capability Net {
 }
 
 service s {
-  on call() -> Effect[()] given Net {
+  on call() -> Effect[()] by Caller given Net {
     par {
       do Net.send()
     }

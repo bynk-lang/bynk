@@ -5,7 +5,7 @@ capability Logger {
 }
 
 service noisy {
-    on call() -> Effect[()] {
+    on call() -> Effect[()] by Caller {
         Logger.log("hi")
     }
 }

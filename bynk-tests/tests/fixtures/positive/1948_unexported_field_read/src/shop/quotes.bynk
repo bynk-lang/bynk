@@ -9,13 +9,13 @@ type Box = { a: Amount }
 type Wrap = { inner: Amount }
 
 service quote {
-  on call() -> Effect[Box] {
+  on call() -> Effect[Box] by Caller {
     Effect.pure(Box { a: Amount { cents: 1 } })
   }
 }
 
 service wrap {
-  on call() -> Effect[Wrap] {
+  on call() -> Effect[Wrap] by Caller {
     Effect.pure(Wrap { inner: Amount { cents: 2 } })
   }
 }

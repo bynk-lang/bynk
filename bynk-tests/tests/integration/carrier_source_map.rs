@@ -53,12 +53,12 @@ service sweeper from cron {
   ---
   Every five minutes.
   ---
-  on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+  on schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
     let _ <- Wallet(\"a\").topUp(1)
     Ok(())
   }
 
-  on schedule(\"0 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+  on schedule(\"0 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
     let _ <- Wallet(\"b\").spend(1)
     Ok(())
   }

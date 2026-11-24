@@ -1,7 +1,7 @@
 context demo.svc
 
 service echo {
-  on call(message: String) -> Effect[String] {
+  on call(message: String) -> Effect[String] by Caller {
     Effect.pure(message)
   }
 }

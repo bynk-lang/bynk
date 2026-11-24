@@ -5,7 +5,7 @@ context demo
 consumes bynk.cloudflare { AnalyticsSql }
 
 service s {
-	on call() -> Effect[Int] given AnalyticsSql {
+	on call() -> Effect[Int] by Caller given AnalyticsSql {
 		let r <- AnalyticsSql.query("SELECT 1", [])
 		match r {
 			Ok(res) => Effect.pure(res.rows),

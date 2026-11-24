@@ -11,7 +11,7 @@ type Status = enum { Open, Closed }
 type Plain = { id: String }
 
 service probe {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let a <- Orders.select[Order]("FROM orders", [])
     let b <- Orders.select[Status]("FROM orders", [])
     let c <- Orders.select[List[Plain]]("FROM orders", [])

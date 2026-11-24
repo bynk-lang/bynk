@@ -1,7 +1,7 @@
 context shop.payment
 
 service charge {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
         Effect.pure(0)
     }
 }

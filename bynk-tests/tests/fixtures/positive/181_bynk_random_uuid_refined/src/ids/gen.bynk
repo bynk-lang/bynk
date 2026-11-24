@@ -3,7 +3,7 @@ context ids.gen
 consumes bynk { Random, Uuid }
 
 service generate {
-  on call() -> Effect[Uuid] given Random {
+  on call() -> Effect[Uuid] by Caller given Random {
     let id <- Random.uuid()
     id
   }

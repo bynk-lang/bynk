@@ -7,7 +7,7 @@ fn stamp() -> Effect[Int] given platform.time.Clock {
 }
 
 service tick {
-  on call() -> Effect[Int] given platform.time.Clock {
+  on call() -> Effect[Int] by Caller given platform.time.Clock {
     let t <- stamp()
     t
   }

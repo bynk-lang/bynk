@@ -14,7 +14,7 @@ provides Stamp = ClockStamp given Clock {
 }
 
 service ordering {
-  on call(sku: String) -> Effect[Int] given Stamp {
+  on call(sku: String) -> Effect[Int] by Caller given Stamp {
     let placedAt <- Stamp.make()
     placedAt
   }

@@ -19,7 +19,7 @@ agent Ledger {
 }
 
 service place {
-  on call(id: String, cents: Int) -> Effect[Result[Int, OrderError]] {
+  on call(id: String, cents: Int) -> Effect[Result[Int, OrderError]] by Caller {
     let a <- Pay.authorise(cents)
     match a {
       Ok(_)  => {

@@ -23,13 +23,13 @@ provides Stamp = FeeStamp given Fees.Fees {
 }
 
 service charge {
-  on call() -> Effect[Int] given Fees.Fees {
+  on call() -> Effect[Int] by Caller given Fees.Fees {
     Fees.Fees.fee()
   }
 }
 
 service stamp {
-  on call() -> Effect[Int] given Stamp {
+  on call() -> Effect[Int] by Caller given Stamp {
     Stamp.next()
   }
 }
@@ -48,7 +48,7 @@ agent Till {
 }
 
 service till {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Till("t").add()
   }
 }
@@ -56,7 +56,7 @@ service till {
 // #1864 review: a first-party capability named with a prefix, not
 // flattened (`consumes bynk { Clock }`), gets its test double too.
 service clock {
-  on call() -> Effect[Int] given B.Clock {
+  on call() -> Effect[Int] by Caller given B.Clock {
     let _ <- B.Clock.now()
     Effect.pure(1)
   }
@@ -65,7 +65,7 @@ service clock {
 // #1864 review: `Rates` is given here directly as well as to `Fees`'s
 // provider, so both are locals of the test deps, `Rates` declared first.
 service rate {
-  on call() -> Effect[Int] given Rates.Rates {
+  on call() -> Effect[Int] by Caller given Rates.Rates {
     Rates.Rates.rate()
   }
 }

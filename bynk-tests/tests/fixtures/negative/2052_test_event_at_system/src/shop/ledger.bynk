@@ -10,7 +10,7 @@ service OnPlaced from Events(Placed) {
 }
 
 service audit {
-  on call(id: String) -> Effect[()] {
+  on call(id: String) -> Effect[()] by Caller {
     ()
   }
 }

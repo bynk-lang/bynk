@@ -23,7 +23,7 @@ type Counter = { count: Int }
   }
 
 service announce {
-      on call(message: String) -> Effect[()] given Logger {
+      on call(message: String) -> Effect[()] by Caller given Logger {
         let _ <- Logger.log(message)
     Effect.pure(())
   }

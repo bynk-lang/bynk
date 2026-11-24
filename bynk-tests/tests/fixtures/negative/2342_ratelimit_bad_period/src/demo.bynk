@@ -6,7 +6,7 @@ consumes bynk.cloudflare { RateLimit }
 capability LoginLimit = RateLimit @limit(10) @period(30.seconds)
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

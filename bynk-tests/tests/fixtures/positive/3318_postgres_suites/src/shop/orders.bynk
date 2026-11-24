@@ -11,21 +11,21 @@ consumes bynk.cloudflare { Postgres, PgError, PgValue, PgRun }
 capability Main = Postgres
 
 service add {
-	on call(name: String) -> Effect[Result[PgRun, PgError]] given Main {
+	on call(name: String) -> Effect[Result[PgRun, PgError]] by Caller given Main {
 		Main.run("insert into orders (name) values ($1)", [PgText(name)])
 	}
 
 }
 
 service list {
-	on call() -> Effect[Result[String, PgError]] given Main {
+	on call() -> Effect[Result[String, PgError]] by Caller given Main {
 		Main.all("select id, name from orders where id > $1", [PgInteger(0)])
 	}
 
 }
 
 service find {
-	on call(id: Int) -> Effect[Result[Option[String], PgError]] given Main {
+	on call(id: Int) -> Effect[Result[Option[String], PgError]] by Caller given Main {
 		Main.first("select name from orders where id = $1", [PgInteger(id)])
 	}
 }

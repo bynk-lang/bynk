@@ -4,5 +4,5 @@ context shop.orders
 consumes shop.payment as Payment
 
 service place {
-  on call(qty: Int) -> Effect[Bool] { Payment.authorise(qty) }
+  on call(qty: Int) -> Effect[Bool] by Caller { Payment.authorise(qty) }
 }

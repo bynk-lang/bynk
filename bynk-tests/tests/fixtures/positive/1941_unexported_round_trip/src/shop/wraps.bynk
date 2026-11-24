@@ -11,13 +11,13 @@ type Coins = { cents: Int }
 type Parcel = { c: Coins }
 
 service wrap {
-  on call() -> Effect[Parcel] {
+  on call() -> Effect[Parcel] by Caller {
     Effect.pure(Parcel { c: Coins { cents: 2 } })
   }
 }
 
 service open {
-  on call(p: Parcel) -> Effect[Int] {
+  on call(p: Parcel) -> Effect[Int] by Caller {
     Effect.pure(p.c.cents)
   }
 }

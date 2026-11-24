@@ -158,9 +158,9 @@ export function __makeBasket(key: string, env?: { BASKET?: __DurableObjectNamesp
 
 export const basket = {
   async call(id: string, deps: {}): globalThis.Promise<string> {
-    const __letElse1589 = await __makeBasket(id).current(deps);
-    const sku = __letElse1589.sku;
-    const qty = __letElse1589.qty;
+    const __letElse1599 = await __makeBasket(id).current(deps);
+    const sku = __letElse1599.sku;
+    const qty = __letElse1599.qty;
     return `${String(sku)}:${String(qty)}`;
   },
 };

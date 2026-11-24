@@ -9,13 +9,13 @@ type Amount = { cents: Int }
 type Box = { a: Amount }
 
 service quote {
-  on call() -> Effect[Box] {
+  on call() -> Effect[Box] by Caller {
     Effect.pure(Box { a: Amount { cents: 1 } })
   }
 }
 
 service echo {
-  on call(b: Box) -> Effect[Int] {
+  on call(b: Box) -> Effect[Int] by Caller {
     Effect.pure(b.a.cents)
   }
 }

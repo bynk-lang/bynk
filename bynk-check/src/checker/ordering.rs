@@ -91,6 +91,9 @@ pub(crate) enum OrdSite<'a> {
     Operator(&'a str),
     /// A `List` or `Query` ordering kernel's key (`sortBy`, `min`, `max`).
     Key(&'a str),
+    /// #3962: a keyless `List` ordering kernel (`sort()`, `min()`, `max()`), which
+    /// orders the element itself.
+    Element(&'a str),
     /// A call to an `Ord`-bounded callee: `callee` requires `param: Ord`.
     Call { callee: &'a str, param: &'a str },
 }
@@ -106,6 +109,7 @@ pub(crate) fn check_ord(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite) -> 
     let clause = match site {
         OrdSite::Operator(op) => format!("operator `{op}` orders values of this type"),
         OrdSite::Key(method) => format!("`{method}` orders by this key"),
+        OrdSite::Element(method) => format!("`{method}` orders the elements"),
         OrdSite::Call { callee, param } => format!("`{callee}` requires `{param}: Ord`"),
     };
     require_ord_vars(ctx, ty, span, &clause)
@@ -122,6 +126,10 @@ fn report_not_orderable(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite, blo
         OrdSite::Key(method) => (
             "bynk.types.key_not_orderable",
             format!("`{method}` needs an orderable key, but the key function returns `{shown}`"),
+        ),
+        OrdSite::Element(method) => (
+            "bynk.types.not_orderable",
+            format!("`{method}` needs an orderable element type, but `{shown}` is not"),
         ),
         OrdSite::Call { callee, param } => (
             "bynk.types.not_orderable",

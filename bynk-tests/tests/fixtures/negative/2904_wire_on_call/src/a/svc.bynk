@@ -7,7 +7,7 @@ service api from http {
 }
 
 service save {
-  on call(key: String) -> Effect[Int] {
+  on call(key: String) -> Effect[Int] by Caller {
     key.length()
   }
 }

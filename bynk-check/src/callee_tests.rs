@@ -429,7 +429,7 @@ consumes bynk { Idempotency, Claim, Events }
 event Seen = { id: String }
 
 service api {
-  on call(id: String) -> Effect[()] given Idempotency, Events {
+  on call(id: String) -> Effect[()] by Caller given Idempotency, Events {
     let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Effect.pure(()) }
     Events.emit[Seen](Seen { id: id })
   }
@@ -462,7 +462,7 @@ fn a_same_named_non_first_party_capability_is_not_first_party() {
 consumes vendor { Idempotency, Events }
 
 service reserve {
-  on call() -> Effect[Bool] given Idempotency, Events {
+  on call() -> Effect[Bool] by Caller given Idempotency, Events {
     let _ <- Events.emit("order")
     Idempotency.claim("order-key-1")
   }
@@ -493,7 +493,7 @@ fn a_qualified_capability_call_is_first_party_only_for_bynk() {
 consumes vendor
 
 service reserve {
-  on call() -> Effect[Bool] given vendor.Idempotency {
+  on call() -> Effect[Bool] by Caller given vendor.Idempotency {
     vendor.Idempotency.claim("order-key-1")
   }
 }
@@ -518,7 +518,7 @@ fn a_qualified_call_on_bynks_own_idempotency_is_first_party() {
 consumes bynk
 
 service api {
-  on call(id: String) -> Effect[()] given bynk.Idempotency {
+  on call(id: String) -> Effect[()] by Caller given bynk.Idempotency {
     let _ <- bynk.Idempotency.dedup[String](id)
     Effect.pure(())
   }
@@ -545,7 +545,7 @@ fn bynks_other_capabilities_have_no_first_party_identity() {
 consumes bynk { Random }
 
 service api {
-  on call() -> Effect[Int] given Random {
+  on call() -> Effect[Int] by Caller given Random {
     Random.int(0, 10)
   }
 }
@@ -577,7 +577,7 @@ const JOBS: &str = r#"context cr.jobs
 type Delivery = { id: String }
 
 service worker from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+  on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
     Ok(())
   }
 }
@@ -598,7 +598,7 @@ service api from http {
 }
 
 service calc {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n
   }
 }
@@ -614,7 +614,7 @@ fn each_test_service_address_records_its_typed_form() {
                 "tests/jobs.bynk",
                 r#"suite cr.jobs as integration {
   case "every address" {
-    let a <- worker.schedule("*/5 * * * *", 960000)
+    let a <- worker.schedule("*/5 * * * *", Instant.fromEpochMillis(960000))
     let b <- deliveries.message(Delivery { id: "c" })
     let c <- api.GET("/count") by Visitor
     let d <- api.POST("/items", 3) by Visitor
@@ -801,7 +801,7 @@ fn run_id_records_the_test_run_intrinsic() {
     let a = analyse(&[
         (
             "shop/ledger.bynk",
-            "context shop.ledger\n\nservice s {\n  on call() -> Effect[Int] { 1 }\n}\n",
+            "context shop.ledger\n\nservice s {\n  on call() -> Effect[Int] by Caller { 1 }\n}\n",
         ),
         (
             "tests/ledger.bynk",
@@ -889,7 +889,7 @@ fn only_bynks_own_events_emit_counts_as_an_emit() {
         ("vendor.binding.ts", OTHER_BINDING),
         (
             "demo/orders.bynk",
-            "context demo.orders\n\nconsumes vendor { Events }\n\nservice reserve {\n  on call() -> Effect[()] given Events {\n    Events.emit(\"order\")\n  }\n}\n",
+            "context demo.orders\n\nconsumes vendor { Events }\n\nservice reserve {\n  on call() -> Effect[()] by Caller given Events {\n    Events.emit(\"order\")\n  }\n}\n",
         ),
     ]);
     other.assert_clean();
@@ -901,7 +901,7 @@ fn only_bynks_own_events_emit_counts_as_an_emit() {
 
     let own = analyse(&[(
         "shop/hooks.bynk",
-        "context shop.hooks\n\nconsumes bynk { Events }\n\nevent Seen = { id: String }\n\nservice api {\n  on call(id: String) -> Effect[()] given Events {\n    Events.emit[Seen](Seen { id: id })\n  }\n}\n",
+        "context shop.hooks\n\nconsumes bynk { Events }\n\nevent Seen = { id: String }\n\nservice api {\n  on call(id: String) -> Effect[()] by Caller given Events {\n    Events.emit[Seen](Seen { id: id })\n  }\n}\n",
     )]);
     own.assert_clean();
     assert!(own.callees_in("shop.hooks").iter().any(is_events_emit));

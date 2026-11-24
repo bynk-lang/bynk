@@ -4,7 +4,7 @@ context club.front
 consumes club.roster
 
 service count {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let all <- club.roster.members(Set.of(["cy", "ada"]))
     all.length()
   }

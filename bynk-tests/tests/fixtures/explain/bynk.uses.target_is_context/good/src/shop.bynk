@@ -3,7 +3,7 @@ context shop
 consumes pay
 
 service checkout {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
         Effect.pure(1)
     }
 }

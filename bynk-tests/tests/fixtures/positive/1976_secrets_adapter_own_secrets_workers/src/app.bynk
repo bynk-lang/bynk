@@ -3,7 +3,7 @@ context app
 consumes vault { Greeter }
 
 service welcome {
-	on call(name: String) -> Effect[String] given Greeter {
+	on call(name: String) -> Effect[String] by Caller given Greeter {
 		let s <- Greeter.hello(name)
 		s
 	}

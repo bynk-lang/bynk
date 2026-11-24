@@ -3,7 +3,7 @@ context v
 type Link[T] = { value: T, next: Option[Link[T]] }
 
 service s {
-	on call(l: Link[Int]) -> Effect[Int] {
+	on call(l: Link[Int]) -> Effect[Int] by Caller {
 		Effect.pure(0)
 	}
 }

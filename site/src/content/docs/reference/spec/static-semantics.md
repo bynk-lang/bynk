@@ -1852,8 +1852,8 @@ MUST supply the same two arguments, with the same codes and result. Constructing
 `RawTagged` MUST supply exactly three — a
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time
-([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. An cron handler MUST take at most one
-`Int` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
+([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. A cron handler MUST take at most one
+`Instant` parameter, a valid five-field schedule, and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
@@ -2292,10 +2292,14 @@ and `call` admits `Foreign` too (`bynk.actor.scheme_not_admissible`). In a sum,
 apart by name. A `Signature` handler MUST take a `body`
 parameter — the signature is computed over the request body, so a bodyless signed
 request is meaningless (`bynk.actor.signature_requires_body`). A handler that
-omits `by` inherits its protocol's default actor; an **HTTP handler has no safe
-default and MUST declare `by`** (`bynk.actor.missing_by_on_http`).
+omits `by` inherits its service header's default, else its protocol's default
+actor (cron `Scheduler`, queue `Producer`, email `Sender`); an **HTTP handler has
+no safe default and MUST declare `by`** (`bynk.actor.missing_by_on_http`), as MUST
+a WebSocket `on open` and a service's **`on call`** handler
+(`bynk.actor.missing_by_on_call`, which supersedes the earlier silent `Caller`
+default). An agent's `on call` operations are unaffected.
 
-The `Caller` prelude actor (the `on call` default) yields a **live `CallerId`**
+The `Caller` prelude actor (the explicit "any consuming context" for `on call`) yields a **live `CallerId`**
 (v0.54): a cross-context `on call … by c: Caller (…)` handler binds `c.identity`
 to the **calling context's qualified name**, established at the boundary over the
 internal Service Binding before the body runs. The name is proved by the call's
@@ -2634,8 +2638,8 @@ In a `system`-tier `case`, a `svc.schedule("…", …)` address runs the cron
 handler through the participant Worker's `scheduled` entry point and yields the
 handler's `Result`, and a `svc.message(m)` address delivers `m`, after a JSON
 round trip, through its `queue` entry point and yields `Ack` or `Retry(reason)`
-as the consumer acknowledged or retried it. The scheduled time is required when
-the handler declares it, as at the other tiers.
+as the consumer acknowledged or retried it. The scheduled time, an `Instant`, is
+required when the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` presents the acting actor's
 credential: a signed token for a Bearer actor, a signature for a `Signature`
@@ -3134,9 +3138,10 @@ the same combinator names a lazy storage `Query[T]` will carry. **Ordering keys*
 (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a storage `Query`, are any `Ord` type
 (§5.2) — else `bynk.types.key_not_orderable`. **`sortByDescending`** orders the largest key first;
 it is the exact reverse of the ascending order (so a `Float` `NaN` is first, §5.2), but stable:
-equal keys keep input order. **Numeric keys**
-(`sum`/`average`) are `Int`/`Float`/`Duration` (not `Instant` — instants are not
-summable), else `bynk.query.sum_needs_numeric`;
+equal keys keep input order. **Numeric keys**:
+`sum` takes `Int`, `Float`, `Duration` or `Decimal` keys, and `average` takes `Int`, `Float` or `Duration`
+(not `Instant` — instants are not summable; and not `Decimal`, because a mean needs a scale and a rounding
+mode), else `bynk.query.sum_needs_numeric`;
 `average` of a `Duration` is a `Duration` (integer-rounded millis), otherwise a
 `Float`. **`distinct`/`distinctBy`** need a `Key` element/key on a `List`
 (`bynk.types.not_keyable`), and the `String`/`Int` rule (incl. refined and opaque)
@@ -3223,15 +3228,15 @@ state, and capability signatures. The function-type confinement of
 Bynk in the first-party `bynk.list` / `bynk.map` commons
 ([§8.4](/reference/spec/compilation-model/#84-build-pipeline--conformance-to-typescript)),
 imported with `uses bynk.list` like any commons: `map`, `filter`, `find`,
-`any`, `all`, `reverse`, `traverse` (sequential); `values`, `contains`,
+`any`, `all`, `reverse`, `traverse`, `sort`, `min`, `max` (all now `List` methods, and deprecated here); `values`, `contains`,
 `getOr`. There is no `Map.fromList` — Bynk has no pair type to spell its
 argument with; maps build via `Map.empty()` + `insert` folds.
 
-> **Deprecated (v0.91, ADR 0116 D6).** The free functions whose `List` method
-> forms exist — `map`, `filter`, `find`, `any`, `all` — emit a non-failing
+> **Deprecated (v0.91, ADR 0116 D6; completed by #3962).** Every free function has a
+> `List` method form, and each emits a non-failing
 > `bynk.list.deprecated_function` warning at each call site (the build still
 > succeeds; [§9](/reference/spec/diagnostics/)), with a machine-applicable fix to the method
-> form. They still work; `reverse` and `traverse` keep their free-function form.
+> form. They still work.
 
 ```bynk
 context jobs
@@ -3249,7 +3254,7 @@ provides Clock = FixedClock {
 }
 
 service stamps {
-	on call(names: List[String]) -> Effect[Result[List[Int], ()]] given Clock {
+	on call(names: List[String]) -> Effect[Result[List[Int], ()]] by Caller given Clock {
 		let stamped <- traverse(names, (name) => Clock.now())
 		Ok(stamped)
 	}

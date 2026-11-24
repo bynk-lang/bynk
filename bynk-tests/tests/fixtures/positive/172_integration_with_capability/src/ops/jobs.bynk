@@ -7,7 +7,7 @@ exports transparent { TickError }
 type TickError = enum { Unavailable }
 
 service tick {
-  on call() -> Effect[Result[Int, TickError]] given platform.time.Clock {
+  on call() -> Effect[Result[Int, TickError]] by Caller given platform.time.Clock {
     let t <- platform.time.Clock.now()
     Ok(t)
   }

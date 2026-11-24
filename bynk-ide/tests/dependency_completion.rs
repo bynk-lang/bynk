@@ -87,8 +87,12 @@ fn consumes_offers_a_dependency_adapter_by_alias_and_its_capabilities() {
     let got = labels("consumes money.tokens { ", doc, &files);
     assert_eq!(got, ["Jwt"]);
 
-    let doc = "context shop.checkout\n\nconsumes money.tokens\n\nservice s {\n  on call() -> Effect[String] given ";
-    let got = labels("  on call() -> Effect[String] given ", doc, &files);
+    let doc = "context shop.checkout\n\nconsumes money.tokens\n\nservice s {\n  on call() -> Effect[String] by Caller given ";
+    let got = labels(
+        "  on call() -> Effect[String] by Caller given ",
+        doc,
+        &files,
+    );
     assert!(got.contains(&"money.tokens.Jwt".to_string()), "{got:?}");
 }
 

@@ -10,8 +10,8 @@ use emit_pipeline::{emit_project_with_tests, emit_workers};
 /// (suites stripped) is byte-identical to a project with no suite at all.
 #[test]
 fn scheduled_result_hook_is_test_build_only() {
-    const JOBS: &str = "context ops.jobs\n\nservice ticker from cron {\n\ton schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {\n\t\tOk(())\n\t}\n}\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tAck\n\t}\n}\n";
-    const SUITE: &str = "suite ops.jobs as system {\n\tcase \"ticks\" {\n\t\tlet r <- ticker.schedule(\"*/5 * * * *\", 0)\n\t\texpect r is Ok(_)\n\t}\n}\n";
+    const JOBS: &str = "context ops.jobs\n\nservice ticker from cron {\n\ton schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {\n\t\tOk(())\n\t}\n}\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tAck\n\t}\n}\n";
+    const SUITE: &str = "suite ops.jobs as system {\n\tcase \"ticks\" {\n\t\tlet r <- ticker.schedule(\"*/5 * * * *\", Instant.fromEpochMillis(0))\n\t\texpect r is Ok(_)\n\t}\n}\n";
     let entry = "workers/ops-jobs/index.ts";
     let with_suite = [("ops/jobs.bynk", JOBS), ("tests/jobs.bynk", SUITE)];
     let test_build = emit_project_with_tests(
@@ -75,7 +75,7 @@ service api from http {
 }
 
 service calc {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }
@@ -206,7 +206,7 @@ fn every_route_response_carries_the_service_security_headers() {
 
 #[test]
 fn a_context_with_only_call_services_emits_no_route_table() {
-    let src = "context demo.calc\n\nservice calc {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+    let src = "context demo.calc\n\nservice calc {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n";
     let ts = emit_workers(&[("demo/calc.bynk", src)])
         .text("workers/demo-calc/index.ts")
         .to_string();

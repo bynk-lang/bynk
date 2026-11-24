@@ -7,7 +7,7 @@ agent Slow {
 }
 
 service quotes {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Slow("a").get().race(Slow("b").get())
   }
 }

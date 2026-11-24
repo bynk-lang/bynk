@@ -10,7 +10,7 @@ fn Batch.big(self) -> Bool {
 }
 
 service latest {
-  on call() -> Effect[Batch] {
+  on call() -> Effect[Batch] by Caller {
     Effect.pure(Batch { id: "b1", size: 3 })
   }
 }

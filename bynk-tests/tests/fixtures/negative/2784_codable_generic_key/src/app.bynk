@@ -8,7 +8,7 @@ fn enc[T: Codable](v: T) -> String {
 
 // #2784: a key is not `Codable`.
 service probe {
-	on call(pkcs8: Bytes) -> Effect[String] given Crypto {
+	on call(pkcs8: Bytes) -> Effect[String] by Caller given Crypto {
 		let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
 		match imported {
 			Err(_) => Effect.pure("error")

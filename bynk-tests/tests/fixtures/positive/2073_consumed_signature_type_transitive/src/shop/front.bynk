@@ -7,14 +7,14 @@ consumes shop.order
 consumes shop.ledger
 
 service check {
-  on call(id: String) -> Effect[Int] {
+  on call(id: String) -> Effect[Int] by Caller {
     let o <- shop.order.place(id)
     shop.ledger.take(o)
   }
 }
 
 service direct {
-  on call(id: String) -> Effect[Int] {
+  on call(id: String) -> Effect[Int] by Caller {
     shop.ledger.take(Order { id: id, b: Base { n: 3 } })
   }
 }

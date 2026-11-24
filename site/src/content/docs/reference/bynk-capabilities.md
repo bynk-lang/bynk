@@ -170,7 +170,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-	on call(orderId: String) -> Effect[()] given Events {
+	on call(orderId: String) -> Effect[()] by Caller given Events {
 		Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
 	}
 }
@@ -1380,7 +1380,7 @@ embedded quote doubled.
 type Order = { id: Int, name: String, placed: Instant, note: Option[String] }
 
 service feed {
-	on call(min: Int) -> Effect[Result[List[Order], PgReadError]] given Main {
+	on call(min: Int) -> Effect[Result[List[Order], PgReadError]] by Caller given Main {
 		Main.select[Order]("FROM orders WHERE id > $1 ORDER BY id", [PgInteger(min)])
 	}
 }
@@ -2078,7 +2078,7 @@ time, so the SQL is still a constant:
 type Activity = { id: String, event: String, receivedAt: Int }
 
 service feed {
-	on call(repo: String) -> Effect[Result[List[Activity], SqlReadError]] given Orders {
+	on call(repo: String) -> Effect[Result[List[Activity], SqlReadError]] by Caller given Orders {
 		Orders.select[Activity]("FROM deliveries WHERE repo = ?1 LIMIT 50", [Text(repo)])
 	}
 }
@@ -2408,7 +2408,7 @@ context app.probe
 consumes bynk { Fetch, Request }
 
 service probe {
-	on call(url: String) -> Effect[String] given Fetch {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
 		let res <- Fetch.send(Request {
 			method: Get,
 			url: url,
@@ -2436,7 +2436,7 @@ context app.probe
 consumes bynk { Fetch, Request, Method, FetchError }
 
 service probe {
-	on call(url: String) -> Effect[String] given Fetch {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
 		let res <- Fetch.send(Request {
 			method: Get,
 			url: url,
@@ -2467,19 +2467,17 @@ in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
 These are ordinary functions with no effects; see the
 [type system reference](/reference/types/).
 
-`bynk.list` also has three `Ord`-bounded free functions, called unqualified after
-`uses bynk.list` (they do not collide with the `xs.min(key)` kernel methods):
+`bynk.list` is deprecated (see below). Its three `Ord`-bounded free functions are the
+`List` methods `sort()`, `min()` and `max()`, which sit beside `xs.sortBy(key)` and `xs.min(key)`:
 
 | Function | Returns | Notes |
 |---|---|---|
-| `sort[T: Ord](xs: List[T])` | `List[T]` | ascending and stable, in the type's own [order](/reference/types/#ordering-your-own-types) |
-| `min[T: Ord](xs: List[T])` | `Option[T]` | the smallest element; `None` for an empty list |
-| `max[T: Ord](xs: List[T])` | `Option[T]` | the largest element; `None` for an empty list |
+| `xs.sort()` | `List[T]` | ascending and stable, in the type's own [order](/reference/types/#ordering-your-own-types) |
+| `xs.min()` | `Option[T]` | the smallest element; `None` for an empty list |
+| `xs.max()` | `Option[T]` | the largest element; `None` for an empty list |
 
 ```bynk,fragment
 commons demo.sorting
-
-uses bynk.list
 
 type Priority = enum { Low, Medium, High } derives Ord
 
@@ -2489,11 +2487,11 @@ type Task = {
 } derives Ord
 
 fn ranked(ts: List[Task]) -> List[Task] {
-	sort(ts)
+	ts.sort()
 }
 
 fn hottest(ts: List[Task]) -> Option[Task] {
-	max(ts)
+	ts.max()
 }
 ```
 
@@ -2557,13 +2555,13 @@ consuming that bundle should `uses` only `bynk.locale.types`, since
 `bynk.locale` and every message-bundle commons both export a `render`. See
 [Localisation](/book/guides/localisation/).
 
-> **Deprecated (v0.91, ADR 0116 D6):** the `bynk.list` free functions whose method
-> forms now exist — `map`, `filter`, `find`, `any`, `all` — emit a non-failing
+> **Deprecated (v0.91, ADR 0116 D6; completed by #3962):** every `bynk.list` free function
+> has a `List` method — `reverse`, `map`, `filter`, `find`, `any`, `all`, `traverse`,
+> `sort`, `min`, `max` — and emits a non-failing
 > `bynk.list.deprecated_function` warning at each call site (the build still
 > succeeds) with a machine-applicable fix to the method form: `map(xs, f)` →
-> `xs.map(f)`, `find(xs, p)` → `xs.filter(p).first()`, and so on. Prefer the
-> [`List` methods](/reference/types/#list-methods). `reverse` and `traverse` keep their
-> free-function form (no method equivalent yet).
+> `xs.map(f)`, `reverse(xs)` → `xs.reverse()`, and so on. Prefer the
+> [`List` methods](/reference/types/#list-methods); `bynk.list` will be removed in a later release.
 
 **See also:** [Capabilities & providers](/reference/capabilities/),
 [Adapters](/reference/adapters/),

@@ -17,7 +17,7 @@ provides Greeter = PoliteGreeter given Logger {
 }
 
 service hello {
-  on call() -> Effect[()] given Greeter {
+  on call() -> Effect[()] by Caller given Greeter {
     let _ <- Greeter.greet()
     Effect.pure(())
   }

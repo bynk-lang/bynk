@@ -22,9 +22,10 @@ service charges {
 }
 ```
 
-`on call` defaults to `Caller`, so you only write the `by` clause when you want
-to *capture* the name. A handler that omits it (or omits the binder) verifies the
-channel but reads no caller — and is unchanged from before.
+An `on call` handler always states its actor (`bynk.actor.missing_by_on_call`);
+`by Caller` is the explicit "any consuming context". Write the binder (`by c: Caller`)
+only when you want to *capture* the name. `by Caller` without a binder verifies
+the channel but reads no caller.
 
 ## How it works
 

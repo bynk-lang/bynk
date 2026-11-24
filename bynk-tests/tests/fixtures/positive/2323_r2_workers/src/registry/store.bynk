@@ -35,11 +35,11 @@ agent Projection {
 }
 
 service fetch {
-	on call(key: String) -> Effect[Option[Bytes]] given Archives { Archives.get(key) }
+	on call(key: String) -> Effect[Option[Bytes]] by Caller given Archives { Archives.get(key) }
 }
 
 service create {
-	on call(key: String, payload: Bytes) -> Effect[Bool] given Archives {
+	on call(key: String, payload: Bytes) -> Effect[Bool] by Caller given Archives {
 		let stored <- Archives.putWith(key, payload, R2Put {
 			contentType: None,
 			metadata: Map.empty(),
@@ -50,9 +50,9 @@ service create {
 }
 
 service packaged {
-	on call(key: String) -> Effect[Option[Bytes]] given Packages { Packages.bytes(key) }
+	on call(key: String) -> Effect[Option[Bytes]] by Caller given Packages { Packages.bytes(key) }
 }
 
 service touch {
-	on call(id: String) -> Effect[Option[R2Object]] { Projection(id).touch() }
+	on call(id: String) -> Effect[Option[R2Object]] by Caller { Projection(id).touch() }
 }

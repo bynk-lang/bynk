@@ -8,7 +8,7 @@ type Status = | Paid | Declined
 type Amount = Int where Positive
 
 service charge {
-  on call(amount: Int) -> Effect[Status] {
+  on call(amount: Int) -> Effect[Status] by Caller {
     Effect.pure(Paid)
   }
 }

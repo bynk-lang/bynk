@@ -35,7 +35,7 @@ exports transparent { Code }
 type Code = enum { Alpha, Beta }
 
 service flip {
-  on call(c: Code) -> Effect[Code] {
+  on call(c: Code) -> Effect[Code] by Caller {
     match c {
       Alpha => Effect.pure(Beta)
       Beta => Effect.pure(Alpha)
@@ -49,7 +49,7 @@ const SOURCE_APP: &str = r#"context alias.app
 consumes alias.lib { Code as LibCode }
 
 service echo {
-  on call(c: LibCode) -> Effect[LibCode] {
+  on call(c: LibCode) -> Effect[LibCode] by Caller {
     Effect.pure(c)
   }
 }

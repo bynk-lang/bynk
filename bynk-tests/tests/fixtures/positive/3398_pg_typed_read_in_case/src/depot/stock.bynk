@@ -15,7 +15,7 @@ type Order = {
 }
 
 service add {
-	on call() -> Effect[Result[PgRun, PgError]] given Main {
+	on call() -> Effect[Result[PgRun, PgError]] by Caller given Main {
 		Main.run("insert into orders default values", [])
 	}
 }

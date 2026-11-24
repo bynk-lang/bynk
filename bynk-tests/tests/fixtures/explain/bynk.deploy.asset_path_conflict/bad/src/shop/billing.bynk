@@ -3,7 +3,7 @@ context shop.billing
 asset terms = "assets/billing-terms.txt" at "/terms.txt"
 
 service billing_probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(2)
   }
 }

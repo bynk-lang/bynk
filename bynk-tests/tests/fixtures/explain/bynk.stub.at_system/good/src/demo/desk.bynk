@@ -11,13 +11,13 @@ provides Meter = Fixed {
 }
 
 service check {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Vault.open(n)
   }
 }
 
 service local {
-  on call(n: Int) -> Effect[Int] given Meter {
+  on call(n: Int) -> Effect[Int] by Caller given Meter {
     let m <- Meter.read()
     Effect.pure(n + m)
   }

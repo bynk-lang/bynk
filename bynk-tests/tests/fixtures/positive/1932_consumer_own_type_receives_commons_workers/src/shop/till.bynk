@@ -9,7 +9,7 @@ consumes shop.quotes
 type Amount = { cents: Int }
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let a <- shop.quotes.price()
     let paid <- shop.quotes.pay(Amount { cents: a.cents + 1 })
     Effect.pure(paid)

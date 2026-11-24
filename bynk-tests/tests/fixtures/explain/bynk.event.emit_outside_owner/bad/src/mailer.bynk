@@ -4,7 +4,7 @@ consumes orders
 consumes bynk { Events }
 
 service notify {
-  on call() -> Effect[()] given Events {
+  on call() -> Effect[()] by Caller given Events {
     Events.emit[Paid](Paid { id: "x" })
   }
 }

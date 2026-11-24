@@ -5,14 +5,14 @@ uses bynk.locale
 uses bynk.locale.types
 
 service greeting {
-  on call() -> Effect[String] given Locale {
+  on call() -> Effect[String] by Caller given Locale {
     let tag <- Locale.current()
     Effect.pure(render(tag, message("hello")))
   }
 }
 
 service greetingWithName {
-  on call(name: String) -> Effect[String] given Locale {
+  on call(name: String) -> Effect[String] by Caller given Locale {
     let tag <- Locale.current()
     let msg = withText(message("greeting"), "name", name)
     Effect.pure(render(tag, msg))
@@ -20,7 +20,7 @@ service greetingWithName {
 }
 
 service greetingWithCountAndName {
-  on call(name: String, count: Int) -> Effect[String] given Locale {
+  on call(name: String, count: Int) -> Effect[String] by Caller given Locale {
     let tag <- Locale.current()
     let msg = withWhole(withText(message("greeting"), "name", name), "count", count)
     Effect.pure(render(tag, msg))

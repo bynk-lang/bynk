@@ -3,7 +3,7 @@ context app.shop
 consumes platform.pay
 
 service checkout {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     platform.pay.charge(1)
   }
 }

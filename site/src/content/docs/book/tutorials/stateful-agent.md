@@ -276,7 +276,7 @@ agent Link {
 }
 
 service create {
-	on call(target: Url) -> Effect[Result[ShortCode, LinkError]] given CodeGen {
+	on call(target: Url) -> Effect[Result[ShortCode, LinkError]] by Caller given CodeGen {
 		let raw <- CodeGen.next()
 		let view = newLink(raw, target)?
 		let registered <- Link(view.code).register(view.target)

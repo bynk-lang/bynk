@@ -3,7 +3,7 @@ context commerce.orders
 consumes commerce.payment
 
 service placeOrder {
-  on call(total: Int) -> Effect[Result[Int, Int]] {
+  on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
     let _ <- commerce.payment.authorise(total)
     Ok(total)
   }
