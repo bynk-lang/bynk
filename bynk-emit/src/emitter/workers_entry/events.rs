@@ -65,7 +65,7 @@ pub(super) fn events_delivery_route(
         // and forwarded unchecked — nothing on this whole path ever called a
         // `deserialise_*` function, so a malformed event silently reached the
         // subscriber's handler body. Both are now validated here, the same
-        // validate-then-400 shape `/_bynk/call/` above already uses: the
+        // validate-then-400 shape `/_bynk/call/` (`call::call_dispatch`) already uses: the
         // envelope once, unconditionally (it's always on the wire regardless
         // of whether a given subscriber declared `env`), then the payload
         // per-`case`, against that subscriber's own generated codec (change A
