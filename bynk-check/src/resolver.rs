@@ -115,6 +115,54 @@ mod compute_is_uses_commons_type_tests {
             "absent from imported_from_kind entirely — a local declaration"
         );
     }
+
+    /// #4231: the prelude `Ordering` (declared by `bynk.ordering`) is not rebranded,
+    /// but a lookalike of the same name and variants declared in a user's file is.
+    #[test]
+    fn the_prelude_ordering_is_exempt_and_a_lookalike_is_not() {
+        use bynk_syntax::ast::{SumBody, Variant};
+        let sum = |file| {
+            let variant = |n: &str| Variant {
+                name: Ident {
+                    name: n.to_string(),
+                    span: Span::default(),
+                },
+                payload: Vec::new(),
+                documentation: None,
+                span: Span::default(),
+                trivia: Trivia::default(),
+            };
+            let mut decl = (*bare_record_type("Ordering")).clone();
+            decl.body = TypeBody::Sum(SumBody {
+                variants: ["Less", "Equal", "Greater"].map(variant).to_vec(),
+                trailing_comments: Default::default(),
+                span: Span::default(),
+                embeds: Vec::new(),
+            });
+            decl.span = Span::new_in(file, 0, 0);
+            Arc::new(decl)
+        };
+        let unit = crate::firstparty::UNITS
+            .iter()
+            .find(|u| u.name == bynk_std::ORDERING_UNIT)
+            .expect("bynk.ordering is registered");
+        let mut kinds = HashMap::new();
+        kinds.insert("Ordering".to_string(), UnitKind::Commons);
+        let mut types = HashMap::new();
+        types.insert(
+            "Ordering".to_string(),
+            sum(crate::project_model::firstparty_file_id(unit)),
+        );
+        assert!(
+            !compute_is_uses_commons_type(&kinds, &types, "Ordering"),
+            "the first-party Ordering is shared by every context as it is"
+        );
+        types.insert("Ordering".to_string(), sum(bynk_syntax::span::FileId(0)));
+        assert!(
+            compute_is_uses_commons_type(&kinds, &types, "Ordering"),
+            "a user's own Ordering with the same variants is rebranded like any commons type"
+        );
+    }
 }
 
 /// The resolver's two collection points, bundled so the reference walk

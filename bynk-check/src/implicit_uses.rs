@@ -19,13 +19,34 @@
 
 use bynk_project::ParsedFile;
 use bynk_std::PRELUDE_TYPES;
+use bynk_syntax::ast::CommonsItem;
 
 /// Add the implicit `uses` to every parsed file of the project's own that needs
 /// one: a file that names a prelude type, or writes a spelling that yields one
-/// ([`bynk_std::PreludeType`]). First-party units are left as written.
+/// ([`bynk_std::PreludeType`]). First-party units are left as written. A file
+/// that declares a type of that name, or `uses`/`consumes` a unit that does, has
+/// shadowed the prelude's: it keeps the declaration the project wrote, and the
+/// two never meet.
 pub(crate) fn add_implicit_uses(parsed: &mut [ParsedFile]) {
-    for pf in parsed.iter_mut().filter(|pf| !pf.is_synthetic()) {
-        for prelude in PRELUDE_TYPES {
+    for prelude in PRELUDE_TYPES {
+        let declaring: std::collections::HashSet<String> = parsed
+            .iter()
+            .filter(|pf| !pf.is_synthetic() && declares_type(pf, prelude.name))
+            .map(|pf| pf.unit().name().joined())
+            .collect();
+        for pf in parsed.iter_mut().filter(|pf| !pf.is_synthetic()) {
+            let shadowed = declaring.contains(&pf.unit().name().joined())
+                || pf
+                    .uses()
+                    .iter()
+                    .any(|u| declaring.contains(&u.target.joined()))
+                || pf
+                    .consumes()
+                    .iter()
+                    .any(|c| declaring.contains(&c.target.joined()));
+            if shadowed {
+                continue;
+            }
             if std::iter::once(&prelude.name)
                 .chain(prelude.triggers)
                 .any(|w| mentions_word(pf.source(), w))
@@ -34,6 +55,13 @@ pub(crate) fn add_implicit_uses(parsed: &mut [ParsedFile]) {
             }
         }
     }
+}
+
+/// Whether the file declares a type called `name`.
+fn declares_type(pf: &ParsedFile, name: &str) -> bool {
+    pf.items()
+        .iter()
+        .any(|item| matches!(item, CommonsItem::Type(t) if t.name.name == name))
 }
 
 /// Whether `word` appears in `source` as a whole identifier (a leading `.` is

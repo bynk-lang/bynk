@@ -320,9 +320,14 @@ pub const ORDERING_UNIT: &str = "bynk.ordering";
 /// #4231: a type every unit may name with no `uses`, and the first-party unit
 /// that declares it. A unit reaches `unit` as if it wrote `uses <unit>` when its
 /// source mentions the type's name or one of `triggers` (a method the type
-/// comes from, written with its leading `.`). The one registration point:
-/// resolution, rebranding and the bare-variant rule read this table, so a new
-/// compiler-known sum is one row here and its unit.
+/// comes from, written with its leading `.`), unless the unit declares a type of
+/// that name itself. The one registration point: resolution, rebranding and the
+/// bare-variant rule read this table, so a new compiler-known sum is one row
+/// here and its unit.
+///
+/// A row must be a plain sum with no invariant and no brand: every context
+/// constructs it directly, because a prelude type is exempt from the per-context
+/// rebrand that would otherwise hide its constructors.
 pub struct PreludeType {
     /// The type's name, as a unit writes it.
     pub name: &'static str,
