@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **912** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **914** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -525,6 +525,8 @@ There are **912** codes in total. Every code is an error unless it is marked **W
 - [`bynk.json.nested_option_plain`](/reference/diagnostics/bynk.json.nested_option_plain/) — A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.
 - [`bynk.lambda.unannotated_param`](/reference/diagnostics/bynk.lambda.unannotated_param/) — A lambda parameter has no type annotation in a position where no function type is expected to infer it from.
 - [`bynk.list.deprecated_function`](/reference/diagnostics/bynk.list.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).
+- [`bynk.list.par_limit_one`](/reference/diagnostics/bynk.list.par_limit_one/) — <span class="diagnostic-severity">Warning</span> A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning).
+- [`bynk.list.par_limit_range`](/reference/diagnostics/bynk.list.par_limit_range/) — A `ParOptions` `limit` that is statically known is outside 1 to 1000.
 - [`bynk.list.par_traverse_unit`](/reference/diagnostics/bynk.list.par_traverse_unit/) — <span class="diagnostic-severity">Warning</span> `List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).
 - [`bynk.locale.multiple_message_bundles`](/reference/diagnostics/bynk.locale.multiple_message_bundles/) — A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.
 - [`bynk.map.deprecated_function`](/reference/diagnostics/bynk.map.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).
