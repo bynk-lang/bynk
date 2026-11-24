@@ -6526,9 +6526,10 @@ fn note_service_defaulted_body_caps(service: &ServiceDecl, errors: &mut Vec<Comp
             "bynk.http.body_cap_defaulted",
             service.name.span,
             format!(
-                "{} on `{}` rely on the default 1 MiB request-body cap",
+                "{} on `{}` {} on the default 1 MiB request-body cap",
                 routes.join(", "),
-                service.name.name
+                service.name.name,
+                if routes.len() == 1 { "relies" } else { "rely" },
             ),
         )
         .with_note(

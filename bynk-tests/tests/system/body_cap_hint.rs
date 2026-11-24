@@ -57,6 +57,11 @@ fn one_hint_lists_every_route_on_the_default() {
         "a bodyless route has no cap: {}",
         hint.message
     );
+    assert!(
+        hint.message.contains(" rely on "),
+        "several routes rely: {}",
+        hint.message
+    );
 }
 
 #[test]
@@ -68,6 +73,11 @@ fn a_route_with_its_own_cap_is_not_listed() {
     assert!(
         hint.message.contains("POST /notes") && !hint.message.contains("PUT"),
         "{}",
+        hint.message
+    );
+    assert!(
+        hint.message.contains(" relies on "),
+        "one route relies: {}",
         hint.message
     );
 }
