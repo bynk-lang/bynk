@@ -1790,21 +1790,30 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
 | plain `Bool` | `true` and `false` |
-| plain `Bytes` | always empty |
-| plain `Decimal` | always `0` at scale 0 |
-| plain `Duration` | always `0` ms, never negative |
-| plain `Float` | finite values from `-1000` up to but not including `1000`, no boundary values and no shrinking; never `NaN`, `-0` or `±Infinity`, so a generated `Float` always encodes on the [wire](/reference/wire-format/) |
-| plain `Instant` | always the epoch (`0` ms) |
-| plain `Int` | `-1000` to `1000`, led by the boundaries `0`, `1000` and `-1000`; shrinks toward `0` |
-| plain `String` | 0 to 8 lowercase letters (`a`–`z`), led by `""`; no whitespace, non-ASCII or astral characters; shrinks toward shorter strings |
+| plain `Bytes` | 0 to 64 octets, with `0` and `255` over-represented, led by empty, `[0]`, `[255]` and `[0, 255]`; shrinks toward empty, then to shorter and all-zero |
+| plain `Decimal` | any sign, scale 0 to 8 and coefficients up to ±10¹⁸, led by `0`, `±1`, `±0.05` and `12.345`; shrinks toward `0` at scale 0 |
+| plain `Duration` | any sign, in whole milliseconds across a day, a month, a present-day epoch and up to ±8.64 × 10¹⁵ (a JavaScript `Date`'s reach), led by `0`, `±1` ms, a day and the limits; shrinks toward `0` through whole values |
+| plain `Float` | finite values only: mostly `-1000` to `1000`, plus `0`, `-0` and magnitudes from about `1e-300` to `1e300`, led by `0`, `-0`, `±1`, `±1e300` and `5e-324`; shrinks toward `0`. Never `NaN` or `±Infinity`: the [wire](/reference/wire-format/) encoding and `==` for the non-finite values are not settled |
+| plain `Instant` | as a plain `Duration`, as milliseconds from the epoch (so present-day timestamps appear); shrinks toward the epoch |
+| plain `Int` | mostly small, with magnitudes up to about 2³¹ and the boundaries `0`, `±1` and the safe-integer limits `±(2⁵³ − 1)`; shrinks toward `0` |
+| plain `String` | 0 to 64 characters: letters of either case, digits, whitespace, punctuation, accented, CJK and astral characters, led by `""`, `" "`, `"A"`, a newline, `"é"` and `"😀"`; shrinks toward shorter strings, a code point at a time |
+
+A **refinement narrows the draw**: `Int where InRange(a, b)` stays in `[a, b]`, `Float
+where InRange(…)` in its range, `String where MaxLength(k)` within `k` characters, and
+so on. A plain `Int`'s draw reaches the safe-integer limits only through its boundary
+values, so a property that adds or multiplies two generated `Int`s can lose precision at the
+limit (property bodies use plain `number` arithmetic, so `n + 2 - 2 == n` fails at `2⁵³ − 1`
+by rounding, silently, not by a fault): that is a finding about the claim, not about the
+generator.
+
 
 The plain rows are what a bare `for all x: T` draws. A record field of that type
 draws from the same range, but without the boundary values or shrinking: a record
-is led by its all-default value and is not shrunk. Only `Int`, `String`, `Bool` and `Float` vary; to test
-a `Decimal`, `Instant`, `Duration` or `Bytes` over more than one value, build it
-from a generated `Int` or `String` in the property's body, or write cases. The
-refined rows above give `Decimal`, `Float` and `Int` their bounds; a refined
-`Instant`, `Duration` or `Bytes` still draws its single value.
+is led by its all-default value and is not shrunk. A refined `Decimal`, `Float` and
+`Int` take their bounds from the refinement.
+
+Widening the draws changed which counterexamples a given seed finds, so a seed
+recorded from an earlier version may now reproduce a different failure (or none).
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
 `String where Matches(re)` has no generator and must be pinned instead; an **agent**
