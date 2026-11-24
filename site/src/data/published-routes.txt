@@ -124,6 +124,7 @@
 /book/guides/testing/integration/
 /book/guides/testing/philosophy/
 /book/guides/testing/run-tests/
+/book/guides/testing/test-a-handler-that-calls-another-context/
 /book/guides/testing/try-an-expression/
 /book/guides/testing/write-tests/
 /book/guides/type-system/

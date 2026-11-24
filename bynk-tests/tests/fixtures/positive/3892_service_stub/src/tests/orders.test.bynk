@@ -1,0 +1,56 @@
+suite shop.orders {
+  consumes shop.pay { Receipt, PaymentError }
+
+  stub shop.stock.reserve(_) returns Ok(())
+
+  case "an order is placed when payment succeeds" {
+    stub Pay.authorise(_) returns Ok(Receipt { id: "r1" })
+    let r <- placeOrder.call("widget", 100)
+    expect r is Ok("r1")
+    expect Pay.authorise called once
+    expect Pay.authorise called with total == 100
+  }
+
+  case "a declined payment is reported" {
+    stub Pay.authorise(_) returns Err(Declined)
+    let r <- placeOrder.call("widget", 100)
+    expect r is Err("declined")
+  }
+
+  case "a sequence of payments" {
+    stub Pay.authorise(_) returns each [Ok(Receipt { id: "a" }), Err(Down)]
+    let r1 <- placeOrder.call("w", 1)
+    let r2 <- placeOrder.call("w", 2)
+    expect r1 is Ok("a")
+    expect r2 is Err("declined")
+    expect Pay.authorise called 2 times
+  }
+
+  case "the first matching pattern answers" {
+    stub Pay.authorise(5) returns Err(Declined)
+    stub Pay.authorise(_) returns Ok(Receipt { id: "x" })
+    let r <- placeOrder.call("w", 5)
+    expect r is Err("declined")
+    expect Pay.authorise called once
+  }
+
+  case "an unreserved sku never reaches payment" {
+    stub shop.stock.reserve("gone") returns Err("sold out")
+    stub Pay.authorise(_) returns Ok(Receipt { id: "x" })
+    let r <- placeOrder.call("gone", 1)
+    expect r is Err("sold out")
+    expect Pay.authorise never called
+  }
+
+  case "a fault in payment fails the case" {
+    stub Pay.authorise(_) fails
+    let r <- placeOrder.call("widget", 100)
+    expect r is Ok("r1")
+  }
+
+  case "a wrong call count fails the case" {
+    stub Pay.authorise(_) returns Ok(Receipt { id: "r1" })
+    let r <- placeOrder.call("widget", 100)
+    expect Pay.authorise called 3 times
+  }
+}

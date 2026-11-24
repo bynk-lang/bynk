@@ -432,7 +432,13 @@ pub(super) fn emit_test_module(
             .is_some_and(|t| t.cases.iter().any(|c| case_observes(&c.body)))
     });
     if uses_observation {
-        let record_types = observation_call_record_types(target_name, unit_tables, unit_uses);
+        let record_types = observation_call_record_types(
+            target_name,
+            unit_tables,
+            unit_uses,
+            unit_consumes,
+            unit_consumes_aliases,
+        );
         // Review of #1486, finding 2: pre-conversion, this whole section was
         // `out.push_str(observation_runtime_helpers()); out.push('\n');
         // extend_printed_at(&mut out, record_types); out.push('\n');` — the
@@ -805,6 +811,7 @@ pub(super) fn emit_test_module(
         unit_tables,
         unit_uses,
         unit_consumes,
+        unit_consumes_aliases,
         hidden,
         tys,
         &all_suite_types,

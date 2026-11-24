@@ -564,6 +564,10 @@
             "link": "/book/guides/testing/integration/"
           },
           {
+            "label": "Test a handler that calls another context",
+            "link": "/book/guides/testing/test-a-handler-that-calls-another-context/"
+          },
+          {
             "label": "Run your tests",
             "link": "/book/guides/testing/run-tests/"
           },

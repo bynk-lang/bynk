@@ -33,11 +33,12 @@ too. A green `unit` case that *fails* when promoted means a collaborator's
 invariant has caught a defect a stub was hiding, with **no new test code**.
 
 Neither tier crosses into **another context**. A consumed context isn't stood up
-in-process, and `stub` doubles capabilities, not a context's services, so a
-`unit` or `integration` case, or a `property`, that reaches another context's
-service (directly, or through a service or agent handler that calls one) is
-[`bynk.tier.cross_context_needs_system`](/reference/diagnostics/bynk.tier.cross_context_needs_system/).
-That flow belongs in a `system` suite.
+in-process, so a `unit` or `integration` case, or a `property`, that reaches
+another context's service (directly, or through a service or agent handler that
+calls one) is
+[`bynk.tier.cross_context_needs_system`](/reference/diagnostics/bynk.tier.cross_context_needs_system/)
+unless it [stubs that service](/book/guides/testing/test-a-handler-that-calls-another-context/).
+A flow that really crosses belongs in a `system` suite.
 
 ## `system`: a suite of its own
 

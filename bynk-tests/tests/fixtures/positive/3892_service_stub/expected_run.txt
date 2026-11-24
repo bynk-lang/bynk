@@ -1,0 +1,4 @@
+# #3892: run by bynk-tests/tests/system/behaviour_fixtures.rs; see that file for the format.
+passed=6 failed=2
+fail a fault in payment fails the case
+fail a wrong call count fails the case
