@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.678.0** | `bynk.schema.lock` records each `derives Ord` type's field and variant order, and a reorder is an error until `bynk lock accept-order` accepts it |
 | **v0.677.3** | `bynk test` no longer panics when a suite checks a function that returns a consumed type renamed with `as` |
 | **v0.677.2** | A `400 RefinementViolation` body no longer echoes the rejected value; `violation` carries `field` and `message` only |
 | **v0.677.1** | A type selected from a consumed context now wins over an unselected `bynk` export of the same name (`Refusal`, `CallOutcome`, `CallFailure`) |
