@@ -595,6 +595,10 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
 | `xs.traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | run `f` for each element in order, stopping at the first `Err` |
 | `xs.parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | the same, concurrently |
+| `xs.parForEachWith(f, options: ParOptions)` | `Effect[()]` | `parForEach` with at most `options.limit` steps in flight |
+| `xs.parTraverseWith(f, options: ParOptions)` | `Effect[List[U]]` | `parTraverse`, bounded the same way |
+| `xs.parTraverseAllWith(f, options: ParOptions)` | `Effect[List[Result[U, E]]]` | `parTraverseAll`, bounded the same way |
+| `xs.parTraverseTryWith(f, options: ParOptions)` | `Effect[Result[List[U], E]]` | `parTraverseTry`, bounded; once a step returns `Err` no further step starts |
 
 The effect methods form one grid of names:
 
@@ -604,6 +608,8 @@ The effect methods form one grid of names:
 | concurrently | `parForEach` | `parTraverse` | `parTraverseAll` | `parTraverseTry` |
 
 Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
+
+**Bounding a fan-out (#3968).** The plain `par…` forms start every step at once. The four `…With` forms take a second argument, `ParOptions`, a record `{ limit: Int }` declared in the first-party `bynk.par` commons (`uses bynk.par`); it has no default, so a call always states its bound. `limit` is a whole number from 1 to 1000, and the steps run on a sliding pool: a new step starts as soon as any in-flight step settles. Results stay in input order and faults follow the plain forms (every started step settles, the first fault in input order is raised). A `limit` that is a literal or constant outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`, since the call is then sequential (use `forEach`, `traverse`, `traverseAll` or `traverseTry`). A limit only known at run time is checked by the runtime, which faults the call. The closure rules, including `bynk.par.store_write_in_closure`, are the plain forms'. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194), which would give the future spelling `limit:`; it is not implemented.
 
 The methods returning an `Effect` can only be called where effects are allowed.
 A method not in this table is `bynk.types.method_not_found`. The rest of this

@@ -53,7 +53,8 @@ pub(super) fn check_effect_iter(
             return None;
         };
         let inner = *inner;
-        if inner == unit {
+        // `parTraverseWith` has its own options to keep, so the rename is no fix.
+        if inner == unit && method.name == "parTraverse" {
             warn_unit_par_traverse(method, ctx);
         }
         tys.intern(Ty::List(inner))

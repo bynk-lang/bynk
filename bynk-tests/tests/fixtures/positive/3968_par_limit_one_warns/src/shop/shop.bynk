@@ -1,0 +1,11 @@
+commons shop {
+  uses bynk.par
+
+  fn notify(id: Int) -> Effect[()] {
+    Effect.pure(())
+  }
+
+  fn warm(ids: List[Int]) -> Effect[()] {
+    ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 1 })
+  }
+}

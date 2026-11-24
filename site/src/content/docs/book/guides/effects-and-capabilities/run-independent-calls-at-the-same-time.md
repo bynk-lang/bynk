@@ -113,6 +113,22 @@ If a call faults, the others still finish, then the first fault in list order is
 `par` block. `traverseAll` and `traverseTry` have concurrent forms (`parTraverseAll`, `parTraverseTry`) for
 steps that return a `Result`.
 
+## Bound how many run at once
+
+`parForEach`, `parTraverse`, `parTraverseAll` and `parTraverseTry` start every element at once. Over a long list that can exhaust connection or subrequest limits. The `…With` forms take a `ParOptions` and keep at most `limit` calls in flight, starting the next as soon as one finishes:
+
+```bynk,fragment
+commons demo.fan {
+  uses bynk.par
+
+  fn warm(ids: List[Int]) -> Effect[()] {
+    ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 8 })
+  }
+}
+```
+
+`limit` must be a whole number from 1 to 1000 (a literal outside that is an error, and `1` is a warning because that is just `forEach`). Results still come back in input order, and a failure still waits for the started calls to settle before raising the first one in input order. `parTraverseTryWith` also stops starting new calls once one returns `Err`.
+
 ## Test it
 
 A `case` can check which names the block bound and the order its calls were issued in:

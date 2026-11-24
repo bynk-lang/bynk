@@ -1,0 +1,7 @@
+commons demo.lim {
+  uses bynk.par
+
+  fn bad(xs: List[Int]) -> Effect[()] {
+    xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 1001 })
+  }
+}

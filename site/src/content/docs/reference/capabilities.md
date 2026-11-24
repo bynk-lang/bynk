@@ -124,8 +124,8 @@ A block with one binding is the warning `bynk.par.single_binding`: it is a plain
 `let x <- e` with extra syntax.
 
 **Store writes stay sequential in `parTraverse` too.** The closure given to
-`parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` runs once per element, all at
-once, so it follows the same rule: it may not write a `store` field
+`parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` (and their bounded `…With` forms, which take a `ParOptions` from `bynk.par`) runs once per element, all at
+once (or `limit` at a time), so it follows the same rule: it may not write a `store` field
 (`bynk.par.store_write_in_closure`). That covers `put`, `remove`, `update`, `upsert`,
 `add`, `append` and `:=`, in the closure, in a lambda nested in it, or in a lambda
 bound to a name and passed by name. Reads, a store used as the *receiver*

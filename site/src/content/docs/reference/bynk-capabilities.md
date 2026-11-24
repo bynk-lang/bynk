@@ -2464,6 +2464,7 @@ in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
 (deprecated: every function is now a `List`, `Map` or `Set` method, and each call warns with a
 fix to it; `bynk.set` has `union`,
 `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`),
+`bynk.par` (the `ParOptions { limit }` record taken by `List.parForEachWith` and the other bounded fan-out methods; it declares no functions),
 `bynk.string` (string helpers) and `bynk.url` (URLs and query strings, below).
 These are ordinary functions with no effects; see the
 [type system reference](/reference/types/).

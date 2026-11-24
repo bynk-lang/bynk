@@ -559,6 +559,13 @@ pub(crate) fn check_list_kernel_method(
         Some(o @ (ListOp::ForEach | ListOp::ParForEach | ListOp::ParTraverse)) => {
             super::list_par::check_effect_iter(method, o, args, elem, span, ctx)
         }
+        // #3968: the bounded concurrent forms.
+        Some(
+            o @ (ListOp::ParForEachWith
+            | ListOp::ParTraverseWith
+            | ListOp::ParTraverseAllWith
+            | ListOp::ParTraverseTryWith),
+        ) => super::list_par_with::check_par_with(method, o, args, elem, span, ctx),
         // v0.148 (ADR 0172): the collect-all effectful iterators.
         // `traverseAll(f: A -> Effect[Result[B, E]]) -> Effect[List[Result[B, E]]]`
         // runs `f` over each element **in order**; `parTraverseAll` runs them

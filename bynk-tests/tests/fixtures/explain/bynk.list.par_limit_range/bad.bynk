@@ -1,0 +1,11 @@
+context demo
+
+uses bynk.par
+
+agent Tally {
+    key id: String
+
+    on call run(xs: List[Int]) -> Effect[()] {
+        xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })
+    }
+}

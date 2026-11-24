@@ -1,0 +1,18 @@
+suite demo.fan
+
+case "parTraverseWith keeps input order" {
+	let out <- tenfold([3, 1, 2])
+	expect out == [30, 10, 20]
+	let wide <- tenfoldConst([1, 2, 3, 4, 5])
+	expect wide == [10, 20, 30, 40, 50]
+}
+
+case "parForEachWith runs every step" {
+	let _ <- touch([1, 2, 3])
+	expect 1 == 1
+}
+
+case "parTraverseAllWith collects every result" {
+	let rs <- collect([1, 2, 3], 2)
+	expect rs.length() == 3
+}

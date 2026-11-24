@@ -2888,6 +2888,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
                   const Greeting: String = \"hello\"   // ✓",
     },
     Explain {
+        code: "bynk.list.par_limit_range",
+        blurb: "The `limit` of a `ParOptions` bounds how many steps of `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` or `parTraverseTryWith` are in flight at once. It must be a whole number from 1 to 1000: zero or a negative bound would never start a step, and a bound above 1000 is past what a single invocation can usefully hold open (connection and subrequest limits). The check applies when the limit is a literal or a constant; a limit computed at run time faults the call instead. Pick a value in range, or use the plain form (`parForEach`, `parTraverse`, …) for an unbounded fan-out.",
+        example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
+    },
+    Explain {
         code: "bynk.messages.format_mismatch",
         blurb: "A placeholder that appears in the reference locale's template and in another \
                 locale's must be formatted the same way in both: plain `{n}`, `plural`, `select`, \
@@ -3131,7 +3136,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
-        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` (or their `…With` forms) runs \
                 once per element, all at once, so it may not write a `store` field, which is \
                 the rule a `par { … }` block already follows. Every `<-` is an await point, \
                 so a `get` then a `put` in the closure lets the other branches write in \
@@ -8516,6 +8521,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.list.deprecated_function",
         "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
+    warn(d(
+        "bynk.list.par_limit_one",
+        "A `limit` of 1 makes the `…With` call sequential: use `forEach`, `traverse`, `traverseAll` or `traverseTry` (warning).",
+    )),
+    d(
+        "bynk.list.par_limit_range",
+        "A `ParOptions` `limit` that is statically known is outside 1 to 1000.",
+    ),
     warn(d(
         "bynk.list.par_traverse_unit",
         "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).",
