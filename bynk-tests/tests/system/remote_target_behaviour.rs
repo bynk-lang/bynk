@@ -341,7 +341,7 @@ fn system_suites_run_against_a_named_target() {
         )
     };
     // An in-process run first: it writes the compiled Worker the stand-in
-    // serves (`out-js/workers/shop-api`).
+    // serves (`out/out-js/workers/shop-api`).
     let proj = project(&dir, &[SUITE, RUN_ID_LOCAL], "");
     let (ok, stdout, stderr) = bynk_test(
         &proj,
@@ -351,7 +351,7 @@ fn system_suites_run_against_a_named_target() {
     );
     assert!(ok, "the in-process run passes\n{stdout}\n{stderr}");
     assert_eq!(json(&stdout, &stderr)["passed"], 3, "{stdout}");
-    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out-js"), "deployed-secret");
+    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out/out-js"), "deployed-secret");
     let proj = project(&dir, &[SUITE, RUN_ID], &target(port));
 
     // Against the stand-in, signing with the secret from the environment.
@@ -555,7 +555,7 @@ fn a_case_that_peeks_is_refused_or_skipped_against_a_target() {
     assert!(ok, "the in-process run passes\n{stdout}\n{stderr}");
     assert_eq!(json(&stdout, &stderr)["passed"], 2, "{stdout}");
 
-    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out-js"), "deployed-secret");
+    let (_stand_in, port) = start_stand_in(&dir, &dir.join("build/out/out-js"), "deployed-secret");
     let proj = project(&dir, &[suite], &target(port));
     fs::write(proj.join("src/shop/api.bynk"), &source).unwrap();
     let (ok, stdout, stderr) = bynk_test(
