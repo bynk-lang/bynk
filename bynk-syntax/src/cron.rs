@@ -346,6 +346,29 @@ pub fn describe_fields(s: &str) -> Option<Vec<(&'static str, String)>> {
     )
 }
 
+/// #3874: what a cron handler's parameter receives. A handler may declare up to
+/// two, told apart by type, in either order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CronParam {
+    /// An `Instant`: the scheduled time (`event.scheduledTime`).
+    Time,
+    /// Exactly `CronSchedule`: the schedule expression that fired the run
+    /// (`event.cron`).
+    Schedule,
+}
+
+/// #3874 [DECISION B]: the kind of a cron handler parameter by its declared
+/// type: exactly `Instant`, or exactly the prelude's `CronSchedule` (not
+/// `String`, and not another `Cron` refinement). `None` for any other type.
+pub fn cron_param(ty: &crate::ast::TypeRef) -> Option<CronParam> {
+    use crate::ast::{BaseType, TypeRef};
+    match ty {
+        TypeRef::Base(BaseType::Instant, _) => Some(CronParam::Time),
+        TypeRef::Named(id) if id.name == "CronSchedule" => Some(CronParam::Schedule),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

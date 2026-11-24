@@ -253,6 +253,7 @@ const WORKER_ORDER: &[&str] = &[
     "__requestBodyStream",
     "__untilBodyTooLarge",
     "__mediaTypeMatches",
+    "__jsonMediaTypeMatches",
     "__requestHeaders",
     "__queryObject",
     "__cookieObject",

@@ -2076,17 +2076,37 @@ impl Handler {
     /// The media type a `@raw(contentType:)` handler declares: `Some` marks the
     /// handler's `body: Bytes` as the raw request body (request-side counterpart of
     /// ADR 0143). `"*/*"` accepts any content type. A malformed `@raw` is a checker
-    /// error, so a missing or non-literal `contentType` reads as not raw here.
+    /// error, so a missing or non-literal `contentType` reads as not raw here. A
+    /// list (#3912) reads as its first type: the one a driver sends.
     pub fn raw_content_type(&self) -> Option<&str> {
-        let ann = self.annotations.iter().find(|a| a.name.name == "raw")?;
-        ann.args
-            .iter()
-            .find_map(|arg| match (&arg.label, &arg.value.kind) {
-                (Some(l), ExprKind::StrLit(s)) if l.name == "contentType" && is_media_type(s) => {
-                    Some(s.as_str())
-                }
-                _ => None,
-            })
+        self.raw_content_types().into_iter().next()
+    }
+
+    /// Every media type a `@raw(contentType:)` handler accepts (#3912): the one
+    /// string, or the entries of a non-empty list of them (`"*/*"` is only valid
+    /// alone). Empty when the handler is not raw, or its `@raw` is malformed.
+    pub fn raw_content_types(&self) -> Vec<&str> {
+        let Some(ann) = self.annotations.iter().find(|a| a.name.name == "raw") else {
+            return Vec::new();
+        };
+        let Some(value) = ann.args.iter().find_map(|arg| match &arg.label {
+            Some(l) if l.name == "contentType" => Some(&arg.value),
+            _ => None,
+        }) else {
+            return Vec::new();
+        };
+        match &value.kind {
+            ExprKind::StrLit(s) if is_media_type(s) => vec![s.as_str()],
+            ExprKind::ListLit(items, ..) if !items.is_empty() => items
+                .iter()
+                .map(|e| match &e.kind {
+                    ExprKind::StrLit(s) if is_media_type(s) && s != "*/*" => Some(s.as_str()),
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
     }
 }
 

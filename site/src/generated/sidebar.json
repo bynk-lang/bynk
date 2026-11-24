@@ -618,6 +618,10 @@
             "link": "/book/guides/projects-build-and-deployment/deploy-to-cloudflare/"
           },
           {
+            "label": "Deploy from CI",
+            "link": "/book/guides/projects-build-and-deployment/deploy-from-ci/"
+          },
+          {
             "label": "Roll back a deployment",
             "link": "/book/guides/projects-build-and-deployment/roll-back-a-deployment/"
           },
