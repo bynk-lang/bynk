@@ -40,6 +40,7 @@ adapter bynk.cloudflare {
 		R2Upload,
 		R2UploadOptions,
 		R2Part,
+		QueueDelivery,
 		QueueSend,
 		RequestCf,
 		DataPoint,
@@ -341,6 +342,20 @@ adapter bynk.cloudflare {
 	type R2Part = {
 		partNumber: Int,
 		etag: String,
+	}
+
+	---
+	What Cloudflare knows about the delivery of a message to a queue consumer,
+	as an `on message` handler's optional second parameter. `attempts` counts
+	the times the consumer has been given the message, starting at 1, so a
+	handler can back off or notice a message that keeps failing. `sentAt` is
+	when the message was sent, so a message that was sent with a delay waited
+	at least that long. Neither is a deduplication key: delivery is at least
+	once, and only a key the producer writes into the message deduplicates.
+	---
+	type QueueDelivery = {
+		attempts: Int,
+		sentAt: Instant,
 	}
 
 	---
