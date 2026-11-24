@@ -70,6 +70,7 @@ mod list_more;
 mod list_par;
 mod list_par_with;
 mod par;
+mod refined_range;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;

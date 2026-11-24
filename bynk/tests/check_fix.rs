@@ -672,3 +672,56 @@ fn a_named_code_at_a_workspace_root_applies_to_every_member() {
     }
     assert!(!err.contains("inverted_range ×"), "{err}");
 }
+
+/// #3972: on an `Int`, each of `InRange`, `Positive` and `NonNegative` in a refined
+/// pattern is fixed to the range pattern it denotes, a combined predicate to its
+/// intersection; a `String` predicate is left alone. After the fix a match that is
+/// exhaustive by ranges needs no `_` arm.
+#[test]
+fn a_refined_pattern_on_an_int_is_fixed_to_its_range() {
+    let root = scratch("refined-pattern");
+    write(
+        &root.join("net.bynk"),
+        "\
+commons net
+
+fn class(status: Int) -> String {
+  match status {
+    _ where InRange(200, 299) => \"success\"
+    _ where Positive && InRange(-5, 10) => \"small\"
+    _ where NonNegative => \"zero\"
+    _ => \"other\"
+  }
+}
+
+fn long(s: String) -> String {
+  match s {
+    _ where MinLength(3) => \"long\"
+    _ => \"short\"
+  }
+}
+",
+    );
+    let (code, err) = run(&bynk(), &root, &["check", "--fix", "net.bynk"], &[]);
+    assert_eq!(code, 0, "{err}");
+    let fixed = read(&root.join("net.bynk"));
+    assert!(fixed.contains("    200..299 => \"success\""), "{fixed}");
+    assert!(fixed.contains("    1..10 => \"small\""), "{fixed}");
+    assert!(fixed.contains("    0.. => \"zero\""), "{fixed}");
+    assert!(
+        fixed.contains("_ where MinLength(3) => \"long\""),
+        "a String predicate is untouched: {fixed}"
+    );
+    assert!(
+        err.contains("fixed: net.bynk: bynk.match.refined_pattern_is_range ×3"),
+        "{err}"
+    );
+    // Ranges count towards exhaustiveness: no `_` arm is needed once they cover.
+    write(
+        &root.join("net.bynk"),
+        "commons net\n\nfn class(n: Int) -> String {\n  match n {\n    ..199 => \"low\"\n    200..299 => \"success\"\n    300.. => \"high\"\n  }\n}\n",
+    );
+    let (code, err) = run(&bynk(), &root, &["check", "net.bynk"], &[]);
+    assert_eq!(code, 0, "{err}");
+    assert!(!err.contains("refined_pattern_is_range"), "{err}");
+}

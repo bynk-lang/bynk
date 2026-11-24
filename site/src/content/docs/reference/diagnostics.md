@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **925** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **926** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -444,6 +444,10 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 - [`bynk.lex.unexpected_character`](/reference/diagnostics/bynk.lex.unexpected_character/) — An unexpected character in the source.
 - [`bynk.lex.unterminated_interpolation`](/reference/diagnostics/bynk.lex.unterminated_interpolation/) — An interpolation hole `\(…)` is not closed on its line.
 - [`bynk.lex.unterminated_string`](/reference/diagnostics/bynk.lex.unterminated_string/) — A string literal is not terminated.
+
+## Match
+
+- [`bynk.match.refined_pattern_is_range`](/reference/diagnostics/bynk.match.refined_pattern_is_range/) — <span class="diagnostic-severity">Warning</span> A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; auto-fixable).
 
 ## Message bundles
 

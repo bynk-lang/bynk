@@ -1190,6 +1190,11 @@ match age {
   `String` ranges are deliberate non-goals. A refined `Int` is matched as an
   `Int`: `Age = Int where InRange(0, 150)` still needs the whole of `Int` covered.
 - `lo > hi` is `bynk.types.empty_range_pattern`, whose fix swaps the bounds.
+- **Prefer a range to `_ where InRange(a, b)` on an `Int`.** A refined pattern is a guard and never counts towards exhaustiveness, so `_ where InRange(200, 299)` is
+  `bynk.match.refined_pattern_is_range`, a warning whose fix writes `200..299`; `Positive`
+  and `NonNegative` become `1..` and `0..`, and a combined predicate that is one
+  interval becomes that interval. A refined pattern stays where a range cannot go: a
+  `String` predicate (`Matches`, a length predicate, `IsoDate`).
 - **Exhaustiveness is by interval.** The integers are the safe integers, and a
   column is split at every endpoint its patterns use, so `..-1` and `0..` cover
   every `Int` with no `_` arm. A match of literals alone is not split, and stays

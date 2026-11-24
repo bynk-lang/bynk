@@ -137,20 +137,40 @@ literals as its base.
 
 ## Guard a primitive pattern with `where`
 
-`_ where predicate` dispatches on a *range* or *shape* instead of an exact
-value, reusing the same closed predicate vocabulary a refined type declares
-with (`InRange`, `Matches`, `NonEmpty`, …):
+On an `Int`, a *band* is a range pattern: `200..299` matches the same values as
+`_ where InRange(200, 299)`, and unlike it, a range counts towards exhaustiveness
+and a missing interval is reported as a pattern you can paste in:
 
 ```bynk
 fn classify(status: Int) -> String {
   match status {
-    _ where InRange(200, 299) => "success"
-    _ where InRange(400, 499) => "client error"
-    _ where InRange(500, 599) => "server error"
-    _                         => "other"
+    200..299 => "success"
+    400..499 => "client error"
+    500..599 => "server error"
+    _        => "other"
   }
 }
 ```
+
+A refined pattern, `_ where predicate`, dispatches on a *shape* instead, reusing the
+same closed predicate vocabulary a refined type declares with (`Matches`,
+`MinLength`, `NonEmpty`, `IsoDate`, …), which is where it stays the way to match:
+
+```bynk
+fn kind(token: String) -> String {
+  match token {
+    _ where Matches("[0-9]+")  => "number"
+    _ where NonEmpty           => "word"
+    _                          => "empty"
+  }
+}
+```
+
+On an `Int`, `_ where InRange(a, b)`, `_ where Positive` and `_ where NonNegative` are
+the range patterns `a..b`, `1..` and `0..`, so the compiler warns
+(`bynk.match.refined_pattern_is_range`) and `bynk check --fix` rewrites them. A
+combined predicate that is one interval (`_ where Positive && InRange(1, 10)`)
+becomes that interval (`1..10`); one that is not is left alone.
 
 A refined pattern is a **guard, not a narrowing**: it does not change the
 static type of anything in the arm's body, and — like an `if` guard — an arm

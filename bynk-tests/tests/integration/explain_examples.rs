@@ -125,6 +125,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "bynk.mysql.sql_invalid",
         "a warning (the parser is not MySQL's own); `positive/3322_mysql_sql_invalid` holds it with `expected_warnings.txt`",
     ),
+    (
+        "bynk.match.refined_pattern_is_range",
+        "a warning; `positive/3972_refined_pattern_is_range` holds it with `expected_warnings.txt`, and `positive/3972_range_pattern_is_exhaustive` holds the good case",
+    ),
 ];
 
 /// Explained codes whose example is not Bynk source, with the reason. Their
