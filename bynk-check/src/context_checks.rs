@@ -5015,7 +5015,7 @@ fn validate_cors_policy(
         errors.push(CompileError::new(
             "bynk.http.cors_invalid_field",
             expr.span,
-            "`cors` `maxAge` must be a `Duration` literal (e.g. `1.hours`)",
+            "`cors` `maxAge` must be a `Duration` literal (e.g. `1.hour`)",
         ));
     }
 

@@ -13,6 +13,6 @@ agent Slow {
 
 service quotes {
     on call() -> Effect[Result[Int, TimedOut]] by Caller {
-        Slow("a").get().within(1.seconds)
+        Slow("a").get().within(1.second)
     }
 }

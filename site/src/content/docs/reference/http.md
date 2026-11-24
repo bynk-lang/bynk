@@ -766,9 +766,8 @@ not `true` or `false` is `bynk.http.cache_bad_immutable`.
 
 The `private` default is the safe one: a shared cache never stores a response
 unless you opt into `public`. A `GET` with no `@cache` still carries its `ETag`
-(so it is revalidatable) but emits no `Cache-Control`. Duration units are plural —
-`5.minutes`, `1.hours`, `30.seconds` — so a singular `1.hour` is a
-`bynk.http.cache_bad_max_age` diagnostic; a value with a fractional-second
+(so it is revalidatable) but emits no `Cache-Control`. A duration literal's unit agrees with its number —
+`5.minutes`, `1.hour`, `30.seconds`; a value with a fractional-second
 remainder (`500.milliseconds`, or `1500.milliseconds`, which is not a whole
 number of seconds even though it is over one) is
 `bynk.http.cache_max_age_fractional_seconds` — `Cache-Control: max-age` has no
@@ -1252,7 +1251,7 @@ service api from http {
   cors {
     origins:     ["https://app.example.com"],
     credentials: false,
-    maxAge:      1.hours,
+    maxAge:      1.hour,
   }
 
   on GET("/items/:id") (id: Slug) -> Effect[HttpResult[Item]] by v: Visitor given Kv { … }

@@ -668,7 +668,7 @@ entry with `simple = { limit = 20, period = 60 }`.
 
 - `@limit(n)` is the number of calls allowed per key in one window: a positive
   `Int` literal.
-- `@period(d)` is the window: `10.seconds` or `60.seconds` (`1.minutes` is the
+- `@period(d)` is the window: `10.seconds` or `60.seconds` (`1.minute` is the
   same), the only two the platform offers.
 - Both are required (`bynk.capability.missing_option`). A limit that isn't a
   positive `Int` literal, or another window, is `bynk.capability.invalid_option`.

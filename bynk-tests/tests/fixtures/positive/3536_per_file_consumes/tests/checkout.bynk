@@ -7,6 +7,6 @@ consumes bynk { Claim, TimedOut }
 
 case "a claim is held" {
   let c: Claim = Claimed
-  expect late(TimedOut { after: 1.seconds }) == true
+  expect late(TimedOut { after: 1.second }) == true
   expect c == Claimed
 }

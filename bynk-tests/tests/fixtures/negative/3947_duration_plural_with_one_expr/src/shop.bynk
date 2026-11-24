@@ -1,0 +1,3 @@
+commons demo
+
+fn wait() -> Duration { 1.hour }

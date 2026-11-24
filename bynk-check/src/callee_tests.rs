@@ -430,7 +430,7 @@ event Seen = { id: String }
 
 service api {
   on call(id: String) -> Effect[()] by Caller given Idempotency, Events {
-    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Effect.pure(()) }
+    let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Effect.pure(()) }
     Events.emit[Seen](Seen { id: id })
   }
 }

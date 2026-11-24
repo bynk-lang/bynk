@@ -11,7 +11,7 @@ consumes bynk.cloudflare { RateLimit }
 ---
 Publishes per token: 20 a minute.
 ---
-capability PublishLimit = RateLimit @limit(20) @period(1.minutes)
+capability PublishLimit = RateLimit @limit(20) @period(1.minute)
 
 capability ReadLimit = RateLimit @limit(1000) @period(10.seconds)
 

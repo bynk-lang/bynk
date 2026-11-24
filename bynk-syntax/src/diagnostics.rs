@@ -394,7 +394,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.actor.signed_cookie_secret_shared",
         blurb: "A session key signs one actor's cookies and nothing else. If two actors shared a variable, a cookie issued for one would verify for the other, and a Bearer token could be replayed as a cookie. Give each actor its own variable; `previous` is the key being rotated out, so it differs from `secret` too.",
-        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✓",
+        example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hour), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hour), identity = UserId }   // ✓",
     },
     Explain {
         code: "bynk.actor.signed_cookie_ttl_long",
@@ -1599,6 +1599,20 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "fn forever() -> Duration { 9007199254740991.days }   // ✗ overflows the millisecond range\n\nfn forever() -> Duration { 365.days }                // ✓",
     },
     Explain {
+        code: "bynk.duration.unit_agreement",
+        blurb: "A `Duration` literal uses the unit that agrees with its number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with every other number, `0` included (`2.hours`, `0.seconds`). `1.hour` and `5.hour` read wrongly and give a duration two spellings, so they are refused with a fix that rewrites the unit. The rule reads the literal's own number: a negative duration is the negation of a literal (`-1.hour`).",
+        example: "fn tick() -> Duration { 1.hour }     // ✗ `1` takes the singular unit
+
+fn tick() -> Duration { 1.hour }      // ✓",
+    },
+    Explain {
+        code: "bynk.duration.unknown_unit",
+        blurb: "An integer literal has no fields, so a word after one (`5.hr`) is always read as the unit of a `Duration` literal. The units are `millisecond(s)`, `second(s)`, `minute(s)`, `hour(s)` and `day(s)`; there is no `week`. The diagnostic lists them and suggests the nearest one. Write the unit out in full, in the form that agrees with the number (`1.hour`, `5.hours`).",
+        example: "fn wait() -> Duration { 5.hr }        // ✗ `hr` is not a unit
+
+fn wait() -> Duration { 5.hours }     // ✓",
+    },
+    Explain {
         code: "bynk.effect.bind_in_pure_context",
         blurb: "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
         example: "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
@@ -2283,8 +2297,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.cache_bad_max_age",
-        blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number, a string or a singular unit such as `1.hour` is refused; the units are plural: `30.seconds`, `5.minutes`, `1.hours`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
-        example: "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hours\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        blurb: "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number or a string is refused; write a `Duration` literal whose unit agrees with its number: `30.seconds`, `5.minutes`, `1.hour`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
+        example: "@cache(maxAge: 3600)      // ✗ a bare number, not a `Duration`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hour)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hour\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.cache_bad_scope",
@@ -2294,7 +2308,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.http.cache_duplicate",
         blurb: "A handler has one `@cache`, which says how long the response to that route may be reused. Two would give it two freshness windows, and neither could be said to win, so the second is refused. Delete the one you do not want. A handler may likewise carry only one `@limit` (`bynk.http.limit_duplicate`), `@raw` or `@json`.",
-        example: "@cache(maxAge: 1.minutes)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+        example: "@cache(maxAge: 1.minute)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.cache_max_age_fractional_seconds",
@@ -2398,7 +2412,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.http.cors_invalid_field",
-        blurb: "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hours`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+        blurb: "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
         example: "cors { origins: [\"https://app.example.com\"], credentials: \"yes\" }   // ✗ `true` or `false`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }    // ✓",
     },
     Explain {
@@ -2414,7 +2428,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.http.cors_unknown_field",
         blurb: "A `cors { }` policy has four fields: `origins`, `headers`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
-        example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hours }    // ✓",
+        example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hour }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
@@ -6531,17 +6545,17 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.within.in_agent_handler",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the agent's work is bounded from outside. For a slow call out, `FetchOptions.timeout` bounds it inside the agent. The same rule holds for `bynk.race.in_agent_handler`.",
-        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
+        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.second)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.second)   // ✓ the service handler has\n    }\n}",
     },
     Explain {
         code: "bynk.within.in_pure_context",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context`.",
-        example: "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.seconds)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.seconds)\n}",
+        example: "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.second)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.second)\n}",
     },
     Explain {
         code: "bynk.within.outside_handler",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, which only a service handler's body, or a function's it calls, has. A WebSocket handler, a provider operation and a test `case` have none. Move the `within` into a service handler or a function, and have the case call that, simulating a slow call with `stub … after`. In an agent handler the rule is `bynk.within.in_agent_handler`.",
-        example: "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.seconds)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
+        example: "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.second)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
     },
     Explain {
         code: "bynk.within.timed_out_not_in_scope",
@@ -7480,6 +7494,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.duration.literal_overflow",
         "A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range.",
+    ),
+    d(
+        "bynk.duration.unit_agreement",
+        "A `Duration` literal's unit does not agree with its number: `1` takes the singular unit, every other number the plural.",
+    ),
+    d(
+        "bynk.duration.unknown_unit",
+        "An integer literal is followed by a word that is not a `Duration` unit.",
     ),
     dg(
         "bynk.effect.bind_in_pure_context",

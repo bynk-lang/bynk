@@ -221,7 +221,7 @@ against can still arrive. Prune past that, from a cron handler:
 ```bynk,fragment
 service retention from cron {
 	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), SqlError]] given Deliveries {
-		let cutoff = (Instant.fromEpochMillis(at) - 1.days).toIso()
+		let cutoff = (Instant.fromEpochMillis(at) - 1.day).toIso()
 		let Ok(_) <- Deliveries.run(
 			"DELETE FROM review_tombstones WHERE at < strftime('%Y-%m-%dT%H:%M:%SZ', ?1)",
 			[Text(cutoff)]

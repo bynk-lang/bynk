@@ -538,7 +538,7 @@ const CLAIM_FIXTURE: &str = "context reps {
 
   service ledger {
     on call(id: String) -> Effect[Result[String, String]] by Caller given Idempotency {
-      let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+      let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok(\"duplicate\") }
       let tagged = \"\\(id)!\"
       if id == \"bad\" { Err(tagged) } else { Ok(tagged) }
     }

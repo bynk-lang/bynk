@@ -10,7 +10,7 @@ suite shop.pricing {
   }
 
   case "a stub faster than the deadline is Ok" {
-    stub Pricing.quote(_) returns 7 after 1.seconds
+    stub Pricing.quote(_) returns 7 after 1.second
     let r <- quotes.call(1)
     expect r == "quoted 7"
   }
@@ -55,7 +55,7 @@ suite shop.pricing {
   }
 
   case "a lambda in the handler bounds each call alone" {
-    stub Pricing.quote(1) returns 1 after 1.seconds
+    stub Pricing.quote(1) returns 1 after 1.second
     stub Pricing.quote(2) returns 2 after 9.seconds
     let n <- many.call([1, 2])
     expect n == 2
@@ -63,14 +63,14 @@ suite shop.pricing {
   }
 
   case "advance Clock fires nothing when no timer is due" {
-    stub Pricing.quote(_) returns 7 after 1.seconds
+    stub Pricing.quote(_) returns 7 after 1.second
     advance Clock by 10.seconds
     let r <- quotes.call(1)
     expect r == "quoted 7"
   }
 
   case "in a par block each within bounds its own effect" {
-    stub Pricing.quote(5) returns 1 after 1.seconds
+    stub Pricing.quote(5) returns 1 after 1.second
     stub Pricing.quote(6) returns 2 after 9.seconds
     let r <- together.call(5)
     expect r == "true false"
@@ -89,7 +89,7 @@ suite shop.pricing {
   }
 
   case "a latency stub that wins at integration is Ok" as integration {
-    stub Pricing.quote(_) returns 7 after 1.seconds
+    stub Pricing.quote(_) returns 7 after 1.second
     let r <- quotes.call(1)
     expect r == "quoted 7"
   }

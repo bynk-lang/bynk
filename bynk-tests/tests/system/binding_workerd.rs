@@ -791,7 +791,7 @@ service api from http {
 \t}
 
 \ton GET(\"/later/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
-\t\tlet _ <- Orders.sendWith(Json.encode(Placed { id: id, total: 8 }), QueueSend { delay: Some(1.seconds) })
+\t\tlet _ <- Orders.sendWith(Json.encode(Placed { id: id, total: 8 }), QueueSend { delay: Some(1.second) })
 \t\tOk(\"sent\")
 \t}
 
@@ -806,7 +806,7 @@ service api from http {
 \t}
 
 \ton GET(\"/valuelater/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Orders {
-\t\tlet _ <- Orders.sendValueWith(Placed { id: id, total: 10 }, QueueSend { delay: Some(1.seconds) })
+\t\tlet _ <- Orders.sendValueWith(Placed { id: id, total: 10 }, QueueSend { delay: Some(1.second) })
 \t\tOk(\"sent\")
 \t}
 

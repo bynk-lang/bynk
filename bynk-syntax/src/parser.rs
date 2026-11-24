@@ -14,6 +14,7 @@ use crate::lexer::{
 };
 use crate::span::Span;
 mod declarations;
+mod duration;
 mod expressions;
 mod staircase;
 mod statements;
@@ -3226,7 +3227,7 @@ mod tests {
     #[test]
     fn advance_still_reads_its_by_and_admits_a_variable_amount() {
         for stmt in ["advance Clock by 15.minutes", "advance Clock by by"] {
-            let src = format!("suite x\n\ncase \"c\" {{\n  let by = 1.minutes\n  {stmt}\n}}\n");
+            let src = format!("suite x\n\ncase \"c\" {{\n  let by = 1.minute\n  {stmt}\n}}\n");
             let toks = tokenize(&src).unwrap();
             let unit = parse_unit_with_recovery(&toks, &src);
             assert!(unit.1.is_empty(), "{stmt}: {:?}", unit.1);

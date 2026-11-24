@@ -49,7 +49,7 @@ A lambda written in the handler can use `within`, and a `par` block bounds each 
 bindings alone:
 
 ```bynk,fragment
-let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(1.seconds))
+let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(1.second))
 ```
 
 ## Where it is allowed

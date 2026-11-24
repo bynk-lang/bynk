@@ -4,7 +4,7 @@ type View = { ok: Bool }
 
 service api from http {
   @cache(maxAge: 5.minutes)
-  @cache(maxAge: 1.hours)
+  @cache(maxAge: 1.hour)
   on GET("/items") () -> Effect[HttpResult[View]] by Visitor {
     Ok(View { ok: true })
   }

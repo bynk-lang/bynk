@@ -24,9 +24,9 @@ fn duration_literal_and_arithmetic_type_cleanly() {
         Vec::<String>::new()
     );
     assert_eq!(codes("Duration", "2.minutes * 3"), Vec::<String>::new());
-    assert_eq!(codes("Duration", "3 * 1.hours"), Vec::<String>::new());
+    assert_eq!(codes("Duration", "3 * 1.hour"), Vec::<String>::new());
     assert_eq!(
-        codes("Duration", "1.hours - 10.minutes"),
+        codes("Duration", "1.hour - 10.minutes"),
         Vec::<String>::new()
     );
 }
@@ -36,7 +36,7 @@ fn every_unit_is_accepted() {
     assert_eq!(
         codes(
             "Duration",
-            "100.milliseconds + 1.seconds + 1.minutes + 1.hours + 1.days"
+            "100.milliseconds + 1.second + 1.minute + 1.hour + 1.day"
         ),
         Vec::<String>::new()
     );
@@ -44,7 +44,7 @@ fn every_unit_is_accepted() {
 
 #[test]
 fn duration_comparison_types_bool() {
-    assert_eq!(codes("Bool", "1.hours > 30.minutes"), Vec::<String>::new());
+    assert_eq!(codes("Bool", "1.hour > 30.minutes"), Vec::<String>::new());
     assert_eq!(
         codes("Bool", "5.minutes == 5.minutes"),
         Vec::<String>::new()

@@ -15,7 +15,7 @@ consumes bynk { Logger, EventEnvelope }
 // precedent); `OnV1`'s own emitted call is the fixture's actual subject.
 service OnV1 from Events(PaymentConfirmed) via schema(1) {
   on event(e: PaymentConfirmed) -> Effect[()] given Logger {
-    let r <- Logger.info(e.orderId).within(1.seconds)
+    let r <- Logger.info(e.orderId).within(1.second)
     ()
   }
 }

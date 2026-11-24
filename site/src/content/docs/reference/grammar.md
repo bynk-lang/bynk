@@ -655,7 +655,9 @@ An argument to a predicate: a number or string literal.
 The primitive types `Int`, `String`, `Bool`, `Float`, and `Duration`. `Duration`
 (v0.86, ADR 0112) is a span of time in milliseconds, written with a literal
 `<int>.<unit>` (`5.minutes`, `30.days`); its closed unit set is `milliseconds`,
-`seconds`, `minutes`, `hours`, `days`.
+`seconds`, `minutes`, `hours`, `days`, written singular with `1` (`1.hour`) and
+plural with every other number (`bynk.duration.unit_agreement`); an integer
+literal followed by any other word is `bynk.duration.unknown_unit`.
 
 **Static semantics.**
 {{#grammar-semantics base_type}}
@@ -1197,7 +1199,7 @@ service api from http {
 	cors {
 		origins: ["https://app.example.com"],
 		credentials: false,
-		maxAge: 1.hours,
+		maxAge: 1.hour,
 	}
 
 	on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {

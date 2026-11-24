@@ -12,7 +12,7 @@ fn scaled() -> Duration {
 }
 
 fn longer() -> Bool {
-  1.hours > 30.minutes
+  1.hour > 30.minutes
 }
 
 fn deadline(now: Instant) -> Instant {
@@ -20,7 +20,7 @@ fn deadline(now: Instant) -> Instant {
 }
 
 fn millis() -> Int {
-  1.minutes.toMillis()
+  1.minute.toMillis()
 }
 
 fn ofInt(n: Int) -> Duration {
@@ -28,5 +28,5 @@ fn ofInt(n: Int) -> Duration {
 }
 
 fn everyUnit() -> Duration {
-  100.milliseconds + 1.seconds + 1.minutes + 1.hours + 1.days
+  100.milliseconds + 1.second + 1.minute + 1.hour + 1.day
 }

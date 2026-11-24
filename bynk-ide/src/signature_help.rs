@@ -702,7 +702,7 @@ mod tests {
 
     #[test]
     fn a_signed_cookie_actor_has_issue_and_expire_signatures() {
-        let doc = "context a\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        let doc = "context a\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hour), identity = UserId }\n";
         assert_eq!(
             resolve_label("User.issue", doc, None).as_deref(),
             Some("issue(identity: UserId) -> Effect[Cookie]")

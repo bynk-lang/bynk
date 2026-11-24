@@ -73,7 +73,7 @@ argument, decide the winner:
 suite shop.prices {
 	case "the faster mirror wins" {
 		stub Prices.get("east", _) returns 1 after 2.seconds
-		stub Prices.get("west", _) returns 2 after 1.seconds
+		stub Prices.get("west", _) returns 2 after 1.second
 		let p <- prices.call(7)
 		expect p == 2
 		expect Prices.get called 2 times  // the loser was still called
