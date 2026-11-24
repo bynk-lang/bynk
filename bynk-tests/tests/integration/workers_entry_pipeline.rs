@@ -204,7 +204,7 @@ fn every_route_response_carries_the_service_security_headers() {
         "{ts}"
     );
     assert!(
-            ts.contains("return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);"),
+            ts.contains("return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, [\"Bynk realm=\\\"demo.shop\\\"\"]), __security_api);"),
             "{ts}"
         );
 }

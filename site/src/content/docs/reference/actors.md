@@ -215,6 +215,26 @@ variable is the operator's configuration. `trustFrom` must be a string
 (`bynk.actor.oidc_trust_from_not_string`) naming a variable no actor uses as its
 `secret` (`bynk.actor.oidc_trust_from_is_secret`).
 
+## The `401` challenge
+
+Every `401` an HTTP route (or a WebSocket upgrade) answers carries a `WWW-Authenticate`
+header, as RFC 9110 §15.5.2 requires. The challenge follows the route's `by` actor and
+names the context as its `realm`:
+
+| Actor on the route | Challenge |
+|---|---|
+| `Bearer`, `Oidc` | `Bearer realm="<context>"`, plus `error="invalid_token"` when the request presented a bearer token (RFC 6750 §3); a request with no token gets the bare challenge, and there is never an `error_description` |
+| `Signature` | `Bynk-Signature realm="<context>", header="<the actor's header>"` |
+| `SignedCookie` | `Bynk-Cookie realm="<context>"` |
+| a sum of actors | one challenge per member, in the sum's order |
+| `Visitor`, or any other route | `Bynk realm="<context>"` |
+
+`Bynk-Signature` and `Bynk-Cookie` are not registered schemes: HMAC signatures and cookies
+have none, so these satisfy the RFC without implying a protocol a generic client might try
+to speak. A handler's own `Unauthorized` carries the route's challenge too, and `on rejected`
+keeps it when it renders a `401` body. A service with CORS adds `WWW-Authenticate` to
+`Access-Control-Expose-Headers` so a browser client can read it.
+
 ## The `by` clause
 
 ```bynk,ignore

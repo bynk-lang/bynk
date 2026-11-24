@@ -4,7 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 
@@ -55,7 +55,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_blob(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_uploads);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
         }
       }
       {
@@ -66,7 +66,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
           }
           const result = await surface.http_POST_either(request);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_uploads);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""]), __security_uploads);
         }
       }
       {
@@ -98,7 +98,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
           const body = __r_body.value;
           const result = await surface.http_POST_json(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_uploads);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
         }
       }
       {
@@ -121,14 +121,14 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
           }
           const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];
-          if (typeof __secret !== "string") return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_uploads);
+          if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
           const __ts = request.headers.get("X-Ts");
-          if (__ts === null) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_uploads);
+          if (__ts === null) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
           const __ok = await __verifySignatureHmacSha256(__bytes, __secret, request.headers.get("X-Sig"), __ts, 300);
-          if (!__ok) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_uploads);
+          if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
           const body = __bytes;
           const result = await surface.http_POST_signed(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_uploads);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
         }
       }
       {
@@ -160,7 +160,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_PUT_api_Param_org_Param_package(org, __id_package, body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_uploads);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.uploads\""]), __security_uploads);
         }
       }
       if (__matchPath("/api/:org/:package", path) !== null) {

@@ -66,7 +66,16 @@ pub(super) fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> by
     let span_start = inner.span.start;
     let span_end = inner.span.end;
     let location = expect_location_raw(cx, span_start);
-    let src = format!("expect {}", expect_source_text_raw(cx, inner.span));
+    let mut src = format!("expect {}", expect_source_text_raw(cx, inner.span));
+    // #3980: a failed `is`, or an `expect false` that is a `match` arm, reports the value tested.
+    let report = match super::expect_was::subject_report(inner, cx) {
+        Some(r) => Some(r),
+        None => super::expect_was::arm_report(inner, cx).map(|(head, r)| {
+            src = [src.as_str(), " ", head.as_str()].concat();
+            r
+        }),
+    };
+    let src_detail = report.as_ref().map_or(src.clone(), |r| r.detail(&src));
     // The `Paren` keeps today's `((value))` bytes; the `Str` nodes
     // escape exactly as `escape_ts_string` does.
     {
@@ -78,8 +87,11 @@ pub(super) fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> by
                 str_lit(location.clone()),
                 num_lit(span_start.to_string()),
                 num_lit(span_end.to_string()),
-                str_lit(src.clone()),
-            ],
+                str_lit(src_detail),
+            ]
+            .into_iter()
+            .chain(report.iter().flat_map(|r| r.runtime_args()))
+            .collect(),
         }
     }
 }

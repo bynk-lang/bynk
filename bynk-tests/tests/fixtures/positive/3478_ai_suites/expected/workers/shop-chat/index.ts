@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.chat`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -39,7 +39,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/chat", path) !== null) {
           __route = "GET /chat";
           const result = await surface.http_GET_chat();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Answer, { weakEtag: true }), request), __security_chat);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Answer, { weakEtag: true }), request), request, ["Bynk realm=\"shop.chat\""]), __security_chat);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -47,7 +47,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/embed", path) !== null) {
           __route = "GET /embed";
           const result = await surface.http_GET_embed();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_chat);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bynk realm=\"shop.chat\""]), __security_chat);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -65,7 +65,7 @@ export default {
           const __raw_plan = __m.params["plan"];
           const plan = __raw_plan;
           const result = await surface.http_POST_signup_Param_plan(plan);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.cart\""]), __security_api);
         }
       }
       if (__matchPath("/signup/:plan", path) !== null) {

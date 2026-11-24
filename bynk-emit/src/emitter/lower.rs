@@ -38,6 +38,7 @@ mod calls;
 mod claims;
 mod control;
 mod expect;
+pub(super) mod expect_was;
 mod ident;
 mod is;
 mod literal;

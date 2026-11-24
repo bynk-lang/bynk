@@ -1,0 +1,35 @@
+// #3980: a failed `is`, and an `expect false` in a `match` arm, report the value tested.
+suite demo.pages {
+  case "a sum subject" {
+    let r = parse("x")
+    expect r is Ok(_)
+  }
+
+  case "a match arm" {
+    let g = greet(0)
+    match g {
+      Hello => expect true
+      _ => expect false
+    }
+  }
+
+  case "an http result" {
+    let r <- api.GET("/hello") by Visitor
+    expect r is NotFound
+  }
+
+  case "a non-codable subject" {
+    let s = feed()
+    expect s is None
+  }
+
+  case "a redacted subject" {
+    let c = claims()
+    expect c is None
+  }
+
+  case "a long subject" {
+    let l = long()
+    expect l is None
+  }
+}

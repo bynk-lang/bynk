@@ -3,7 +3,7 @@
 
 import { __bynkBytesToBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -39,7 +39,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/blob", path) !== null) {
           __route = "GET /blob";
           const result = await surface.http_GET_blob();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: globalThis.Uint8Array) => __bynkBytesToBase64(__v) as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -47,7 +47,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/ratio", path) !== null) {
           __route = "GET /ratio";
           const result = await surface.http_GET_ratio();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isFinite(v)) throw new globalThis.Error("non-finite Float at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
