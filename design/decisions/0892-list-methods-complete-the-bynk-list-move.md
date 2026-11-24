@@ -1,12 +1,6 @@
----
-level: minor
-probes: ast_importers
-changelog: `List` gains `reverse`, `find`, `contains`, `last`, `lastOrElse`, `isEmpty`, `traverse` and keyless `sort()`, `min()` and `max()`, so every `bynk.list` function now has a method and `bynk.list` is fully deprecated
----
+# 0892 — Every bynk.list function has a List method
 
-## ADR: list-methods-complete-the-bynk-list-move
-title: Every bynk.list function has a List method
-summary: Adds the List methods bynk.list still held, plus contains, last and isEmpty, and fully deprecates bynk.list
+- **Status:** Accepted (v0.643)
 
 **Context.** ADR 0116 moved `List`'s vocabulary into methods and deprecated the
 free functions, but left `reverse`, `find`, keyless `sort`/`min`/`max` and

@@ -1,0 +1,33 @@
+context cr.jobs
+
+// #3870: the scheduled time is an `Instant`, so a handler does `Duration`
+// arithmetic on it directly: `at - 1.hour` is the start of the window the run
+// covers, and `at.toEpochMillis()` is the number where one is needed.
+agent Window {
+	key id: String
+	store start: Cell[Int]
+
+	on call note(ms: Int) -> Effect[Int] {
+		let _ <- start.update((_) => ms)
+		start
+	}
+
+	on call read() -> Effect[Int] {
+		start
+	}
+}
+
+service sweeper from cron {
+	on schedule("0 * * * *") (at: Instant) -> Effect[Result[(), String]] {
+		let windowStart = at - 1.hour
+		let _ <- Window("w").note(windowStart.toEpochMillis())
+		Ok(())
+	}
+}
+
+service api from http {
+	on GET("/window") () -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Window("w").read()
+		Ok(n)
+	}
+}

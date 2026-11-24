@@ -65,7 +65,7 @@ service api from http {
 
 // Cron wrapper: the scheduled-time param binds as const __id_delete.
 service sweeper from cron {
-  on schedule("*/5 * * * *") (delete: Int) -> Effect[Result[(), ()]] {
+  on schedule("*/5 * * * *") (delete: Instant) -> Effect[Result[(), ()]] {
     Ok(())
   }
 }

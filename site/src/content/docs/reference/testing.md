@@ -26,7 +26,7 @@ the declared handler and checked for arity and argument types:
 |---|---|
 | `on call` | `svc.call(args)` |
 | `from http` | `svc.GET("/path")`, `svc.POST("/path", body)` — the path is the route **pattern**, then the handler's params (path params, then body); a `system` case may add a trailing [`RequestHeaders`](#request-headers) when the route declares no `headers:` |
-| `from cron` | `svc.schedule("<expr>")` — matched to the handler with that schedule |
+| `from cron` | `svc.schedule("<expr>", at)` — matched to the handler with that schedule; `at` is an `Instant` when the handler declares it |
 | `from queue` | `svc.message(msg)` |
 | `from Events(E)` | `svc.event(e)`, `svc.event(e, env)` — [one delivered event](#event-address) |
 | `from websocket` | `svc.open(tc, route…)`, `svc.message(tc, frame)`, `svc.close(tc)` — [a connection's lifecycle](#websocket-address) |
@@ -507,8 +507,9 @@ suite shop.inventory as system {
 ```
 
 - **`svc.schedule("<expr>", at)`** calls `scheduled` with `{ cron: "<expr>",
-  scheduledTime: at }`. The scheduled time is required, as at `unit`, when the
-  handler declares it; a handler that doesn't is fired at `0`. The address yields
+  scheduledTime: at }`. The scheduled time, an `Instant`, is required, as at
+  `unit`, when the handler declares it; a handler that doesn't is fired at the
+  epoch. The address yields
   the handler's `Result`, which the test build's entry hands back to the harness.
   A cron handler that faults fails the case, as it does at `unit`.
 - **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON

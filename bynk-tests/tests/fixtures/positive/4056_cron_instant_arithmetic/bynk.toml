@@ -1,0 +1,6 @@
+[project]
+name = "4056-cron-instant-arithmetic"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

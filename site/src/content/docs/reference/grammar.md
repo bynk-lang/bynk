@@ -310,7 +310,7 @@ capabilities, isolated behind its boundary.
 context reaper
 
 service sweeper from cron {
-	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
 		Ok(())
 	}
 }

@@ -4,8 +4,7 @@ title: Run a task on a schedule
 **Goal:** run some work on a fixed schedule — a nightly sweep, an hourly
 refresh — without an incoming request.
 
-Cron handlers go in a `service` inside a `context`. Each names a schedule (bare,
-after `cron`), takes at most one parameter, and returns `Effect[Result[(), E]]`.
+Cron handlers go in a `service` inside a `context`. Each is an `on schedule("…")`, takes at most one parameter, and returns `Effect[Result[(), E]]`.
 
 ## A minimal scheduled task
 
@@ -25,16 +24,18 @@ minutes; `0 0 * * *` runs at midnight.
 
 ## Get the scheduled time
 
-Cron has no built-in clock. To learn when the run fired, declare a single `Int`
-parameter — it receives the scheduled time as Unix epoch milliseconds. It is the
-exact, schedule-aligned instant (better than "now" for bucketing or idempotency
-keys):
+To learn when the run fired, declare a single `Instant` parameter — it receives
+the scheduled time. It is the exact, schedule-aligned instant (better than
+`Clock.now()` for bucketing or idempotency keys, because it stays the same when a
+run starts late), and it works directly with `Duration` arithmetic such as
+`at - 1.hour`. Schedules run in UTC. Where you need the number, use
+`at.toEpochMillis()`:
 
 ```bynk
 context reaper
 
 service sweeper from cron {
-	on schedule("0 * * * *") (at: Int) -> Effect[Result[(), String]] {
+	on schedule("0 * * * *") (at: Instant) -> Effect[Result[(), String]] {
 		Ok(())
 	}
 }
@@ -59,13 +60,13 @@ service sweeper from cron {
 ## Test it
 
 A test case runs a cron handler with `svc.schedule("<expr>", at)`, passing the
-scheduled time when the handler declares it. The address yields the handler's
+scheduled time (an `Instant`) when the handler declares it. The address yields the handler's
 `Result`:
 
 ```bynk,fragment
 suite reaper as system {
 	case "the hourly sweep succeeds" {
-		let r <- sweeper.schedule("0 * * * *", 3600000)
+		let r <- sweeper.schedule("0 * * * *", Instant.fromEpochMillis(3600000))
 		expect r is Ok(_)
 	}
 }
