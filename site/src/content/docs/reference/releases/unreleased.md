@@ -7,3 +7,4 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.662.0** | A failed `expect … is …`, and an `expect false` that is a `match` arm, report the value they tested (`r was {"tag":"Err",…}`), and `bynk test --format json` carries it as `actual` |
