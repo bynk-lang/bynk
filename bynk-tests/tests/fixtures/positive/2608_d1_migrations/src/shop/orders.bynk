@@ -11,13 +11,13 @@ capability Orders = D1
 type Order = { id: String, total: Int, note: String }
 
 service save {
-	on call(id: String, total: Int, note: String) -> Effect[Result[SqlRun, SqlError]] given Orders {
+	on call(id: String, total: Int, note: String) -> Effect[Result[SqlRun, SqlError]] by Caller given Orders {
 		Orders.run("INSERT INTO orders (id, total, note) VALUES (?1, ?2, ?3)", [Text(id), Integer(total), Text(note)])
 	}
 }
 
 service listing {
-	on call() -> Effect[Result[List[Order], String]] given Orders {
+	on call() -> Effect[Result[List[Order], String]] by Caller given Orders {
 		let rows <- Orders.all("SELECT id, total, note FROM orders ORDER BY id", [])
 		match rows {
 			Ok(text) => match Json.decode[List[Order]](text) {

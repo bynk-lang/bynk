@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0892](0892-list-methods-complete-the-bynk-list-move.md) | **Every bynk.list function has a List method** (v0.643) — Adds the List methods bynk.list still held, plus contains, last and isEmpty, and fully deprecates bynk.list | Accepted (v0.643) |
+| [0891](0891-on-call-requires-by.md) | **An `on call` handler must state its actor** (v0.642) — Supersedes ADR 0082's silent `Caller` default for `on call` | Accepted (v0.642) |
+| [0890](0890-out-js-inside-the-output-root.md) | **The compiled JavaScript lives inside the output root** (v0.641) — `<output>/out-js` replaces the sibling `<output>/../out-js`, so a run's artefacts are private to it | Accepted (v0.641) |
 | [0889](0889-generated-test-modules-are-trees.md) | **A generated test module is a tree, and its imports come from it** (v0.640.71) — Test modules derive their imports, and both corpus audits cover them | Accepted (v0.640.71) |
 | [0888](0888-wrangler-rest-boundary.md) | **The wrangler/REST boundary and the Cloudflare client layer** (v0.640.69) — Wrangler for deploy, dev, tail, migrations and rollback; REST for account resources; one module, one operation trait, one REST client, typed errors whose text is the contract | Accepted (v0.640.69) |
 | [0887](0887-the-test-runtime-is-first-party-runtime-code.md) | **The test runtime is first-party runtime code** (v0.640.52) — Test-runtime code is authored as type-checked modules under the runtime's `src/testing/`, spliced into generated test modules as generated text, and guarded so every module is checked | Accepted (v0.640.52) |

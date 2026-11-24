@@ -6,7 +6,7 @@ consumes shop.order
 consumes shop.ledger
 
 service check {
-  on call(id: String) -> Effect[String] {
+  on call(id: String) -> Effect[String] by Caller {
     let o <- shop.order.place(id)
     let back <- shop.ledger.echo(o)
     shop.ledger.orderId(back)

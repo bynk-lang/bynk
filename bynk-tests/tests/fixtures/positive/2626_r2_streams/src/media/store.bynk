@@ -32,21 +32,21 @@ service api from http {
 }
 
 service save {
-	on call(key: String, data: Bytes) -> Effect[Int] given Videos {
+	on call(key: String, data: Bytes) -> Effect[Int] by Caller given Videos {
 		let o <- Videos.putStream(key, Stream.of([data.slice(0, 2), data.slice(2, data.length())]), data.length())
 		o.size
 	}
 }
 
 service saveExactly {
-	on call(key: String, data: Bytes, size: Int) -> Effect[Int] given Videos {
+	on call(key: String, data: Bytes, size: Int) -> Effect[Int] by Caller given Videos {
 		let o <- Videos.putStream(key, Stream.of([data]), size)
 		o.size
 	}
 }
 
 service saveNew {
-	on call(key: String, data: Bytes) -> Effect[Bool] given Videos {
+	on call(key: String, data: Bytes) -> Effect[Bool] by Caller given Videos {
 		let stored <- Videos.putStreamWith(key, Stream.of([data]), data.length(), R2Put {
 			contentType: Some("video/mp4"),
 			metadata: Map.empty(),
@@ -57,7 +57,7 @@ service saveNew {
 }
 
 service copy {
-	on call(src: String, dst: String) -> Effect[Option[Int]] given Videos {
+	on call(src: String, dst: String) -> Effect[Option[Int]] by Caller given Videos {
 		let found <- Videos.getStream(src)
 		match found {
 			Some(o) => {
@@ -70,7 +70,7 @@ service copy {
 }
 
 service read {
-	on call(key: String) -> Effect[Option[String]] given Videos {
+	on call(key: String) -> Effect[Option[String]] by Caller given Videos {
 		let found <- Videos.getStream(key)
 		match found {
 			Some(o) => {
@@ -85,14 +85,14 @@ service read {
 // An upload's handle is plain data: here its id goes back to the caller and
 // returns with the parts, as it would between requests.
 service begin {
-	on call(key: String) -> Effect[String] given Videos {
+	on call(key: String) -> Effect[String] by Caller given Videos {
 		let u <- Videos.createUpload(key, R2UploadOptions { contentType: Some("video/mp4"), metadata: Map.empty().insert("by", "test") })
 		u.uploadId
 	}
 }
 
 service finish {
-	on call(key: String, id: String, first: String, last: String) -> Effect[String] given Videos {
+	on call(key: String, id: String, first: String, last: String) -> Effect[String] by Caller given Videos {
 		let u = R2Upload { key: key, uploadId: id }
 		let b <- Videos.uploadPart(u, 2, Bytes.fromUtf8(last))
 		let a <- Videos.uploadPart(u, 1, Bytes.fromUtf8(first))
@@ -102,7 +102,7 @@ service finish {
 }
 
 service abandon {
-	on call(key: String, id: String) -> Effect[()] given Videos {
+	on call(key: String, id: String) -> Effect[()] by Caller given Videos {
 		let u = R2Upload { key: key, uploadId: id }
 		let _ <- Videos.uploadPart(u, 1, Bytes.fromUtf8("x"))
 		Videos.abortUpload(u)

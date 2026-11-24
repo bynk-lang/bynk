@@ -4,7 +4,7 @@ consumes bynk.cloudflare { Kv, KvPut, KvExpiration }
 
 // #2590: `Kv.putWith` ships experimental, though `Kv` is stable.
 service probe {
-  on call(key: String) -> Effect[()] given Kv {
+  on call(key: String) -> Effect[()] by Caller given Kv {
     Kv.putWith(key, "v", KvPut { expiration: Never, metadata: Map.empty() })
   }
 }

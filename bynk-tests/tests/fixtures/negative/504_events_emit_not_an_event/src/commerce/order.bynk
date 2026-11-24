@@ -5,7 +5,7 @@ consumes bynk { Events }
 type NotAnEvent = { orderId: String }
 
 service leak {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[NotAnEvent](NotAnEvent { orderId: orderId })
   }
 }

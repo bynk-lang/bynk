@@ -8,7 +8,7 @@ consumes shop.ledger
 type Ticket = { n: Int }
 
 service check {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     shop.ledger.take(Ticket { n: 1 })
   }
 }

@@ -19,25 +19,25 @@ type Token = opaque String where MaxLength(8)
 type Tagged = { token: Token, n: Int }
 
 service price {
-  on call(n: Int) -> Effect[Result[Cents, Int]] {
+  on call(n: Int) -> Effect[Result[Cents, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }
 
 service wrapped {
-  on call(n: Int) -> Effect[Result[Envelope, Int]] {
+  on call(n: Int) -> Effect[Result[Envelope, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }
 
 service outcome {
-  on call(n: Int) -> Effect[Result[Outcome, Int]] {
+  on call(n: Int) -> Effect[Result[Outcome, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }
 
 service tagged {
-  on call(n: Int) -> Effect[Result[Tagged, Int]] {
+  on call(n: Int) -> Effect[Result[Tagged, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }

@@ -4,7 +4,7 @@ consumes bynk
 consumes bynk.cloudflare { Email, EmailMessage }
 
 service probe {
-  on call() -> Effect[Int] given Email {
+  on call() -> Effect[Int] by Caller given Email {
     Effect.pure(0)
   }
 }

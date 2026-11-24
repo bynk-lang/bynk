@@ -3,7 +3,7 @@ context app.main
 uses geo.r
 
 service probe {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     warn("x")
   }
 }

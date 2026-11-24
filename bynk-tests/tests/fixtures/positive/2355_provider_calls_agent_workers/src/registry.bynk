@@ -42,7 +42,7 @@ provides Unyank = AgentUnyank {
 }
 
 service yank {
-  on call() -> Effect[Bool] given Yanks, Unyank {
+  on call() -> Effect[Bool] by Caller given Yanks, Unyank {
     let first <- Yanks.set(true)
     let again <- Yanks.set(true)
     let cleared <- Unyank.clear()

@@ -6,7 +6,7 @@ consumes bynk.cloudflare { R2 }
 capability Archives = R2 @jurisdiction("us")
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

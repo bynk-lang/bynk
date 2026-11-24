@@ -8,19 +8,19 @@ context ev.relay
 consumes ev.store
 
 service hold {
-  on call(id: String, b: Batch) -> Effect[Option[Batch]] {
+  on call(id: String, b: Batch) -> Effect[Option[Batch]] by Caller {
     Effect.pure(Some(Batch { id: id, size: b.size, status: Held("checked"), code: b.code }))
   }
 }
 
 service active {
-  on call() -> Effect[Status] {
+  on call() -> Effect[Status] by Caller {
     Effect.pure(Active)
   }
 }
 
 service held {
-  on call(b: Batch) -> Effect[Bool] {
+  on call(b: Batch) -> Effect[Bool] by Caller {
     Effect.pure(match b.status {
       Active => false
       Held(_) => true

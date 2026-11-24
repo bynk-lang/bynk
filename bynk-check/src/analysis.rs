@@ -1298,12 +1298,12 @@ mod tests {
     const PAYMENT: &str = "context demo.payment\n\n\
 exports transparent { Receipt }\n\n\
 type Receipt = { id: String }\n\n\
-service authorise {\n  on call(id: String) -> Effect[Result[Receipt, Int]] {\n    Ok(Receipt { id: id })\n  }\n}\n";
+service authorise {\n  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {\n    Ok(Receipt { id: id })\n  }\n}\n";
 
     const CHECKOUT: &str = "context demo.checkout\n\n\
 uses demo.money\n\nconsumes demo.payment\n\n\
 fn price() -> Cents { 100 }\n\n\
-service pay {\n  on call(id: String) -> Effect[Result[Receipt, Int]] {\n    demo.payment.authorise(id)\n  }\n}\n";
+service pay {\n  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {\n    demo.payment.authorise(id)\n  }\n}\n";
 
     #[test]
     fn a_consuming_context_checks_clean_against_its_uses_and_consumes() {

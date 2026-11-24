@@ -5,7 +5,7 @@ consumes pay
 type Row = { token: Token }
 
 service check {
-  on call(raw: String) -> Effect[Bool] {
+  on call(raw: String) -> Effect[Bool] by Caller {
     Effect.pure(Json.decodeSql[List[Row]](raw).isOk())
   }
 }

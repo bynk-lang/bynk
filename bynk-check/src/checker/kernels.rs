@@ -769,12 +769,6 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::List(elem)))
         }
-        Some(ListOp::Count) => {
-            if !arity(0, ctx) {
-                return None;
-            }
-            Some(tys.intern(Ty::Base(BaseType::Int)))
-        }
         Some(ListOp::Any | ListOp::All) => {
             if !arity(1, ctx) {
                 return None;
@@ -790,19 +784,6 @@ pub(crate) fn check_list_kernel_method(
                 ctx,
             );
             Some(tys.intern(Ty::Base(BaseType::Bool)))
-        }
-        Some(ListOp::First) => {
-            if !arity(0, ctx) {
-                return None;
-            }
-            Some(tys.intern(Ty::Option(elem)))
-        }
-        Some(ListOp::FirstOrElse) => {
-            if !arity(1, ctx) {
-                return None;
-            }
-            check_arg(&args[0], elem, "the `List.firstOrElse` fallback", ctx);
-            Some(elem)
         }
         // v0.88 (ADR 0116 D2/D3/D4): ordering and aggregate vocabulary. The
         // key is the projection's return type; orderable/numeric widen through
@@ -841,6 +822,22 @@ pub(crate) fn check_list_kernel_method(
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sum` key", ctx)?;
             Some(sum_result(key, "List.sum", args[0].span, ctx))
         }
+        Some(o @ (ListOp::Min | ListOp::Max)) if args.is_empty() => {
+            super::list_basics::check_list_basic(method, o, args, elem, span, ctx)
+        }
+        Some(
+            o @ (ListOp::Reverse
+            | ListOp::Find
+            | ListOp::Contains
+            | ListOp::Last
+            | ListOp::LastOrElse
+            | ListOp::IsEmpty
+            | ListOp::Sort
+            | ListOp::Traverse
+            | ListOp::First
+            | ListOp::FirstOrElse
+            | ListOp::Count),
+        ) => super::list_basics::check_list_basic(method, o, args, elem, span, ctx),
         Some(ListOp::Min | ListOp::Max) => {
             if !arity(1, ctx) {
                 return None;
@@ -2990,7 +2987,12 @@ pub(crate) fn check_effect_race_method(
 /// the return is read from the actual: an expected return carrying a
 /// flexible variable lets a lambda type bottom-up (the v0.20a pass-2 rule),
 /// and `unify` captures it here. Returns the function's return type.
-fn check_kernel_fn_arg(arg: &Expr, params: Vec<TyId>, label: &str, ctx: &mut Ctx) -> Option<TyId> {
+pub(super) fn check_kernel_fn_arg(
+    arg: &Expr,
+    params: Vec<TyId>,
+    label: &str,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
     let tys = ctx.tys;
     const RET_VAR: &str = "__kernel_ret";
     let expected = Ty::Fn {

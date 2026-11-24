@@ -15,7 +15,7 @@ agent Shelf {
 }
 
 service api {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Shelf("s").count(Page { items: [Item { name: "a" }, Item { name: "b" }], next: None })
   }
 }

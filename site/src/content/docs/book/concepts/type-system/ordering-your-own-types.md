@@ -54,13 +54,10 @@ fix, but **Fix all** and `bynk check --fix` leave it alone.
 
 ## Sort, min and max
 
-With `uses bynk.list`, `sort`, `min` and `max` work on a list of any orderable
-type:
+`sort()`, `min()` and `max()` work on a list of any orderable type:
 
 ```bynk,fragment
 commons guide.sorting
-
-uses bynk.list
 
 type Priority = enum { Low, Medium, High } derives Ord
 
@@ -70,11 +67,11 @@ type Task = {
 } derives Ord
 
 fn ranked(ts: List[Task]) -> List[Task] {
-	sort(ts)
+	ts.sort()
 }
 
 fn hottest(ts: List[Task]) -> Option[Task] {
-	max(ts)
+	ts.max()
 }
 
 fn byTitle(ts: List[Task]) -> List[Task] {
@@ -110,10 +107,8 @@ declared:
 ```bynk,fragment
 commons guide.generic
 
-uses bynk.list
-
 fn top[T: Ord](xs: List[T]) -> Option[T] {
-	max(xs)
+	xs.max()
 }
 
 fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {

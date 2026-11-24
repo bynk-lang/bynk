@@ -10,7 +10,7 @@ consumes t.vault as Vault
 type Code = String
 
 service probe {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     let t <- Vault.fetch()
     Effect.pure(t.repo)
   }

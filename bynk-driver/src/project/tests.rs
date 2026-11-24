@@ -296,7 +296,7 @@ fn compile_options_split_with_sources(
 /// fresh for every project. Two in-memory projects that gate in
 /// *different* first-party units, compiled back-to-back in the same
 /// process (so both share the same cache), must each see exactly their
-/// own gated-in set: `bynk.map` (which itself `uses bynk.list`) for the
+/// own gated-in set: `bynk.map` for the
 /// first, `bynk.string` alone for the second — never the other's.
 #[test]
 fn firstparty_cache_does_not_leak_gating_across_projects() {
@@ -314,8 +314,8 @@ fn firstparty_cache_does_not_leak_gating_across_projects() {
         .collect();
     assert!(paths.iter().any(|p| p == "bynk/map.ts"), "{paths:?}");
     assert!(
-        paths.iter().any(|p| p == "bynk/list.ts"),
-        "bynk.map itself uses bynk.list, so list must be injected too: {paths:?}"
+        !paths.iter().any(|p| p == "bynk/list.ts"),
+        "bynk.map no longer uses bynk.list (#3962), so list is not injected: {paths:?}"
     );
     assert!(
         !paths.iter().any(|p| p.starts_with("bynk/string")),

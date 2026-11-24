@@ -19,7 +19,7 @@ capability Pricing {
 }
 
 service quotes {
-	on call(id: Int) -> Effect[String] given Pricing {
+	on call(id: Int) -> Effect[String] by Caller given Pricing {
 		let r <- Pricing.quote(id).within(2.seconds)
 		match r {
 			Ok(q) => Effect.pure("quoted \(q)"),

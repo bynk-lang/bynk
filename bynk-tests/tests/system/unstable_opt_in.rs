@@ -17,7 +17,7 @@ use std::process::Command;
 
 const MANIFEST: &str = "[project]\nname = \"opt-in\"\nversion = \"0.1.0\"\n\n[unstable]\nallow = [\"bynk.list\", \"bynk.cloudflare.D1\", \"bynk.cloudflare.Kvv\"]\n";
 
-const SOURCE: &str = "context app.probe\n\nuses bynk.list\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
+const SOURCE: &str = "context app.probe\n\nuses bynk.list\n\nservice probe {\n\ton call() -> Effect[Int] by Caller {\n\t\tEffect.pure(1)\n\t}\n}\n";
 
 /// The `[unstable]` diagnostics: `bynk.project.unstable_*`, as `(code, entry)`.
 fn unstable(found: impl IntoIterator<Item = (String, String)>) -> BTreeSet<(String, String)> {

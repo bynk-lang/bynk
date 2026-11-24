@@ -1,7 +1,7 @@
 context shop.orders
 
 service place {
-  on call(id: OrderId, qty: Int) -> Effect[Int] {
+  on call(id: OrderId, qty: Int) -> Effect[Int] by Caller {
     Book(id).add(qty)
   }
 }

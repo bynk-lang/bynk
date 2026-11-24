@@ -5,7 +5,7 @@ consumes shop.order
 type Region = enum { Here, There }
 
 service take {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     o.id
   }
 }

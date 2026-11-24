@@ -38,7 +38,7 @@ provides Signer = KeySigner given StripeKey {
 }
 
 service signing {
-	on call(body: String) -> Effect[Bool] given Signer {
+	on call(body: String) -> Effect[Bool] by Caller given Signer {
 		Signer.sign(body)
 	}
 }

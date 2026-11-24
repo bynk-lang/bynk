@@ -10,28 +10,28 @@ type Outcome = | Done(reply: Reply) | Failed(code: Int)
 type Tagged = { token: Token, n: Int }
 
 service askPrice {
-  on call(n: Int) -> Effect[Result[Cents, Int]] {
+  on call(n: Int) -> Effect[Result[Cents, Int]] by Caller {
     let r <- Provider.price(n)
     Effect.pure(r)
   }
 }
 
 service askWrapped {
-  on call(n: Int) -> Effect[Result[Envelope, Int]] {
+  on call(n: Int) -> Effect[Result[Envelope, Int]] by Caller {
     let r <- Provider.wrapped(n)
     Effect.pure(r)
   }
 }
 
 service askOutcome {
-  on call(n: Int) -> Effect[Result[Outcome, Int]] {
+  on call(n: Int) -> Effect[Result[Outcome, Int]] by Caller {
     let r <- Provider.outcome(n)
     Effect.pure(r)
   }
 }
 
 service askTagged {
-  on call(n: Int) -> Effect[Result[Tagged, Int]] {
+  on call(n: Int) -> Effect[Result[Tagged, Int]] by Caller {
     let r <- Provider.tagged(n)
     Effect.pure(r)
   }

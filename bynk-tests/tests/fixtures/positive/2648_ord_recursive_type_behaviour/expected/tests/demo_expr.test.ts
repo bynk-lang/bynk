@@ -4,7 +4,6 @@
 import { Some, None } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import * as __ns_demo_expr from "./../demo/expr.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -44,7 +43,6 @@ async function test_variants_order_by_declaration__payloads_recursively() {
     const { Chain, Expr, chains, ordered } = __ns_demo_expr;
     type Chain = __ns_demo_expr.Chain;
     type Expr = __ns_demo_expr.Expr;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const one = Expr.Num(1);
     const two = Expr.Num(2);
     const xs: readonly Expr[] = [Expr.Add(one, two), Expr.Neg(two), two, Expr.Add(one, one), Expr.Neg(one), one];
@@ -65,7 +63,6 @@ async function test_deep_values_compare_through_the_recursion() {
     const { Chain, Expr, chains, ordered } = __ns_demo_expr;
     type Chain = __ns_demo_expr.Chain;
     type Expr = __ns_demo_expr.Expr;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const deep: Expr = Expr.Add(Expr.Add(Expr.Num(1), Expr.Num(2)), Expr.Num(3));
     const deeper: Expr = Expr.Add(Expr.Add(Expr.Num(1), Expr.Num(2)), Expr.Neg(Expr.Num(0)));
     const xs: readonly Expr[] = [deeper, deep];
@@ -86,7 +83,6 @@ async function test_a_recursive_record_through_Option() {
     const { Chain, Expr, chains, ordered } = __ns_demo_expr;
     type Chain = __ns_demo_expr.Chain;
     type Expr = __ns_demo_expr.Expr;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const a: Chain = { head: 1, rest: None };
     const b: Chain = { head: 1, rest: Some(a) };
     const c: Chain = { head: 0, rest: Some(b) };

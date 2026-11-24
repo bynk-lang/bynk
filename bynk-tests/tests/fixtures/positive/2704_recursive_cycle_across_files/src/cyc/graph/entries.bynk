@@ -7,7 +7,7 @@ type Entry =
   | Sub(dir: Dir)
 
 service entries {
-  on call(e: Entry) -> Effect[Entry] {
+  on call(e: Entry) -> Effect[Entry] by Caller {
     Effect.pure(e)
   }
 }

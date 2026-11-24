@@ -44,14 +44,14 @@ flowchart LR
 
   ```bynk,fragment
   service markPaid {
-    on call(orderId: String) -> Effect[()] given Events {
+    on call(orderId: String) -> Effect[()] by Caller given Events {
       Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
     }
   }
   ```
 
-- **`from Events(E)`** is a service protocol — the sixth member of the closed
-  protocol set alongside `call`/`http`/`cron`/`queue`/`websocket`. A service
+- **`from Events(E)`** is a service protocol — the seventh member of the closed
+  protocol set alongside `call`/`http`/`cron`/`queue`/`websocket`/`email`. A service
   with this protocol has exactly one handler, `on event`, and is not called
   directly; it runs whenever a matching event arrives.
 
@@ -145,13 +145,18 @@ for it:
   `publisherId` is the emitting context's qualified name (e.g.
   `"commerce.order"`) every time.
 
-**The idempotency idiom.** Delivery is at-least-once (see below) — an
-effectful subscriber that must not double-apply an emission claims
-`env.eventId` using the already-documented
+**The idempotency idiom.** Delivery is **at most once** today (see "Delivery,
+concretely, per platform", below): nothing redelivers an emission, so a
+subscriber that fails does not run again. Claiming `env.eventId` is still the
+right habit for an effectful subscriber that must not double-apply an
+emission, because it will matter once delivery is durable (the
+[durable event delivery](https://github.com/bynk-lang/bynk/issues/3898) track is the planned change), and it already
+protects against a duplicate you cause yourself, such as a caller that emits
+the same fact twice. Use the already-documented
 [`Idempotency`](/reference/bynk-capabilities/) capability, exactly as
 shown above. `claim` is atomic and is released if the handler fails, so a
-redelivery after a failure runs the work again, and one after success is
-skipped. This is the ordinary capability, not new syntax —
+second delivery after a failure would run the work again, and one after success
+would be skipped. This is the ordinary capability, not new syntax —
 `env.eventId` is just a `String` key like any other, and two different
 subscriber services claiming the same `eventId` never collide (each
 handler's key is scoped to its own qualified name automatically). A
@@ -169,7 +174,7 @@ guard as delivery does, so delivering the same envelope twice checks the claim:
 
 ```bynk,fragment
 suite commerce.notifications {
-	case "a redelivered payment is handled once" {
+	case "the same payment delivered twice is handled once" {
 		let e = PaymentConfirmed { orderId: "o1" }
 		let env = EventEnvelope {
 			eventId: "evt-1",
@@ -425,7 +430,7 @@ consumes commerce.order
 consumes bynk { Events }
 
 service leak {
-  on call() -> Effect[()] given Events {
+  on call() -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: "x" })
   }
 }
@@ -438,10 +443,12 @@ governs what a context may *name* (`uses`/`consumes`) — this is the first that
 restricts what a context may *do* with something it can already see. A type
 being subscribable does not make it forgeable.
 
-## Emission is fire-and-forget, and release-at-commit
+## Emission never reports an outcome, and release-at-commit
 
 `Events.emit[E]` returns `Effect[()]` — the emitting handler never learns
-whether a subscriber ran, or how it went. What it *does* guarantee: an
+whether a subscriber ran, or how it went. On Workers it does **wait** for
+delivery to finish, though: a slow subscriber slows the publisher (see
+"Delivery, concretely, per platform", below). What emission *does* guarantee: an
 emission only ever reaches a subscriber if the emitting handler itself
 **committed**. An agent handler that emits and then goes on to violate one of
 its own invariants emits nothing — the invariant violation throws before the
@@ -480,6 +487,8 @@ handler on every target too — deliver-and-filter, not a routing difference:
 | Target | Mechanism |
 |---|---|
 | **Cloudflare Workers** | Each publishing context gets its own compiler-synthesised fan-out Durable Object. One subscriber's delivery failure is caught and logged without blocking delivery to its siblings. Ordering is preserved *within* one emission (everything a single handler invocation emits) and *across* successive, non-overlapping calls to one agent — but **not** across concurrent invocations of the same agent, since the Durable Object delivers by making an outbound call per subscriber and does not serialise two overlapping deliveries against each other. |
+| **Delivery guarantee (Workers)** | **At most once.** An emission is lost if the hand-off to the fan-out Durable Object fails, or if delivery to a subscriber fails (its handler faults, or the call fails). Nothing is stored or retried; a failed hand-off is logged as `EventsFanout dispatch failed` and a subscriber failure as `EventsFanout delivery failed`, and both are dropped. |
+| **Publisher wait (Workers)** | The emitting handler waits, after it commits, for every subscriber to finish, one after another, so its response time includes each subscriber's run time. Every subscriber, matching or not, is invoked and filters itself. |
 | **Bundle** (node, browser) | Dispatch is in-process — no Durable Object, no wire. The composed program calls directly into each subscriber's handler. |
 
 On Workers, delivery travels over a Service Binding from the publisher to each
@@ -492,15 +501,16 @@ doesn't exist yet, so neither Worker can go first, and `bynk deploy` refuses
 that project and names the publisher. `bynk dev` serves it fine. To deploy it,
 move the services the subscriber calls out of the publishing context.
 
-What the track does **not** yet give you: a delivery retry, a durable log to
+Delivery is at most once today. The [durable event delivery](https://github.com/bynk-lang/bynk/issues/3898) track plans a durable
+replacement. What events do **not** give you yet: a delivery retry, a durable log to
 replay from, or ordering across *concurrent* invocations of the same
 publishing agent — measured, not assumed, and found not to hold. A subscriber
 that needs a total order across concurrent publishes must carry its own
 sequence number in the event payload. A subscriber that must not double-apply
-a redelivered emission claims `env.eventId` via `Idempotency` (see "The
-envelope, and idempotent handling", above); on Cloudflare the claim is durable
-and shared, so a duplicate delivered to another isolate, or after a restart, is
-still skipped.
+an emission claims `env.eventId` via `Idempotency` (see "The
+envelope, and idempotent handling", above), which is the habit that carries over
+once delivery is durable; on Cloudflare the claim is durable and shared, so a
+duplicate delivered to another isolate, or after a restart, is still skipped.
 
 **See also:**
 [First-party `bynk` capabilities](/reference/bynk-capabilities/),

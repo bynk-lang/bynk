@@ -116,7 +116,7 @@ fn generate_linked_context(index: usize, groups: usize) -> String {
         None => "    Effect.pure(n)\n".to_string(),
     };
     s.push_str(&format!(
-        "service price {{\n  on call(n: Int) -> Effect[Int] {{\n{forward}  }}\n}}\n\n"
+        "service price {{\n  on call(n: Int) -> Effect[Int] by Caller {{\n{forward}  }}\n}}\n\n"
     ));
     for j in 0..groups {
         // The cross-context call in the first handler needs a parent to call.

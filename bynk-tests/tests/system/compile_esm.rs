@@ -176,7 +176,7 @@ fn compiled_output_emits_as_esm_without_a_user_package_json() {
 
     // The emitted JavaScript is ESM, whichever names a TypeScript version
     // happens to reserve under CommonJS.
-    let js_path = root.join("out-js/demo/names.js");
+    let js_path = root.join("out/out-js/demo/names.js");
     let js = fs::read_to_string(&js_path)
         .unwrap_or_else(|e| panic!("tsc wrote no {}: {e}", js_path.display()));
     assert!(

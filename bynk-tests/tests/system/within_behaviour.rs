@@ -45,7 +45,7 @@ capability Audit {
 }
 
 service bounded {
-  on call(id: Int) -> Effect[String] given Pricing {
+  on call(id: Int) -> Effect[String] by Caller given Pricing {
     let r <- Pricing.quote(id).within(50.milliseconds)
     match r {
       Ok(q) => Effect.pure("quoted \(q)")
@@ -55,7 +55,7 @@ service bounded {
 }
 
 service both {
-  on call(id: Int) -> Effect[String] given Pricing, Audit {
+  on call(id: Int) -> Effect[String] by Caller given Pricing, Audit {
     par {
       let a <- Pricing.quote(id).within(50.milliseconds)
       let b <- Pricing.quote(id + 1).within(50.milliseconds)
@@ -66,7 +66,7 @@ service both {
 }
 
 service many {
-  on call(ids: List[Int]) -> Effect[Int] given Pricing {
+  on call(ids: List[Int]) -> Effect[Int] by Caller given Pricing {
     let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(50.milliseconds))
     Effect.pure(rs.length())
   }

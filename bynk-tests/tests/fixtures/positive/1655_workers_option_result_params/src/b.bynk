@@ -7,13 +7,13 @@ on bundle.
 context b
 
 service lookup {
-  on call(o: Option[Int]) -> Effect[Result[Int, String]] {
+  on call(o: Option[Int]) -> Effect[Result[Int, String]] by Caller {
     Ok(o.getOrElse(0))
   }
 }
 
 service settle {
-  on call(r: Result[Int, String]) -> Effect[Option[Int]] {
+  on call(r: Result[Int, String]) -> Effect[Option[Int]] by Caller {
     match r {
       Ok(n) => Some(n)
       Err(_) => None

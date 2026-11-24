@@ -10,13 +10,13 @@ context shop.ledger
 // could never fire (ADR 0200 Decision E's anti-deployment-tax reasoning, one
 // layer up).
 service authorise {
-  on call(amount: Int) -> Effect[Result[Int, String]] {
+  on call(amount: Int) -> Effect[Result[Int, String]] by Caller {
     Ok(amount)
   }
 }
 
 service refund {
-  on call(reference: String) -> Effect[Result[Bool, String]] {
+  on call(reference: String) -> Effect[Result[Bool, String]] by Caller {
     Ok(true)
   }
 }

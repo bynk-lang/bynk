@@ -179,7 +179,7 @@ export const loose = {
 
 export const looseOne = {
   async call(deps: { Stock: Stock }): globalThis.Promise<string> {
-    const __letElse1970 = await (async () => {
+    const __letElse2040 = await (async () => {
       const __decode = (__s: string): Result<Loose, DecodeError> => {
         let __j: __JsonValue;
         try {
@@ -198,16 +198,16 @@ export const looseOne = {
       const __d = __decode(__r.value.value);
       return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (__letElse1970.tag === "Ok") {
-      const row = __letElse1970.value;
+    if (__letElse2040.tag === "Ok") {
+      const row = __letElse2040.value;
       return "ok";
     }
-    if (__letElse1970.tag === "Err" && __letElse1970.error.tag === "Sql") {
-      const e = __letElse1970.error.error;
+    if (__letElse2040.tag === "Err" && __letElse2040.error.tag === "Sql") {
+      const e = __letElse2040.error.error;
       return sqlText(e);
     }
-    if (__letElse1970.tag === "Err" && __letElse1970.error.tag === "Decode") {
-      const e = __letElse1970.error.error;
+    if (__letElse2040.tag === "Err" && __letElse2040.error.tag === "Decode") {
+      const e = __letElse2040.error.error;
       return jsonText(e);
     }
     throw new globalThis.Error("non-exhaustive match");

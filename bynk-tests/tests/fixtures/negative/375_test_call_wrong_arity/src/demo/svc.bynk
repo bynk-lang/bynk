@@ -1,7 +1,7 @@
 context demo.svc
 
 service echo {
-  on call(x: Int) -> Effect[Int] {
+  on call(x: Int) -> Effect[Int] by Caller {
     x + 1
   }
 }

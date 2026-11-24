@@ -37,7 +37,7 @@ provides Logger = ConsoleLogger {
 }
 
 service authorise {
-  on call(amount: Money) -> Effect[Result[AuthId, PaymentError]]
+  on call(amount: Money) -> Effect[Result[AuthId, PaymentError]] by Caller
       given Payments, Logger {
     let _ <- Logger.log("Authorising payment")
     let result <- Payments.authorise(amount)

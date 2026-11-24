@@ -31,7 +31,7 @@ agent Meter {
 }
 
 service hits {
-	on call(id: MeterId) -> Effect[Result[Int, MeterError]] {
+	on call(id: MeterId) -> Effect[Result[Int, MeterError]] by Caller {
 		let meter = Meter(id)
 		let total <- meter.hits()
 		total

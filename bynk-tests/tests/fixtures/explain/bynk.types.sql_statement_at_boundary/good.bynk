@@ -9,7 +9,7 @@ type Job = {
 }
 
 service exec {
-    on call(job: Job) -> Effect[Int] given Orders {
+    on call(job: Job) -> Effect[Int] by Caller given Orders {
         let runs <- Orders.batch([SqlStatement { sql: "delete from orders where id = ?1", params: [Text(job.id)] }])
         Effect.pure(1)
     }

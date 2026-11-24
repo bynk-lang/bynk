@@ -6,14 +6,14 @@ capability Mailer {
 }
 
 service notify {
-	on call(to: String) -> Effect[()] given Mailer {
+	on call(to: String) -> Effect[()] by Caller given Mailer {
 		Mailer.send(to)
 	}
 }
 
 // A second requirement of `Mailer` is not a second error.
 service remind {
-	on call(to: String) -> Effect[()] given Mailer {
+	on call(to: String) -> Effect[()] by Caller given Mailer {
 		Mailer.send(to)
 	}
 }

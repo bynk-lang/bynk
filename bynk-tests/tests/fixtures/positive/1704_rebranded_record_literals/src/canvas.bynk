@@ -24,7 +24,7 @@ agent Board {
 }
 
 service api {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let p = Point { x: 1, y: 2 }
     let moved = Point { ...p, x: 3 }
     let _ <- Board("svc").add(origin())

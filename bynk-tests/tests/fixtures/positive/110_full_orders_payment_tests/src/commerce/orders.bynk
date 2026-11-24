@@ -6,7 +6,7 @@ context commerce.orders {
   type OrderError = | PaymentDeclined | PaymentInsufficient
 
   service place {
-    on call(amount: Int) -> Effect[Result[AuthId, OrderError]] {
+    on call(amount: Int) -> Effect[Result[AuthId, OrderError]] by Caller {
       let auth <- Payment.authorise(amount)
       match auth {
         Ok(id) => Ok(id)

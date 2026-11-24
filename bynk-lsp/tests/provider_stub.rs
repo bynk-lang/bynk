@@ -80,7 +80,7 @@ impl Run {
 }
 
 const CLOCK: &str = "capability Clock {\n  fn now() -> Effect[Int]\n  fn zone(name: String) -> Effect[Option[String]]\n  fn tick() -> Effect[()]\n}\n";
-const SERVICE: &str = "service s {\n  on call() -> Effect[Int] given Clock {\n    let n <- Clock.now()\n    n\n  }\n}\n";
+const SERVICE: &str = "service s {\n  on call() -> Effect[Int] by Caller given Clock {\n    let n <- Clock.now()\n    n\n  }\n}\n";
 
 fn context(items: &str) -> String {
     canon(&format!("context app.c\n\n{items}"))

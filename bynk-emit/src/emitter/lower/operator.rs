@@ -468,7 +468,11 @@ enum EqualityLowering {
 /// The runtime helper `==`/`!=` calls for an operand type, noting its import, or
 /// `None` for a host-`===` operand. A missing type entry takes the walker, which
 /// is also correct for primitives.
-fn equality_helper(operand: Option<TyId>, tys: &Types, cx: &LowerCtx) -> Option<&'static str> {
+pub(in crate::emitter) fn equality_helper(
+    operand: Option<TyId>,
+    tys: &Types,
+    cx: &LowerCtx,
+) -> Option<&'static str> {
     match operand.map(|t| equality_lowering(t, tys)) {
         Some(EqualityLowering::Host) => None,
         Some(EqualityLowering::Bytes) => {

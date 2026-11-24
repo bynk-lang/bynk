@@ -64,7 +64,7 @@ service ticker from cron {
 }
 
 service calc {
-  on call(x: Int) -> Effect[Int] {
+  on call(x: Int) -> Effect[Int] by Caller {
     x
   }
 }

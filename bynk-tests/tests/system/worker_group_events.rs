@@ -169,7 +169,7 @@ fn without_a_group_each_publisher_keeps_its_own_fanout() {
     let _ = fs::remove_dir_all(&root);
 }
 
-const SCRIPT: &str = r#"import worker, { __EventsFanout } from "./out-js/workers/core/index.js";
+const SCRIPT: &str = r#"import worker, { __EventsFanout } from "./out/out-js/workers/core/index.js";
 const delivered = [];
 const KEY = "edge-key";
 const binding = (name) => ({
@@ -245,7 +245,11 @@ fn run_group(root: &Path) -> Option<Vec<serde_json::Value>> {
         .output()
         .expect("run tsc");
     assert!(emitted.status.success(), "tsc failed:\n{}", text(&emitted));
-    fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(
+        root.join("out/out-js/package.json"),
+        "{\"type\":\"module\"}",
+    )
+    .unwrap();
     fs::write(root.join("run.mjs"), SCRIPT).unwrap();
     let ran = Command::new("node")
         .arg("run.mjs")

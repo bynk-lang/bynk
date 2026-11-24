@@ -8,7 +8,7 @@ type LocalAmount = {
 }
 
 service placeOrder {
-  on call(value: LocalAmount) -> Effect[Result[Int, Int]] {
+  on call(value: LocalAmount) -> Effect[Result[Int, Int]] by Caller {
     let _ <- Payment.authorise(value)
     Effect.pure(Ok(0))
   }

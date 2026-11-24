@@ -3,7 +3,7 @@ context demo.prec
 consumes bynk.cloudflare { Kv }
 
 service store {
-  on call(k: String, v: String) -> Effect[Option[String]] given Kv {
+  on call(k: String, v: String) -> Effect[Option[String]] by Caller given Kv {
     let _ <- Kv.put(k, v)
     Kv.get(k)
   }

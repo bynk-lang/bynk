@@ -48,7 +48,7 @@ A handler lists the capabilities it needs with `given`, then calls them:
 
 ```bynk,fragment
 service hello {
-  on call() -> Effect[String] given Logger {
+  on call() -> Effect[String] by Caller given Logger {
     let _ <- Logger.info("hi")
     "ok"
   }
@@ -95,7 +95,7 @@ latencies. A `par` block issues several effects together and waits for all of th
 
 ```bynk,fragment
 service dashboard {
-  on call(id: Int) -> Effect[String] given Users, Orders {
+  on call(id: Int) -> Effect[String] by Caller given Users, Orders {
     par {
       let user <- Users.get(id)
       let orders <- Orders.forUser(id)
@@ -266,7 +266,7 @@ inferred from the arguments or the expected type, the same discipline
 
 ```bynk,fragment
 service reserve {
-  on call() -> Effect[Option[ReserveOutcome]] given Idempotency {
+  on call() -> Effect[Option[ReserveOutcome]] by Caller given Idempotency {
     let cached <- Idempotency.dedup[ReserveOutcome]("order-key-1")
     cached
   }
@@ -353,7 +353,7 @@ capability Sessions = Kv
 capability PriceCache = Kv
 
 service remember {
-	on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
+	on call(k: String, v: String) -> Effect[Option[String]] by Caller given Sessions {
 		let _ <- Sessions.put(k, v)
 		Sessions.get(k)
 	}
@@ -461,7 +461,7 @@ context ops.jobs
 consumes platform.time
 
 service tick {
-	on call() -> Effect[Int] given platform.time.Clock {
+	on call() -> Effect[Int] by Caller given platform.time.Clock {
 		let t <- platform.time.Clock.now()
 		t
 	}

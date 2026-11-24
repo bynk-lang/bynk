@@ -10,7 +10,7 @@ context demo.svc
 fn identity[T](x: T) -> T { x }
 
 service repro {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     // explicit call type arg (checker/calls.rs `check_generic_call`)
     let a = identity[Missing](5)
     // lambda parameter annotation (checker/expressions.rs `check_lambda`)

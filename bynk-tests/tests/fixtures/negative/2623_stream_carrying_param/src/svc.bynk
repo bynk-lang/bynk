@@ -6,7 +6,7 @@ type Download = { contentType: String, body: Stream[Bytes] }
 type Shelf = { name: String, latest: Download }
 
 service s {
-	on call(shelves: List[Shelf]) -> Effect[Int] {
+	on call(shelves: List[Shelf]) -> Effect[Int] by Caller {
 		Effect.pure(shelves.length())
 	}
 }

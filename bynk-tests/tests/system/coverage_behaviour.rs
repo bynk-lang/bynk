@@ -35,9 +35,8 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// Run `bynk test <fixture> --coverage [--format json]` and return combined
-/// stdout+stderr. Each run gets its own parent dir: the runner derives the
-/// executed `out-js` tree as a *sibling* of `--output`, so a shared parent would
-/// race the emitted `.js`/`.js.map`s the remap reads back.
+/// stdout+stderr. The runner writes the executed `out-js` tree inside `--output`
+/// (#4159), so each run's `.js`/`.js.map`s are private to it.
 fn run_coverage(name: &str, out_dir: &str, json: bool) -> String {
     run_coverage_case(name, out_dir, json, None)
 }

@@ -9,7 +9,7 @@ capability Main = Postgres
 type Job = { statement: PgStatement }
 
 service exec {
-  on call(s: PgStatement) -> Effect[Result[List[PgRun], PgError]] given Main {
+  on call(s: PgStatement) -> Effect[Result[List[PgRun], PgError]] by Caller given Main {
     Main.transaction([s])
   }
 }

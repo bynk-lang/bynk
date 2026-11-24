@@ -3,8 +3,6 @@
 
 import { __bynkCmpFloat, __bynkCmpInt, __bynkCmpRecord, __bynkCmpString } from "../__bynk_runtime/compare.js";
 
-import { reverse } from "../bynk/list.js";
-
 /**
  * #2805: `List.sortByDescending` is the exact reverse of `sortBy`'s order, and stable
  * (equal keys keep input order, unlike `reverse(sortBy)`), so `NaN` comes first, in a bare
@@ -53,7 +51,7 @@ export function byTier(xs: readonly Item[]): readonly Item[] {
 }
 
 export function byTierReversed(xs: readonly Item[]): readonly Item[] {
-  return reverse([...xs].sort((__a: Item, __b: Item) => {
+  return ((__xs: readonly Item[]) => [...__xs].reverse())([...xs].sort((__a: Item, __b: Item) => {
     const __ka = ((i: Item) => i.tier)(__a);
     const __kb = ((i: Item) => i.tier)(__b);
     return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;

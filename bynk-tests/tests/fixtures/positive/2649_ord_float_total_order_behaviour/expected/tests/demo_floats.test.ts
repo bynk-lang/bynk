@@ -4,7 +4,6 @@
 import { Some, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import * as __ns_demo_floats from "./../demo/floats.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -43,7 +42,6 @@ async function test_sort_puts_NaN_last() {
     const deps = {};
     const { Reading, isNaN, largest, lessThan, minusOne, nan, negZero, readings, smallest, sorted, sortedBy } = __ns_demo_floats;
     type Reading = __ns_demo_floats.Reading;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly number[] = [3.0, nan(), 1.0, nan(), 2.0];
     const out = sorted(xs);
     if (!(__bynkEq((out).slice(0, globalThis.Math.max(0, 3)), [1.0, 2.0, 3.0]))) { throw __bynkExpectFailure("tests/demo/floats.bynk:6:10", 133, 163, "expect out.take(3) == [1.0, 2.0, 3.0]\n  expected: out.take(3) == [1.0, 2.0, 3.0]\n  actual:   " + __bynkShow(((out).slice(0, globalThis.Math.max(0, 3)))) + " == " + __bynkShow(([1.0, 2.0, 3.0]))); }
@@ -65,7 +63,6 @@ async function test_sortBy_agrees_with_sort_at_NaN() {
     const deps = {};
     const { Reading, isNaN, largest, lessThan, minusOne, nan, negZero, readings, smallest, sorted, sortedBy } = __ns_demo_floats;
     type Reading = __ns_demo_floats.Reading;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly number[] = [nan(), 2.0, 1.0];
     if (!(__bynkEq((sortedBy(xs)).slice(0, globalThis.Math.max(0, 2)), [1.0, 2.0]))) { throw __bynkExpectFailure("tests/demo/floats.bynk:14:10", 374, 408, "expect sortedBy(xs).take(2) == [1.0, 2.0]\n  expected: sortedBy(xs).take(2) == [1.0, 2.0]\n  actual:   " + __bynkShow(((sortedBy(xs)).slice(0, globalThis.Math.max(0, 2)))) + " == " + __bynkShow(([1.0, 2.0]))); }
     if (!(isNaN(((__xs: readonly number[], __d: number) => __xs.length > 0 ? __xs[0] : __d)((sortedBy(xs)).slice(globalThis.Math.max(0, 2)), 0.0)))) { throw __bynkExpectFailure("tests/demo/floats.bynk:15:10", 418, 462, "expect isNaN(sortedBy(xs).skip(2).firstOrElse(0.0))"); }
@@ -84,12 +81,11 @@ async function test_max_is_NaN_when_one_is_present__min_only_when_all_are() {
     const deps = {};
     const { Reading, isNaN, largest, lessThan, minusOne, nan, negZero, readings, smallest, sorted, sortedBy } = __ns_demo_floats;
     type Reading = __ns_demo_floats.Reading;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const mixed: readonly number[] = [1.0, nan(), 5.0];
-    const __r0: readonly number[] = [nan(), nan()];
+    const all: readonly number[] = [nan(), nan()];
     if (!(isNaN(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(largest(mixed), 0.0)))) { throw __bynkExpectFailure("tests/demo/floats.bynk:21:10", 623, 659, "expect isNaN(largest(mixed).getOrElse(0.0))"); }
     if (!(__bynkEq(smallest(mixed), Some(1.0)))) { throw __bynkExpectFailure("tests/demo/floats.bynk:22:10", 669, 697, "expect smallest(mixed) == Some(1.0)\n  expected: smallest(mixed) == Some(1.0)\n  actual:   " + __bynkShow((smallest(mixed))) + " == " + __bynkShow((Some(1.0)))); }
-    if (!(isNaN(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(smallest(__r0), 0.0)))) { throw __bynkExpectFailure("tests/demo/floats.bynk:23:10", 707, 742, "expect isNaN(smallest(all).getOrElse(0.0))"); }
+    if (!(isNaN(((__o: Option<number>, __d: number) => __o.tag === "Some" ? __o.value : __d)(smallest(all), 0.0)))) { throw __bynkExpectFailure("tests/demo/floats.bynk:23:10", 707, 742, "expect isNaN(smallest(all).getOrElse(0.0))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -105,7 +101,6 @@ async function test_negative_zero_and_zero_compare_equal__so_the_sort_is_stable(
     const deps = {};
     const { Reading, isNaN, largest, lessThan, minusOne, nan, negZero, readings, smallest, sorted, sortedBy } = __ns_demo_floats;
     type Reading = __ns_demo_floats.Reading;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const xs: readonly number[] = [0.0, negZero(), minusOne()];
     if (!(__bynkEq((sorted(xs)).slice(0, globalThis.Math.max(0, 1)), [minusOne()]))) { throw __bynkExpectFailure("tests/demo/floats.bynk:28:10", 877, 911, "expect sorted(xs).take(1) == [minusOne()]\n  expected: sorted(xs).take(1) == [minusOne()]\n  actual:   " + __bynkShow(((sorted(xs)).slice(0, globalThis.Math.max(0, 1)))) + " == " + __bynkShow(([minusOne()]))); }
     const r1 = { value: 0.0, tag: "a" };
@@ -130,7 +125,6 @@ async function test_a_Float_in_a_record_sorts_NaN_last_too() {
     const deps = {};
     const { Reading, isNaN, largest, lessThan, minusOne, nan, negZero, readings, smallest, sorted, sortedBy } = __ns_demo_floats;
     type Reading = __ns_demo_floats.Reading;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const a = { value: nan(), tag: "a" };
     const b = { value: 1.0, tag: "b" };
     const rs: readonly Reading[] = [a, b];
@@ -150,7 +144,6 @@ async function test_the_operators_keep_IEEE_semantics() {
     const deps = {};
     const { Reading, isNaN, largest, lessThan, minusOne, nan, negZero, readings, smallest, sorted, sortedBy } = __ns_demo_floats;
     type Reading = __ns_demo_floats.Reading;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     if (!(!lessThan(nan(), 1.0))) { throw __bynkExpectFailure("tests/demo/floats.bynk:46:10", 1458, 1479, "expect !lessThan(nan(), 1.0)"); }
     if (!(!lessThan(1.0, nan()))) { throw __bynkExpectFailure("tests/demo/floats.bynk:47:10", 1489, 1510, "expect !lessThan(1.0, nan())"); }
     if (!(lessThan(1.0, 2.0))) { throw __bynkExpectFailure("tests/demo/floats.bynk:48:10", 1520, 1538, "expect lessThan(1.0, 2.0)"); }

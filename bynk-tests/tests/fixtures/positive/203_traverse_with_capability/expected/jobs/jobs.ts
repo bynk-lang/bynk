@@ -3,8 +3,6 @@
 
 import { Ok, type Result } from "../__bynk_runtime/result.js";
 
-import { traverse } from "../bynk/list.js";
-
 export interface Clock {
   now(): globalThis.Promise<number>;
 }
@@ -21,7 +19,13 @@ export const __FixedClockProvider = { token: __ClockToken, factory: () => new Fi
 
 export const stamps = {
   async call(names: readonly string[], deps: { Clock: Clock }): globalThis.Promise<Result<readonly number[], void>> {
-    const stamped = await traverse(names, async (name: string) => deps.Clock.now());
+    const stamped = await (async (__xs: readonly string[]) => {
+      const __out: number[] = [];
+      for (const __x of __xs) {
+        __out.push(await (async (name: string) => deps.Clock.now())(__x));
+      }
+      return __out;
+    })(names);
     return Ok(stamped);
   },
 };
