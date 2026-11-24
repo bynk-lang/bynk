@@ -1127,10 +1127,15 @@ pub(crate) fn check_query_kernel_method(
             Some(eff(tys.intern(Ty::Option(tys.intern(result)))))
         }
         // v0.107 (slice 4): `forEach` runs the effectful function over each element
-        // **in turn**; `parTraverse` runs them **concurrently** (the broadcast form —
+        // **in turn**; `parForEach` runs them **concurrently** (the broadcast form —
         // a slow/half-dead connection must not head-of-line-block the rest). Same
-        // type; the difference is sequential-vs-parallel lowering.
-        Some(QueryOp::ForEach | QueryOp::ParTraverse) => {
+        // type; the difference is sequential-vs-parallel lowering. #4177: `parTraverse`
+        // is the old spelling of `parForEach`, an error with a fix; the call is still
+        // checked as `parForEach` so one wrong name raises one error.
+        Some(op @ (QueryOp::ForEach | QueryOp::ParForEach | QueryOp::ParTraverse)) => {
+            if op == QueryOp::ParTraverse {
+                super::query_par::report_query_par_traverse(method, ctx);
+            }
             if !arity(1, ctx) {
                 return None;
             }

@@ -13,7 +13,7 @@ agent Tally {
   store counts: Map[String, Int]
 
   on call overQuery(n: Int) -> Effect[()] {
-    let _ <- items.parTraverse((v: Int) => counts.put("k", v))
+    let _ <- items.parForEach((v: Int) => counts.put("k", v))
     Effect.pure(())
   }
 

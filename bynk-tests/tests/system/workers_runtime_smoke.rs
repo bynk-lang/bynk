@@ -1071,7 +1071,7 @@ agent Board {
   }
 
   on call post(text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
     ()
   }
 }
@@ -1112,7 +1112,7 @@ agent Room {
   }
 
   on call post(text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
     ()
   }
 }

@@ -206,11 +206,15 @@ kernel_ops! {
         Max = "max", "max(key: T -> K) -> Effect[Option[K]]";
         Average = "average", "average(key: T -> K) -> Effect[Option[Float]]";
         ForEach = "forEach", "forEach(f: T -> Effect[()]) -> Effect[()]";
-        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[()]) -> Effect[()]";
+        ParForEach = "parForEach", "parForEach(f: T -> Effect[()]) -> Effect[()]";
         TraverseAll = "traverseAll", "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
         ParTraverseAll = "parTraverseAll", "parTraverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
         TraverseTry = "traverseTry", "traverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
         ParTraverseTry = "parTraverseTry", "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
+        @hidden
+        // #4177: the old spelling of `parForEach` on a query. It is dispatched so the checker
+        // can report the rename with a fix; it is not offered and never reaches lowering.
+        ParTraverse = "parTraverse";
     }
 /// `Option[T]` combinators (v0.22a).
     OptionOp {

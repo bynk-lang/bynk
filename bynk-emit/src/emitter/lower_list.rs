@@ -464,7 +464,7 @@ fn list_for_each(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> byn
 // v0.147 (ADR 0171): `parForEach` — issue the effectful fn over every
 // element concurrently and await them together, so one slow element does
 // not head-of-line-block the rest. The eager `List` analogue of the
-// `Query.parTraverse` terminal, emitted inline.
+// `Query.parForEach` terminal, emitted inline.
 fn list_par_traverse(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     let recv = pre.lower_node(a.receiver, cx);
     let f = pre.lower_node(f, cx);

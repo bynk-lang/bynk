@@ -4076,6 +4076,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Order = { customerId: String, region: Int }\ntype Customer = { code: String, region: Int }\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.region, (o, c) => c.region).count()   // ✗ `String` against `Int`\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.code, (o, c) => c.region).count()     // ✓ both `String`",
     },
     Explain {
+        code: "bynk.query.par_traverse_renamed",
+        blurb: "`parTraverse` on a store or held `Map` is now `parForEach`. On a `List`, `parTraverse` runs the steps concurrently and returns their values; the query form returns `()`, so it takes the `parForEach` name, which means the same on both receivers. Rename the call: the fix is machine-applicable. A step whose results you want back is a `List`: `collect()` the query, then `parTraverse` the list.",
+        example: "agent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parTraverse((c) => c.send(Frame { text: text }))   // ✗ renamed\n    }\n}\n\nagent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parForEach((c) => c.send(Frame { text: text }))    // ✓ runs for effect\n    }\n}",
+    },
+    Explain {
         code: "bynk.query.sum_needs_numeric",
         blurb: "`sum` and `average` add the values the key function returns, so the key must be numeric: `Int`, `Float` or `Duration`, or a refined type over one of them. A `String` or a record cannot be added. Return a numeric field. `sum` also adds a `Decimal` key, exactly, on a `List` and on a `Query`. `average` does not take one: a mean is a division, and a `Decimal` division needs a scale and a rounding mode, so sum the key, then `div(Decimal.fromInt(n), scale, mode)` by the count. To pick by an ordering rather than add, `min`, `max` and `sortBy` accept any orderable key.",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
@@ -8073,7 +8078,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.held.query_accessor_on_held_map",
-        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query.",
+        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`), not a key query.",
     ),
     d(
         "bynk.held.unsupported_map_op",
@@ -9252,6 +9257,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.query.join_key_mismatch",
         "A `joinOn`/`leftJoin` left and right key function return different types.",
+    ),
+    d(
+        "bynk.query.par_traverse_renamed",
+        "`Query.parTraverse` (a store or held `Map`'s concurrent step) is now `parForEach` (auto-fixable).",
     ),
     dg(
         "bynk.query.sum_needs_numeric",

@@ -9,7 +9,7 @@ agent Room {
   key id: UserId
   store conns: Map[UserId, Connection[ServerFrame]]
   on call closeAll() -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.close())
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.close())
     ()
   }
 }

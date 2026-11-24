@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **922** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **923** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -543,6 +543,7 @@ There are **922** codes in total. Every code is an error unless it is marked **W
 - [`bynk.postgres.sql_invalid`](/reference/diagnostics/bynk.postgres.sql_invalid/) — <span class="diagnostic-severity">Warning</span> A literal `Postgres` statement does not parse with the Postgres dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not Postgres' own, so it may refuse valid SQL).
 - [`bynk.postgres.sql_param_count`](/reference/diagnostics/bynk.postgres.sql_param_count/) — A literal `Postgres` statement uses a different number of parameters (its highest `$n`) than the list literal passed with it holds, in a project that has a `schema.sql`.
 - [`bynk.query.join_key_mismatch`](/reference/diagnostics/bynk.query.join_key_mismatch/) — A `joinOn`/`leftJoin` left and right key function return different types.
+- [`bynk.query.par_traverse_renamed`](/reference/diagnostics/bynk.query.par_traverse_renamed/) — `Query.parTraverse` (a store or held `Map`'s concurrent step) is now `parForEach` (auto-fixable).
 - [`bynk.query.sum_needs_numeric`](/reference/diagnostics/bynk.query.sum_needs_numeric/) — A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).
 - [`bynk.race.in_agent_handler`](/reference/diagnostics/bynk.race.in_agent_handler/) — `a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to.
 - [`bynk.race.in_pure_context`](/reference/diagnostics/bynk.race.in_pure_context/) — `a.race(b)` was used in a pure (non-effectful) context.
