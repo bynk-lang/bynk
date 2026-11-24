@@ -1705,6 +1705,7 @@ impl<'a> Formatter<'a> {
             PredKind::Positive => self.push("Positive"),
             PredKind::NonEmpty => self.push("NonEmpty"),
             PredKind::IsoDate => self.push("IsoDate"),
+            PredKind::Cron => self.push("Cron"),
         }
     }
 

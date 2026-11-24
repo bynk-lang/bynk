@@ -200,6 +200,14 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
     if p == "IsoDate" {
         return Some(Domain::Length(closed(10, 10)));
     }
+    // #3873: `* * * * *` is the shortest valid schedule, so `Cron` entails every
+    // length bound `MinLength(9)` does. Nothing but `Cron` itself entails `Cron`.
+    if p == "Cron" {
+        return Some(Domain::Length(Interval {
+            lo: Some((9, false)),
+            hi: None,
+        }));
+    }
     if let Some(a) = pred_args(p, "Length") {
         let n = a.first()?.parse().ok()?;
         return Some(Domain::Length(closed(n, n)));
@@ -219,7 +227,7 @@ pub fn entailed(base: &str, sender: &[String], q: &str) -> bool {
     }
     // #2867: being a date is more than being ten characters long, so only `IsoDate` itself
     // satisfies `IsoDate` (it is still *sent* as `Length(10)` below).
-    if q == "IsoDate" {
+    if q == "IsoDate" || q == "Cron" {
         return false;
     }
     let Some(want) = domain(base, q) else {
@@ -332,6 +340,13 @@ mod tests {
         assert!(entailed("String", &s(&["IsoDate"]), "IsoDate"));
         assert!(entailed("String", &s(&["IsoDate"]), "MaxLength(12)"));
         assert!(!entailed("String", &s(&["IsoDate"]), "MaxLength(9)"));
+        // #3873: only `Cron` entails `Cron`, and it entails `MinLength(1..=9)`.
+        assert!(entailed("String", &s(&["Cron"]), "Cron"));
+        assert!(!entailed("String", &s(&["MinLength(9)"]), "Cron"));
+        assert!(entailed("String", &s(&["Cron"]), "MinLength(9)"));
+        assert!(entailed("String", &s(&["Cron"]), "MinLength(1)"));
+        assert!(!entailed("String", &s(&["Cron"]), "MinLength(10)"));
+        assert!(!entailed("String", &s(&["Cron"]), "MaxLength(20)"));
     }
 
     #[test]

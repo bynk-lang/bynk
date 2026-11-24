@@ -1,0 +1,9 @@
+commons demo {
+  type Schedule = String where Cron
+
+  // #3873: a literal in a position that expects a `Schedule` is checked at
+  // compile time. Minute 61 is outside 0-59, so this is a compile error.
+  fn bad() -> Schedule {
+    "61 * * * *"
+  }
+}

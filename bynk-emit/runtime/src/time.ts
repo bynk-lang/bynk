@@ -47,6 +47,94 @@ export function __bynkIsIsoDate(s: string): boolean {
   return m !== null && isRealDate(Number(m[1]), Number(m[2]), Number(m[3]));
 }
 
+// The `Cron` refinement (#3873): exactly Cloudflare's cron-trigger syntax. The
+// TypeScript twin of `bynk_syntax::cron::is_cron_expression`; the two agree over
+// generated strings (`test/time.test.ts`). Five fields separated by exactly one
+// space. Where Cloudflare's documentation does not settle a form it is refused.
+const CRON_FIELDS: { lo: number; hi: number; names: string[] }[] = [
+  { lo: 0, hi: 59, names: [] },
+  { lo: 0, hi: 23, names: [] },
+  { lo: 1, hi: 31, names: [] },
+  { lo: 1, hi: 12, names: ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] },
+  { lo: 1, hi: 7, names: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] },
+];
+
+function cronValue(f: number, text: string): number | null {
+  const { lo, hi, names } = CRON_FIELDS[f];
+  const i = names.indexOf(text.toUpperCase());
+  if (i >= 0) {
+    return lo + i;
+  }
+  if (!/^[0-9]+$/.test(text)) {
+    return null;
+  }
+  const n = Number(text);
+  return n >= lo && n <= hi ? n : null;
+}
+
+function cronItem(f: number, item: string): boolean {
+  if (item === "" || item.includes("?")) {
+    return false;
+  }
+  const hi = CRON_FIELDS[f].hi;
+  const slash = item.indexOf("/");
+  const body = slash < 0 ? item : item.slice(0, slash);
+  const step = slash < 0 ? null : item.slice(slash + 1);
+  if (step !== null) {
+    if (!/^[0-9]+$/.test(step)) {
+      return false;
+    }
+    const n = Number(step);
+    if (n < 1 || n > hi) {
+      return false;
+    }
+  }
+  if (body === "*") {
+    return true;
+  }
+  const dash = body.indexOf("-");
+  if (dash >= 0) {
+    const a = cronValue(f, body.slice(0, dash));
+    const b = cronValue(f, body.slice(dash + 1));
+    return a !== null && b !== null && a <= b;
+  }
+  if (step !== null) {
+    return false;
+  }
+  if (f === 2) {
+    if (body === "L" || body === "LW") {
+      return true;
+    }
+    if (body.endsWith("W")) {
+      const n = body.slice(0, -1);
+      return /^[0-9]+$/.test(n) && Number(n) >= 1 && Number(n) <= 31;
+    }
+  }
+  if (f === 4) {
+    const hash = body.indexOf("#");
+    if (hash >= 0) {
+      const nth = body.slice(hash + 1);
+      return cronValue(f, body.slice(0, hash)) !== null && /^[0-9]+$/.test(nth) && Number(nth) >= 1 && Number(nth) <= 5;
+    }
+    if (body.endsWith("L") || body.endsWith("l")) {
+      const d = body.slice(0, -1);
+      return d !== "" && cronValue(f, d) !== null;
+    }
+  }
+  return cronValue(f, body) !== null;
+}
+
+export function __bynkIsCron(s: string): boolean {
+  if (s === "" || s.startsWith(" ") || s.endsWith(" ") || s.includes("  ") || /[\t\n\r]/.test(s) || s.startsWith("@")) {
+    return false;
+  }
+  const fields = s.split(" ");
+  if (fields.length !== 5) {
+    return false;
+  }
+  return fields.every((field, f) => field !== "" && field.split(",").every((item) => cronItem(f, item)));
+}
+
 // Partial: `None` for anything outside the profile or the calendar. A leap
 // second (`:60`) is `None`, since epoch milliseconds cannot name it, and a
 // fraction past milliseconds is truncated toward the earlier instant. Hand

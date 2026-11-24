@@ -1481,13 +1481,23 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.invalid_schedule",
-        blurb: "A cron schedule is a standard five-field expression: minute, hour, day of month, month, day of week, separated by whitespace. Bynk checks the field count at compile time so a schedule the platform's cron trigger would reject is caught before deploy, not when it silently never runs. Only the count is checked at compile time. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
-        example: "on schedule(\"every day\") () -> Effect[Result[(), String]] { … }   // ✗ words, not five fields\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 every day",
+        blurb: "A cron schedule is Cloudflare's five-field syntax: minute `0-59`, hour `0-23`, day of month `1-31` (also `L` and `W`), month `1-12` or `JAN`-`DEC`, and day of week `1-7` with `1` as Sunday, or `SUN`-`SAT` (also `L` and `#`). `*`, `,`, `-` and `/` work in every field. There are no seconds, no year, no `?` and no `@daily`-style macros. Fields are separated by exactly one space, with none leading or trailing, because Cloudflare hands the handler that exact string back and dispatches on it character for character. Bynk checks all of this at compile time, so a schedule Cloudflare would reject is caught before deploy, not when it silently never runs; the message names the failing field. The same rule is the `Cron` refinement predicate, and `CronSchedule` is the type of a valid schedule. A bad parameter or return type on the handler is `bynk.cron.bad_params` or `bynk.cron.return_not_effect_result`.",
+        example: "on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] { … }   // ✗ minute 61 is outside 0-59\n\non schedule(\"0 3 * * *\") () -> Effect[Result[(), String]] { … }   // ✓ 03:00 UTC every day",
+    },
+    Explain {
+        code: "bynk.cron.numeric_weekday",
+        blurb: "Standard cron numbers the days `0` or `7` for Sunday, so `5` is Friday. Cloudflare's cron triggers number them `1`-`7` with `1` as Sunday, so `5` is Thursday. A schedule that was copied from standard cron, or written from habit, then runs a day early. Both forms are valid, so this is only a warning; name the day (`FRI`) or list the days explicitly to say what is meant, which also silences it.",
+        example: "on schedule(\"0 9 * * 5\") () -> Effect[Result[(), String]] { … }     // ⚠ Thursday on Cloudflare, not Friday\n\non schedule(\"0 9 * * FRI\") () -> Effect[Result[(), String]] { … }   // ✓ unambiguous",
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
         blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
+    },
+    Explain {
+        code: "bynk.cron.uneven_step",
+        blurb: "A step such as `*/45` in the minute field counts from the start of the hour, so it fires at minute 0 and 45 and then starts over at 0 in the next hour: the gaps are 45 and 15 minutes, not an even 45. The same is true of an hour step that does not divide 24. Only a step that divides the field's range (`*/5`, `*/15`, `*/30` for minutes; `*/2`, `*/6`, `*/12` for hours) fires evenly. Both forms are valid, so this is only a warning; list the times you mean (`0,45`) or pick a step that divides the range, which silences it.",
+        example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
     },
     Explain {
         code: "bynk.d1.migration_name",
@@ -7374,7 +7384,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.bad_params",
-        "A cron handler declares more than one parameter, or a non-`Int` one.",
+        "A cron handler declares more than one parameter, or a non-`Instant` one.",
         &["cron_handler"],
     ),
     dg(
@@ -7384,14 +7394,24 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.invalid_schedule",
-        "A cron expression is not five whitespace-separated fields.",
+        "A cron schedule is not valid Cloudflare cron syntax: a field is out of range or malformed, or the fields are not separated by exactly one space.",
         &["cron_handler"],
     ),
+    warn(dg(
+        "bynk.cron.numeric_weekday",
+        "A cron schedule names a day of the week by number, where Cloudflare's `1` is Sunday, not standard cron's `0`/`7` (warning).",
+        &["cron_handler"],
+    )),
     dg(
         "bynk.cron.return_not_effect_result",
         "A cron handler does not return `Effect[Result[(), E]]`.",
         &["cron_handler"],
     ),
+    warn(dg(
+        "bynk.cron.uneven_step",
+        "A cron schedule's `*/n` step in the minute or hour field does not divide the field's range, so the last gap is shorter than `n` (warning).",
+        &["cron_handler"],
+    )),
     warn(d(
         "bynk.d1.migration_invalid",
         "A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning).",

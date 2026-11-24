@@ -548,7 +548,8 @@ pub(super) fn refined_check_as_bool(
                 | PredKind::NonNegative
                 | PredKind::Positive
                 | PredKind::NonEmpty
-                | PredKind::IsoDate => cond,
+                | PredKind::IsoDate
+                | PredKind::Cron => cond,
             });
         }
     }

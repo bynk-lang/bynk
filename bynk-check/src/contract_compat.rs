@@ -1978,6 +1978,7 @@ mod tests {
             }
             p if p.starts_with("Length(") => len(v).is_some_and(|n| n as f64 == args("Length")[0]),
             "IsoDate" => matches!(v, J::Str(s) if bynk_syntax::ast::is_iso_date(s)),
+            "Cron" => matches!(v, J::Str(s) if bynk_syntax::cron::is_cron_expression(s).is_ok()),
             other => panic!("the model does not know {other}"),
         }
     }

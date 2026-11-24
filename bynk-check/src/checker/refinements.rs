@@ -240,6 +240,7 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
         (PredKind::Length(k), ConstLit::Str(s)) => s.chars().count() as i64 == *k,
         (PredKind::NonEmpty, ConstLit::Str(s)) => !s.is_empty(),
         (PredKind::IsoDate, ConstLit::Str(s)) => bynk_syntax::ast::is_iso_date(s),
+        (PredKind::Cron, ConstLit::Str(s)) => bynk_syntax::cron::is_cron_expression(s).is_ok(),
         (PredKind::Matches(pat), ConstLit::Str(s)) => {
             // Evaluated with the same engine semantics the emitted
             // `new RegExp(...)` runs under (ECMAScript, no flags).
@@ -609,8 +610,11 @@ pub(crate) fn check_refinement(
                     ));
                 }
             }
-            PredKind::NonNegative | PredKind::Positive | PredKind::NonEmpty | PredKind::IsoDate => {
-            }
+            PredKind::NonNegative
+            | PredKind::Positive
+            | PredKind::NonEmpty
+            | PredKind::IsoDate
+            | PredKind::Cron => {}
         }
     }
 
@@ -657,12 +661,13 @@ fn pred_applies_to(pred: &PredKind, base: BaseType) -> bool {
             )
             | (PredKind::NonEmpty, BaseType::String)
             | (PredKind::IsoDate, BaseType::String)
+            | (PredKind::Cron, BaseType::String)
     )
 }
 
 fn predicate_base_help(name: &str) -> &'static str {
     match name {
-        "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" | "IsoDate" => {
+        "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" | "IsoDate" | "Cron" => {
             "this predicate applies to `String` only"
         }
         "NonNegative" | "Positive" => "this predicate applies to `Int`, `Float` and `Decimal` only",
@@ -768,6 +773,8 @@ pub(crate) fn check_string_refinement_consistency(
                 min_len = min_len.max(10);
                 max_len = max_len.min(10);
             }
+            // #3873: `* * * * *` is the shortest valid schedule, nine characters.
+            PredKind::Cron => min_len = min_len.max(9),
             PredKind::Length(n) => {
                 if let Some(prev) = exact_len {
                     if prev != *n {
@@ -810,10 +817,12 @@ pub(crate) fn check_string_refinement_consistency(
 /// it contains a `Matches` predicate, where bare `Val[T]` must be given an
 /// explicit pin instead.
 pub(crate) fn refinement_needs_pin(refinement: &Refinement) -> bool {
-    refinement
-        .predicates
-        .iter()
-        .any(|p| matches!(p.kind, PredKind::Matches(_) | PredKind::IsoDate))
+    refinement.predicates.iter().any(|p| {
+        matches!(
+            p.kind,
+            PredKind::Matches(_) | PredKind::IsoDate | PredKind::Cron
+        )
+    })
 }
 
 /// #2686: the `@example(<arg>)` annotation's argument on a refinement, if

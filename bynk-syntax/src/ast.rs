@@ -3108,6 +3108,9 @@ pub enum PredKind {
     /// #2867: a `String` that is a real calendar date, exactly `YYYY-MM-DD`
     /// (years 0000-9999). The same date rule `Instant.fromIso` applies.
     IsoDate,
+    /// #3873: a `String` that is a valid Cloudflare cron schedule
+    /// ([`crate::cron::is_cron_expression`]).
+    Cron,
 }
 
 /// #2867: is `s` exactly `YYYY-MM-DD` and a date that exists? The one
@@ -3153,6 +3156,7 @@ impl PredKind {
             PredKind::Positive => "Positive",
             PredKind::NonEmpty => "NonEmpty",
             PredKind::IsoDate => "IsoDate",
+            PredKind::Cron => "Cron",
         }
     }
 }

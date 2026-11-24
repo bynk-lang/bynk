@@ -129,6 +129,7 @@ const ORDER: &[&str] = &[
     "__bynkInstantFromIso",
     "__bynkPgRow",
     "__bynkIsIsoDate",
+    "__bynkIsCron",
     "__bynkCodePointLength",
     "__bynkYamlParse",
     "__bynkSettleAll",

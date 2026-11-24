@@ -55,7 +55,8 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)
                         | PredKind::NonEmpty
-                        | PredKind::IsoDate => {}
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
             }
@@ -74,7 +75,7 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                     match p.kind {
                         PredKind::NonEmpty => len = len.max(1),
                         PredKind::MinLength(k) | PredKind::Length(k) => len = len.max(k),
-                        PredKind::Matches(_) | PredKind::IsoDate => return None,
+                        PredKind::Matches(_) | PredKind::IsoDate | PredKind::Cron => return None,
                         PredKind::InRange(..)
                         | PredKind::InRangeF(..)
                         | PredKind::InRangeD(..)
@@ -109,7 +110,8 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)
                         | PredKind::NonEmpty
-                        | PredKind::IsoDate => {}
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
             }
@@ -161,7 +163,8 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         | PredKind::Length(..)
                         | PredKind::NonNegative
                         | PredKind::NonEmpty
-                        | PredKind::IsoDate => {}
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
             }

@@ -573,7 +573,7 @@
   "cron_handler": [
     {
       "code": "bynk.cron.bad_params",
-      "summary": "A cron handler declares more than one parameter, or a non-`Int` one."
+      "summary": "A cron handler declares more than one parameter, or a non-`Instant` one."
     },
     {
       "code": "bynk.cron.duplicate_schedule",
@@ -581,11 +581,19 @@
     },
     {
       "code": "bynk.cron.invalid_schedule",
-      "summary": "A cron expression is not five whitespace-separated fields."
+      "summary": "A cron schedule is not valid Cloudflare cron syntax: a field is out of range or malformed, or the fields are not separated by exactly one space."
+    },
+    {
+      "code": "bynk.cron.numeric_weekday",
+      "summary": "A cron schedule names a day of the week by number, where Cloudflare's `1` is Sunday, not standard cron's `0`/`7` (warning)."
     },
     {
       "code": "bynk.cron.return_not_effect_result",
       "summary": "A cron handler does not return `Effect[Result[(), E]]`."
+    },
+    {
+      "code": "bynk.cron.uneven_step",
+      "summary": "A cron schedule's `*/n` step in the minute or hour field does not divide the field's range, so the last gap is shorter than `n` (warning)."
     }
   ],
   "decimal_literal": [

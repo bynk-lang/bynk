@@ -190,6 +190,7 @@ The `bynk` unit also exports the transparent types these operations use:
 
 ```bynk
 type Uuid       = String where Matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+type CronSchedule = String where Cron
 type Method     = enum { Get, Post, Put, Delete, Patch, Head, Options }
 type FetchError = enum { Network, Timeout, InvalidHeader, InvalidBody }
 type Redirect   = enum { Follow, Manual }
