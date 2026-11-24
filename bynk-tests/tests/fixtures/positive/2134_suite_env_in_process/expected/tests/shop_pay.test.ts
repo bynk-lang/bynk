@@ -54,7 +54,7 @@ async function test_integration__a_name_no_env_gives_is_none() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -65,6 +65,7 @@ async function test_integration__a_name_no_env_gives_is_none() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -92,7 +93,7 @@ async function test_integration__a_case_env_is_what_the_Secrets_double_answers()
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -103,6 +104,7 @@ async function test_integration__a_case_env_is_what_the_Secrets_double_answers()
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -130,7 +132,7 @@ async function test_unit__the_processor_comes_from_the_suite_env() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -141,6 +143,7 @@ async function test_unit__the_processor_comes_from_the_suite_env() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -168,7 +171,7 @@ async function test_unit__a_case_env_overrides_the_suite_s() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -179,6 +182,7 @@ async function test_unit__a_case_env_overrides_the_suite_s() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -206,7 +210,7 @@ async function test_unit__a_later_case_sees_the_suite_value_again() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_shop_pay;
     type UserId = __ns_shop_pay.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -217,6 +221,7 @@ async function test_unit__a_later_case_sees_the_suite_value_again() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;

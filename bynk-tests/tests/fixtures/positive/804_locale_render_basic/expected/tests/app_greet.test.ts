@@ -35,7 +35,7 @@ function __bynkShow(v: unknown): string {
 
 class __Stub_Locale {
   async current(): globalThis.Promise<__ns_bynk_locale_types.LocaleTag> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -46,6 +46,7 @@ class __Stub_Locale {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -102,7 +103,7 @@ async function test_no_params_renders_just_the_code() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -113,6 +114,7 @@ async function test_no_params_renders_just_the_code() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -141,7 +143,7 @@ async function test_one_param_renders_code_plus_the_substitution() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -152,6 +154,7 @@ async function test_one_param_renders_code_plus_the_substitution() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -180,7 +183,7 @@ async function test_multiple_params_render_sorted_by_key__not_call_order() {
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
     type Message = __ns_bynk_locale_types.Message;
     type MessageArg = __ns_bynk_locale_types.MessageArg;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -191,6 +194,7 @@ async function test_multiple_params_render_sorted_by_key__not_call_order() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;

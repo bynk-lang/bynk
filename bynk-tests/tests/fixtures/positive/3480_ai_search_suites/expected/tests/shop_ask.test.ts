@@ -68,7 +68,7 @@ class __Stub_Kb {
   }
 
   async answer(messages: readonly __ns_bynk_cloudflare.ChatMessage[], options: __ns_bynk_cloudflare.SearchOptions): globalThis.Promise<Result<__ns_bynk_cloudflare.SearchAnswer, __ns_bynk_cloudflare.SearchError>> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -79,6 +79,7 @@ class __Stub_Kb {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -175,7 +176,7 @@ class __Stub_Kb {
   }
 
   async search(query: string, options: __ns_bynk_cloudflare.SearchOptions): globalThis.Promise<Result<readonly __ns_bynk_cloudflare.SearchHit[], __ns_bynk_cloudflare.SearchError>> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -186,6 +187,7 @@ class __Stub_Kb {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -330,7 +332,7 @@ async function test_an_unstubbed_search_faults() {
   try {
     const deps = __makeTestDeps();
     const { api } = __ns_shop_ask;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -341,6 +343,7 @@ async function test_an_unstubbed_search_faults() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -452,7 +455,7 @@ async function test_an_unstubbed_answer_faults() {
   try {
     const deps = __makeTestDeps();
     const { api } = __ns_shop_ask;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -463,6 +466,7 @@ async function test_an_unstubbed_answer_faults() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -575,7 +579,7 @@ async function test_a_stubbed_search_is_returned() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed search is returned"), { AiSearch: ["answer", "search"], Kb: ["answer", "search"] }, __obs);
     const { api } = __ns_shop_ask;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -586,6 +590,7 @@ async function test_a_stubbed_search_is_returned() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -689,7 +694,7 @@ async function test_a_stubbed_answer_is_returned() {
   try {
     const deps = __makeTestDeps("a stubbed answer is returned");
     const { api } = __ns_shop_ask;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -700,6 +705,7 @@ async function test_a_stubbed_answer_is_returned() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -802,7 +808,7 @@ async function test_a_rate_limit_is_matched() {
   try {
     const deps = __makeTestDeps("a rate limit is matched");
     const { api } = __ns_shop_ask;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -813,6 +819,7 @@ async function test_a_rate_limit_is_matched() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;

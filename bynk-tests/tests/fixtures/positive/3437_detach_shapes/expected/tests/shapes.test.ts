@@ -77,7 +77,7 @@ async function test_a_detached_effect_of_any_type_completes_the_handler() {
     const { MailError, Note, notify, notifyAll, run } = __ns_shapes;
     type MailError = __ns_shapes.MailError;
     type Note = __ns_shapes.Note;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -88,6 +88,7 @@ async function test_a_detached_effect_of_any_type_completes_the_handler() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -113,7 +114,7 @@ async function test_a_detached_Err_does_not_fail_the_case() {
     const { MailError, Note, notify, notifyAll, run } = __ns_shapes;
     type MailError = __ns_shapes.MailError;
     type Note = __ns_shapes.Note;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -124,6 +125,7 @@ async function test_a_detached_Err_does_not_fail_the_case() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -149,7 +151,7 @@ async function test_a_detached_Err_with_a_payload_does_not_fail_the_case() {
     const { MailError, Note, notify, notifyAll, run } = __ns_shapes;
     type MailError = __ns_shapes.MailError;
     type Note = __ns_shapes.Note;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -160,6 +162,7 @@ async function test_a_detached_Err_with_a_payload_does_not_fail_the_case() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
@@ -185,7 +188,7 @@ async function test_a_helper_detaches() {
     const { MailError, Note, notify, notifyAll, run } = __ns_shapes;
     type MailError = __ns_shapes.MailError;
     type Note = __ns_shapes.Note;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
@@ -196,6 +199,7 @@ async function test_a_helper_detaches() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;

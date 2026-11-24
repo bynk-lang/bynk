@@ -145,6 +145,20 @@ export const FetchOptions = {
 };
 
 /**
+ * The options of the bounded fan-out methods `parForEachWith`, `parTraverseWith`,
+ * `parTraverseAllWith` and `parTraverseTryWith`. `limit` is the most steps in
+ * flight at once: a whole number from 1 to 1000, with no default, so a call
+ * always states it. A literal or constant outside that range is the error
+ * `bynk.list.par_limit_range`; a computed one faults the call.
+ */
+export interface ParOptions {
+  readonly limit: number;
+}
+
+export const ParOptions = {
+};
+
+/**
  * Why an `e.within(d)` produced no value: the deadline `after` passed first.
  * The abandoned effect is **not** cancelled. It is handed to the platform's
  * `waitUntil` and may still complete after the handler has returned, so its

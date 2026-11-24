@@ -4,7 +4,7 @@
 import { Ok, Err } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import * as __ns_demo_fan from "./../demo/fan.js";
-import * as __ns_bynk_par from "./../bynk/par.js";
+import * as __ns_bynk from "./../bynk.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -40,14 +40,31 @@ function __makeTestDeps() {
 // case tier: unit
 async function test_parTraverseWith_keeps_input_order() {
   try {
-    const deps = {};
+    const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { ParOptions } = __ns_bynk_par;
-    type ParOptions = __ns_bynk_par.ParOptions;
-    const out = await tenfold([3, 1, 2]);
-    if (!(__bynkEq(out, [30, 10, 20]))) { throw __bynkExpectFailure("tests/demo/fan.bynk:5:9", 98, 117, "expect out == [30, 10, 20]\n  expected: out == [30, 10, 20]\n  actual:   " + __bynkShow((out)) + " == " + __bynkShow(([30, 10, 20]))); }
-    const wide = await tenfoldConst([1, 2, 3, 4, 5]);
-    if (!(__bynkEq(wide, [10, 20, 30, 40, 50]))) { throw __bynkExpectFailure("tests/demo/fan.bynk:7:9", 169, 197, "expect wide == [10, 20, 30, 40, 50]\n  expected: wide == [10, 20, 30, 40, 50]\n  actual:   " + __bynkShow((wide)) + " == " + __bynkShow(([10, 20, 30, 40, 50]))); }
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const out = await tenfold.call([3, 1, 2], deps);
+    if (!(__bynkEq(out, [30, 10, 20]))) { throw __bynkExpectFailure("tests/demo/fan.bynk:5:9", 103, 122, "expect out == [30, 10, 20]\n  expected: out == [30, 10, 20]\n  actual:   " + __bynkShow((out)) + " == " + __bynkShow(([30, 10, 20]))); }
+    const wide = await tenfoldConst.call([1, 2, 3, 4, 5], deps);
+    if (!(__bynkEq(wide, [10, 20, 30, 40, 50]))) { throw __bynkExpectFailure("tests/demo/fan.bynk:7:9", 179, 207, "expect wide == [10, 20, 30, 40, 50]\n  expected: wide == [10, 20, 30, 40, 50]\n  actual:   " + __bynkShow((wide)) + " == " + __bynkShow(([10, 20, 30, 40, 50]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -60,12 +77,29 @@ async function test_parTraverseWith_keeps_input_order() {
 // case tier: unit
 async function test_parForEachWith_runs_every_step() {
   try {
-    const deps = {};
+    const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { ParOptions } = __ns_bynk_par;
-    type ParOptions = __ns_bynk_par.ParOptions;
-    const __r0 = await touch([1, 2, 3]);
-    if (!(1 === 1)) { throw __bynkExpectFailure("tests/demo/fan.bynk:12:9", 276, 282, "expect 1 == 1\n  expected: 1 == 1\n  actual:   " + __bynkShow((1)) + " == " + __bynkShow((1))); }
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const __r0 = await touch.call([1, 2, 3], deps);
+    if (!(1 === 1)) { throw __bynkExpectFailure("tests/demo/fan.bynk:12:9", 291, 297, "expect 1 == 1\n  expected: 1 == 1\n  actual:   " + __bynkShow((1)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -78,12 +112,29 @@ async function test_parForEachWith_runs_every_step() {
 // case tier: unit
 async function test_parTraverseAllWith_collects_every_result() {
   try {
-    const deps = {};
+    const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { ParOptions } = __ns_bynk_par;
-    type ParOptions = __ns_bynk_par.ParOptions;
-    const rs = await collect([1, 2, 3], 2);
-    if (!((rs).length === 3)) { throw __bynkExpectFailure("tests/demo/fan.bynk:17:9", 377, 393, "expect rs.length() == 3\n  expected: rs.length() == 3\n  actual:   " + __bynkShow(((rs).length)) + " == " + __bynkShow((3))); }
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const rs = await collect.call([1, 2, 3], 2, deps);
+    if (!((rs).length === 3)) { throw __bynkExpectFailure("tests/demo/fan.bynk:17:9", 397, 413, "expect rs.length() == 3\n  expected: rs.length() == 3\n  actual:   " + __bynkShow(((rs).length)) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -96,12 +147,29 @@ async function test_parTraverseAllWith_collects_every_result() {
 // case tier: unit
 async function test_parTraverseTryWith_returns_every_value_in_input_order_when_all_succeed() {
   try {
-    const deps = {};
+    const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { ParOptions } = __ns_bynk_par;
-    type ParOptions = __ns_bynk_par.ParOptions;
-    const r = await tryAll([1, 2], 2);
-    if (!(__bynkEq(r, Ok([1, 2])))) { throw __bynkExpectFailure("tests/demo/fan.bynk:22:9", 513, 528, "expect r == Ok([1, 2])\n  expected: r == Ok([1, 2])\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Ok([1, 2])))); }
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const r = await tryAll.call([1, 2], 2, deps);
+    if (!(__bynkEq(r, Ok([1, 2])))) { throw __bynkExpectFailure("tests/demo/fan.bynk:22:9", 538, 553, "expect r == Ok([1, 2])\n  expected: r == Ok([1, 2])\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((Ok([1, 2])))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -114,14 +182,31 @@ async function test_parTraverseTryWith_returns_every_value_in_input_order_when_a
 // case tier: unit
 async function test_parTraverseTryWith_returns_the_first_Err_in_input_order__and_an_early_Err_stops_the_rest() {
   try {
-    const deps = {};
+    const deps = __makeTestDeps();
     const { WIDTH, check, collect, tenfold, tenfoldConst, touch, tryAll } = __ns_demo_fan;
-    const { ParOptions } = __ns_bynk_par;
-    type ParOptions = __ns_bynk_par.ParOptions;
-    const wide = await tryAll([1, 3, 4], 3);
-    if (!(__bynkEq(wide, Err("big")))) { throw __bynkExpectFailure("tests/demo/fan.bynk:27:9", 672, 690, "expect wide == Err(\"big\")\n  expected: wide == Err(\"big\")\n  actual:   " + __bynkShow((wide)) + " == " + __bynkShow((Err("big")))); }
-    const narrow = await tryAll([3, 1, 2], 1);
-    if (!(__bynkEq(narrow, Err("big")))) { throw __bynkExpectFailure("tests/demo/fan.bynk:29:9", 735, 755, "expect narrow == Err(\"big\")\n  expected: narrow == Err(\"big\")\n  actual:   " + __bynkShow((narrow)) + " == " + __bynkShow((Err("big")))); }
+    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const wide = await tryAll.call([1, 3, 4], 3, deps);
+    if (!(__bynkEq(wide, Err("big")))) { throw __bynkExpectFailure("tests/demo/fan.bynk:27:9", 702, 720, "expect wide == Err(\"big\")\n  expected: wide == Err(\"big\")\n  actual:   " + __bynkShow((wide)) + " == " + __bynkShow((Err("big")))); }
+    const narrow = await tryAll.call([3, 1, 2], 1, deps);
+    if (!(__bynkEq(narrow, Err("big")))) { throw __bynkExpectFailure("tests/demo/fan.bynk:29:9", 770, 790, "expect narrow == Err(\"big\")\n  expected: narrow == Err(\"big\")\n  actual:   " + __bynkShow((narrow)) + " == " + __bynkShow((Err("big")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
