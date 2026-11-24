@@ -1,6 +1,5 @@
 commons bynk.locale {
 	uses bynk.locale.types
-	uses bynk.string
 
 	---
 	Renders `msg`. Slice 1 has no bundle/lookup mechanism: the output is
@@ -21,7 +20,7 @@ commons bynk.locale {
 					None => acc,
 				})
 				.reverse()
-			msg.code.concat(" {").concat(join(parts, ", ")).concat("}")
+			msg.code.concat(" {").concat(parts.join(", ")).concat("}")
 		}
 	}
 
