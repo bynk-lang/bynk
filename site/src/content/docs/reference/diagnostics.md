@@ -333,7 +333,7 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.cache_duplicate`](/reference/diagnostics/bynk.http.cache_duplicate/) — A handler carries more than one `@cache` annotation.
 - [`bynk.http.cache_max_age_fractional_seconds`](/reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/) — A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds.
 - [`bynk.http.cache_no_store_conflict`](/reference/diagnostics/bynk.http.cache_no_store_conflict/) — A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`.
-- [`bynk.http.cache_on_non_get`](/reference/diagnostics/bynk.http.cache_on_non_get/) — A `@cache` annotation is placed on a handler that is not `on http GET`.
+- [`bynk.http.cache_on_non_get`](/reference/diagnostics/bynk.http.cache_on_non_get/) — A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).
 - [`bynk.http.cache_public_authenticated`](/reference/diagnostics/bynk.http.cache_public_authenticated/) — A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.
 - [`bynk.http.cache_public_reads_cookies`](/reference/diagnostics/bynk.http.cache_public_reads_cookies/) — A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another.
 - [`bynk.http.cache_unknown_arg`](/reference/diagnostics/bynk.http.cache_unknown_arg/) — A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).

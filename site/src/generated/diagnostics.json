@@ -3340,14 +3340,14 @@
     "summary": "A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`."
   },
   {
-    "blurb": "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all.",
+    "blurb": "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all. The one form that is not for reads is `@cache(noStore: true)`, which sends `Cache-Control: no-store` and is legal on a route of any HTTP method; it is still refused on a handler that is not HTTP, and on an agent.",
     "category": "HTTP",
     "categoryAnchor": "http",
     "code": "bynk.http.cache_on_non_get",
     "constructs": [],
     "example": "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     "severity": "error",
-    "summary": "A `@cache` annotation is placed on a handler that is not `on http GET`."
+    "summary": "A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route)."
   },
   {
     "blurb": "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",

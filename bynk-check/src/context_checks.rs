@@ -6211,13 +6211,17 @@ fn validate_query_param(
 /// unknown annotation name is flagged rather than silently ignored. The
 /// automatic conditional `ETag`/`304` half carries no author surface, so `@cache`
 /// is the only annotation validated here.
-/// #3922: whether a route's actor carries a credential, and whether it is a `SignedCookie`
-/// (which has its own `bynk.actor.signed_cookie_public_cache`).
+/// #3922: whether `scope: public` on this route is a `bynk.http.cache_public_authenticated`,
+/// and whether the route is a `SignedCookie` one. Neither is reported where another rule
+/// already says it: a `SignedCookie` route has `bynk.actor.signed_cookie_public_cache`, and
+/// in a context that declares `EdgeCache` the edge rule
+/// `bynk.cloudflare.edge_cache_public_authenticated` covers every credentialed route.
 fn route_actor_kinds(handler: &Handler, service: &ServiceDecl, table: &UnitTable) -> (bool, bool) {
+    let edge = table.derived.values().any(|d| d.is_edge_cache());
     let by = handler.by_clause.as_ref().or(service.default_by.as_ref());
     by.map_or((false, false), |by| {
         (
-            crate::actors::route_is_credentialed(by, &table.actors),
+            !edge && crate::actors::route_is_credentialed(by, &table.actors),
             crate::actors::by_clause_is_signed_cookie(by, &table.actors),
         )
     })
@@ -6266,14 +6270,16 @@ fn validate_handler_annotations(
                     continue;
                 }
                 seen_cache = true;
-                // #3922: `noStore` is allowed on any route, since data that must never
-                // be stored is not only a `GET`'s.
-                if !is_get && !handler.cache_no_store() {
+                // #3922: `noStore` is allowed on any HTTP route, since data that must never
+                // be stored is not only a `GET`'s. Another protocol, or an agent, has no
+                // response to stamp, so it stays `cache_on_non_get`.
+                let is_http = matches!(handler.kind, HandlerKind::Http { .. });
+                if !is_get && !(is_http && handler.cache_no_store()) {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_on_non_get",
                             ann.span,
-                            "`@cache` is only valid on an `on http GET` handler",
+                            "`@cache` is only valid on an `on http GET` handler (`@cache(noStore: true)` is also valid on any other HTTP route)",
                         )
                         .with_note(
                             "conditional caching applies to safe, idempotent reads — a `GET` route",
