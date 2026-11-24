@@ -173,8 +173,47 @@ fn rewrite_handlers(handlers: &mut [Handler], scope: &Scope, refs: &mut RefSink)
     let mut changed = false;
     for h in handlers {
         changed |= rewrite_annotations(&mut h.annotations, HANDLER_RULES, scope, refs);
+        changed |= rewrite_schedule(h, scope, refs);
     }
     changed
+}
+
+/// #3875: `on schedule(Nightly)` — resolve the named constant to the literal it
+/// denotes and fill the handler's schedule expression with it, so the checker,
+/// the trigger table, dispatch and every reader see the literal text. A constant
+/// declared `String` or exactly `CronSchedule` resolves; anything else is left
+/// with its refusal recorded for `bynk.cron.invalid_schedule` (or the unknown
+/// name) to report. The literal is checked against `Cron` afterwards, where a
+/// literal schedule is.
+fn rewrite_schedule(h: &mut Handler, scope: &Scope, refs: &mut RefSink) -> bool {
+    use bynk_syntax::ast::{HandlerKind, ScheduleRefusal};
+    let Some(sc) = &mut h.schedule_const else {
+        return false;
+    };
+    let name = sc.name.name.clone();
+    match crate::consts::resolve_schedule_literal(|u| scope.lookup(u), scope.unit, &name) {
+        Ok(found) => {
+            let ExprKind::StrLit(text) = &found.literal.kind else {
+                return false;
+            };
+            let same_file = found.owner.is_none() && scope.file_consts.contains(&name);
+            sc.decl_span = same_file.then_some(found.decl.name.span);
+            refs.record(sc.name.span, SymbolKind::Const, &name);
+            h.kind = HandlerKind::Cron { expr: text.clone() };
+            true
+        }
+        Err(declared) => {
+            sc.refusal = Some(match declared {
+                None => ScheduleRefusal::Unknown,
+                Some(d) => {
+                    ScheduleRefusal::Declared(crate::context_checks::ts_type_ref_display(&d.ty))
+                }
+            });
+            // Changed: the unit's table is rebuilt, so the refusal reaches the
+            // checker with the handler.
+            true
+        }
+    }
 }
 
 fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
