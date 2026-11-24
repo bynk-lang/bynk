@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A type selected from a consumed context now wins over an unselected `bynk` export of the same name (`Refusal`, `CallOutcome`, `CallFailure`)
----
+# 0936 — A selected consumed type wins over an unselected standard-library export of the same name
 
-## ADR: selected-consumed-type-beats-unselected-adapter-export
-title: A selected consumed type wins over an unselected standard-library export of the same name
-summary: Name precedence between a file's own, selected consumed, and unselected `bynk` types
+- **Status:** Accepted (v0.677.1)
 
 **Context.** #4211 added `CallOutcome`, `CallFailure` and `Refusal` to `bynk`'s exports. A context that selects its own `Refusal` from another context while consuming `bynk { Secrets, Clock }` silently lost it: the composer skipped the consumed export because `Refusal` was an unselected `bynk` name, so the standard library's enum took its place and `bynk.consumes.type_not_selected` fired on the user's own type.
 

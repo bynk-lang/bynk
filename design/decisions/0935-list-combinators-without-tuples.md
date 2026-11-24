@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `List` gains `filterMap`, `zipWith`, `takeWhile`, `skipWhile` and `count(p)`
----
+# 0935 — filterMap, zipWith, takeWhile, skipWhile and count(p) on List
 
-## ADR: list-combinators-without-tuples
-title: filterMap, zipWith, takeWhile, skipWhile and count(p) on List
-summary: Adds the five list combinators a language without tuples needs, with zipWith stopping at the shorter list
+- **Status:** Accepted (v0.677)
 
 **Context.** Keep-and-transform, pairwise combination, a prefix by predicate and counting matches each took two passes or a hand-written `fold` with a flag. There are no tuples, so `zip` has no result type; `zipWith` is its tuple-free form.
 
