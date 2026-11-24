@@ -64,6 +64,7 @@ mod expressions;
 mod kernels;
 mod linearity;
 mod list_basics;
+mod list_par;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;

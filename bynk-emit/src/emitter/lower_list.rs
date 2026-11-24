@@ -195,9 +195,11 @@ pub(super) fn lower_list_kernel(
         (ListOp::Fold, [init, f]) => Some(list_fold(&a, init, f, p, cx)),
         (ListOp::FoldEff, [init, f]) => Some(list_fold_eff(&a, init, f, p, cx)),
         (ListOp::ForEach, [f]) => Some(list_for_each(&a, f, p, cx)),
-        (ListOp::ParTraverse, [f]) => Some(list_par_traverse(&a, f, p, cx)),
+        (ListOp::ParForEach, [f]) => Some(list_par_traverse(&a, f, p, cx)),
         (ListOp::TraverseAll | ListOp::Traverse, [f]) => Some(list_traverse_all(&a, f, p, cx)),
-        (ListOp::ParTraverseAll, [f]) => Some(list_par_traverse_all(&a, f, p, cx)),
+        (ListOp::ParTraverseAll | ListOp::ParTraverse, [f]) => {
+            Some(list_par_traverse_all(&a, f, p, cx))
+        }
         (name @ (ListOp::SequenceAll | ListOp::SequenceTry), []) => {
             Some(list_sequence(&a, name, p, cx))
         }
@@ -449,7 +451,7 @@ fn list_for_each(a: &ListArm, f: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> byn
     }
 }
 
-// v0.147 (ADR 0171): `parTraverse` — issue the effectful fn over every
+// v0.147 (ADR 0171): `parForEach` — issue the effectful fn over every
 // element concurrently and await them together, so one slow element does
 // not head-of-line-block the rest. The eager `List` analogue of the
 // `Query.parTraverse` terminal, emitted inline.
@@ -1709,7 +1711,7 @@ mod list_kernel_tests {
             "Int",
             "Effect[()]",
             ", g: (Int) -> Effect[()]",
-            "{R}.parTraverse(g)",
+            "{R}.parForEach(g)",
         ));
         assert!(ts.contains("__bynkSettleAll"), "{ts}");
         assert!(
