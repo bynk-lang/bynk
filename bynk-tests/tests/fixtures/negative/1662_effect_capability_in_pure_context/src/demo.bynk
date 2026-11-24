@@ -12,7 +12,7 @@ provides Clock = FixedClock {
 }
 
 service probe {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let f: (Int) -> Int = (n) => Clock.now()
     Effect.pure(1)
   }

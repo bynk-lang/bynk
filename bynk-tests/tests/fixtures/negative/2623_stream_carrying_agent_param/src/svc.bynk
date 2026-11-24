@@ -8,7 +8,7 @@ agent Keeper {
 
 	store count: Cell[Int]
 
-	on call(d: Download) -> Effect[Int] {
+	on call(d: Download) -> Effect[Int] by Caller {
 		Effect.pure(1)
 	}
 }

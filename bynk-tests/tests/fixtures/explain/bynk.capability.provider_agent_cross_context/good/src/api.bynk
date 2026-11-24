@@ -3,7 +3,7 @@ context api
 consumes registry
 
 service yank {
-  on call() -> Effect[Bool] {
+  on call() -> Effect[Bool] by Caller {
     registry.yank(true)
   }
 }

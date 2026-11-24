@@ -167,12 +167,12 @@ fn the_editor_refuses_what_the_fixture_expects() {
 
 const ORDERS: &str = "context shop.orders\n\n\
 capability Warehouse {\n  fn reserve(sku: String) -> Effect[String]\n}\n\n\
-service orders {\n  on call(sku: String) -> Effect[String] given Warehouse {\n    Warehouse.reserve(sku)\n  }\n}\n";
+service orders {\n  on call(sku: String) -> Effect[String] by Caller given Warehouse {\n    Warehouse.reserve(sku)\n  }\n}\n";
 
 const PUBLISHER: &str = "context shop.audit\n\n\
 consumes bynk { Events }\n\n\
 event Noted = { n: Int }\n\n\
-service audit {\n  on call(n: Int) -> Effect[Int] given Events {\n    let _ <- Events.emit[Noted](Noted { n: n })\n    n\n  }\n}\n";
+service audit {\n  on call(n: Int) -> Effect[Int] by Caller given Events {\n    let _ <- Events.emit[Noted](Noted { n: n })\n    n\n  }\n}\n";
 
 const MANIFEST: &str = "[project]\nname = \"bundle-composition\"\nversion = \"0.1.0\"\n";
 

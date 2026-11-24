@@ -119,7 +119,7 @@ fn stamped_hash(b_body: &str, tag: &str) -> String {
     std::fs::write(proj.join("b.bynk"), b_body).unwrap();
     std::fs::write(
         proj.join("a.bynk"),
-        "context app.a\n\nconsumes app.b as B\n\nservice ask {\n  on call(x: String) -> Effect[Result[String, String]] {\n    let r <- B.probe(x)\n    r\n  }\n}\n",
+        "context app.a\n\nconsumes app.b as B\n\nservice ask {\n  on call(x: String) -> Effect[Result[String, String]] by Caller {\n    let r <- B.probe(x)\n    r\n  }\n}\n",
     )
     .unwrap();
     let out = bynk_driver::project::compile_project(
@@ -163,13 +163,13 @@ fn stamped_hash(b_body: &str, tag: &str) -> String {
 #[test]
 fn a_parameter_rename_changes_the_hash() {
     let a = stamped_hash(
-        "context app.b\n\nservice probe {\n  on call(x: String) -> Effect[Result[String, String]] {\n    Ok(x)\n  }\n}\n",
+        "context app.b\n\nservice probe {\n  on call(x: String) -> Effect[Result[String, String]] by Caller {\n    Ok(x)\n  }\n}\n",
         "param-x",
     );
     // The caller calls `B.probe(x)` positionally, so only the callee's parameter
     // name differs — which is exactly the case a name-blind form would miss.
     let b = stamped_hash(
-        "context app.b\n\nservice probe {\n  on call(renamed: String) -> Effect[Result[String, String]] {\n    Ok(renamed)\n  }\n}\n",
+        "context app.b\n\nservice probe {\n  on call(renamed: String) -> Effect[Result[String, String]] by Caller {\n    Ok(renamed)\n  }\n}\n",
         "param-renamed",
     );
     assert_ne!(a, b, "a parameter rename must change the hash");

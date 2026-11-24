@@ -11,7 +11,7 @@ context api
 uses money
 
 service mk {
-  on call(n: Int) -> Effect[Bool] {
+  on call(n: Int) -> Effect[Bool] by Caller {
     let r = Cents.fromInt(n)
     match r {
       Ok(c) => Effect.pure(c.equals(c))

@@ -1738,7 +1738,7 @@ type ClientId = String where NonEmpty
 type Rate = { count: Int, limit: Int }
 
 service Api {
-  on call(client: ClientId) -> Effect[Rate] {
+  on call(client: ClientId) -> Effect[Rate] by Caller {
     client
   }
 }
@@ -1758,7 +1758,7 @@ type Used = String where NonEmpty
 type Unused = { n: Int }
 
 service Api {
-  on call(x: Used) -> Effect[Used] {
+  on call(x: Used) -> Effect[Used] by Caller {
     x
   }
 }
@@ -1895,7 +1895,7 @@ type Profile = { id: ClientId, home: Address }
 type Unrelated = { n: Int }
 
 service Api {
-  on call(client: ClientId) -> Effect[Profile] {
+  on call(client: ClientId) -> Effect[Profile] by Caller {
     Profile { id: client, home: Address { street: "x", city: "y" } }
   }
 }

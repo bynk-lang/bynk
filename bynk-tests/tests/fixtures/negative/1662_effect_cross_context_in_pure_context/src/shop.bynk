@@ -4,7 +4,7 @@ context shop
 consumes pay
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let f = (n: Int) => pay.charge(n)
     Effect.pure(1)
   }

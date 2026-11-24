@@ -17,7 +17,7 @@ service api from http {
 }
 
 service count {
-	on call(blobs: List[String]) -> Effect[Int] given Signups {
+	on call(blobs: List[String]) -> Effect[Int] by Caller given Signups {
 		let _ <- Signups.write(DataPoint { index: None, blobs: blobs, doubles: [] })
 		Effect.pure(blobs.length())
 	}

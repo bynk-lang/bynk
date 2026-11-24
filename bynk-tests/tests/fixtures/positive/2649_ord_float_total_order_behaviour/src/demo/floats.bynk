@@ -5,7 +5,6 @@ operators keep their IEEE meaning.
 ---
 commons demo.floats
 
-uses bynk.list
 
 type Reading = { value: Float, tag: String } derives Ord
 
@@ -15,15 +14,15 @@ fn negZero() -> Float { 0.0 * (0.0 - 1.0) }
 
 fn minusOne() -> Float { 0.0 - 1.0 }
 
-fn sorted(xs: List[Float]) -> List[Float] { sort(xs) }
+fn sorted(xs: List[Float]) -> List[Float] { xs.sort() }
 
-fn smallest(xs: List[Float]) -> Option[Float] { min(xs) }
+fn smallest(xs: List[Float]) -> Option[Float] { xs.min() }
 
-fn largest(xs: List[Float]) -> Option[Float] { max(xs) }
+fn largest(xs: List[Float]) -> Option[Float] { xs.max() }
 
 fn sortedBy(xs: List[Float]) -> List[Float] { xs.sortBy((x) => x) }
 
-fn readings(xs: List[Reading]) -> List[Reading] { sort(xs) }
+fn readings(xs: List[Reading]) -> List[Reading] { xs.sort() }
 
 fn lessThan(a: Float, b: Float) -> Bool { a < b }
 

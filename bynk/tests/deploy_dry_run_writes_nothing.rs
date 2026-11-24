@@ -24,7 +24,7 @@ agent Counter {
 }
 
 service api {
-  on call(id: String) -> Effect[Bool] {
+  on call(id: String) -> Effect[Bool] by Caller {
     Counter(id).bump("x")
   }
 }

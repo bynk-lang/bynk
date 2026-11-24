@@ -1,0 +1,7 @@
+context shop
+
+service authorise {
+  on call(total: Int) -> Effect[Int] by Caller {
+    total
+  }
+}

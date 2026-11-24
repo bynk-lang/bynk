@@ -27,7 +27,7 @@ fn makeSurface() -> Int { 2 }
 fn makeTestDeps() -> Int { 4 }
 
 service time {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let t <- Clock.now()
     t + SystemClockProvider() + makeSurface() + ClockToken { id: 3 }.id + DemoClockDeps { id: 5 }.id + makeTestDeps()
   }

@@ -4,7 +4,6 @@
 import { Some } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import * as __ns_demo_hand from "./../demo/hand.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
 import * as __ns_demo_algo from "./../demo/algo.js";
 import * as __ns_demo_cards from "./../demo/cards.js";
 
@@ -48,7 +47,6 @@ async function test_a_bounded_generic_from_another_unit_orders_an_imported_recor
     type Card = __ns_demo_cards.Card;
     type Rank = __ns_demo_cards.Rank;
     const { rankOf, smaller, twiceSmaller } = __ns_demo_algo;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const two = { rank: Rank.Two, name: "x" };
     const jack = { rank: Rank.Jack, name: "x" };
     const ace = { rank: Rank.Ace, name: "x" };
@@ -72,7 +70,6 @@ async function test_rankOf_counts_the_smaller_elements() {
     type Card = __ns_demo_cards.Card;
     type Rank = __ns_demo_cards.Rank;
     const { rankOf, smaller, twiceSmaller } = __ns_demo_algo;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const two = { rank: Rank.Two, name: "x" };
     const jack = { rank: Rank.Jack, name: "x" };
     const ace = { rank: Rank.Ace, name: "x" };
@@ -98,7 +95,6 @@ async function test_sort_and_max_use_the_imported_declaration_order() {
     type Card = __ns_demo_cards.Card;
     type Rank = __ns_demo_cards.Rank;
     const { rankOf, smaller, twiceSmaller } = __ns_demo_algo;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const a = { rank: Rank.Ace, name: "a" };
     const j = { rank: Rank.Jack, name: "z" };
     const t = { rank: Rank.Two, name: "m" };

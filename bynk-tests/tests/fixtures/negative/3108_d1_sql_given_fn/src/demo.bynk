@@ -23,7 +23,7 @@ fn orphan(id: String) -> Effect[Bool] given Orders {
 }
 
 service probe {
-  on call(id: String) -> Effect[Bool] given Orders {
+  on call(id: String) -> Effect[Bool] by Caller given Orders {
     lookup(id)
   }
 }

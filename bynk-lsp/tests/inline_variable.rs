@@ -179,7 +179,7 @@ fn a_same_named_field_is_not_a_use() {
 #[test]
 fn an_effectful_binding_is_not_inlined() {
     let src = canon(
-        "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call() -> Effect[Int] given Clock {\n    let t <- Clock.now()\n    t + 1\n  }\n}\n",
+        "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call() -> Effect[Int] by Caller given Clock {\n    let t <- Clock.now()\n    t + 1\n  }\n}\n",
     );
     let run = Run::new("effect", &src);
     assert!(run.plan("t <-", 0).is_none());

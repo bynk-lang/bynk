@@ -44,7 +44,7 @@ pub const CEILINGS_FILE: &str = "xtask/module-line-ceilings.txt";
 /// November 2026), exempt from the cap until track exit. An entry leaves the list when its
 /// ceiling falls under [`EXIT_CAP`] (the test fails while a listed file is under it); the
 /// slice that takes the last one under deletes this constant and the rule that reads it.
-pub const GRANDFATHERED: &[&str] = &["bynk-emit/src/emitter.rs"];
+pub const GRANDFATHERED: &[&str] = &[];
 
 /// One measured file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +296,16 @@ pub fn render_ceilings(measured: &[ModuleLines]) -> String {
 /// threshold, an entry that no longer names a file over it, a new entry at or over
 /// [`EXIT_CAP`], a grandfathered entry that has fallen under it, and a key with a `\\`.
 pub fn violations(measured: &[ModuleLines], ceilings: &[(String, usize)]) -> Vec<String> {
+    violations_with(measured, ceilings, GRANDFATHERED)
+}
+
+/// [`violations`] against an explicit exemption list, so the rule can be tested while the
+/// committed [`GRANDFATHERED`] list is empty.
+fn violations_with(
+    measured: &[ModuleLines],
+    ceilings: &[(String, usize)],
+    grandfathered_files: &[&str],
+) -> Vec<String> {
     let mut out = Vec::new();
     for m in measured {
         match ceilings.iter().find(|(k, _)| *k == m.file) {
@@ -326,7 +336,7 @@ pub fn violations(measured: &[ModuleLines], ceilings: &[(String, usize)]) -> Vec
                  (or is gone or renamed): remove its entry from {CEILINGS_FILE}"
             ));
         }
-        let grandfathered = GRANDFATHERED.contains(&key.as_str());
+        let grandfathered = grandfathered_files.contains(&key.as_str());
         if *ceiling >= EXIT_CAP && !grandfathered {
             out.push(format!(
                 "{key} has a ceiling of {ceiling}, at or over the {EXIT_CAP}-line exit cap, and is not \
@@ -347,8 +357,16 @@ pub fn violations(measured: &[ModuleLines], ceilings: &[(String, usize)]) -> Vec
 /// threshold and deleted it): remove them from [`GRANDFATHERED`]. Checked against the whole
 /// committed file, so it is separate from [`violations`], which unit tests feed partial lists.
 pub fn stale_grandfathered(ceilings: &[(String, usize)]) -> Vec<String> {
+    stale_grandfathered_in(ceilings, GRANDFATHERED)
+}
+
+/// [`stale_grandfathered`] against an explicit exemption list (see [`violations_with`]).
+fn stale_grandfathered_in(
+    ceilings: &[(String, usize)],
+    grandfathered_files: &[&str],
+) -> Vec<String> {
     let mut out = Vec::new();
-    for g in GRANDFATHERED {
+    for g in grandfathered_files {
         if !ceilings.iter().any(|(k, _)| k == g) {
             out.push(format!(
                 "{g} is in GRANDFATHERED but has no ceiling entry: remove it from GRANDFATHERED in \
@@ -448,6 +466,10 @@ mod tests {
         assert!(!got.iter().any(|(p, _)| p.contains("emitter/testkit")));
     }
 
+    /// A stand-in for a grandfathered file, so the exemption rule stays tested while the
+    /// committed list is empty.
+    const FAKE_GRANDFATHERED: &str = "a/src/legacy.rs";
+
     fn m(file: &str, lines: usize) -> ModuleLines {
         ModuleLines {
             file: file.into(),
@@ -511,20 +533,22 @@ mod tests {
         // 3,000 exactly is over the cap (the probe counts with `>=`).
         let v = violations(&[m("a/src/big.rs", 3000)], &[c("a/src/big.rs", 3000)]);
         assert!(v.iter().any(|x| x.contains("exit cap")), "{v:?}");
-        let g = GRANDFATHERED[0];
-        assert!(violations(&[m(g, 3500)], &[c(g, 3500)]).is_empty());
+        let list = [FAKE_GRANDFATHERED];
+        let g = list[0];
+        assert!(violations_with(&[m(g, 3500)], &[c(g, 3500)], &list).is_empty());
         // A grandfathered file that fell under the cap must leave the list.
-        let v = violations(&[m(g, 2999)], &[c(g, 2999)]);
+        let v = violations_with(&[m(g, 2999)], &[c(g, 2999)], &list);
         assert!(v.iter().any(|x| x.contains("GRANDFATHERED")), "{v:?}");
     }
 
     #[test]
     fn a_grandfathered_file_without_an_entry_is_reported() {
-        let all: Vec<(String, usize)> = GRANDFATHERED.iter().map(|g| c(g, 3500)).collect();
-        assert!(stale_grandfathered(&all).is_empty());
-        let v = stale_grandfathered(&all[1..]);
+        let list = [FAKE_GRANDFATHERED];
+        let all: Vec<(String, usize)> = list.iter().map(|g| c(g, 3500)).collect();
+        assert!(stale_grandfathered_in(&all, &list).is_empty());
+        let v = stale_grandfathered_in(&all[1..], &list);
         assert_eq!(v.len(), 1, "{v:?}");
-        assert!(v[0].contains(GRANDFATHERED[0]));
+        assert!(v[0].contains(list[0]));
     }
 
     #[test]

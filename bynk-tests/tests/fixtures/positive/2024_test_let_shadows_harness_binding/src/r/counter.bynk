@@ -20,7 +20,7 @@ agent Counter {
 }
 
 service level {
-  on call(id: String) -> Effect[Int] { Counter(id).bump() }
+  on call(id: String) -> Effect[Int] by Caller { Counter(id).bump() }
 }
 
 service api from http {

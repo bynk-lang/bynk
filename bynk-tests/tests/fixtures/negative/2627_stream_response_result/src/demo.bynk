@@ -5,7 +5,7 @@ consumes bynk { Fetch, Request, StreamResponse, FetchError, FetchOptions, Redire
 // #2627: a `StreamResponse` carries a stream, so it can't be a handler's
 // result: serve its body with `RawStreamed` instead.
 service probe {
-  on call(req: Request) -> Effect[Result[StreamResponse, FetchError]] given Fetch {
+  on call(req: Request) -> Effect[Result[StreamResponse, FetchError]] by Caller given Fetch {
     Fetch.receiveStream(req, FetchOptions { timeout: None, redirect: Follow })
   }
 }

@@ -1,7 +1,7 @@
 context probe
 
 service probe {
-  on call() -> Int {
+  on call() -> Int by Caller {
     1
   }
 }

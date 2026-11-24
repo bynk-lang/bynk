@@ -1054,9 +1054,8 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
     let next = std::sync::atomic::AtomicUsize::new(0);
     let finished = std::sync::atomic::AtomicUsize::new(0);
     let worker = |w: usize| {
-        // `bynk test` puts its compiled JavaScript beside the output
-        // directory (`<parent>/out-js`), so a job needs a parent of its own,
-        // not just its own `out`.
+        // `bynk test` puts its compiled JavaScript inside the output directory
+        // (`<out>/out-js`), so each job needs an output directory of its own.
         let dir = if jobs == 1 {
             "out".to_string()
         } else {
@@ -1550,7 +1549,7 @@ mod tests {
         const BIG: String = \"select id from orders where total > 1 and id = ?1\"\n\
         const ALIAS: String = BIG\n\
         const PROSE: String = \"DELETE <b>x</b> FROM here WHERE a > 1 AND b < 2\"\n\n\
-        service probe {\n  on call(id: String) -> Effect[String] given Orders {\n    \
+        service probe {\n  on call(id: String) -> Effect[String] by Caller given Orders {\n    \
         let _ <- Orders.all(ALIAS, [Text(id)])\n    \
         let _ <- Orders.first(\"SELECT id FROM orders WHERE total >= 2\\n  AND id = ?1\", [Text(id)])\n    \
         let _ <- Orders.run(\"update orders set total = total + 1 where id = ?1\", [Text(id)])\n    \

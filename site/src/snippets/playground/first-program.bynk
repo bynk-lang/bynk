@@ -21,7 +21,7 @@ Run calls `service playground`, so the playground has something to show:
 `classify` applied to three sizes of number.
 ---
 service playground {
-  on call() -> Effect[List[String]] {
+  on call() -> Effect[List[String]] by Caller {
     [classify(7), classify(42), classify(1000)]
   }
 }

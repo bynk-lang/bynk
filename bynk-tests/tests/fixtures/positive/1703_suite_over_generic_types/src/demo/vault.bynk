@@ -11,7 +11,7 @@ exports transparent { Envelope }
 type Envelope[T] = { item: T, note: String }
 
 service open {
-  on call(n: Int) -> Effect[Envelope[Int]] {
+  on call(n: Int) -> Effect[Envelope[Int]] by Caller {
     Envelope { item: n, note: "sealed" }
   }
 }

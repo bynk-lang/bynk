@@ -81,7 +81,7 @@ service streams from http {
 }
 
 service about {
-	on call(image: Bytes) -> Effect[Option[Bytes]] given Thumbnailer {
+	on call(image: Bytes) -> Effect[Option[Bytes]] by Caller given Thumbnailer {
 		Thumbnailer.thumb(image)
 	}
 }

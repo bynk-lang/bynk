@@ -6,7 +6,7 @@ type AuthId = opaque String
 type PaymentError = | Declined | InsufficientFunds
 
 service authorise {
-  on call(amount: Int) -> Effect[Result[AuthId, PaymentError]] {
+  on call(amount: Int) -> Effect[Result[AuthId, PaymentError]] by Caller {
     if amount == 0 {
       Err(Declined)
     } else if amount > 1000000 {

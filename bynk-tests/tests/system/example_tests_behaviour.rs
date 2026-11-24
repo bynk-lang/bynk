@@ -74,8 +74,8 @@ fn every_example_test_suite_passes() {
     let mut problems: Vec<String> = Vec::new();
     for example in &examples {
         let name = example.file_name().expect("example name").to_string_lossy();
-        // Each run gets its own parent directory: the runner writes its
-        // executed `out-js` tree as a sibling of `--output`.
+        // Each run gets its own output directory: the runner writes its
+        // executed `out-js` tree inside `--output`.
         let output = scratch.join(name.as_ref()).join("out");
         let _ = std::fs::remove_dir_all(scratch.join(name.as_ref()));
         let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))

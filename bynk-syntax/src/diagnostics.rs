@@ -200,6 +200,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "actor Principal { auth = Internal, identity = Int }   // ✗ `Int` is not owned by this context\n\ntype PrincipalId = Int where NonNegative\nactor Principal { auth = Internal, identity = PrincipalId }   // ✓ minted only here",
     },
     Explain {
+        code: "bynk.actor.missing_by_on_call",
+        blurb: "An `on call` handler is reachable by every context that consumes this one, and which of them may call it is an access decision, so the handler must say, with a `by` clause. `by Caller` is the explicit \"any consuming context\"; a refinement over `Caller`, a `Foreign` actor or a sum narrows it. The error's fix inserts `by Caller`, which is what the handler did before the clause was required, and `bynk check --fix=bynk.actor.missing_by_on_call` migrates a whole project. A header default, `service pay by Caller`, covers every handler without its own `by`. Agents, cron, queue and `Events` handlers have no caller to name, so they are unchanged.",
+        example: "context shop\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n\x20   total\n\x20 }\n}\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n\x20   total\n\x20 }\n}",
+    },
+    Explain {
         code: "bynk.actor.missing_by_on_http",
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
@@ -207,7 +212,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set \
                 it once on the header, `service api from http by Visitor`, and every handler \
                 without its own `by` inherits it. A WebSocket `on open` handler needs one too. \
-                The internal protocols (`call`, cron, queue) have a default.",
+                `call` handlers need one too (`bynk.actor.missing_by_on_call`); cron and queue have a default.",
         example: "service api from http {\n\
                   \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n\
                   \x20   Ok(\"up\")\n\
@@ -474,7 +479,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 \x20 binding \"./tokens.binding.ts\"\n\
                 \x20 provides Jwt = JoseJwt\n\
                 \x20 service login {                       // ✗ an adapter may not declare a service\n\
-                \x20   on call(x: Int) -> Effect[Int] { … }\n\
+                \x20   on call(x: Int) -> Effect[Int] by Caller { … }\n\
                 \x20 }\n\
                 }\n\
                 \n\
@@ -882,7 +887,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   type Box = { weight: Int }\n\
                   \n\
-                  service weigh {\n    on call(b: Box) -> Effect[Int] { … }\n\
+                  service weigh {\n    on call(b: Box) -> Effect[Int] by Caller { … }\n\
                   }\n\
                   \n\
                   // depot.bynk\n\
@@ -901,7 +906,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.capability.base_not_instantiable",
         blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
-        example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
+        example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
     },
     Explain {
         code: "bynk.capability.derived_outside_context",
@@ -918,9 +923,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 handler asks for that instance in `given` instead of the kind. Two instances of \
                 one kind never share data. Some kinds need options on the instance, such as \
                 `RateLimit @limit(20) @period(60.seconds)`.",
-        example: "on call() -> Effect[()] given D1 {            // ✗ the bare kind names no database\n\n\
+        example: "on call() -> Effect[()] by Caller given D1 {            // ✗ the bare kind names no database\n\n\
                   capability Orders = D1\n\
-                  on call() -> Effect[()] given Orders {        // ✓ a named instance",
+                  on call() -> Effect[()] by Caller given Orders {        // ✓ a named instance",
     },
     Explain {
         code: "bynk.capability.invalid_option",
@@ -985,7 +990,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `bynk.exports.capability_not_provided`. Add a provider to the context, or, on \
                 Workers, build for `--target bundle` when the bundle has no composition root.",
         example: "service notify {\n\
-                  \x20\x20on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n\
+                  \x20\x20on call(to: String) -> Effect[()] by Caller given Mailer {   // ✗ no `provides Mailer` in this context\n\
                   \x20\x20\x20\x20Mailer.send(to)\n\
                   \x20\x20}\n\
                   }\n\
@@ -1049,14 +1054,14 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   // api.bynk\n\
                   service yank {\n\
-                  \x20\x20on call() -> Effect[Bool] given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n\
+                  \x20\x20on call() -> Effect[Bool] by Caller given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n\
                   \x20\x20\x20\x20registry.Yanks.set(true)\n\
                   \x20\x20}\n\
                   }\n\
                   \n\
                   // api.bynk\n\
                   service yank {\n\
-                  \x20\x20on call() -> Effect[Bool] {\n\
+                  \x20\x20on call() -> Effect[Bool] by Caller {\n\
                   \x20\x20\x20\x20registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n\
                   \x20\x20}\n\
                   }",
@@ -1151,7 +1156,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.capability_not_selected",
         blurb: "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list is an error; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
-        example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
+        example: "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
     },
     Explain {
         code: "bynk.consumes.name_conflict",
@@ -1187,12 +1192,12 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.service_arity",
         blurb: "A cross-context call has the shape of the `on call` handler it reaches: one argument for each parameter. The consumed context owns that signature, so the caller adapts to it. Pass the arguments the handler declares (the note says where it is declared), or change the handler's parameters if the service needs different input.",
-        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
+        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
     },
     Explain {
         code: "bynk.consumes.signature_type_unconsumed",
         blurb: "A service you call may take or return a type declared in a third context. The value crosses the call as that context's type, so your context has to state the dependency itself: it does not inherit it from the service's context. Add `consumes` for the context the error names.",
-        example: "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
+        example: "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] by Caller { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
     },
     Explain {
         code: "bynk.consumes.target_is_commons",
@@ -1227,7 +1232,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.unit_not_consumed",
         blurb: "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. A call from a file that does not is an error; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
-        example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
+        example: "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
     },
     Explain {
         code: "bynk.consumes.unknown_context",
@@ -1237,7 +1242,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.consumes.unknown_service",
         blurb: "A call such as `pay.charge(…)` reaches a service of the consumed context, and `pay` has none by that name. Only a service's `on call` handler can be called across contexts, so check the spelling against the consumed context and that the service has an `on call` handler. A call with the wrong number of arguments is `bynk.consumes.service_arity`.",
-        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
+        example: "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
     },
     Explain {
         code: "bynk.container.build_missing",
@@ -1295,7 +1300,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   consumes a                       // ✗\n\
                   \n\
-                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)\n    }\n\
+                  service quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] by Caller {\n        Effect.pure(rate * 2)\n    }\n\
                   }",
     },
     Explain {
@@ -1330,7 +1335,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \n\
                   type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
                   \n\
-                  service issue {\n    on call() -> Effect[AuthId] { … }\n\
+                  service issue {\n    on call() -> Effect[AuthId] by Caller { … }\n\
                   }\n\
                   \n\
                   // orders.bynk\n\
@@ -1388,7 +1393,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   // shop.bynk\n\
                   context shop\n\n\
                   consumes pay\n\n\
-                  service checkout {\n    on call() -> Effect[Bool] {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n\
+                  service checkout {\n    on call() -> Effect[Bool] by Caller {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n\
                   // pay.bynk\n\
                   exports transparent { Status }   // ✓ the owner shares the shape",
     },
@@ -1611,7 +1616,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.effect.cross_context_in_pure_context",
         blurb: "A call to a service in a consumed context is an effect, as a capability call is, so it is only allowed in a body that is itself effectful. A handler is effectful, but a lambda inside it is a body of its own, and a service call alone does not make it effectful. Make the call in the handler body, bind it with `<-`, and use the result in the lambda.",
-        example: "on call() -> Effect[Int] {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
+        example: "on call() -> Effect[Int] by Caller {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] by Caller {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
     },
     Explain {
         code: "bynk.effect.do_discards_result",
@@ -1658,10 +1663,10 @@ pub const EXPLANATIONS: &[Explain] = &[
                 variant or a record field. An argument to another call is left alone, because the \
                 parameter decides what happens to it. If you want the result, use `<-`; if only the \
                 effect, use `do`.",
-        example: "on call() -> Effect[()] {\n    \
+        example: "on call() -> Effect[()] by Caller {\n    \
                     let e = Counter(\"k\").bump()       // ✗ started, never awaited\n    \
                     Effect.pure(())\n}\n\n\
-                  on call() -> Effect[()] {\n    \
+                  on call() -> Effect[()] by Caller {\n    \
                     do Counter(\"k\").bump()           // ✓ run in order\n    \
                     Effect.pure(())\n}",
     },
@@ -1832,7 +1837,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.exec.unavailable",
         blurb: "A function that uses `detach`, `within` or `race` hands work to the execution context, which a service handler has. An agent handler, a WebSocket handler, a provider operation, a function that is not effectful and a `const`, `store` or predicate initialiser do not. Calling such a function from one of those, directly or through other functions, or naming it as a value, is refused. The note gives the chain of calls down to the construct. Make the call in a service handler, and pass what it returns on.",
-        example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
+        example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] by Caller {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
     },
     Explain {
         code: "bynk.expect.faults_not_effect",
@@ -2085,9 +2090,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 through another type, its note names the field path. To cross a boundary today, \
                 use a concrete recursive type, or keep the generic one inside the context.",
         example: "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\n\
-                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\n\
+                  service s {\n    on call(t: Tree[Int]) -> Effect[Int] by Caller { … }   // ✗ no codec for a recursive generic\n}\n\n\
                   type IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\n\
-                  service s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
+                  service s {\n    on call(t: IntTree) -> Effect[Int] by Caller { … }     // ✓ a concrete recursive type\n}",
     },
     Explain {
         code: "bynk.generics.type_arg_count",
@@ -2168,9 +2173,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 `given`; the error names which ones. Using a capability directly, without declaring \
                 it, is `bynk.given.undeclared_capability`.",
         example: "fn warn(what: String) -> Effect[()] given Logger { … }\n\n\
-                  on call(sku: String) -> Effect[()] {\n    \
+                  on call(sku: String) -> Effect[()] by Caller {\n    \
                     warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\n\
-                  on call(sku: String) -> Effect[()] given Logger {   // ✓ declared on the caller\n    \
+                  on call(sku: String) -> Effect[()] by Caller given Logger {   // ✓ declared on the caller\n    \
                     warn(sku)\n}",
     },
     Explain {
@@ -2181,9 +2186,9 @@ pub const EXPLANATIONS: &[Explain] = &[
                 reaches for, so a reader (and the compiler) can see a handler's \
                 full reach from its signature alone. Using a capability that is \
                 not in `given` is the missing half of that contract.",
-        example: "on call() -> Effect[()] {\n    \
+        example: "on call() -> Effect[()] by Caller {\n    \
                     Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\n\
-                  on call() -> Effect[()] given Logger {   // ✓ declared, then used\n    \
+                  on call() -> Effect[()] by Caller given Logger {   // ✓ declared, then used\n    \
                     Logger.log(\"hi\")\n}",
     },
     Explain {
@@ -3308,7 +3313,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }\n\
                   \n\
                   service orders {\n\
-                  \x20\x20\x20\x20on call() -> Effect[Int] {     // ✓\n\
+                  \x20\x20\x20\x20on call() -> Effect[Int] by Caller {     // ✓\n\
                   \x20\x20\x20\x20\x20\x20\x20\x20Effect.pure(0)\n\
                   \x20\x20\x20\x20}\n\
                   }",
@@ -4022,7 +4027,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.race.in_agent_handler",
         blurb: "`race` hands the side that loses to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the race is run from outside. The same rule holds for `bynk.within.in_agent_handler`.",
-        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
+        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] by Caller {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
     },
     Explain {
         code: "bynk.race.in_pure_context",
@@ -4315,7 +4320,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.resolve.unconsumed_context",
         blurb: "A call such as `platform.pay.charge(1)` reaches into another context, and a context may only do that to one it has declared with `consumes`. The declaration is what makes a dependency between contexts visible and checked, instead of a name that happens to resolve. The same code is reported for a `given platform.pay.Cap` whose context is not consumed. Add `consumes platform.pay` (with an alias, if you want to call it by another name) at the top of the calling context. A consumed context that does not export a capability is `bynk.given.cross_context_unknown_capability`.",
-        example: "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\n\
+        example: "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\n\
                   context app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
     },
     Explain {
@@ -4456,7 +4461,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.service.duplicate_call_handler",
         blurb: "A service with no `from` clause is called by its name, `svc.call(…)`, so it has one entry: exactly one `on call` handler. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
-        example: "service greet {\n    on call(name: String) -> Effect[String] { … }\n    on call(name: String) -> Effect[String] { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] { … }\n}",
+        example: "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] by Caller { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] by Caller { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] by Caller { … }\n}",
     },
     Explain {
         code: "bynk.service.missing_from",
@@ -4466,7 +4471,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.service.mixed_protocols",
         blurb: "A service is one protocol adapter: with `from http`, `from cron`, `from queue(…)`, `from websocket(…)` or `from Events(E)` it admits only handlers of that form, and one that does not match is refused. Declare a service per protocol. A handler in a service with no `from` at all is `bynk.service.missing_from`.",
-        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] { … }\n}",
+        example: "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] by Caller { … }\n}",
     },
     Explain {
         code: "bynk.service.outside_context",
@@ -4476,7 +4481,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.service.return_not_effect",
         blurb: "Every service handler returns an `Effect[T]`, whatever its protocol. A handler runs as the context answers a call, route, schedule, message or frame, and its effects and `given` capabilities are the runtime's to run, so a bare `Int` is refused. Wrap the result: `Effect.pure(x)` for a value you already hold. An `on event` handler that returns an `Effect` of anything but `()` is `bynk.event.return_not_effect_unit`.",
-        example: "service probe {\n    on call() -> Int { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] { … }    // ✓\n}",
+        example: "service probe {\n    on call() -> Int by Caller { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] by Caller { … }    // ✓\n}",
     },
     Explain {
         code: "bynk.service.unknown_protocol",
@@ -6227,8 +6232,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 return a stream, since its provider runs in the caller's own isolate, and a \
                 `@raw` HTTP handler's `body` may be a `Stream[Bytes]`, the request body as it \
                 arrives.",
-        example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
-                  service s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
+        example: "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] by Caller {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\n\
+                  service s {\n    on call(readings: List[Int]) -> Effect[Int] by Caller {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
     },
     Explain {
         code: "bynk.types.stream_not_comparable",
@@ -6526,7 +6531,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.within.in_agent_handler",
         blurb: "`within` hands the effect it abandons on a timeout to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the agent's work is bounded from outside. For a slow call out, `FetchOptions.timeout` bounds it inside the agent. The same rule holds for `bynk.race.in_agent_handler`.",
-        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
+        example: "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
     },
     Explain {
         code: "bynk.within.in_pure_context",
@@ -6719,6 +6724,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.identity_not_sealed",
         "An actor identity type is not a context-ownable (sealed) value type.",
+    ),
+    d(
+        "bynk.actor.missing_by_on_call",
+        "An `on call` handler lacks the required `by` actor clause.",
     ),
     d(
         "bynk.actor.missing_by_on_http",
@@ -8465,7 +8474,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     warn(d(
         "bynk.list.deprecated_function",
-        "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).",
+        "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
     d(
         "bynk.locale.multiple_message_bundles",

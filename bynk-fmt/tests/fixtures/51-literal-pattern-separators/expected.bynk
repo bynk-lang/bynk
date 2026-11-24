@@ -9,7 +9,7 @@ event Charged = {
 }
 
 service markCharged {
-	on call(orderId: String) -> Effect[()] given Events {
+	on call(orderId: String) -> Effect[()] by Caller given Events {
 		Events.emit[Charged](Charged { orderId: orderId, cents: 1_000 })
 	}
 }

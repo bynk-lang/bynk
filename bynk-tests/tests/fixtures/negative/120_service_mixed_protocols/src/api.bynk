@@ -1,7 +1,7 @@
 context api
 
 service mixed from http {
-  on call(name: String) -> Effect[Result[String, ()]] {
+  on call(name: String) -> Effect[Result[String, ()]] by Caller {
     Ok("called")
   }
 

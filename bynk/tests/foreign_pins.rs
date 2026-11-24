@@ -173,7 +173,7 @@ fn deploy_holds_a_build_to_each_foreign_callers_pin() {
         dir.join("src/shop/orders.bynk"),
         ORDERS_V1
             .replace("on call(id: String)", "on call(id: Int)")
-            .replace("by Legacy {", "{"),
+            .replace("by Legacy {", "by Caller {"),
     )
     .unwrap();
     let (ok, out) = dry_run(&dir);

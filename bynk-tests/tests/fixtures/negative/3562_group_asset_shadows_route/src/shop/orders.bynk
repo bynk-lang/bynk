@@ -3,7 +3,7 @@ context shop.orders
 asset terms = "assets/a.txt" at "/legal.txt"
 
 service orders_probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

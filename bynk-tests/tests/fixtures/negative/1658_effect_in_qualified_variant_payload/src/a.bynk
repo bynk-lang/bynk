@@ -12,7 +12,7 @@ type ApiResult[T] =
 
 // #1658: the qualified spelling `ApiResult.Loaded(…)` is the same construction (review of #1694).
 service s {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let r = ApiResult.Loaded(Counter("k").get())
     let v <- Counter("k").get()
     Effect.pure(v)

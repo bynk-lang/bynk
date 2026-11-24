@@ -3,7 +3,7 @@ context demo
 consumes bynk.cloudflare { Version }
 
 service build {
-  on call() -> Effect[String] given Version {
+  on call() -> Effect[String] by Caller given Version {
     let v <- Version.current()
     Effect.pure(v.id)
   }

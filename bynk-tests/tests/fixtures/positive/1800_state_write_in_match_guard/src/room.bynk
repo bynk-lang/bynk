@@ -42,19 +42,19 @@ agent Counter {
 }
 
 service bump {
-  on call(id: String, n: Int) -> Effect[()] {
+  on call(id: String, n: Int) -> Effect[()] by Caller {
     Counter(id).bump(n)
   }
 }
 
 service note {
-  on call(id: String, n: Int) -> Effect[()] {
+  on call(id: String, n: Int) -> Effect[()] by Caller {
     Counter(id).note(n)
   }
 }
 
 service read {
-  on call(id: String) -> Effect[Int] {
+  on call(id: String) -> Effect[Int] by Caller {
     Counter(id).read()
   }
 }

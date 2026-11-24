@@ -9,7 +9,7 @@ context app.blobs
 // both sides and the restriction is retired.
 
 service objects {
-  on call(payload: Bytes) -> Effect[Result[Int, ()]] {
+  on call(payload: Bytes) -> Effect[Result[Int, ()]] by Caller {
     Ok(payload.length())
   }
 }

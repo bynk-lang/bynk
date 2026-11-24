@@ -3,8 +3,9 @@ title: Events
 ---
 A context declares an **`event`** it may emit, `given Events` emission raises
 one at handler commit, and another context's service subscribes with **`from
-Events(E)`**. Delivery is fire-and-forget across contexts — the emitting
-handler never learns whether, or how, a subscriber ran.
+Events(E)`**. Delivery is at most once today, and the emitting handler never learns
+whether, or how, a subscriber ran (on Workers it does wait for delivery to
+finish). See [Understand events](/book/concepts/events/understand-events/).
 
 **Understand**
 - [Understand events](/book/concepts/events/understand-events/)

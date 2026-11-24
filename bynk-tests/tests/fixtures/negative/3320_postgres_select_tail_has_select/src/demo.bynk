@@ -8,7 +8,7 @@ capability Main = Postgres
 type Order = { id: Int, qty: Int }
 
 service probe {
-  on call() -> Effect[Bool] given Main {
+  on call() -> Effect[Bool] by Caller given Main {
     let a <- Main.select[Order]("SELECT id, qty FROM orders", [])
     let b <- Main.select[Order]("  select * FROM orders", [])
     let c <- Main.firstAs[Order]("WITH x AS (SELECT 1) SELECT 1", [])

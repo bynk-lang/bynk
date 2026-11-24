@@ -5,7 +5,7 @@ consumes bynk.cloudflare { R2, R2Upload }
 capability Videos = R2
 
 service abandon {
-	on call(upload: R2Upload) -> Effect[()] given Videos {
+	on call(upload: R2Upload) -> Effect[()] by Caller given Videos {
 		Videos.abortUpload(upload)
 	}
 }

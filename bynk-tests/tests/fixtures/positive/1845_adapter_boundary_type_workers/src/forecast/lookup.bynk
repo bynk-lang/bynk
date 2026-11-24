@@ -3,7 +3,7 @@ context forecast.lookup
 consumes weather { Weather, Report, WeatherError }
 
 service lookup {
-  on call(city: String) -> Effect[Result[Report, WeatherError]] given Weather {
+  on call(city: String) -> Effect[Result[Report, WeatherError]] by Caller given Weather {
     let r <- Weather.current(city)
     r
   }

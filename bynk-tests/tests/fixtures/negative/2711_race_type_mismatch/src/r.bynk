@@ -14,7 +14,7 @@ provides Prices = FixedPrices {
 
 service prices {
 	// #2711: both sides of a `race` must produce the same type.
-	on call(sku: Int) -> Effect[Int] given Prices {
+	on call(sku: Int) -> Effect[Int] by Caller given Prices {
 		Prices.get(sku).race(Prices.label(sku))
 	}
 }

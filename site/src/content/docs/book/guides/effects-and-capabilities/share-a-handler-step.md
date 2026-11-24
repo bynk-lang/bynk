@@ -31,7 +31,7 @@ fn orZero(read: Result[Int, String]) -> Effect[Int] given Logger {
 }
 
 service api {
-	on call(n: Int) -> Effect[Int] given Logger {
+	on call(n: Int) -> Effect[Int] by Caller given Logger {
 		orZero(Ok(n))
 	}
 }

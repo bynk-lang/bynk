@@ -11,7 +11,7 @@ consumes demo.vault as Vault
 type Wrapper[T] = { item: T, note: String }
 
 service total {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let e <- Vault.open(n)
     let w <- Vault.wrapPlain(n)
     let es <- Vault.many(n)
@@ -21,7 +21,7 @@ service total {
 }
 
 service settled {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let o <- Vault.settle(n)
     match o {
       Done(v) => v
@@ -31,20 +31,20 @@ service settled {
 }
 
 service sentBack {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let e <- Vault.open(n)
     Vault.readBack(e)
   }
 }
 
 service sent {
-  on call(s: String) -> Effect[Int] {
+  on call(s: String) -> Effect[Int] by Caller {
     Vault.read(Envelope { item: s, note: "out" })
   }
 }
 
 service sentWrapper {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let w: Wrapper[Int] = Wrapper { item: n, note: "mine" }
     Vault.readBack(w)
   }

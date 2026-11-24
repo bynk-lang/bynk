@@ -103,8 +103,8 @@ export const ledger = {
     let __r;
     try {
       __r = await (async () => {
-        const __letElse1240 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
-        switch (__letElse1240.tag) {
+        const __letElse1250 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.hooks.ledger.call::${id}`, 3600000));
+        switch (__letElse1250.tag) {
           case "Claimed": {
             return (id === "bad" ? Err("rejected") : Ok("done"));
           }

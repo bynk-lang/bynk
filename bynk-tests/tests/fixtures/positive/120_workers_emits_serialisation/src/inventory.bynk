@@ -13,7 +13,7 @@ type StockError = enum {
 }
 
 service check {
-  on call(sku: Sku) -> Effect[Result[StockItem, StockError]] {
+  on call(sku: Sku) -> Effect[Result[StockItem, StockError]] by Caller {
     Err(NotFound)
   }
 }

@@ -647,7 +647,7 @@
     "/book/concepts/events/understand-events/#filtering-delivery-with-a-pattern"
   ],
   "bynk.event.return_not_effect_unit": [
-    "/book/concepts/events/understand-events/#emission-is-fire-and-forget-and-release-at-commit"
+    "/book/concepts/events/understand-events/#emission-never-reports-an-outcome-and-release-at-commit"
   ],
   "bynk.event.unknown_annotation": [
     "/book/concepts/events/understand-events/#asserting-a-schema-version-with-scheman"

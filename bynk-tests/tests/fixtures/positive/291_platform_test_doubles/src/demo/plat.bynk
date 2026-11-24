@@ -5,14 +5,14 @@ consumes bynk.cloudflare { Kv }
 uses bynk.locale.types
 
 service clock {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let t <- Clock.now()
     t.toEpochMillis()
   }
 }
 
 service draws {
-  on call() -> Effect[List[Int]] given Random {
+  on call() -> Effect[List[Int]] by Caller given Random {
     let a <- Random.int(0, 1000)
     let b <- Random.int(0, 1000)
     [a, b]
@@ -20,7 +20,7 @@ service draws {
 }
 
 service ids {
-  on call() -> Effect[List[String]] given Random {
+  on call() -> Effect[List[String]] by Caller given Random {
     let a <- Random.uuid()
     let b <- Random.uuid()
     [a, b]
@@ -28,26 +28,26 @@ service ids {
 }
 
 service secret {
-  on call(name: String) -> Effect[Option[String]] given Secrets {
+  on call(name: String) -> Effect[Option[String]] by Caller given Secrets {
     Secrets.get(name)
   }
 }
 
 service locale {
-  on call() -> Effect[String] given Locale {
+  on call() -> Effect[String] by Caller given Locale {
     let l <- Locale.current()
     l
   }
 }
 
 service greet {
-  on call(who: String) -> Effect[()] given Logger {
+  on call(who: String) -> Effect[()] by Caller given Logger {
     Logger.info("hello \(who)")
   }
 }
 
 service once {
-  on call(key: String) -> Effect[Bool] given Idempotency {
+  on call(key: String) -> Effect[Bool] by Caller given Idempotency {
     let seen <- Idempotency.dedup[Bool](key)
     match seen {
       Some(_) => Effect.pure(false)
@@ -60,20 +60,20 @@ service once {
 }
 
 service store {
-  on call(k: String, v: String) -> Effect[Option[String]] given Kv {
+  on call(k: String, v: String) -> Effect[Option[String]] by Caller given Kv {
     let _ <- Kv.put(k, v)
     Kv.get(k)
   }
 }
 
 service lookup {
-  on call(k: String) -> Effect[Option[String]] given Kv {
+  on call(k: String) -> Effect[Option[String]] by Caller given Kv {
     Kv.get(k)
   }
 }
 
 service relay {
-  on call(url: String) -> Effect[Int] given Fetch {
+  on call(url: String) -> Effect[Int] by Caller given Fetch {
     let res <- Fetch.send(Request {
       method:        Get,
       url:           url,

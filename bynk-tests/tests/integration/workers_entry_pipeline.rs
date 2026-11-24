@@ -75,7 +75,7 @@ service api from http {
 }
 
 service calc {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }
@@ -206,7 +206,7 @@ fn every_route_response_carries_the_service_security_headers() {
 
 #[test]
 fn a_context_with_only_call_services_emits_no_route_table() {
-    let src = "context demo.calc\n\nservice calc {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+    let src = "context demo.calc\n\nservice calc {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n";
     let ts = emit_workers(&[("demo/calc.bynk", src)])
         .text("workers/demo-calc/index.ts")
         .to_string();

@@ -101,7 +101,7 @@ context auth.sessions {
 	consumes tokens { Jwt }  // flatten `Jwt` into the local namespace
 
 	service login {
-		on call() -> Effect[String] given Jwt {
+		on call() -> Effect[String] by Caller given Jwt {
 			let token <- Jwt.sign(Claims { sub: "u1", exp: 0 })
 			token
 		}
