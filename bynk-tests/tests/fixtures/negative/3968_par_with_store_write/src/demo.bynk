@@ -1,0 +1,23 @@
+context demo
+
+consumes bynk { ParOptions }
+
+// #3968: the store-write closure rule covers the bounded `…With` forms: a write in
+// the closure, and a write in a lambda bound to a name and passed by name.
+
+agent Tally {
+  key id: String
+  store seen: Set[Int]
+  store counts: Map[String, Int]
+
+  on call direct(n: Int) -> Effect[()] {
+    let _ <- [1, 2, 3].parForEachWith((x: Int) => seen.add(x), ParOptions { limit: 2 })
+    Effect.pure(())
+  }
+
+  on call bound(n: Int) -> Effect[()] {
+    let step = (x: Int) => counts.remove("k")
+    let _ <- [1, 2, 3].parTraverseWith(step, ParOptions { limit: 2 })
+    Effect.pure(())
+  }
+}

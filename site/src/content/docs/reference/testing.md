@@ -63,10 +63,8 @@ under the case and counts them as `detached_failures` in `--format json`.
 suite app.web {
 	case "the greeting names the visitor" {
 		let r <- api.GET("/hello") by Visitor
-		match r {
-			Ok(greeting) => expect greeting.startsWith("Hello"),
-			_ => expect false,
-		}
+		expect r is Ok(greeting)
+		expect greeting.startsWith("Hello")
 	}
 }
 ```
@@ -186,10 +184,8 @@ services by passing the asset instead of a route:
 suite t.web {
 	case "the stylesheet is served" {
 		let r <- api.GET(style)
-		match r {
-			Raw(body, ct) => expect ct == "text/css; charset=utf-8",
-			_ => expect false,
-		}
+		expect r is Raw(body, ct)
+		expect ct == "text/css; charset=utf-8"
 	}
 }
 ```
@@ -876,6 +872,36 @@ is refused even if nothing applies it (`[() => Logger.log("x")].length() == 1`).
 `expect`'s own forms are the exceptions: a [fault claim](#faults) runs its call,
 and an [observation](#observation) or `trace(Cap.op)` reads the calls already
 recorded.
+
+### Names an `is` binds stay bound {#expect-is-bindings}
+
+A statement-form `expect … is P(x)` keeps the names `P` binds for the rest of the
+enclosing block (the case body, or the `if` or `match` arm body the statement sits
+in). A failed `expect` ends the case, so nothing after it runs unless the predicate
+held:
+
+```bynk,fragment
+let r <- api.GET("/hello") by Visitor
+expect r is Ok(greeting)
+expect greeting.startsWith("Hello")
+```
+
+The older staircase, `match r { Ok(greeting) => …, _ => expect false }`, still works,
+and a failed `_ => expect false` arm [reports the value it matched](#expect).
+
+- The whole predicate holding is what binds: `expect r is Ok(a) && o is Some(b)`
+  binds `a` and `b`. An or-pattern, `expect s is Circle(k) | Square(k)`, binds what
+  every alternative binds. A predicate that does not prove the test (`||`, `!`)
+  binds nothing, as in an `if`.
+- Only names directly inside the pattern bind (`Ok(code)`, `Some(n)`, a record's
+  fields, an or-pattern's shared names), as in an `if`. A nested sub-pattern's names
+  (`Rejected(RefinementViolation(d))`) do not: use a `match` for that shape.
+- A bound name that shadows an existing one is renamed in the output the way a
+  re-`let` is, and reads as the new binding afterwards.
+- An `expect` used as an expression (inside a `match` arm's expression, a lambda)
+  binds nothing beyond itself.
+- A `property` body binds nothing across its claims: it evaluates them once per
+  input, and a binding that carried on would complicate the shrunk report.
 
 ### `?` in a case {#question-in-case}
 

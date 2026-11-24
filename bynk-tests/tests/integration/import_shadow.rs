@@ -52,6 +52,10 @@ const UNIMPORTED_RUNTIME_OK: &[(&str, &str)] = &[
         "signature",
         "a parameter name in a binding module's signature, not the runtime's `signature`",
     ),
+    (
+        "then",
+        "a method key on `Ordering`'s companion (`bynk.ordering`), not the runtime's `then`",
+    ),
 ];
 
 fn target_name(target: BuildTarget) -> &'static str {

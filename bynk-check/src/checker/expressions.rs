@@ -1821,6 +1821,10 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                     | PAR_TRAVERSE_ALL
                     | TRAVERSE_TRY
                     | PAR_TRAVERSE_TRY
+                    | "parForEachWith"
+                    | "parTraverseWith"
+                    | "parTraverseAllWith"
+                    | "parTraverseTryWith"
             ) {
                 return true;
             }
@@ -1951,7 +1955,7 @@ pub(crate) fn left_out_variant_owner<'a>(
         return None;
     };
     types.get(want).filter(|t| {
-        unselected.contains(want)
+        (unselected.contains(want) || crate::resolver::is_prelude_ordering(t))
             && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
     })
 }
@@ -2350,9 +2354,19 @@ fn keeps_flexible_context(e: &Expr) -> bool {
 /// other operand's type can pick its owner.
 fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
     let shared = |name: &str| {
-        crate::resolver::bare_variant_owners(name, &ctx.input.types, &ctx.input.unselected_types)
-            .len()
-            > 1
+        let owners = crate::resolver::bare_variant_owners(
+            name,
+            &ctx.input.types,
+            &ctx.input.unselected_types,
+        );
+        // #3955: the implicit `Ordering` shares its variants' names with a sum
+        // of the author's own, and only the context says which is meant.
+        let beside_ordering = ctx.input.types.get("Ordering").is_some_and(|o| {
+            crate::resolver::is_prelude_ordering(o)
+                && matches!(&o.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
+                && owners.iter().any(|t| !crate::resolver::is_prelude_ordering(t))
+        });
+        owners.len() > 1 || beside_ordering
     };
     match &e.kind {
         ExprKind::Ident(id) => shared(&id.name) || needs_expected_type(e),
@@ -5672,7 +5686,7 @@ fn validate_is_nested_payloads(
 /// The bindings the `is` tests in a condition introduce when it is true: the
 /// tests [`crate::narrowing::matched_is_tests`] proves matched (#1654, the rule
 /// the resolver and the emitter share). Later wins on a name collision.
-fn collect_is_bindings(expr: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
+pub(crate) fn collect_is_bindings(expr: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
     collect_is_bindings_when(expr, true, ctx)
 }
 
@@ -5716,7 +5730,7 @@ pub(crate) fn collect_is_bindings_when(
 /// them in. Hover, go-to-definition, references and rename read these. Types come
 /// from the same per-test bindings the checker binds; a name the checker does not
 /// bind (a nested sub-pattern's) has no type here and is skipped.
-fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
+pub(crate) fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
     let tys = ctx.tys;
     for test in crate::narrowing::matched_is_tests(cond, when_true) {
         let ExprKind::Is { pattern, .. } = &test.kind else {

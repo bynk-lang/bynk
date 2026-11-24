@@ -1321,6 +1321,8 @@ scope after the closing brace, and re-binding an earlier name follows §5.1. A b
 with one binding is `bynk.par.single_binding`, a non-failing warning (ADR 0117). The
 block has no value; it is a statement.
 
+The `…With` forms (`parForEachWith`, `parTraverseWith`, `parTraverseAllWith`, `parTraverseTryWith`; #3968) take `(f, options: ParOptions)` where `ParOptions = { limit: Int }` is exported by the `bynk` adapter (`consumes bynk { ParOptions }`); the argument must be that record, not one of the same name declared elsewhere. A statically known `limit` outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`. The closure `f` is checked as for the plain form, and the rule below applies to it.
+
 The same rule covers the closure passed to `parTraverse`, `parTraverseAll` or
 `parTraverseTry` (on a `List` or a `Query`; #3298): the closure runs once per element,
 concurrently, so it MUST NOT write a `store` field (`bynk.par.store_write_in_closure`).

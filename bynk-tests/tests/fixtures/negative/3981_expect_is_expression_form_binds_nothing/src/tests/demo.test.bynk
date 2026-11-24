@@ -1,0 +1,11 @@
+// #3981: an `expect` used as an expression binds nothing beyond itself.
+suite demo {
+  case "an expression-form expect keeps no binding" {
+    let o = find(3)
+    let w = match o {
+      Some(v) => expect o is Some(q)
+      None => expect false
+    }
+    expect q == 3
+  }
+}

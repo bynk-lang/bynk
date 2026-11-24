@@ -148,6 +148,20 @@ export const FetchOptions = {
 };
 
 /**
+ * The options of the bounded fan-out methods `parForEachWith`, `parTraverseWith`,
+ * `parTraverseAllWith` and `parTraverseTryWith`. `limit` is the most steps in
+ * flight at once: a whole number from 1 to 1000, with no default, so a call
+ * always states it. A literal or constant outside that range is the error
+ * `bynk.list.par_limit_range`; a computed one faults the call.
+ */
+export interface ParOptions {
+  readonly limit: number;
+}
+
+export const ParOptions = {
+};
+
+/**
  * Why an `e.within(d)` produced no value: the deadline `after` passed first.
  * The abandoned effect is **not** cancelled. It is handed to the platform's
  * `waitUntil` and may still complete after the handler has returned, so its
@@ -958,6 +972,27 @@ export function __deserialise_Method(json: __JsonValue, path: string = "$"): Res
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_ParOptions(value: ParOptions): __JsonValue {
+  return {
+    limit: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.limit),
+  };
+}
+
+export function __deserialise_ParOptions(json: __JsonValue, path: string = "$"): Result<ParOptions, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["limit"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "number", actual: typeof obj["limit"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["limit"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.limit`, expected: "safe integer", actual: String(obj["limit"]) });
+  }
+  const __limit = obj["limit"];
+  return Ok({ limit: __limit } as ParOptions);
 }
 
 export function __serialise_Redirect(value: Redirect): __JsonValue {
