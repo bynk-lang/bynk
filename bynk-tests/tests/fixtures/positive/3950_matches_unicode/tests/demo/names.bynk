@@ -1,0 +1,25 @@
+suite demo.names
+
+case "a property escape admits letters beyond ASCII" {
+  expect name("Zoë") is Ok(_)
+  expect name("Žofia O'Brien") is Ok(_)
+  expect name("Zoe42") is Err(_)
+  expect name("") is Err(_)
+}
+
+case "a constant is admitted at compile time" {
+  expect Zoe == "Zoë"
+}
+
+case "a dot matches one astral character, not half of one" {
+  expect one("😀") is Ok(_)
+  expect one("a") is Ok(_)
+  expect one("ab") is Err(_)
+}
+
+case "a leading (?i) matches case-insensitively" {
+  expect code("abc-1234") is Ok(_)
+  expect code("ABC-1234") is Ok(_)
+  expect code("AbC-1234") is Ok(_)
+  expect code("abc-12x4") is Err(_)
+}

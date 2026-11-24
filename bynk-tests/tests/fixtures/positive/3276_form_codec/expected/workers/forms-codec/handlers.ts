@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkEq } from "../../__bynk_runtime/equality.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { __formDecode, __formString } from "../../__bynk_runtime/http.js";
@@ -11,7 +12,7 @@ export type Email = string & { readonly __brand: "forms.codec.Email" };
 
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "^[^@]+@[^@]+$" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "^[^@]+@[^@]+$" + ")$", "u").test(value))) {
       return Err({ field: "Email", message: "must match /^[^@]+@[^@]+$/", value });
     }
     return Ok(value as Email);
