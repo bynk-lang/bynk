@@ -17,9 +17,11 @@ either order: one may be `Instant` (the scheduled time) and one may be
 type, is `bynk.cron.bad_params`. A single `Tick { at, schedule }` record is
 rejected (Cloudflare's event carries nothing else for it to grow into, and it makes
 the common one-parameter case wordier), as is a fixed positional order (one more
-rule for no gain). B. The parameter's type is exactly `CronSchedule`, not `String`
-and not another `Cron` refinement: one spelling, and a `CronSchedule` widens to
-`String` wherever it is read. C. The value is `event.cron`; under the single-space
+rule for no gain). B. The parameter's type is exactly the prelude's `CronSchedule`, not `String`,
+not another `Cron` refinement and not a type the unit declares under the same
+name (that is `bynk.cron.bad_params`, since the entry hands the parameter a
+schedule string): one spelling, and a `CronSchedule` widens to `String` wherever
+it is read. C. The value is `event.cron`; under the single-space
 rule it equals the expression as written. At `unit` and `integration` the test
 address passes its own first argument; at `system` the driver already sends it, so
 the address's shape is unchanged and `schedule` is not an argument of it. The

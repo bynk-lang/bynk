@@ -48,7 +48,8 @@ service sweeper from cron {
 ## Run once per scheduled time
 
 A run can start twice for the same scheduled time. Declare the schedule beside the
-time, and claim a key built from both with `Idempotency.claim`:
+time, and claim a key built from both with `Idempotency.claim`. The context needs
+`consumes bynk { Claim, CronSchedule, Idempotency }` for these names:
 
 ```bynk,fragment
 service sweeper from cron {

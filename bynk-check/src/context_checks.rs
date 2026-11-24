@@ -3482,7 +3482,7 @@ fn check_service_decls(
             let HandlerKind::Cron { expr } = &handler.kind else {
                 continue;
             };
-            validate_cron_handler(handler, expr, errors);
+            validate_cron_handler(handler, expr, table, errors);
             if let Some(prev) = schedule_first_span.get(expr).copied() {
                 errors.push(
                     CompileError::new(
@@ -6831,14 +6831,45 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
 }
 
 /// #3874 [DECISION A, B]: a cron handler takes up to two parameters, told apart by
-/// type, in either order: an `Instant` (the scheduled time) and exactly
-/// `CronSchedule` (the schedule that fired the run). A second parameter of the
-/// same type, a third, or any other type is `bynk.cron.bad_params`.
-fn check_cron_params(handler: &Handler, errors: &mut Vec<CompileError>) {
+/// type, in either order: an `Instant` (the scheduled time) and exactly the
+/// prelude's `CronSchedule` (the schedule that fired the run). A second parameter
+/// of the same type, a third, or any other type is `bynk.cron.bad_params`. A
+/// `CronSchedule` the unit declares itself is not the prelude's, whatever it is
+/// spelled like: the entry hands the parameter a schedule string, which only the
+/// prelude type admits.
+fn check_cron_params(handler: &Handler, table: &UnitTable, errors: &mut Vec<CompileError>) {
     use bynk_syntax::cron::{CronParam, cron_param};
+    let own_schedule_type = table.types.contains_key("CronSchedule");
     let mut seen: Vec<CronParam> = Vec::new();
     for (i, p) in handler.params.iter().enumerate() {
-        let Some(kind) = cron_param(&p.type_ref) else {
+        if i >= 2 {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.span,
+                    "an `on schedule` handler takes at most two parameters",
+                )
+                .with_note(
+                    "a scheduled trigger carries two things: the time it fired (`Instant`) and the schedule that fired it (`CronSchedule`)",
+                ),
+            );
+            continue;
+        }
+        let kind = cron_param(&p.type_ref);
+        if kind == Some(CronParam::Schedule) && own_schedule_type {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.type_ref.span(),
+                    "this `CronSchedule` is a type this unit declares, not the prelude's",
+                )
+                .with_note(
+                    "a schedule parameter must be the `CronSchedule` that `consumes bynk { CronSchedule }` provides: the entry hands it the schedule string that fired the run",
+                ),
+            );
+            continue;
+        }
+        let Some(kind) = kind else {
             errors.push(
                 CompileError::new(
                     "bynk.cron.bad_params",
@@ -6854,7 +6885,7 @@ fn check_cron_params(handler: &Handler, errors: &mut Vec<CompileError>) {
             );
             continue;
         };
-        if seen.contains(&kind) || i >= 2 {
+        if seen.contains(&kind) {
             let what = match kind {
                 CronParam::Time => "an `Instant`",
                 CronParam::Schedule => "a `CronSchedule`",
@@ -6933,8 +6964,13 @@ fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileEr
 /// handler (v0.10a §4.1): at most one `Instant` parameter (the scheduled time), a structurally well-formed schedule, and the unit-Result
 /// return shape. The service-only rule is enforced earlier, in the parser
 /// (`bynk.parse.handler_in_agent`).
-fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
-    check_cron_params(handler, errors);
+fn validate_cron_handler(
+    handler: &Handler,
+    expr: &str,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
+    check_cron_params(handler, table, errors);
     check_cron_schedule(handler, expr, errors);
     // The return type must be `Effect[Result[(), E]]`.
     let return_ok = match &handler.return_type {

@@ -23,12 +23,13 @@ service <Name> from cron {
   order: an `Instant` (the scheduled fire time) and exactly `CronSchedule` (the
   schedule expression that fired this run, `event.cron`; nameable in a context that
   `consumes bynk { CronSchedule }`). A second parameter of the same type, a third,
-  or any other type is `bynk.cron.bad_params`. `schedule` is the expression that
-  fired this run, not "the next run". It equals the expression as written, since a
-  schedule is single-spaced. The `Instant`: An `Int`
-  parameter, the spelling before v0.90's `Instant` reached cron, is that error
-  too: write `at: Instant`, and `at.toEpochMillis()` where the body needs the
-  number. For "now", use `Clock.now()`; the parameter is the exact,
+  or any other type is `bynk.cron.bad_params`, as is a `CronSchedule` that the
+  context declares itself rather than takes from `bynk`. `schedule` is the expression
+  that fired this run, not "the next run"; it equals the expression as written,
+  since a schedule is single-spaced. For the `Instant`, an `Int` parameter (the
+  spelling before v0.90's `Instant` reached cron) is that error too: write
+  `at: Instant`, and `at.toEpochMillis()` where the body needs the number. For
+  "now", use `Clock.now()`; the parameter is the exact,
   schedule-aligned instant, which stays the same when a run starts late (useful
   for bucketing and idempotency). It works directly with `Duration` arithmetic
   (`at - 1.hour`) and `Instant` comparison.
