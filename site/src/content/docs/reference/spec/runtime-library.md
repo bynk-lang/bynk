@@ -79,7 +79,7 @@ The runtime maps each variant to an HTTP response:
 |---|---|
 | `HttpResult<T>` | the result type, and `HttpResult` the constructor namespace |
 | `httpResultToResponse(result, serialiseValue, opts?)` | maps a variant to a `Response` with the corresponding status (`Ok` → 200, `Created` → 201, `NoContent` → 204, `BadRequest` → 400, … `ServerError` → 500); with `opts.weakEtag`, an `Ok` response, or a `Raw` body of at most 1 MiB, also carries a weak `ETag` (see below); a `RawTagged` response always carries its own tag, and throws if the tag is not an RFC 9110 entity tag |
-| `matchPath(pattern, path)` | matches a route pattern such as `/orders/:id`, returning the captured parameters or `null` |
+| `matchPath(pattern, path)` | matches a route pattern such as `/orders/:id`, returning the captured parameters or `null`; empty segments are insignificant and every segment compares percent-decoded; a malformed escape yields a `malformed` description, not a throw |
 | `headResponse(response)` | rebuilds a `GET` response as its `HEAD` answer — same status and headers, empty body — without reading (and so without draining) the original body |
 | `weakETag(body)` | a weak validator `W/"…"` over a serialised body, from a synchronous non-cryptographic hash (FNV-1a); a `Raw` body is hashed the same way over its octets |
 | `applyCache(response, maxAgeSecs, scope, immutable?)` | stamps `Cache-Control: <scope>, max-age=<n>` onto a response, in place, appending `, immutable` when `immutable` is `true` |

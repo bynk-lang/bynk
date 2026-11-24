@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/bad-tag") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/bad-tag", path) !== null) {
           __route = "GET /bad-tag";
           const result = await surface.http_GET_bad_tag();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_files);
@@ -43,7 +43,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/big") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/big", path) !== null) {
           __route = "GET /big";
           const result = await surface.http_GET_big();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_files);
@@ -78,12 +78,12 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/bad-tag") {
+      if (__matchPath("/bad-tag", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_files);
       }
-      if (path === "/big") {
+      if (__matchPath("/big", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_files);

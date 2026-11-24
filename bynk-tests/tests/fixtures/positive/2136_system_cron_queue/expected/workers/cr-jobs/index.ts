@@ -2,7 +2,7 @@
 // Worker entry point for context `cr.jobs`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -41,14 +41,14 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/count") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/count", path) !== null) {
           __route = "GET /count";
           const result = await surface.http_GET_count();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/count") {
+      if (__matchPath("/count", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

@@ -371,6 +371,43 @@ fn members_that_declare_the_same_route_collide() {
     );
 }
 
+/// #3909: one router answers the whole group, so a member's route that the
+/// others' routes answer first can never be reached, though no context shadows it
+/// alone.
+#[test]
+fn a_member_route_shadowed_by_another_member_is_unreachable() {
+    let root =
+        std::env::temp_dir().join(format!("bynk-deploy-groups-shadow-{}", std::process::id()));
+    write_project(&root, WORKERS_TARGET);
+    let route = |svc: &str, path: &str, param: &str| {
+        format!(
+            "service {svc} from http by Visitor {{\n\ton GET(\"{path}\") ({param}) -> Effect[HttpResult[String]] {{\n\t\tOk(\"x\")\n\t}}\n}}"
+        )
+    };
+    fs::write(
+        root.join("src/shop/orders.bynk"),
+        context_with("shop.orders", &route("a", "/a/:x", "x: String")),
+    )
+    .unwrap();
+    fs::write(
+        root.join("src/shop/payment.bynk"),
+        context_with("shop.payment", &route("b", "/a/:y", "y: String")),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(!ok, "{out}");
+    assert!(out.contains("bynk.http.unreachable_route"), "{out}");
+    // Ungrouped, each context has its own router: no shadowing.
+    fs::write(
+        root.join("bynk.toml"),
+        format!("{UNSTABLE_R2}[build]\ntarget = \"workers\"\n"),
+    )
+    .unwrap();
+    let (ok, out) = build(&root);
+    assert!(ok, "separate Workers answer their own routes:\n{out}");
+    let _ = fs::remove_dir_all(&root);
+}
+
 /// A queue has one consumer Worker, so two contexts consuming one are refused by
 /// the project-wide check (`bynk.queue.duplicate_consumer`), grouped or not, and
 /// a group adds no check of its own: a project gets exactly one diagnostic.

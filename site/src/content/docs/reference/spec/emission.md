@@ -411,8 +411,18 @@ validation), `compose.ts` (the wiring), and a `wrangler.toml`. A handler's
 status and body of the `Response`; records crossing the boundary are serialised
 and deserialised through the generated `__serialise_*` / `__deserialise_*` helpers.
 
+The router MUST try the routes of a method in a defined order: compared segment by
+segment, left to right, and at the first segment where two routes differ a literal
+segment is tried before a `:name` one, independently of declaration order and of
+parameter names. Empty path segments are insignificant, and every segment is compared
+percent-decoded; a path whose percent-encoding does not decode is a `400`
+(`MalformedPath`). A route that every other route of its method answers first is a
+compile error (`bynk.http.unreachable_route`), per context and across the members of a
+worker group.
+
 The router MUST answer the method contract derived from the declared routes. For
-each path, the **allowed-method set** is the union of the methods declared on it,
+each path, the **allowed-method set** is the union of the methods declared on it (and,
+where routes overlap, on every route that matches the request path),
 plus `HEAD` when `GET` is declared, plus `OPTIONS`. A `GET` dispatch block also
 accepts `HEAD`: the `GET` handler runs and its `Response` is returned with the
 body stripped (`headResponse` — same status and headers, empty body, the source

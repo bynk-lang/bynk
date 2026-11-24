@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/pinned") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/pinned", path) !== null) {
           __route = "GET /pinned";
           const result = await surface.http_GET_pinned(request);
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -44,7 +44,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/who") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/who", path) !== null) {
           __route = "GET /who";
           const result = await surface.http_GET_who(request);
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -52,7 +52,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/release") {
+        if (method === "POST" && __matchPath("/release", path) !== null) {
           __route = "POST /release";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -70,17 +70,17 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/pinned") {
+      if (__matchPath("/pinned", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/release") {
+      if (__matchPath("/release", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/who") {
+      if (__matchPath("/who", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

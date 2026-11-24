@@ -2,7 +2,7 @@
 // Worker entry point for context `newsletter.site`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __multipartMediaTypeMatches, __multipartObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __multipartMediaTypeMatches, __multipartObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/photos") {
+        if (method === "POST" && __matchPath("/photos", path) !== null) {
           __route = "POST /photos";
           if (!__multipartMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type multipart/form-data" }), { status: 415, headers: { "content-type": "application/json" } }), __security_site);
@@ -65,7 +65,7 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_site);
         }
       }
-      if (path === "/photos") {
+      if (__matchPath("/photos", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_site);

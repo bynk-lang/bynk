@@ -48,7 +48,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
     }
 
     {
-      if ((method === "GET" || method === "HEAD") && path === "/bad-tag") {
+      if ((method === "GET" || method === "HEAD") && __matchPath("/bad-tag", path) !== null) {
         __route = "GET /bad-tag";
         const result = await surface.http_GET_bad_tag();
         const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyEdgeCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 60, "public"), request), __security_files);
@@ -56,7 +56,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
       }
     }
     {
-      if ((method === "GET" || method === "HEAD") && path === "/status") {
+      if ((method === "GET" || method === "HEAD") && __matchPath("/status", path) !== null) {
         __route = "GET /status";
         const result = await surface.http_GET_status();
         const __response = __applySecurityHeaders(__notModifiedIfMatch(__noStore(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true })), request), __security_files);
@@ -90,7 +90,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
         return __applySecurityHeaders(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), __security_files);
       }
     }
-    if (path === "/bad-tag") {
+    if (__matchPath("/bad-tag", path) !== null) {
       const __status = method === "OPTIONS" ? 204 : 405;
       const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
       return __applySecurityHeaders(__res, __security_files);
@@ -100,7 +100,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
       const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
       return __applySecurityHeaders(__res, __security_files);
     }
-    if (path === "/status") {
+    if (__matchPath("/status", path) !== null) {
       const __status = method === "OPTIONS" ? 204 : 405;
       const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
       return __applySecurityHeaders(__res, __security_files);
