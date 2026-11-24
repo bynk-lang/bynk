@@ -558,7 +558,7 @@ fn operation(
                 "name": name,
                 "in": "path",
                 "required": true,
-                "schema": r.parameter_schema(components, &p.type_ref),
+                "schema": path_parameter_schema(r, components, &p.type_ref),
             }));
         } else if name == "query" {
             // #2854: a typed `query` record is one `in: query` parameter per
@@ -674,6 +674,20 @@ fn query_parameters(
             Value::Object(param)
         })
         .collect()
+}
+
+/// #3910: a path parameter's schema. An enum is read off the segment by variant name, so it is a
+/// string enumeration of the names, not the tagged object its body form is; everything else is
+/// the type's own schema (a refined or opaque type carries its `type`, `format` and bounds).
+fn path_parameter_schema(r: &Renderer, components: &mut Components, ty: &TypeRef) -> Value {
+    if let TypeRef::Named(id) = ty
+        && let Some(bynk_syntax::ast::TypeBody::Sum(sum)) = r.types.get(&id.name).map(|t| &t.body)
+        && sum.variants.iter().all(|v| v.payload.is_empty())
+    {
+        let names: Vec<&str> = sum.variants.iter().map(|v| v.name.name.as_str()).collect();
+        return json!({ "type": "string", "enum": names });
+    }
+    r.parameter_schema(components, ty)
 }
 
 /// `api` + `GET` + `/check/:client` → `api_get_check_client`.

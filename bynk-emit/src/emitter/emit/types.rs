@@ -117,7 +117,7 @@ pub(crate) fn emit_type_in(
 /// all come out of the same `t.body` the caller already matched on — but the
 /// function still takes six parameters, so this is a lint fix that reads well,
 /// not a decomposition.
-struct RefinedShape<'a> {
+pub(in crate::emitter) struct RefinedShape<'a> {
     base: BaseType,
     refinement: Option<&'a Refinement>,
     /// ADR 0182: opaque and refined lower identically apart from `unsafe`, which
@@ -185,38 +185,17 @@ fn emit_refined_type(
     );
     let mut stmts = vec![type_alias];
 
-    let checks = {
-        let checks = if bynk_syntax::ast::of_is_total(base, refinement, is_opaque) {
-            Vec::new()
-        } else {
-            emit_refined_checks(t, base, refinement)
-        };
-        // #2622: a `Decimal` violation reports its canonical text, since the
-        // `bigint` coefficient cannot be JSON-stringified.
-        if base == BaseType::Decimal && refinement.is_some() {
-            runtime_use.note_decimal("__bynkDecimalToString");
-        }
-        checks
-    };
     let cast_to_name = bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
         ty: bynk_ts::TsType::named(name.clone()),
     };
-    // #3946: a named type with no predicate has nothing to check; `of` is a
-    // brand cast returning the type itself, like literal admission.
     let total = bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
-    let mut of_body = checks;
-    of_body.push(bynk_ts::TsStmt::return_stmt(
-        Some(if total {
-            cast_to_name.clone()
-        } else {
-            bynk_ts::TsExpr::Call {
-                callee: Box::new(bynk_ts::TsExpr::Ident("Ok".to_string())),
-                args: vec![cast_to_name.clone()],
-            }
-        }),
-        None,
-    ));
+    let of_body = refined_of_body(
+        t,
+        &name,
+        shape_parts(base, refinement, is_opaque),
+        runtime_use,
+    );
     let mut entries: Vec<bynk_ts::TsObjectEntry> = vec![bynk_ts::TsObjectEntry::Method {
         name: "of".to_string(),
         is_async: false,
@@ -275,6 +254,67 @@ fn emit_refined_type(
     );
     stmts.push(const_decl);
     stmts
+}
+
+/// The statements of a refined or opaque type's `of(value)`: its guards, then the
+/// branded return (`Ok(value as T)`, or `value as T` when the type has no
+/// predicate to check, #3946). Shared by the owner's companion and by a consumer
+/// that builds the type itself (#4213).
+///
+/// `t` names the type as its owner declares it (the `field` of a violation);
+/// `cast_name` is what the value is branded as in this module, which differs from
+/// it for a consumed type the module renames (`consumes c { T as U }`).
+pub(in crate::emitter) fn refined_of_body(
+    t: &TypeDecl,
+    cast_name: &str,
+    shape: RefinedShape<'_>,
+    runtime_use: &RuntimeUse,
+) -> Vec<bynk_ts::TsStmt> {
+    let RefinedShape {
+        base,
+        refinement,
+        is_opaque,
+    } = shape;
+    let total = bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
+    let mut body = if total {
+        Vec::new()
+    } else {
+        emit_refined_checks(t, base, refinement)
+    };
+    // #2622: a `Decimal` violation reports its canonical text, since the
+    // `bigint` coefficient cannot be JSON-stringified.
+    if !total && base == BaseType::Decimal && refinement.is_some() {
+        runtime_use.note_decimal("__bynkDecimalToString");
+    }
+    let cast = bynk_ts::TsExpr::As {
+        expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
+        ty: bynk_ts::TsType::named(cast_name.to_string()),
+    };
+    body.push(bynk_ts::TsStmt::return_stmt(
+        Some(if total {
+            cast
+        } else {
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("Ok".to_string())),
+                args: vec![cast],
+            }
+        }),
+        None,
+    ));
+    body
+}
+
+/// The parts of a refined or opaque body [`refined_of_body`] reads.
+pub(in crate::emitter) fn shape_parts(
+    base: BaseType,
+    refinement: Option<&Refinement>,
+    is_opaque: bool,
+) -> RefinedShape<'_> {
+    RefinedShape {
+        base,
+        refinement,
+        is_opaque,
+    }
 }
 
 /// #1335 (R7.1): each guard is a real [`bynk_ts::TsStmt::If`] wrapping a

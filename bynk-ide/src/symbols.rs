@@ -619,7 +619,116 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
         }
     }
     // #3909: otherwise a route string that overlaps another route of its method.
-    describe_route_at(source, offset)
+    describe_route_at(source, offset).or_else(|| describe_path_param_at(source, offset))
+}
+
+/// #3910: hover for a path parameter's name in an HTTP handler's parameter list: how the router
+/// decodes it from its `:name` segment, and the `400`s that decoding can answer. `None` when the
+/// cursor is elsewhere, or on a parameter that no `:name` segment binds.
+pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    let decls: HashMap<&str, &bynk_syntax::ast::TypeDecl> = items
+        .iter()
+        .filter_map(|i| match i {
+            CommonsItem::Type(t) => Some((t.name.name.as_str(), t)),
+            _ => None,
+        })
+        .collect();
+    for item in items {
+        let CommonsItem::Service(service) = item else {
+            continue;
+        };
+        for h in &service.handlers {
+            let HandlerKind::Http { path, .. } = &h.kind else {
+                continue;
+            };
+            for p in &h.params {
+                if !span_covers(p.name.span, offset)
+                    || !path
+                        .split('/')
+                        .any(|seg| seg.strip_prefix(':') == Some(p.name.name.as_str()))
+                {
+                    continue;
+                }
+                let name = &p.name.name;
+                let ty = bynk_syntax::print::type_ref_to_string(&p.type_ref);
+                // What the segment is read as (when this file declares the type), whether it can
+                // fail to read, and whether a refinement can refuse it.
+                let known = |base: &BaseType, refined: bool| {
+                    let text = *base == BaseType::String;
+                    (Some(base_phrase(base)), !text, refined)
+                };
+                let (reads, mismatch, refined) = match &p.type_ref {
+                    TypeRef::Base(b, _) => known(b, false),
+                    TypeRef::Named(id) => match decls.get(id.name.as_str()).map(|t| &t.body) {
+                        Some(TypeBody::Refined { base, .. }) => known(base, true),
+                        Some(TypeBody::Opaque {
+                            base, refinement, ..
+                        }) => known(base, refinement.is_some()),
+                        Some(TypeBody::Sum(_)) => (Some("a variant name".to_string()), true, false),
+                        // Declared in another file, a commons or a consumed context: not known here.
+                        _ => (None, true, true),
+                    },
+                    _ => return None,
+                };
+                let mut text = match &reads {
+                    Some(r) => format!(
+                        "**`{name}`** — a path parameter: the `:{name}` segment, read as {r} and decoded as `{ty}` after the route matches."
+                    ),
+                    None => format!(
+                        "**`{name}`** — a path parameter: the `:{name}` segment, decoded as `{ty}` after the route matches."
+                    ),
+                };
+                if mismatch {
+                    let what = reads.unwrap_or_else(|| format!("`{ty}`"));
+                    text.push_str(&format!(
+                        "\n\n- `400 StructuralMismatch` at `path.{name}` when the segment does not read as {what}."
+                    ));
+                }
+                if refined {
+                    text.push_str(&format!(
+                        "\n- `400 RefinementViolation` at `path.{name}` when it breaks `{ty}`'s refinement."
+                    ));
+                }
+                if !mismatch && !refined {
+                    text.push_str("\n\nAny text binds.");
+                }
+                return Some(text);
+            }
+        }
+    }
+    None
+}
+
+/// `a `String``, `an `Int``: a base type as a noun phrase.
+fn base_phrase(b: &BaseType) -> String {
+    let word = base_word(b);
+    let article = if word.starts_with(['A', 'E', 'I', 'O', 'U']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} `{word}`")
+}
+
+fn base_word(b: &BaseType) -> &'static str {
+    match b {
+        BaseType::Int => "Int",
+        BaseType::String => "String",
+        BaseType::Bool => "Bool",
+        BaseType::Decimal => "Decimal",
+        BaseType::Float => "Float",
+        BaseType::Duration => "Duration",
+        BaseType::Instant => "Instant",
+        BaseType::Bytes => "Bytes",
+    }
 }
 
 /// #3909: hover for the route string of an `on GET("/path")` handler: the routes of
@@ -5126,6 +5235,41 @@ mod tests {
         let lit = describe_route_at(svc, svc.find("/users/me").unwrap() + 2).expect("hovers");
         assert!(lit.contains("this route is tried first"), "{lit}");
         assert!(describe_route_at(svc, svc.find("/solo").unwrap() + 2).is_none());
+    }
+
+    #[test]
+    fn hover_on_a_path_parameter_names_its_decoding_and_its_400s() {
+        let svc = "context api\ntype OrderNo = Int where Positive\ntype Status = enum { Open, Closed }\nservice api from http {\n  on GET(\"/orders/:id/:s/:n\") (id: OrderNo, s: Status, n: Int, q: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let at = |needle: &str| describe_path_param_at(svc, svc.find(needle).unwrap());
+        let id = at("id: OrderNo").expect("hovers a refined Int");
+        assert!(
+            id.contains("read as an `Int`") && id.contains("RefinementViolation"),
+            "{id}"
+        );
+        let s = at("s: Status").expect("hovers an enum");
+        assert!(
+            s.contains("a variant name") && !s.contains("RefinementViolation"),
+            "{s}"
+        );
+        let n = at("n: Int").expect("hovers an Int");
+        assert!(
+            n.contains("StructuralMismatch") && !n.contains("RefinementViolation"),
+            "{n}"
+        );
+        assert!(at("q: String").is_none(), "q binds no segment");
+        // A plain `String` has no 400; a type declared elsewhere makes no specific claim.
+        let svc2 = "context api\nservice api from http {\n  on GET(\"/a/:s/:o\") (s: String, o: Elsewhere) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let plain = describe_path_param_at(svc2, svc2.find("s: String").unwrap()).expect("hovers");
+        assert!(
+            plain.contains("Any text binds") && !plain.contains("400"),
+            "{plain}"
+        );
+        let other =
+            describe_path_param_at(svc2, svc2.find("o: Elsewhere").unwrap()).expect("hovers");
+        assert!(
+            !other.contains("variant name") && !other.contains("read as a"),
+            "{other}"
+        );
     }
 
     #[test]

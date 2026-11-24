@@ -1,0 +1,12 @@
+suite app
+
+consumes shapes { Pt }
+
+case "a consumer builds a context's transparent types" {
+  expect port(8080) is Ok(_)
+  expect port(0) is Err(_)
+  expect port(70000) is Err(_)
+  expect circle(2) == qualified(2)
+  expect dot() != circle(1)
+  expect pt(1, 2) == Pt { x: 1, y: 2 }
+}

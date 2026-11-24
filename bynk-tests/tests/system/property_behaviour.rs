@@ -371,4 +371,13 @@ fn a_decimal_or_bytes_counterexample_prints_in_bynk_form() {
         case_named(&doc, "bytes differ from themselves")["counterexample"],
         "b = Bytes.fromHex(\"\")"
     );
+    // #4229: a `Duration` and an `Instant` print in Bynk's form, not as bare milliseconds.
+    assert_eq!(
+        case_named(&doc, "durations differ from themselves")["counterexample"],
+        "d = 0.seconds"
+    );
+    assert_eq!(
+        case_named(&doc, "instants differ from themselves")["counterexample"],
+        "t = Instant.fromEpochMillis(0)"
+    );
 }
