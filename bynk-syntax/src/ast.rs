@@ -563,6 +563,13 @@ pub enum StubRhs {
     /// #2683: `never` — the call never completes. It exists to test a
     /// `within` against an effect that does not finish.
     Never(Span),
+    /// #3894: `rejected <Refusal>` — a consumed service's call is refused before its handler
+    /// runs, for the named `bynk` `Refusal` case. Only on a consumed-service stub.
+    Rejected(Ident, Span),
+    /// #3894: `faulted` — a consumed service's handler ran and faulted.
+    Faulted(Span),
+    /// #3894: `unreachable` — it is not known whether a consumed service's handler ran.
+    Unreachable(Span),
 }
 
 impl StubRhs {
@@ -572,6 +579,7 @@ impl StubRhs {
             StubRhs::Fails(s) => *s,
             StubRhs::ReturnsEach(_, s) => *s,
             StubRhs::Never(s) => *s,
+            StubRhs::Rejected(_, s) | StubRhs::Faulted(s) | StubRhs::Unreachable(s) => *s,
         }
     }
 }
