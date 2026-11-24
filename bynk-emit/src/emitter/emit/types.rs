@@ -808,7 +808,7 @@ mod refined_checks_tests {
                 2
             ),
             "    if (!globalThis.Number.isInteger(value)) {\n      \
-             return Err({ field: \"Cents\", message: \"must be an integer\", value });\n    \
+             return Err({ field: \"Cents\", message: \"must be an integer\", rule: { tag: \"WellFormed\" }, value });\n    \
              }\n"
         );
     }
@@ -825,7 +825,7 @@ mod refined_checks_tests {
         assert_eq!(
             out,
             "    if (!(value >= 0)) {\n      \
-             return Err({ field: \"Cents\", message: \"must be non-negative\", value });\n    \
+             return Err({ field: \"Cents\", message: \"must be non-negative\", rule: { tag: \"NonNegative\" }, value });\n    \
              }\n"
         );
     }
@@ -1043,9 +1043,9 @@ commons envelope {
             ts.contains(
                 "export const Age = {\n  of(value: number): Result<Age, ValidationError> {\n    \
                  if (!globalThis.Number.isSafeInteger(value)) {\n      \
-                 return Err({ field: \"Age\", message: \"must be a safe integer\", value });\n    }\n    \
+                 return Err({ field: \"Age\", message: \"must be a safe integer\", rule: { tag: \"WellFormed\" }, value });\n    }\n    \
                  if (!(value > 0)) {\n      \
-                 return Err({ field: \"Age\", message: \"must be positive\", value });\n    }\n    \
+                 return Err({ field: \"Age\", message: \"must be positive\", rule: { tag: \"Positive\" }, value });\n    }\n    \
                  return Ok(value as Age);\n  },\n};\n"
             ),
             "{ts}"

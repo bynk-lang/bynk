@@ -33,6 +33,21 @@ export interface ValidationError {
   readonly value: unknown;
 }
 
+// #3952: a rule as a `400` body writes it: `kind` where the in-memory form has `tag`
+// (every sum is `{"kind": …}` on the wire), a `Decimal` bound as its text.
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+// #3952: a violation as the `400` body carries it: the field, the message and the rule,
+// never the value (#4278). What a client reads back from a server's refusal.
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
+}
+
 // v0.22b: the JSON-decode error (ADR 0047) — BoundaryError's information
 // (the discriminating kind and the tracked field path) flattened into a
 // uniform, Bynk-inspectable record. `kind` is "Malformed" for a JSON.parse

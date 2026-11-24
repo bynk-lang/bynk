@@ -267,18 +267,25 @@ export type ValidationRule =
   | { readonly tag: "Cron" }
   | { readonly tag: "WellFormed" };
 
+/** A refinement a value broke. */
+export interface ValidationError {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: ValidationRule;
+  readonly value: unknown;
+}
+
 /** A rule as the server's `400` writes it: `kind` where the in-memory form has `tag`, a `Decimal` bound as its text. */
 export interface WireValidationRule {
   readonly kind: string;
   readonly [field: string]: unknown;
 }
 
-/** A refinement a value broke. `rule` is the in-memory form for a value the client itself refused to send and the wire form for one the server's `400` reported; `value` is there only for the former, since the server never echoes it. */
-export interface ValidationError {
+/** A violation as the server's `400` carries it: the field, the message and the rule, never the value. */
+export interface WireViolation {
   readonly field: string;
   readonly message: string;
-  readonly rule: ValidationRule | WireValidationRule;
-  readonly value?: unknown;
+  readonly rule: WireValidationRule;
 }
 
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
@@ -293,7 +300,7 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 

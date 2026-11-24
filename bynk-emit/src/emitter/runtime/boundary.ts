@@ -1,7 +1,7 @@
 import type { Result } from "./result.ts";
 import type { Option } from "./result.ts";
 import { Ok, Err, Some, None } from "./result.ts";
-import type { ValidationBound, ValidationError, ValidationRule } from "./errors.ts";
+import type { ValidationBound, ValidationError, ValidationRule, WireViolation } from "./errors.ts";
 import { __bynkDecimalToString } from "./decimal.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
@@ -25,7 +25,7 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
