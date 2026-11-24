@@ -476,8 +476,18 @@
     "/book/guides/entry-points/cron/",
     "/reference/cron/"
   ],
+  "bynk.cron.numeric_weekday": [
+    "/reference/cron/#schedule-syntax",
+    "/book/guides/entry-points/cron/",
+    "/reference/cron/"
+  ],
   "bynk.cron.return_not_effect_result": [
     "/reference/cron/#handler-form",
+    "/book/guides/entry-points/cron/",
+    "/reference/cron/"
+  ],
+  "bynk.cron.uneven_step": [
+    "/reference/cron/#schedule-syntax",
     "/book/guides/entry-points/cron/",
     "/reference/cron/"
   ],
