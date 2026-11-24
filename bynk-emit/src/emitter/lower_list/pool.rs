@@ -51,22 +51,25 @@ pub(super) fn lower_pool(
     // `(options).limit`: a literal, a constant or a computed record all read alike.
     let limit = member(paren(options), "limit");
     let thunks = settle_thunks(a, f);
-    match op {
-        ListOp::ParForEachWith => iife_block(
+    if op == ListOp::ParForEachWith {
+        iife_block(
             vec![xs_param(&a.elem)],
             true,
             vec![expr_stmt(await_pool(thunks, limit, false))],
             vec![recv],
-        ),
-        ListOp::ParTraverseWith | ListOp::ParTraverseAllWith => call(
+        )
+    } else if matches!(op, ListOp::ParTraverseWith | ListOp::ParTraverseAllWith) {
+        call(
             arrow_with(
                 vec![xs_param(&a.elem)],
                 true,
                 await_pool(thunks, limit, false),
             ),
             vec![recv],
-        ),
-        ListOp::ParTraverseTryWith => {
+        )
+    } else {
+        // `ParTraverseTryWith`: the only other `…With` form routed here.
+        {
             let u = ok_elem.expect("read above for the Try form");
             // A step the early stop never started leaves no result, so the scan
             // reaches the first `Err` in input order before it could reach one.
@@ -79,6 +82,5 @@ pub(super) fn lower_pool(
             ];
             iife_block(vec![xs_param(&a.elem)], true, body, vec![recv])
         }
-        _ => unreachable!("only the `…With` forms are routed here"),
     }
 }
