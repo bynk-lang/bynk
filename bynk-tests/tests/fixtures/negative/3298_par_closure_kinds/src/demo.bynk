@@ -2,7 +2,7 @@ context demo
 
 // #3298: each write form, in each of the three operations: `Set.add` in
 // `parTraverseAll`, `Log.append` in `parTraverseTry`, a `Cell` `:=` and
-// `Map.remove` in `parTraverse`.
+// `Map.remove` in `parForEach`.
 
 capability Clock {
   fn now() -> Effect[Instant]
@@ -34,7 +34,7 @@ agent Tally {
   }
 
   on call viaCell(n: Int) -> Effect[()] {
-    let _ <- [1, 2, 3].parTraverse((x: Int) => {
+    let _ <- [1, 2, 3].parForEach((x: Int) => {
       total := x
       Effect.pure(())
     })
@@ -42,7 +42,7 @@ agent Tally {
   }
 
   on call viaRemove(n: Int) -> Effect[()] {
-    let _ <- [1, 2, 3].parTraverse((x: Int) => counts.remove("k"))
+    let _ <- [1, 2, 3].parForEach((x: Int) => counts.remove("k"))
     Effect.pure(())
   }
 }

@@ -1793,6 +1793,7 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                 method.name.as_str(),
                 FOLD_EFF
                     | FOR_EACH
+                    | PAR_FOR_EACH
                     | PAR_TRAVERSE
                     | TRAVERSE_ALL
                     | PAR_TRAVERSE_ALL

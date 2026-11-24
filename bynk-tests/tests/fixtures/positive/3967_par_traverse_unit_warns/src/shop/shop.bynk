@@ -1,0 +1,9 @@
+commons shop {
+  fn notify(id: Int) -> Effect[()] {
+    Effect.pure(())
+  }
+
+  fn warm(ids: List[Int]) -> Effect[()] {
+    do ids.parTraverse((id: Int) => notify(id))
+  }
+}
