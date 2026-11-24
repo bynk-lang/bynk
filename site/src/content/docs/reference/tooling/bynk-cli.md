@@ -596,7 +596,9 @@ Provision the Cloudflare resources each context declares — KV namespaces, queu
 and Durable Object migrations — set its secrets, and deploy every context's
 Worker, in Service-Binding dependency order. See [Deploy to
 Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/)
-for the workflow.
+for the workflow, and [Deploy from
+CI](/book/guides/projects-build-and-deployment/deploy-from-ci/) to run it from
+GitHub Actions.
 
 ```text
 bynk deploy [PATH] [--context NAME | --worker NAME] [--dry-run] [--no-install] [--format short|json] [--yes]
