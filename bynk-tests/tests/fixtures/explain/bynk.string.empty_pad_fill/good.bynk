@@ -1,0 +1,5 @@
+commons demo
+
+fn invoice(n: Int) -> String {
+    n.toString().padStart(6, "0")
+}

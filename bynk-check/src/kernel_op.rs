@@ -107,7 +107,7 @@ kernel_ops! {
         Skip = "skip", "skip(n: Int) -> List[T]";
         Distinct = "distinct", "distinct() -> List[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> List[T]";
-        Count = "count", "count() -> Int";
+        Count = "count", "count() -> Int, or count(p: T -> Bool) -> Int";
         Any = "any", "any(p: T -> Bool) -> Bool";
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
@@ -126,11 +126,16 @@ kernel_ops! {
         Min = "min", "min(key: T -> K) -> Option[K], or min() -> Option[T] for an Ord element";
         Max = "max", "max(key: T -> K) -> Option[K], or max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
+        // #3963: the combinators a language without tuples needs most.
+        FilterMap = "filterMap", "filterMap(f: T -> Option[U]) -> List[U]";
+        ZipWith = "zipWith", "zipWith(other: List[U], f: (T, U) -> V) -> List[V]";
+        TakeWhile = "takeWhile", "takeWhile(p: T -> Bool) -> List[T]";
+        SkipWhile = "skipWhile", "skipWhile(p: T -> Bool) -> List[T]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
         JoinOn = "joinOn", "joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> List[V]";
         LeftJoin = "leftJoin", "leftJoin(other: List[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> List[V]";
-        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]";
+        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V], or join(sep: String) -> String for a List[String]";
         GroupBy = "groupBy", "groupBy(key: T -> K, into: (K, List[T]) -> V) -> List[V]";
         @hidden
         // v0.119 (ADR 0155): `run.upTo(step)` on a synthesised history `Step`
@@ -255,6 +260,17 @@ kernel_ops! {
         // K2 (#2594): RFC 3986 percent-encoding over the UTF-8 bytes.
         PercentEncode = "percentEncode", "percentEncode() -> String";
         PercentDecode = "percentDecode", "percentDecode() -> Option[String]";
+        // #3978: the everyday methods the kernel lacked. Widths and counts are in
+        // code points (padding) or code units (`lastIndexOf`, like `indexOf`).
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        TrimStart = "trimStart", "trimStart() -> String";
+        TrimEnd = "trimEnd", "trimEnd() -> String";
+        PadStart = "padStart", "padStart(width: Int, fill: String) -> String";
+        PadEnd = "padEnd", "padEnd(width: Int, fill: String) -> String";
+        Repeat = "repeat", "repeat(n: Int) -> String";
+        Lines = "lines", "lines() -> List[String]";
+        LastIndexOf = "lastIndexOf", "lastIndexOf(sub: String) -> Option[Int]";
+        ReplaceFirst = "replaceFirst", "replaceFirst(from: String, to: String) -> String";
         // K6c (#2600): regex methods over a string-literal pattern.
         MatchesRegex = "matchesRegex", "matchesRegex(pattern: String) -> Bool";
         ContainsRegex = "containsRegex", "containsRegex(pattern: String) -> Bool";

@@ -13,7 +13,9 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{take, zero};
 use super::super::{Expr, ExprKind, rounding_mode};
 use super::kernel::receiver_object;
-use crate::ts_build::{arrow, assign, binary, call, ident, member, num_lit, spread, str_lit};
+use crate::ts_build::{
+    arrow, assign, binary, bool_lit, call, ident, member, num_lit, spread, str_lit,
+};
 use bynk_ts::TsParam;
 
 /// The receiver and then each argument, lowered in order.
@@ -70,6 +72,29 @@ fn method_of(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
     let mut n = kids;
     let recv = receiver_object(n.remove(0));
     call(member(recv, method), n)
+}
+
+/// `recv.<method>(sub)` as an `Option[Int]`: `None` for `-1`. Shared by `indexOf` and
+/// `lastIndexOf`, which both count UTF-16 code units.
+fn index_option(kids: Vec<bynk_ts::TsExpr>, method: &str) -> bynk_ts::TsExpr {
+    let n = kids;
+    let [recv, sub] = take::<2, _>(n);
+    let to_option = arrow(
+        vec![TsParam::new("__i", Some(ts_named("number")))],
+        TsExpr::Conditional {
+            test: Box::new(TsExpr::Binary {
+                op: TsBinaryOp::LessThan,
+                left: Box::new(ident("__i")),
+                right: Box::new(zero()),
+            }),
+            consequent: Box::new(ident("None")),
+            alternate: Box::new(call(ident("Some"), vec![ident("__i")])),
+        },
+    );
+    call(
+        to_option,
+        vec![call(member(receiver_object(recv), method), vec![sub])],
+    )
 }
 
 /// `lo` and `hi` clamped at zero as `String.slice` does: `globalThis.Math.max(0, x)`.
@@ -664,7 +689,16 @@ fn regex_arm(op: StringOp, literal: &str, kids: Vec<bynk_ts::TsExpr>) -> Option<
         | StringOp::Chars
         | StringOp::Concat
         | StringOp::PercentEncode
-        | StringOp::PercentDecode => return None,
+        | StringOp::PercentDecode
+        | StringOp::IsEmpty
+        | StringOp::TrimStart
+        | StringOp::TrimEnd
+        | StringOp::PadStart
+        | StringOp::PadEnd
+        | StringOp::Repeat
+        | StringOp::Lines
+        | StringOp::LastIndexOf
+        | StringOp::ReplaceFirst => return None,
     })
 }
 
@@ -767,26 +801,52 @@ pub(in crate::emitter) fn lower_string_kernel(
         }
         (StringOp::IndexOf, [sub]) => {
             let kids = operands(&mut pre, cx, &[receiver, sub]);
-            Some({
-                let n = kids;
-                let [recv, sub] = take::<2, _>(n);
-                let to_option = arrow(
-                    vec![TsParam::new("__i", Some(ts_named("number")))],
-                    TsExpr::Conditional {
-                        test: Box::new(TsExpr::Binary {
-                            op: TsBinaryOp::LessThan,
-                            left: Box::new(ident("__i")),
-                            right: Box::new(zero()),
-                        }),
-                        consequent: Box::new(ident("None")),
-                        alternate: Box::new(call(ident("Some"), vec![ident("__i")])),
-                    },
-                );
-                call(
-                    to_option,
-                    vec![call(member(receiver_object(recv), "indexOf"), vec![sub])],
-                )
-            })
+            Some(index_option(kids, "indexOf"))
+        }
+        (StringOp::LastIndexOf, [sub]) => {
+            let kids = operands(&mut pre, cx, &[receiver, sub]);
+            Some(index_option(kids, "lastIndexOf"))
+        }
+        // #3978.
+        (StringOp::IsEmpty, []) => {
+            let [recv] = take::<1, _>(operands(&mut pre, cx, &[receiver]));
+            Some(binary(
+                TsBinaryOp::StrictEq,
+                member_of(recv, "length"),
+                zero(),
+            ))
+        }
+        (StringOp::TrimStart, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some(method_of(kids, "trimStart"))
+        }
+        (StringOp::TrimEnd, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some(method_of(kids, "trimEnd"))
+        }
+        // Widths count code points, so these go through a runtime helper; `true` pads at the start.
+        (StringOp::PadStart | StringOp::PadEnd, [width, fill]) => {
+            let mut kids = operands(&mut pre, cx, &[receiver, width, fill]);
+            kids.push(bool_lit(op == StringOp::PadStart));
+            Some(plain_call("__bynkPad", kids))
+        }
+        (StringOp::Repeat, [n]) => {
+            let kids = operands(&mut pre, cx, &[receiver, n]);
+            Some(plain_call("__bynkRepeat", kids))
+        }
+        (StringOp::Lines, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some(plain_call("__bynkLines", kids))
+        }
+        // The first occurrence only, and `to` literally: a function replacer's result is
+        // never `$`-expanded, as `replace`'s is not either (#1650).
+        (StringOp::ReplaceFirst, [from, to]) => {
+            let kids = operands(&mut pre, cx, &[receiver, from, to]);
+            let [recv, from, to] = take::<3, _>(kids);
+            Some(call(
+                member(receiver_object(recv), "replace"),
+                vec![from, arrow(vec![], to)],
+            ))
         }
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
         (StringOp::PercentEncode, []) => {

@@ -149,7 +149,9 @@ v0.22a adds `bynk.string` on the same path (`uses bynk.string` →
 `bynk/string.ts`): derived helpers **written in Bynk over the string
 kernel** ([§5.2](/reference/spec/static-semantics/#52-well-typedness)) — currently
 `join(parts: List[String], sep: String) -> String`. The kernel operations
-themselves are compiler built-ins, not commons functions.
+themselves are compiler built-ins, not commons functions. Since #3978 `join` is the
+method `xs.join(sep)` on a `List[String]`, and `bynk.string.join` is deprecated
+(`bynk.string.deprecated_function`).
 
 A successful Bynk build emits TypeScript that is **type-correct end to end**: it
 compiles under `tsc --strict` with no errors. This is the final gate of the

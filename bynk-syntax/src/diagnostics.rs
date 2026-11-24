@@ -4680,6 +4680,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
     },
     Explain {
+        code: "bynk.string.empty_pad_fill",
+        blurb: "`padStart` and `padEnd` make a string `width` code points wide by repeating `fill` at the start or the end, so a `fill` with no characters has nothing to repeat. When the `fill` is an empty string literal the call is refused here; a `fill` computed at run time that turns out empty faults the call instead. Pass a non-empty `fill` (`\" \"` to pad with spaces, `\"0\"` for a number). A `fill` longer than one character is cut to fit, and the width counts code points, so an emoji in either string is one position.",
+        example: "fn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"\")    // ✗ nothing to pad with\n}\n\nfn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"0\")   // ✓ 42 is 000042\n}",
+    },
+    Explain {
         code: "bynk.stub.after_type",
         blurb: "`stub … returns <value> after <delay>` makes the stubbed call \
                 complete only once the harness clock has advanced by that \
@@ -9753,6 +9758,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.store.unknown_op",
         "A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations.",
+    ),
+    warn(d(
+        "bynk.string.deprecated_function",
+        "A `bynk.string` free function is deprecated in favour of the `List[String]` method form (warning; auto-fixable).",
+    )),
+    d(
+        "bynk.string.empty_pad_fill",
+        "The `fill` of `String.padStart` or `String.padEnd` is an empty literal, so there is nothing to pad with.",
     ),
     d(
         "bynk.stub.after_type",
