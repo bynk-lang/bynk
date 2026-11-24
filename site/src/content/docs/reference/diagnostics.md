@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **911** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **919** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -386,7 +386,7 @@ There are **911** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.limits_unknown_field`](/reference/diagnostics/bynk.http.limits_unknown_field/) — A `limits { }` policy declares a field outside the closed set.
 - [`bynk.http.multipart_body_unbounded`](/reference/diagnostics/bynk.http.multipart_body_unbounded/) — A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).
 - [`bynk.http.multipart_large_cap`](/reference/diagnostics/bynk.http.multipart_large_cap/) — <span class="diagnostic-severity">Warning</span> A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning).
-- [`bynk.http.path_param_not_stringy`](/reference/diagnostics/bynk.http.path_param_not_stringy/) — A path parameter's type is not constructible from a string.
+- [`bynk.http.path_param_not_stringy`](/reference/diagnostics/bynk.http.path_param_not_stringy/) — A path parameter's type is not one a single path segment can carry.
 - [`bynk.http.query_field_not_stringy`](/reference/diagnostics/bynk.http.query_field_not_stringy/) — A field of an HTTP handler's `query` record has a type a query string cannot carry.
 - [`bynk.http.query_not_http`](/reference/diagnostics/bynk.http.query_not_http/) — A `RequestQuery` appears on a handler that is not an HTTP route.
 - [`bynk.http.query_wrong_type`](/reference/diagnostics/bynk.http.query_wrong_type/) — An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`.
@@ -409,6 +409,7 @@ There are **911** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.stream_body_signature`](/reference/diagnostics/bynk.http.stream_body_signature/) — A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first.
 - [`bynk.http.unbound_path_param`](/reference/diagnostics/bynk.http.unbound_path_param/) — A `:name` route segment has no matching handler parameter.
 - [`bynk.http.unknown_handler_annotation`](/reference/diagnostics/bynk.http.unknown_handler_annotation/) — A handler carries an annotation outside the closed set (`@cache`/`@limit`).
+- [`bynk.http.unreachable_route`](/reference/diagnostics/bynk.http.unreachable_route/) — A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group).
 
 ## History properties
 
@@ -524,6 +525,8 @@ There are **911** codes in total. Every code is an error unless it is marked **W
 - [`bynk.json.nested_option_plain`](/reference/diagnostics/bynk.json.nested_option_plain/) — A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.
 - [`bynk.lambda.unannotated_param`](/reference/diagnostics/bynk.lambda.unannotated_param/) — A lambda parameter has no type annotation in a position where no function type is expected to infer it from.
 - [`bynk.list.deprecated_function`](/reference/diagnostics/bynk.list.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).
+- [`bynk.list.par_limit_one`](/reference/diagnostics/bynk.list.par_limit_one/) — <span class="diagnostic-severity">Warning</span> A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning).
+- [`bynk.list.par_limit_range`](/reference/diagnostics/bynk.list.par_limit_range/) — A `ParOptions` `limit` that is statically known is outside 1 to 1000.
 - [`bynk.list.par_traverse_unit`](/reference/diagnostics/bynk.list.par_traverse_unit/) — <span class="diagnostic-severity">Warning</span> `List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).
 - [`bynk.locale.multiple_message_bundles`](/reference/diagnostics/bynk.locale.multiple_message_bundles/) — A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.
 - [`bynk.map.deprecated_function`](/reference/diagnostics/bynk.map.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).
@@ -612,6 +615,7 @@ There are **911** codes in total. Every code is an error unless it is marked **W
 - [`bynk.parse.dangling_handler_annotation`](/reference/diagnostics/bynk.parse.dangling_handler_annotation/) — A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler.
 - [`bynk.parse.doc_block_contains_code`](/reference/diagnostics/bynk.parse.doc_block_contains_code/) — A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation.
 - [`bynk.parse.duplicate_cors`](/reference/diagnostics/bynk.parse.duplicate_cors/) — A service declares more than one `cors { }` policy.
+- [`bynk.parse.duplicate_delivery`](/reference/diagnostics/bynk.parse.duplicate_delivery/) — A service declares more than one `delivery { }` policy.
 - [`bynk.parse.duplicate_json`](/reference/diagnostics/bynk.parse.duplicate_json/) — A service declares more than one `json { }` policy.
 - [`bynk.parse.duplicate_limits`](/reference/diagnostics/bynk.parse.duplicate_limits/) — A service declares more than one `limits { }` policy.
 - [`bynk.parse.duplicate_security`](/reference/diagnostics/bynk.parse.duplicate_security/) — A service declares more than one `security { }` policy.
@@ -716,8 +720,12 @@ There are **911** codes in total. Every code is an error unless it is marked **W
 ## Queue
 
 - [`bynk.queue.bad_params`](/reference/diagnostics/bynk.queue.bad_params/) — An `on message` handler does not take exactly one `message` parameter.
+- [`bynk.queue.dead_letter_type_mismatch`](/reference/diagnostics/bynk.queue.dead_letter_type_mismatch/) — A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from.
+- [`bynk.queue.delivery_bad_option`](/reference/diagnostics/bynk.queue.delivery_bad_option/) — A `delivery { }` key is unknown, repeated, out of range or of the wrong type, or the dead-letter queue is the consumer's own.
+- [`bynk.queue.delivery_not_queue`](/reference/diagnostics/bynk.queue.delivery_not_queue/) — A `delivery { }` policy on a service that is not `from queue`.
 - [`bynk.queue.duplicate_consumer`](/reference/diagnostics/bynk.queue.duplicate_consumer/) — Two `on message` handlers, in one context or in two, consume the same queue.
 - [`bynk.queue.invalid_name`](/reference/diagnostics/bynk.queue.invalid_name/) — A `from queue("…")` binding has an empty queue name, or one Cloudflare refuses.
+- [`bynk.queue.no_dead_letter`](/reference/diagnostics/bynk.queue.no_dead_letter/) — <span class="diagnostic-severity">Warning</span> A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).
 - [`bynk.queue.return_not_queue_result`](/reference/diagnostics/bynk.queue.return_not_queue_result/) — An `on message` handler does not return `Effect[QueueResult]`.
 
 ## Record spread

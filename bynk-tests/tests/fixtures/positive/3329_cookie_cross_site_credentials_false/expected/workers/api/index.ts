@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -35,17 +35,17 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/logout")) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/logout", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
-        if (method === "POST" && path === "/logout") {
+        if (method === "POST" && __matchPath("/logout", path) !== null) {
           __route = "POST /logout";
           const result = await surface.http_POST_logout();
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: void) => null), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
-      if (path === "/logout") {
+      if (__matchPath("/logout", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -35,41 +35,41 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/host" || path === "/login" || path === "/plain")) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/host", path) !== null || __matchPath("/login", path) !== null || __matchPath("/plain", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
-        if (method === "POST" && path === "/host") {
+        if (method === "POST" && __matchPath("/host", path) !== null) {
           __route = "POST /host";
           const result = await surface.http_POST_host();
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
       {
-        if (method === "POST" && path === "/login") {
+        if (method === "POST" && __matchPath("/login", path) !== null) {
           __route = "POST /login";
           const result = await surface.http_POST_login();
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
       {
-        if (method === "POST" && path === "/plain") {
+        if (method === "POST" && __matchPath("/plain", path) !== null) {
           __route = "POST /plain";
           const result = await surface.http_POST_plain();
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
-      if (path === "/host") {
+      if (__matchPath("/host", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/login") {
+      if (__matchPath("/login", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/plain") {
+      if (__matchPath("/plain", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

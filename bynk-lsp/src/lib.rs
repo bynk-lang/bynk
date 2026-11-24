@@ -2452,6 +2452,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #3877: each `delivery` section keyword of a queue consumer, as `keyword`.
+        dt.extend(
+            bynk_ide::queue_delivery::delivery_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
         // #2842: the contextual `matches` and `snapshot` of a snapshot claim.
         dt.extend(
             crate::symbols::snapshot_keyword_spans(text)
@@ -3859,6 +3865,9 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside a `limits { }` block, offer the policy field
         // names; at a service-body item start, offer the `limits` section keyword.
         items.extend(limits_completions(&text, offset, &line_prefix));
+        // #3877: inside a `delivery { }` block, the keys not yet written; at a
+        // service-body item start, the `delivery` section keyword.
+        items.extend(delivery_completions(&text, offset, &line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
@@ -3871,6 +3880,8 @@ impl LanguageServer for Backend {
         // #2854: in an `on http` handler's parameter list, offer the special
         // parameter names (`query`, `headers`, `body`).
         items.extend(http_param_completions(&text, offset));
+        // #3880: `delivery: QueueDelivery` at a parameter of an `on message` handler.
+        items.extend(message_param_completions(&text, offset));
         // #2640: at statement position in an effectful body, the `par` block.
         if completion::is_keyword_position(&line_prefix)
             && completion::in_effectful_body_position(&text, offset)
@@ -5481,6 +5492,35 @@ fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIt
     Vec::new()
 }
 
+/// #3877: the queue delivery completion cells. Inside a `delivery { }` block at a
+/// key-name position, the keys not yet written; at a service-body item start, the
+/// `delivery` section keyword. Lexical (offset-based), as `limits_completions`.
+fn delivery_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if bynk_ide::queue_delivery::in_delivery_field_position(text, offset) {
+        return bynk_ide::queue_delivery::unwritten_keys(text, offset)
+            .into_iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some(doc.to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "delivery".to_string(),
+            kind: Some(CompletionItemKind::KEYWORD),
+            detail: Some("delivery policy for this queue consumer".to_string()),
+            insert_text: Some("delivery {\n\tdeadLetter: $0,\n}".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
 /// #2858: the response-JSON completion cells. Inside `json { }` or `@json( )` at a
 /// name position, the closed field set (`options`); at the value of `options:`,
 /// `tagged` / `plain`; at a service-body item start, the `json` section keyword
@@ -5587,6 +5627,25 @@ fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
             ..Default::default()
         })
         .collect()
+}
+
+/// #3880: the `QueueDelivery` parameter of a queue consumer's `on message`, at a
+/// parameter-name position in its header. Lexical, like the HTTP parameter cells.
+fn message_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
+    if !bynk_ide::queue_delivery::in_message_param_name_position(text, offset) {
+        return Vec::new();
+    }
+    vec![CompletionItem {
+        label: "delivery".to_string(),
+        kind: Some(CompletionItemKind::VARIABLE),
+        detail: Some(
+            "the message's delivery metadata: `attempts` and `sentAt` (`consumes bynk.cloudflare { QueueDelivery }`)"
+                .to_string(),
+        ),
+        insert_text: Some("delivery: ${1:QueueDelivery}".to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
 }
 
 /// The `@raw` completion cells, mirroring `limit_completions`: inside `@raw( … )` at

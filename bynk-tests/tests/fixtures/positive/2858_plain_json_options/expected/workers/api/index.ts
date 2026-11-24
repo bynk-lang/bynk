@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __withPlainJson, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __withPlainJson, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -37,7 +37,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/filtered") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/filtered", path) !== null) {
           __route = "GET /filtered";
           const __q = __queryObject(request, [{ name: "limit", kind: "int", list: false, option: true }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_plain);
@@ -45,76 +45,76 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_plain);
           const query = __r_query.value;
           const result = await surface.http_GET_filtered(query);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_Int), { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_Int), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/legacy") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/legacy", path) !== null) {
           __route = "GET /legacy";
           const result = await surface.http_GET_legacy();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), __security_legacy);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_legacy);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/legacy/plain") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/legacy/plain", path) !== null) {
           __route = "GET /legacy/plain";
           const result = await surface.http_GET_legacy_plain();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), __security_legacy);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_legacy);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/plain") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/plain", path) !== null) {
           __route = "GET /plain";
           const result = await surface.http_GET_plain();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Activity), { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Activity), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/tagged") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/tagged", path) !== null) {
           __route = "GET /tagged";
           const result = await surface.http_GET_tagged();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/top") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/top", path) !== null) {
           __route = "GET /top";
           const result = await surface.http_GET_top();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/filtered") {
+      if (__matchPath("/filtered", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_plain);
       }
-      if (path === "/legacy") {
+      if (__matchPath("/legacy", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_legacy);
       }
-      if (path === "/legacy/plain") {
+      if (__matchPath("/legacy/plain", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_legacy);
       }
-      if (path === "/plain") {
+      if (__matchPath("/plain", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_plain);
       }
-      if (path === "/tagged") {
+      if (__matchPath("/tagged", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_plain);
       }
-      if (path === "/top") {
+      if (__matchPath("/top", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_plain);

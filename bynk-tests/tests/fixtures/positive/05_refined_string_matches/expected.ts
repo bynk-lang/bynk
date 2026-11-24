@@ -2,13 +2,14 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Slug = string & { readonly __brand: "Slug" };
 
 export const Slug = {
   of(value: string): Result<Slug, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z][a-z0-9-]*" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[a-z][a-z0-9-]*" + ")$", "u").test(value))) {
       return Err({ field: "Slug", message: "must match /[a-z][a-z0-9-]*/", value });
     }
     return Ok(value as Slug);

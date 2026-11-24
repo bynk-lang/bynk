@@ -2,7 +2,7 @@
 // Worker entry point for context `store.blobs`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __requestBodyStream, __untilBodyTooLarge, __mediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __requestBodyStream, __untilBodyTooLarge, __mediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/small") {
+        if (method === "POST" && __matchPath("/small", path) !== null) {
           __route = "POST /small";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
@@ -52,7 +52,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_small(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_blobs);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
         }
       }
       {
@@ -77,7 +77,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1000000 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           const result = __handled.value;
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_blobs);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"store.blobs\""]), __security_blobs);
         }
       }
       if (__matchPath("/blobs/:name", path) !== null) {
@@ -85,7 +85,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_blobs);
       }
-      if (path === "/small") {
+      if (__matchPath("/small", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_blobs);

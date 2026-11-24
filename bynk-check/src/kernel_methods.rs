@@ -25,8 +25,8 @@ use bynk_syntax::ast::BaseType;
 pub use crate::kernel_op::KernelMethod;
 use crate::kernel_op::{
     BytesOp, DecimalOp, DurationOp, EffectOp, EffectResultOp, FloatOp, HttpResultOp, InstantOp,
-    IntOp, ListOp, MapOp, OptionOp, QueryOp, RequestCookiesOp, RequestHeadersOp, RequestQueryOp,
-    ResultOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
+    IntOp, ListOp, MapOp, OptionOp, OrdOp, QueryOp, RequestCookiesOp, RequestHeadersOp,
+    RequestQueryOp, ResultOp, SetOp, StringOp, TestConnectionOp, TokenClaimsOp,
 };
 
 /// `List[T]` (v0.20b; v0.88 adds the ADR 0116 query/collection vocabulary).
@@ -82,6 +82,31 @@ pub const REQUEST_COOKIES_METHODS: &[KernelMethod] = RequestCookiesOp::TABLE;
 pub const TOKEN_CLAIMS_METHODS: &[KernelMethod] = TokenClaimsOp::TABLE;
 /// A case's recording `TestConnection[F]` (#3051).
 pub const TEST_CONNECTION_METHODS: &[KernelMethod] = TestConnectionOp::TABLE;
+
+/// #3955: the method every orderable type has, `compare`. Not a `*_METHODS`
+/// table: it belongs to no one receiver type, so it is offered beside the
+/// receiver's own table wherever [`is_ord_receiver`] holds.
+pub const ORD_RECEIVER_TABLE: &[KernelMethod] = OrdOp::TABLE;
+
+/// Whether a receiver of type `ty` is orderable, so `compare` applies. The
+/// built-in types decide structurally; a named type is asked through
+/// `named_is_ord` (its declaration says whether it `derives Ord`, which only the
+/// caller can look up). A type parameter is not offered it: its bound is not
+/// known here.
+pub fn is_ord_receiver(ty: TyId, tys: &Types, named_is_ord: &dyn Fn(&str) -> bool) -> bool {
+    match &*tys.get(ty) {
+        Ty::Base(b) => !matches!(b, BaseType::Bool),
+        Ty::Option(t) | Ty::List(t) => is_ord_receiver(*t, tys, named_is_ord),
+        Ty::Named { name, kind, args } => {
+            let own = match kind {
+                NamedKind::Refined(b) => !matches!(b, BaseType::Bool),
+                NamedKind::Record | NamedKind::Sum | NamedKind::Opaque(_) => named_is_ord(name),
+            };
+            own && args.iter().all(|a| is_ord_receiver(*a, tys, named_is_ord))
+        }
+        _ => false,
+    }
+}
 
 /// Every method table above, by the type a user writes. The one enumerable
 /// registry (read by the wasm `bynk_reference`); a test pins it against the

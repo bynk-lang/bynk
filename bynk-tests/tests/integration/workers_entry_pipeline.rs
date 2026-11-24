@@ -159,7 +159,10 @@ fn a_post_route_with_unparseable_json_is_a_400_malformed_json() {
 #[test]
 fn a_known_path_with_an_undeclared_method_is_a_405_listing_the_allowed_ones() {
     let ts = shop_index();
-    assert!(ts.contains("if (path === \"/items\") {"), "{ts}");
+    assert!(
+        ts.contains("if (__matchPath(\"/items\", path) !== null) {"),
+        "{ts}"
+    );
     assert!(ts.contains("headers: { allow: \"OPTIONS, POST\" }"), "{ts}");
     assert!(
         ts.contains("if (__matchPath(\"/items/:id\", path) !== null) {"),
@@ -178,7 +181,9 @@ fn a_known_path_with_an_undeclared_method_is_a_405_listing_the_allowed_ones() {
 #[test]
 fn exact_paths_are_tried_before_parameterised_ones_and_unknown_paths_are_404() {
     let ts = shop_index();
-    let exact = ts.find("path === \"/items\") {").expect("exact route");
+    let exact = ts
+        .find("__matchPath(\"/items\", path) !== null) {")
+        .expect("exact route");
     let param = ts
         .find("__matchPath(\"/items/:id\", path);")
         .expect("param route");
@@ -199,7 +204,7 @@ fn every_route_response_carries_the_service_security_headers() {
         "{ts}"
     );
     assert!(
-            ts.contains("return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);"),
+            ts.contains("return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, [\"Bynk realm=\\\"demo.shop\\\"\"]), __security_api);"),
             "{ts}"
         );
 }

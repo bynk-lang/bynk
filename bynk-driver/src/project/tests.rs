@@ -126,6 +126,7 @@ fn a_group_members_d1_migrations_are_staged_where_wrangler_points() {
         &[],
         &[],
         &[],
+        &[],
         None,
         &Default::default(),
         &migrations,

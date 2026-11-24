@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __requestHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __requestHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,34 +36,34 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/session" || path === "/cookie-header" || path === "/me" || path === "/theme" || path === "/rename")) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/session", path) !== null || __matchPath("/cookie-header", path) !== null || __matchPath("/me", path) !== null || __matchPath("/theme", path) !== null || __matchPath("/rename", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
-        if (method === "DELETE" && path === "/session") {
+        if (method === "DELETE" && __matchPath("/session", path) !== null) {
           __route = "DELETE /session";
           const result = await surface.http_DELETE_session(request);
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: void) => null), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/cookie-header") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/cookie-header", path) !== null) {
           __route = "GET /cookie-header";
           const result = await surface.http_GET_cookie_header(request, __requestHeaders(request, "__Host-session"));
-          const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
+          const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk-Cookie realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/me") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/me", path) !== null) {
           __route = "GET /me";
           const result = await surface.http_GET_me(request);
-          const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
+          const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk-Cookie realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/theme") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/theme", path) !== null) {
           __route = "GET /theme";
           const __c = __cookieObject(request, [{ name: "theme", kind: "string", list: false, option: true }], "__Host-session");
           if (!__c.ok) return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__c.error), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
@@ -71,38 +71,38 @@ export default {
           if (__r_cookies.tag === "Err") return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify(__r_cookies.error), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
           const cookies = __r_cookies.value;
           const result = await surface.http_GET_theme(request, cookies);
-          const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
+          const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk-Cookie realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if (method === "POST" && path === "/rename") {
+        if (method === "POST" && __matchPath("/rename", path) !== null) {
           __route = "POST /rename";
           const result = await surface.http_POST_rename(request);
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: void) => null), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
-      if (path === "/cookie-header") {
+      if (__matchPath("/cookie-header", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/me") {
+      if (__matchPath("/me", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/rename") {
+      if (__matchPath("/rename", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/session") {
+      if (__matchPath("/session", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/theme") {
+      if (__matchPath("/theme", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

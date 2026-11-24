@@ -2,7 +2,7 @@
 // Worker entry point for context `geo.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __requestHeaders, __cfObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __requestHeaders, __cfObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,24 +36,24 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/eu") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/eu", path) !== null) {
           __route = "GET /eu";
           const __r_cf = handlers.__deserialise_RequestCf(__cfObject(request), "cf");
           if (__r_cf.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_cf.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const cf = __r_cf.value;
           const result = await surface.http_GET_eu(cf);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"geo.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/hello") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/hello", path) !== null) {
           __route = "GET /hello";
           const __r_cf = handlers.__deserialise_RequestCf(__cfObject(request), "cf");
           if (__r_cf.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_cf.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const cf = __r_cf.value;
           const result = await surface.http_GET_hello(cf);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"geo.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -67,7 +67,7 @@ export default {
           const __raw_cf = __m.params["cf"];
           const cf = __raw_cf;
           const result = await surface.http_GET_by_Param_cf(cf);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"geo.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -84,7 +84,7 @@ export default {
           if (__r_cf.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_cf.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const cf = __r_cf.value;
           const result = await surface.http_GET_greet_Param_name(name, cf, __requestHeaders(request));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"geo.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -93,7 +93,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/eu") {
+      if (__matchPath("/eu", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -103,7 +103,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/hello") {
+      if (__matchPath("/hello", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

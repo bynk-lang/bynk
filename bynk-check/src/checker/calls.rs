@@ -301,6 +301,7 @@ pub(crate) fn check_fn_in(
         effectful,
         agent_state_ty: None,
         commit_seen: false,
+        fold_init_expected: None,
         caps: match fn_caps {
             Some(c) => {
                 let given_entries: Vec<(String, Span)> = f
@@ -509,6 +510,7 @@ fn type_static_initialiser(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx::default(),
             in_test_body: false,
             oidc_binder: None,
@@ -3365,9 +3367,29 @@ pub(crate) fn check_method_call(
         _ => None,
     };
     let recv_ty = type_of(receiver, recv_expected, ctx)?;
+    // #4193: a `fold`'s result is its accumulator, so what the call is expected to
+    // produce is what an empty `init` (`Set.empty()`) should take its type from.
+    ctx.fold_init_expected = if method.name == "fold" {
+        expected
+    } else {
+        None
+    };
     if type_args_pending && !receiver_has_generic_instance_method(recv_ty, method, ctx) {
         reject_method_type_args(method, args, span, ctx);
         return None;
+    }
+    // #3955: the universal `compare` on every `Ord` receiver.
+    if method.name == "compare"
+        && let Some(r) = super::ordering::check_compare_method(recv_ty, method, args, span, ctx)
+    {
+        return record_kernel(
+            ctx,
+            expr_id,
+            recv_ty,
+            Some(KernelOp::Ord(crate::kernel_op::OrdOp::Compare)),
+            method,
+            r,
+        );
     }
     // v0.20b: built-in kernel methods on the collection types. These are
     // compiler-known special forms typed directly here — generic in their
@@ -4568,34 +4590,9 @@ fn check_test_service_address(
         return handler_outcome(handler, ctx);
     }
 
-    // `svc.message(msg)` — the queue message handler.
+    // `svc.message(msg)` / `svc.message(msg, delivery)` — the queue message handler.
     if method.name == "message" {
-        ctx.callees.insert(
-            expr_id,
-            Callee::TestService {
-                service: id.name.clone(),
-                address: HandlerAddress::Message,
-                extra_headers: false,
-            },
-        );
-        let matched = sig
-            .handlers
-            .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Message));
-        let Some(handler) = matched else {
-            ctx.errors.push(CompileError::new(
-                "bynk.test.service_unknown_route",
-                method.span,
-                format!("`{}` declares no `on message(...)` handler", id.name),
-            ));
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        };
-        let params = handler.params.clone();
-        check_address_args(&id.name, "message", &params, args, method.span, ctx);
-        return handler_outcome(handler, ctx);
+        return check_message_address(sig, id, method, args, expr_id, ctx);
     }
 
     // #2052: `svc.event(payload)` / `svc.event(payload, envelope)` — one
@@ -5020,6 +5017,63 @@ fn is_asset_value(e: &Expr, ctx: &Ctx) -> bool {
             .unwrap_or_else(|| ctx.input.assets.contains_key(&id.name)),
         _ => false,
     }
+}
+
+/// `svc.message(msg)` / `svc.message(msg, delivery)` (#3880): the queue consumer's address.
+/// A handler's `QueueDelivery` parameter is filled by the address, from its optional second
+/// argument, so the message is the address's first parameter.
+fn check_message_address(
+    sig: &TestServiceSig,
+    id: &Ident,
+    method: &Ident,
+    args: &[Expr],
+    expr_id: bynk_syntax::ast::ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let matched = sig
+        .handlers
+        .iter()
+        .find(|h| matches!(&h.kind, HandlerKind::Message));
+    // #3880: a handler's `QueueDelivery` parameter is filled by the address, from its
+    // optional second argument, so the message is the address's first parameter.
+    let delivery = matched.and_then(|h| {
+        h.params
+            .iter()
+            .position(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+    });
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: id.name.clone(),
+            address: HandlerAddress::Message { delivery },
+            extra_headers: false,
+        },
+    );
+    let Some(handler) = matched else {
+        ctx.errors.push(CompileError::new(
+            "bynk.test.service_unknown_route",
+            method.span,
+            format!("`{}` declares no `on message(...)` handler", id.name),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let mut params: Vec<bynk_syntax::ast::Param> = handler
+        .params
+        .iter()
+        .filter(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+        .cloned()
+        .collect();
+    if let Some(at) = delivery {
+        // The optional delivery follows the message.
+        if args.len() > 1 {
+            params.push(handler.params[at].clone());
+        }
+    }
+    check_address_args(&id.name, "message", &params, args, method.span, ctx);
+    handler_outcome(handler, ctx)
 }
 
 /// #3874: a cron handler's `CronSchedule` parameter is filled from the address's

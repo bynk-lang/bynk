@@ -1007,6 +1007,7 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
             let location = expect_location_raw(cx, span_start);
             let src = expect_source_text_raw(cx, a.value.span);
             let mut pre = Pre::new();
+            let mut was = None;
             // Structural expected-vs-actual for a top-level comparison. Each
             // operand is lowered once and both the condition and the failure
             // detail read it. When an operand hoists statements (a `?` guard),
@@ -1054,6 +1055,13 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                         "expect {src}\n  the call returned without faulting"
                     )),
                 )
+            } else if let Some(r) = super::lower::expect_was::subject_report(&a.value, cx) {
+                // #3980: a failed `is` reports the subject's value.
+                let head = ["expect ", src.as_str()].concat();
+                let text = r.detail(&head);
+                let c = pre.lower_node(&a.value, cx);
+                was = Some((r, head));
+                (c, ExpectDetail::Message(text))
             } else {
                 (
                     pre.lower_node(&a.value, cx),
@@ -1061,13 +1069,32 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                 )
             };
             body.extend(pre.items());
-            body.push(expect_item(
-                cond,
-                detail,
-                &location,
-                &src,
-                (span_start, span_end),
-            ));
+            match was {
+                Some((r, head)) if !r.runtime_args().is_empty() => {
+                    body.push(stmt_item(super::lower::expect_was::guard(
+                        cond,
+                        &location,
+                        (span_start, span_end),
+                        &head,
+                        &r,
+                    )));
+                }
+                _ => body.push(expect_item(
+                    cond,
+                    detail,
+                    &location,
+                    &src,
+                    (span_start, span_end),
+                )),
+            }
+            // #3981: the names a statement-form `is` binds stay in scope to the end of the block.
+            if cx.expect_is_bindings {
+                body.extend(
+                    super::lower::expect_bindings::declarations(&a.value, cx)
+                        .into_iter()
+                        .map(stmt_item),
+                );
+            }
         }
         Statement::Advance(a) => {
             // #2137: move the case's harness clock (`testgen/test_runtime/clock.ts`),
@@ -1440,7 +1467,15 @@ pub(super) fn match_tail(
     } else {
         PatPath::from_lowered(disc)
     };
+    // #3980: an `expect false` arm names its arm and the value matched.
+    let framed = {
+        let frame = super::lower::expect_was::scrutinee_frame(discriminant, path.node(), arms, cx);
+        cx.push_scrutinee(frame)
+    };
     match_dispatch(body, &path, &disc_ty, arms, cx, async_tail);
+    if framed {
+        cx.pop_scrutinee();
+    }
 }
 
 /// The `switch` or `if` chain over `arms`, then the non-exhaustive `throw`:

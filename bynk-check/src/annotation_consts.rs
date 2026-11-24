@@ -25,8 +25,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use bynk_syntax::ast::{
-    Annotation, BaseType, Commons, CommonsItem, ConstRef, ExprKind, Handler, RecordField,
-    Refinement, SourceUnit, TypeBody, TypeDecl, TypeRef,
+    Annotation, BaseType, Commons, CommonsItem, ConstRef, DeliveryPolicy, ExprKind, Handler,
+    RecordField, Refinement, SourceUnit, TypeBody, TypeDecl, TypeRef,
 };
 use bynk_syntax::error::CompileError;
 
@@ -133,6 +133,48 @@ fn rewrite_annotations(
             arg.value.kind = found.literal.kind.clone();
             changed = true;
         }
+    }
+    changed
+}
+
+/// The base type each `delivery { }` key's constant must have (#3877).
+const DELIVERY_KEYS: &[(&str, BaseType)] = &[
+    ("retries", BaseType::Int),
+    ("retryDelay", BaseType::Duration),
+    ("deadLetter", BaseType::String),
+    ("batchSize", BaseType::Int),
+    ("batchWait", BaseType::Duration),
+    ("concurrency", BaseType::Int),
+];
+
+/// #3877: a `delivery { }` value that is a bare constant counts as the literal it
+/// is bound to, as an annotation argument does (ADR 0826). An unresolved name is
+/// left as written, so the key's own diagnostic (`bynk.queue.delivery_bad_option`)
+/// fires on it.
+fn rewrite_delivery(
+    policy: Option<&mut DeliveryPolicy>,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let Some(policy) = policy else {
+        return false;
+    };
+    let mut changed = false;
+    for field in &mut policy.fields {
+        let ExprKind::Ident(id) = &field.value.kind else {
+            continue;
+        };
+        let Some((_, base)) = DELIVERY_KEYS.iter().find(|(k, _)| *k == field.name.name) else {
+            continue;
+        };
+        let Some(found) =
+            crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, *base)
+        else {
+            continue;
+        };
+        refs.record(id.span, SymbolKind::Const, &id.name);
+        field.value.kind = found.literal.kind.clone();
+        changed = true;
     }
     changed
 }
@@ -248,6 +290,7 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
                 changed |= rewrite_annotations(&mut ev.annotations, EVENT_RULES, scope, refs);
             }
             CommonsItem::Service(svc) => {
+                changed |= rewrite_delivery(svc.delivery.as_mut(), scope, refs);
                 changed |= rewrite_handlers(&mut svc.handlers, scope, refs)
             }
             CommonsItem::Agent(agent) => {

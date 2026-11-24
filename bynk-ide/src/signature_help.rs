@@ -81,8 +81,17 @@ pub fn kernel_method_signature(
     tys: &bynk_check::checker::Types,
     method: &str,
 ) -> Option<String> {
+    // #3955: `compare` applies to every orderable receiver. A named type is
+    // taken as orderable here (its `derives` is not known to this lookup; a
+    // receiver that is not `Ord` is reported by the checker at the call).
+    let ord = if bynk_check::kernel_methods::is_ord_receiver(ty, tys, &|_| true) {
+        bynk_check::kernel_methods::ORD_RECEIVER_TABLE
+    } else {
+        &[]
+    };
     bynk_check::kernel_methods::methods_for(ty, tys)
         .iter()
+        .chain(ord)
         .find(|m| m.name == method)
         .map(|m| m.signature.to_string())
 }
@@ -196,6 +205,12 @@ pub fn resolve_label(
             && let Some((_, sig)) = statics.iter().find(|(n, _)| *n == member)
         {
             return Some((*sig).to_string());
+        }
+        // #3880: a queue service's `svc.message(…)` test address.
+        if member == "message"
+            && let Some(label) = crate::queue_delivery::message_address_label(recv, doc_text, files)
+        {
+            return Some(label);
         }
         // A refined/opaque type's `of`/`unsafe`, or a capability op.
         return resolve_qualified(recv, member, doc_text, files);
@@ -801,6 +816,28 @@ mod tests {
                 .starts_with("split(")
         );
         assert!(kernel_method_signature(string, tys, "nope").is_none());
+    }
+
+    /// #3955: `compare` has signature help on a `Bytes` receiver and on a named
+    /// type, but not on a `Bool`.
+    #[test]
+    fn kernel_method_signature_offers_compare_on_orderable_receivers() {
+        use bynk_check::checker::{NamedKind, Ty, Types};
+        use bynk_syntax::ast::BaseType;
+        let tys = &Types::new();
+        let bytes = tys.intern(Ty::Base(BaseType::Bytes));
+        assert_eq!(
+            kernel_method_signature(bytes, tys, "compare").as_deref(),
+            Some("compare(other: T) -> Ordering")
+        );
+        let version = tys.intern(Ty::Named {
+            name: "Version".to_string(),
+            kind: NamedKind::Record,
+            args: Vec::new(),
+        });
+        assert!(kernel_method_signature(version, tys, "compare").is_some());
+        let flag = tys.intern(Ty::Base(BaseType::Bool));
+        assert!(kernel_method_signature(flag, tys, "compare").is_none());
     }
 
     #[test]

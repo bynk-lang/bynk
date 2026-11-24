@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -15,7 +16,7 @@ export type EntryId = string & { readonly __brand: "shop.ledger.EntryId" };
 
 export const EntryId = {
   of(value: string): Result<EntryId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "E-[0-9]+" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "E-[0-9]+" + ")$", "u").test(value))) {
       return Err({ field: "EntryId", message: "must match /E-[0-9]+/", value });
     }
     return Ok(value as EntryId);

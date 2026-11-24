@@ -255,6 +255,34 @@ pub(in crate::emitter) fn lower_duration_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (DurationOp::ToMillis, []) => Some(identity(&mut pre, receiver, cx)),
+        // #3948: whole units, rounding towards zero. `+ 0` turns the `-0` of a
+        // part unit below zero into `0`.
+        (
+            DurationOp::ToSeconds
+            | DurationOp::ToMinutes
+            | DurationOp::ToHours
+            | DurationOp::ToDays,
+            [],
+        ) => {
+            let factor = match op {
+                DurationOp::ToSeconds => "1000",
+                DurationOp::ToMinutes => "60000",
+                DurationOp::ToHours => "3600000",
+                DurationOp::ToDays | DurationOp::ToMillis | DurationOp::ToString => "86400000",
+            };
+            let kids = operands(&mut pre, cx, &[receiver]);
+            let [recv] = take::<1, _>(kids);
+            let quotient = TsExpr::Binary {
+                op: TsBinaryOp::Div,
+                left: Box::new(recv),
+                right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num(factor.to_string()))),
+            };
+            Some(TsExpr::Binary {
+                op: TsBinaryOp::Add,
+                left: Box::new(math_call("trunc", vec![quotient])),
+                right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num("0".to_string()))),
+            })
+        }
         (DurationOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("String", kids))
@@ -328,10 +356,6 @@ pub(in crate::emitter) fn lower_bytes_kernel(
             let kids = operands(&mut pre, cx, &[receiver, other]);
             Some(plain_call("__bynkBytesConcat", kids))
         }
-        (BytesOp::Compare, [other]) => {
-            let kids = operands(&mut pre, cx, &[receiver, other]);
-            Some(plain_call("__bynkBytesCompare", kids))
-        }
         (BytesOp::ToHex, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("__bynkBytesToHex", kids))
@@ -364,7 +388,8 @@ fn regex_parts(literal: &str, extra: &str, anchored: bool) -> (String, String) {
     } else {
         pat
     };
-    (source, format!("{flags}{extra}"))
+    // #3950: every Bynk regex runs in Unicode mode.
+    (source, format!("{flags}{extra}u"))
 }
 
 /// [`regex_construction`] as a node: `new globalThis.RegExp("<source>", "<flags>")`. The `Str`
@@ -1052,12 +1077,6 @@ mod tests {
                 "__bynkBytesConcat",
             ),
             (
-                "b: Bytes, c: Bytes",
-                "Int { b.compare(c) }",
-                "__bynkBytesCompare(b, c)",
-                "__bynkBytesCompare",
-            ),
-            (
                 "b: Bytes",
                 "String { b.toHex() }",
                 "__bynkBytesToHex(b)",
@@ -1252,35 +1271,35 @@ mod tests {
         for (body, want) in [
             (
                 "Bool { s.matchesRegex(\"a+\") }",
-                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:a+)(?![\\\\s\\\\S])\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:a+)(?![\\\\s\\\\S])\", \"u\").test(s)".to_string(),
             ),
             (
                 "Bool { s.matchesRegex(\"(?i)abc\") }",
-                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:abc)(?![\\\\s\\\\S])\", \"i\").test(s)".to_string(),
+                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:abc)(?![\\\\s\\\\S])\", \"iu\").test(s)".to_string(),
             ),
             (
                 "Bool { s.containsRegex(\"a\\\\.b\") }",
-                "new globalThis.RegExp(\"a\\\\.b\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"a\\\\.b\", \"u\").test(s)".to_string(),
             ),
             (
                 "Bool { s.containsRegex(\"\\\"q\\\"$\") }",
-                "new globalThis.RegExp(\"\\\"q\\\"$\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"\\\"q\\\"$\", \"u\").test(s)".to_string(),
             ),
             (
                 "Option[List[Option[String]]] { s.findRegex(\"(a)(b)?\") }",
                 format!(
-                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(({groups})(__m)))(new globalThis.RegExp(\"(a)(b)?\", \"\").exec(s))"
+                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(({groups})(__m)))(new globalThis.RegExp(\"(a)(b)?\", \"u\").exec(s))"
                 ),
             ),
             (
                 "List[List[Option[String]]] { s.findAllRegex(\"\\\\d+\") }",
                 format!(
-                    "([...s.matchAll(new globalThis.RegExp(\"\\\\d+\", \"g\"))].map({groups}) as readonly (readonly Option<string>[])[])"
+                    "([...s.matchAll(new globalThis.RegExp(\"\\\\d+\", \"gu\"))].map({groups}) as readonly (readonly Option<string>[])[])"
                 ),
             ),
             (
                 "String { s.replaceRegex(\"\\\\s+\", \" \") }",
-                "s.replace(new globalThis.RegExp(\"\\\\s+\", \"g\"), \" \")".to_string(),
+                "s.replace(new globalThis.RegExp(\"\\\\s+\", \"gu\"), \" \")".to_string(),
             ),
         ] {
             let ts = emitted("s: String", body);
@@ -1310,7 +1329,7 @@ mod tests {
             "{ts}"
         );
         assert!(
-            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"y\"))"),
+            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"yu\"))"),
             "{ts}"
         );
         assert!(ts.contains("\n    while (__q < __s.length) {\n"), "{ts}");

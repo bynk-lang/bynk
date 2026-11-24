@@ -1,0 +1,5 @@
+context shapes
+
+exports opaque { Shape }
+
+type Shape = | Dot | Circle(radius: Int)

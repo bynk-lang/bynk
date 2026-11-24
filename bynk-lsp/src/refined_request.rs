@@ -99,6 +99,10 @@ pub enum Predicate {
     Positive,
     /// `min <= value <= max`, for an `Int` or a `Float` alike.
     Range { min: Bound, max: Bound },
+    /// `value >= min` (#3948).
+    AtLeast { min: Bound },
+    /// `value <= max` (#3948).
+    AtMost { max: Bound },
     /// The value's length is at least 1.
     NonEmpty,
     /// The value's length is at least `length`.
@@ -125,6 +129,21 @@ pub enum Bound {
     Float(f64),
 }
 
+/// A one-sided bound as a [`Bound`]. A `Decimal` or `Duration` has no
+/// refined-request panel; they read as a number (a `Duration` in
+/// milliseconds) only to keep the match total.
+fn bound_of(b: &bynk_syntax::ast::PredBound) -> Bound {
+    use bynk_syntax::ast::PredBound;
+    match b {
+        PredBound::Int(a) => Bound::Int(a.value),
+        PredBound::Float(a) => Bound::Float(a.value),
+        PredBound::Decimal(a) => {
+            Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0))
+        }
+        PredBound::Duration(a) => Bound::Int(a.millis),
+    }
+}
+
 impl Predicate {
     fn of(kind: &PredKind) -> Self {
         match kind {
@@ -144,6 +163,12 @@ impl Predicate {
                 min: Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
                 max: Bound::Float(b.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
             },
+            PredKind::InRangeDur(a, b) => Predicate::Range {
+                min: Bound::Int(a.millis),
+                max: Bound::Int(b.millis),
+            },
+            PredKind::AtLeast(b) => Predicate::AtLeast { min: bound_of(b) },
+            PredKind::AtMost(b) => Predicate::AtMost { max: bound_of(b) },
             PredKind::NonEmpty => Predicate::NonEmpty,
             PredKind::MinLength(n) => Predicate::MinLength { length: *n },
             PredKind::MaxLength(n) => Predicate::MaxLength { length: *n },
@@ -252,6 +277,9 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::InRange(a, b) => format!("{} ≤ value ≤ {}", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("value ≥ {}", b.lexeme()),
+        PredKind::AtMost(b) => format!("value ≤ {}", b.lexeme()),
         PredKind::NonEmpty => "length ≥ 1".to_string(),
         PredKind::MinLength(n) => format!("length ≥ {n}"),
         PredKind::MaxLength(n) => format!("length ≤ {n}"),
@@ -276,8 +304,10 @@ fn clause(kind: &PredKind) -> Clause {
         predicate: Predicate::of(kind),
         // The emitted check calls the runtime's `__bynkCodePointLength`; the
         // client has no runtime, so spell the same code-point count inline (#3949).
+        // Likewise `__bynkRegExp(source, flags)`, the runtime's shared `RegExp` (#3950).
         check: bynk_ts::print_expr(&cond)
-            .replace("__bynkCodePointLength(value)", "Array.from(value).length"),
+            .replace("__bynkCodePointLength(value)", "Array.from(value).length")
+            .replace("__bynkRegExp(", "new globalThis.RegExp("),
         message,
     }
 }
@@ -375,6 +405,8 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     PredKind::Positive => (Some(1), None),
                     PredKind::NonNegative => (Some(0), None),
                     PredKind::InRange(a, b) => (Some(a.value), Some(b.value)),
+                    PredKind::AtLeast(bynk_syntax::ast::PredBound::Int(a)) => (Some(a.value), None),
+                    PredKind::AtMost(bynk_syntax::ast::PredBound::Int(b)) => (None, Some(b.value)),
                     _ => continue,
                 };
                 lower = lower.max(l);
@@ -412,6 +444,12 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     }
                     PredKind::NonNegative => (Some(0.0), None),
                     PredKind::InRangeF(a, b) => (Some(a.value), Some(b.value)),
+                    PredKind::AtLeast(bynk_syntax::ast::PredBound::Float(a)) => {
+                        (Some(a.value), None)
+                    }
+                    PredKind::AtMost(bynk_syntax::ast::PredBound::Float(b)) => {
+                        (None, Some(b.value))
+                    }
                     _ => continue,
                 };
                 lower = match (lower, l) {
@@ -458,7 +496,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                         PredKind::Matches(p) => Some(p),
                         _ => None,
                     })
-                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                    .and_then(|p| {
+                        let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                        regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+                    });
                 for d in ["2026-11-03", "2028-02-29", "2000-02-29"] {
                     if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
                         push(d.to_string(), &mut out);
@@ -477,7 +518,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                         PredKind::Matches(p) => Some(p),
                         _ => None,
                     })
-                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                    .and_then(|p| {
+                        let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                        regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+                    });
                 for d in ["0 2 * * MON-FRI", "*/15 * * * *", "0 0 1 JAN *"] {
                     if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
                         push(d.to_string(), &mut out);
@@ -513,7 +557,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     )),
                 );
             }
-            let re = pattern.and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+            let re = pattern.and_then(|p| {
+                let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+            });
             let ok = |s: &str| re.as_ref().is_none_or(|re| re.find(s).is_some());
             let mut try_push = |len: i64, out: &mut Vec<String>, rng: &mut Rng| {
                 let s = rng.string(len as usize);

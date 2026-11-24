@@ -1,0 +1,3 @@
+commons demo {
+  type Span = Duration where InRange(0, 10)
+}

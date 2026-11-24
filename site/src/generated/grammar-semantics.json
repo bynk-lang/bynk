@@ -602,6 +602,24 @@
       "summary": "A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622)."
     }
   ],
+  "delivery_policy": [
+    {
+      "code": "bynk.queue.dead_letter_type_mismatch",
+      "summary": "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from."
+    },
+    {
+      "code": "bynk.queue.delivery_bad_option",
+      "summary": "A `delivery { }` key is unknown, repeated, out of range or of the wrong type, or the dead-letter queue is the consumer's own."
+    },
+    {
+      "code": "bynk.queue.delivery_not_queue",
+      "summary": "A `delivery { }` policy on a service that is not `from queue`."
+    },
+    {
+      "code": "bynk.queue.no_dead_letter",
+      "summary": "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning)."
+    }
+  ],
   "do_stmt": [
     {
       "code": "bynk.effect.do_discards_result",
@@ -1053,7 +1071,7 @@
     },
     {
       "code": "bynk.http.path_param_not_stringy",
-      "summary": "A path parameter's type is not constructible from a string."
+      "summary": "A path parameter's type is not one a single path segment can carry."
     },
     {
       "code": "bynk.http.query_field_not_stringy",
@@ -1706,6 +1724,10 @@
     {
       "code": "bynk.parse.duplicate_cors",
       "summary": "A service declares more than one `cors { }` policy."
+    },
+    {
+      "code": "bynk.parse.duplicate_delivery",
+      "summary": "A service declares more than one `delivery { }` policy."
     },
     {
       "code": "bynk.parse.duplicate_json",

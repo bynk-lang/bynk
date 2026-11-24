@@ -445,12 +445,23 @@ fn walk_expr_for_constraints(
             if let ExprKind::Ident(id) = &receiver.kind
                 && let Some(ct) = consumed.get(&id.name)
             {
-                let is_construct = method.name == OF
-                    || method.name == UNSAFE
+                // #3948, #4213: a type its owner exports `transparent` takes every
+                // ordinary construction form from a consumer: `.of` on a refined
+                // one, a variant of a sum, as a record literal already did. An
+                // opaque export, a declared `opaque` type and `.unsafe` (an
+                // unchecked assertion, not a construction) stay the owner's.
+                let owner_only = ct.visibility == Visibility::Opaque
                     || matches!(
                         typed.types.get(&id.name).map(|d| &d.body),
-                        Some(TypeBody::Sum(s)) if s.variants.iter().any(|v| v.name.name == method.name),
+                        Some(TypeBody::Opaque { .. })
                     );
+                let is_construct = method.name == UNSAFE
+                    || (owner_only
+                        && (method.name == OF
+                            || matches!(
+                                typed.types.get(&id.name).map(|d| &d.body),
+                                Some(TypeBody::Sum(s)) if s.variants.iter().any(|v| v.name.name == method.name),
+                            )));
                 if is_construct {
                     errors.push(
                         CompileError::new(
@@ -3338,6 +3349,46 @@ fn check_actor_contracts(
     }
 }
 
+/// #3909 (decision B): a route no request can reach is an error. Within a context,
+/// every path the route matches is matched first by other routes of its method
+/// (see [`crate::route_order`]); overlap alone is not an error.
+fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    let mut routes: Vec<(HttpMethod, &str, Span)> = Vec::new();
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            if let HandlerKind::Http { method, path } = &handler.kind {
+                routes.push((*method, path.as_str(), handler.span));
+            }
+        }
+    }
+    let keys: Vec<(&str, &str)> = routes.iter().map(|(m, p, _)| (m.as_str(), *p)).collect();
+    for (r, covering) in crate::route_order::shadowed(&keys) {
+        let (method, path, span) = routes[r];
+        let mut err = CompileError::new(
+            "bynk.http.unreachable_route",
+            span,
+            format!(
+                "route `{} {path}` can never be reached: every path it matches is answered first by another route",
+                method.as_str()
+            ),
+        )
+        .with_note(
+            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+        );
+        for c in covering {
+            err = err.with_label(
+                routes[c].2,
+                format!(
+                    "`{} {}` answers it first",
+                    routes[c].0.as_str(),
+                    routes[c].1
+                ),
+            );
+        }
+        errors.push(err);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_service_decls(
     typed: &mut checker::TypedCommons,
@@ -3395,6 +3446,8 @@ fn check_service_decls(
         }
     }
 
+    check_unreachable_routes(table, errors);
+
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
     // wherever it is written, not only on well-formed HTTP routes.
@@ -3431,6 +3484,12 @@ fn check_service_decls(
         if let Some(policy) = &service.limits {
             validate_limits_policy(service, policy, errors);
         }
+    }
+
+    // #3877: validate each service's `delivery { }` policy, and warn of a queue
+    // consumer with no dead-letter queue.
+    for service in table.services.values() {
+        crate::queue_delivery::validate_delivery(service, errors);
     }
 
     // #2858: validate each service's `json { }` policy, then refuse the one
@@ -3500,7 +3559,7 @@ fn check_service_decls(
             if !matches!(handler.kind, HandlerKind::Message) {
                 continue;
             }
-            validate_queue_handler(handler, name, errors);
+            validate_queue_handler(handler, name, table, errors);
             if let Some(prev) = consumer_first_span.get(name).copied() {
                 errors.push(
                     CompileError::new(
@@ -5470,8 +5529,9 @@ fn reserved_route_char(
 /// - Every `:name` segment binds to a handler parameter of the same name.
 /// - Every parameter is either a path parameter or named `body`, `headers` or
 ///   `query`.
-/// - Path parameter types are constructible from `String` (`String`, refined
-///   `String`, or opaque `String`).
+/// - Path parameter types are those of a typed `query` field, less `Option` and
+///   `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined
+///   or opaque type over one of those.
 /// - GET / DELETE handlers may not have a `body` parameter.
 /// - The handler return type must be `Effect[HttpResult[T]]`.
 fn validate_http_handler(
@@ -5651,20 +5711,21 @@ fn validate_http_handler(
                 ),
             );
         }
-        // Path params must be constructible from String.
-        if is_path && !is_string_constructible(&p.type_ref, types) {
+        // #3910: a path parameter reads as a typed `query` field does, minus `Option`
+        // and `List` (a segment is always present and single-valued).
+        if is_path && !is_query_leaf(&p.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.path_param_not_stringy",
                     p.type_ref.span(),
                     format!(
-                        "path parameter `{}` must have a type constructible from `String` (got `{}`)",
+                        "path parameter `{}` must be a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one of those (got `{}`)",
                         p.name.name,
                         ts_type_ref_display(&p.type_ref),
                     ),
                 )
                 .with_note(
-                    "use `String`, a refined `String`, or an opaque type whose base is `String`",
+                    "a path segment is one value, so `Option` and `List` are refused; an enum is read by variant name",
                 ),
             );
         }
@@ -7058,12 +7119,17 @@ fn validate_cron_handler(
 /// wire-deserialisable type), and the `Effect[QueueResult]` return — the verdict
 /// sum, where `Ack` acknowledges the message and `Retry(...)` has it redelivered. The service-only rule is
 /// enforced earlier, in the parser (`bynk.parse.handler_in_agent`).
-fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<CompileError>) {
+fn validate_queue_handler(
+    handler: &Handler,
+    name: &str,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
     if name.is_empty() {
         errors.push(CompileError::new(
             "bynk.queue.invalid_name",
             handler.span,
-            "`on queue` requires a non-empty queue name",
+            "`from queue` requires a non-empty queue name",
         ));
     } else if !crate::project_model::is_queue_name(name) {
         errors.push(
@@ -7077,18 +7143,50 @@ fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<Compil
             ),
         );
     }
-    // Exactly one parameter — the message. (Conventionally named `message`.)
-    if handler.params.len() != 1 {
+    // #3880: the delivery parameter is the `QueueDelivery` of `bynk.cloudflare`. A type of the
+    // same name that this context declares is the author's own, not the platform's, and is
+    // refused rather than taken for it, since later stages recognise the parameter by its name.
+    if table.types.contains_key("QueueDelivery")
+        && let Some(p) = handler
+            .params
+            .iter()
+            .find(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+    {
         errors.push(
             CompileError::new(
                 "bynk.queue.bad_params",
-                handler.span,
-                format!(
-                    "`on message` handlers take exactly one parameter (the message), got {}",
-                    handler.params.len(),
-                ),
+                p.type_ref.span(),
+                "this context declares its own `QueueDelivery`, which is not the delivery metadata of `bynk.cloudflare`",
             )
-            .with_note("a queue consumer processes one message per invocation"),
+            .with_note(
+                "rename your type, or `consumes bynk.cloudflare { QueueDelivery }` and use that one; the delivery parameter of an `on message` handler is the platform's",
+            ),
+        );
+    }
+    // The message, and optionally the delivery metadata (#3880): at most two
+    // parameters, the second being exactly one `QueueDelivery`, in either order.
+    let deliveries =
+        bynk_syntax::queue::delivery_positions(handler.params.iter().map(|p| &p.type_ref));
+    let messages = handler.params.len() - deliveries.len();
+    if messages != 1 || deliveries.len() > 1 {
+        let why = if deliveries.len() > 1 {
+            format!(
+                "`on message` handlers take one `QueueDelivery` at most, got {}",
+                deliveries.len()
+            )
+        } else if messages == 0 {
+            "`on message` handlers take the message as a parameter, and a `QueueDelivery` is not a message"
+                .to_string()
+        } else {
+            format!(
+                "`on message` handlers take the message and optionally a `QueueDelivery`, got {} parameters besides it",
+                messages - 1
+            )
+        };
+        errors.push(
+            CompileError::new("bynk.queue.bad_params", handler.span, why).with_note(
+                "a queue consumer processes one message per invocation; add `delivery: QueueDelivery` (`consumes bynk.cloudflare { QueueDelivery }`) to read its attempt count and send time",
+            ),
         );
     }
     // v0.44: the return type must be `Effect[QueueResult]` (the verdict sum).

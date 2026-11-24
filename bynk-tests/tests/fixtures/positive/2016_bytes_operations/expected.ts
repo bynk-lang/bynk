@@ -2,7 +2,7 @@
 // commons frames
 
 import type { Option } from "./__bynk_runtime/result.js";
-import { __bynkBytesConcat, __bynkBytesCompare, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url } from "./__bynk_runtime/bytes.js";
+import { __bynkBytesConcat, __bynkBytesToHex, __bynkBytesFromHex, __bynkBytesToBase64Url, __bynkBytesFromBase64Url } from "./__bynk_runtime/bytes.js";
 
 export function frame(header: globalThis.Uint8Array, payload: globalThis.Uint8Array): globalThis.Uint8Array {
   return __bynkBytesConcat(header, payload);
@@ -10,10 +10,6 @@ export function frame(header: globalThis.Uint8Array, payload: globalThis.Uint8Ar
 
 export function tag(b: globalThis.Uint8Array): globalThis.Uint8Array {
   return b.slice(globalThis.Math.max(0, 0), globalThis.Math.max(0, 4));
-}
-
-export function order(a: globalThis.Uint8Array, b: globalThis.Uint8Array): number {
-  return __bynkBytesCompare(a, b);
 }
 
 export function hex(b: globalThis.Uint8Array): string {

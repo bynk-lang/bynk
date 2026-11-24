@@ -1,0 +1,7 @@
+commons demo.order
+
+type Pair = { a: Int, b: Int }
+
+fn cmp(x: Pair, y: Pair) -> Ordering {
+  x.compare(y)
+}

@@ -20,7 +20,7 @@ use super::super::lower::{
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{key_is_plain, take};
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
-use super::super::{Expr, ExprKind, Ident, TypeRef};
+use super::super::{Expr, ExprKind, Ident, TypeBody, TypeDecl, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
 use super::query::stream_generator;
@@ -65,6 +65,28 @@ pub(in crate::emitter) fn lower_type_static_call(
         )
     {
         let mut all: Vec<bynk_ts::TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+        // #4213: on `workers` a consumed context's type is another Worker's and is
+        // named in type position only, so this module builds its values itself:
+        // a sum variant as a literal, and `.of` through its own copy of the guards.
+        if cx.is_consumed_context_type(&id.name) {
+            match cx.commons().callees.get(&e.id) {
+                Some(Callee::Ctor { sum, tag }) => {
+                    match crate::emitter::consumed_variant_literal(e, &sum.name.name, tag, all, cx)
+                    {
+                        Ok(built) => return Some(built),
+                        Err(args) => all = args,
+                    }
+                }
+                Some(Callee::Refine(decl)) if all.len() == 1 => {
+                    let decl = decl.clone();
+                    if let Some(built) = lower_consumed_refine(&decl, all.remove(0), cx) {
+                        return Some(built);
+                    }
+                    unreachable!("a refined type's `of` has a body");
+                }
+                _ => {}
+            }
+        }
         // #2719: a static method in the needs-context set takes the context last.
         let mut needs_exec = false;
         if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
@@ -90,6 +112,45 @@ pub(in crate::emitter) fn lower_type_static_call(
         });
     }
     None
+}
+
+/// #4213: `T.of(x)` for a refined type a consumed context owns: an immediately
+/// invoked copy of the owner's `of`, so the guards run in this Worker and no value
+/// import crosses to the owner's. `None` for a type that is not refined or opaque.
+fn lower_consumed_refine(
+    decl: &TypeDecl,
+    arg: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> Option<bynk_ts::TsExpr> {
+    let (base, refinement, is_opaque) = match &decl.body {
+        TypeBody::Refined {
+            base, refinement, ..
+        } => (*base, refinement.as_ref(), false),
+        TypeBody::Opaque {
+            base, refinement, ..
+        } => (*base, refinement.as_ref(), true),
+        TypeBody::Record(_) | TypeBody::Sum(_) => return None,
+    };
+    // The guards report the type as its owner declares it, so a violation reads
+    // the same on every target; the brand cast keeps this module's own name.
+    let declared = cx
+        .consumed_declared_name(&decl.name.name)
+        .map(str::to_string);
+    let mut owner_view = decl.clone();
+    if let Some(declared) = declared {
+        owner_view.name.name = declared;
+    }
+    let body = crate::emitter::refined_of_body(
+        &owner_view,
+        &decl.name.name,
+        crate::emitter::shape_parts(base, refinement, is_opaque),
+        cx.runtime_use(),
+    );
+    let value_ty = bynk_ts::TsType::named(super::super::ts_types::ts_base(base));
+    Some(call(
+        crate::ts_build::block_arrow(vec![TsParam::new("value", Some(value_ty))], false, body),
+        vec![arg],
+    ))
 }
 
 /// The `[+-]?digits` grammar `Int.parse` accepts (#1657), a fixed literal.

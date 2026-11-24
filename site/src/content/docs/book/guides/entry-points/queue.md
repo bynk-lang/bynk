@@ -43,8 +43,75 @@ service outbox from queue("outbound-email") {
 }
 ```
 
-A message that keeps retrying eventually hits the queue's dead-letter policy
-(configured outside Bynk).
+A message that keeps retrying eventually reaches the retry limit (3 redeliveries by
+default). Cloudflare then deletes it, unless you keep it, which is the next section.
+
+## Keep failed messages
+
+Name a dead-letter queue in a `delivery { }` section, and a message that reaches
+the retry limit is written there instead of deleted. `bynk deploy` creates the
+queue, so there is nothing to set up in the dashboard, which a deploy would
+overwrite anyway:
+
+```bynk,fragment
+service outbox from queue("outbound-email") {
+  delivery {
+    retries: 5,
+    retryDelay: 30.seconds,
+    deadLetter: "outbound-email-dlq",
+  }
+
+  on message(message: EmailJob) -> Effect[QueueResult] {
+    Retry("smtp unavailable")
+  }
+}
+```
+
+The dead-letter queue is an ordinary queue, so a consumer of its own can inspect or
+replay what failed. It takes the same message type:
+
+```bynk,fragment
+service review from queue("outbound-email-dlq") {
+  delivery {
+    deadLetter: None,
+  }
+
+  on message(message: EmailJob) -> Effect[QueueResult] given Logger {
+    let _ <- Logger.warn("gave up on an email to \(message.to)")
+    Ack
+  }
+}
+```
+
+A consumer with no `deadLetter` draws a warning, because the platform default
+deletes the message. Write `deadLetter: None` when that is what you want. See the
+[delivery policy](/reference/queue/#delivery-policy) for every key.
+
+## Handle a redelivered message
+
+Delivery is at least once, so a handler can see a message again, after a `Retry` or in
+rare cases without one. Take the delivery metadata as a second parameter to back off by
+attempt or to notice a message that keeps failing:
+
+```bynk,fragment
+consumes bynk.cloudflare { QueueDelivery }
+
+service outbox from queue("outbound-email") {
+  on message(message: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] given Logger {
+    if delivery.attempts > 3 {
+      let _ <- Logger.warn("giving up on \(message.id) after \(delivery.attempts) attempts")
+      Ack
+    } else {
+      Retry("attempt \(delivery.attempts)")
+    }
+  }
+}
+```
+
+`attempts` counts the times this consumer has been given the message, starting at 1, and
+`sentAt` is when it was sent. Neither deduplicates: to do that, put a key in the message
+when you send it, and claim it with `Idempotency.claim` before doing the work, so a
+second delivery with the same key does nothing.
 
 ## Use a capability
 

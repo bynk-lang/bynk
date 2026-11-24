@@ -5,7 +5,7 @@ context sessions
 // binary values, and `listPage` a page at a time.
 
 consumes bynk { Clock }
-consumes bynk.cloudflare { Kv, KvPut, KvExpiration, KvGet, KvList, KvListing }
+consumes bynk.cloudflare { Kv, KvPut, KvExpiration, KvGet, KvList, KvListing, KvTtl }
 
 capability Blobs = Kv
 
@@ -21,8 +21,14 @@ service store {
 }
 
 service expireSoon {
-	on call(id: String) -> Effect[()] by Caller given Kv {
-		Kv.putWith(id, "body", KvPut { expiration: After(10.seconds), metadata: Map.empty() })
+	on call(id: String, seconds: Int) -> Effect[Bool] by Caller given Kv {
+		match KvTtl.of(Duration.millis(seconds * 1000)) {
+			Ok(ttl) => {
+				let _ <- Kv.putWith(id, "body", KvPut { expiration: After(ttl), metadata: Map.empty() })
+				Effect.pure(true)
+			}
+			Err(_) => Effect.pure(false)
+		}
 	}
 }
 
@@ -35,7 +41,7 @@ service expireAt {
 
 service ttlListed {
 	on call() -> Effect[Bool] by Caller given Kv {
-		let _ <- Kv.putTtl("t:1", "v", 120)
+		let _ <- Kv.putTtl("t:1", "v", 2.minutes)
 		let page <- Kv.listPage(KvList { prefix: Some("t:"), cursor: None, limit: None })
 		Effect.pure(page.keys.length() == 1 && page.keys.all((k) => k.expiration.isSome()))
 	}

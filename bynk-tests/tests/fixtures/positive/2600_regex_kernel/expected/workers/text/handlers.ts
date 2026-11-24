@@ -2,13 +2,14 @@
 // context text
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 
 export type Sku = string & { readonly __brand: "text.Sku" };
 
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$", "u").test(value))) {
       return Err({ field: "Sku", message: "must match /[A-Z]{3}-[0-9]{4}/", value });
     }
     return Ok(value as Sku);
@@ -16,7 +17,7 @@ export const Sku = {
 };
 
 export function isSku(s: string): boolean {
-  return new globalThis.RegExp("(?<![\\s\\S])(?:[A-Z]{3}-[0-9]{4})(?![\\s\\S])", "").test(s);
+  return new globalThis.RegExp("(?<![\\s\\S])(?:[A-Z]{3}-[0-9]{4})(?![\\s\\S])", "u").test(s);
 }
 
 export function skuAgrees(s: string): boolean {
@@ -24,19 +25,19 @@ export function skuAgrees(s: string): boolean {
 }
 
 export function version(s: string): Option<readonly Option<string>[]> {
-  return ((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(((__m: globalThis.RegExpMatchArray): Option<string>[] => [...__m].map((__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g)))(__m)))(new globalThis.RegExp("v(\\d+)\\.(\\d+)(?:\\.(\\d+))?", "").exec(s));
+  return ((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(((__m: globalThis.RegExpMatchArray): Option<string>[] => [...__m].map((__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g)))(__m)))(new globalThis.RegExp("v(\\d+)\\.(\\d+)(?:\\.(\\d+))?", "u").exec(s));
 }
 
 export function numbers(s: string): readonly string[] {
-  return (([...s.matchAll(new globalThis.RegExp("\\d+", "g"))].map((__m: globalThis.RegExpMatchArray): Option<string>[] => [...__m].map((__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g))) as readonly (readonly Option<string>[])[])).map((__x: readonly Option<string>[]) => ((m: readonly Option<string>[]) => ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<string>) => __o.tag === "Some" ? __f(__o.value) : None)(((__xs: readonly Option<string>[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as Option<string>) : None)(m, 0), (g: Option<string>) => g), "?"))(__x));
+  return (([...s.matchAll(new globalThis.RegExp("\\d+", "gu"))].map((__m: globalThis.RegExpMatchArray): Option<string>[] => [...__m].map((__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g))) as readonly (readonly Option<string>[])[])).map((__x: readonly Option<string>[]) => ((m: readonly Option<string>[]) => ((__o: Option<string>, __d: string) => __o.tag === "Some" ? __o.value : __d)(((__o: Option<Option<string>>, __f: (x: Option<string>) => Option<string>) => __o.tag === "Some" ? __f(__o.value) : None)(((__xs: readonly Option<string>[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as Option<string>) : None)(m, 0), (g: Option<string>) => g), "?"))(__x));
 }
 
 export function tidy(s: string): string {
-  return s.replace(new globalThis.RegExp("\\s+", "g"), " ");
+  return s.replace(new globalThis.RegExp("\\s+", "gu"), " ");
 }
 
 export function swapped(s: string): string {
-  return s.replace(new globalThis.RegExp("(?<first>\\w+)@(\\w+)", "g"), "$2 at $<first>, cost $$1");
+  return s.replace(new globalThis.RegExp("(?<first>\\w+)@(\\w+)", "gu"), "$2 at $<first>, cost $$1");
 }
 
 export function fields(s: string): readonly string[] {
@@ -62,11 +63,11 @@ export function fields(s: string): readonly string[] {
     }
     __out.push(__s.slice(__p));
     return __out;
-  })(s, new globalThis.RegExp("\\s*(,|;)\\s*", "y"));
+  })(s, new globalThis.RegExp("\\s*(,|;)\\s*", "yu"));
 }
 
 export const clean = {
   async call(input: string, deps: {}): globalThis.Promise<string> {
-    return input.trim().replace(new globalThis.RegExp("[^a-z0-9]+", "g"), "-");
+    return input.trim().replace(new globalThis.RegExp("[^a-z0-9]+", "gu"), "-");
   },
 };

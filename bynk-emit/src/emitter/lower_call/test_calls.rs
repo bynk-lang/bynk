@@ -274,7 +274,7 @@ pub(in crate::emitter) fn lower_system_schedule_call(
             Some(HandlerAddress::Schedule {
                 expr: Some(expr), ..
             }) => cx.system_schedule_driver(&id.name, expr),
-            Some(HandlerAddress::Message) => cx.system_message_driver(&id.name),
+            Some(HandlerAddress::Message { .. }) => cx.system_message_driver(&id.name),
             _ => None,
         };
         if let Some(driver) = driver {
@@ -748,11 +748,26 @@ pub(in crate::emitter) fn lower_test_service_call(
             let built = websocket_lifecycle_call(shape, &svc.name, args, e.span, &deps, cx, pre);
             return settle(built);
         }
-        if matches!(address, Some(HandlerAddress::Message)) && facts.has_message {
+        if matches!(address, Some(HandlerAddress::Message { .. })) && facts.has_message {
             // A `from queue` service binds exactly one queue and declares one `on message`
             // handler, so the position index is 0.
             let key = crate::emitter::queue_handler_method_name(&svc.name, 0);
             let mut lowered = lower_args(args, cx, pre);
+            // #3880: a handler that declares a `QueueDelivery` is given the address's
+            // second argument, or the default delivery (the first attempt, sent at the
+            // epoch, which is where each case's harness clock starts), in its position.
+            if let Some(HandlerAddress::Message { delivery: Some(at) }) = &address
+                && !lowered.is_empty()
+            {
+                let given = (lowered.len() > 1).then(|| lowered.remove(1));
+                let delivery = given.unwrap_or_else(|| {
+                    TsExpr::object(vec![
+                        ("attempts".to_string(), num_lit("1")),
+                        ("sentAt".to_string(), num_lit("0")),
+                    ])
+                });
+                lowered.insert((*at).min(lowered.len()), delivery);
+            }
             if plain && args.first().is_some_and(|a| is_inbound_email(a, cx)) && !lowered.is_empty()
             {
                 return settle(inbound_email_call(&svc.name, &key, lowered.swap_remove(0)));

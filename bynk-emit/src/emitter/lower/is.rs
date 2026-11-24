@@ -149,7 +149,21 @@ pub(in crate::emitter) fn gather_is_bindings_for_emit(
     // #1654: which `is` tests `e` proves is the shared rule the resolver and
     // the checker scope bindings by (`bynk_check::narrowing`).
     for test in bynk_check::narrowing::matched_is_tests(e, when_true) {
-        emit_is_test_bindings(test, cx, out, found);
+        emit_is_test_bindings(test, cx, out, found, false);
+    }
+}
+
+/// [`gather_is_bindings_for_emit`] for the statements after a statement-form `expect` (#3981):
+/// the declarations land in the block that already holds the subject, so a refined subject is
+/// re-bound under a fresh name (as a re-`let` is) rather than redeclared.
+pub(in crate::emitter) fn gather_is_bindings_for_statement(
+    e: &Expr,
+    cx: &mut LowerCtx,
+    out: &mut Vec<bynk_ts::TsStmt>,
+    found: &mut bool,
+) {
+    for test in bynk_check::narrowing::matched_is_tests(e, true) {
+        emit_is_test_bindings(test, cx, out, found, true);
     }
 }
 
@@ -161,6 +175,7 @@ fn emit_is_test_bindings(
     cx: &mut LowerCtx,
     out: &mut Vec<bynk_ts::TsStmt>,
     found: &mut bool,
+    in_subject_block: bool,
 ) {
     let tys = cx.ty_render();
     let ExprKind::Is { value, pattern } = &e.kind else {
@@ -189,6 +204,12 @@ fn emit_is_test_bindings(
                     expr: Box::new(recv.node().clone()),
                     ty: bynk_ts::TsType::named(variant.name.clone()),
                 };
+                if in_subject_block {
+                    // #3981: the subject's own `const` is in this block; re-bind under a fresh name.
+                    let local = cx.bind_local_name(&id.name);
+                    out.push(const_(&local, cast));
+                    return;
+                }
                 out.push(const_(ts_ident(&id.name), cast));
                 cx.declare_binder(&id.name);
                 return;
@@ -535,13 +556,18 @@ pub(super) fn refined_check_as_bool(
             let (cond, _) = bynk_ts::pred_condition_and_message_over(&p.kind, &recv, Some(base));
             // A range is one bracketed term; every other predicate stands bare.
             terms.push(match &p.kind {
-                PredKind::InRange(..) | PredKind::InRangeF(..) if base != BaseType::Decimal => {
+                PredKind::InRange(..) | PredKind::InRangeF(..) | PredKind::InRangeDur(..)
+                    if base != BaseType::Decimal =>
+                {
                     TsExpr::Paren(Box::new(cond))
                 }
                 PredKind::Matches(..)
                 | PredKind::InRange(..)
                 | PredKind::InRangeF(..)
                 | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
                 | PredKind::MinLength(..)
                 | PredKind::MaxLength(..)
                 | PredKind::Length(..)

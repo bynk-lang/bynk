@@ -20,8 +20,14 @@ export function __bynkFault(what: string, e: unknown): Error {
 export async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec) => Promise<void>): Promise<T> {
   const exec = __bynkJobExec();
   const log = globalThis.console.error;
-  // The entry logs an `Err` run; the case reads that `Err` as the result.
-  globalThis.console.error = (...args: unknown[]): void => { if (args[0] !== `cron ${cron} failed`) log(...args); };
+  // #3872: the entry reports an `Err` run (a structured record, and a fault to the platform). The double records
+  // that report without counting it (the list is this case's: reset per call): the case reads the `Err` as the result, so counting would report it twice.
+  const cronReports: unknown[] = ((globalThis as unknown as { __bynkCronReports?: unknown[] }).__bynkCronReports = []);
+  globalThis.console.error = (...args: unknown[]): void => {
+    const record = args[0] as { message?: unknown } | null;
+    if (typeof record === "object" && record !== null && record.message === "a cron run returned Err") cronReports.push(record);
+    else log(...args);
+  };
   try {
     await __bynkJobSettle(exec, run(exec));
   } catch (e) {
@@ -34,12 +40,12 @@ export async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec
 }
 export type __BynkQueueMessage = { readonly id: string; readonly timestamp: Date; readonly attempts: number; readonly body: unknown; ack(): void; retry(): void };
 export type __BynkQueueBatch = { readonly queue: string; readonly messages: ReadonlyArray<__BynkQueueMessage>; ackAll(): void; retryAll(): void };
-export async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
+export async function __bynkDeliver<T>(queue: string, body: unknown, delivery: { attempts: number; sentAt: number } | undefined, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
   const wire: unknown = globalThis.JSON.parse(globalThis.JSON.stringify(body ?? null));
   let verdict: { tag: "Ack" } | { tag: "Retry"; reason: string } | undefined;
   let reason = "";
   const message: __BynkQueueMessage = {
-    id: "bynk-test-message-1", timestamp: new globalThis.Date(0), attempts: 1, body: wire,
+    id: "bynk-test-message-1", timestamp: new globalThis.Date(delivery?.sentAt ?? 0), attempts: delivery?.attempts ?? 1, body: wire,
     ack(): void { verdict ??= { tag: "Ack" }; },
     retry(): void { verdict ??= { tag: "Retry", reason }; },
   };

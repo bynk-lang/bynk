@@ -1,0 +1,6 @@
+[project]
+name = "3872-cron-failed-run"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

@@ -1,0 +1,3 @@
+commons demo {
+  type Band = Int where AtLeast(10) && AtMost(5)
+}

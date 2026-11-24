@@ -537,8 +537,8 @@ groups it would splice in).
   cannot prove unambiguous, and no ambiguity it finds (`bynk.types.catastrophic_regex`,
   `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
   here).
-- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
-  classes work on UTF-16 code units. A pattern may open with one inline-flag
+- Semantics are JS `RegExp` in Unicode mode (`u`), as for `Matches` (#3950): `.`
+  and classes work on code points, and `\w`, `\d` and `\b` stay ASCII. A pattern may open with one inline-flag
   group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
   flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
   runs under those flags: under `s`, `.` matches every code unit, and under
@@ -861,7 +861,7 @@ an `Int` is rejected (`bynk.types.predicate_base_mismatch`) — and MUST be
 internally consistent: an `InRange` MUST NOT be inverted
 (`bynk.types.inverted_range`), a length MUST NOT be negative
 (`bynk.types.negative_length`), a `Matches` regex MUST be valid
-(`bynk.types.invalid_regex`) and MUST be safe to backtrack (below), and the
+(`bynk.types.invalid_regex`; in Unicode mode, with the same optional leading `(?i)`/`(?s)` group as the `String` regex methods and no `(?m)`) and MUST be safe to backtrack (below), and the
 predicates together MUST admit at least one value (`bynk.types.empty_refinement`
 — on `Float`, `Positive` excludes the lower endpoint `0.0`, so
 `InRange(-1.0, 0.0) && Positive` is empty).
@@ -902,11 +902,15 @@ lookarounds as matching anything (analysing each lookaround body as a pattern of
 its own), and a backreference as an optional copy of its group. So it can reject
 a pattern that is in fact safe, never accept one that is not.
 
-`InRange` bounds MUST match the numeric base (v0.21): integer bounds on
-`Int`, float bounds on `Float`. A bound of the other numeric type, or a
-mixed pair, is `bynk.types.no_numeric_coercion`.
+`InRange`, `AtLeast` and `AtMost` bounds MUST match the numeric base (v0.21,
+#3948): integer bounds on `Int`, float bounds on `Float`, decimal bounds on
+`Decimal`, `Duration` literals on `Duration`. A bound of the other type, or a
+mixed pair, is `bynk.types.no_numeric_coercion`. `NonNegative`, `Positive`,
+`InRange`, `AtLeast` and `AtMost` all apply to a `Duration`, compared in
+milliseconds; no predicate applies to an `Instant` or `Bytes`.
 
-A **literal** written where a refined type is expected is admitted at compile
+A **literal** — an integer, float, decimal, string or `Duration` literal —
+written where a refined type is expected is admitted at compile
 time ([§6.4](/reference/spec/type-system/#64-admission--construction)) in these positions:
 return (block tail), a `let` with a type annotation, an `Ok`/`Some`/`Err`
 payload, and a refined-typed call argument — including a cross-context call's
@@ -1320,6 +1324,8 @@ is not a sibling: `let n <- F(n + 1)` reads the earlier `n`. The bound names are
 scope after the closing brace, and re-binding an earlier name follows §5.1. A block
 with one binding is `bynk.par.single_binding`, a non-failing warning (ADR 0117). The
 block has no value; it is a statement.
+
+The `…With` forms (`parForEachWith`, `parTraverseWith`, `parTraverseAllWith`, `parTraverseTryWith`; #3968) take `(f, options: ParOptions)` where `ParOptions = { limit: Int }` is exported by the `bynk` adapter (`consumes bynk { ParOptions }`); the argument must be that record, not one of the same name declared elsewhere. A statically known `limit` outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`. The closure `f` is checked as for the plain form, and the rule below applies to it.
 
 The same rule covers the closure passed to `parTraverse`, `parTraverseAll` or
 `parTraverseTry` (on a `List` or a `Query`; #3298): the closure runs once per element,
@@ -1856,7 +1862,9 @@ unique, MUST NOT use the reserved `/_bynk/` prefix
 (`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
 MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
 route form (`bynk.http.reserved_route_syntax`),
-and each `:name` segment MUST bind to a string-constructible parameter
+and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
+`Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
+opaque type over one of those
 (`bynk.http.unbound_path_param`, `bynk.http.path_param_not_stringy`,
 `bynk.http.extra_param`); `GET` and `DELETE` MUST NOT take a `body`
 (`bynk.http.body_on_get_or_delete`). A parameter named `query` that no `:query`
@@ -1886,8 +1894,17 @@ schedule is (`bynk.cron.invalid_schedule` otherwise), and duplicate detection an
 trigger table read it. A cron handler MUST take at most two parameters, at most one `Instant` (the
 scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
-parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
-codes).
+parameter (plus, #3880, at most one `QueueDelivery` of `bynk.cloudflare`, in either order, which receives
+the platform's attempt count and send time), a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
+codes). A `from queue` service MAY carry one `delivery { }` section (#3877), whose keys are the
+closed set `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours),
+`deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole
+seconds, 0 to 60) and `concurrency` (1 to 250), each written once, with a literal or a constant
+of its type (`bynk.queue.delivery_bad_option`); on any other service it is
+`bynk.queue.delivery_not_queue`. A consumer with no `deadLetter` key warns
+(`bynk.queue.no_dead_letter`; `deadLetter: None` silences it). The dead-letter queue MUST NOT be
+the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
+receives from (`bynk.queue.dead_letter_type_mismatch`).
 
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is
@@ -2525,14 +2542,18 @@ never a context (`bynk.adapter.consumes_context`).
 or with conflicting visibility, and an exported capability MUST have a provider
 (the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
 compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
-`bynk.boundary.structural_mismatch`); outside its owning context, a context-owned
-type MUST NOT be built through its constructors (`.of`, `.unsafe`, a variant) and
-an opaque export MUST NOT be built with record syntax or inspected
-(`bynk.context.external_construction`, `bynk.context.opaque_inspection`), nor
-decoded from JSON (`bynk.context.external_decode`); a
-field read on a value of an opaque export is an inspection, however the value
-was bound. A transparent record's fields are shared, so a consumer MAY build
-one with record syntax. A consumer MAY read the fields of a value whose type the
+`bynk.boundary.structural_mismatch`); outside its owning context, an
+`exports opaque` type, and a type declared `opaque` however it is exported,
+MUST NOT be built through its constructors (`.of`, a
+variant) or with record syntax, inspected
+(`bynk.context.external_construction`, `bynk.context.opaque_inspection`) or
+decoded from JSON (`bynk.context.external_decode`), and `.unsafe` MUST NOT be
+called on any type from outside; a field read on a value of an opaque export is
+an inspection, however the value was bound. A type a context or an **adapter**
+exports `transparent` is constructible by a consumer in every ordinary form —
+`.of` on a refined type, a variant of a sum, record syntax — and under the
+Workers target the consumer builds a context's own with its own copy of the
+guards. A consumer MAY read the fields of a value whose type the
 providing context declares but does not export; the read is checked against
 that declaration ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries)). These rules hold in every body — functions, service and agent handlers,
 and provider operations.

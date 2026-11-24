@@ -281,6 +281,13 @@ identifier as for `<-`, and the names are bound only after every expression is
 lowered. The join is imported only by a module that has a `par` block, so every
 other module emits byte-for-byte as before. The `parTraverse` family imports it too, in a module with no `par` block.
 
+The `scheduled` entry (#3872) always takes the execution context and runs each cron
+handler through `__bynkCronRun`: an `Err` is one structured `console.error` record
+(`{message, level, fields: {site, type, variant}}`, never the payload) and a fault
+reported through `__bynkReportFault`, so Cloudflare's Cron Past Events shows the run
+as failed; a throw is logged with its stack, reported and rethrown. An unmatched
+`event.cron` logs one warning.
+
 A **detached effect** (`e.detach()`) lowers on the Workers target to
 `__bynkDetach(<effect>, deps.__exec, <site>)`: the effect's `Promise` is handed to the
 execution context's `waitUntil` rather than awaited, so it settles *after* the
@@ -411,8 +418,18 @@ validation), `compose.ts` (the wiring), and a `wrangler.toml`. A handler's
 status and body of the `Response`; records crossing the boundary are serialised
 and deserialised through the generated `__serialise_*` / `__deserialise_*` helpers.
 
+The router MUST try the routes of a method in a defined order: compared segment by
+segment, left to right, and at the first segment where two routes differ a literal
+segment is tried before a `:name` one, independently of declaration order and of
+parameter names. Empty path segments are insignificant, and every segment is compared
+percent-decoded; a path whose percent-encoding does not decode is a `400`
+(`MalformedPath`). A route that every other route of its method answers first is a
+compile error (`bynk.http.unreachable_route`), per context and across the members of a
+worker group.
+
 The router MUST answer the method contract derived from the declared routes. For
-each path, the **allowed-method set** is the union of the methods declared on it,
+each path, the **allowed-method set** is the union of the methods declared on it (and,
+where routes overlap, on every route that matches the request path),
 plus `HEAD` when `GET` is declared, plus `OPTIONS`. A `GET` dispatch block also
 accepts `HEAD`: the `GET` handler runs and its `Response` is returned with the
 body stripped (`headResponse` — same status and headers, empty body, the source
@@ -539,6 +556,17 @@ reads no `X-Bynk-Caller` header. The name is proved, not claimed: the request's
 signature ([§7.3.4d](#734d-the-request-signature)) is checked under the key the
 callee holds for the edge from that caller, so a request whose caller is absent,
 or holds no key there, never reaches the dispatch.
+
+**The `401` challenge** (#3914). RFC 9110 §15.5.2 requires a `401` to carry a
+`WWW-Authenticate` challenge. The entry computes each route's challenges at compile time
+from its `by` actor(s) (one per sum member, in order) and the context's name as `realm`, and
+wraps the route's response in `applyChallenge(response, request, challenges)`, which appends
+one header line per challenge to a `401` that carries none: `Bearer realm="…"` for `Bearer`
+and `Oidc` (with `error="invalid_token"` when the request presented a bearer token),
+`Bynk-Signature realm="…", header="…"` for `Signature`, `Bynk-Cookie realm="…"` for
+`SignedCookie`, `Bynk realm="…"` otherwise. It wraps the seam's `401`, a handler's own
+`Unauthorized` and a `WebSocket` upgrade's refusal alike, inside `applyCors`, which adds
+`WWW-Authenticate` to `Access-Control-Expose-Headers` when the response has one.
 
 ### §7.3.4b The cross-context boundary codec (v0.176)
 

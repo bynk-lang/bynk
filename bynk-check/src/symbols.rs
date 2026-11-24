@@ -2336,6 +2336,71 @@ pub fn discover_event_subscribers(
 /// queue names (`from queue("name")`), sorted and deduped — the two `wrangler.toml`
 /// binding lists a context's own compose entry needs. `v0.44`: one queue binding
 /// per service, on the `from queue(...)` header.
+/// #3877: a queue consumer's `delivery { }` settings, as `[[queues.consumers]]`
+/// carries them. A key the author left out is `None` and is not written, so
+/// Cloudflare's default stands (`max_batch_size` stays 10 when unset).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct QueueDelivery {
+    /// The consumer's queue, as written (not environment-qualified).
+    pub queue: String,
+    pub retries: Option<i64>,
+    pub retry_delay_secs: Option<i64>,
+    /// The dead-letter queue, as written; `None` for `deadLetter: None` too.
+    pub dead_letter: Option<String>,
+    pub batch_size: Option<i64>,
+    pub batch_wait_secs: Option<i64>,
+    pub concurrency: Option<i64>,
+}
+
+/// #3877: the `delivery { }` settings of every queue consumer in `table`, sorted
+/// by queue name (the services are a `HashMap`, so unsorted input would make
+/// `wrangler.toml` differ between runs). A consumer with no section, or an
+/// empty one, has no entry.
+pub fn queue_deliveries(table: &UnitTable) -> Vec<QueueDelivery> {
+    let mut out: Vec<QueueDelivery> = table
+        .services
+        .values()
+        .filter_map(|service| {
+            let ServiceProtocol::Queue { name } = &service.protocol else {
+                return None;
+            };
+            let policy = service.delivery.as_ref()?;
+            let delivery = QueueDelivery {
+                queue: name.clone(),
+                retries: policy.retries(),
+                retry_delay_secs: policy.retry_delay_secs(),
+                dead_letter: match policy.dead_letter() {
+                    Some(bynk_syntax::ast::DeadLetter::Queue(q)) => Some(q.to_string()),
+                    Some(bynk_syntax::ast::DeadLetter::Deleted) | None => None,
+                },
+                batch_size: policy.batch_size(),
+                batch_wait_secs: policy.batch_wait_secs(),
+                concurrency: policy.concurrency(),
+            };
+            let blank = QueueDelivery {
+                queue: name.clone(),
+                ..QueueDelivery::default()
+            };
+            (delivery != blank).then_some(delivery)
+        })
+        .collect();
+    out.sort_by(|a, b| a.queue.cmp(&b.queue));
+    out
+}
+
+/// #3872: the variant names of the sum type `name` declared in `table`, in
+/// declaration order; empty when `name` is not a sum declared here (a record, a
+/// base type, or a type of another unit). A cron run's failure record may name
+/// the variant of a sum error and nothing of any other error.
+pub fn sum_variant_names(table: &UnitTable, name: &str) -> Vec<String> {
+    match table.types.get(name).map(|t| &t.body) {
+        Some(bynk_syntax::ast::TypeBody::Sum(sum)) => {
+            sum.variants.iter().map(|v| v.name.name.clone()).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 pub fn cron_and_queue_triggers(table: &UnitTable) -> (Vec<String>, Vec<String>) {
     let mut crons: Vec<String> = Vec::new();
     let mut queues: Vec<String> = Vec::new();
@@ -2871,6 +2936,34 @@ pub fn combined_types_for(
         }
     }
     out
+}
+
+/// The types a context's Worker entry resolves a request's types against (#3910): its own and
+/// those of the commons it `uses` ([`combined_types_for`]), and each type it takes from a context
+/// it consumes (`consumed.1`, the names; `consumed.0`, the contexts each unit consumes), which a
+/// path parameter of that type is decoded by.
+pub fn entry_types_for(
+    unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    consumed: (
+        &HashMap<String, Vec<String>>,
+        &std::collections::HashSet<String>,
+    ),
+) -> HashMap<String, Arc<TypeDecl>> {
+    let (unit_consumes, consumed_types) = consumed;
+    let mut types = combined_types_for(unit, unit_tables, unit_uses);
+    for dep in unit_consumes.get(unit).into_iter().flatten() {
+        let Some(table) = unit_tables.get(dep) else {
+            continue;
+        };
+        for (name, decl) in &table.types {
+            if consumed_types.contains(name) {
+                types.entry(name.clone()).or_insert_with(|| decl.clone());
+            }
+        }
+    }
+    types
 }
 
 /// P6.18: a `uses`-imported type's own combined visible types (one level,

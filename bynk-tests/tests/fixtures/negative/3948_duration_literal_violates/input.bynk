@@ -1,0 +1,5 @@
+commons demo {
+  type Ttl = Duration where AtLeast(60.seconds)
+
+  const Short: Ttl = 30.seconds
+}

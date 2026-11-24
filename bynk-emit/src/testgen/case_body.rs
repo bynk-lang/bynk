@@ -67,6 +67,9 @@ pub fn lower_test_case_stmts(
     rel_path: &str,
     runtime_use: &RuntimeUse,
     report_value: bool,
+    // #3981: a statement-form `expect … is P(x)` keeps `x` bound after it (a case body; a
+    // `property` body binds nothing across claims).
+    expect_is_bindings: bool,
 ) -> (Vec<bynk_ts::TsStmt>, Option<bynk_syntax::span::Span>) {
     let mut sink = StatementSink::new();
     {
@@ -91,6 +94,7 @@ pub fn lower_test_case_stmts(
         );
         cx.local_agents = test_agents;
         cx.harness_bound = harness_bound;
+        cx.expect_is_bindings = expect_is_bindings;
         for stmt in &block.statements {
             sink.statement(stmt, &mut cx);
         }

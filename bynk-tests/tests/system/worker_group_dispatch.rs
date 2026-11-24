@@ -267,7 +267,7 @@ for (const [name, method, body] of [["post", "POST", "[1]"], ["get", "GET", unde
 }
 await show("event-unsigned", new Request(u("/_bynk/event/nothing"), { method: "POST", body: "{}" }));
 const logs = [];
-console.error = (...args) => { logs.push(args.map(String).join(" ")); };
+console.error = (...args) => { logs.push(args.map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a))).join(" ")); };
 const observe = async (label, run) => {
   logs.length = 0;
   const extra = await run();
@@ -477,15 +477,15 @@ fn a_groups_scheduled_queue_and_email_go_to_the_members_that_own_them() {
             .join("\n")
     };
 
-    // Two members share a cron: both run. Another cron is one member's alone.
+    // Two members share a cron: both run, each reporting its failed run (#3872 names the service). Another cron is one member's alone.
     let both = logged("cron-both");
     assert!(
-        both.contains("ran-orders") && both.contains("ran-pricing"),
+        both.contains("(tick)") && both.contains("(sweep)"),
         "{both}"
     );
     let one = logged("cron-one");
     assert!(
-        one.contains("ran-pricing-30") && !one.contains("ran-orders"),
+        one.contains("(sweep)") && one.contains("30 * * * *") && !one.contains("(tick)"),
         "{one}"
     );
     assert_eq!(logged("cron-none"), "");

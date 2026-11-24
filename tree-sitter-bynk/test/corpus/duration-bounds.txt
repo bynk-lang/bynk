@@ -1,0 +1,49 @@
+==========================
+One-sided predicates and Duration bounds (#3948)
+==========================
+
+commons spans {
+	type Ttl = Duration where AtLeast(60.seconds)
+	type Window = Duration where InRange(1.second, 1.day) && NonNegative
+	type Percent = Int where AtLeast(0) && AtMost(100)
+}
+
+--------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_call
+            name: (predicate_name)
+            (number_literal)
+            (identifier)))))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_call
+            name: (predicate_name)
+            (number_literal)
+            (identifier)
+            (number_literal)
+            (identifier))
+          (pred_atom
+            (predicate_name)))))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_call
+            name: (predicate_name)
+            (number_literal))
+          (pred_call
+            name: (predicate_name)
+            (number_literal)))))))

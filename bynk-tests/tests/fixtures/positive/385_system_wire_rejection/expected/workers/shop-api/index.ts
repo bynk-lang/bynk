@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -39,7 +39,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/cart") {
+        if (method === "POST" && __matchPath("/cart", path) !== null) {
           __route = "POST /cart";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -54,11 +54,11 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_cart(request, body);
-          return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_Item), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item), request, ["Bearer realm=\"shop.api\""]), __security_api);
         }
       }
       {
-        if (method === "POST" && path === "/reject") {
+        if (method === "POST" && __matchPath("/reject", path) !== null) {
           __route = "POST /reject";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -73,7 +73,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_reject(request, body);
-          return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_Item), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item), request, ["Bearer realm=\"shop.api\""]), __security_api);
         }
       }
       {
@@ -100,10 +100,10 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_PUT_cart_Param_sku(request, sku, body);
-          return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_Item), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item), request, ["Bearer realm=\"shop.api\""]), __security_api);
         }
       }
-      if (path === "/cart") {
+      if (__matchPath("/cart", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -113,7 +113,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/reject") {
+      if (__matchPath("/reject", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

@@ -931,7 +931,7 @@ jobs:
         continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite. nextest cannot
       # run rustdoc doctests; the only ones in the tree are the crate READMEs'
-      # examples, which the `README examples` step below runs. The corpus's includes:
+      # examples, which `test-system`'s `README examples` step runs. The corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
       #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date
@@ -977,21 +977,9 @@ jobs:
           # workerd smokes may skip if wrangler cannot boot. Linux requires them
           # in the `test-system` job (see there, and bynk-tests/tests/require/mod.rs
           # for the one implementation of the "non-empty means required" contract).
-      # #1645: the crate READMEs' `rust` examples, compiled and run as doctests
-      # (`cargo readme-doctests`, a `.cargo/config.toml` alias naming only the
-      # crates whose README has one). Linux only: the examples are
-      # OS-independent. A README-only change runs it in the `drift` job instead.
-      - name: README examples (doctests)
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo readme-doctests
-      # C4b (#2940): every test is in exactly one tier (unit, integration,
-      # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
-      # partition is OS-independent. `--profile test` reuses the test build
-      # above (a plain `cargo run` would rebuild xtask's dependencies in the dev
-      # profile); the four `nextest list` calls run no test and take seconds.
-      - name: Test tier partition
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo run --locked --profile test -p xtask -- tier-probe
+      # The README examples and the tier partition used to run here, after the
+      # suite. They moved to `test-system` (see there), off the merge queue's
+      # critical path.
       # #3679: the growth probes (ts_writes, ts_any, emit_abi_shapes,
       # verbatim_sites, span_keyed_maps) may only fall unless a pending file
       # `raises:` them. `growth_probes_never_rise` checks the working-tree
@@ -1150,6 +1138,30 @@ jobs:
           BYNK_REQUIRE_MYSQL: "1"
           BYNK_MYSQL_SMOKE_PORT: ${{ job.services.mariadb.ports['3306'] }}
           GH_TOKEN: ${{ github.token }}
+      # Two checks that used to follow the suite in the `test` job, serially,
+      # where they put ~2 min on every merge-queue entry's critical path. They
+      # run here instead: in every ready PR's run and every push to `main`
+      # (the queue never passes this job, so `main` never skips it), and in the
+      # nightly. Not in the merge queue: each entry already passed both on its
+      # own PR. A break that only stacking reveals (an API rename in one entry,
+      # a README example using the old name in another) is caught by this job's
+      # run on the merged tree in the push run on `main`, as for the system
+      # tier. This job builds every test binary, so the tier probe's
+      # `nextest list` calls compile nothing.
+      #
+      # #1645: the crate READMEs' `rust` examples, compiled and run as doctests
+      # (`cargo readme-doctests`, a `.cargo/config.toml` alias naming only the
+      # crates whose README has one). Linux only: the examples are
+      # OS-independent. A README-only change runs it in the `drift` job instead.
+      - name: README examples (doctests)
+        run: cargo readme-doctests
+      # C4b (#2940): every test is in exactly one tier (unit, integration,
+      # system; the `ci-*` profiles in .config/nextest.toml). Linux only: the
+      # partition is OS-independent. `--profile test` reuses the test build
+      # above (a plain `cargo run` would rebuild xtask's dependencies in the dev
+      # profile).
+      - name: Test tier partition
+        run: cargo run --locked --profile test -p xtask -- tier-probe
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1721,7 +1733,7 @@ jobs:
     #     `readmes` input) and asserts the crate-layering diagram matches the manifests.
     #   - `cargo readme-doctests` compiles and runs the `rust` examples in
     #     bynk-*/README.md (a `readmes` input) as doctests (#1645), which the
-    #     `test` job runs in its own `README examples` step;
+    #     `test-system` job runs in its own `README examples` step;
     #     xtask/tests/docs_consistency/readme_doctests.rs keeps the alias's crate
     #     list in step with the READMEs that have a `rust` block.
     #   - xtask validates design/pending/**.md (a `pending` input) against the

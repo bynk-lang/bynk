@@ -1,0 +1,31 @@
+// #4231: `Ordering` is nameable with no import, in a context as in a commons, and
+// building it there is not a rebrand construction.
+context app
+
+fn cmp(a: Int, b: Int) -> Ordering {
+  a.compare(b)
+}
+
+fn less() -> Ordering {
+  Ordering.Less
+}
+
+fn bare() -> Ordering {
+  Less
+}
+
+fn flip(o: Ordering) -> Ordering {
+  o.reverse()
+}
+
+fn sorted(xs: List[Int]) -> List[Int] {
+  xs.sortWith((a, b) => b.compare(a))
+}
+
+fn name(o: Ordering) -> String {
+  match o {
+    Less => "less"
+    Equal => "equal"
+    Greater => "greater"
+  }
+}

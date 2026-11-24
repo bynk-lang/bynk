@@ -1341,17 +1341,19 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.context.external_construction",
-        blurb: "A context that `consumes` another may hold and pass on the other's types, but \
-                may not build one. A refined or opaque type can promise an invariant, a \
-                `Matches` pattern or a smart constructor, and that holds only if every value is \
-                made by the owner; `.of`, `.unsafe` and a variant constructor are refused from \
-                outside, as is the record syntax of an opaque type. Ask the owner for the value \
-                instead: a service that returns it, or takes the plain input and does the check. \
-                `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+        blurb: "A context that `consumes` another may hold and pass on the other's types, but may not \
+                build an opaque one. (A `transparent` export, whether a context's or an adapter's, such \
+                as `bynk.cloudflare`'s `KvTtl`, is open to a consumer: `.of`, a variant and a record \
+                literal build it.) An opaque type can promise an invariant, a `Matches` pattern or a \
+                smart constructor, and that holds only if every value is made by the owner; `.of`, a \
+                variant constructor and record syntax are refused from outside, and so is `.unsafe` on \
+                any type. Ask the owner for the value instead: a service that returns it, or takes the \
+                plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking \
+                inside such a value.",
         example: "// payment.bynk\n\
                   context payment\n\
                   \n\
-                  exports transparent { AuthId }\n\
+                  exports opaque { AuthId }\n\
                   \n\
                   type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
                   \n\
@@ -1501,7 +1503,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
     },
     Explain {
@@ -2618,8 +2620,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.path_param_not_stringy",
-        blurb: "A path parameter is read from a segment of the URL, which is text, so its type must be one the router can build from a string: `String`, a refined `String`, or an opaque type over `String`. An `Int`, an enum or a record is refused here, though a `query` field may be one. Take the segment as a refined `String` that states its shape.",
-        example: "on GET(\"/items/:id\") (id: Int) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a path segment is a string\n\ntype ItemId = String where Matches(\"^[0-9]+$\")\non GET(\"/items/:id\") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        blurb: "A path parameter is read from one segment of the URL, which is text, so its type must be one the router can read from a single value: a `String`, `Int`, `Bool` or `Decimal`, an enum (by variant name), or a refined or opaque type over one of those, the set a typed `query` field takes. A segment is always present and holds one value, so `Option` and `List` make no sense here, and a record or any other type is refused. The router decodes the segment after matching the route and answers `400` when it does not read as the type or breaks a refinement. Take the segment as a type that states its shape.",
+        example: "on GET(\"/items/:id\") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a segment is always present\n\ntype ItemNo = Int where Positive\non GET(\"/items/:id\") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.query_field_not_stringy",
@@ -2738,6 +2740,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.unknown_handler_annotation",
         blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
         example: "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
+    },
+    Explain {
+        code: "bynk.http.unreachable_route",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
     },
     Explain {
         code: "bynk.index.bad_argument",
@@ -2906,6 +2913,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
                 `\\n`, or use a multi-line string literal.",
         example: "const Greeting: String = \"hello      // ✗ no closing quote\n\
                   const Greeting: String = \"hello\"   // ✓",
+    },
+    Explain {
+        code: "bynk.list.par_limit_range",
+        blurb: "The `limit` of a `ParOptions` bounds how many steps of `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` or `parTraverseTryWith` are in flight at once. It must be a whole number from 1 to 1000: zero or a negative bound would never start a step, and a bound above 1000 is past what a single invocation can usefully hold open (connection and subrequest limits). The check applies when the limit is a literal or a constant; a limit computed at run time faults the call instead. Pick a value in range, or use the plain form (`parForEach`, `parTraverse`, …) for an unbounded fan-out.",
+        example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
         code: "bynk.messages.format_mismatch",
@@ -3151,7 +3163,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
-        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` (or their `…With` forms) runs \
                 once per element, all at once, so it may not write a `store` field, which is \
                 the rule a `par { … }` block already follows. Every `<-` is an await point, \
                 so a `get` then a `put` in the closure lets the other branches write in \
@@ -3271,6 +3283,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.parse.duplicate_cors",
         blurb: "A service has one CORS policy, and it applies to every route in it. Two `cors` blocks could grant different things, and the reader would not know which holds, so the second is refused. Merge them into one. `security` and `limits` follow the same rule (`bynk.parse.duplicate_security`, `bynk.parse.duplicate_limits`), as does `json` (`bynk.parse.duplicate_json`).",
         example: "service api from http {\n    cors { origins: [\"https://a.example\"] }\n    cors { origins: [\"https://b.example\"] }          // ✗ a second `cors`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://a.example\", \"https://b.example\"] }   // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_delivery",
+        blurb: "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
         code: "bynk.parse.duplicate_json",
@@ -4050,8 +4067,23 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.queue.bad_params",
-        blurb: "A queue consumer is invoked once per message, so `on message` takes exactly one parameter: the message, of any type that can be decoded from the queue body. Two parameters leave the second with nothing to supply it, and none leaves the handler without the message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
+        blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+    },
+    Explain {
+        code: "bynk.queue.dead_letter_type_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
+    },
+    Explain {
+        code: "bynk.queue.delivery_bad_option",
+        blurb: "A `delivery { }` section sets the consumer's `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours), `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole seconds, 0 to 60) and `concurrency` (1 to 250). Those are Cloudflare's limits, so a value outside its range, a key that is not one of these, or one written twice is refused here rather than failing at deploy. The dead-letter queue also cannot be the consumer's own queue, which would redeliver a failed message to the consumer that failed it. A literal, or a constant of the key's type, is accepted.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 500, deadLetter: None }   // ✗ at most 100\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, retryDelay: 30.seconds, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    },
+    Explain {
+        code: "bynk.queue.delivery_not_queue",
+        blurb: "A `delivery { }` section sets how a queue consumer's messages are retried, delayed, dead-lettered and batched. Only a `from queue` service consumes a queue, so on any other service the section has nothing to govern. Move it to the `from queue` service it was meant for, or delete it.",
+        example: "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
         code: "bynk.queue.duplicate_consumer",
@@ -4062,6 +4094,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.queue.invalid_name",
         blurb: "`from queue(\"…\")` names a Cloudflare queue, so the name must be one Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`, starting and ending with a letter or digit. An empty name, capitals or `_` are refused here, rather than failing at deploy. Rename it, for example `order-events`.",
         example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.queue.no_dead_letter",
+        blurb: "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
+        example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
         code: "bynk.queue.return_not_queue_result",
@@ -6024,7 +6061,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.no_numeric_coercion",
         blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
-                a comparison or an `InRange` bound. Each conversion can lose or invent \
+                a comparison or an `InRange`, `AtLeast` or `AtMost` bound, which takes literals of the base's own type (`1.second` for a `Duration`). Each conversion can lose or invent \
                 precision, so Bynk makes you write it: `.toFloat()` on an `Int`, \
                 `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, \
                 `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same \
@@ -6162,7 +6199,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.predicate_base_mismatch",
-        blurb: "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive` and `InRange` to an `Int`, `Float` or `Decimal`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
+        blurb: "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive`, `InRange`, `AtLeast` and `AtMost` to an `Int`, `Float`, `Decimal` or `Duration`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
         example: "type Code = Int where NonEmpty         // ✗ `NonEmpty` is a `String` predicate\n\ntype Code = String where NonEmpty      // ✓",
     },
     Explain {
@@ -6307,7 +6344,10 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 take a type from, and the compiler will not guess, because the element type \
                 becomes part of the type of everything the collection touches. Give it one: \
                 annotate the binding, as `let xs: List[Int] = []`, or use the empty value \
-                where a type is expected, such as an argument or a return value.",
+                where a type is expected, such as an argument or a return value. The seed \
+                of a `fold` is such a place: `fold(Set.empty(), …)` takes its type from the \
+                result the fold is expected to produce, so annotate the result (`let tags: \
+                Set[String] = xs.fold(Set.empty(), …)`).",
         example: "fn count() -> Int {\n    let xs = []                  // ✗ a list of what?\n    xs.length()\n}\n\n\
                   fn count() -> Int {\n    let xs: List[Int] = []       // ✓\n    xs.length()\n}",
     },
@@ -8324,7 +8364,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     dg(
         "bynk.http.path_param_not_stringy",
-        "A path parameter's type is not constructible from a string.",
+        "A path parameter's type is not one a single path segment can carry.",
         &["http_handler"],
     ),
     dg(
@@ -8422,6 +8462,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.unknown_handler_annotation",
         "A handler carries an annotation outside the closed set (`@cache`/`@limit`).",
+    ),
+    d(
+        "bynk.http.unreachable_route",
+        "A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group).",
     ),
     d(
         "bynk.index.bad_argument",
@@ -8560,6 +8604,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.list.deprecated_function",
         "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
+    warn(d(
+        "bynk.list.par_limit_one",
+        "A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning).",
+    )),
+    d(
+        "bynk.list.par_limit_range",
+        "A `ParOptions` `limit` that is statically known is outside 1 to 1000.",
+    ),
     warn(d(
         "bynk.list.par_traverse_unit",
         "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).",
@@ -8758,6 +8810,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_cors",
         "A service declares more than one `cors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_delivery",
+        "A service declares more than one `delivery { }` policy.",
         &["service_decl"],
     ),
     dg(
@@ -9179,6 +9236,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["queue_handler"],
     ),
     dg(
+        "bynk.queue.dead_letter_type_mismatch",
+        "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from.",
+        &["delivery_policy"],
+    ),
+    dg(
+        "bynk.queue.delivery_bad_option",
+        "A `delivery { }` key is unknown, repeated, out of range or of the wrong type, or the dead-letter queue is the consumer's own.",
+        &["delivery_policy"],
+    ),
+    dg(
+        "bynk.queue.delivery_not_queue",
+        "A `delivery { }` policy on a service that is not `from queue`.",
+        &["delivery_policy"],
+    ),
+    dg(
         "bynk.queue.duplicate_consumer",
         "Two `on message` handlers, in one context or in two, consume the same queue.",
         &["queue_handler"],
@@ -9188,6 +9260,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses.",
         &["queue_handler"],
     ),
+    warn(dg(
+        "bynk.queue.no_dead_letter",
+        "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
+        &["delivery_policy"],
+    )),
     dg(
         "bynk.queue.return_not_queue_result",
         "An `on message` handler does not return `Effect[QueueResult]`.",

@@ -1,0 +1,6 @@
+[project]
+name = "fold-empty-seed-generic-callee"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

@@ -325,3 +325,59 @@ fn a_violated_invariant_shrinks_and_a_failed_expect_reports_its_position() {
         "the failing expect's line: {expect}"
     );
 }
+
+/// #4198: a shrunk counterexample over `Decimal` or `Bytes` prints in Bynk's own
+/// form, not `[object Object]` (a `bigint` makes `JSON.stringify` throw) or an
+/// index map.
+#[test]
+fn a_decimal_or_bytes_counterexample_prints_in_bynk_form() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-show")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_show"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    assert_eq!(
+        case_named(&doc, "a decimal differs from itself")["counterexample"],
+        "x = 0d"
+    );
+    assert_eq!(
+        case_named(&doc, "bytes differ from themselves")["counterexample"],
+        "b = Bytes.fromHex(\"\")"
+    );
+    // #4229: a `Duration` and an `Instant` print in Bynk's form, not as bare milliseconds.
+    assert_eq!(
+        case_named(&doc, "durations differ from themselves")["counterexample"],
+        "d = 0.seconds"
+    );
+    assert_eq!(
+        case_named(&doc, "instants differ from themselves")["counterexample"],
+        "t = Instant.fromEpochMillis(0)"
+    );
+}

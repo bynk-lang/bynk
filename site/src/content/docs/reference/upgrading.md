@@ -17,6 +17,30 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.667.0
+
+`Kv.putTtl` takes a `KvTtl` (a `Duration` of at least 60 seconds) instead of `Int` seconds, `KvExpiration.After` takes a `KvTtl` and `KvGet.cacheTtl` an `Option[KvCacheTtl]`, so `Kv.putTtl(k, v, 86400)` is a type error: write `1.day`, or `KvTtl.of(d)` for a computed span; a TTL under 60 seconds (30 for `cacheTtl`) is now a compile error or a `ValidationError` instead of a run-time fault, and a part second rounds towards zero rather than up
+
+## v0.664.0
+
+`Bytes.compare` returns an `Ordering` (`Less`, `Equal` or `Greater`) instead of `-1`, `0` or `1`; a program that compares the result with an `Int` must match on the `Ordering`
+
+## v0.660.0
+
+a `Matches` or regex-method pattern that is valid without the `u` flag but not with it (an identity escape such as `\-` outside a class, a `[\w-.]` range) is `bynk.types.invalid_regex`, with a note naming Unicode mode; drop the needless backslash
+
+## v0.659.0
+
+Routes that overlap are now tried by position, not by spelling: at the first segment where two routes of a method differ, a literal beats a `:name` (so `GET /a/b/:y` now beats `GET /a/:x/c` for `/a/b/c`, where the alphabetical tie-break picked `/a/:x/c`), and a route that every other route of its method answers first is refused with `bynk.http.unreachable_route`: remove it or make it match a path the others do not. Literal routes also now ignore empty segments (`/items/` reaches `GET /items`) and compare percent-decoded.
+
+## v0.658.0
+
+A cron `Err` is no longer logged as `cron <expr> failed <payload>`; the log is now a structured record with the error's type and variant only, so an alert keyed on the old line stops matching, and the payload no longer reaches the log
+
+## v0.656.0
+
+A context that writes a bare `consumes bynk` (no braces) and declares its own `CallOutcome`, `CallFailure` or `Refusal` now fails as `bynk.consumes.name_conflict`; rename the type, or consume only what you use with `consumes bynk { … }`.
+
 ## v0.655.1
 
 `BoundaryRejection` gains `MalformedPath(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `MalformedPath(_)`, or a `_` arm. A request whose path cannot be decoded now answers `400`, where it answered `500` and was reported as a fault.

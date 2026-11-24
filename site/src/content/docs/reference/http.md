@@ -23,8 +23,10 @@ service <Name> from http {
   segment as a `:name` parameter and check it in the handler.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type must be
-  constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
+  [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type is one a typed [`query`](#query-strings) field takes, less
+  `Option` and `List` (`bynk.http.path_param_not_stringy`): a `String`, `Int`, `Bool` or
+  `Decimal`, an enum, or a refined or opaque type over one of those; see
+  [Path parameters](#path-parameters). `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
   (`bynk.http.return_not_effect_http_result`).
@@ -50,6 +52,75 @@ body read, and is the same rejection as a `@raw` route's, so
 [`on rejected`](#rendering-rejections) renders it. Note that `curl -d '{…}'` sends
 `Content-Type: application/x-www-form-urlencoded` unless `-H 'content-type: application/json'`
 is given, so it gets the `415`.
+
+### How a route is chosen {#route-order}
+
+Routes with the same method are compared segment by segment, left to right. At the
+first segment where they differ, a literal segment beats a `:name` segment. So
+`GET /users/me` answers `/users/me`, and `GET /users/:id` answers every other
+`/users/<x>`, whichever is declared first and however the parameter is named:
+
+```bynk,ignore
+service api from http {
+  on GET("/users/:id") (id: String) -> Effect[HttpResult[String]] by Visitor { … }
+  on GET("/users/me") () -> Effect[HttpResult[String]] by Visitor { … }
+}
+```
+
+- **Overlap is fine.** `/a/:x/c` and `/a/b/:y` both match `/a/b/c`; the second wins,
+  because at the second segment its `b` is a literal where the first has a
+  parameter. The outcome never depends on how a route is spelt.
+- **Percent-decoding.** Every segment is compared decoded, a literal as much as a
+  parameter, so `/caf%C3%A9` reaches `GET /café`. A path with a malformed escape is a
+  [`400 MalformedPath`](#rendering-rejections).
+- **Empty segments don't count.** `/items`, `/items/` and `//items` are the same
+  path, so `/items/` reaches `GET /items`. (A `308` redirect to one canonical form
+  was considered and left out: it would change every existing service's responses.)
+- **A route nothing can reach is an error.** When every path a route matches is
+  answered first by other routes of its method, it is
+  `bynk.http.unreachable_route`, and the error points at the routes that cover it.
+  `GET /a/:x` beside `GET /a/:y` is the plainest case: parameter names are not part
+  of the shape. It is checked within a context, and across the members of a
+  [worker group](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/),
+  whose contexts share one router.
+- **Methods.** A request is matched by method and path. The `Allow` set for a path
+  (see [Method semantics](#method-semantics)) is the union over the routes that
+  match it, so an overlap can't hide a method.
+
+### Path parameters {#path-parameters}
+
+A `:name` segment binds a handler parameter of the same name, and the parameter takes the
+types a typed [`query`](#typed-query) field takes, less `Option` and `List` (a segment is
+always present and holds one value): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a
+refined or opaque type over one of those. Anything else is
+`bynk.http.path_param_not_stringy`.
+
+```bynk,ignore
+type OrderNo = Int where Positive
+type Status = enum { Open, Closed }
+
+on GET("/orders/:id") (id: OrderNo) -> Effect[HttpResult[Order]] by v: Visitor { … }
+on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[List[Order]]] by v: Visitor { … }
+```
+
+- **Matching is by shape; decoding follows.** A route matches on its segment count and
+  literals alone, so a parameter's type never changes which route answers (a typed
+  parameter is a `:name` segment for [ordering](#route-order) and for
+  `bynk.http.unreachable_route`, and `/orders/:id` with `Int` beside `/orders/:slug` with
+  `String` leaves the one spelt later unreachable, not two routes). Each parameter is decoded after the
+  route is chosen.
+- **A segment that does not read** is a `400 StructuralMismatch` at `path.<name>`
+  (`/orders/abc` for `id: OrderNo`), not a `404` and not a fall-through to another route:
+  the path's shape named a resource, with an identifier that is not valid. A segment that
+  reads but breaks a refinement (`/orders/0`) is a `400 RefinementViolation`, as for a
+  `String`-based type.
+- **Reading rules are `query`'s.** An `Int` is `-?[0-9]+` within the safe-integer range (so
+  `/orders/007` and `/orders/7` are the same value and reach the same handler, as in a query
+  string; a type that wants one canonical form refines it, or takes a `String`), a
+  `Decimal` reads its text form, an enum is its variant's name (case-sensitive), and a
+  `Bool` is `true` or `false` only (`on` and `off` are a form's convention).
+- `bynk client` takes the typed value and writes it as the segment (`String(n)`, the
+  variant name), and `bynk openapi` gives the parameter its type, `format` and `enum`.
 
 ## Request headers
 
@@ -274,7 +345,7 @@ body.
 | Variant | Status | Payload |
 |---|---|---|
 | `BadRequest(message)` | 400 | message |
-| `Unauthorized` | 401 | none |
+| `Unauthorized` | 401 | none, with the route's [`WWW-Authenticate` challenge](/reference/actors/#the-401-challenge) |
 | `Forbidden` | 403 | none |
 | `NotFound` | 404 | none |
 | `MethodNotAllowed` | 405 | none |
@@ -363,7 +434,8 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 `MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
-`RawError` of that status; the router keeps its other headers (the `Allow` of a
+`RawError` of that status; the router keeps its other headers (the `WWW-Authenticate` of a
+`401`, the `Allow` of a
 `405`) and stamps the service's CORS and security headers as usual. Any other
 answer, another status or a fault in the handler sends the router's default
 response instead, and logs why. A service without `on rejected` is unchanged.
@@ -488,8 +560,8 @@ so is a `cookies` that is not a record (`bynk.http.cookies_wrong_type`).
 - **An empty cookie** (`a=`) is a value, not an absent one.
 
 A cookie is not authentication: it reaches the router from the client, so treat every field
-as input to check. A cookie-backed actor is separate. See
-[#3181](https://github.com/bynk-lang/bynk/issues/3181).
+as input to check. A cookie-backed actor is separate: see
+[Signed cookies](/reference/actors/#signed-cookies).
 
 ### Reading a prefixed cookie {#request-cookies}
 
@@ -651,7 +723,9 @@ the router synthesises, from that table alone:
 | `GET /nope` (no such path) | `404` — unchanged |
 
 The **allowed-method set** for a path is the union of the methods declared on it,
-plus `OPTIONS` always, plus `HEAD` whenever `GET` is present. So:
+plus `OPTIONS` always, plus `HEAD` whenever `GET` is present. Where routes
+[overlap](#route-order), it is the union over every route that matches the request
+path. So:
 
 - **`405 + Allow`** — a request to a *live* path with an undeclared method is a
   `405` (not a `404`), carrying the derived `Allow` header (RFC 9110 §15.5.6). A
@@ -1287,7 +1361,8 @@ From this the compiler synthesises, for that service:
   credential-less by spec, so it must not be rejected by an actor check); and
 - **`Access-Control-Allow-Origin`** (plus `Vary: Origin`) stamped onto **every**
   response of the service — uniformly across the `Ok`/`Raw`/redirect/error/stream
-  variants.
+  variants. A `401` also lists `WWW-Authenticate` in `Access-Control-Expose-Headers`, so a
+  browser client can read the [challenge](/reference/actors/#the-401-challenge).
 
 ### Fields
 
@@ -1568,9 +1643,12 @@ flowchart TD
   known -->|yes, other| m405["405 + Allow"]
   params --> ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
   ctype -->|no| m415["415"]
-  ctype -->|yes| body{"body valid?"}
+  ctype -->|yes| actor{"by actor admitted?"}
+  actor -->|no| m401["401 / 403"]
+  actor -->|yes| body{"body valid?"}
   body -->|over the cap| m413["413"]
   body -->|no| bad["400 at the boundary"]
+  m401 -.-> hook
   m405 -.-> hook["on rejected renders the body, if declared"]
   m415 -.-> hook
   m413 -.-> hook
@@ -1587,7 +1665,8 @@ on method **and** path. On a match, path parameters are bound (a path that is no
 `400 MalformedPath`, never a `500`) and a typed
 [`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
-then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
+then the handler's `by` actor is checked (`401` or `403`, see [Actors](/reference/actors/)),
+before any body is read; then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an
 `Effect` and returns an `HttpResult[T]`, which is mapped to an HTTP status and
 JSON body per the table above. When no route matches, a request to a *live* path
