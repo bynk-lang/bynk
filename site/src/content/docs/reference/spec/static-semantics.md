@@ -320,7 +320,7 @@ numeric types widen to their base in operator positions, as before.
 of the **same `Ord` type**; a type that is not `Ord` is
 `bynk.types.not_orderable`. A type is `Ord` when it is one of:
 
-- `Int`, `Float`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
+- `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` or `Bytes`, or a refined type
   over one of them;
 - `Option[T]` or `List[T]` where `T` is `Ord`;
 - a record, sum, enum or opaque type that declares `derives Ord` (§4.2.1),
@@ -339,6 +339,7 @@ follows:
 
 - `Int`, `Duration` and `Instant` order numerically; a refined type orders as
   its base.
+- `Decimal` orders numerically, ignoring scale: `1.2d` and `1.20d` are equal.
 - `String` orders by **UTF-16 code unit**, element by element, a proper prefix
   first. This is not Unicode code-point or locale order.
 - `Bytes` orders **lexicographically over unsigned octets**, a proper prefix
@@ -2346,8 +2347,11 @@ audit/logging belongs *after* resolution.
 ## §5.7b Events (v0.238–v0.244) {#events}
 
 An **event** is a typed fact one context emits and any number of contexts
-receive. Delivery is at-least-once and fire-and-forget: an emitter never learns
-whether, or how, a subscriber ran.
+receive. Delivery is at most once: an emission is lost if the hand-off or the
+delivery to a subscriber fails, and nothing is retried. An emitter never learns
+whether, or how, a subscriber ran. On Workers the emitting handler waits for
+delivery to finish. A durable replacement is planned
+([#3898](https://github.com/bynk-lang/bynk/issues/3898)).
 
 **Declaration.** An `event` ([§4.1.12](/reference/spec/syntactic-grammar/#4112-event_decl))
 MUST be declared in a context (`bynk.event.outside_context`). Its one admitted

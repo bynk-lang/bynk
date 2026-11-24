@@ -1375,7 +1375,7 @@ type OrderId = opaque String
 A `Map` key, a `Set` member and the key of a `List`'s `distinct`, `distinctBy`,
 `groupBy` and joins must be a **`Key`** type. A type is `Key` when it is:
 
-- `String`, `Int`, `Bool`, `Instant`, `Duration` or `Bytes`, or a refined or opaque
+- `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` or `Decimal`, or a refined or opaque
   type over one of them;
 - `Option[T]` or `List[T]` with `T` a `Key`;
 - a record, sum or enum whose every field and payload is a `Key`, with no `derives`
@@ -1389,7 +1389,9 @@ resources are not keys either. Using one is `bynk.types.not_keyable`.
 
 Two keys are the same key when they are `==`, so `Map[OrderId, Int]` finds an entry
 with an equal `OrderId` however it was built, and `keys()` returns the keys as
-inserted, in insertion order. `Key` implies `Eq`.
+inserted, in insertion order. `Key` implies `Eq`. A `Decimal` key is the same key at
+any scale (`1.2d` and `1.20d` are one key), and `keys()` returns the spelling that was
+inserted first.
 
 ```bynk
 commons demo.keys
@@ -1443,7 +1445,7 @@ stays a valid identifier elsewhere. `derives Ord + …` is the list form; `Eq`,
 `bynk.types.derives_automatic` (a fix removes it). Any other name is
 `bynk.generics.unknown_constraint`.
 
-**Which types are `Ord`.** `Int`, `Float`, `String`, `Duration`, `Instant` and
+**Which types are `Ord`.** `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` and
 `Bytes`; a refined type over one of them; `Option[T]` and `List[T]` where `T` is
 `Ord`; a record, sum, enum or opaque type that `derives Ord`; and a type parameter
 declared `T: Ord`. `Bool`, `Result`, `Map`, `Set`, functions and held resources
@@ -1457,6 +1459,7 @@ type that derives `Ord` must be `Ord`, else
 | Type | Order |
 |---|---|
 | `Int`, `Duration`, `Instant` | numeric |
+| `Decimal` | numeric, ignoring scale (`1.2d` and `1.20d` are equal) |
 | `String` | UTF-16 code unit, element by element (not code point, not locale) |
 | `Bytes` | unsigned octets, lexicographic |
 | `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |

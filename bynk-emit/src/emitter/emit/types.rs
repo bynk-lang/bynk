@@ -11,12 +11,10 @@ use bynk_model::TypeShape;
 use bynk_syntax::ast::{BaseType, PredKind, Refinement, TypeDecl, TypeParam};
 
 /// P6.x (#1188): reads `shape` — `t`'s already-lowered `bynk-emit::ir::TypeShape`
-/// — instead of walking `t.body` (the AST's own `TypeBody`) directly. Doesn't
-/// spell that AST module's path literally in this comment on purpose: this
-/// file is otherwise invisible to the `ast_importers` probe
-/// (`xtask/src/greenfield_status.rs`), which matches on the literal string,
-/// comments included — see `design/tracks/the-ir.md` §5's own note on this
-/// exact blind spot.
+/// — instead of walking `t.body` (the AST's own `TypeBody`) directly. (This file
+/// does import `bynk_syntax::ast`, for `BaseType` and the like, so the
+/// `ast_importers` probe in `xtask/src/greenfield_status.rs` counts it, once,
+/// under `emitter/emit.rs` in `AST_IMPORTER_ORIGINS`.)
 /// `t` itself is still read for what `TypeShape` deliberately doesn't carry:
 /// `.documentation`/`.name`/`.type_params` (header/namespace-object emission,
 /// including this type's own attached methods via `emit_attached_methods`,
