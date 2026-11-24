@@ -101,6 +101,15 @@ service api from http {
 }
 ```
 
+A JSON route answers `415` to a form or multipart post, so a `curl` call names its
+type:
+
+```sh
+curl -X POST http://localhost:8787/notes \
+  -H 'content-type: application/json' \
+  -d '{"title": "first"}'
+```
+
 ## Choose the right status
 
 Return the `HttpResult` variant matching the outcome — `Ok` (200),

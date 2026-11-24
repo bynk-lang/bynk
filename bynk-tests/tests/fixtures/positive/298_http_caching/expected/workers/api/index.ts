@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -82,6 +82,9 @@ export default {
       {
         if (method === "POST" && path === "/items") {
           __route = "POST /items";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+          }
           let __body_json: __JsonValue;
           try {
             __body_json = (await request.json()) as __JsonValue;

@@ -6806,13 +6806,20 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
     match content_type.map(|a| &a.value.kind) {
         Some(ExprKind::StrLit(s)) if bynk_syntax::ast::is_media_type(s) => {}
+        // #3912: a non-empty list of media types; `"*/*"` cannot be one of several.
+        Some(ExprKind::ListLit(items, ..))
+            if !items.is_empty()
+                && items.iter().all(|e| {
+                    matches!(&e.kind, ExprKind::StrLit(s)
+                        if bynk_syntax::ast::is_media_type(s) && s != "*/*")
+                }) => {}
         Some(_) => {
             let arg = content_type.unwrap();
             errors.push(crate::annotation_consts::with_const_origin(
                 CompileError::new(
                     "bynk.http.raw_bad_content_type",
                     arg.span,
-                    "`@raw` `contentType` must be a media type string literal (or a `String` constant bound to one) — `type/subtype`, or `\"*/*\"` to accept any",
+                    "`@raw` `contentType` must be a media type string literal (or a `String` constant bound to one) — `type/subtype`, or `\"*/*\"` to accept any — or a non-empty list of `type/subtype` literals",
                 ),
                 arg,
             ));

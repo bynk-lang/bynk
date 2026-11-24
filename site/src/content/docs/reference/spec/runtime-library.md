@@ -151,10 +151,14 @@ chunked transfer, or wrong), the body of a capped route is then read through the
 runtime's counting reader (`readCapped`): the bytes actually read are counted and
 the read is cancelled, with the same `413`, once it crosses the cap. A route
 declared `@raw(contentType:)` first has its `Content-Type` matched by
-`mediaTypeMatches` (parameters stripped, case-insensitive; `*/*` matches all), and
+`mediaTypeMatches` (parameters stripped, case-insensitive; `*/*` matches all; a list
+matches any of its types), and
 a mismatch is a synthesised `415 UnsupportedMediaType` (`{ kind:
 "UnsupportedMediaType", details: … }`), stamped and ordered like the `413`. Its
-body is then the counted octets as a `Uint8Array`, with no decode. A route declared
+body is then the counted octets as a `Uint8Array`, with no decode. A JSON `body` route
+has its `Content-Type`, when present, matched by `jsonMediaTypeMatches` (`application/json`
+or a `+json` type; parameters stripped, case-insensitive), and a mismatch is the same `415`
+(a missing `Content-Type` is accepted). A route declared
 `@form` has its `Content-Type` matched by `formMediaTypeMatches` (the media type
 `application/x-www-form-urlencoded`, parameters stripped, case-insensitive, and a
 `charset` parameter, when present, UTF-8), a mismatch being the same `415`; its body is

@@ -728,11 +728,13 @@ pub(super) fn emit_system_http_support(
             // #3276: a `@form` route's `content-type` is the driver's default, so a
             // case's own `Content-Type` (a trailing `RequestHeaders`) overrides it,
             // which is how a case probes the route's `415`.
-            let (spread_first, spread_last): (Entries, Entries) = if is_form {
-                (Vec::new(), vec![headers_spread.clone()])
-            } else {
-                (vec![headers_spread.clone()], Vec::new())
-            };
+            // #3912: so is a JSON or `@raw` route's, probing its `415` (or a listed type).
+            let (spread_first, spread_last): (Entries, Entries) =
+                if is_form || (body_arg.is_some() && !is_multipart) {
+                    (Vec::new(), vec![headers_spread.clone()])
+                } else {
+                    (vec![headers_spread.clone()], Vec::new())
+                };
             let verb = method.as_str();
             let cat = |parts: Vec<&Entries>| -> Entries {
                 parts.into_iter().flatten().cloned().collect()
