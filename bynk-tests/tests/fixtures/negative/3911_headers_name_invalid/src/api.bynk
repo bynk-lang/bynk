@@ -1,0 +1,11 @@
+context api
+
+type Probe = {
+  @name("if match") a: String,
+}
+
+service api from http {
+  on GET("/p") (headers: Probe) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

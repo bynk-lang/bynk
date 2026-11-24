@@ -1,0 +1,26 @@
+context shop.api
+
+type ReaderId = String where NonEmpty
+
+actor Reader { auth = Bearer(secret = "READER_SECRET"), identity = ReaderId }
+
+type Probe = {
+	authorization: Option[String],
+	@name("x-trace") trace: Option[String],
+}
+
+// #3911: the credential the Bearer seam consumed reads as absent in a typed `headers` record, as
+// it does in `RequestHeaders`; another header still reads.
+service api from http {
+	on GET("/probe") (headers: Probe) -> Effect[HttpResult[String]] by r: Reader {
+		let auth = match headers.authorization {
+			Some(_) => "present"
+			None => "absent"
+		}
+		let trace = match headers.trace {
+			Some(t) => "\(t)"
+			None => "-"
+		}
+		Ok("\(auth) \(trace) \(r.identity)")
+	}
+}
