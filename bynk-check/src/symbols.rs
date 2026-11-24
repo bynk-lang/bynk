@@ -3369,6 +3369,8 @@ pub fn parsed_alias_span(
 pub struct ConsumedType {
     pub owning_context: String,
     pub visibility: Visibility,
+    /// #3948: the owner is an adapter, whose values are linked into every consumer.
+    pub owner_is_adapter: bool,
 }
 
 /// #1925: every pair of top-level declarations sharing one name, in one

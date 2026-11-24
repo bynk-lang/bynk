@@ -3315,6 +3315,8 @@ enum ConstLit {
     Float(f64),
     /// #2622: a decimal literal's coefficient (with any `-`) and scale.
     Decimal(String, u32),
+    /// #3948: a `Duration` literal, in milliseconds.
+    Duration(i64),
     Str(String),
     Bool(bool),
     Unit,
@@ -3326,6 +3328,16 @@ impl ConstLit {
             ConstLit::Int(n) => n.to_string(),
             ConstLit::Float(v) => v.to_string(),
             ConstLit::Decimal(coef, scale) => bynk_syntax::decimal::render(coef, *scale),
+            ConstLit::Duration(ms) => {
+                // The largest unit that divides it exactly: `30000` is `30.seconds`.
+                let unit = bynk_syntax::ast::DurationUnit::ALL
+                    .into_iter()
+                    .rev()
+                    .find(|u| *ms != 0 && ms % u.millis() == 0)
+                    .unwrap_or(bynk_syntax::ast::DurationUnit::Milliseconds);
+                let n = ms / unit.millis();
+                format!("{n}.{}", unit.name_for(n))
+            }
             ConstLit::Str(s) => format!("{s:?}"),
             ConstLit::Bool(b) => b.to_string(),
             ConstLit::Unit => "()".to_string(),
@@ -5261,9 +5273,11 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         // like any other literal.
         ExprKind::DecimalLit { .. } => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::Decimal)))),
-        // v0.86 (ADR 0112): a `Duration` literal always takes the base
-        // `Duration` (no refined `Duration` types exist).
-        ExprKind::DurationLit { .. } => Some(tys.intern(Ty::Base(BaseType::Duration))),
+        // v0.86 (ADR 0112): a `Duration` literal takes the base `Duration`;
+        // #3948: in a refined-`Duration` position it is admitted like any
+        // other literal, checked against the predicates now.
+        ExprKind::DurationLit { .. } => admit_refined_literal(expr, expected, ctx)
+            .or(Some(tys.intern(Ty::Base(BaseType::Duration)))),
         ExprKind::StrLit(_) => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::String)))),
         // An interpolated string (v0.43, ADR 0075). Each hole must type to a

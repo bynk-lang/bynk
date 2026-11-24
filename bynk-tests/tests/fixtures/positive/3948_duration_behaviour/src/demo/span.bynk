@@ -1,0 +1,57 @@
+---
+#3948: the whole-unit `Duration` conversions, which round towards zero, and the
+predicates over `Duration` and the one-sided `AtLeast` and `AtMost`.
+---
+commons demo.span
+
+type Ttl = Duration where AtLeast(60.seconds)
+
+type Window = Duration where InRange(1.second, 1.day)
+
+type Percent = Int where AtLeast(0) && AtMost(100)
+
+type Ratio = Float where AtLeast(0.0) && AtMost(1.5)
+
+type Price = Decimal where AtLeast(0.50d)
+
+const Retention: Ttl = 30.days
+
+fn ttl(d: Duration) -> Result[Ttl, ValidationError] {
+  Ttl.of(d)
+}
+
+fn window(d: Duration) -> Result[Window, ValidationError] {
+  Window.of(d)
+}
+
+fn percent(n: Int) -> Result[Percent, ValidationError] {
+  Percent.of(n)
+}
+
+fn ratio(x: Float) -> Result[Ratio, ValidationError] {
+  Ratio.of(x)
+}
+
+fn price(d: Decimal) -> Result[Price, ValidationError] {
+  Price.of(d)
+}
+
+fn retentionDays() -> Int {
+  Retention.toDays()
+}
+
+fn seconds(d: Duration) -> Int {
+  d.toSeconds()
+}
+
+fn minutes(d: Duration) -> Int {
+  d.toMinutes()
+}
+
+fn hours(d: Duration) -> Int {
+  d.toHours()
+}
+
+fn days(d: Duration) -> Int {
+  d.toDays()
+}
