@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.653.0** | A constant names a cron schedule: `on schedule(Nightly)` and `svc.schedule(Nightly)` accept a `String` or `CronSchedule` constant, resolved to its literal at compile time |
 | **v0.652.2** | Internal: the module-size cap now binds every back-half file, with no exemptions, now that Phase 2 of the back-half paydown has taken every one under 2,000 lines |
 | **v0.652.1** | `bynk` reports wrangler's own error, not "Broken pipe", when wrangler exits before reading a piped secret |
 | **v0.652.0** | A `Cron` refinement predicate and the `CronSchedule` type admit exactly Cloudflare's cron syntax; a schedule's fields are now checked, with `bynk.cron.numeric_weekday` and `bynk.cron.uneven_step` warnings |

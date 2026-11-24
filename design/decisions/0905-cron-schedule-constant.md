@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A constant names a cron schedule: `on schedule(Nightly)` and `svc.schedule(Nightly)` accept a `String` or `CronSchedule` constant, resolved to its literal at compile time
----
+# 0905 — A constant names a cron schedule
 
-## ADR: cron-schedule-constant
-title: A constant names a cron schedule
-summary: `schedule(…)` takes a `String` or `CronSchedule` constant; a refined constant is accepted for this position only
+- **Status:** Accepted (v0.653)
 
 **Context.** A schedule shared by two places (a handler and a test, or two
 contexts through a commons) had to be written twice. Constants exist for exactly
