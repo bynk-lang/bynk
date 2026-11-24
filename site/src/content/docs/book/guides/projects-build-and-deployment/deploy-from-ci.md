@@ -19,14 +19,16 @@ So when `CI` is set (GitHub sets it) `bynk deploy` refuses to make one, and
 names the resource:
 
 ```text
-bynk: KV namespace for `<worker>` is unrecorded; provision locally first and commit bynk.deploy.lock
+bynk: error: KV namespace for `<worker>` is unrecorded; provision locally first and commit bynk.deploy.lock
 ```
 
-Run the first deploy of each environment from your own machine, then commit the
-lock file:
+Run the first deploy of each environment CI will deploy to from your own machine,
+naming the environment with `--env` (a bare `bynk deploy` deploys the `default`
+environment, which has its own Workers and its own section of the lock), then
+commit the lock file:
 
 ```sh
-bynk deploy
+bynk deploy --env production
 bynk deploy --env staging
 git add bynk.deploy.lock
 git commit -m "Record the deploy state"
@@ -75,8 +77,8 @@ here. The action passes `--yes`, because a CI job has no one to ask.
 
 ## The token
 
-`CLOUDFLARE_API_TOKEN` is the account's API token. A dry run never
-authenticates, but a real deploy needs a token that can deploy Workers and
+`CLOUDFLARE_API_TOKEN` is the account's API token. A dry run
+needs no token, but a real deploy needs a token that can deploy Workers and
 manage what the project declares. These are the permissions this guide's
 resources name; each lookup checks Cloudflare before the deploy changes
 anything, and a refusal names the permission it lacked.
@@ -121,8 +123,16 @@ not to wrangler after `--`: a run that includes a new Worker refuses
 Pass only values that come directly from `secrets.*`: GitHub masks those in the
 log, but prints a literal, or a value built from a secret, in the step's header.
 A name that is declared but unset fails the deploy, since CI has no prompt, and
-a secret that is already set is left alone unless you pass `force-secrets: "true"`
-after rotating it. See [Secrets](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#secrets).
+a secret that is already set is left alone.
+
+`force-secrets: "true"` is `bynk deploy --force`, and it overwrites **every**
+secret in the run, including the ones Bynk manages for you: it rotates each edge
+key (so calls fail briefly), replaces minted `SignedCookie` keys (which signs
+every user out), and re-mints foreign-caller keys, printing the new value into
+the job log where GitHub does not mask it. To change one value, such as
+`STRIPE_KEY`, run `bynk deploy --force` once from your own machine, or set that
+single secret with `wrangler secret put`, rather than leaving `force-secrets` on in
+the workflow. See [Secrets](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#secrets).
 
 ## A plan on pull requests
 
@@ -159,6 +169,14 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 ```
+
+A project with a `Postgres` or `MySql` capability that reads its connection string
+from an environment variable (`connection_env`) fails the deploy, a dry run
+included, if that variable is unset. Set it in the job's `env` from a secret on
+every deploy job, and for an environment that only CI touches, give it a
+`config_id` in `[deploy.hyperdrive]` instead, which also keeps the plan job
+working without the connection string. See
+[Postgres databases: Hyperdrive](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#postgres-databases-hyperdrive).
 
 The `plan` output is always JSON. Without a token the plan is built offline, so
 it shows what the project would create rather than what is already on the
