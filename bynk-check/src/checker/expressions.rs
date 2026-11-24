@@ -2611,7 +2611,11 @@ fn check_retry_after(
             CompileError::new(
                 "bynk.queue.retry_delay_out_of_range",
                 args[1].span,
-                "a retry delay is between 1 second and 24 hours",
+                if *millis < MIN_RETRY_DELAY_MS {
+                    "this retry delay is under 1 second; write a delay from 1 second to 24 hours"
+                } else {
+                    "this retry delay is over 24 hours; write a delay from 1 second to 24 hours"
+                },
             )
             .with_note(
                 "Cloudflare retries a message after a whole number of seconds, at most 24 hours; a delay computed at run time is rounded up and clamped to that range, but a literal outside it is a mistake",
@@ -6129,5 +6133,57 @@ mod future_witness_tests {
             Some(("FetchError".to_string(), "Pair(_, _)".to_string()))
         );
         assert_eq!(future_variant_witness("Pair(_, _)"), None);
+    }
+}
+
+#[cfg(test)]
+mod retry_after_tests {
+    use crate::testkit::analyse;
+
+    fn verdict(expr: &str) -> Vec<&'static str> {
+        let source = format!(
+            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] {{ {expr} }}\n}}\n"
+        );
+        analyse(&[("t/q.bynk", &source)]).categories()
+    }
+
+    #[test]
+    fn a_reason_and_a_duration_are_accepted() {
+        assert!(verdict("RetryAfter(\"x\", 30.seconds)").is_empty());
+    }
+
+    #[test]
+    fn the_wrong_number_of_arguments_is_a_variant_arity_error() {
+        assert_eq!(verdict("RetryAfter(\"x\")"), ["bynk.types.variant_arity"]);
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 1.second, 2)"),
+            ["bynk.types.variant_arity"]
+        );
+    }
+
+    #[test]
+    fn the_wrong_argument_type_is_an_argument_mismatch() {
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 5)"),
+            ["bynk.types.argument_mismatch"]
+        );
+        assert_eq!(
+            verdict("RetryAfter(1, 1.second)"),
+            ["bynk.types.argument_mismatch"]
+        );
+    }
+
+    #[test]
+    fn a_literal_outside_the_range_is_refused_on_either_side() {
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 999.milliseconds)"),
+            ["bynk.queue.retry_delay_out_of_range"]
+        );
+        assert_eq!(
+            verdict("RetryAfter(\"x\", 25.hours)"),
+            ["bynk.queue.retry_delay_out_of_range"]
+        );
+        assert!(verdict("RetryAfter(\"x\", 24.hours)").is_empty());
+        assert!(verdict("RetryAfter(\"x\", 1.second)").is_empty());
     }
 }

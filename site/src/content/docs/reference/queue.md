@@ -58,9 +58,11 @@ after a whole number of seconds, from 1 second to 24 hours, so a delay **written
 literal** outside that range is `bynk.queue.retry_delay_out_of_range`, and a delay
 **computed at run time** is rounded up to whole seconds and clamped to the range, with
 the clamp logged: a fault would retry with no delay, the opposite of what the handler
-asked for. At the `system` tier a case reads the verdict as written
-(`expect r == RetryAfter("down", 20.seconds)`, or `RetryAfter(_, d)` to bind the delay),
-and a `match` of a queue verdict names `RetryAfter` or has a wildcard.
+asked for. At the `system` tier a case reads the *settled* verdict: the delay the entry
+gave Cloudflare, so a rounded or clamped delay reads as the one it became (`1500.milliseconds`
+as `2.seconds`, `25.hours` computed as `24.hours`). `expect r == RetryAfter("down", 20.seconds)`
+checks it, and `RetryAfter(_, d)` binds the delay. A `match` of a queue verdict names
+`RetryAfter` or has a wildcard.
 
 The handler never calls an ack API itself — it returns a verdict and the
 framework routes it. The verdict is **independent of success/failure**: `Ack` a

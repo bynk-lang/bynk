@@ -1,2 +1,2 @@
-bynk.queue.retry_delay_out_of_range a retry delay is between 1 second and 24 hours
+bynk.queue.retry_delay_out_of_range this retry delay is over 24 hours; write a delay from 1 second to 24 hours
 # exact
