@@ -5,7 +5,7 @@ consumes idempotency { Idempotency }
 type ReserveOutcome = { orderId: String }
 
 service reserve {
-  on call() -> Effect[Option[ReserveOutcome]] given Idempotency {
+  on call() -> Effect[Option[ReserveOutcome]] by Caller given Idempotency {
     let cached <- Idempotency.dedup[ReserveOutcome]("order-key-1")
     cached
   }

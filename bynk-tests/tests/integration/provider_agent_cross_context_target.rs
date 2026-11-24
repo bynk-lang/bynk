@@ -41,7 +41,7 @@ const API_HANDLER: &str = "context api
 consumes registry
 
 service yank {
-  on call() -> Effect[Bool] given registry.Yanks {
+  on call() -> Effect[Bool] by Caller given registry.Yanks {
     registry.Yanks.set(true)
   }
 }
@@ -61,7 +61,7 @@ provides Moderation = YankModeration given registry.Yanks {
 }
 
 service yank {
-  on call() -> Effect[Bool] given Moderation {
+  on call() -> Effect[Bool] by Caller given Moderation {
     Moderation.hide()
   }
 }

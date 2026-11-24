@@ -168,7 +168,7 @@ agent Tally {
 }
 
 service poke {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     let _ <- Tally("t").bump()
     Effect.pure(())
   }

@@ -50,7 +50,7 @@ provides Gamma = GammaImpl {{
 }}
 
 service handlers {{
-  on call(x: Int) -> Effect[Int]{given} {{
+  on call(x: Int) -> Effect[Int] by Caller{given} {{
 {body}
   }}
 }}
@@ -222,7 +222,7 @@ context app.crossuse
 consumes platform.time as Time
 
 service crossuse {{
-  on call() -> Effect[Int]{given} {{
+  on call() -> Effect[Int] by Caller{given} {{
     let t <- Time.Clock.now()
     t
   }}
@@ -408,6 +408,25 @@ fn refined_raw_quick_fix_drops_dot_raw() {
     assert!(
         !fixed.contains(".raw") && fixed.contains("  s\n"),
         "`.raw` removed, leaving the bare value: {fixed:?}"
+    );
+    assert_clean("app/refine.bynk", &fixed);
+}
+
+// -- #3946: `?` on a predicate-free named type's `.of` → "drop the `?`" quick-fix --
+
+#[test]
+fn named_type_of_question_fix_drops_the_question_mark() {
+    // `type Id = Int` has no predicate, so `Id.of(n)` is total and returns `Id`;
+    // the `?` written when it returned a `Result` is the error.
+    let src = "commons app.refine\n\n\
+               type Id = Int\n\n\
+               fn mk(n: Int) -> Result[Id, ValidationError] {\n  let id = Id.of(n)?\n  Ok(id)\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let s = sole_suggestion(&diags, "bynk.types.question_on_non_result");
+    let fixed = apply(src, &s);
+    assert!(
+        fixed.contains("let id = Id.of(n)\n"),
+        "`?` removed: {fixed:?}"
     );
     assert_clean("app/refine.bynk", &fixed);
 }

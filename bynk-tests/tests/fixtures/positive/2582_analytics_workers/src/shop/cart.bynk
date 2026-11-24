@@ -33,5 +33,5 @@ service api from http {
 }
 
 service checkout {
-	on call(region: String) -> Effect[()] given Timer { Timer.took(region, 12.5) }
+	on call(region: String) -> Effect[()] by Caller given Timer { Timer.took(region, 12.5) }
 }

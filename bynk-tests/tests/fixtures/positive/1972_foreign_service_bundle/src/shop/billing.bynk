@@ -15,7 +15,7 @@ capability Billing = Service @worker("legacy-billing")
 capability Ledger = Service @worker("ledger")
 
 service charge {
-	on call(id: String) -> Effect[Int] given Billing {
+	on call(id: String) -> Effect[Int] by Caller given Billing {
 		let req = Request {
 			method: Post,
 			url: "https://legacy-billing/charge",
@@ -33,7 +33,7 @@ service charge {
 }
 
 service audit {
-	on call() -> Effect[String] given Ledger {
+	on call() -> Effect[String] by Caller given Ledger {
 		let req = Request {
 			method: Get,
 			url: "https://ledger/entries",

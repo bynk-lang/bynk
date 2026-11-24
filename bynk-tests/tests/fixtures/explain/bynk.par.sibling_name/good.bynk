@@ -1,7 +1,7 @@
 context demo
 
 service dash {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     par {
       let a <- Effect.pure(1)
       let c <- Effect.pure(2)

@@ -6,7 +6,7 @@ context demo.t
 consumes bynk { Locale }
 
 service s {
-	on call() -> Effect[String] given Locale {
+	on call() -> Effect[String] by Caller given Locale {
 		let l <- Locale.current()
 		Effect.pure("x")
 	}

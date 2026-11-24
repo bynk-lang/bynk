@@ -4559,7 +4559,8 @@ mod tests {
     /// #2618: `private` on a declaration it does not apply to is rejected.
     #[test]
     fn private_on_a_service_is_rejected() {
-        let src = "context m\n\nprivate service s {\n  on call() -> Effect[Int] { 1 }\n}\n";
+        let src =
+            "context m\n\nprivate service s {\n  on call() -> Effect[Int] by Caller { 1 }\n}\n";
         let tokens = crate::lexer::tokenize(src).unwrap();
         let errs = parse_units(&tokens, src).unwrap_err();
         assert_eq!(errs[0].category, "bynk.visibility.private_not_allowed");

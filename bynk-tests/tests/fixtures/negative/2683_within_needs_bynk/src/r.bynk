@@ -6,7 +6,7 @@ capability Pricing {
 }
 
 service s {
-	on call(id: Int) -> Effect[String] given Pricing {
+	on call(id: Int) -> Effect[String] by Caller given Pricing {
 		let r <- Pricing.quote(id).within(2.seconds)
 		Effect.pure("x")
 	}

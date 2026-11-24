@@ -1,7 +1,7 @@
 context shop.ledger
 
 service authorise {
-  on call(amount: Int) -> Effect[Result[Int, String]] {
+  on call(amount: Int) -> Effect[Result[Int, String]] by Caller {
     Ok(amount)
   }
 }

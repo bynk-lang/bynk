@@ -1,7 +1,7 @@
 context ag.doubler
 
 service double {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n * 2
   }
 }

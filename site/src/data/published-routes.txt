@@ -1295,6 +1295,7 @@
 /reference/diagnostics/bynk.actor.foreign_reserved_secret/
 /reference/diagnostics/bynk.actor.foreign_secret_not_string/
 /reference/diagnostics/bynk.actor.identity_not_sealed/
+/reference/diagnostics/bynk.actor.missing_by_on_call/
 /reference/diagnostics/bynk.actor.missing_by_on_http/
 /reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.oidc_missing_audience/
@@ -1692,6 +1693,7 @@
 /reference/diagnostics/bynk.lex.unterminated_interpolation/
 /reference/diagnostics/bynk.lex.unterminated_string/
 /reference/diagnostics/bynk.list.deprecated_function/
+/reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/

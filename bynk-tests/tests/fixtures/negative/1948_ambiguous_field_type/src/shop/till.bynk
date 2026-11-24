@@ -9,7 +9,7 @@ consumes shop.other
 // The field's type cannot be traced to one of them, so the read is rejected.
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let w <- shop.quotes.wrap()
     Effect.pure(w.inner.cents)
   }

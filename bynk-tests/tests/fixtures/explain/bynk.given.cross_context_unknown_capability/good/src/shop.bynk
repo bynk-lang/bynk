@@ -3,7 +3,7 @@ context shop
 consumes clock { Clock }
 
 service tick {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

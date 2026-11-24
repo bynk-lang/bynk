@@ -10,7 +10,7 @@ type Receipt = {
 }
 
 service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     Ok(Receipt { id: id, region: None })
   }
 }

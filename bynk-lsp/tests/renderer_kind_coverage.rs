@@ -82,7 +82,7 @@ agent Todos {
 }
 
 service api {
-  on call() -> Effect[()] given Logger {
+  on call() -> Effect[()] by Caller given Logger {
     let _ <- Logger.info("ping")
     Effect.pure(())
   }

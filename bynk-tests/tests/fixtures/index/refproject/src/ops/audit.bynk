@@ -3,7 +3,7 @@ context ops.audit
 consumes shop.billing
 
 service audit {
-  on call() -> Effect[Int] given shop.billing.Pay {
+  on call() -> Effect[Int] by Caller given shop.billing.Pay {
     let _ <- shop.billing.bill(3)
     let c <- shop.billing.Pay.charge(1)
     c

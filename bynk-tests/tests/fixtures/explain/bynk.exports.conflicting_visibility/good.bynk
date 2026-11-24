@@ -5,7 +5,7 @@ exports opaque { OrderId }
 type OrderId = String where Matches("ORD-[0-9]+")
 
 service probe {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
         Effect.pure(1)
     }
 }

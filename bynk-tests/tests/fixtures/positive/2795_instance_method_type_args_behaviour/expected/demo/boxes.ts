@@ -3,8 +3,6 @@
 
 import { None, type Option } from "../__bynk_runtime/result.js";
 
-import { sort } from "../bynk/list.js";
-
 export interface Box<T> {
   readonly value: T;
 }
@@ -20,7 +18,7 @@ export const Box = {
     return self.value;
   },
   sortedWith<T, U>(self: Box<T>, xs: readonly U[], __cmp_U: (a: U, b: U) => number): readonly U[] {
-    return sort(xs, __cmp_U);
+    return [...xs].sort((__a: U, __b: U) => __cmp_U(((__v: U) => __v)(__a), ((__v: U) => __v)(__b)));
   },
   castInside<T, V>(self: Box<T>): Option<string> {
     const c = Box.cast<any, string>(self);

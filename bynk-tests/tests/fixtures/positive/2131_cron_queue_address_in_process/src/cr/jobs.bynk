@@ -17,7 +17,7 @@ agent Counter {
 }
 
 service sweeper from cron {
-	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
 		let _ <- Counter("c").bump()
 		Ok(())
 	}

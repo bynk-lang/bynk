@@ -1,7 +1,7 @@
 context a.tick
 
 service sweep from cron {
-  on schedule("0 * * * *") (when: Int) -> Effect[Result[(), String]] {
+  on schedule("0 * * * *") (when: Instant) -> Effect[Result[(), String]] {
     Ok(())
   }
 }

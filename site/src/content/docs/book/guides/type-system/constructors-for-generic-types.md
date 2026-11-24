@@ -12,14 +12,12 @@ the type holds inside it:
 ```bynk,fragment
 commons guide.sorted
 
-uses bynk.list
-
 type Sorted[T: Ord] = {
 	items: List[T],
 }
 
 fn Sorted.fromList(xs: List[T]) -> Sorted[T] {
-	Sorted { items: sort(xs) }
+	Sorted { items: xs.sort() }
 }
 
 fn Sorted.empty() -> Sorted[T] {

@@ -53,7 +53,7 @@ service recent {
 // The default `Caller`: a foreign caller may not call it, so the client
 // leaves it out.
 service audit {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n
   }
 }

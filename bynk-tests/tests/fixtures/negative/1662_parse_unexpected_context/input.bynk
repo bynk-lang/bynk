@@ -2,7 +2,7 @@ context demo
 
 // #1662: a context checked as a single file.
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

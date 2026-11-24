@@ -1,7 +1,7 @@
 context commerce.payment
 
 service batch {
-  on call(amounts: List[Int]) -> Effect[Result[Int, Int]] {
+  on call(amounts: List[Int]) -> Effect[Result[Int, Int]] by Caller {
     Ok(1)
   }
 }

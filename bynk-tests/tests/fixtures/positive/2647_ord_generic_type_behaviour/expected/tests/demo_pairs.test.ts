@@ -5,7 +5,6 @@ import { Some } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkCmpInt, __bynkCmpString } from "../__bynk_runtime/compare.js";
 import * as __ns_demo_pairs from "./../demo/pairs.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -45,7 +44,6 @@ async function test_one_generic_type_at_two_instantiations() {
     const { Entry, Maybe, entriesByInt, entriesByString, firstEntry, maybes, nested } = __ns_demo_pairs;
     type Entry<K, V> = __ns_demo_pairs.Entry<K, V>;
     type Maybe<T> = __ns_demo_pairs.Maybe<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const a = { key: 10, value: "a" };
     const b = { key: 9, value: "z" };
     const xs: readonly Entry<number, string>[] = [a, b];
@@ -70,7 +68,6 @@ async function test_a_bounded_generic_over_a_derived_type_forwards_both_comparat
     const { Entry, Maybe, entriesByInt, entriesByString, firstEntry, maybes, nested } = __ns_demo_pairs;
     type Entry<K, V> = __ns_demo_pairs.Entry<K, V>;
     type Maybe<T> = __ns_demo_pairs.Maybe<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const a = { key: 1, value: "b" };
     const b = { key: 1, value: "a" };
     const xs: readonly Entry<number, string>[] = [a, b];
@@ -91,7 +88,6 @@ async function test_a_generic_sum_orders_by_variant_and_then_payload() {
     const { Entry, Maybe, entriesByInt, entriesByString, firstEntry, maybes, nested } = __ns_demo_pairs;
     type Entry<K, V> = __ns_demo_pairs.Entry<K, V>;
     type Maybe<T> = __ns_demo_pairs.Maybe<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const none: Maybe<number> = Maybe.Missing;
     const ms: readonly Maybe<number>[] = [Maybe.Present(3), none, Maybe.Present(1)];
     if (!(__bynkEq(maybes(ms), [none, Maybe.Present(1), Maybe.Present(3)]))) { throw __bynkExpectFailure("tests/demo/pairs.bynk:24:10", 783, 827, "expect maybes(ms) == [none, Present(1), Present(3)]\n  expected: maybes(ms) == [none, Present(1), Present(3)]\n  actual:   " + __bynkShow((maybes(ms))) + " == " + __bynkShow(([none, Maybe.Present(1), Maybe.Present(3)]))); }
@@ -111,7 +107,6 @@ async function test_type_arguments_nest() {
     const { Entry, Maybe, entriesByInt, entriesByString, firstEntry, maybes, nested } = __ns_demo_pairs;
     type Entry<K, V> = __ns_demo_pairs.Entry<K, V>;
     type Maybe<T> = __ns_demo_pairs.Maybe<T>;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const k1: Maybe<number> = Maybe.Present(1);
     const k2: Maybe<number> = Maybe.Missing;
     const a = { key: k1, value: [1, 2] };

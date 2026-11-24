@@ -4,7 +4,7 @@ consumes bynk
 consumes bynk.cloudflare { Postgres }
 
 service probe {
-  on call() -> Effect[Int] given Postgres {
+  on call() -> Effect[Int] by Caller given Postgres {
     Effect.pure(0)
   }
 }

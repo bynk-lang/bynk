@@ -6,7 +6,7 @@ consumes bynk.cloudflare { Postgres, PgError, PgRun, PgStatement, PgValue }
 capability Main = Postgres
 
 service probe {
-  on call(name: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+  on call(name: String) -> Effect[Result[List[PgRun], PgError]] by Caller given Main {
     Main.transaction([
       PgStatement { sql: "insert into orders (name) values ($1)", params: [PgText(name)] },
       PgStatement { sql: "update orders set qty = qty + 1 where name = $1 and", params: [PgText(name)] },

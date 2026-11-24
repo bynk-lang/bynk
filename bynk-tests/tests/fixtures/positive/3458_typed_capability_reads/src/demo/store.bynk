@@ -8,27 +8,27 @@ type Legacy = { id: String }
 // #3458: a first-party operation whose `Effect[P]` payload mentions its
 // `Codable` parameter returns plain JSON, which the call site decodes as `P`.
 service stash {
-  on call(key: String, receipt: Receipt) -> Effect[()] given TypedReads {
+  on call(key: String, receipt: Receipt) -> Effect[()] by Caller given TypedReads {
     TypedReads.write[Receipt](key, receipt)
   }
 }
 
 service stashLegacy {
-  on call(key: String, legacy: Legacy) -> Effect[()] given TypedReads {
+  on call(key: String, legacy: Legacy) -> Effect[()] by Caller given TypedReads {
     TypedReads.write[Legacy](key, legacy)
   }
 }
 
 // `readOpt` declares an undecodable reply a miss.
 service find {
-  on call(key: String) -> Effect[Option[Receipt]] given TypedReads {
+  on call(key: String) -> Effect[Option[Receipt]] by Caller given TypedReads {
     TypedReads.readOpt[Receipt](key)
   }
 }
 
 // `read` declares nothing, so an undecodable reply faults.
 service need {
-  on call(key: String) -> Effect[Receipt] given TypedReads {
+  on call(key: String) -> Effect[Receipt] by Caller given TypedReads {
     TypedReads.read[Receipt](key)
   }
 }

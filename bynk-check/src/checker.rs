@@ -62,6 +62,8 @@ use equality::EqScope;
 mod expressions;
 mod kernels;
 mod linearity;
+mod list_basics;
+mod list_par;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
@@ -2182,7 +2184,13 @@ pub fn check_handler_body(
             .push(calls::with_of_hint(err, body_ty, return_ty, &ctx));
     }
     if report_unused {
-        report_unused_given(&mut ctx, &given_entries, return_ty_span);
+        let given_removal_anchor = ctx.caps.given_anchor.unwrap_or(return_ty_span);
+        report_unused_given(
+            &mut ctx,
+            &given_entries,
+            return_ty_span,
+            given_removal_anchor,
+        );
     }
 }
 
@@ -2194,6 +2202,7 @@ pub(crate) fn report_unused_given(
     ctx: &mut Ctx,
     given_entries: &[(String, Span)],
     return_ty_span: Span,
+    removal_anchor: Span,
 ) {
     // Bidirectional `given` check.
     // 1) Every used capability is declared. (Handled in capability-call site.)
@@ -2222,7 +2231,7 @@ pub(crate) fn report_unused_given(
             .with_suggestion(
                 format!("remove `{c}` from the `given` clause"),
                 vec![(
-                    given_removal_span(given_entries, i, return_ty_span),
+                    given_removal_span(given_entries, i, removal_anchor),
                     String::new(),
                 )],
                 Applicability::MachineApplicable,

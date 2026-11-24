@@ -4,7 +4,7 @@ consumes bynk.cloudflare { D1, SqlError }
 
 // #2602: a bare `D1` names no database.
 service probe {
-  on call() -> Effect[Result[String, SqlError]] given D1 {
+  on call() -> Effect[Result[String, SqlError]] by Caller given D1 {
     D1.all("SELECT 1", [])
   }
 }

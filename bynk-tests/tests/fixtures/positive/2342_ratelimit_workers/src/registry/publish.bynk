@@ -35,5 +35,5 @@ service api from http {
 }
 
 service read {
-	on call(key: String) -> Effect[Bool] given Gate { Gate.open(key) }
+	on call(key: String) -> Effect[Bool] by Caller given Gate { Gate.open(key) }
 }

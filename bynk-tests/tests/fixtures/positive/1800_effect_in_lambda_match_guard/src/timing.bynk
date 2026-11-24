@@ -7,7 +7,7 @@ consumes bynk { Clock }
 // guards, so `stamp` was typed pure and its `<-` rejected as
 // `bynk.effect.bind_in_pure_context`.
 service stamp {
-  on call(n: Int) -> Effect[Int] given Clock {
+  on call(n: Int) -> Effect[Int] by Caller given Clock {
     let f = (m: Int) => {
       match Some(m) {
         Some(x) if if x > 0 {

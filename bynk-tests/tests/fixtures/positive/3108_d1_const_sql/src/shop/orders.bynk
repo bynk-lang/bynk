@@ -12,13 +12,13 @@ const INSERT_ORDER: String = "INSERT INTO orders (id, total) VALUES (?1, ?2)"
 const ONE_ORDER: String = "SELECT id, total FROM orders WHERE id = ?1"
 
 service save {
-	on call(id: String, total: Int) -> Effect[Result[SqlRun, SqlError]] given Orders {
+	on call(id: String, total: Int) -> Effect[Result[SqlRun, SqlError]] by Caller given Orders {
 		Orders.run(INSERT_ORDER, [Text(id), Integer(total)])
 	}
 }
 
 service find {
-	on call(id: String) -> Effect[Result[String, SqlError]] given Orders {
+	on call(id: String) -> Effect[Result[String, SqlError]] by Caller given Orders {
 		Orders.all(ONE_ORDER, [Text(id)])
 	}
 }

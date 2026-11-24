@@ -399,8 +399,7 @@ mod tests {
         assert_eq!(range["end"]["character"], 2);
     }
 
-    const PLATFORM: &str =
-        "context platform\n\nservice Pinger {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+    const PLATFORM: &str = "context platform\n\nservice Pinger {\n  on call(n: Int) -> Effect[Int] by Caller {\n    n\n  }\n}\n";
     const LIMITS: &str = "context ratelimit\n\nagent Limiter {\n  key client: String\n\n  store count: Cell[Int]\n\n  on call reset() -> Effect[()] {\n    count := 0\n  }\n\n  on call hit(now: Int) -> Effect[Int] {\n    now\n  }\n}\n";
 
     fn uri(name: &str) -> Url {

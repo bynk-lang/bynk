@@ -13,7 +13,7 @@ exports transparent { Receipt }
 type Receipt = { id: String }
 
 service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     Ok(Receipt { id: id })
   }
 }
@@ -24,7 +24,7 @@ const CHECKOUT: &str = "context demo.checkout
 consumes demo.payment
 
 service pay {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     demo.payment.authorise(id)
   }
 }
@@ -77,7 +77,7 @@ fn a_consumed_context_that_is_never_called_is_not_bound() {
 consumes demo.payment
 
 service keep {
-  on call(r: Receipt) -> Effect[Int] {
+  on call(r: Receipt) -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }
@@ -97,7 +97,7 @@ fn each_handler_env_names_only_the_contexts_it_calls() {
     let ledger = "context demo.ledger
 
 service note {
-  on call(id: String) -> Effect[Int] {
+  on call(id: String) -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }
@@ -108,13 +108,13 @@ consumes demo.payment
 consumes demo.ledger
 
 service pay {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     demo.payment.authorise(id)
   }
 }
 
 service log {
-  on call(id: String) -> Effect[Int] {
+  on call(id: String) -> Effect[Int] by Caller {
     demo.ledger.note(id)
   }
 }
@@ -165,7 +165,7 @@ agent Ledger {
 }
 
 service ping {
-  on call(id: String) -> Effect[()] given Events, Kv {
+  on call(id: String) -> Effect[()] by Caller given Events, Kv {
     let _ <- Kv.put(id, id)
     let _ <- demo.payment.authorise(id)
     Events.emit[Pinged](Pinged { id: id })
@@ -229,7 +229,7 @@ agent Ledger {
 }
 
 service ping {
-  on call(id: String) -> Effect[Int] given Events, Kv {
+  on call(id: String) -> Effect[Int] by Caller given Events, Kv {
     let _ <- Kv.put(id, id)
     let _ <- demo.payment.authorise(id)
     let n <- Ledger(id).total()
@@ -273,7 +273,7 @@ fn a_user_type_in_a_wrapper_signature_is_qualified_through_handlers() {
 type Order = { id: String }
 
 service place {
-  on call(order: Order) -> Effect[Option[Order]] {
+  on call(order: Order) -> Effect[Option[Order]] by Caller {
     Effect.pure(Some(order))
   }
 }
@@ -314,7 +314,7 @@ provides Clock = FixedClock {
 }
 
 service probe {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     Clock.now()
   }
 }

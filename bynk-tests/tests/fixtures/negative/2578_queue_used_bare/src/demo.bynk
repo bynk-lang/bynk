@@ -4,7 +4,7 @@ consumes bynk.cloudflare { Queue }
 
 // #2578: a bare `Queue` names no queue.
 service probe {
-  on call(body: String) -> Effect[()] given Queue {
+  on call(body: String) -> Effect[()] by Caller given Queue {
     Queue.send(body)
   }
 }

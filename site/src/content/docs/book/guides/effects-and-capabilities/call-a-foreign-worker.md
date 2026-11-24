@@ -35,7 +35,7 @@ The billing system that predates this project.
 capability Billing = Service @worker("legacy-billing")
 
 service charge {
-	on call(order: String) -> Effect[Int] given Billing {
+	on call(order: String) -> Effect[Int] by Caller given Billing {
 		let req = Request {
 			method: Post,
 			url: "https://legacy-billing/charges",

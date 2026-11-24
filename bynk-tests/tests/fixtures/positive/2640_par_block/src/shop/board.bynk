@@ -40,7 +40,7 @@ fn positive(x: Int) -> Result[Int, String] {
 }
 
 service board {
-  on call(id: Int) -> Effect[String] given Users, Orders, Audit {
+  on call(id: Int) -> Effect[String] by Caller given Users, Orders, Audit {
     par {
       let user <- Users.get(id)
       let orders: Int <- Orders.forUser(id)
@@ -53,7 +53,7 @@ service board {
 // A binding may re-bind a name from before the block, and read the earlier
 // value in its own expression; `_` discards a result.
 service rebind {
-  on call(id: Int) -> Effect[Int] given Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Orders {
     let orders <- Orders.forUser(id)
     par {
       let orders <- Orders.forUser(orders + 1)
@@ -65,7 +65,7 @@ service rebind {
 
 // A `par` block sits anywhere a statement can, inside a branch included.
 service branch {
-  on call(id: Int) -> Effect[Int] given Users, Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Users, Orders {
     if id > 0 {
       par {
         let user <- Users.get(id)
@@ -81,7 +81,7 @@ service branch {
 // A name a lambda parameter, a `match` arm or an inner `let` binds for itself is
 // that binding, not a sibling's: only reading the sibling's own name is refused.
 service shadow {
-  on call(id: Int) -> Effect[Int] given Users, Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Users, Orders {
     par {
       let user <- Users.get(id)
       let n <- Orders.forUser([1, 2].map((user) => user + 1).length())
@@ -93,7 +93,7 @@ service shadow {
 
 // A binding whose value hoists statements keeps them inside its own thunk.
 service hoist {
-  on call(id: Int) -> Effect[Int] given Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Orders {
     par {
       let a <- Orders.forUser(id)
       let b: Int <- Orders.forUser(match id { 0 => 1, _ => id })
@@ -107,7 +107,7 @@ service hoist {
 // and the `?` lines run in source order, so the first `Err` in source order
 // propagates.
 service unwrap {
-  on call(id: Int) -> Effect[Result[Int, String]] given Lookup {
+  on call(id: Int) -> Effect[Result[Int, String]] by Caller given Lookup {
     par {
       let aR <- Lookup.find(id)
       let bR <- Lookup.find(id + 1)
@@ -120,7 +120,7 @@ service unwrap {
 
 // A `?` on an argument is computed before the block, not inside it.
 service hoisted {
-  on call(id: Int) -> Effect[Result[Int, String]] given Orders {
+  on call(id: Int) -> Effect[Result[Int, String]] by Caller given Orders {
     let key = positive(id)?
     par {
       let a <- Orders.forUser(key)

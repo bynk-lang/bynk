@@ -59,7 +59,7 @@ matches.
 
 ```bynk,fragment
 service find {
-	on call(id: String) -> Effect[Result[Option[Activity], SqlReadError]] given Deliveries {
+	on call(id: String) -> Effect[Result[Option[Activity], SqlReadError]] by Caller given Deliveries {
 		Deliveries.firstAs[Activity]("FROM deliveries WHERE id = ?1", [Text(id)])
 	}
 }

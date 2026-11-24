@@ -14,7 +14,7 @@ provides Clockish = FixedClock {
 fn double(n: Int) -> Int { n * 2 }
 
 service plain {
-	on call(n: Int) -> Effect[Int] given Clockish {
+	on call(n: Int) -> Effect[Int] by Caller given Clockish {
 		let t <- Clockish.stamp()
 		Effect.pure(double(n) + t)
 	}

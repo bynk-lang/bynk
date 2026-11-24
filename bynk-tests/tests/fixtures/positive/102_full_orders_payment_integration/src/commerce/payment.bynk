@@ -35,7 +35,7 @@ Authorise a payment. The single entry point for payment authorisation
 from other contexts.
 ---
 service authorise {
-  on call(amount: Money) -> Effect[Result[AuthId, PaymentError]]
+  on call(amount: Money) -> Effect[Result[AuthId, PaymentError]] by Caller
       given Payments {
     let result <- Payments.authorise(amount)
     result

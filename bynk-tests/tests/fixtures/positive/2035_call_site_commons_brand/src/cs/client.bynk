@@ -7,7 +7,7 @@ consumes cs.store
 // included, straight into `cs.store`'s arguments. Each must fit the callee's
 // parameter type, whose `Line` carries `cs.store`'s brand.
 service go {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let line = Line { qty: 2, note: "n" }
     let a <- cs.store.put(Batch { lines: [], first: None, byKey: Map.empty(), page: Page { items: [] }, pair: Pair { left: line, right: None } })
     let b <- cs.store.put(Batch { lines: List.empty(), first: Some(line), byKey: Map.empty().insert("k", line), page: Page { items: [line] }, pair: Pair { left: line, right: Some(line) } })
@@ -21,7 +21,7 @@ service go {
 // Values typed with this context's `Line` (a handler parameter, an annotated
 // binding) cross into a consumed record the same way.
 service viaParam {
-  on call(l: Line, ls: List[Line]) -> Effect[Int] {
+  on call(l: Line, ls: List[Line]) -> Effect[Int] by Caller {
     let byKey: Map[String, Line] = Map.empty()
     cs.store.put(Batch { lines: ls, first: Some(l), byKey: byKey, page: Page { items: ls }, pair: Pair { left: l, right: None } })
   }

@@ -5,7 +5,7 @@ capability Logger {
 }
 
 service silent {
-  on call() -> Effect[()] given Logger {
+  on call() -> Effect[()] by Caller given Logger {
     Effect.pure(())
   }
 }

@@ -2,12 +2,12 @@
 // ran it, as one in an HTTP or service handler is, and does not fail the case.
 suite cr.jobs as system {
 	case "a detached Err in a cron handler is reported" {
-		let r <- sweeper.schedule("*/5 * * * *", 960000)
+		let r <- sweeper.schedule("*/5 * * * *", Instant.fromEpochMillis(960000))
 		expect r is Ok(_)
 	}
 
 	case "a detached fault in a cron handler is reported" {
-		let r <- sweeper.schedule("0 * * * *", 0)
+		let r <- sweeper.schedule("0 * * * *", Instant.fromEpochMillis(0))
 		expect r is Ok(_)
 	}
 

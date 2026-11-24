@@ -10,7 +10,7 @@ capability Stock = D1
 type Item = { id: String }
 
 service listing {
-	on call() -> Effect[Result[List[Item], SqlReadError]] given Stock {
+	on call() -> Effect[Result[List[Item], SqlReadError]] by Caller given Stock {
 		Stock.select[Item]("FROM items", [])
 	}
 }

@@ -9,7 +9,7 @@ provides Clock = Fixed {
 }
 
 service probe {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let add: (Int) -> Int = (n) => {
       let t = Clock.now()
       n

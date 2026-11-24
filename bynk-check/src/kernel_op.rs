@@ -77,7 +77,9 @@ kernel_ops! {
         // v0.146 (ADR 0170): run an effectful step for each element, in order.
         ForEach = "forEach", "forEach(f: T -> Effect[()]) -> Effect[()]";
         // v0.147 (ADR 0171): run an effectful step for every element concurrently.
-        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[()]) -> Effect[()]";
+        // #3967: named `parForEach`, so `parTraverse` can return the values.
+        ParForEach = "parForEach", "parForEach(f: T -> Effect[()]) -> Effect[()]";
+        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[U]) -> Effect[List[U]]";
         // v0.148 (ADR 0172): collect every outcome (no short-circuit), sequential
         // and concurrent.
         TraverseAll = "traverseAll", "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
@@ -103,9 +105,19 @@ kernel_ops! {
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
         FirstOrElse = "firstOrElse", "firstOrElse(default: T) -> T";
+        // #3962 (with #3828): the rest of `bynk.list`'s vocabulary, and the three
+        // everyday methods that existed nowhere.
+        Reverse = "reverse", "reverse() -> List[T]";
+        Find = "find", "find(p: T -> Bool) -> Option[T]";
+        Contains = "contains", "contains(item: T) -> Bool";
+        Last = "last", "last() -> Option[T]";
+        LastOrElse = "lastOrElse", "lastOrElse(default: T) -> T";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Sort = "sort", "sort() -> List[T]";
+        Traverse = "traverse", "traverse(f: T -> Effect[U]) -> Effect[List[U]]";
         Sum = "sum", "sum(key: T -> K) -> K";
-        Min = "min", "min(key: T -> K) -> Option[K]";
-        Max = "max", "max(key: T -> K) -> Option[K]";
+        Min = "min", "min(key: T -> K) -> Option[K], or min() -> Option[T] for an Ord element";
+        Max = "max", "max(key: T -> K) -> Option[K], or max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).

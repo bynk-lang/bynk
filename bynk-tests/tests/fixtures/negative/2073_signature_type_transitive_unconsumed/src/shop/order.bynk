@@ -8,7 +8,7 @@ exports transparent { Order }
 type Order = { id: String, b: Base }
 
 service place {
-  on call(id: String) -> Effect[Order] {
+  on call(id: String) -> Effect[Order] by Caller {
     Order { id: id, b: Base { n: 7 } }
   }
 }

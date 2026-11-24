@@ -20,7 +20,7 @@ capability Prices {
 }
 
 service prices {
-	on call(sku: Int) -> Effect[Int] given Prices {
+	on call(sku: Int) -> Effect[Int] by Caller given Prices {
 		Prices.get("east", sku).race(Prices.get("west", sku))
 	}
 }

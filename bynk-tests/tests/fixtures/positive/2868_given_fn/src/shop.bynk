@@ -60,7 +60,7 @@ fn pong(n: Int) -> Effect[Int] given Logger {
 }
 
 service api {
-	on call(sku: String) -> Effect[Int] given Logger, Orders {
+	on call(sku: String) -> Effect[Int] by Caller given Logger, Orders {
 		let n <- countOr[Int](sku, 0, (c) => c * 2)
 		let _ <- warnAll(["a", "b"])
 		let _ <- countdown(2)

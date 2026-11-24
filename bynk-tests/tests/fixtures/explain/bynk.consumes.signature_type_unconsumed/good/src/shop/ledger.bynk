@@ -3,7 +3,7 @@ context shop.ledger
 consumes shop.order
 
 service domestic {
-    on call(id: String) -> Effect[Order] {
+    on call(id: String) -> Effect[Order] by Caller {
         Effect.pure(Order { id: id })
     }
 }

@@ -113,7 +113,7 @@ event Tick = {
 }
 
 service trigger {
-  on call(tag: String) -> Effect[()] given Events {
+  on call(tag: String) -> Effect[()] by Caller given Events {
     Events.emit[Tick](Tick { tag: tag })
   }
 }
