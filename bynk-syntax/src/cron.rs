@@ -369,9 +369,62 @@ pub fn cron_param(ty: &crate::ast::TypeRef) -> Option<CronParam> {
     }
 }
 
+/// #3872: the name of the error type `E` in a cron handler's declared
+/// `Effect[Result[(), E]]`, for the failure record a run leaves. `(unnamed)` when the
+/// return type is not in that shape (the checker reports that separately) or the
+/// error is neither a named nor a base type, so it cannot be read as a user type.
+pub fn cron_error_type(ret: &crate::ast::TypeRef) -> String {
+    use crate::ast::TypeRef;
+    if let TypeRef::Effect(inner, _) = ret
+        && let TypeRef::Result(_, err, _) = &**inner
+    {
+        if let TypeRef::Named(name) = &**err {
+            return name.name.clone();
+        }
+        if let TypeRef::Base(base, _) = &**err {
+            return base.name().to_string();
+        }
+    }
+    "(unnamed)".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `Effect[Result[(), err]]`, as a handler declares it.
+    fn cron_return(err: crate::ast::TypeRef) -> crate::ast::TypeRef {
+        use crate::ast::TypeRef;
+        let at = crate::span::Span::new(0, 0);
+        TypeRef::Effect(
+            Box::new(TypeRef::Result(
+                Box::new(TypeRef::Unit(at)),
+                Box::new(err),
+                at,
+            )),
+            at,
+        )
+    }
+
+    #[test]
+    fn the_error_type_is_named_and_anything_else_is_unnamed() {
+        use crate::ast::{BaseType, Ident, TypeRef};
+        let at = crate::span::Span::new(0, 0);
+        let named = TypeRef::Named(Ident {
+            name: "Refused".to_string(),
+            span: at,
+        });
+        assert_eq!(cron_error_type(&cron_return(named.clone())), "Refused");
+        assert_eq!(
+            cron_error_type(&cron_return(TypeRef::Base(BaseType::String, at))),
+            "String"
+        );
+        // An `Option[…]` error, or a handler that is not an `Effect[Result[…]]`, is not a name
+        // a user type could have.
+        let option = TypeRef::Option(Box::new(named.clone()), at);
+        assert_eq!(cron_error_type(&cron_return(option)), "(unnamed)");
+        assert_eq!(cron_error_type(&named), "(unnamed)");
+    }
 
     fn ok(s: &str) {
         assert_eq!(is_cron_expression(s), Ok(()), "{s:?} should be admitted");

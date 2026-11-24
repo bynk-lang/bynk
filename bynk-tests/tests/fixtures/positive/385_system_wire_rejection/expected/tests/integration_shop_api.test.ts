@@ -31,8 +31,34 @@ function __bynkViolationOf(e: any): { kind: string, agent: string, name: string,
   const v = e && e.invariantViolation;
   return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
 }
+// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
+// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
+// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
+function __bynkShowLeaf(x: any): unknown {
+  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
+    const neg = x.coefficient < 0n;
+    let digits = (neg ? -x.coefficient : x.coefficient).toString();
+    let text = digits;
+    if (x.scale > 0) {
+      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
+      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
+    }
+    return (neg ? "-" : "") + text + "d";
+  }
+  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
+  return x;
+}
 function __bynkShow(v: unknown): string {
-  try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
+  try {
+    if (typeof v === "bigint") return String(v);
+    const leaf = __bynkShowLeaf(v);
+    if (typeof leaf === "string" && leaf !== v) return leaf;
+    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
+    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
+    }
+    return JSON.stringify(v) ?? String(v);
+  } catch { return String(v); }
 }
 
 
@@ -421,13 +447,13 @@ async function test_a_raw_path_segment_failing_refinement_is_rejected_even_with_
   }
 }
 
-async function test_an_empty_raw_path_segment_does_not_route_and_falls_through() {
+async function test_an_empty_raw_path_segment_is_the_parent_path__which_does_not_answer_PUT() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:58:12", 2952, 2967, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MethodNotAllowed"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:57:12", 2900, 2931, "expect r is Rejected(MethodNotAllowed)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -443,7 +469,7 @@ async function test_a_typed_path_segment_with_a_raw_body_passes_both_through_the
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku(String(("widget" as any)), "{\"sku\": \"widget\"}", undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:62:12", 3157, 3172, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:61:12", 3121, 3136, "expect r is Handled(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -462,9 +488,9 @@ async function test_a_refinement_rejection_carries_the_router_s_detail() {
     void (((__d) => {
       if (__d.tag === "Rejected" && __d.value.tag === "RefinementViolation") {
         const d = __d.value.detail;
-        return __bynkExpect((d.includes("sku")), "shop/tests/api.test.bynk:69:50", 3523, 3540, "expect d.contains(\"sku\")");
+        return __bynkExpect((d.includes("sku")), "shop/tests/api.test.bynk:68:50", 3487, 3504, "expect d.contains(\"sku\")");
       }
-      return __bynkExpect((false), "shop/tests/api.test.bynk:70:19", 3559, 3564, "expect false");
+      return __bynkExpect((false), "shop/tests/api.test.bynk:69:19", 3523, 3528, "expect false");
     })(r));
     return { pass: true };
   } catch (e) {
@@ -484,9 +510,9 @@ async function test_a_malformed_body_s_rejection_carries_the_parser_s_detail() {
     void (((__d) => {
       if (__d.tag === "Rejected" && __d.value.tag === "MalformedJson") {
         const d = __d.value.detail;
-        return __bynkExpect((d.length > 0), "shop/tests/api.test.bynk:76:44", 3767, 3781, "expect d.length() > 0");
+        return __bynkExpect((d.length > 0), "shop/tests/api.test.bynk:75:44", 3731, 3745, "expect d.length() > 0");
       }
-      return __bynkExpect((false), "shop/tests/api.test.bynk:77:19", 3800, 3805, "expect false");
+      return __bynkExpect((false), "shop/tests/api.test.bynk:76:19", 3764, 3769, "expect false");
     })(r));
     return { pass: true };
   } catch (e) {
@@ -506,9 +532,9 @@ async function test_a_handled_raw_body_carries_the_handler_s_typed_result() {
     void (((__d) => {
       if (__d.tag === "Handled" && __d.value.tag === "Created") {
         const item = __d.value.value;
-        return __bynkExpect((item.sku === "raw-ok"), "shop/tests/api.test.bynk:83:40", 4013, 4033, "expect item.sku == \"raw-ok\"");
+        return __bynkExpect((item.sku === "raw-ok"), "shop/tests/api.test.bynk:82:40", 3977, 3997, "expect item.sku == \"raw-ok\"");
       }
-      return __bynkExpect((false), "shop/tests/api.test.bynk:84:19", 4052, 4057, "expect false");
+      return __bynkExpect((false), "shop/tests/api.test.bynk:83:19", 4016, 4021, "expect false");
     })(r));
     return { pass: true };
   } catch (e) {
@@ -533,7 +559,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a typed create returns Created over the real wire", "an empty sku is rejected at the boundary before the handler", "malformed json is rejected at the boundary", "valid raw input passes the boundary to the handler", "no credential is rejected at the seam", "no credential combined with a raw body is rejected at the seam", "no credential combined with a raw path and a typed body is rejected at the seam", "the wrong method is a 405 fall-through", "a handler-returned 400 is Handled, not a boundary rejection", "a raw path segment with a typed body passes both through the boundary", "a raw path segment failing refinement is rejected even with a typed body", "an empty raw path segment does not route and falls through", "a typed path segment with a raw body passes both through the boundary", "a refinement rejection carries the router's detail", "a malformed body's rejection carries the parser's detail", "a handled raw body carries the handler's typed result"];
+export const __bynkCases: readonly string[] = ["a typed create returns Created over the real wire", "an empty sku is rejected at the boundary before the handler", "malformed json is rejected at the boundary", "valid raw input passes the boundary to the handler", "no credential is rejected at the seam", "no credential combined with a raw body is rejected at the seam", "no credential combined with a raw path and a typed body is rejected at the seam", "the wrong method is a 405 fall-through", "a handler-returned 400 is Handled, not a boundary rejection", "a raw path segment with a typed body passes both through the boundary", "a raw path segment failing refinement is rejected even with a typed body", "an empty raw path segment is the parent path, which does not answer PUT", "a typed path segment with a raw body passes both through the boundary", "a refinement rejection carries the router's detail", "a malformed body's rejection carries the parser's detail", "a handled raw body carries the handler's typed result"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -604,9 +630,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("an empty raw path segment does not route and falls through")) {
+  if (want("an empty raw path segment is the parent path, which does not answer PUT")) {
     const started = __bynkCaseNow();
-    const r = { name: "an empty raw path segment does not route and falls through", ...(await test_an_empty_raw_path_segment_does_not_route_and_falls_through()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "an empty raw path segment is the parent path, which does not answer PUT", ...(await test_an_empty_raw_path_segment_is_the_parent_path__which_does_not_answer_PUT()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
