@@ -931,7 +931,7 @@ jobs:
         continue-on-error: true
       # `cargo nextest run --workspace` runs every crate's suite. nextest cannot
       # run rustdoc doctests; the only ones in the tree are the crate READMEs'
-      # examples, which the `README examples` step below runs. The corpus's includes:
+      # examples, which `test-system`'s `README examples` step runs. The corpus's includes:
       #   - doc_examples        — the example-compilation gate (the Book)
       #   - diagnostics_registry / keywords_reference / grammar_reference
       #     — assert the generated reference pages are up to date
@@ -1143,8 +1143,10 @@ jobs:
       # run here instead: in every ready PR's run and every push to `main`
       # (the queue never passes this job, so `main` never skips it), and in the
       # nightly. Not in the merge queue: each entry already passed both on its
-      # own PR, and this job repeats them on the merged tree in the push run on
-      # `main`. This job builds every test binary, so the tier probe's
+      # own PR. A break that only stacking reveals (an API rename in one entry,
+      # a README example using the old name in another) is caught by this job's
+      # run on the merged tree in the push run on `main`, as for the system
+      # tier. This job builds every test binary, so the tier probe's
       # `nextest list` calls compile nothing.
       #
       # #1645: the crate READMEs' `rust` examples, compiled and run as doctests
@@ -1731,7 +1733,7 @@ jobs:
     #     `readmes` input) and asserts the crate-layering diagram matches the manifests.
     #   - `cargo readme-doctests` compiles and runs the `rust` examples in
     #     bynk-*/README.md (a `readmes` input) as doctests (#1645), which the
-    #     `test` job runs in its own `README examples` step;
+    #     `test-system` job runs in its own `README examples` step;
     #     xtask/tests/docs_consistency/readme_doctests.rs keeps the alias's crate
     #     list in step with the READMEs that have a `rust` block.
     #   - xtask validates design/pending/**.md (a `pending` input) against the
