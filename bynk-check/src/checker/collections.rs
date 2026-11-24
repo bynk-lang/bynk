@@ -235,7 +235,7 @@ pub(super) fn check_map_of(
     Some(tys.intern(Ty::Map(key, val)))
 }
 
-/// The `bynk.map` and `bynk.set` free functions and the method form each rewrites
+/// The `bynk.map`, `bynk.set` and `bynk.string` free functions and the method form each rewrites
 /// to: `(module, function, method, arity)`. One table, read by the warning below and by
 /// the wasm `bynk_reference` catalogue so the two cannot drift.
 pub const BYNK_COLLECTION_DEPRECATED: &[(&str, &str, &str, usize)] = &[
@@ -248,7 +248,18 @@ pub const BYNK_COLLECTION_DEPRECATED: &[(&str, &str, &str, usize)] = &[
     ("bynk.set", "isSubsetOf", "isSubsetOf", 2),
     ("bynk.set", "filterSet", "filter", 2),
     ("bynk.set", "mapSet", "map", 2),
+    // #3978: `join(parts, sep)` is `parts.join(sep)` on a `List[String]`.
+    ("bynk.string", "join", "join", 2),
 ];
+
+/// The diagnostic code and receiver-type name of each deprecated module.
+fn deprecation_of(module: &str) -> (&'static str, &'static str) {
+    match module {
+        "bynk.map" => ("bynk.map.deprecated_function", "Map"),
+        "bynk.set" => ("bynk.set.deprecated_function", "Set"),
+        _ => ("bynk.string.deprecated_function", "List[String]"),
+    }
+}
 
 /// A call to a deprecated `bynk.map`/`bynk.set` function: a non-failing warning
 /// (ADR 0117) with a machine-applicable rewrite to the method form,
@@ -268,23 +279,17 @@ pub(super) fn warn_deprecated_collection_fn(
     else {
         return;
     };
-    let code = if module == "bynk.map" {
-        "bynk.map.deprecated_function"
-    } else {
-        "bynk.set.deprecated_function"
-    };
+    let (code, receiver) = deprecation_of(&module);
     let mut err = CompileError::new(
         code,
         name.span,
         format!(
-            "`{module}.{}` is deprecated: use the `{}` method `.{method}(…)`",
-            name.name,
-            if module == "bynk.map" { "Map" } else { "Set" }
+            "`{module}.{}` is deprecated: use the `{receiver}` method `.{method}(…)`",
+            name.name
         ),
     )
     .with_note(format!(
-        "the `{module}` free functions are superseded by the `{}` methods (#3961); the method form reads left to right and chains",
-        if module == "bynk.map" { "Map" } else { "Set" }
+        "the `{module}` free functions are superseded by the `{receiver}` methods (#3961, #3978); the method form reads left to right and chains",
     ));
     // The rewrite needs the function's own shape; a wrong-arity call is reported
     // elsewhere and gets no fix.
