@@ -571,39 +571,13 @@ fn agent_constructor(
     }
 }
 
-/// #1482: returns a real `Vec<bynk_ts::TsStmt>` (was `out: &mut String` plus
-/// a `source_map: Option<&RefCell<SourceMapBuilder>>` parameter) — the
-/// state interface/registry/zero-factory/rehydration-gate/construction-
-/// factory are each already real, fully-converted top-level nodes (#1367/
-/// #1369/#1371/#1377) and now push directly into the returned `Vec` instead
-/// of being printed through the removed `out` parameter (per #1462's own
-/// confirmed 66-site "already-argued print-and-splice" bucket — no internal
-/// construction logic changes here, only the outer plumbing). Two sites stay
-/// genuinely opaque, each wrapped as its own `TsStmt::raw`, mirroring
-/// `emit_provider`'s own Decision-C precedent (#1480):
-///
-/// - **The DO class** (`export class {Name} { ... }`) — `emit_agent`'s own
-///   instance of `emit_provider`'s Decision C (the class's own header/
-///   fields/constructor stay hand-written text, cited in place below); every
-///   real per-method/per-handler print-and-splice site inside it (`loadState`/
-///   `commitState`/the per-handler loop/the WS-hosted DO methods/`fetch`)
-///   still builds and merges exactly as before, just into a local buffer/map
-///   pair instead of this function's own former `out`/`source_map`
-///   parameters — captured as ONE `TsStmt::raw` carrying a class-wide
-///   `nested_map` that combines every one of those merges, the same
-///   two-level composition `emit_provider` already established.
-/// - **The history-driver** (`__bynkDriveHistory_*`) — #1386's own standing
-///   decision, confirmed still-permanent by #1462's own correction (test-
-///   support only, stripped from deploy, thinnest fixture coverage in the
-///   track, its own per-handler discriminated-union algebra deferred to
-///   `any` by design): genuinely raw hand-templated text throughout, zero
-///   `bynk_ts` nodes or `LowerCtx` involvement anywhere in it, captured as a
-///   second, separate `TsStmt::raw` with no `nested_map` (nothing to merge),
-///   not decomposed further, wrapping the whole function's own text output.
-///
-/// The caller (`emitter.rs`) merges every returned node into its own real
-/// module map via `print_stmt_and_merge`, the same composition
-/// `emit_free_fn`/`emit_provider`/`emit_service` already use.
+/// Emit one agent: the state interface, registry, zero factory, persistence functions and
+/// the Durable Object class, each a `bynk_ts` node. The DO class's fields, constructor and
+/// every method are nodes too, so the printer alone records the source map (#1482 returned a
+/// `Vec<bynk_ts::TsStmt>` in place of an `out: &mut String`; 1A.32b made the class a real
+/// `TsDecl::class`). The test-support history driver is emitted alongside it. The caller
+/// (`emitter.rs`) merges every returned node into its module map via `print_stmt_and_merge`,
+/// as `emit_free_fn`, `emit_provider` and `emit_service` do.
 pub(crate) fn emit_agent(
     a: &AgentDecl,
     state: &[StoreFieldIr],

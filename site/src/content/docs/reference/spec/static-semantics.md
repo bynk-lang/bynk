@@ -1871,7 +1871,11 @@ MUST supply the same two arguments, with the same codes and result. Constructing
 `RawTagged` MUST supply exactly three — a
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time
-([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. A cron handler MUST take at most one
+([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. The schedule of a cron handler, written as the name of a constant, MUST name a
+constant declared exactly `String` or `CronSchedule` and bound, through any chain of such
+constants, to a string literal; the literal is the schedule, checked as a literal
+schedule is (`bynk.cron.invalid_schedule` otherwise), and duplicate detection and the
+trigger table read it. A cron handler MUST take at most one
 `Instant` parameter, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`

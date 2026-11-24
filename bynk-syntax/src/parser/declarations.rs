@@ -4298,6 +4298,7 @@ impl<'a> Parser<'a> {
         let kind_ident = self.expect_ident(
             "expected a handler form (e.g. `call`, `GET`, `schedule`, `message`) after `on`",
         )?;
+        let mut schedule_const = None;
         let kind = match kind_ident.name.as_str() {
             "call" => HandlerKind::Call,
             "message" => HandlerKind::Message,
@@ -4314,13 +4315,8 @@ impl<'a> Parser<'a> {
             // router's own rejections.
             "rejected" => HandlerKind::Rejected,
             "schedule" => {
-                self.expect(TokenKind::LParen, "before the cron schedule expression")?;
-                let expr_tok = self.expect(
-                    TokenKind::StrLit,
-                    "expected a cron expression string literal in `schedule(\"…\")`",
-                )?;
-                let expr = parse_string_literal(self.slice(expr_tok.span), expr_tok.span)?;
-                self.expect(TokenKind::RParen, "to close the schedule expression")?;
+                let (expr, named) = self.parse_schedule_header()?;
+                schedule_const = named;
                 HandlerKind::Cron { expr }
             }
             method if HttpMethod::from_ident(method).is_some() => {
@@ -4427,6 +4423,7 @@ impl<'a> Parser<'a> {
             kind,
             annotations,
             method_name,
+            schedule_const,
             by_clause,
             params,
             return_type,
@@ -4436,6 +4433,36 @@ impl<'a> Parser<'a> {
             span,
             trivia: Trivia::default(),
         })
+    }
+
+    /// #3875: the parenthesised schedule of `on schedule(…)`: a string literal, or
+    /// the name of a constant. A name returns an empty expression and the
+    /// reference; the resolution pass (`annotation_consts`) fills the expression
+    /// in with the literal the constant denotes.
+    fn parse_schedule_header(&mut self) -> Result<(String, Option<ScheduleConst>), CompileError> {
+        self.expect(TokenKind::LParen, "before the cron schedule expression")?;
+        let result = if self.peek_kind() == Some(TokenKind::Ident) {
+            let name = self.expect_ident("as the constant naming the cron schedule")?;
+            (
+                String::new(),
+                Some(ScheduleConst {
+                    name,
+                    decl_span: None,
+                    refusal: None,
+                }),
+            )
+        } else {
+            let expr_tok = self.expect(
+                TokenKind::StrLit,
+                "expected a cron expression string literal or a constant name in `schedule(…)`",
+            )?;
+            (
+                parse_string_literal(self.slice(expr_tok.span), expr_tok.span)?,
+                None,
+            )
+        };
+        self.expect(TokenKind::RParen, "to close the schedule expression")?;
+        Ok(result)
     }
 
     /// Parse the optional `by (<binder>:)? <Actor> (| <Actor>)*` clause (v0.45/

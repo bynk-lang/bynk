@@ -1732,6 +1732,31 @@ pub struct ConstRef {
     pub decl_span: Option<Span>,
 }
 
+/// #3875: a cron handler's schedule written as the name of a constant,
+/// `on schedule(Nightly)`. The resolution pass fills the handler's
+/// [`HandlerKind::Cron`] `expr` with the literal the constant denotes, so every
+/// later reader sees the resolved text; this keeps the reference (its span, for
+/// go-to-definition and rename) and, when the constant was refused, why.
+#[derive(Debug, Clone)]
+pub struct ScheduleConst {
+    /// The reference as written.
+    pub name: Ident,
+    /// The span of the constant's declaration, when it is in the same file.
+    pub decl_span: Option<Span>,
+    /// Set by the resolution pass when the name does not denote a schedule.
+    pub refusal: Option<ScheduleRefusal>,
+}
+
+/// Why a [`ScheduleConst`] was not resolved.
+#[derive(Debug, Clone)]
+pub enum ScheduleRefusal {
+    /// No constant of that name is visible in the unit.
+    Unknown,
+    /// A constant that is not declared `String` or `CronSchedule`, or whose
+    /// initialiser is not a plain literal; the text names its declared type.
+    Declared(String),
+}
+
 /// A storage kind applied to its element type(s) (v0.81): `Cell[Int]`,
 /// `Map[ReservationId, Reservation]`. The `head` is the kind name (`Cell`,
 /// `Map`, `Set`, `Log`, `Queue`, `Cache`); the checker validates it against the
@@ -1984,6 +2009,9 @@ pub struct Handler {
     /// `on call addItem(...)`). For service handlers, this is None (just
     /// `on call(...)`).
     pub method_name: Option<Ident>,
+    /// #3875: the constant an `on schedule(Name)` handler named; `None` for a
+    /// string-literal schedule and every other handler.
+    pub schedule_const: Option<ScheduleConst>,
     /// The `by <binder>: <Actor>` clause (v0.45), if present. Service handlers
     /// only; an absent clause inherits the protocol's default actor.
     pub by_clause: Option<ByClause>,

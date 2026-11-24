@@ -2592,9 +2592,12 @@ impl<'a> Formatter<'a> {
                     escape_string(path)
                 ));
             }
-            HandlerKind::Cron { expr } => {
-                self.push(&format!("on schedule(\"{}\") ", escape_string(expr)));
-            }
+            HandlerKind::Cron { expr } => match &h.schedule_const {
+                // #3875: a constant names the schedule; print the name, not the
+                // literal the resolution pass filled in.
+                Some(sc) => self.push(&format!("on schedule({}) ", sc.name.name)),
+                None => self.push(&format!("on schedule(\"{}\") ", escape_string(expr))),
+            },
             HandlerKind::Message => {
                 self.push("on message");
             }

@@ -136,8 +136,8 @@ its name (`bynk.consumes.type_alias_capability`); alias a name the unit does not
 (`bynk.consumes.type_alias_unknown_export`), alias the same type twice or both
 bare and aliased (`bynk.consumes.type_alias_repeated`), or pick an alias that is
 already taken (`bynk.consumes.type_alias_conflict`), and the compiler refuses.
-In a context split across files, an alias written in any file applies to all of
-them.
+In a context split across files, an alias is in scope only in the file that
+writes it, like the rest of that file's `consumes`.
 
 An alias that appears in one of this context's own service signatures is part of
 that service's contract: renaming the alias changes the contract hash of every

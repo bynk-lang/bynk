@@ -130,7 +130,7 @@ pub(super) fn collect_cron_routes(table: &UnitTable, service_names: &[&String]) 
         for h in &service.handlers {
             // P6.31: dispatches on `IrHandlerKind`; `expr` is a plain `String`
             // in both, so no AST re-derivation is needed here (unlike the
-            // `Http` arm above).
+            // `Http` arm in `http::collect_http_routes`).
             if let bynk_model::IrHandlerKind::Cron { expr } =
                 bynk_model::lower_handler_kind_ir(&h.kind)
             {

@@ -1,0 +1,11 @@
+context svc
+
+type Short20 = String where MaxLength(20)
+
+const Every: Short20 = "*/5 * * * *"
+
+service sweeper from cron {
+  on schedule(Every) () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

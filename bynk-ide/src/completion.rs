@@ -173,6 +173,11 @@ pub fn complete_in(
             })
             .collect();
     }
+    // 0a. #3875: inside `on schedule(<cursor>` — the in-scope `String` and
+    //     `CronSchedule` constants, which name a schedule.
+    if in_schedule_argument(line_prefix) {
+        return schedule_constant_candidates(doc_text, files);
+    }
     // 0b. #2686: `@<cursor>` after a `Matches(…)` / `IsoDate` refinement — the
     //     `@example` annotation, the only one valid there.
     if in_refinement_annotation_position(line_prefix) {
@@ -1088,6 +1093,38 @@ pub const JSON_OPTIONS_VALUES: &[(&str, &str)] = &[
         "plain JSON for non-Bynk clients: `Some(v)` is `v`, `None` is `null`",
     ),
 ];
+
+/// #3875: whether the cursor is inside the parentheses of `on schedule(`, at a
+/// bare (possibly empty) name: a schedule written as a string literal has
+/// nothing to complete.
+pub fn in_schedule_argument(line_prefix: &str) -> bool {
+    let Some(at) = line_prefix.rfind("on schedule(") else {
+        return false;
+    };
+    let after = &line_prefix[at + "on schedule(".len()..];
+    after.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// #3875: the constants a schedule can be written as: those declared exactly
+/// `String` or `CronSchedule` (the detail line of a constant candidate reads
+/// `const Name: Type`).
+fn schedule_constant_candidates(
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
+    free_function_candidates(doc_text, files)
+        .into_iter()
+        .filter(|c| {
+            c.detail.as_deref().is_some_and(|d| {
+                let ty = d
+                    .strip_prefix("const ")
+                    .and_then(|r| r.split_once(": "))
+                    .map(|(_, t)| t.split(" — ").next().unwrap_or(t));
+                matches!(ty, Some("String" | "CronSchedule"))
+            })
+        })
+        .collect()
+}
 
 /// #2686: whether the cursor follows `@` (and any partial name) after a
 /// `where … Matches(…)` / `IsoDate` refinement on the line: a type declaration
@@ -3752,6 +3789,20 @@ mod tests {
 
     use super::*;
     use bynk_check::firstparty::BYNK_LIST_SRC;
+
+    /// #3875: inside `on schedule(` the `String` and `CronSchedule` constants in
+    /// scope are offered, and no other constant.
+    #[test]
+    fn schedule_argument_offers_schedule_constants() {
+        assert!(in_schedule_argument("  on schedule("));
+        assert!(in_schedule_argument("  on schedule(Nigh"));
+        assert!(!in_schedule_argument("  on schedule(\"0 2"));
+        assert!(!in_schedule_argument("  on call("));
+        let doc = "context app.reaper\n\nconst Nightly: String = \"0 2 * * *\"\nconst Limit: Int = 3\n\nfn helper() -> Int { 1 }\n";
+        let got = complete("  on schedule(", doc, None);
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Nightly"], "{labels:?}");
+    }
 
     /// S3 (#1963): an experimental first-party item is marked in its completion
     /// detail; nothing ships experimental, so a stable one is unmarked.
