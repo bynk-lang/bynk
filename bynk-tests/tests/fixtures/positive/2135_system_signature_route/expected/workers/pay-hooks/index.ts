@@ -64,7 +64,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
           const body = __r_body.value;
           const result = await surface.http_POST_webhooks_legacy(body);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Legacy-Sig\""]), __security_webhooks);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Legacy-Sig\""])), __security_webhooks);
         }
       }
       {
@@ -95,7 +95,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_webhooks);
           const body = __r_body.value;
           const result = await surface.http_POST_webhooks_processor(body);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Sig\""]), __security_webhooks);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"pay.hooks\", header=\"X-Sig\""])), __security_webhooks);
         }
       }
       if (__matchPath("/webhooks/legacy", path) !== null) {

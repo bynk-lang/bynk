@@ -39,7 +39,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/who", path) !== null) {
           __route = "GET /who";
           const result = await surface.http_GET_who(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"w.api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"w.api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

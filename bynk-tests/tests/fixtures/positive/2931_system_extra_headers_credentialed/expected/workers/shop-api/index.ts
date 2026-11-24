@@ -53,7 +53,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/me", path) !== null) {
           __route = "GET /me";
           const result = await surface.http_GET_me(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"shop.api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -64,7 +64,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
           const result = await surface.http_POST_notify(request);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"shop.api\", header=\"X-Sig\"", "Bearer realm=\"shop.api\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"shop.api\", header=\"X-Sig\"", "Bearer realm=\"shop.api\""])), __security_api);
         }
       }
       if (__matchPath("/items", path) !== null) {

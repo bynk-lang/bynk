@@ -40,7 +40,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/activity", path) !== null) {
           __route = "GET /activity";
           const result = await surface.http_GET_activity(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"pay.api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"pay.api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -60,7 +60,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_notes(request, body);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bearer realm=\"pay.api\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"pay.api\""])), __security_api);
         }
       }
       if (__matchPath("/activity", path) !== null) {

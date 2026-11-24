@@ -41,7 +41,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/greet", path) !== null) {
           __route = "GET /greet";
           const result = await surface.http_GET_greet(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"hk.hooks\"", "Bynk realm=\"hk.hooks\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"hk.hooks\"", "Bynk realm=\"hk.hooks\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -73,7 +73,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_hook(body);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"hk.hooks\", header=\"X-Sig\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"hk.hooks\", header=\"X-Sig\""])), __security_api);
         }
       }
       {
@@ -83,7 +83,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
           const result = await surface.http_POST_notify(request);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"hk.hooks\", header=\"X-Sig\"", "Bearer realm=\"hk.hooks\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"hk.hooks\", header=\"X-Sig\"", "Bearer realm=\"hk.hooks\""])), __security_api);
         }
       }
       if (__matchPath("/greet", path) !== null) {

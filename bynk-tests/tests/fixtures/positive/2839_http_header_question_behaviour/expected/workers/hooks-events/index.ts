@@ -61,7 +61,7 @@ export default {
           if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""]), __security_events);
           const body = __bytes;
           const result = await surface.http_POST_event(__requestHeaders(request, undefined, ["x-hub-signature-256"]), body);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""]), __security_events);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""])), __security_events);
         }
       }
       {

@@ -70,7 +70,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_notes_Param_id(request, id, __requestHeaders(request, undefined, ["x-sig", "authorization"]));
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bynk-Signature realm=\"reg.api\", header=\"X-Sig\"", "Bearer realm=\"reg.api\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"reg.api\", header=\"X-Sig\"", "Bearer realm=\"reg.api\""])), __security_api);
         }
       }
       {

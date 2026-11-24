@@ -59,7 +59,7 @@ export default {
         if (method === "POST" && __matchPath("/logout", path) !== null) {
           __route = "POST /logout";
           const result = await surface.http_POST_logout(request);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: void) => null)), request, ["Bynk-Cookie realm=\"shop.api\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\""])), __security_api);
         }
       }
       if (__matchPath("/login", path) !== null) {

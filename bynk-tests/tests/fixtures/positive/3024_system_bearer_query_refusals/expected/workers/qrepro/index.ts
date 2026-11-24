@@ -45,7 +45,7 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const query = __r_query.value;
           const result = await surface.http_GET_report(request, query);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"qrepro\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"qrepro\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

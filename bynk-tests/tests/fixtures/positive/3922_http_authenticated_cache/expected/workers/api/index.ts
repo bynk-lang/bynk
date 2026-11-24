@@ -40,7 +40,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/cached", path) !== null) {
           __route = "GET /cached";
           const result = await surface.http_GET_cached(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 60, "private"), request)), request, ["Bearer realm=\"api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 60, "private"), request), request, ["Bearer realm=\"api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -56,7 +56,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/me", path) !== null) {
           __route = "GET /me";
           const result = await surface.http_GET_me(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -64,7 +64,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/missing", path) !== null) {
           __route = "GET /missing";
           const result = await surface.http_GET_missing(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request)), request, ["Bearer realm=\"api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -80,7 +80,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/tokens", path) !== null) {
           __route = "GET /tokens";
           const result = await surface.http_GET_tokens(request);
-          const __response = __applySecurityHeaders(__applyChallenge(__privateByDefault(__notModifiedIfMatch(__noStore(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: false })), request)), request, ["Bearer realm=\"api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__noStore(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: false })), request), request, ["Bearer realm=\"api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -100,7 +100,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_things(request, body);
-          return __applySecurityHeaders(__applyChallenge(__privateByDefault(__httpResultToResponse(result, (__v: string) => __v as __JsonValue)), request, ["Bearer realm=\"api\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"api\""])), __security_api);
         }
       }
       if (__matchPath("/cached", path) !== null) {
