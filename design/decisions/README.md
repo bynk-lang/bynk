@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0929](0929-typed-show-for-time.md) | **The test printer is told where a Duration or Instant sits in a value's type** (v0.671.1) — Generator descriptors and `is` failure reports carry a shape, so Duration and Instant print as Bynk values | Accepted (v0.671.1) |
 | [0928](0928-consumer-built-context-types.md) | **A consumer builds a context's transparent types itself** (v0.671) — a consumer lowers `.of` and a sum variant of a consumed context's type inline, so no value import crosses the Worker boundary, and the checker's adapter-only qualification goes | Accepted (v0.671) |
 | [0927](0927-typed-path-parameters.md) | **Path parameters take the typed-query scalar set, decoded after matching** (v0.670) — A path parameter is a String, Int, Bool, Decimal, enum, or a refinement or opaque type over one; matching stays structural and decoding follows | Accepted (v0.670) |
 | [0926](0926-queue-delivery-metadata.md) | **A queue handler can take its delivery metadata** (v0.669) — An optional `QueueDelivery` parameter carries the platform's attempt count and send time | Accepted (v0.669) |

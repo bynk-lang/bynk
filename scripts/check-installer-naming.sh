@@ -36,12 +36,12 @@ need scripts/install.ps1 '$stage.zip' 'archive suffix'
 need scripts/install.ps1 'SHA256SUMS' 'checksum file'
 
 # Every target the scripts name must be built by the release matrix.
+# macOS targets are paused until #4263; restore them here with the matrix legs.
 for t in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu \
-         x86_64-apple-darwin aarch64-apple-darwin x86_64-pc-windows-msvc; do
+         x86_64-pc-windows-msvc; do
   need "$rel" "target: $t" 'release matrix target'
 done
-for t in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu \
-         x86_64-apple-darwin aarch64-apple-darwin; do
+for t in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
   need scripts/install.sh "$t" 'supported target'
 done
 need scripts/install.ps1 "x86_64-pc-windows-msvc" 'supported target'
