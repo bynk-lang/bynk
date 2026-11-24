@@ -2534,18 +2534,18 @@ never a context (`bynk.adapter.consumes_context`).
 or with conflicting visibility, and an exported capability MUST have a provider
 (the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
 compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
-`bynk.boundary.structural_mismatch`); outside its owning context, a
-context-owned type MUST NOT be built through its constructors (`.of`,
-`.unsafe`, a variant) and an opaque export MUST NOT be built with record syntax
-or inspected (`bynk.context.external_construction`,
-`bynk.context.opaque_inspection`), nor decoded from JSON
-(`bynk.context.external_decode`); a field read on a value of an opaque export is
-an inspection, however the value was bound. A transparent record's fields are
-shared, so a consumer MAY build one with record syntax. A type an **adapter**
+`bynk.boundary.structural_mismatch`); outside its owning context, an
+`exports opaque` type, and a type declared `opaque` however it is exported,
+MUST NOT be built through its constructors (`.of`, a
+variant) or with record syntax, inspected
+(`bynk.context.external_construction`, `bynk.context.opaque_inspection`) or
+decoded from JSON (`bynk.context.external_decode`), and `.unsafe` MUST NOT be
+called on any type from outside; a field read on a value of an opaque export is
+an inspection, however the value was bound. A type a context or an **adapter**
 exports `transparent` is constructible by a consumer in every ordinary form —
-`.of` on a refined type, a variant of a sum, record syntax — because an adapter's
-values are linked into each consumer (`.unsafe` and an opaque export stay the
-owner's). A consumer MAY read the fields of a value whose type the
+`.of` on a refined type, a variant of a sum, record syntax — and under the
+Workers target the consumer builds a context's own with its own copy of the
+guards. A consumer MAY read the fields of a value whose type the
 providing context declares but does not export; the read is checked against
 that declaration ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries)). These rules hold in every body — functions, service and agent handlers,
 and provider operations.

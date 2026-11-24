@@ -1352,18 +1352,18 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.context.external_construction",
         blurb: "A context that `consumes` another may hold and pass on the other's types, but may not \
-                build one. (An adapter's `transparent` types, such as `bynk.cloudflare`'s `KvTtl`, \
-                are the exception: `.of`, a variant and a record literal are open to a consumer.) A \
-                refined or opaque type can promise an invariant, a `Matches` pattern or a smart constructor, \
-                and that holds only if every value is made by the owner; `.of`, `.unsafe` and a variant \
-                constructor are refused from outside, as is the record syntax of an opaque type. Ask the owner \
-                for the value instead: a service that returns it, or takes the plain input and \
-                does the check. `bynk.context.opaque_inspection` is the other side, looking \
+                build an opaque one. (A `transparent` export, whether a context's or an adapter's, such \
+                as `bynk.cloudflare`'s `KvTtl`, is open to a consumer: `.of`, a variant and a record \
+                literal build it.) An opaque type can promise an invariant, a `Matches` pattern or a \
+                smart constructor, and that holds only if every value is made by the owner; `.of`, a \
+                variant constructor and record syntax are refused from outside, and so is `.unsafe` on \
+                any type. Ask the owner for the value instead: a service that returns it, or takes the \
+                plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking \
                 inside such a value.",
         example: "// payment.bynk\n\
                   context payment\n\
                   \n\
-                  exports transparent { AuthId }\n\
+                  exports opaque { AuthId }\n\
                   \n\
                   type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
                   \n\

@@ -1,13 +1,6 @@
----
-level: minor
-probes: ts_writes
-raises: ts_writes — the typed path-parameter decoder and the enum segment of the system driver URL are built as typed nodes in the entry and driver emitters (#3910)
-changelog: A path parameter takes the types a typed `query` field does (`Int`, `Bool`, `Decimal`, enums, and refined or opaque types over them), decoded after the route matches with a `400` at `path.<name>`
----
+# 0927 — Path parameters take the typed-query scalar set, decoded after matching
 
-## ADR: typed-path-parameters
-title: Path parameters take the typed-query scalar set, decoded after matching
-summary: A path parameter is a String, Int, Bool, Decimal, enum, or a refinement or opaque type over one; matching stays structural and decoding follows
+- **Status:** Accepted (v0.670)
 
 **Context.** A path parameter had to be a `String` or a refined or opaque type over `String`, while a typed `query` field, a `cookies` field and a `@form` field also take `Int`, `Bool`, `Decimal` and enums. So `GET /orders/:id` with `id: OrderNo` (`type OrderNo = Int where Positive`) could not be written: the handler took a `String` and parsed it by hand, outside the boundary's validation.
 
