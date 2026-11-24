@@ -55,7 +55,7 @@ pub const D_PATH: &str = "/d/";
 /// A curated, offline-complete explanation of a diagnostic code (#853).
 ///
 /// The `blurb`/`example` are the offline answer `bynk explain` prints, and the
-/// text of the code's page on the site ([`render_json`]). Where that page
+/// text of the code's page on the site ([`render_json_per_code`]). Where that page
 /// lives, and which reference sections it links to, belong to the docs
 /// (`site/src/data/diagnostic-links.json`), not to this table (#3876): the
 /// toolchain links every code as [`href`], so a docs reorganisation never

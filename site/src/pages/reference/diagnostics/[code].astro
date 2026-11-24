@@ -10,12 +10,12 @@ import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
 import { Badge, Code } from "@astrojs/starlight/components";
 import diagnosticLinks from "../../../data/diagnostic-links.json";
 
-// One file per code (#4286), so two changes that add different codes never touch the same file.
-const diagnostics = Object.values(
-  import.meta.glob("../../../generated/diagnostics/*.json", { eager: true, import: "default" }),
-).sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
-
 export async function getStaticPaths() {
+  // One file per code (#4286), so two changes that add different codes never touch the same
+  // file. Inside the function: Astro hoists `getStaticPaths`, so only imports are in scope.
+  const diagnostics = Object.values(
+    import.meta.glob("../../../generated/diagnostics/*.json", { eager: true, import: "default" }),
+  ).sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
   // The title and headings of every Book page a code links to, read once.
   const wanted = new Set(
     Object.values(diagnosticLinks)
