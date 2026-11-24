@@ -1,6 +1,6 @@
 context payment
 
-exports transparent { AuthId }
+exports opaque { AuthId }
 
 type AuthId = String where Matches("AUTH-[0-9]+")
 

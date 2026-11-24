@@ -1,0 +1,7 @@
+context app
+
+consumes shapes { Shape }
+
+fn circle(r: Int) -> Shape {
+  Shape.Circle(r)
+}

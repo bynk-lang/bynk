@@ -2938,6 +2938,34 @@ pub fn combined_types_for(
     out
 }
 
+/// The types a context's Worker entry resolves a request's types against (#3910): its own and
+/// those of the commons it `uses` ([`combined_types_for`]), and each type it takes from a context
+/// it consumes (`consumed.1`, the names; `consumed.0`, the contexts each unit consumes), which a
+/// path parameter of that type is decoded by.
+pub fn entry_types_for(
+    unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    consumed: (
+        &HashMap<String, Vec<String>>,
+        &std::collections::HashSet<String>,
+    ),
+) -> HashMap<String, Arc<TypeDecl>> {
+    let (unit_consumes, consumed_types) = consumed;
+    let mut types = combined_types_for(unit, unit_tables, unit_uses);
+    for dep in unit_consumes.get(unit).into_iter().flatten() {
+        let Some(table) = unit_tables.get(dep) else {
+            continue;
+        };
+        for (name, decl) in &table.types {
+            if consumed_types.contains(name) {
+                types.entry(name.clone()).or_insert_with(|| decl.clone());
+            }
+        }
+    }
+    types
+}
+
 /// P6.18: a `uses`-imported type's own combined visible types (one level,
 /// matching [`combined_types_for`]'s identical shape) — the narrow resolution
 /// scope a signature-lowering pass needs for that unit's own attached
@@ -3341,8 +3369,6 @@ pub fn parsed_alias_span(
 pub struct ConsumedType {
     pub owning_context: String,
     pub visibility: Visibility,
-    /// #3948: the owner is an adapter, whose values are linked into every consumer.
-    pub owner_is_adapter: bool,
 }
 
 /// #1925: every pair of top-level declarations sharing one name, in one

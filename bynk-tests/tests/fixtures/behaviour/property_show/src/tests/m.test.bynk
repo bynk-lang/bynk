@@ -12,4 +12,16 @@ suite demo.m {
       expect b != b
     }
   }
+
+  property "durations differ from themselves" {
+    for all d: Duration {
+      expect d != d
+    }
+  }
+
+  property "instants differ from themselves" {
+    for all t: Instant {
+      expect t != t
+    }
+  }
 }

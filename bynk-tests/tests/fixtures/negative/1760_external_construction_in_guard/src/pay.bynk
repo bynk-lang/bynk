@@ -1,7 +1,7 @@
 context pay
 
 exports opaque { Status }
-exports transparent { Amount }
+exports opaque { Amount }
 
 type Status = | Paid | Declined
 
