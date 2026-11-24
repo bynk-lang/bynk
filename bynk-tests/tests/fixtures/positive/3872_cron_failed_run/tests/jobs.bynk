@@ -1,0 +1,18 @@
+// #3872: an `Err` run is reported to the platform and still read as the case's result; a throwing run
+// fails its case exactly once.
+suite cr.jobs as system {
+	case "an Err run is the case's result" {
+		let r <- sweeper.schedule("*/5 * * * *", Instant.fromEpochMillis(0))
+		expect r is Err(_)
+	}
+
+	case "an Ok run is a success" {
+		let r <- sweeper.schedule("0 * * * *", Instant.fromEpochMillis(0))
+		expect r is Ok(_)
+	}
+
+	case "a throwing run fails the case" {
+		let r <- sweeper.schedule("30 * * * *", Instant.fromEpochMillis(0))
+		expect r is Ok(_)
+	}
+}

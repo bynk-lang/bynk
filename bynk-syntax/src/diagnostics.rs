@@ -1501,7 +1501,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
     },
     Explain {
