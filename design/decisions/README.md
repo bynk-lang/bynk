@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0910](0910-call-outcome.md) | **`svc.outcome(…)` returns a `CallOutcome`, so a caller can handle a failed call** (v0.656) — A cross-context call's failure becomes a value on request, grouped by whether the callee's handler ran | Accepted (v0.656) |
 | [0909](0909-virtual-settle-deps-type.md) | **The virtual-time settle helper accepts any deps object** (v0.655.2) — `__bynkSettleVirtual`'s deps parameter is `object & { __exec?: … }`, not a weak type | Accepted (v0.655.2) |
 | [0908](0908-malformed-path-rejection.md) | **A path that cannot be percent-decoded is a 400 MalformedPath, not a fault** (v0.655.1) — The router refuses an undecodable path with a synthesised 400, a new BoundaryRejection variant | Accepted (v0.655.1) |
 | [0907](0907-cron-handler-schedule-parameter.md) | **A cron handler can take the schedule that fired it** (v0.655) — Up to two parameters, told apart by type, in either order: an `Instant` and exactly `CronSchedule` | Accepted (v0.655) |
