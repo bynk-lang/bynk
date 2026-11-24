@@ -1562,14 +1562,14 @@
     "summary": "A Worker would declare two bindings with the same name, such as an agent `Kv` and the `bynk.cloudflare` KV namespace (both `KV`)."
   },
   {
-    "blurb": "A context that `consumes` another may hold and pass on the other's types, but may not build one. A refined or opaque type can promise an invariant, a `Matches` pattern or a smart constructor, and that holds only if every value is made by the owner; `.of`, `.unsafe` and a variant constructor are refused from outside, as is the record syntax of an opaque type. Ask the owner for the value instead: a service that returns it, or takes the plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+    "blurb": "A context that `consumes` another may hold and pass on the other's types, and build the ones it exports `transparent`, but may not build one it exports `opaque`. An opaque type can promise an invariant, a `Matches` pattern or a smart constructor, and that holds only if every value is made by the owner; `.of`, a variant constructor and the record syntax of an opaque type are refused from outside. `.unsafe`, an unchecked assertion, is refused for every owned type. Ask the owner for the value instead: a service that returns it, or takes the plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
     "category": "Contexts",
     "categoryAnchor": "contexts",
     "code": "bynk.context.external_construction",
     "constructs": [],
-    "example": "// payment.bynk\ncontext payment\n\nexports transparent { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] by Caller { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
+    "example": "// payment.bynk\ncontext payment\n\nexports opaque { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] by Caller { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
     "severity": "error",
-    "summary": "A context-owned type was constructed from outside that context."
+    "summary": "A type a context exports opaque was constructed from outside that context, or `.unsafe` was applied to a context-owned type."
   },
   {
     "blurb": "Decoding creates a value, and a context may not create one of a type another context owns and exports opaque. A decoder would check no more than the base type, because the owner's predicate is the owner's secret. So a handler that takes such a type as its input (an HTTP, queue, event or WebSocket handler decodes it from bytes), and a `Json.decode`, `Json.decodeSql` or `Codable` witness of it, are refused. Take the plain form of the input and let the owner's service make the value. A reply from the owner's own service is fine: its decode is generated.",
@@ -9079,7 +9079,7 @@
     "summary": "An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed."
   },
   {
-    "blurb": "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, a comparison or an `InRange` bound. Each conversion can lose or invent precision, so Bynk makes you write it: `.toFloat()` on an `Int`, `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same code covers a `Duration` or `Instant` used with an operand it does not support.",
+    "blurb": "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, a comparison or an `InRange`, `AtLeast` or `AtMost` bound, which takes literals of the base's own type (`1.second` for a `Duration`). Each conversion can lose or invent precision, so Bynk makes you write it: `.toFloat()` on an `Int`, `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same code covers a `Duration` or `Instant` used with an operand it does not support.",
     "category": "Type checking",
     "categoryAnchor": "type-checking",
     "code": "bynk.types.no_numeric_coercion",
@@ -9256,7 +9256,7 @@
     "summary": "A `Matches` pattern's matching time grows polynomially with input length, but a `MaxLength` or `Length` predicate bounds the input small enough for its degree (warning)."
   },
   {
-    "blurb": "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive` and `InRange` to an `Int`, `Float` or `Decimal`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
+    "blurb": "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive`, `InRange`, `AtLeast` and `AtMost` to an `Int`, `Float`, `Decimal` or `Duration`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
     "category": "Type checking",
     "categoryAnchor": "type-checking",
     "code": "bynk.types.predicate_base_mismatch",

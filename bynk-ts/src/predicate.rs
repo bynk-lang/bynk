@@ -4,7 +4,7 @@
 //! condition without depending on the emitter; behaviour is unchanged.
 
 use crate::program::{TsBinaryOp, TsExpr, TsLit};
-use bynk_syntax::ast::{BaseType, PredKind};
+use bynk_syntax::ast::{BaseType, PredBound, PredKind};
 
 /// Escapes a string for embedding in a TypeScript double-quoted string literal.
 /// The one definition: the printer's `TsLit::Str`, `bynk-emit`'s `escape_ts_string`
@@ -101,9 +101,27 @@ fn decimal_pred_condition(pred: &PredKind, recv: &TsExpr) -> Option<(TsExpr, Str
                 bynk_syntax::decimal::render(&b.coef, b.scale)
             ),
         )),
+        // #3948: a one-sided bound over a `Decimal`.
+        PredKind::AtLeast(PredBound::Decimal(b)) => Some((
+            decimal_bound_expr(recv, TsBinaryOp::GreaterThanEq, b),
+            format!(
+                "must be at least {}",
+                bynk_syntax::decimal::render(&b.coef, b.scale)
+            ),
+        )),
+        PredKind::AtMost(PredBound::Decimal(b)) => Some((
+            decimal_bound_expr(recv, TsBinaryOp::LessThanEq, b),
+            format!(
+                "must be at most {}",
+                bynk_syntax::decimal::render(&b.coef, b.scale)
+            ),
+        )),
         PredKind::Matches(_)
         | PredKind::InRange(..)
         | PredKind::InRangeF(..)
+        | PredKind::InRangeDur(..)
+        | PredKind::AtLeast(_)
+        | PredKind::AtMost(_)
         | PredKind::MinLength(_)
         | PredKind::MaxLength(_)
         | PredKind::Length(_)
@@ -157,24 +175,27 @@ fn decimal_range_expr(
     lo: &bynk_syntax::ast::DecimalBound,
     hi: &bynk_syntax::ast::DecimalBound,
 ) -> TsExpr {
-    let bound = |op, b: &bynk_syntax::ast::DecimalBound| {
-        let scaled_recv = binary(
-            TsBinaryOp::Mul,
-            decimal_member(recv, "coefficient"),
-            pow10(TsExpr::Lit(TsLit::Num(b.scale.to_string()))),
-        );
-        let scaled_bound = binary(
-            TsBinaryOp::Mul,
-            paren(bigint(&decimal_signed_coef(&b.coef))),
-            pow10(decimal_member(recv, "scale")),
-        );
-        paren(binary(op, scaled_recv, scaled_bound))
-    };
     paren(binary(
         TsBinaryOp::And,
-        bound(TsBinaryOp::GreaterThanEq, lo),
-        bound(TsBinaryOp::LessThanEq, hi),
+        decimal_bound_expr(recv, TsBinaryOp::GreaterThanEq, lo),
+        decimal_bound_expr(recv, TsBinaryOp::LessThanEq, hi),
     ))
+}
+
+/// `recv <op> bound` over a `Decimal` object, at a common scale (#3948: the
+/// one-sided form of [`decimal_range_expr`]'s halves).
+fn decimal_bound_expr(recv: &TsExpr, op: TsBinaryOp, b: &bynk_syntax::ast::DecimalBound) -> TsExpr {
+    let scaled_recv = binary(
+        TsBinaryOp::Mul,
+        decimal_member(recv, "coefficient"),
+        pow10(TsExpr::Lit(TsLit::Num(b.scale.to_string()))),
+    );
+    let scaled_bound = binary(
+        TsBinaryOp::Mul,
+        paren(bigint(&decimal_signed_coef(&b.coef))),
+        pow10(decimal_member(recv, "scale")),
+    );
+    paren(binary(op, scaled_recv, scaled_bound))
 }
 
 /// The `Decimal` range check as printed text — for `bynk-emit`'s `lower.rs`, which still
@@ -208,7 +229,13 @@ pub fn pred_condition_and_message_over(
     receiver: &TsExpr,
     base: Option<BaseType>,
 ) -> (crate::TsExpr, String) {
-    if (base == Some(BaseType::Decimal) || matches!(pred, PredKind::InRangeD(..)))
+    if (base == Some(BaseType::Decimal)
+        || matches!(
+            pred,
+            PredKind::InRangeD(..)
+                | PredKind::AtLeast(PredBound::Decimal(_))
+                | PredKind::AtMost(PredBound::Decimal(_))
+        ))
         && let Some((cond, msg)) = decimal_pred_condition(pred, receiver)
     {
         return (cond, msg);
@@ -257,6 +284,33 @@ pub fn pred_condition_and_message_over(
                     cmp(TsBinaryOp::LessThanEq, recv(), num(b.clone())),
                 ),
                 format!("must be in range [{a}, {b}]"),
+            )
+        }
+        // #3948: a `Duration` is its milliseconds; the message names the span as written.
+        PredKind::InRangeDur(a, b) => (
+            cmp(
+                TsBinaryOp::And,
+                cmp(TsBinaryOp::GreaterThanEq, recv(), num(a.millis.to_string())),
+                cmp(TsBinaryOp::LessThanEq, recv(), num(b.millis.to_string())),
+            ),
+            format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        ),
+        // #3948: one-sided bounds, inclusive. A `Float` bound keeps its lexeme.
+        PredKind::AtLeast(b) | PredKind::AtMost(b) => {
+            let (op, word) = if matches!(pred, PredKind::AtLeast(_)) {
+                (TsBinaryOp::GreaterThanEq, "at least")
+            } else {
+                (TsBinaryOp::LessThanEq, "at most")
+            };
+            let operand = match b {
+                PredBound::Int(a) => a.value.to_string(),
+                PredBound::Float(a) => a.lexeme.clone(),
+                PredBound::Duration(a) => a.millis.to_string(),
+                PredBound::Decimal(_) => unreachable!("decimal predicates return early"),
+            };
+            (
+                cmp(op, recv(), num(operand)),
+                format!("must be {word} {}", b.lexeme()),
             )
         }
         // Handled above (a `Decimal` base); not reachable for another base.

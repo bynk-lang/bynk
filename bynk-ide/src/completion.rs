@@ -2101,6 +2101,8 @@ fn predicate_name_candidates() -> Vec<Completion> {
     [
         "Matches",
         "InRange",
+        "AtLeast",
+        "AtMost",
         "MinLength",
         "MaxLength",
         "Length",

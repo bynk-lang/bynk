@@ -242,18 +242,21 @@ built-in predicates joined by `&&`. Each predicate applies to a specific base
 
 {{#grammar predicate_name}}
 
-**On `Int`, `Float` and `Decimal`:**
+**On `Int`, `Float`, `Decimal` and `Duration`:**
 
 | Predicate | Holds when |
 |---|---|
 | `NonNegative` | value ≥ 0 |
 | `Positive` | value > 0 |
 | `InRange(lo, hi)` | lo ≤ value ≤ hi (inclusive) |
+| `AtLeast(lo)` | value ≥ lo (inclusive) |
+| `AtMost(hi)` | value ≤ hi (inclusive) |
 
-`InRange` bounds are numeric literals whose type must **match the base**
-(v0.21): integer bounds on `Int` (`InRange(0, 10)`), float bounds on `Float`
-(`InRange(0.0, 1.0)`), decimal bounds on `Decimal` (`InRange(0.00d, 1.00d)`,
-compared by value). A bound of another numeric type — or a mix — is
+`InRange`, `AtLeast` and `AtMost` bounds are literals whose type must **match
+the base** (v0.21): integer bounds on `Int` (`InRange(0, 10)`), float bounds on
+`Float` (`InRange(0.0, 1.0)`), decimal bounds on `Decimal` (`InRange(0.00d, 1.00d)`,
+compared by value), `Duration` literals on `Duration` (`AtLeast(60.seconds)`,
+compared in milliseconds). A bound of another type — or a mix — is
 `bynk.types.no_numeric_coercion`. On `Float`, `Positive` excludes `0.0`
 exactly as it excludes `0` on `Int`, and the `.of` constructor additionally
 requires the value to be **finite** ([§7.2](/reference/spec/emission/#72-targets)).
@@ -409,11 +412,12 @@ stronger caller.
 
 A context's `exports` clause controls what the boundary reveals: an
 `exports transparent` type shares its structure with consumers — including
-field-level construction — whereas an `exports opaque` type exposes only an
-opaque handle — inspecting it from outside the owning context is rejected
-(`bynk.context.opaque_inspection`), as is building a context-owned type through
-its constructors (`.of`, `.unsafe`, a variant), or an opaque one with record
-syntax, from outside (`bynk.context.external_construction`). Decoding creates a
+construction: `.of` on a refined type, a variant of a sum, a record literal —
+whereas an `exports opaque` type exposes only an opaque handle — inspecting it
+from outside the owning context is rejected (`bynk.context.opaque_inspection`),
+as is building it through its constructors (`.of`, a variant) or with record
+syntax (`bynk.context.external_construction`). `.unsafe`, an unchecked
+assertion, stays the owner's for every type. Decoding creates a
 value too: a context MUST NOT decode such a type through `Json.decode`,
 `Json.decodeSql` or a `Codable` witness, nor take one in an HTTP or queue
 handler's input (`bynk.context.external_decode`); the value comes from a service

@@ -32,7 +32,7 @@ toolchain rather than constructed in the code.
 
 `POST("/links")` mints a code by calling `Random.uuid()`, slicing the result to
 eight characters, and passing it through `Slug.of`. On success it stores the mapping
-with `Kv.putTtl(keyOf(code), body.target, 86400)` — a one-day TTL, so the entry
+with `Kv.putTtl(keyOf(code), body.target, 1.day)` — a one-day TTL, so the entry
 disappears on its own with no sweep to write — and returns `Created` with the code
 and target. `GET("/links/:code")` takes a `Slug` directly, reads
 `Kv.get(keyOf(code))`, and matches the `Option`: `Some(target)` resolves to a

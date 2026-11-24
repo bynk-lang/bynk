@@ -445,12 +445,23 @@ fn walk_expr_for_constraints(
             if let ExprKind::Ident(id) = &receiver.kind
                 && let Some(ct) = consumed.get(&id.name)
             {
-                let is_construct = method.name == OF
-                    || method.name == UNSAFE
+                // #3948: a type exported `transparent` takes every ordinary
+                // construction form from a consumer: `.of` on a refined one, a
+                // variant of a sum, as a record literal already did. An opaque
+                // export, a declared `opaque` type and `.unsafe` (an unchecked
+                // assertion, not a construction) stay the owner's.
+                let owner_only = ct.visibility == Visibility::Opaque
                     || matches!(
                         typed.types.get(&id.name).map(|d| &d.body),
-                        Some(TypeBody::Sum(s)) if s.variants.iter().any(|v| v.name.name == method.name),
+                        Some(TypeBody::Opaque { .. })
                     );
+                let is_construct = method.name == UNSAFE
+                    || (owner_only
+                        && (method.name == OF
+                            || matches!(
+                                typed.types.get(&id.name).map(|d| &d.body),
+                                Some(TypeBody::Sum(s)) if s.variants.iter().any(|v| v.name.name == method.name),
+                            )));
                 if is_construct {
                     errors.push(
                         CompileError::new(

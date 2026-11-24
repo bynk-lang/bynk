@@ -1607,7 +1607,13 @@ pub(crate) fn check_duration_kernel_method(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let sig: Option<(Vec<TyId>, Ty)> = match op {
-        Some(DurationOp::ToMillis) => Some((vec![], Ty::Base(BaseType::Int))),
+        Some(
+            DurationOp::ToMillis
+            | DurationOp::ToSeconds
+            | DurationOp::ToMinutes
+            | DurationOp::ToHours
+            | DurationOp::ToDays,
+        ) => Some((vec![], Ty::Base(BaseType::Int))),
         Some(DurationOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
         None => None,
     };
@@ -1616,7 +1622,7 @@ pub(crate) fn check_duration_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toString`",
+                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`",
                 method.name
             ),
         ));

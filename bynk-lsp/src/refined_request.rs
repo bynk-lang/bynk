@@ -99,6 +99,10 @@ pub enum Predicate {
     Positive,
     /// `min <= value <= max`, for an `Int` or a `Float` alike.
     Range { min: Bound, max: Bound },
+    /// `value >= min` (#3948).
+    AtLeast { min: Bound },
+    /// `value <= max` (#3948).
+    AtMost { max: Bound },
     /// The value's length is at least 1.
     NonEmpty,
     /// The value's length is at least `length`.
@@ -125,6 +129,21 @@ pub enum Bound {
     Float(f64),
 }
 
+/// A one-sided bound as a [`Bound`]. A `Decimal` or `Duration` has no
+/// refined-request panel; they read as a number (a `Duration` in
+/// milliseconds) only to keep the match total.
+fn bound_of(b: &bynk_syntax::ast::PredBound) -> Bound {
+    use bynk_syntax::ast::PredBound;
+    match b {
+        PredBound::Int(a) => Bound::Int(a.value),
+        PredBound::Float(a) => Bound::Float(a.value),
+        PredBound::Decimal(a) => {
+            Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0))
+        }
+        PredBound::Duration(a) => Bound::Int(a.millis),
+    }
+}
+
 impl Predicate {
     fn of(kind: &PredKind) -> Self {
         match kind {
@@ -144,6 +163,12 @@ impl Predicate {
                 min: Bound::Float(a.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
                 max: Bound::Float(b.lexeme.trim_end_matches('d').parse().unwrap_or(0.0)),
             },
+            PredKind::InRangeDur(a, b) => Predicate::Range {
+                min: Bound::Int(a.millis),
+                max: Bound::Int(b.millis),
+            },
+            PredKind::AtLeast(b) => Predicate::AtLeast { min: bound_of(b) },
+            PredKind::AtMost(b) => Predicate::AtMost { max: bound_of(b) },
             PredKind::NonEmpty => Predicate::NonEmpty,
             PredKind::MinLength(n) => Predicate::MinLength { length: *n },
             PredKind::MaxLength(n) => Predicate::MaxLength { length: *n },
@@ -252,6 +277,9 @@ fn clause(kind: &PredKind) -> Clause {
         PredKind::InRange(a, b) => format!("{} ≤ value ≤ {}", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("{} ≤ value ≤ {}", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("value ≥ {}", b.lexeme()),
+        PredKind::AtMost(b) => format!("value ≤ {}", b.lexeme()),
         PredKind::NonEmpty => "length ≥ 1".to_string(),
         PredKind::MinLength(n) => format!("length ≥ {n}"),
         PredKind::MaxLength(n) => format!("length ≤ {n}"),
@@ -375,6 +403,8 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     PredKind::Positive => (Some(1), None),
                     PredKind::NonNegative => (Some(0), None),
                     PredKind::InRange(a, b) => (Some(a.value), Some(b.value)),
+                    PredKind::AtLeast(bynk_syntax::ast::PredBound::Int(a)) => (Some(a.value), None),
+                    PredKind::AtMost(bynk_syntax::ast::PredBound::Int(b)) => (None, Some(b.value)),
                     _ => continue,
                 };
                 lower = lower.max(l);
@@ -412,6 +442,12 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     }
                     PredKind::NonNegative => (Some(0.0), None),
                     PredKind::InRangeF(a, b) => (Some(a.value), Some(b.value)),
+                    PredKind::AtLeast(bynk_syntax::ast::PredBound::Float(a)) => {
+                        (Some(a.value), None)
+                    }
+                    PredKind::AtMost(bynk_syntax::ast::PredBound::Float(b)) => {
+                        (None, Some(b.value))
+                    }
                     _ => continue,
                 };
                 lower = match (lower, l) {

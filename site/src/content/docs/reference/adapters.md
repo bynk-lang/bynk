@@ -160,7 +160,7 @@ v0.19; `putTtl`/`list` since v0.23):
 
 | Capability | Ops | Binding maps to |
 |---|---|---|
-| `Kv` | `get(key) -> Effect[Option[String]]`, `put(key, value) -> Effect[()]`, `putTtl(key, value, ttlSeconds) -> Effect[()]`, `delete(key) -> Effect[()]`, `list(prefix: Option[String]) -> Effect[List[String]]` | the Worker KV namespace at `env.KV` |
+| `Kv` | `get(key) -> Effect[Option[String]]`, `put(key, value) -> Effect[()]`, `putTtl(key, value, ttl: KvTtl) -> Effect[()]`, `delete(key) -> Effect[()]`, `list(prefix: Option[String]) -> Effect[List[String]]` | the Worker KV namespace at `env.KV` |
 
 `putTtl` writes with an `expirationTtl`. `list` is a **drain**: the binding
 follows the cursor internally and returns every matching key name — eager
@@ -173,7 +173,7 @@ store `Json.encode(entry)`, read back through `Json.decode[Entry]`:
 ```bynk,fragment
 service cache {
   on call(key: String, e: Entry) -> Effect[Option[Entry]] by Caller given Kv {
-    let _ <- Kv.putTtl(key, Json.encode(e), 60)
+    let _ <- Kv.putTtl(key, Json.encode(e), 1.minute)
     let stored <- Kv.get(key)
     match stored {
       Some(s) => match Json.decode[Entry](s) {

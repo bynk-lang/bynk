@@ -199,6 +199,7 @@ pub(crate) fn const_literal(e: &Expr) -> Option<ConstLit> {
         ExprKind::IntLit { value: n, .. } => Some(ConstLit::Int(*n)),
         ExprKind::FloatLit { value, .. } => Some(ConstLit::Float(*value)),
         ExprKind::DecimalLit { coef, scale, .. } => Some(ConstLit::Decimal(coef.clone(), *scale)),
+        ExprKind::DurationLit { millis, .. } => Some(ConstLit::Duration(*millis)),
         ExprKind::StrLit(s) => Some(ConstLit::Str(s.clone())),
         ExprKind::BoolLit(b) => Some(ConstLit::Bool(*b)),
         ExprKind::UnitLit => Some(ConstLit::Unit),
@@ -235,6 +236,17 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
             bynk_syntax::decimal::cmp(&lo.coef, lo.scale, c, *s) != Greater
                 && bynk_syntax::decimal::cmp(c, *s, &hi.coef, hi.scale) != Greater
         }
+        (PredKind::NonNegative, ConstLit::Duration(ms)) => *ms >= 0,
+        (PredKind::Positive, ConstLit::Duration(ms)) => *ms > 0,
+        (PredKind::InRangeDur(lo, hi), ConstLit::Duration(ms)) => {
+            lo.millis <= *ms && *ms <= hi.millis
+        }
+        (PredKind::AtLeast(b), lit) => {
+            bound_cmp(b, lit).is_none_or(|o| o != std::cmp::Ordering::Less)
+        }
+        (PredKind::AtMost(b), lit) => {
+            bound_cmp(b, lit).is_none_or(|o| o != std::cmp::Ordering::Greater)
+        }
         (PredKind::MinLength(k), ConstLit::Str(s)) => s.chars().count() as i64 >= *k,
         (PredKind::MaxLength(k), ConstLit::Str(s)) => (s.chars().count() as i64) <= *k,
         (PredKind::Length(k), ConstLit::Str(s)) => s.chars().count() as i64 == *k,
@@ -249,6 +261,21 @@ pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
                 .unwrap_or(false)
         }
         _ => true,
+    }
+}
+
+/// #3948: how the literal compares with a one-sided bound (`lit` against
+/// `bound`), or `None` when they are of different bases (a base/predicate
+/// mismatch, reported at the declaration).
+fn bound_cmp(bound: &PredBound, lit: &ConstLit) -> Option<std::cmp::Ordering> {
+    match (bound, lit) {
+        (PredBound::Int(b), ConstLit::Int(n)) => Some(n.cmp(&b.value)),
+        (PredBound::Float(b), ConstLit::Float(v)) => v.partial_cmp(&b.value),
+        (PredBound::Decimal(b), ConstLit::Decimal(c, s)) => {
+            Some(bynk_syntax::decimal::cmp(c, *s, &b.coef, b.scale))
+        }
+        (PredBound::Duration(b), ConstLit::Duration(ms)) => Some(ms.cmp(&b.millis)),
+        _ => None,
     }
 }
 
@@ -324,6 +351,7 @@ pub(crate) fn literal_matches_base(lit: &ConstLit, base: BaseType) -> bool {
             | (ConstLit::Bool(_), BaseType::Bool)
             | (ConstLit::Float(_), BaseType::Float)
             | (ConstLit::Decimal(..), BaseType::Decimal)
+            | (ConstLit::Duration(_), BaseType::Duration)
     )
 }
 
@@ -420,27 +448,50 @@ pub(crate) fn check_refinement(
             // to refinement bounds, not a predicate/base mismatch.
             let numeric_bound_mismatch = matches!(
                 (&pred.kind, base),
-                (PredKind::InRange(_, _), BaseType::Float | BaseType::Decimal)
-                    | (PredKind::InRangeF(_, _), BaseType::Int | BaseType::Decimal)
-                    | (PredKind::InRangeD(_, _), BaseType::Int | BaseType::Float)
+                (
+                    PredKind::InRange(_, _),
+                    BaseType::Float | BaseType::Decimal | BaseType::Duration
+                ) | (
+                    PredKind::InRangeF(_, _),
+                    BaseType::Int | BaseType::Decimal | BaseType::Duration
+                ) | (
+                    PredKind::InRangeD(_, _),
+                    BaseType::Int | BaseType::Float | BaseType::Duration
+                ) | (
+                    PredKind::InRangeDur(_, _),
+                    BaseType::Int | BaseType::Float | BaseType::Decimal
+                )
+            ) || matches!(
+                &pred.kind,
+                PredKind::AtLeast(b) | PredKind::AtMost(b)
+                    if is_ordered_numeric(base) && b.base() != base
             );
             if numeric_bound_mismatch {
-                let bounds = match &pred.kind {
-                    PredKind::InRange(..) => "`Int`",
-                    PredKind::InRangeF(..) => "`Float`",
-                    _ => "`Decimal`",
+                let (pred_name, bounds) = match &pred.kind {
+                    PredKind::InRange(..) => ("InRange", "`Int`"),
+                    PredKind::InRangeF(..) => ("InRange", "`Float`"),
+                    PredKind::InRangeD(..) => ("InRange", "`Decimal`"),
+                    PredKind::InRangeDur(..) => ("InRange", "`Duration`"),
+                    PredKind::AtLeast(b) => ("AtLeast", bound_type_name(b)),
+                    PredKind::AtMost(b) => ("AtMost", bound_type_name(b)),
+                    _ => ("InRange", "`Decimal`"),
                 };
-                let want = match base {
-                    BaseType::Float => "`InRange(0.0, 1.0)`",
-                    BaseType::Decimal => "`InRange(0.00d, 1.00d)`",
-                    _ => "`InRange(0, 1)`",
+                let want = match (base, pred_name) {
+                    (BaseType::Float, "InRange") => "`InRange(0.0, 1.0)`".to_string(),
+                    (BaseType::Decimal, "InRange") => "`InRange(0.00d, 1.00d)`".to_string(),
+                    (BaseType::Duration, "InRange") => "`InRange(1.second, 1.day)`".to_string(),
+                    (_, "InRange") => "`InRange(0, 1)`".to_string(),
+                    (BaseType::Float, n) => format!("`{n}(0.0)`"),
+                    (BaseType::Decimal, n) => format!("`{n}(0.00d)`"),
+                    (BaseType::Duration, n) => format!("`{n}(1.second)`"),
+                    (_, n) => format!("`{n}(0)`"),
                 };
                 errors.push(
                     CompileError::new(
                         "bynk.types.no_numeric_coercion",
                         pred.span,
                         format!(
-                            "`InRange` bounds are {bounds} literals, but the base type is `{}`",
+                            "`{pred_name}` bounds are {bounds} literals, but the base type is `{}`",
                             base.name()
                         ),
                     )
@@ -601,6 +652,25 @@ pub(crate) fn check_refinement(
                     );
                 }
             }
+            PredKind::InRangeDur(lo, hi) => {
+                if lo.millis > hi.millis {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.types.inverted_range",
+                            pred.span,
+                            format!(
+                                "`InRange({}, {})` has its bounds inverted (`min` must be ≤ `max`)",
+                                lo.lexeme, hi.lexeme
+                            ),
+                        )
+                        .with_suggestion(
+                            "swap the bounds",
+                            vec![(lo.span, hi.lexeme.clone()), (hi.span, lo.lexeme.clone())],
+                            Applicability::MachineApplicable,
+                        ),
+                    );
+                }
+            }
             PredKind::MinLength(n) | PredKind::MaxLength(n) | PredKind::Length(n) => {
                 if *n < 0 {
                     errors.push(CompileError::new(
@@ -610,7 +680,9 @@ pub(crate) fn check_refinement(
                     ));
                 }
             }
-            PredKind::NonNegative
+            PredKind::AtLeast(_)
+            | PredKind::AtMost(_)
+            | PredKind::NonNegative
             | PredKind::Positive
             | PredKind::NonEmpty
             | PredKind::IsoDate
@@ -630,34 +702,39 @@ pub(crate) fn check_refinement(
         BaseType::String => check_string_refinement_consistency(refinement, errors),
         BaseType::Bool => {}
         BaseType::Float => check_float_refinement_consistency(refinement, errors),
-        // v0.86/v0.90/v0.110: no refinement predicate applies to `Duration`,
-        // `Instant`, or `Bytes` (none is in any `pred_applies_to` row), so a
-        // refined one is rejected upstream and there is nothing to
-        // consistency-check here.
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => {}
-        // #2622: a decimal range has no further consistency check here; an
-        // inverted `InRange` is reported above.
-        BaseType::Decimal => {}
+        // #3948: `Duration` takes the numeric predicates; `Instant` and
+        // `Bytes` take none, so a refined one is rejected upstream.
+        BaseType::Duration => check_duration_refinement_consistency(refinement, errors),
+        BaseType::Instant | BaseType::Bytes => {}
+        // #2622: an inverted `InRange` is reported above; #3948: bounds that
+        // contradict each other across predicates are reported here.
+        BaseType::Decimal => check_decimal_refinement_consistency(refinement, errors),
     }
 }
 
 fn pred_applies_to(pred: &PredKind, base: BaseType) -> bool {
+    // #3948: a one-sided bound applies to an ordered numeric base whose own
+    // literal it is; a bound of another type is `no_numeric_coercion`.
+    if let PredKind::AtLeast(b) | PredKind::AtMost(b) = pred {
+        return is_ordered_numeric(base) && b.base() == base;
+    }
     matches!(
         (pred, base),
         (PredKind::Matches(_), BaseType::String)
             | (PredKind::InRange(_, _), BaseType::Int)
             | (PredKind::InRangeF(_, _), BaseType::Float)
             | (PredKind::InRangeD(_, _), BaseType::Decimal)
+            | (PredKind::InRangeDur(_, _), BaseType::Duration)
             | (PredKind::MinLength(_), BaseType::String)
             | (PredKind::MaxLength(_), BaseType::String)
             | (PredKind::Length(_), BaseType::String)
             | (
                 PredKind::NonNegative,
-                BaseType::Int | BaseType::Float | BaseType::Decimal
+                BaseType::Int | BaseType::Float | BaseType::Decimal | BaseType::Duration
             )
             | (
                 PredKind::Positive,
-                BaseType::Int | BaseType::Float | BaseType::Decimal
+                BaseType::Int | BaseType::Float | BaseType::Decimal | BaseType::Duration
             )
             | (PredKind::NonEmpty, BaseType::String)
             | (PredKind::IsoDate, BaseType::String)
@@ -665,14 +742,33 @@ fn pred_applies_to(pred: &PredKind, base: BaseType) -> bool {
     )
 }
 
+/// #3948: the bases the numeric predicates (`InRange`, `AtLeast`, `AtMost`) apply to.
+fn is_ordered_numeric(base: BaseType) -> bool {
+    matches!(
+        base,
+        BaseType::Int | BaseType::Float | BaseType::Decimal | BaseType::Duration
+    )
+}
+
+fn bound_type_name(b: &PredBound) -> &'static str {
+    match b {
+        PredBound::Int(_) => "`Int`",
+        PredBound::Float(_) => "`Float`",
+        PredBound::Decimal(_) => "`Decimal`",
+        PredBound::Duration(_) => "`Duration`",
+    }
+}
+
 fn predicate_base_help(name: &str) -> &'static str {
     match name {
         "Matches" | "MinLength" | "MaxLength" | "Length" | "NonEmpty" | "IsoDate" | "Cron" => {
             "this predicate applies to `String` only"
         }
-        "NonNegative" | "Positive" => "this predicate applies to `Int`, `Float` and `Decimal` only",
-        "InRange" => {
-            "this predicate applies to `Int`, `Float` and `Decimal` only, with bounds matching the base"
+        "NonNegative" | "Positive" => {
+            "this predicate applies to `Int`, `Float`, `Decimal` and `Duration` only"
+        }
+        "InRange" | "AtLeast" | "AtMost" => {
+            "this predicate applies to `Int`, `Float`, `Decimal` and `Duration` only, with bounds matching the base"
         }
         _ => "see the documentation for valid predicate-base combinations",
     }
@@ -692,6 +788,8 @@ pub(crate) fn check_int_refinement_consistency(
                 lo = lo.max(a.value);
                 hi = hi.min(b.value);
             }
+            PredKind::AtLeast(PredBound::Int(a)) => lo = lo.max(a.value),
+            PredKind::AtMost(PredBound::Int(b)) => hi = hi.min(b.value),
             _ => {}
         }
     }
@@ -734,6 +832,11 @@ pub(crate) fn check_float_refinement_consistency(
                 }
                 hi = hi.min(b.value);
             }
+            PredKind::AtLeast(PredBound::Float(a)) if a.value > lo => {
+                lo = a.value;
+                lo_exclusive = false;
+            }
+            PredKind::AtMost(PredBound::Float(b)) => hi = hi.min(b.value),
             _ => {}
         }
     }
@@ -753,6 +856,112 @@ pub(crate) fn check_float_refinement_consistency(
                 }
             )),
         );
+    }
+}
+
+/// #3948: the `Duration` twin of the integer check, over milliseconds.
+pub(crate) fn check_duration_refinement_consistency(
+    refinement: &Refinement,
+    errors: &mut Vec<CompileError>,
+) {
+    let mut lo: i64 = i64::MIN;
+    let mut hi: i64 = i64::MAX;
+    for p in &refinement.predicates {
+        match &p.kind {
+            PredKind::Positive => lo = lo.max(1),
+            PredKind::NonNegative => lo = lo.max(0),
+            // An inverted range is `inverted_range`'s to report, once.
+            PredKind::InRangeDur(a, b) if a.millis <= b.millis => {
+                lo = lo.max(a.millis);
+                hi = hi.min(b.millis);
+            }
+            PredKind::AtLeast(PredBound::Duration(a)) => lo = lo.max(a.millis),
+            PredKind::AtMost(PredBound::Duration(b)) => hi = hi.min(b.millis),
+            _ => {}
+        }
+    }
+    if lo > hi {
+        errors.push(
+            CompileError::new(
+                "bynk.types.empty_refinement",
+                refinement.span,
+                "this refinement has no valid values — the predicates contradict each other",
+            )
+            .with_note(format!(
+                "the effective range is `{lo}..={hi}` milliseconds, which is empty"
+            )),
+        );
+    }
+}
+
+/// #3948: the `Decimal` check — a lower bound above an upper bound, across
+/// `InRange`, `AtLeast`, `AtMost`, `NonNegative` and `Positive`.
+pub(crate) fn check_decimal_refinement_consistency(
+    refinement: &Refinement,
+    errors: &mut Vec<CompileError>,
+) {
+    use bynk_syntax::decimal::cmp;
+    use std::cmp::Ordering;
+    // (coefficient, scale, exclusive)
+    let mut lo: Option<(String, u32, bool)> = None;
+    let mut hi: Option<(String, u32)> = None;
+    let raise = |lo: &mut Option<(String, u32, bool)>, c: &str, s: u32, excl: bool| {
+        let replace = match lo {
+            None => true,
+            Some((lc, ls, lx)) => match cmp(c, s, lc, *ls) {
+                Ordering::Greater => true,
+                Ordering::Equal => excl && !*lx,
+                Ordering::Less => false,
+            },
+        };
+        if replace {
+            *lo = Some((c.to_string(), s, excl));
+        }
+    };
+    for p in &refinement.predicates {
+        match &p.kind {
+            PredKind::Positive => raise(&mut lo, "0", 0, true),
+            PredKind::NonNegative => raise(&mut lo, "0", 0, false),
+            // An inverted range is `inverted_range`'s to report, once.
+            PredKind::InRangeD(a, b)
+                if cmp(&a.coef, a.scale, &b.coef, b.scale) != Ordering::Greater =>
+            {
+                raise(&mut lo, &a.coef, a.scale, false);
+                if hi
+                    .as_ref()
+                    .is_none_or(|(c, s)| cmp(&b.coef, b.scale, c, *s) == Ordering::Less)
+                {
+                    hi = Some((b.coef.clone(), b.scale));
+                }
+            }
+            PredKind::AtLeast(PredBound::Decimal(a)) => raise(&mut lo, &a.coef, a.scale, false),
+            PredKind::AtMost(PredBound::Decimal(b))
+                if hi
+                    .as_ref()
+                    .is_none_or(|(c, s)| cmp(&b.coef, b.scale, c, *s) == Ordering::Less) =>
+            {
+                hi = Some((b.coef.clone(), b.scale));
+            }
+            _ => {}
+        }
+    }
+    if let (Some((lc, ls, lx)), Some((hc, hs))) = (&lo, &hi) {
+        let o = cmp(lc, *ls, hc, *hs);
+        if o == Ordering::Greater || (o == Ordering::Equal && *lx) {
+            errors.push(
+                CompileError::new(
+                    "bynk.types.empty_refinement",
+                    refinement.span,
+                    "this refinement has no valid values — the predicates contradict each other",
+                )
+                .with_note(format!(
+                    "the effective range is `{}..={}`{}, which is empty",
+                    bynk_syntax::decimal::render(lc, *ls),
+                    bynk_syntax::decimal::render(hc, *hs),
+                    if *lx { " (lower bound exclusive)" } else { "" }
+                )),
+            );
+        }
     }
 }
 
@@ -1062,6 +1271,8 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
             PredKind::NonNegative => true,
             PredKind::Positive => false,
             PredKind::InRange(lo, hi) => lo.value <= 0 && 0 <= hi.value,
+            PredKind::AtLeast(PredBound::Int(b)) => b.value <= 0,
+            PredKind::AtMost(PredBound::Int(b)) => b.value >= 0,
             // Length/Matches predicates don't apply to Int; reject conservatively.
             _ => false,
         },
@@ -1076,9 +1287,18 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
         },
         // The only Bool zero is `false`; no Bool refinement predicates exist.
         BaseType::Bool => true,
-        // No refinement predicate applies to `Duration`, `Instant`, or
-        // `Bytes`, so the question is vacuous — admit it (mirrors `Bool`).
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => true,
+        // No refinement predicate applies to `Instant` or `Bytes`, so the
+        // question is vacuous — admit it (mirrors `Bool`).
+        BaseType::Instant | BaseType::Bytes => true,
+        // #3948: `Duration`'s zero is `0.milliseconds`.
+        BaseType::Duration => match k {
+            PredKind::NonNegative => true,
+            PredKind::Positive => false,
+            PredKind::InRangeDur(lo, hi) => lo.millis <= 0 && 0 <= hi.millis,
+            PredKind::AtLeast(PredBound::Duration(b)) => b.millis <= 0,
+            PredKind::AtMost(PredBound::Duration(b)) => b.millis >= 0,
+            _ => false,
+        },
         BaseType::Decimal => match k {
             PredKind::NonNegative => true,
             PredKind::Positive => false,
@@ -1086,12 +1306,16 @@ fn pred_admits_zero(base: BaseType, k: &PredKind) -> bool {
                 bynk_syntax::decimal::sign(&lo.coef) <= 0
                     && bynk_syntax::decimal::sign(&hi.coef) >= 0
             }
+            PredKind::AtLeast(PredBound::Decimal(b)) => bynk_syntax::decimal::sign(&b.coef) <= 0,
+            PredKind::AtMost(PredBound::Decimal(b)) => bynk_syntax::decimal::sign(&b.coef) >= 0,
             _ => false,
         },
         BaseType::Float => match k {
             PredKind::NonNegative => true,
             PredKind::Positive => false,
             PredKind::InRangeF(lo, hi) => lo.value <= 0.0 && 0.0 <= hi.value,
+            PredKind::AtLeast(PredBound::Float(b)) => b.value <= 0.0,
+            PredKind::AtMost(PredBound::Float(b)) => b.value >= 0.0,
             // Other predicates don't apply to Float; reject conservatively.
             _ => false,
         },

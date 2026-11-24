@@ -88,7 +88,11 @@ type Port = Int where InRange(1, 65535)
 const DefaultPort: Port = 8080
 ```
 
-`const DefaultPort: Port = 0` is `bynk.refine.literal_violates`.
+`const DefaultPort: Port = 0` is `bynk.refine.literal_violates`. A `Duration` literal is
+admitted to a refined `Duration` the same way: with
+`type Ttl = Duration where AtLeast(60.seconds)`, `const Retention: Ttl = 30.days` is
+checked when the program compiles, and `const Short: Ttl = 30.seconds` is
+`bynk.refine.literal_violates`.
 
 Constants may refer to each other in any order, across files and through
 `uses`, but not in a cycle: `const A: Int = B` with `const B: Int = A` is
