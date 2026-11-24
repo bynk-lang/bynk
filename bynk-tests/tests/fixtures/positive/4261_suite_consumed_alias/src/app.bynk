@@ -2,6 +2,31 @@ context app
 
 consumes shapes { Code as Tag }
 
+// The app's own `Code` is why the consumed one is renamed: the suite must not
+// read `Tag` as this type.
+type Code = { n: Int }
+
+type Box = { t: Tag }
+
 fn tag(s: String) -> Result[Tag, ValidationError] {
   Tag.of(s)
+}
+
+fn box(t: Tag) -> Box {
+  Box { t: t }
+}
+
+fn same(a: Tag, b: Tag) -> Bool {
+  a == b
+}
+
+fn code(n: Int) -> Code {
+  Code { n: n }
+}
+
+fn boxed(s: String) -> Bool {
+  match tag(s) {
+    Ok(t) => same(box(t).t, t)
+    Err(_) => false
+  }
 }

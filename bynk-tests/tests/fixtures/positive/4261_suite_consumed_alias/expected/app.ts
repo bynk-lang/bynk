@@ -6,6 +6,46 @@ import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { Code as Tag } from "./shapes.js";
 
+export interface Code {
+  readonly n: number;
+}
+
+export const Code = {
+};
+
+export interface Box {
+  readonly t: Tag;
+}
+
+export const Box = {
+};
+
 export function tag(s: string): Result<Tag, ValidationError> {
   return Tag.of(s);
+}
+
+export function box(t: Tag): Box {
+  return { t: t };
+}
+
+export function same(a: Tag, b: Tag): boolean {
+  return a === b;
+}
+
+export function code(n: number): Code {
+  return { n: n };
+}
+
+export function boxed(s: string): boolean {
+  const __r0 = tag(s);
+  switch (__r0.tag) {
+    case "Ok": {
+      const t = __r0.value;
+      return same(box(t).t, t);
+    }
+    case "Err": {
+      return false;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
 }

@@ -122,15 +122,19 @@ function __makeTestDeps() {
 async function test_a_suite_that_does_not_import_the_alias_checks_the_result() {
   try {
     const deps = __makeTestDeps();
-    const { tag } = __ns_app;
-    const { Code: Tag, Code } = __ns_shapes;
+    const { Box, Code, box, boxed, code, same, tag } = __ns_app;
+    type Box = __ns_app.Box;
+    type Code = __ns_app.Code;
+    const { Code: Tag } = __ns_shapes;
     type Tag = __ns_shapes.Code;
-    type Code = __ns_shapes.Code;
     const shapes = (deps as any).surface?.shapes;
     const __r0 = tag("ABC");
     if (!(((__c: boolean) => __c)(__r0.tag === "Ok"))) { throw __bynkExpectFailure("tests/app.bynk:4:10", 86, 105, "expect tag(\"ABC\") is Ok(_)"); }
     const __r1 = tag("abc");
     if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/app.bynk:5:10", 115, 135, "expect tag(\"abc\") is Err(_)"); }
+    if (!(boxed("ABC"))) { throw __bynkExpectFailure("tests/app.bynk:6:10", 145, 157, "expect boxed(\"ABC\")"); }
+    if (!(!boxed("abc"))) { throw __bynkExpectFailure("tests/app.bynk:7:10", 167, 180, "expect !boxed(\"abc\")"); }
+    if (!(code(3).n === 3)) { throw __bynkExpectFailure("tests/app.bynk:8:10", 190, 204, "expect code(3).n == 3\n  expected: code(3).n == 3\n  actual:   " + __bynkShow((code(3).n)) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -141,18 +145,19 @@ async function test_a_suite_that_does_not_import_the_alias_checks_the_result() {
 }
 
 // case tier: unit
-async function test_a_suite_that_imports_the_alias_checks_the_result() {
+async function test_a_suite_that_imports_the_declared_name_checks_the_result() {
   try {
     const deps = __makeTestDeps();
-    const { tag } = __ns_app;
-    const { Code: Tag, Code } = __ns_shapes;
+    const { Box, Code, box, boxed, code, same, tag } = __ns_app;
+    type Box = __ns_app.Box;
+    type Code = __ns_app.Code;
+    const { Code: Tag } = __ns_shapes;
     type Tag = __ns_shapes.Code;
-    type Code = __ns_shapes.Code;
     const shapes = (deps as any).surface?.shapes;
     const __r0 = tag("ABC");
-    if (!(((__c: boolean) => __c)(__r0.tag === "Ok"))) { throw __bynkExpectFailure("tests/app_imported.bynk:6:10", 111, 130, "expect tag(\"ABC\") is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(__r0.tag === "Ok"))) { throw __bynkExpectFailure("tests/app_imported.bynk:6:10", 112, 131, "expect tag(\"ABC\") is Ok(_)"); }
     const __r1 = tag("abc");
-    if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/app_imported.bynk:7:10", 140, 160, "expect tag(\"abc\") is Err(_)"); }
+    if (!(((__c: boolean) => __c)(__r1.tag === "Err"))) { throw __bynkExpectFailure("tests/app_imported.bynk:7:10", 141, 161, "expect tag(\"abc\") is Err(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -176,7 +181,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a suite that does not import the alias checks the result", "a suite that imports the alias checks the result"];
+export const __bynkCases: readonly string[] = ["a suite that does not import the alias checks the result", "a suite that imports the declared name checks the result"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -187,9 +192,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("a suite that imports the alias checks the result")) {
+  if (want("a suite that imports the declared name checks the result")) {
     const started = __bynkCaseNow();
-    const r = { name: "a suite that imports the alias checks the result", ...(await test_a_suite_that_imports_the_alias_checks_the_result()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "a suite that imports the declared name checks the result", ...(await test_a_suite_that_imports_the_declared_name_checks_the_result()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
