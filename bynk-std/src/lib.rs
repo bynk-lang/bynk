@@ -276,13 +276,6 @@ pub const URL_UNIT: &str = "bynk.url";
 /// as a keyword would break every user `type Url`.
 pub const BYNK_URL_SRC: &str = include_str!("../lib/core/bynk.url.bynk");
 
-/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
-pub const PAR_UNIT: &str = "bynk.par";
-
-/// `bynk.par` (#3968) — the `ParOptions` record the bounded concurrent `List`
-/// forms (`parForEachWith`, …) take.
-pub const BYNK_PAR_SRC: &str = include_str!("../lib/core/bynk.par.bynk");
-
 pub const SET_UNIT: &str = "bynk.set";
 
 /// `bynk.set` (standard-library K6a, #2596) — Bynk-written combinators over
@@ -1330,21 +1323,6 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
-    Unit {
-        name: PAR_UNIT,
-        kind: UnitKind::Commons,
-        identity_path: "bynk/par.bynk",
-        source: BYNK_PAR_SRC,
-        binding: Binding::None,
-        id_block: 11,
-        platform: None,
-        env_providers: &[],
-        stability: Stability::Stable,
-        experimental: &[],
-        extensible: &[],
-        instantiable: &[],
-        singletons: &[],
-    },
     #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
@@ -2147,7 +2125,6 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
-                ("bynk.par", 11),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2179,7 +2156,6 @@ mod tests {
                 "bynk.crypto",
                 "bynk.url",
                 "bynk.set",
-                "bynk.par",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

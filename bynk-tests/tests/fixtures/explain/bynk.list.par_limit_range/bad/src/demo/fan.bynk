@@ -1,7 +1,9 @@
-commons demo.fan {
-    uses bynk.par
+context demo.fan
 
-    fn run(xs: List[Int]) -> Effect[()] {
+consumes bynk { ParOptions }
+
+service run {
+    on call(xs: List[Int]) -> Effect[()] by Caller {
         xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })
     }
 }

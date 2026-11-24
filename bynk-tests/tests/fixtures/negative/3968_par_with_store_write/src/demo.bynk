@@ -1,6 +1,6 @@
 context demo
 
-uses bynk.par
+consumes bynk { ParOptions }
 
 // #3968: the store-write closure rule covers the bounded `…With` forms: a write in
 // the closure, and a write in a lambda bound to a name and passed by name.

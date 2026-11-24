@@ -14,6 +14,7 @@ adapter bynk {
 		Cookie,
 		SameSite,
 		FetchOptions,
+		ParOptions,
 		Redirect,
 		TimedOut,
 		LogLevel,
@@ -97,6 +98,17 @@ adapter bynk {
 	type FetchOptions = {
 		timeout: Option[Duration] = None,
 		redirect: Redirect = Redirect.Follow,
+	}
+
+	---
+	The options of the bounded fan-out methods `parForEachWith`, `parTraverseWith`,
+	`parTraverseAllWith` and `parTraverseTryWith`. `limit` is the most steps in
+	flight at once: a whole number from 1 to 1000, with no default, so a call
+	always states it. A literal or constant outside that range is the error
+	`bynk.list.par_limit_range`; a computed one faults the call.
+	---
+	type ParOptions = {
+		limit: Int,
 	}
 
 	---

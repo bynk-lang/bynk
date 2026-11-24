@@ -115,13 +115,15 @@ steps that return a `Result`.
 
 ## Bound how many run at once
 
-`parForEach`, `parTraverse`, `parTraverseAll` and `parTraverseTry` start every element at once. Over a long list that can exhaust connection or subrequest limits. The `…With` forms take a `ParOptions` and keep at most `limit` calls in flight, starting the next as soon as one finishes:
+`parForEach`, `parTraverse`, `parTraverseAll` and `parTraverseTry` start every element at once. Over a long list that can exhaust connection or subrequest limits. The `…With` forms take a `ParOptions` (`consumes bynk { ParOptions }`) and keep at most `limit` calls in flight, starting the next as soon as one finishes:
 
 ```bynk,fragment
-commons demo.fan {
-	uses bynk.par
+context demo.fan
 
-	fn warm(ids: List[Int]) -> Effect[()] {
+consumes bynk { ParOptions }
+
+service warm {
+	on call(ids: List[Int]) -> Effect[()] by Caller {
 		ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 8 })
 	}
 }

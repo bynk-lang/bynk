@@ -1,7 +1,9 @@
-commons demo.lim {
-  uses bynk.par
+context demo.lim
 
-  fn bad(xs: List[Int]) -> Effect[()] {
+consumes bynk { ParOptions }
+
+service bad {
+  on call(xs: List[Int]) -> Effect[()] by Caller {
     xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 1001 })
   }
 }

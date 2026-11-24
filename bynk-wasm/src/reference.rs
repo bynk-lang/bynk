@@ -365,7 +365,7 @@ mod tests {
     }
 
     /// Units that list nothing: types only, no functions or capabilities.
-    const NOTHING_TO_LIST: &[&str] = &["bynk.locale.types", "bynk.par"];
+    const NOTHING_TO_LIST: &[&str] = &["bynk.locale.types"];
 
     #[test]
     fn every_first_party_unit_is_listed_or_allowlisted() {

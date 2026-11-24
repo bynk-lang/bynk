@@ -1,10 +1,14 @@
-commons demo.look {
-  // A record of the same name is not the `bynk.par` one: nothing guarantees its `limit`.
-  type ParOptions = {
-    max: Int,
-  }
+context demo.look
 
-  fn bad(xs: List[Int]) -> Effect[()] {
-    xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { max: 4 })
+// A record of the same name declared here is not `bynk`'s `ParOptions`: it has no
+// provenance, and the emitted call reads `limit` without a check.
+
+type ParOptions = {
+  limit: Int,
+}
+
+service bad {
+  on call(xs: List[Int]) -> Effect[()] by Caller {
+    xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 4 })
   }
 }

@@ -1,15 +1,19 @@
-commons shop {
-  uses bynk.par
+context shop
 
-  fn notify(id: Int) -> Effect[()] {
-    Effect.pure(())
-  }
+consumes bynk { ParOptions }
 
-  fn warm(ids: List[Int]) -> Effect[()] {
+fn notify(id: Int) -> Effect[()] {
+  Effect.pure(())
+}
+
+service warm {
+  on call(ids: List[Int]) -> Effect[()] by Caller {
     ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 1 })
   }
+}
 
-  fn collect(ids: List[Int]) -> Effect[List[()]] {
+service collect {
+  on call(ids: List[Int]) -> Effect[List[()]] by Caller {
     ids.parTraverseWith((id: Int) => notify(id), ParOptions { limit: 4 })
   }
 }

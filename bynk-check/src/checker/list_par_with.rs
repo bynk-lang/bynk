@@ -1,7 +1,7 @@
 //! #3968: `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` and
 //! `parTraverseTryWith`: the concurrent `List` forms with a bound on how many
 //! steps are in flight. Each is its plain form's typing plus a second argument, a
-//! `bynk.par` `ParOptions { limit }`. Kept apart from `kernels.rs` so that file
+//! `bynk` `ParOptions { limit }`. Kept apart from `kernels.rs` so that file
 //! does not grow.
 
 use super::*;
@@ -71,14 +71,15 @@ fn static_limit(e: &Expr, ctx: &Ctx) -> Option<i64> {
     }
 }
 
-/// Whether the record `name` has a field `limit: Int`.
-fn declares_int_limit(name: &str, ctx: &Ctx) -> bool {
-    matches!(
-        ctx.input.types.get(name).map(|t| &t.body),
-        Some(TypeBody::Record(r)) if r.fields.iter().any(|f| {
-            f.name.name == "limit" && matches!(f.type_ref, TypeRef::Base(BaseType::Int, _))
-        })
-    )
+/// Whether `name`, in the project's type table, is the `ParOptions` the `bynk` adapter
+/// exports, found by its declaration's file (as `bynk.cloudflare`'s `SqlStatement`
+/// is). A record of the same name declared elsewhere is not it, and the emitted call
+/// reads its `limit` without a check.
+fn is_bynk_par_options(name: &str, ctx: &Ctx) -> bool {
+    ctx.input.types.get(name).is_some_and(|decl| {
+        crate::firstparty::unit(crate::firstparty::BYNK_UNIT)
+            .is_some_and(|unit| decl.span.file == crate::project_model::firstparty_file_id(unit))
+    })
 }
 
 /// Type one `…With` call: the function argument as its plain form, the options
@@ -109,13 +110,10 @@ pub(super) fn check_par_with(
     let result =
         super::kernels::check_list_kernel_method(method, Some(plain), &args[..1], elem, span, ctx);
     let options = type_of(&args[1], None, ctx)?;
-    // The emitted call reads `(options).limit` without a check, so the record must
-    // be one with an `Int` `limit`: the `bynk.par` `ParOptions`, and not a
-    // look-alike of the same name with other fields.
     let is_options = matches!(
         &*tys.get(options),
         Ty::Named { name, kind: NamedKind::Record, .. }
-            if name == "ParOptions" && declares_int_limit(name, ctx)
+            if name == "ParOptions" && is_bynk_par_options(name, ctx)
     );
     if !is_options {
         ctx.errors.push(
@@ -128,7 +126,7 @@ pub(super) fn check_par_with(
                 ),
             )
             .with_note(
-                "pass a `ParOptions { limit: 10 }`, the record from `uses bynk.par` (a record of the same name needs a `limit: Int` field)",
+                "pass a `ParOptions { limit: 10 }`, the record from `consumes bynk { ParOptions }` (a record of the same name declared elsewhere does not count)",
             ),
         );
         return result;
