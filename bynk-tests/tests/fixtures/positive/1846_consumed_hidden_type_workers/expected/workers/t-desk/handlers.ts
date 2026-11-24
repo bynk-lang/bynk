@@ -2,6 +2,7 @@
 // context t.desk
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
@@ -12,7 +13,7 @@ export type Code = string & { readonly __brand: "t.desk.Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Code", message: "must be non-empty", value });
     }
     return Ok(value as Code);

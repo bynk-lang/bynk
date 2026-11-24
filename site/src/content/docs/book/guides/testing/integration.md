@@ -161,7 +161,7 @@ provides Bank = StubBank {
 }
 
 service authorise {
-	on call(cents: Int) -> Effect[Result[Int, PayError]] given Bank {
+	on call(cents: Int) -> Effect[Result[Int, PayError]] by Caller given Bank {
 		let r <- Bank.charge(cents)
 		r
 	}
@@ -177,7 +177,7 @@ exports transparent { OrderError }
 type OrderError = enum { Rejected }
 
 service place {
-	on call(cents: Int) -> Effect[Result[Int, OrderError]] {
+	on call(cents: Int) -> Effect[Result[Int, OrderError]] by Caller {
 		let a <- Pay.authorise(cents)
 		match a {
 			Ok(n) => Ok(n),

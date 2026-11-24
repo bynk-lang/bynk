@@ -2,6 +2,7 @@
 // context web.api
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -14,10 +15,10 @@ export type Token = string & { readonly __brand: "web.api.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Token", message: "must be non-empty", value });
     }
-    if (!(value.length <= 8)) {
+    if (!(__bynkCodePointLength(value) <= 8)) {
       return Err({ field: "Token", message: "length must be at most 8", value });
     }
     return Ok(value as Token);

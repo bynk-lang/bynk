@@ -4,7 +4,7 @@ consumes bynk.cloudflare { Analytics, DataPoint }
 
 // #2582: a bare `Analytics` has no dataset of its own.
 service probe {
-  on call(point: DataPoint) -> Effect[()] given Analytics {
+  on call(point: DataPoint) -> Effect[()] by Caller given Analytics {
     Analytics.write(point)
   }
 }

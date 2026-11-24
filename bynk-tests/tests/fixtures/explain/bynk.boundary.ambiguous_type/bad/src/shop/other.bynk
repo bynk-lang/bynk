@@ -3,7 +3,7 @@ context shop.other
 type Amount = { dollars: Int }
 
 service price {
-    on call() -> Effect[Amount] {
+    on call() -> Effect[Amount] by Caller {
         Effect.pure(Amount { dollars: 1 })
     }
 }

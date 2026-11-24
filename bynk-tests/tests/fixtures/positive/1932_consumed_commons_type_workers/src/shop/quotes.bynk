@@ -7,19 +7,19 @@ uses lib.money
 // commons type is shared structurally (spec §6.5).
 
 service quote {
-  on call() -> Effect[Box] {
+  on call() -> Effect[Box] by Caller {
     Effect.pure(wrap())
   }
 }
 
 service price {
-  on call() -> Effect[Amount] {
+  on call() -> Effect[Amount] by Caller {
     Effect.pure(Amount { cents: 4 })
   }
 }
 
 service pay {
-  on call(a: Amount) -> Effect[Int] {
+  on call(a: Amount) -> Effect[Int] by Caller {
     Effect.pure(a.cents)
   }
 }

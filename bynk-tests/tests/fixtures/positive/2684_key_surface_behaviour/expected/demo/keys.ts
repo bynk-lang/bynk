@@ -3,8 +3,6 @@
 
 import { __bynkDistinct, __bynkMapInsert } from "../__bynk_runtime/keys.js";
 
-import { getOr } from "../bynk/map.js";
-
 /**
  * #2684: structural `Map` keys and `Set` members, and `distinct`, `groupBy` and
  * joins over record keys.
@@ -44,7 +42,7 @@ export function countBy<K, V>(xs: readonly V[], key: (a0: V) => K): ReadonlyMap<
     return __acc;
   })(xs, init, (acc: ReadonlyMap<K, number>, x: V) => {
     const k = key(x);
-    return __bynkMapInsert<K, number>(acc, k, getOr(acc, k, 0) + 1);
+    return __bynkMapInsert<K, number>(acc, k, ((__m: ReadonlyMap<K, number>, __k: K, __d: number) => __m.has(__k) ? __m.get(__k) as number : __d)(acc, k, 0) + 1);
   });
 }
 

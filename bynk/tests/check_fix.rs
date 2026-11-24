@@ -195,7 +195,7 @@ provides Alpha = AlphaImpl {
 }
 
 service one {
-  on call(x: Int) -> Effect[Int] given Alpha {
+  on call(x: Int) -> Effect[Int] by Caller given Alpha {
     42
   }
 }
@@ -215,7 +215,7 @@ provides Alpha = AlphaImpl {
 }
 
 service one {
-  on call(x: Int) -> Effect[Int] {
+  on call(x: Int) -> Effect[Int] by Caller {
     42
   }
 }

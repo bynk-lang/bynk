@@ -21,7 +21,7 @@ provides Yanks = AgentYanks {
 }
 
 service yank {
-  on call(value: Bool) -> Effect[Bool] given Yanks {
+  on call(value: Bool) -> Effect[Bool] by Caller given Yanks {
     Yanks.set(value)
   }
 }

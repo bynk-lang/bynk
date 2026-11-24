@@ -4,8 +4,6 @@ joins over record keys.
 ---
 commons demo.keys
 
-uses bynk.list
-uses bynk.map
 
 type OrderId = { region: String, n: Int }
 
@@ -17,7 +15,7 @@ fn countBy[K: Key, V](xs: List[V], key: (V) -> K) -> Map[K, Int] {
   let init: Map[K, Int] = Map.empty()
   xs.fold(init, (acc, x) => {
     let k = key(x)
-    acc.insert(k, getOr(acc, k, 0) + 1)
+    acc.insert(k, acc.getOrElse(k, 0) + 1)
   })
 }
 

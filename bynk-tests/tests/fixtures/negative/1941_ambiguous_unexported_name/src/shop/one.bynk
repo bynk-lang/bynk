@@ -3,13 +3,13 @@ context shop.one
 type Box = { x: Int }
 
 service quote {
-  on call() -> Effect[Box] {
+  on call() -> Effect[Box] by Caller {
     Effect.pure(Box { x: 1 })
   }
 }
 
 service take {
-  on call(b: Box) -> Effect[Int] {
+  on call(b: Box) -> Effect[Int] by Caller {
     Effect.pure(b.x)
   }
 }

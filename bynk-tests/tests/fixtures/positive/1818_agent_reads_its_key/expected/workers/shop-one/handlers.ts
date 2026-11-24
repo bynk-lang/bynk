@@ -2,6 +2,7 @@
 // context shop.one
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
@@ -12,7 +13,7 @@ export type OrderId = string & { readonly __brand: "shop.one.OrderId" };
 
 export const OrderId = {
   of(value: string): Result<OrderId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "OrderId", message: "must be non-empty", value });
     }
     return Ok(value as OrderId);

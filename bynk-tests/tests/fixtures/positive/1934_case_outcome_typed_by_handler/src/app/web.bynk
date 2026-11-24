@@ -12,7 +12,7 @@ service api from http {
 }
 
 service calc {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n * 2
   }
 }

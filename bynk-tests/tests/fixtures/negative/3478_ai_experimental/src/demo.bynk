@@ -5,7 +5,7 @@ context demo
 consumes bynk.cloudflare { Ai }
 
 service s {
-	on call() -> Effect[String] given Ai {
+	on call() -> Effect[String] by Caller given Ai {
 		let r <- Ai.run("@cf/meta/llama-3.2-1b-instruct", "{}")
 		match r {
 			Ok(text) => Effect.pure(text),

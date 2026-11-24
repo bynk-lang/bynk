@@ -5,7 +5,7 @@ exports opaque { Status }
 type Status = | Paid | Declined
 
 service charge {
-  on call(amount: Int) -> Effect[Status] {
+  on call(amount: Int) -> Effect[Status] by Caller {
     Effect.pure(Paid)
   }
 }

@@ -15,7 +15,7 @@ agent KvSessions {
 }
 
 service probe {
-  on call() -> Effect[Option[String]] given Sessions {
+  on call() -> Effect[Option[String]] by Caller given Sessions {
     Sessions.get("a")
   }
 }

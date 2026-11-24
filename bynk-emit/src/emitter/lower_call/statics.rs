@@ -301,6 +301,19 @@ pub(in crate::emitter) fn lower_scalar_static_call(
         }
         return Some(set_of(plain, ts_ty_to_ts_type(t, tys), xs));
     }
+    // #3961: `Map.of(entries)`.
+    if let ExprKind::Ident(_) = &receiver.kind
+        && matches!(
+            cx.commons().callee(e.id),
+            Some(Callee::Intrinsic {
+                op: StaticOp::Map(MapStatic::Of),
+                ..
+            })
+        )
+        && args.len() == 1
+    {
+        return Some(super::kernel_collections::lower_map_of(args, cx, pre));
+    }
     // v0.22b: the typed JSON codec (ADR 0045).
     // The codec's decoders and encoders are their own family (1A.21), and a node they return
     // passes through.

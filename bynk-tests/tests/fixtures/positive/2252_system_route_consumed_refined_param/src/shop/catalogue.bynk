@@ -5,7 +5,7 @@ exports transparent { Sku }
 type Sku = String where Matches("[a-z0-9]{1,16}")
 
 service lookup {
-  on call(sku: Sku) -> Effect[Bool] {
+  on call(sku: Sku) -> Effect[Bool] by Caller {
     Effect.pure(true)
   }
 }

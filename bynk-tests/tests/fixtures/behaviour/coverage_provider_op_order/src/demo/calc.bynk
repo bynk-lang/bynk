@@ -18,7 +18,7 @@ provides Calc = SimpleCalc {
 }
 
 service run {
-  on call(n: Int) -> Effect[Int] given Calc {
+  on call(n: Int) -> Effect[Int] by Caller given Calc {
     Effect.pure(Calc.double(n))
   }
 }

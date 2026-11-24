@@ -5,7 +5,7 @@
 
 use super::keying::{KeySite, check_key};
 use super::*;
-use crate::kernel_methods::{KernelMethod, LIST_METHODS, QUERY_METHODS};
+use crate::kernel_methods::{KernelMethod, LIST_METHODS, MAP_METHODS, QUERY_METHODS, SET_METHODS};
 
 /// Render a kernel's method names for a `method_not_found` message —
 /// `` `map`, `filter`, … `` — generated from a `KernelMethod` table rather
@@ -36,6 +36,10 @@ pub(crate) fn check_collection_static(
     // comes from the list, or from the expected `Set`.
     if type_name.name == SET && method.name == "of" {
         return check_set_of(args, span, expected, ctx);
+    }
+    // #3961: `Map.of(entries)` builds a map from a list of `MapEntry`.
+    if type_name.name == MAP && method.name == "of" {
+        return super::collections::check_map_of(args, span, expected, ctx);
     }
     for a in args {
         let _ = type_of(a, None, ctx);
@@ -139,11 +143,17 @@ pub(crate) fn check_set_kernel_method(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    if let Some(r) =
+        op.and_then(|o| super::collections::check_set_more(method, o, args, elem, span, ctx))
+    {
+        return r;
+    }
     let sig: Option<(Vec<TyId>, Ty)> = match op {
         Some(SetOp::Length) => Some((vec![], Ty::Base(BaseType::Int))),
         Some(SetOp::Contains) => Some((vec![elem], Ty::Base(BaseType::Bool))),
         Some(SetOp::Insert | SetOp::Remove) => Some((vec![elem], Ty::Set(elem))),
         Some(SetOp::ToList) => Some((vec![], Ty::List(elem))),
+        Some(_) => unreachable!("the #3961 methods return before this match"),
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -151,9 +161,10 @@ pub(crate) fn check_set_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Set[{}]` type has no method `{}` — the kernel is `length`, `contains`, `insert`, `remove`, `toList` (and `bynk.set` has `union`, `intersect`, …)",
+                "the built-in `Set[{}]` type has no method `{}` — the kernel is {}",
                 elem.display(tys),
-                method.name
+                method.name,
+                kernel_vocabulary(SET_METHODS)
             ),
         ));
         for a in args {
@@ -543,43 +554,10 @@ pub(crate) fn check_list_kernel_method(
             }
             Some(tys.intern(Ty::Effect(acc)))
         }
-        // v0.146 (ADR 0170): `forEach(f: T -> Effect[()]) -> Effect[()]` runs an
-        // effectful step for each element **in turn**; v0.147 (ADR 0171):
-        // `parTraverse` runs them **concurrently** (the fan-out form) and awaits
-        // them together. Same type — the difference is sequential-vs-parallel
-        // lowering. Both are the `List` analogue of the `Query` terminals; like
-        // `foldEff`, each runs an effectful function value and so is confined to
-        // effectful contexts.
-        Some(ListOp::ForEach | ListOp::ParTraverse) => {
-            if !arity(1, ctx) {
-                return None;
-            }
-            let f = Ty::Fn {
-                params: vec![elem],
-                ret: tys.intern(Ty::Effect(tys.intern(Ty::Unit))),
-            };
-            check_arg(
-                &args[0],
-                tys.intern(f.clone()),
-                &format!("the `List.{}` function", method.name),
-                ctx,
-            );
-            if !ctx.effectful {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.effect.fn_value_in_pure_context",
-                        span,
-                        format!(
-                            "`List.{}` runs an effectful function and cannot be called in a pure context",
-                            method.name
-                        ),
-                    )
-                    .with_note(
-                        "effectful function values may only be called where the enclosing body is effectful (its return type is an Effect)",
-                    ),
-                );
-            }
-            Some(tys.intern(Ty::Effect(tys.intern(Ty::Unit))))
+        // v0.146 (ADR 0170) `forEach`, v0.147 (ADR 0171) `parForEach` (#3967: was
+        // `parTraverse`), and the value-returning `parTraverse` (#3967).
+        Some(o @ (ListOp::ForEach | ListOp::ParForEach | ListOp::ParTraverse)) => {
+            super::list_par::check_effect_iter(method, o, args, elem, span, ctx)
         }
         // v0.148 (ADR 0172): the collect-all effectful iterators.
         // `traverseAll(f: A -> Effect[Result[B, E]]) -> Effect[List[Result[B, E]]]`
@@ -769,12 +747,6 @@ pub(crate) fn check_list_kernel_method(
             );
             Some(tys.intern(Ty::List(elem)))
         }
-        Some(ListOp::Count) => {
-            if !arity(0, ctx) {
-                return None;
-            }
-            Some(tys.intern(Ty::Base(BaseType::Int)))
-        }
         Some(ListOp::Any | ListOp::All) => {
             if !arity(1, ctx) {
                 return None;
@@ -790,19 +762,6 @@ pub(crate) fn check_list_kernel_method(
                 ctx,
             );
             Some(tys.intern(Ty::Base(BaseType::Bool)))
-        }
-        Some(ListOp::First) => {
-            if !arity(0, ctx) {
-                return None;
-            }
-            Some(tys.intern(Ty::Option(elem)))
-        }
-        Some(ListOp::FirstOrElse) => {
-            if !arity(1, ctx) {
-                return None;
-            }
-            check_arg(&args[0], elem, "the `List.firstOrElse` fallback", ctx);
-            Some(elem)
         }
         // v0.88 (ADR 0116 D2/D3/D4): ordering and aggregate vocabulary. The
         // key is the projection's return type; orderable/numeric widen through
@@ -841,6 +800,22 @@ pub(crate) fn check_list_kernel_method(
             let key = check_kernel_fn_arg(&args[0], vec![elem], "the `List.sum` key", ctx)?;
             Some(sum_result(key, "List.sum", args[0].span, ctx))
         }
+        Some(o @ (ListOp::Min | ListOp::Max)) if args.is_empty() => {
+            super::list_basics::check_list_basic(method, o, args, elem, span, ctx)
+        }
+        Some(
+            o @ (ListOp::Reverse
+            | ListOp::Find
+            | ListOp::Contains
+            | ListOp::Last
+            | ListOp::LastOrElse
+            | ListOp::IsEmpty
+            | ListOp::Sort
+            | ListOp::Traverse
+            | ListOp::First
+            | ListOp::FirstOrElse
+            | ListOp::Count),
+        ) => super::list_basics::check_list_basic(method, o, args, elem, span, ctx),
         Some(ListOp::Min | ListOp::Max) => {
             if !arity(1, ctx) {
                 return None;
@@ -2990,7 +2965,12 @@ pub(crate) fn check_effect_race_method(
 /// the return is read from the actual: an expected return carrying a
 /// flexible variable lets a lambda type bottom-up (the v0.20a pass-2 rule),
 /// and `unify` captures it here. Returns the function's return type.
-fn check_kernel_fn_arg(arg: &Expr, params: Vec<TyId>, label: &str, ctx: &mut Ctx) -> Option<TyId> {
+pub(super) fn check_kernel_fn_arg(
+    arg: &Expr,
+    params: Vec<TyId>,
+    label: &str,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
     let tys = ctx.tys;
     const RET_VAR: &str = "__kernel_ret";
     let expected = Ty::Fn {
@@ -4346,6 +4326,11 @@ pub(crate) fn check_map_kernel_method(
         }
         true
     };
+    if let Some(r) =
+        op.and_then(|o| super::collections::check_map_more(method, o, args, key, val, span, ctx))
+    {
+        return r;
+    }
     match op {
         Some(MapOp::Length) => {
             if !arity(0, ctx) {
@@ -4381,15 +4366,17 @@ pub(crate) fn check_map_kernel_method(
             check_arg(&args[1], val, "the `Map.insert` value", ctx);
             Some(tys.intern(Ty::Map(key, val)))
         }
+        Some(_) => unreachable!("the #3961 methods return before this match"),
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
-                    "the built-in `Map[{}, {}]` type has no method `{}` — the kernel is `length`, `keys`, `values`, `get`, `insert`",
+                    "the built-in `Map[{}, {}]` type has no method `{}` — the kernel is {}",
                     key.display(tys),
                     val.display(tys),
-                    method.name
+                    method.name,
+                    kernel_vocabulary(MAP_METHODS)
                 ),
             ));
             for a in args {

@@ -1,0 +1,5 @@
+commons demo.setmap
+
+fn bad(s: Set[Int]) -> Set[Float] {
+  s.map((x) => 1.5)
+}

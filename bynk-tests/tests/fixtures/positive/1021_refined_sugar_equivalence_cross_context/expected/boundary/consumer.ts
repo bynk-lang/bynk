@@ -2,6 +2,7 @@
 // context boundary.consumer
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import * as boundary_provider from "./provider.js";
@@ -20,7 +21,7 @@ export type LocalToken = string & { readonly __brand: "boundary.consumer.LocalTo
 
 export const LocalToken = {
   of(value: string): Result<LocalToken, ValidationError> {
-    if (!(value.length >= 1)) {
+    if (!(__bynkCodePointLength(value) >= 1)) {
       return Err({ field: "LocalToken", message: "length must be at least 1", value });
     }
     return Ok(value as LocalToken);

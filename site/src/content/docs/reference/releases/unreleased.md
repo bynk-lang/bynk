@@ -7,6 +7,15 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.648.1** | A `Bearer`, `Oidc` or `Signature` route's handler no longer sees the credential its seam verified in `RequestHeaders` |
+| **v0.648.0** | `Map` gains `remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`, `mapValues`, `fold` and `Map.of`, `Set` gains `union`, `intersect`, `difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`, and `bynk.map` and `bynk.set` are deprecated in favour of the methods |
+| **v0.647.1** | `Events.emit(e)` infers its event type from the argument, as `Idempotency.remember` infers `T` |
+| **v0.647.0** | `String` orders and its length predicates count by code point, agreeing with storage, SQL and OpenAPI |
+| **v0.646.0** | `List.parTraverse` now returns the steps' values in input order and the old unit-returning form is `parForEach`, completing the grid `forEach`/`traverse`/`traverseAll`/`traverseTry` and `parForEach`/`parTraverse`/`parTraverseAll`/`parTraverseTry` |
+| **v0.645.0** | `.of` on a named type with no predicate is total and returns the type; "alias" is renamed "named type" |
+| **v0.644.0** | A cron handler's scheduled time is an `Instant`, not an `Int`; `svc.schedule(expr, at)` takes an `Instant` |
+| **v0.643.0** | `List` gains `reverse`, `find`, `contains`, `last`, `lastOrElse`, `isEmpty`, `traverse` and keyless `sort()`, `min()` and `max()`, so every `bynk.list` function now has a method and `bynk.list` is fully deprecated |
+| **v0.642.0** | An `on call` handler must state its actor, `by Caller` at least (`bynk.actor.missing_by_on_call`), as an HTTP route must; `bynk check --fix=bynk.actor.missing_by_on_call` inserts it |
 | **v0.641.0** | `bynk test` builds its JavaScript into `<output>/out-js`, inside the output directory, and the emitted `tsconfig.json` follows (`outDir` is `./out-js`, and `out-js` is excluded from the project), so concurrent runs whose `--output`s share a parent no longer overwrite one another's compiled tree |
 | **v0.640.100** | Internal restructuring: the project-mode module builder moves out of `emitter.rs` into `project.rs`, `boundary.rs` and `consumed.rs`; no output changes |
 | **v0.640.99** | Internal restructuring: `emit.rs` is now a thin facade over one file per declaration kind (agent handlers and dispatch, the agent class and the suite declarations move out); no output changes |

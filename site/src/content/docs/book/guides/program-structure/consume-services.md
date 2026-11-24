@@ -10,7 +10,7 @@ services. Suppose a `payment` context offers an `authorise` service:
 context payment
 
 service authorise {
-	on call(amount: Int) -> Effect[Result[Int, Int]] {
+	on call(amount: Int) -> Effect[Result[Int, Int]] by Caller {
 		Ok(amount)
 	}
 }
@@ -27,7 +27,7 @@ context orders
 consumes payment
 
 service placeOrder {
-	on call(total: Int) -> Effect[Result[Int, Int]] {
+	on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
 		let _ <- payment.authorise(total)
 		Ok(total)
 	}
@@ -44,7 +44,7 @@ context orders
 consumes payment as Pay
 
 service placeOrder {
-	on call(total: Int) -> Effect[Result[Int, Int]] {
+	on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
 		let _ <- Pay.authorise(total)
 		Ok(total)
 	}
@@ -67,7 +67,7 @@ consumes bynk { Clock }
 consumes payment
 
 service placeOrder {
-	on call(total: Int) -> Effect[Result[Int, Int]] given Clock {
+	on call(total: Int) -> Effect[Result[Int, Int]] by Caller given Clock {
 		let _ <- payment.authorise(total)
 		Ok(total)
 	}
@@ -118,7 +118,7 @@ fn empty() -> Digest {
 }
 
 service hashing {
-	on call(token: String) -> Effect[Bytes] given Crypto {
+	on call(token: String) -> Effect[Bytes] by Caller given Crypto {
 		Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
 	}
 }
@@ -159,7 +159,7 @@ consumes inventory as Stock
 consumes payment as Pay
 
 service placeOrder {
-	on call(sku: String, total: Int) -> Effect[Result[Int, String]] {
+	on call(sku: String, total: Int) -> Effect[Result[Int, String]] by Caller {
 		let Ok(_) <- Stock.reserve(sku) else { Err("out of stock") }
 		let Ok(receipt) <- Pay.authorise(total) else {
 			let _ <- Stock.release(sku)

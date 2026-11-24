@@ -1,0 +1,75 @@
+context ci.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+actor Workload {
+	auth = Oidc(issuer = "https://issuer.example.com", audience = "bynk-registry", jwks = "https://issuer.example.com/.well-known/jwks.json"),
+	identity = UserId
+}
+
+actor Processor {
+	auth = Signature(
+		secret = "HOOK_SECRET",
+		header = "X-Sig",
+		timestamp = "X-Ts",
+		tolerance = 300
+	)
+}
+
+// #3994: the seam has verified the credential, so the handler's `RequestHeaders` does
+// not carry it, as a `SignedCookie` route's does not carry its cookie.
+service api from http {
+	on GET("/bearer") (headers: RequestHeaders) -> Effect[HttpResult[String]] by u: User {
+		match headers.bearer() {
+			Some(_) => Ok("leaked \(u.identity)")
+			None => Ok("hidden \(u.identity)")
+		}
+	}
+
+	on GET("/bearer-raw") (headers: RequestHeaders) -> Effect[HttpResult[String]] by User {
+		match headers.get("authorization") {
+			Some(_) => Ok("leaked")
+			None => Ok("hidden")
+		}
+	}
+
+	on GET("/oidc") (headers: RequestHeaders) -> Effect[HttpResult[String]] by w: Workload {
+		match headers.bearer() {
+			Some(_) => Ok("leaked \(w.identity)")
+			None => Ok("hidden \(w.identity)")
+		}
+	}
+
+	on GET("/sum") (headers: RequestHeaders) -> Effect[HttpResult[String]] by who: User | Visitor {
+		match headers.bearer() {
+			Some(_) => Ok("leaked")
+			None => Ok("hidden")
+		}
+	}
+
+	// A `Signature` member and a `Visitor` member: the union rule hides the signature header, and
+	// an `Authorization` header is hidden on a Bearer sum's `Visitor` arm (`/sum`).
+	on POST("/either") (headers: RequestHeaders, body: String) -> Effect[HttpResult[String]] by who: Processor | Visitor {
+		match headers.get("x-sig") {
+			Some(_) => Ok("leaked")
+			None => Ok("hidden")
+		}
+	}
+
+	on POST("/hook") (headers: RequestHeaders, body: String) -> Effect[HttpResult[String]] by Processor {
+		match headers.get("x-sig") {
+			Some(_) => Ok("leaked \(body)")
+			None => Ok("hidden \(body)")
+		}
+	}
+
+	// No seam consumed a credential here, so the header stays readable.
+	on GET("/open") (headers: RequestHeaders) -> Effect[HttpResult[String]] by Visitor {
+		match headers.bearer() {
+			Some(_) => Ok("seen")
+			None => Ok("none")
+		}
+	}
+}

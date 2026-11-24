@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import { __bynkEq } from "../../__bynk_runtime/equality.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -10,7 +11,7 @@ export type Tag = string & { readonly __brand: "tags.Tag" };
 
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
-    if (!(value.length >= 1)) {
+    if (!(__bynkCodePointLength(value) >= 1)) {
       return Err({ field: "Tag", message: "length must be at least 1", value });
     }
     return Ok(value as Tag);

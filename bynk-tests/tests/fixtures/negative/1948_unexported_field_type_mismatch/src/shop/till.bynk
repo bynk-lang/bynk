@@ -7,7 +7,7 @@ consumes shop.quotes
 // an `Int` is an ordinary type error.
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.quotes.quote()
     Effect.pure(b.a)
   }

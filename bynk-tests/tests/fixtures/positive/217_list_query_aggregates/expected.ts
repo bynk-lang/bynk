@@ -2,6 +2,7 @@
 // commons report
 
 import { Some, None, type Option } from "./__bynk_runtime/result.js";
+import { __bynkCmpString } from "./__bynk_runtime/compare.js";
 
 export interface Item {
   readonly id: number;
@@ -12,11 +13,7 @@ export const Item = {
 };
 
 export function sortedNames(items: readonly Item[]): readonly Item[] {
-  return [...items].sort((__a: Item, __b: Item) => {
-    const __ka = ((i: Item) => i.name)(__a);
-    const __kb = ((i: Item) => i.name)(__b);
-    return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
-  });
+  return [...items].sort((__a: Item, __b: Item) => __bynkCmpString(((i: Item) => i.name)(__a), ((i: Item) => i.name)(__b)));
 }
 
 export function uniqueIds(items: readonly Item[]): readonly Item[] {

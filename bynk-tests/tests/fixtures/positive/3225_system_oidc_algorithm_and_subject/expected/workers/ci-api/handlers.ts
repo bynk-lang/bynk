@@ -2,6 +2,7 @@
 // context ci.api
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 
@@ -9,7 +10,7 @@ export type WorkloadId = string & { readonly __brand: "ci.api.WorkloadId" };
 
 export const WorkloadId = {
   of(value: string): Result<WorkloadId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "WorkloadId", message: "must be non-empty", value });
     }
     return Ok(value as WorkloadId);
@@ -20,7 +21,7 @@ export type AnyId = string & { readonly __brand: "ci.api.AnyId" };
 
 export const AnyId = {
   of(value: string): Result<AnyId, ValidationError> {
-    if (!(value.length <= 64)) {
+    if (!(__bynkCodePointLength(value) <= 64)) {
       return Err({ field: "AnyId", message: "length must be at most 64", value });
     }
     return Ok(value as AnyId);

@@ -51,8 +51,10 @@ pub use bynk_syntax::ast::ExprId;
 
 mod calls;
 pub mod codable;
+mod collections;
 mod cookie_lints;
 mod d1;
+mod events_emit;
 pub mod peek;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
@@ -62,6 +64,8 @@ use equality::EqScope;
 mod expressions;
 mod kernels;
 mod linearity;
+mod list_basics;
+mod list_par;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
@@ -94,6 +98,7 @@ pub use calls::{
     BYNK_LIST_DEPRECATED, FnCaps, check_const_decl, check_context_fn, check_event_field_default,
     check_state_initialiser, check_suite_fn,
 };
+pub use collections::BYNK_COLLECTION_DEPRECATED;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
 pub use d1::{row_base_fields, row_bool_fields};
 pub use refinements::{ZeroValue, is_zeroable, locale_tag_accepts, locale_tag_pattern, zero_value};
@@ -859,6 +864,10 @@ pub enum Callee {
         /// bynk's own ([`crate::firstparty::resolve`]); `None` for any other
         /// capability, including a same-named one from another unit (#934).
         first_party: Option<crate::firstparty::FirstPartyCap>,
+        /// #4113: for bynk's own `Events.emit`, the event the call emits: its type argument,
+        /// written or inferred from the argument, once the owner check has accepted it. The one
+        /// place the emitter and the architecture model read the emitted event from.
+        event: Option<String>,
     },
     /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     /// a derived `D1` instance. Not a declared operation: the compiler writes
@@ -2182,7 +2191,13 @@ pub fn check_handler_body(
             .push(calls::with_of_hint(err, body_ty, return_ty, &ctx));
     }
     if report_unused {
-        report_unused_given(&mut ctx, &given_entries, return_ty_span);
+        let given_removal_anchor = ctx.caps.given_anchor.unwrap_or(return_ty_span);
+        report_unused_given(
+            &mut ctx,
+            &given_entries,
+            return_ty_span,
+            given_removal_anchor,
+        );
     }
 }
 
@@ -2194,6 +2209,7 @@ pub(crate) fn report_unused_given(
     ctx: &mut Ctx,
     given_entries: &[(String, Span)],
     return_ty_span: Span,
+    removal_anchor: Span,
 ) {
     // Bidirectional `given` check.
     // 1) Every used capability is declared. (Handled in capability-call site.)
@@ -2222,7 +2238,7 @@ pub(crate) fn report_unused_given(
             .with_suggestion(
                 format!("remove `{c}` from the `given` clause"),
                 vec![(
-                    given_removal_span(given_entries, i, return_ty_span),
+                    given_removal_span(given_entries, i, removal_anchor),
                     String::new(),
                 )],
                 Applicability::MachineApplicable,

@@ -1,11 +1,11 @@
 context shop
 
 service greet {
-  on call(name: String) -> Effect[String] {
+  on call(name: String) -> Effect[String] by Caller {
     Effect.pure("hello, \(name)")
   }
 
-  on call(name: String) -> Effect[String] {
+  on call(name: String) -> Effect[String] by Caller {
     Effect.pure("hi, \(name)")
   }
 }

@@ -1,0 +1,18 @@
+commons demo {
+  type Id = Int
+  type Age = Int where InRange(0, 150)
+
+  fn total(n: Int) -> Id {
+    Id.of(n)
+  }
+
+  fn fallible(n: Int) -> Result[Age, ValidationError] {
+    Age.of(n)
+  }
+
+  fn both(id: Int, age: Int) -> Result[Age, ValidationError] {
+    let i: Id = Id.of(id)
+    let a = Age.of(age)?
+    Ok(a)
+  }
+}

@@ -3,7 +3,7 @@ context shop.web
 consumes shop.stock
 
 service storefront {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let r <- shop.stock.level(n)
     Effect.pure(r)
   }

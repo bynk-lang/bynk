@@ -3,11 +3,11 @@ context demo.desk
 consumes demo.vault as Vault
 
 service check {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Vault.open(n)
   }
 }
 
 service local {
-  on call(n: Int) -> Effect[Int] { n + 1 }
+  on call(n: Int) -> Effect[Int] by Caller { n + 1 }
 }

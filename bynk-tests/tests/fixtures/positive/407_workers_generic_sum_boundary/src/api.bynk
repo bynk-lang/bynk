@@ -10,7 +10,7 @@ type ApiResult[T] =
 type User = { id: Int, name: String }
 
 service results {
-  on call(input: ApiResult[User]) -> Effect[Result[ApiResult[User], ()]] {
+  on call(input: ApiResult[User]) -> Effect[Result[ApiResult[User], ()]] by Caller {
     Ok(input)
   }
 }

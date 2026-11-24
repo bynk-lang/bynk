@@ -14,7 +14,7 @@ exports transparent { Envelope }
 type Envelope[T] = { item: T, note: String }
 
 service readBack {
-  on call(e: Envelope[Int]) -> Effect[Int] {
+  on call(e: Envelope[Int]) -> Effect[Int] by Caller {
     e.item
   }
 }

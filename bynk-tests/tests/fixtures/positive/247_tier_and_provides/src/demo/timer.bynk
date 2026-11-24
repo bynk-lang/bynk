@@ -20,7 +20,7 @@ context demo.timer {
   }
 
   service elapsed {
-    on call() -> Effect[Int] given Clock {
+    on call() -> Effect[Int] by Caller given Clock {
       let a <- Clock.now()
       let b <- Clock.now()
       Effect.pure(b - a)
@@ -28,7 +28,7 @@ context demo.timer {
   }
 
   service rate {
-    on call(code: String) -> Effect[Int] given Rates {
+    on call(code: String) -> Effect[Int] by Caller given Rates {
       let r <- Rates.lookup(code)
       Effect.pure(r)
     }

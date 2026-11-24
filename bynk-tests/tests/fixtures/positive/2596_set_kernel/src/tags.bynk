@@ -30,7 +30,7 @@ fn decoded(text: String) -> Bool {
 }
 
 service count {
-	on call(xs: List[Int]) -> Effect[Int] {
+	on call(xs: List[Int]) -> Effect[Int] by Caller {
 		Set.of(xs).length()
 	}
 }

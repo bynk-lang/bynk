@@ -17,6 +17,30 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.648.1
+
+A handler on a `by` route that reads `headers.bearer()` or `headers.get("authorization")` (or the `Signature` header) now gets `None`, because the seam consumed it; take the identity from the `by` binding instead.
+
+## v0.647.0
+
+`String` `<`, `sortBy`, `min`, `max` and `Ord` now order by code point, not UTF-16 code unit, so text mixing a character above U+FFFF with one in U+E000..U+FFFF sorts differently; `MinLength`, `MaxLength` and `Length` now count code points at run time too (an emoji counts once). No diagnostic; no fix-it is needed for BMP-only text.
+
+## v0.646.0
+
+"`List.parTraverse` now returns `Effect[List[U]]`, the steps' values in input order; the old behaviour (steps returning `Effect[()]`, result `Effect[()]`) is `parForEach`. A call whose step returns `()` still type-checks but is the warning `bynk.list.par_traverse_unit`, and where its result is used as `Effect[()]` it is also a type error; `bynk check --fix` renames the call to `parForEach` in both cases. `parTraverse` on a `store` query or a held `Map` is unchanged."
+
+## v0.645.0
+
+`T.of(x)` on a named type with no predicate (`type Id = Int`) now returns `T`, not `Result[T, ValidationError]`, so `Id.of(n)?` or a `match` on it stops compiling (`bynk.types.question_on_non_result`, with a machine-applicable "drop the `?`" fix-it); the emitted TypeScript `Id.of(n)` returns the branded value, not a result object. Adding a predicate later turns `.of` back into a `Result`. A `Float` named type stays fallible.
+
+## v0.644.0
+
+A cron handler declared `(at: Int)` is now `bynk.cron.bad_params`, and a test's `svc.schedule("…", 3600000)` address needs an `Instant`; write `(at: Instant)`, `Instant.fromEpochMillis(3600000)`, and `at.toEpochMillis()` where the body needs the number.
+
+## v0.642.0
+
+An `on call` handler with no `by` clause, on the handler or the service header, is now `bynk.actor.missing_by_on_call`; it used to default silently to `Caller`. Run `bynk check --fix=bynk.actor.missing_by_on_call` to insert `by Caller`, which is what the handler did before, then narrow it if you want fewer callers. Agents, cron, queue and `Events` handlers are unchanged.
+
 ## v0.641.0
 
 The compiled JavaScript moves from `<output>/../out-js` to `<output>/out-js`, and the emitted `tsconfig.json` now has `"outDir": "./out-js"` and excludes `out-js`; anything that read `../out-js` (a script running the `tsc`-built JavaScript, a Wrangler or CI step pointing at it) must read `<output>/out-js`, and a `tsconfig.json` copied from an earlier output needs the same two changes. `out-js` is now compiler-owned: a later `bynk build` or `bynk test` into the same `--output` removes the `.js`, `.map` and `.json` files it did not write, so copy `out-js` elsewhere (or run it) before the next build.

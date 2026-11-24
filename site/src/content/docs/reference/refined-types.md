@@ -31,11 +31,15 @@ the base's own type: `0`, `0.0` or `0.00d`.
 | Predicate | Holds when |
 |---|---|
 | `NonEmpty` | length ≥ 1 |
-| `MinLength(n)` | length ≥ n |
-| `MaxLength(n)` | length ≤ n |
-| `Length(n)` | length = n |
+| `MinLength(n)` | length ≥ n, counted in code points |
+| `MaxLength(n)` | length ≤ n, counted in code points |
+| `Length(n)` | length = n, counted in code points |
 | `Matches(regex)` | the whole string matches `regex` (anchored) |
 | `IsoDate` | a calendar date, exactly `YYYY-MM-DD` (years 0000-9999), and a date that exists |
+
+A `String`'s predicate length is in **code points**, so an emoji counts once; it agrees with
+`chars()` and with the `maxLength` of the published OpenAPI. `s.length()` is different: it counts
+UTF-16 code units, so `"🙂".length()` is `2`.
 
 `IsoDate` is the date half of RFC 3339 and the date rule `Instant.fromIso`
 applies: months and days must exist (`2028-02-29` and `2000-02-29` do,
@@ -82,8 +86,11 @@ them only one way.
 Age.of(value)   // Result[Age, ValidationError]
 ```
 
-`.of` **always** returns a `Result`. Use it for values not known at compile time
-(input, variables). See
+`.of` returns a `Result` whenever the type has predicates. A named type with no
+predicate (`type Id = Int`) has nothing to check, so `Id.of(n)` returns `Id`
+directly; add a `where` clause later and every call site that can now fail
+becomes a type error until it handles the failure. Use `.of` for values not
+known at compile time (input, variables). See
 [Define a refined type and validate untrusted input](/book/guides/type-system/define-and-validate/).
 
 > **Tip.** In VS Code, hover a refined type and follow **Try values…** to see

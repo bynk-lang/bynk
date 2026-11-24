@@ -5,7 +5,7 @@ consumes shop
 type Box = { label: String }
 
 service pack {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		shop.weigh(Box { label: "a" })
 	}
 }

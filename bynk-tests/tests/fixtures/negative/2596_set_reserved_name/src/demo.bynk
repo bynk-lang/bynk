@@ -4,7 +4,7 @@ context demo
 type Set = { items: List[Int] }
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

@@ -3,7 +3,7 @@ context app.svc
 consumes platform.clk
 
 service tick {
-  on call() -> Effect[Int] given platform.clk.Clock {
+  on call() -> Effect[Int] by Caller given platform.clk.Clock {
     let t <- platform.clk.Clock.now()
     t
   }

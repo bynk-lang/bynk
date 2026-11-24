@@ -77,7 +77,9 @@ kernel_ops! {
         // v0.146 (ADR 0170): run an effectful step for each element, in order.
         ForEach = "forEach", "forEach(f: T -> Effect[()]) -> Effect[()]";
         // v0.147 (ADR 0171): run an effectful step for every element concurrently.
-        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[()]) -> Effect[()]";
+        // #3967: named `parForEach`, so `parTraverse` can return the values.
+        ParForEach = "parForEach", "parForEach(f: T -> Effect[()]) -> Effect[()]";
+        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[U]) -> Effect[List[U]]";
         // v0.148 (ADR 0172): collect every outcome (no short-circuit), sequential
         // and concurrent.
         TraverseAll = "traverseAll", "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";
@@ -103,9 +105,19 @@ kernel_ops! {
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
         FirstOrElse = "firstOrElse", "firstOrElse(default: T) -> T";
+        // #3962 (with #3828): the rest of `bynk.list`'s vocabulary, and the three
+        // everyday methods that existed nowhere.
+        Reverse = "reverse", "reverse() -> List[T]";
+        Find = "find", "find(p: T -> Bool) -> Option[T]";
+        Contains = "contains", "contains(item: T) -> Bool";
+        Last = "last", "last() -> Option[T]";
+        LastOrElse = "lastOrElse", "lastOrElse(default: T) -> T";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Sort = "sort", "sort() -> List[T]";
+        Traverse = "traverse", "traverse(f: T -> Effect[U]) -> Effect[List[U]]";
         Sum = "sum", "sum(key: T -> K) -> K";
-        Min = "min", "min(key: T -> K) -> Option[K]";
-        Max = "max", "max(key: T -> K) -> Option[K]";
+        Min = "min", "min(key: T -> K) -> Option[K], or min() -> Option[T] for an Ord element";
+        Max = "max", "max(key: T -> K) -> Option[K], or max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
@@ -126,6 +138,15 @@ kernel_ops! {
         Insert = "insert", "insert(item: T) -> Set[T]";
         Remove = "remove", "remove(item: T) -> Set[T]";
         ToList = "toList", "toList() -> List[T]";
+        // #3961: the set algebra and the `List`-shaped vocabulary, as methods.
+        Union = "union", "union(other: Set[T]) -> Set[T]";
+        Intersect = "intersect", "intersect(other: Set[T]) -> Set[T]";
+        Difference = "difference", "difference(other: Set[T]) -> Set[T]";
+        IsSubsetOf = "isSubsetOf", "isSubsetOf(other: Set[T]) -> Bool";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Filter = "filter", "filter(p: T -> Bool) -> Set[T]";
+        Map = "map", "map(f: T -> U) -> Set[U]";
+        Fold = "fold", "fold(init: U, step: (U, T) -> U) -> U";
     }
 /// `Map[K, V]` (v0.20b).
     MapOp {
@@ -134,6 +155,15 @@ kernel_ops! {
         Values = "values", "values() -> List[V]";
         Get = "get", "get(key: K) -> Option[V]";
         Insert = "insert", "insert(key: K, value: V) -> Map[K, V]";
+        // #3961: removal, membership, entry access and the `List`-shaped vocabulary.
+        Remove = "remove", "remove(key: K) -> Map[K, V]";
+        Contains = "contains", "contains(key: K) -> Bool";
+        GetOrElse = "getOrElse", "getOrElse(key: K, default: V) -> V";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Entries = "entries", "entries() -> List[MapEntry[K, V]]";
+        Filter = "filter", "filter(p: (K, V) -> Bool) -> Map[K, V]";
+        MapValues = "mapValues", "mapValues(f: V -> U) -> Map[K, U]";
+        Fold = "fold", "fold(init: U, step: (U, K, V) -> U) -> U";
     }
 /// `Query[T]` (v0.91, ADR 0115; joins/grouping v0.94, ADR 0116/0120) — the lazy
 /// storage-query vocabulary a `store` collection lifts into (a `store Map`'s
@@ -485,6 +515,7 @@ kernel_ops! {
 /// `Map.empty()`.
     MapStatic {
         Empty = "empty", "Map.empty() -> Map[K, V]";
+        Of = "of", "Map.of(entries: List[MapEntry[K, V]]) -> Map[K, V]";
     }
 /// `Set.empty()` / `Set.of(xs)` (K6a, #2596).
     SetStatic {

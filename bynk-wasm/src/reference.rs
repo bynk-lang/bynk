@@ -193,7 +193,12 @@ fn units() -> (Vec<CapabilityEntry>, Vec<ModuleEntry>) {
                                 .find(|(n, _)| *n == id.name)
                                 .map(|(_, form)| format!("use the `List` method form `{form}`"))
                         } else {
-                            None
+                            bynk_check::checker::BYNK_COLLECTION_DEPRECATED
+                                .iter()
+                                .find(|(m, n, _, _)| m == unit_name && *n == id.name)
+                                .map(|(_, _, method, _)| {
+                                    format!("use the method form `.{method}(…)`")
+                                })
                         };
                         Some(Member {
                             name: id.name.clone(),
@@ -332,11 +337,10 @@ mod tests {
         let map = member(list, "functions", "map");
         assert_eq!(map["deprecated"], "use the `List` method form `xs.map(f)`");
         assert!(map["doc"].is_string());
-        // `reverse` has no method form yet.
-        assert!(
-            member(list, "functions", "reverse")
-                .get("deprecated")
-                .is_none()
+        // Every function has a method form since #3962, `reverse` included.
+        assert_eq!(
+            member(list, "functions", "reverse")["deprecated"],
+            "use the `List` method form `xs.reverse()`"
         );
     }
 

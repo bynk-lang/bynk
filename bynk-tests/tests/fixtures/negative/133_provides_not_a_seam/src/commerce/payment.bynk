@@ -15,7 +15,7 @@ context commerce.payment {
   }
 
   service authorise {
-    on call() -> Effect[Result[AuthId, PaymentError]] given Logger {
+    on call() -> Effect[Result[AuthId, PaymentError]] by Caller given Logger {
       let _ <- Logger.log("authorise")
       Effect.pure(Ok(AuthId.unsafe("AUTH-000")))
     }

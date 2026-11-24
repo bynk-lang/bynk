@@ -5,7 +5,7 @@ context shop.one
 consumes bynk { Clock }
 
 service now {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let _ <- Clock.now()
     Effect.pure(1)
   }

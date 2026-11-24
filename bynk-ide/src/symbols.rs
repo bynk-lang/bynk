@@ -1101,7 +1101,7 @@ pub fn describe_system_job_address_at<'s>(
         return None;
     }
     Some(if name == "schedule" {
-        "**`svc.schedule(\"<expr>\", at)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
+        "**`svc.schedule(\"<expr>\", at: Instant)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
     } else {
         "**`q.message(m)`** at `system` — delivers `m` through the Worker's `queue` entry, after a JSON round trip, and yields `Ack` or `Retry(reason)` as the consumer acknowledged or retried it.".to_string()
     })
@@ -4314,7 +4314,7 @@ mod tests {
     // v0.123 (slice 2): a service renders its protocol header and route lines.
     #[test]
     fn describe_service_renders_routes() {
-        let src = "context demo.app\n\nservice greeter {\n  on call(name: String) -> Effect[String] {\n    Effect.pure(name)\n  }\n}\n";
+        let src = "context demo.app\n\nservice greeter {\n  on call(name: String) -> Effect[String] by Caller {\n    Effect.pure(name)\n  }\n}\n";
         let out = describe_symbol(src, "greeter").unwrap();
         assert!(out.contains("service greeter {"), "{out}");
         assert!(out.contains("on call"), "{out}");

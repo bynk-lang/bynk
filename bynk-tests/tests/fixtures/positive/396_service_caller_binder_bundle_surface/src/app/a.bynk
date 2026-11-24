@@ -3,7 +3,7 @@ context app.a
 consumes app.b as B
 
 service ask {
-  on call(ping: String) -> Effect[Result[String, String]] {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
     let r <- B.whoami(ping)
     r
   }

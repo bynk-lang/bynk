@@ -10,19 +10,19 @@ consumes bynk.cloudflare { MySql, MySqlError, MySqlRun, MySqlValue }
 capability Legacy = MySql @tls("verify-identity")
 
 service add {
-	on call(name: String) -> Effect[Result[MySqlRun, MySqlError]] given Legacy {
+	on call(name: String) -> Effect[Result[MySqlRun, MySqlError]] by Caller given Legacy {
 		Legacy.run("insert into orders (name, flag, at) values (?, ?, ?)", [MySqlText(name), MySqlBoolean(true), MySqlDateTime("2026-11-12 09:30:00")])
 	}
 }
 
 service list {
-	on call() -> Effect[Result[String, MySqlError]] given Legacy {
+	on call() -> Effect[Result[String, MySqlError]] by Caller given Legacy {
 		Legacy.all("select id, name from orders where id > ?", [MySqlInteger(0)])
 	}
 }
 
 service find {
-	on call(id: Int) -> Effect[Result[Option[String], MySqlError]] given Legacy {
+	on call(id: Int) -> Effect[Result[Option[String], MySqlError]] by Caller given Legacy {
 		Legacy.first("select name from orders where id = ?", [MySqlInteger(id)])
 	}
 }

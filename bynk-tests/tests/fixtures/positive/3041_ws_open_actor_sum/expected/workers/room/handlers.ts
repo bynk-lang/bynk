@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkSettleAll } from "../../__bynk_runtime/settle.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
@@ -15,7 +16,7 @@ export type UserId = string & { readonly __brand: "room.UserId" };
 
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "UserId", message: "must be non-empty", value });
     }
     return Ok(value as UserId);

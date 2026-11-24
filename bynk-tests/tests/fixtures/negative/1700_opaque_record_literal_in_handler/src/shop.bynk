@@ -6,7 +6,7 @@ consumes pay
 // forging its representation. A transparent export may be built this way; an
 // opaque one only by its owner.
 service checkout {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let r = Receipt { amount: 1 }
     Effect.pure(1)
   }

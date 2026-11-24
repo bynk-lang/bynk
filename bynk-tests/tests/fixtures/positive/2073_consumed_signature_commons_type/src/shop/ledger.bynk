@@ -7,13 +7,13 @@ context shop.ledger
 consumes shop.order
 
 service orderId {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     o.id
   }
 }
 
 service echo {
-  on call(o: Order) -> Effect[Order] {
+  on call(o: Order) -> Effect[Order] by Caller {
     o
   }
 }

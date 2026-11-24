@@ -1,48 +1,51 @@
 commons bynk.set {
 	---
-	Every element of `a`, then every element of `b` not already in `a`, in
-	that order.
+	Deprecated: use `a.union(b)`. Every element of `a`, then every element of
+	`b` not already in `a`, in that order.
 	---
 	fn union[T: Key](a: Set[T], b: Set[T]) -> Set[T] {
-		b.toList().fold(a, (acc, x) => acc.insert(x))
+		a.union(b)
 	}
 
 	---
-	The elements of `a` that are also in `b`, in `a`'s order.
+	Deprecated: use `a.intersect(b)`. The elements of `a` that are also in `b`,
+	in `a`'s order.
 	---
 	fn intersect[T: Key](a: Set[T], b: Set[T]) -> Set[T] {
-		Set.of(a.toList().filter((x) => b.contains(x)))
+		a.intersect(b)
 	}
 
 	---
-	The elements of `a` that are not in `b`, in `a`'s order.
+	Deprecated: use `a.difference(b)`. The elements of `a` that are not in `b`,
+	in `a`'s order.
 	---
 	fn difference[T: Key](a: Set[T], b: Set[T]) -> Set[T] {
-		Set.of(a.toList().filter((x) => !b.contains(x)))
+		a.difference(b)
 	}
 
 	---
-	Whether every element of `a` is in `b`.
+	Deprecated: use `a.isSubsetOf(b)`. Whether every element of `a` is in `b`.
 	---
 	fn isSubsetOf[T: Key](a: Set[T], b: Set[T]) -> Bool {
-		a.toList().all((x) => b.contains(x))
+		a.isSubsetOf(b)
 	}
 
 	---
-	The elements of `s` for which `p` holds, in order. Named apart from
-	`bynk.list`'s `filter`, so a unit can use both commons.
+	Deprecated: use `s.filter(p)`. The elements of `s` for which `p` holds, in
+	order. Named apart from `bynk.list`'s `filter`, so a unit can use both
+	commons.
 	---
 	fn filterSet[T: Key](s: Set[T], p: T -> Bool) -> Set[T] {
-		Set.of(s.toList().filter(p))
+		s.filter(p)
 	}
 
 	---
-	`f` applied to each element of `s`, in order. Elements that map to the same
-	value collapse to one, at the first one's position; the result type must
-	itself be value-keyable. Named apart from `bynk.list`'s `map`, so a unit can
-	use both commons.
+	Deprecated: use `s.map(f)`. `f` applied to each element of `s`, in order.
+	Elements that map to the same value collapse to one, at the first one's
+	position; the result type must itself be value-keyable. Named apart from
+	`bynk.list`'s `map`, so a unit can use both commons.
 	---
 	fn mapSet[A: Key, B: Key](s: Set[A], f: A -> B) -> Set[B] {
-		Set.of(s.toList().map(f))
+		s.map(f)
 	}
 }

@@ -24,7 +24,7 @@ agent Order {
 }
 
 service api {
-  on call(qty: Int) -> Effect[Result[(), OrderError]] given Clock {
+  on call(qty: Int) -> Effect[Result[(), OrderError]] by Caller given Clock {
     let n <- Clock.now()
     let _ <- Order("o1").addItem(n)
     Ok(())

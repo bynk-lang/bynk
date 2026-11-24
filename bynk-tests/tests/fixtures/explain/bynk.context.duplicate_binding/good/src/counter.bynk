@@ -1,7 +1,7 @@
 context counter
 
 service store {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }

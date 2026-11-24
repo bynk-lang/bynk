@@ -7,7 +7,7 @@ type Repo = Int
 type Box = { n: Int }
 
 service open {
-  on call() -> Effect[Box] {
+  on call() -> Effect[Box] by Caller {
     Effect.pure(Box { n: 1 })
   }
 }

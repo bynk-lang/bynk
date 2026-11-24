@@ -8,7 +8,7 @@ private fn code_of(t: Tag) -> Int {
 }
 
 service place {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     code_of(Tag { code: n })
   }
 }

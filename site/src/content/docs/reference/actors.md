@@ -32,6 +32,9 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
   capability reads), not the key itself.
 - A `Bearer` or `Oidc` actor's **`identity`** must be a context-owned,
   string-constructible type, so the minted value is sealed to the context.
+- The seam **consumes** a `Bearer`, `Oidc` or `Signature` credential, as it does a `SignedCookie`'s: the
+  handler's `headers: RequestHeaders` omits the `Authorization` header (so `bearer()` is `None`), or the
+  signature header, and the handler sees only the identity ([Request headers](/reference/http/#request-headers)).
 - A `Signature` actor takes **no** `identity` and a handler using it **must** take
   a `body`; it is HTTP-only.
 - An **`Oidc`** actor names **no secret** — its trust root is the provider's
@@ -220,9 +223,15 @@ by <Actor>                      // verify, capture nothing (optional binder)
 by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
 ```
 
-- **HTTP requires a `by` clause** (`bynk.actor.missing_by_on_http`); a public
-  route writes `by v: Visitor`. The internal protocols default: `call` →
-  `Caller`, cron → `Scheduler`, queue → `Producer`, email → `Sender`.
+- **HTTP, WebSocket and `call` require a `by` clause**, because the caller is a
+  party and more than one actor is sensible. A public HTTP route writes
+  `by v: Visitor` (`bynk.actor.missing_by_on_http`). An `on call` handler writes
+  at least `by Caller`, the explicit "any consuming context"
+  (`bynk.actor.missing_by_on_call`); `bynk check --fix=bynk.actor.missing_by_on_call`
+  inserts it, and a service-header `by` covers every handler without its own.
+  The platform-only protocols default: cron → `Scheduler`, queue → `Producer`,
+  email → `Sender`. An agent's `on call` operations are reached only from inside
+  their own context, so they name no caller.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.
   Peers are distinguished by scheme (no duplicates), a `None` catch-all is last,
   refinements are not members, and total failure is `401`. On `call`, a sum
@@ -235,7 +244,8 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   composed with `&&`/`||`/`!`. An `Admin` is usable wherever its base is.
 - **`Caller`** (on `on call`) yields the calling context's qualified name as
   `CallerId`. It admits Bynk contexts only: a foreign caller is admitted by its
-  own actor, never by `Caller`, so a handler without `by` refuses one (`403`).
+  own actor, never by `Caller`, so a handler that names only `Caller` refuses
+  one (`403`).
 
 ## Prelude actors
 

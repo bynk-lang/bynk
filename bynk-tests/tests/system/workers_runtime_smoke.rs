@@ -81,17 +81,24 @@ fn hello_world_serves_on_workerd() {
         "example layout changed — update this test's worker path"
     );
 
-    // A pid-derived port keeps parallel test binaries off each other.
-    let port = 20000 + (std::process::id() % 10000) as u16;
+    // #4174: a port the OS has just handed out, as for the other smokes (`wrangler::ports`).
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let child = wrangler::Wrangler::spawn(
         wrangler::npx()
-            .args(["dev", "--port", &port.to_string()])
+            .args([
+                "dev",
+                "--port",
+                &port.to_string(),
+                // wrangler's default inspector port is shared by every `wrangler dev` otherwise.
+                "--inspector-port",
+                &inspector_port.to_string(),
+            ])
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
         &tmp.join("registry"),
     );
-    let child = match child {
+    let mut child = match child {
         Ok(c) => c,
         Err(e) => {
             if skip(&format!("could not launch npx: {e}")) {
@@ -107,6 +114,28 @@ fn hello_world_serves_on_workerd() {
     let url = format!("http://127.0.0.1:{port}/");
     let mut last_err = String::new();
     loop {
+        // #4174: a wrangler that has already exited will never serve; say so now (see
+        // `serve_smoke_with_args`).
+        if let Ok(Some(status)) = child.child().try_wait() {
+            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
+            // descendant may outlive the leader.
+            child.stop();
+            let mut logs = String::new();
+            if let Some(mut e) = child.child().stderr.take() {
+                let _ = e.read_to_string(&mut logs);
+            }
+            assert!(
+                !logs.contains("Address already in use"),
+                "wrangler dev could not bind its port ({status}): {logs}"
+            );
+            if skip(&format!(
+                "wrangler dev exited ({status}) before serving (likely no network to \
+                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+            )) {
+                return;
+            }
+            unreachable!()
+        }
         if Instant::now() > deadline {
             let mut child = child;
             // Stop first: the pipe reaches EOF only once the whole group is gone.
@@ -214,7 +243,7 @@ service api from http {
 
 #[test]
 fn agent_state_round_trips_on_workerd() {
-    let Some(served) = serve_smoke(AGENT_STATE_SOURCE, "state", 30000) else {
+    let Some(served) = serve_smoke(AGENT_STATE_SOURCE, "state") else {
         return;
     };
     let url = &served.url;
@@ -310,7 +339,6 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
         let Some(served) = serve_smoke_with(
             &[("smoke.bynk", MIGRATE_SMOKE_V1)],
             "migrate-v1",
-            31000,
             None,
             Some(&store),
         ) else {
@@ -323,7 +351,6 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
     let Some(served) = serve_smoke_with(
         &[("smoke.bynk", MIGRATE_SMOKE_V2)],
         "migrate-v2",
-        31100,
         lock,
         Some(&store),
     ) else {
@@ -369,7 +396,6 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
         let Some(served) = serve_smoke_with(
             &[("smoke.bynk", MIGRATE_SMOKE_V1)],
             "sweep-v1",
-            31200,
             None,
             Some(&store),
         ) else {
@@ -386,7 +412,6 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     let Some(served) = serve_smoke_with_args(
         &[("smoke.bynk", MIGRATE_SMOKE_V2)],
         "sweep-v2",
-        31300,
         lock,
         Some(&store),
         &["--var".to_string(), format!("{}:{key}", wf::MIGRATE_KEY)],
@@ -575,7 +600,7 @@ service api from http {
 
 #[test]
 fn agent_calls_use_the_boundary_codec_on_workerd() {
-    let Some(served) = serve_smoke(AGENT_CODEC_SOURCE, "codec", 40000) else {
+    let Some(served) = serve_smoke(AGENT_CODEC_SOURCE, "codec") else {
         return;
     };
     let body = fetch(&served.url, "/rt").expect("GET /rt round-trips values through an agent");
@@ -616,7 +641,7 @@ service api from http {
 
 #[test]
 fn bytes_operations_run_on_workerd() {
-    let Some(served) = serve_smoke(BYTES_OPS_SOURCE, "bytes", 10000) else {
+    let Some(served) = serve_smoke(BYTES_OPS_SOURCE, "bytes") else {
         return;
     };
     let body = fetch(&served.url, "/bytes").expect("GET /bytes runs the Bytes operations");
@@ -682,7 +707,7 @@ service api from http {
 
 #[test]
 fn a_provider_calls_an_agent_on_workerd() {
-    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent", 55000) else {
+    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent") else {
         return;
     };
     let body = fetch(&served.url, "/yank").expect("GET /yank calls the agent through providers");
@@ -772,7 +797,7 @@ service api from http {
 
 #[test]
 fn a_context_split_across_files_serves_on_workerd() {
-    let Some(served) = serve_smoke_files(SPLIT_CONTEXT_FILES, "split", 50000) else {
+    let Some(served) = serve_smoke_files(SPLIT_CONTEXT_FILES, "split") else {
         return;
     };
     let first = fetch(&served.url, "/add").expect("GET /add reaches the sibling file's agent");
@@ -811,19 +836,19 @@ impl Drop for Served {
 }
 
 /// Compile `source` (a single-file `smoke` context) for Workers, strip it to JS
-/// and serve it with `wrangler dev` on a pid-derived port above `port_base`,
-/// with its own inspector port (wrangler's default 9229 is shared otherwise),
-/// so the tests in this binary can run concurrently. `None` when the test is
+/// and serve it with `wrangler dev` on ports the OS hands out (`wrangler::ports`), with its
+/// own inspector port (wrangler's default 9229 is shared otherwise), so the tests in this
+/// binary can run concurrently. `None` when the test is
 /// skipped: no `npx`/`node`, or wrangler did not boot (`skip` panics instead
 /// when `BYNK_REQUIRE_WORKERD` is set).
-fn serve_smoke(source: &str, tag: &str, port_base: u16) -> Option<Served> {
-    serve_smoke_files(&[("smoke.bynk", source)], tag, port_base)
+fn serve_smoke(source: &str, tag: &str) -> Option<Served> {
+    serve_smoke_files(&[("smoke.bynk", source)], tag)
 }
 
 /// [`serve_smoke`] over several source files, each `(path under src/,
 /// source)`, which together declare the `smoke` context (#1820).
-fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Option<Served> {
-    serve_smoke_with(files, tag, port_base, None, None)
+fn serve_smoke_files(files: &[(&str, &str)], tag: &str) -> Option<Served> {
+    serve_smoke_with(files, tag, None, None)
 }
 
 /// [`serve_smoke_files`] against a committed schema lock (`lock`, `None` for a
@@ -833,11 +858,10 @@ fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Optio
 fn serve_smoke_with(
     files: &[(&str, &str)],
     tag: &str,
-    port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
 ) -> Option<Served> {
-    serve_smoke_with_args(files, tag, port_base, lock, persist, &[])
+    serve_smoke_with_args(files, tag, lock, persist, &[])
 }
 
 /// [`serve_smoke_with`], passing `extra` to `wrangler dev` (state-migrations
@@ -845,7 +869,6 @@ fn serve_smoke_with(
 fn serve_smoke_with_args(
     files: &[(&str, &str)],
     tag: &str,
-    port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
     extra: &[String],
@@ -885,8 +908,10 @@ fn serve_smoke_with_args(
         "smoke layout changed — update this test's worker path"
     );
 
-    let port = port_base + (std::process::id() % 10000) as u16;
-    let inspector_port = port + 1;
+    // #4174: ports the OS has just handed out, not a pid-derived number. A pid-derived `base +
+    // pid % 10000` collided with another test's (`Address already in use`), wrangler exited
+    // at once, and the wait below polled the dead process for the whole boot window.
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let mut args: Vec<String> = [
         "dev",
         "--port",
@@ -910,7 +935,7 @@ fn serve_smoke_with_args(
             .stderr(Stdio::piped()),
         &tmp.join("registry"),
     );
-    let child = match child {
+    let mut child = match child {
         Ok(c) => c,
         Err(e) => {
             if skip(&format!("could not launch npx: {e}")) {
@@ -924,6 +949,28 @@ fn serve_smoke_with_args(
     let url = format!("http://127.0.0.1:{port}/");
     let mut last_err = String::new();
     loop {
+        // A wrangler that has already exited will never serve: say so now, with what it said,
+        // instead of waiting out the boot window.
+        if let Ok(Some(status)) = child.child().try_wait() {
+            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
+            // descendant may outlive the leader.
+            child.stop();
+            let mut logs = String::new();
+            if let Some(mut e) = child.child().stderr.take() {
+                let _ = e.read_to_string(&mut logs);
+            }
+            assert!(
+                !logs.contains("Address already in use"),
+                "wrangler dev could not bind its ports ({status}): {logs}"
+            );
+            if skip(&format!(
+                "wrangler dev exited ({status}) before serving (likely no network to \
+                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+            )) {
+                return None;
+            }
+            unreachable!()
+        }
         if Instant::now() > deadline {
             let mut child = child;
             // Stop first: the pipe reaches EOF only once the whole group is gone.
@@ -1118,14 +1165,8 @@ const open = (query) => within(new Promise((resolve, reject) => {
 /// Serve `source`, run the clients (`queries`; the first `expected` share the
 /// broadcast's instance), and assert the frames each received: the one
 /// `hello` frame for those, none for the rest.
-fn broadcast_reaches_clients(
-    source: &str,
-    tag: &str,
-    port_base: u16,
-    expected: usize,
-    queries: &[&str],
-) {
-    let Some(served) = serve_smoke(source, tag, port_base) else {
+fn broadcast_reaches_clients(source: &str, tag: &str, expected: usize, queries: &[&str]) {
+    let Some(served) = serve_smoke(source, tag) else {
         return;
     };
     let port = served
@@ -1180,7 +1221,6 @@ fn a_broadcast_reaches_websockets_opened_through_a_literal_keyed_upgrade_on_work
     broadcast_reaches_clients(
         WS_LITERAL_KEY_SOURCE,
         "ws-literal",
-        15000,
         2,
         &["user=alice", "user=bob"],
     );
@@ -1193,7 +1233,6 @@ fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_worker
     broadcast_reaches_clients(
         WS_ROUTE_KEY_SOURCE,
         "ws-route",
-        25000,
         2,
         &[
             "room=r1&user=alice",
@@ -1250,7 +1289,7 @@ service api from http {
 
 #[test]
 fn concurrent_handlers_on_one_agent_instance_all_count_on_workerd() {
-    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise", 45000) else {
+    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise") else {
         return;
     };
     let url = served.url.clone();

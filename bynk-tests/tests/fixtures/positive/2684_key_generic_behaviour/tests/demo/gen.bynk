@@ -11,8 +11,8 @@ case "set algebra over records" {
   let b: Set[P] = Set.of([P { x: 2, y: 2 }, P { x: 3, y: 3 }])
   expect merge(a, b).toList() == [P { x: 1, y: 1 }, P { x: 2, y: 2 }, P { x: 3, y: 3 }]
   expect common(a, b).toList() == [P { x: 2, y: 2 }]
-  expect difference(a, b).toList() == [P { x: 1, y: 1 }]
-  expect isSubsetOf(common(a, b), a)
+  expect a.difference(b).toList() == [P { x: 1, y: 1 }]
+  expect common(a, b).isSubsetOf(a)
 }
 
 case "equal sets compare equal whatever their build order" {
@@ -20,7 +20,7 @@ case "equal sets compare equal whatever their build order" {
   let b: Set[P] = Set.of([P { y: 2, x: 2 }, P { y: 1, x: 1 }])
   expect a == b
   let empty: Set[P] = Set.empty()
-  expect difference(a, a) == empty
+  expect a.difference(a) == empty
   expect Set.of([P { x: 1, y: 1 }]).remove(P { x: 1, y: 1 }) == empty
 }
 

@@ -19,7 +19,7 @@ agent Counter {
 	store n: Cell[Int] = 0
 
 	on call run() -> Effect[()] {
-		let _ <- [1, 2].parTraverse(tick)
+		let _ <- [1, 2].parForEach(tick)
 		()
 	}
 }

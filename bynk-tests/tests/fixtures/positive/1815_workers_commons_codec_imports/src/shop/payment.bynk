@@ -3,5 +3,5 @@ context shop.payment
 uses shop.values
 
 service authorise {
-  on call(cents: Cents) -> Effect[Bool] { true }
+  on call(cents: Cents) -> Effect[Bool] by Caller { true }
 }

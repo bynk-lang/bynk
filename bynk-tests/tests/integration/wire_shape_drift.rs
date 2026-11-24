@@ -89,8 +89,8 @@ fn extract_fn<'a>(text: &'a str, fn_name: &str) -> &'a str {
 fn condition_snippet(p: &bynk_syntax::ast::PredKind) -> String {
     use bynk_syntax::ast::PredKind;
     match p {
-        PredKind::NonEmpty => "json.length > 0".to_string(),
-        PredKind::MaxLength(n) => format!("json.length <= {n}"),
+        PredKind::NonEmpty => "__bynkCodePointLength(json) > 0".to_string(),
+        PredKind::MaxLength(n) => format!("__bynkCodePointLength(json) <= {n}"),
         other => panic!(
             "wire_shape_drift.rs's condition_snippet has no mapping for {other:?} — extend it or simplify the fixture"
         ),

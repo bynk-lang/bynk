@@ -3,9 +3,8 @@
 
 import { Some, None, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
-import { __bynkMapInsert, __bynkSetOf, __bynkSetRemove } from "../__bynk_runtime/keys.js";
+import { __bynkMapInsert, __bynkSetOf, __bynkSetRemove, __bynkSetDifference, __bynkSetIsSubsetOf } from "../__bynk_runtime/keys.js";
 import * as __ns_demo_gen from "./../demo/gen.js";
-import * as __ns_bynk_set from "./../bynk/set.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -45,13 +44,12 @@ async function test_set_algebra_over_records() {
     const { P, Tagged, common, merge } = __ns_demo_gen;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    const { difference, filterSet, intersect, isSubsetOf, mapSet, union } = __ns_bynk_set;
     const a: ReadonlySet<P> = __bynkSetOf<P>([{ x: 1, y: 1 }, { x: 2, y: 2 }]);
     const b: ReadonlySet<P> = __bynkSetOf<P>([{ x: 2, y: 2 }, { x: 3, y: 3 }]);
     if (!(__bynkEq(([...merge(a, b)] as readonly P[]), [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }]))) { throw __bynkExpectFailure("tests/demo/gen.bynk:12:10", 466, 544, "expect merge(a, b).toList() == [P { x: 1, y: 1 }, P { x: 2, y: 2 }, P { x: 3, y: 3 }]\n  expected: merge(a, b).toList() == [P { x: 1, y: 1 }, P { x: 2, y: 2 }, P { x: 3, y: 3 }]\n  actual:   " + __bynkShow((([...merge(a, b)] as readonly P[]))) + " == " + __bynkShow(([{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }]))); }
     if (!(__bynkEq(([...common(a, b)] as readonly P[]), [{ x: 2, y: 2 }]))) { throw __bynkExpectFailure("tests/demo/gen.bynk:13:10", 554, 597, "expect common(a, b).toList() == [P { x: 2, y: 2 }]\n  expected: common(a, b).toList() == [P { x: 2, y: 2 }]\n  actual:   " + __bynkShow((([...common(a, b)] as readonly P[]))) + " == " + __bynkShow(([{ x: 2, y: 2 }]))); }
-    if (!(__bynkEq(([...difference(a, b)] as readonly P[]), [{ x: 1, y: 1 }]))) { throw __bynkExpectFailure("tests/demo/gen.bynk:14:10", 607, 654, "expect difference(a, b).toList() == [P { x: 1, y: 1 }]\n  expected: difference(a, b).toList() == [P { x: 1, y: 1 }]\n  actual:   " + __bynkShow((([...difference(a, b)] as readonly P[]))) + " == " + __bynkShow(([{ x: 1, y: 1 }]))); }
-    if (!(isSubsetOf(common(a, b), a))) { throw __bynkExpectFailure("tests/demo/gen.bynk:15:10", 664, 691, "expect isSubsetOf(common(a, b), a)"); }
+    if (!(__bynkEq(([...__bynkSetDifference(a, b)] as readonly P[]), [{ x: 1, y: 1 }]))) { throw __bynkExpectFailure("tests/demo/gen.bynk:14:10", 607, 653, "expect a.difference(b).toList() == [P { x: 1, y: 1 }]\n  expected: a.difference(b).toList() == [P { x: 1, y: 1 }]\n  actual:   " + __bynkShow((([...__bynkSetDifference(a, b)] as readonly P[]))) + " == " + __bynkShow(([{ x: 1, y: 1 }]))); }
+    if (!(__bynkSetIsSubsetOf(common(a, b), a))) { throw __bynkExpectFailure("tests/demo/gen.bynk:15:10", 663, 689, "expect common(a, b).isSubsetOf(a)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -68,13 +66,12 @@ async function test_equal_sets_compare_equal_whatever_their_build_order() {
     const { P, Tagged, common, merge } = __ns_demo_gen;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    const { difference, filterSet, intersect, isSubsetOf, mapSet, union } = __ns_bynk_set;
     const a: ReadonlySet<P> = __bynkSetOf<P>([{ x: 1, y: 1 }, { x: 2, y: 2 }]);
     const b: ReadonlySet<P> = __bynkSetOf<P>([{ y: 2, x: 2 }, { y: 1, x: 1 }]);
-    if (!(__bynkEq(a, b))) { throw __bynkExpectFailure("tests/demo/gen.bynk:21:10", 891, 897, "expect a == b\n  expected: a == b\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((b))); }
+    if (!(__bynkEq(a, b))) { throw __bynkExpectFailure("tests/demo/gen.bynk:21:10", 889, 895, "expect a == b\n  expected: a == b\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((b))); }
     const empty: ReadonlySet<P> = new globalThis.Set<P>();
-    if (!(__bynkEq(difference(a, a), empty))) { throw __bynkExpectFailure("tests/demo/gen.bynk:23:10", 941, 966, "expect difference(a, a) == empty\n  expected: difference(a, a) == empty\n  actual:   " + __bynkShow((difference(a, a))) + " == " + __bynkShow((empty))); }
-    if (!(__bynkEq(__bynkSetRemove<P>(__bynkSetOf<P>([{ x: 1, y: 1 }]), { x: 1, y: 1 }), empty))) { throw __bynkExpectFailure("tests/demo/gen.bynk:24:10", 976, 1036, "expect Set.of([P { x: 1, y: 1 }]).remove(P { x: 1, y: 1 }) == empty\n  expected: Set.of([P { x: 1, y: 1 }]).remove(P { x: 1, y: 1 }) == empty\n  actual:   " + __bynkShow((__bynkSetRemove<P>(__bynkSetOf<P>([{ x: 1, y: 1 }]), { x: 1, y: 1 }))) + " == " + __bynkShow((empty))); }
+    if (!(__bynkEq(__bynkSetDifference(a, a), empty))) { throw __bynkExpectFailure("tests/demo/gen.bynk:23:10", 939, 963, "expect a.difference(a) == empty\n  expected: a.difference(a) == empty\n  actual:   " + __bynkShow((__bynkSetDifference(a, a))) + " == " + __bynkShow((empty))); }
+    if (!(__bynkEq(__bynkSetRemove<P>(__bynkSetOf<P>([{ x: 1, y: 1 }]), { x: 1, y: 1 }), empty))) { throw __bynkExpectFailure("tests/demo/gen.bynk:24:10", 973, 1033, "expect Set.of([P { x: 1, y: 1 }]).remove(P { x: 1, y: 1 }) == empty\n  expected: Set.of([P { x: 1, y: 1 }]).remove(P { x: 1, y: 1 }) == empty\n  actual:   " + __bynkShow((__bynkSetRemove<P>(__bynkSetOf<P>([{ x: 1, y: 1 }]), { x: 1, y: 1 }))) + " == " + __bynkShow((empty))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -91,13 +88,12 @@ async function test_a_sum_keeps_its_payload_kinds_apart() {
     const { P, Tagged, common, merge } = __ns_demo_gen;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    const { difference, filterSet, intersect, isSubsetOf, mapSet, union } = __ns_bynk_set;
     const m: ReadonlyMap<Tagged, number> = __bynkMapInsert<Tagged, number>(__bynkMapInsert<Tagged, number>(new globalThis.Map<Tagged, number>(), Tagged.Num(1), 1), Tagged.Str("1"), 2);
-    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:29:10", 1172, 1187, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Num(1)), Some(1)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:30:10", 1197, 1221, "expect m.get(Num(1)) == Some(1)\n  expected: m.get(Num(1)) == Some(1)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Num(1)))) + " == " + __bynkShow((Some(1)))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Str("1")), Some(2)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:31:10", 1231, 1257, "expect m.get(Str(\"1\")) == Some(2)\n  expected: m.get(Str(\"1\")) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Str("1")))) + " == " + __bynkShow((Some(2)))); }
+    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:29:10", 1169, 1184, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Num(1)), Some(1)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:30:10", 1194, 1218, "expect m.get(Num(1)) == Some(1)\n  expected: m.get(Num(1)) == Some(1)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Num(1)))) + " == " + __bynkShow((Some(1)))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Str("1")), Some(2)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:31:10", 1228, 1254, "expect m.get(Str(\"1\")) == Some(2)\n  expected: m.get(Str(\"1\")) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Tagged, number>, __k: Tagged) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, Tagged.Str("1")))) + " == " + __bynkShow((Some(2)))); }
     const o: ReadonlyMap<Option<string>, number> = __bynkMapInsert<Option<string>, number>(__bynkMapInsert<Option<string>, number>(new globalThis.Map<Option<string>, number>(), Some("x"), 1), None, 2);
-    if (!(o.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:33:10", 1352, 1367, "expect o.length() == 2\n  expected: o.length() == 2\n  actual:   " + __bynkShow((o.size)) + " == " + __bynkShow((2))); }
+    if (!(o.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:33:10", 1349, 1364, "expect o.length() == 2\n  expected: o.length() == 2\n  actual:   " + __bynkShow((o.size)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -114,10 +110,9 @@ async function test_Bytes_with_different_contents_stay_distinct() {
     const { P, Tagged, common, merge } = __ns_demo_gen;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    const { difference, filterSet, intersect, isSubsetOf, mapSet, union } = __ns_bynk_set;
     const m: ReadonlyMap<globalThis.Uint8Array, number> = __bynkMapInsert<globalThis.Uint8Array, number>(__bynkMapInsert<globalThis.Uint8Array, number>(__bynkMapInsert<globalThis.Uint8Array, number>(new globalThis.Map<globalThis.Uint8Array, number>(), new globalThis.TextEncoder().encode("a"), 1), new globalThis.TextEncoder().encode("a"), 2), new globalThis.TextEncoder().encode("b"), 3);
-    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:41:10", 1580, 1595, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<globalThis.Uint8Array, number>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, new globalThis.TextEncoder().encode("a")), Some(2)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:42:10", 1605, 1642, "expect m.get(Bytes.fromUtf8(\"a\")) == Some(2)\n  expected: m.get(Bytes.fromUtf8(\"a\")) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<globalThis.Uint8Array, number>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, new globalThis.TextEncoder().encode("a")))) + " == " + __bynkShow((Some(2)))); }
+    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:41:10", 1577, 1592, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<globalThis.Uint8Array, number>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, new globalThis.TextEncoder().encode("a")), Some(2)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:42:10", 1602, 1639, "expect m.get(Bytes.fromUtf8(\"a\")) == Some(2)\n  expected: m.get(Bytes.fromUtf8(\"a\")) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<globalThis.Uint8Array, number>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, new globalThis.TextEncoder().encode("a")))) + " == " + __bynkShow((Some(2)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -134,10 +129,9 @@ async function test_nested_records_and_lists_of_records_key_by_value() {
     const { P, Tagged, common, merge } = __ns_demo_gen;
     type P = __ns_demo_gen.P;
     type Tagged = __ns_demo_gen.Tagged;
-    const { difference, filterSet, intersect, isSubsetOf, mapSet, union } = __ns_bynk_set;
     const m: ReadonlyMap<readonly P[], number> = __bynkMapInsert<readonly P[], number>(__bynkMapInsert<readonly P[], number>(new globalThis.Map<readonly P[], number>(), [{ x: 1, y: 2 }], 1), [{ x: 1, y: 2 }, { x: 1, y: 2 }], 2);
-    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:49:10", 1842, 1857, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<readonly P[], number>, __k: readonly P[]) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, [{ y: 2, x: 1 }]), Some(1)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:50:10", 1867, 1903, "expect m.get([P { y: 2, x: 1 }]) == Some(1)\n  expected: m.get([P { y: 2, x: 1 }]) == Some(1)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<readonly P[], number>, __k: readonly P[]) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, [{ y: 2, x: 1 }]))) + " == " + __bynkShow((Some(1)))); }
+    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/gen.bynk:49:10", 1839, 1854, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<readonly P[], number>, __k: readonly P[]) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, [{ y: 2, x: 1 }]), Some(1)))) { throw __bynkExpectFailure("tests/demo/gen.bynk:50:10", 1864, 1900, "expect m.get([P { y: 2, x: 1 }]) == Some(1)\n  expected: m.get([P { y: 2, x: 1 }]) == Some(1)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<readonly P[], number>, __k: readonly P[]) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, [{ y: 2, x: 1 }]))) + " == " + __bynkShow((Some(1)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

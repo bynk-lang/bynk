@@ -8,7 +8,7 @@ consumes ev.store
 // `__CommonsQty` and `__CommonsPage`, so their imports are emitted only
 // because each spelled alias implies its type (`settle_implied`).
 service relay {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- ev.store.sample()
     let r <- ev.store.batch(b)
     r.lines.length()

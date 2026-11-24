@@ -33,7 +33,7 @@ provides Orders = FixedOrders {
 }
 
 service summary {
-	on call(id: Int) -> Effect[String] given Users, Orders {
+	on call(id: Int) -> Effect[String] by Caller given Users, Orders {
 		par {
 			let user <- Users.get(id)
 			let orders <- Orders.forUser(id)
@@ -75,7 +75,7 @@ sequential, so do them before or after the block, and a `?` is matched after the
 rather than inside it. The
 [reference](/reference/capabilities/#par) lists everything that is refused.
 
-The same holds for the closure you give to `parTraverse`, `parTraverseAll` or
+The same holds for the closure you give to `parForEach`, `parTraverse`, `parTraverseAll` or
 `parTraverseTry`: it runs for every element at once, so it may not write a `store`
 (`bynk.par.store_write_in_closure`). A `get` followed by a `put` in it would lose
 updates, because the branches interleave between the two calls. Run that loop with
@@ -87,11 +87,31 @@ write afterwards:
 
 ```bynk,fragment
 // refused: the closure writes `counts`
-let _ <- xs.parTraverse((x: Int) => counts.update("k", (v) => v + 1))
+let _ <- xs.parForEach((x: Int) => counts.update("k", (v) => v + 1))
 
 // accepted: sequential, and `update` is atomic per key
 let _ <- xs.forEach((x: Int) => counts.update("k", (v) => v + 1))
 ```
+
+## Fan out over a list
+
+To run one call per element at the same time, use `parForEach` when you only need the
+calls to happen, and `parTraverse` when you want what they return. The results come back in
+the order of the list, whatever order the calls finish in:
+
+```bynk,fragment
+fn quotes(skus: List[Sku]) -> Effect[List[Quote]] given Pricing {
+	skus.parTraverse((s) => Pricing.quote(s))
+}
+
+fn warmAll(keys: List[String]) -> Effect[()] given Cache {
+	keys.parForEach((k) => Cache.warm(k))
+}
+```
+
+If a call faults, the others still finish, then the first fault in list order is raised, as for a
+`par` block. `traverseAll` and `traverseTry` have concurrent forms (`parTraverseAll`, `parTraverseTry`) for
+steps that return a `Result`.
 
 ## Test it
 

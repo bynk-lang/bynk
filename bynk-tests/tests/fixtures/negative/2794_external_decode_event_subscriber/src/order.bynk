@@ -7,7 +7,7 @@ exports transparent { Placed }
 event Placed = { id: String, token: Token }
 
 service place {
-  on call(id: String, t: Token) -> Effect[()] given Events {
+  on call(id: String, t: Token) -> Effect[()] by Caller given Events {
     let _ <- Events.emit[Placed](Placed { id: id, token: t })
     Effect.pure(())
   }

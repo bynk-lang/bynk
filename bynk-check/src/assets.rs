@@ -1077,11 +1077,11 @@ mod tests {
         let a = analyse(&[
             (
                 "shop/payment.bynk",
-                "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n",
+                "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n",
             ),
             (
                 "shop/orders.bynk",
-                "context shop.orders\n\nconsumes shop.payment\n\nasset shop = \"assets/a.css\"\n\nservice place {\n  on call() -> Effect[Int] {\n    let n <- shop.payment.charge(1)\n    Effect.pure(n)\n  }\n}\n",
+                "context shop.orders\n\nconsumes shop.payment\n\nasset shop = \"assets/a.css\"\n\nservice place {\n  on call() -> Effect[Int] by Caller {\n    let n <- shop.payment.charge(1)\n    Effect.pure(n)\n  }\n}\n",
             ),
         ]);
         a.assert_clean();
@@ -1575,7 +1575,7 @@ mod tests {
     /// only by its own Worker) is not.
     #[test]
     fn a_consumed_contexts_hashed_asset_is_nameable_but_its_fixed_one_is_not() {
-        let other = "context t.other\n\nasset badge = \"assets/a.css\"\nasset robots = \"assets/b.css\" at \"/robots.txt\"\n\nservice fragment {\n  on call() -> Effect[String] {\n    Effect.pure(badge.url)\n  }\n}\n";
+        let other = "context t.other\n\nasset badge = \"assets/a.css\"\nasset robots = \"assets/b.css\" at \"/robots.txt\"\n\nservice fragment {\n  on call() -> Effect[String] by Caller {\n    Effect.pure(badge.url)\n  }\n}\n";
         let web = "context t.web\n\nconsumes t.other\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    let f <- t.other.fragment()\n    Ok(f)\n  }\n}\n";
         for header in ["suite t.web", "suite t.web as system"] {
             let suite = |body: &str| format!("{header} {{\n  case \"c\" {{\n{body}\n  }}\n}}\n");

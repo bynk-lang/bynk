@@ -11,7 +11,7 @@ exports transparent { Envelope }
 type Envelope[T] = { item: T, note: String }
 
 service read {
-  on call(e: Envelope[String]) -> Effect[Int] {
+  on call(e: Envelope[String]) -> Effect[Int] by Caller {
     e.item.length()
   }
 }

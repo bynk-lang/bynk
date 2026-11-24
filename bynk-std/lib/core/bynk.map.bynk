@@ -1,34 +1,24 @@
 commons bynk.map {
-	uses bynk.list
-
 	---
-	Returns the values of `m`, one per key (order follows `m.keys()`).
+	Deprecated: use `m.values()`. Returns the values of `m`, one per key (order
+	follows `m.keys()`).
 	---
 	fn values[K: Key, V](m: Map[K, V]) -> List[V] {
-		let init: List[V] = List.empty()
-		reverse(m.keys().fold(init, (acc, k) => match m.get(k) {
-			Some(v) => acc.prepend(v),
-			None => acc,
-		}))
+		m.values()
 	}
 
 	---
-	True if `m` has an entry for `key`.
+	Deprecated: use `m.contains(key)`. True if `m` has an entry for `key`.
 	---
 	fn contains[K: Key, V](m: Map[K, V], key: K) -> Bool {
-		match m.get(key) {
-			Some(v) => true,
-			None => false,
-		}
+		m.contains(key)
 	}
 
 	---
-	Returns the value `m` holds for `key`, or `fallback` if there is none.
+	Deprecated: use `m.getOrElse(key, fallback)`. Returns the value `m` holds for
+	`key`, or `fallback` if there is none.
 	---
 	fn getOr[K: Key, V](m: Map[K, V], key: K, fallback: V) -> V {
-		match m.get(key) {
-			Some(v) => v,
-			None => fallback,
-		}
+		m.getOrElse(key, fallback)
 	}
 }

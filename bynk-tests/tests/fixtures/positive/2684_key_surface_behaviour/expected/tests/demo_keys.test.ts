@@ -5,8 +5,6 @@ import { Some, None, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkMapInsert, __bynkSetInsert, __bynkSetOf, __bynkSetRemove } from "../__bynk_runtime/keys.js";
 import * as __ns_demo_keys from "./../demo/keys.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
-import * as __ns_bynk_map from "./../bynk/map.js";
 
 class ExpectationError extends Error {
   location: string;
@@ -47,15 +45,13 @@ async function test_a_record_keys_a_map_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const a = { region: "eu", n: 7 };
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(__bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), a, 3), { region: "us", n: 1 }, 4);
     if (!(__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, { n: 7, region: "eu" }), Some(3)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:11:10", 433, 481, "expect m.get(OrderId { n: 7, region: \"eu\" }) == Some(3)\n  expected: m.get(OrderId { n: 7, region: \"eu\" }) == Some(3)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, { n: 7, region: "eu" }))) + " == " + __bynkShow((Some(3)))); }
     if (!(__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, { region: "eu", n: 8 }), None))) { throw __bynkExpectFailure("tests/demo/keys.bynk:12:10", 491, 536, "expect m.get(OrderId { region: \"eu\", n: 8 }) == None\n  expected: m.get(OrderId { region: \"eu\", n: 8 }) == None\n  actual:   " + __bynkShow((((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(m, { region: "eu", n: 8 }))) + " == " + __bynkShow((None))); }
     if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:13:10", 546, 561, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
-    if (!(contains(m, { region: "us", n: 1 }))) { throw __bynkExpectFailure("tests/demo/keys.bynk:14:10", 571, 614, "expect contains(m, OrderId { region: \"us\", n: 1 })"); }
-    if (!(!contains(m, { region: "us", n: 2 }))) { throw __bynkExpectFailure("tests/demo/keys.bynk:15:10", 624, 668, "expect !contains(m, OrderId { region: \"us\", n: 2 })"); }
+    if (!((m).has({ region: "us", n: 1 }))) { throw __bynkExpectFailure("tests/demo/keys.bynk:14:10", 571, 613, "expect m.contains(OrderId { region: \"us\", n: 1 })"); }
+    if (!(!(m).has({ region: "us", n: 2 }))) { throw __bynkExpectFailure("tests/demo/keys.bynk:15:10", 623, 666, "expect !m.contains(OrderId { region: \"us\", n: 2 })"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -73,12 +69,10 @@ async function test_inserting_an_equal_key_replaces_in_place() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(__bynkMapInsert<OrderId, number>(__bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), { region: "eu", n: 1 }, 1), { region: "us", n: 1 }, 2), { region: "eu", n: 1 }, 9);
-    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:23:10", 913, 928, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
-    if (!(__bynkEq([...m.keys()], [{ region: "eu", n: 1 }, { region: "us", n: 1 }]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:24:10", 938, 1014, "expect m.keys() == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  expected: m.keys() == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  actual:   " + __bynkShow(([...m.keys()])) + " == " + __bynkShow(([{ region: "eu", n: 1 }, { region: "us", n: 1 }]))); }
-    if (!(__bynkEq([...m.values()], [9, 2]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:25:10", 1024, 1044, "expect m.values() == [9, 2]\n  expected: m.values() == [9, 2]\n  actual:   " + __bynkShow(([...m.values()])) + " == " + __bynkShow(([9, 2]))); }
+    if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:23:10", 911, 926, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkEq([...m.keys()], [{ region: "eu", n: 1 }, { region: "us", n: 1 }]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:24:10", 936, 1012, "expect m.keys() == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  expected: m.keys() == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  actual:   " + __bynkShow(([...m.keys()])) + " == " + __bynkShow(([{ region: "eu", n: 1 }, { region: "us", n: 1 }]))); }
+    if (!(__bynkEq([...m.values()], [9, 2]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:25:10", 1022, 1042, "expect m.values() == [9, 2]\n  expected: m.values() == [9, 2]\n  actual:   " + __bynkShow(([...m.values()])) + " == " + __bynkShow(([9, 2]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -96,16 +90,14 @@ async function test_an_enum_is_a_set_member_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const s: ReadonlySet<Status> = __bynkSetOf<Status>([Status.Open, Status.Shipped, Status.Open]);
-    if (!(s.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:30:10", 1152, 1167, "expect s.length() == 2\n  expected: s.length() == 2\n  actual:   " + __bynkShow((s.size)) + " == " + __bynkShow((2))); }
-    if (!(s.has(Status.Shipped))) { throw __bynkExpectFailure("tests/demo/keys.bynk:31:10", 1177, 1196, "expect s.contains(Shipped)"); }
-    if (!(!s.has(Status.Cancelled))) { throw __bynkExpectFailure("tests/demo/keys.bynk:32:10", 1206, 1228, "expect !s.contains(Cancelled)"); }
-    if (!(__bynkEq(([...s] as readonly Status[]), [Status.Open, Status.Shipped]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:33:10", 1238, 1267, "expect s.toList() == [Open, Shipped]\n  expected: s.toList() == [Open, Shipped]\n  actual:   " + __bynkShow((([...s] as readonly Status[]))) + " == " + __bynkShow(([Status.Open, Status.Shipped]))); }
-    if (!(__bynkSetInsert<Status>(s, Status.Open).size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:34:10", 1277, 1305, "expect s.insert(Open).length() == 2\n  expected: s.insert(Open).length() == 2\n  actual:   " + __bynkShow((__bynkSetInsert<Status>(s, Status.Open).size)) + " == " + __bynkShow((2))); }
-    if (!(__bynkSetInsert<Status>(s, Status.Cancelled).size === 3)) { throw __bynkExpectFailure("tests/demo/keys.bynk:35:10", 1315, 1348, "expect s.insert(Cancelled).length() == 3\n  expected: s.insert(Cancelled).length() == 3\n  actual:   " + __bynkShow((__bynkSetInsert<Status>(s, Status.Cancelled).size)) + " == " + __bynkShow((3))); }
-    if (!(__bynkEq(([...__bynkSetRemove<Status>(s, Status.Open)] as readonly Status[]), [Status.Shipped]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:36:10", 1358, 1394, "expect s.remove(Open).toList() == [Shipped]\n  expected: s.remove(Open).toList() == [Shipped]\n  actual:   " + __bynkShow((([...__bynkSetRemove<Status>(s, Status.Open)] as readonly Status[]))) + " == " + __bynkShow(([Status.Shipped]))); }
+    if (!(s.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:30:10", 1150, 1165, "expect s.length() == 2\n  expected: s.length() == 2\n  actual:   " + __bynkShow((s.size)) + " == " + __bynkShow((2))); }
+    if (!(s.has(Status.Shipped))) { throw __bynkExpectFailure("tests/demo/keys.bynk:31:10", 1175, 1194, "expect s.contains(Shipped)"); }
+    if (!(!s.has(Status.Cancelled))) { throw __bynkExpectFailure("tests/demo/keys.bynk:32:10", 1204, 1226, "expect !s.contains(Cancelled)"); }
+    if (!(__bynkEq(([...s] as readonly Status[]), [Status.Open, Status.Shipped]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:33:10", 1236, 1265, "expect s.toList() == [Open, Shipped]\n  expected: s.toList() == [Open, Shipped]\n  actual:   " + __bynkShow((([...s] as readonly Status[]))) + " == " + __bynkShow(([Status.Open, Status.Shipped]))); }
+    if (!(__bynkSetInsert<Status>(s, Status.Open).size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:34:10", 1275, 1303, "expect s.insert(Open).length() == 2\n  expected: s.insert(Open).length() == 2\n  actual:   " + __bynkShow((__bynkSetInsert<Status>(s, Status.Open).size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkSetInsert<Status>(s, Status.Cancelled).size === 3)) { throw __bynkExpectFailure("tests/demo/keys.bynk:35:10", 1313, 1346, "expect s.insert(Cancelled).length() == 3\n  expected: s.insert(Cancelled).length() == 3\n  actual:   " + __bynkShow((__bynkSetInsert<Status>(s, Status.Cancelled).size)) + " == " + __bynkShow((3))); }
+    if (!(__bynkEq(([...__bynkSetRemove<Status>(s, Status.Open)] as readonly Status[]), [Status.Shipped]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:36:10", 1356, 1392, "expect s.remove(Open).toList() == [Shipped]\n  expected: s.remove(Open).toList() == [Shipped]\n  actual:   " + __bynkShow((([...__bynkSetRemove<Status>(s, Status.Open)] as readonly Status[]))) + " == " + __bynkShow(([Status.Shipped]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -123,13 +115,11 @@ async function test_Bytes_key_a_map_by_content() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const k1 = new globalThis.TextEncoder().encode("ab");
     const k2 = new globalThis.TextEncoder().encode("ab");
     const m: ReadonlyMap<globalThis.Uint8Array, string> = __bynkMapInsert<globalThis.Uint8Array, string>(new globalThis.Map<globalThis.Uint8Array, string>(), k1, "x");
-    if (!(__bynkEq(((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, k2), Some("x")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:43:10", 1565, 1587, "expect m.get(k2) == Some(\"x\")\n  expected: m.get(k2) == Some(\"x\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, k2))) + " == " + __bynkShow((Some("x")))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, new globalThis.TextEncoder().encode("abc")), None))) { throw __bynkExpectFailure("tests/demo/keys.bynk:44:10", 1597, 1633, "expect m.get(Bytes.fromUtf8(\"abc\")) == None\n  expected: m.get(Bytes.fromUtf8(\"abc\")) == None\n  actual:   " + __bynkShow((((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, new globalThis.TextEncoder().encode("abc")))) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, k2), Some("x")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:43:10", 1563, 1585, "expect m.get(k2) == Some(\"x\")\n  expected: m.get(k2) == Some(\"x\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, k2))) + " == " + __bynkShow((Some("x")))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, new globalThis.TextEncoder().encode("abc")), None))) { throw __bynkExpectFailure("tests/demo/keys.bynk:44:10", 1595, 1631, "expect m.get(Bytes.fromUtf8(\"abc\")) == None\n  expected: m.get(Bytes.fromUtf8(\"abc\")) == None\n  actual:   " + __bynkShow((((__m: ReadonlyMap<globalThis.Uint8Array, string>, __k: globalThis.Uint8Array) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, new globalThis.TextEncoder().encode("abc")))) + " == " + __bynkShow((None))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -147,15 +137,13 @@ async function test_an_Option_and_a_List_can_key_a_map() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const m: ReadonlyMap<Option<number>, string> = __bynkMapInsert<Option<number>, string>(__bynkMapInsert<Option<number>, string>(new globalThis.Map<Option<number>, string>(), Some(1), "one"), None, "none");
-    if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(1)), Some("one")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:49:10", 1782, 1811, "expect m.get(Some(1)) == Some(\"one\")\n  expected: m.get(Some(1)) == Some(\"one\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(1)))) + " == " + __bynkShow((Some("one")))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, None), Some("none")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:50:10", 1821, 1848, "expect m.get(None) == Some(\"none\")\n  expected: m.get(None) == Some(\"none\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, None))) + " == " + __bynkShow((Some("none")))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(2)), None))) { throw __bynkExpectFailure("tests/demo/keys.bynk:51:10", 1858, 1880, "expect m.get(Some(2)) == None\n  expected: m.get(Some(2)) == None\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(2)))) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(1)), Some("one")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:49:10", 1780, 1809, "expect m.get(Some(1)) == Some(\"one\")\n  expected: m.get(Some(1)) == Some(\"one\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(1)))) + " == " + __bynkShow((Some("one")))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, None), Some("none")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:50:10", 1819, 1846, "expect m.get(None) == Some(\"none\")\n  expected: m.get(None) == Some(\"none\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, None))) + " == " + __bynkShow((Some("none")))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(2)), None))) { throw __bynkExpectFailure("tests/demo/keys.bynk:51:10", 1856, 1878, "expect m.get(Some(2)) == None\n  expected: m.get(Some(2)) == None\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(2)))) + " == " + __bynkShow((None))); }
     const ls: ReadonlyMap<readonly number[], string> = __bynkMapInsert<readonly number[], string>(__bynkMapInsert<readonly number[], string>(new globalThis.Map<readonly number[], string>(), [1, 0], "a"), [10], "b");
-    if (!(ls.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:53:10", 1975, 1991, "expect ls.length() == 2\n  expected: ls.length() == 2\n  actual:   " + __bynkShow((ls.size)) + " == " + __bynkShow((2))); }
-    if (!(__bynkEq(((__m: ReadonlyMap<readonly number[], string>, __k: readonly number[]) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(ls, [1, 0]), Some("a")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:54:10", 2001, 2028, "expect ls.get([1, 0]) == Some(\"a\")\n  expected: ls.get([1, 0]) == Some(\"a\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<readonly number[], string>, __k: readonly number[]) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(ls, [1, 0]))) + " == " + __bynkShow((Some("a")))); }
+    if (!(ls.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:53:10", 1973, 1989, "expect ls.length() == 2\n  expected: ls.length() == 2\n  actual:   " + __bynkShow((ls.size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<readonly number[], string>, __k: readonly number[]) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(ls, [1, 0]), Some("a")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:54:10", 1999, 2026, "expect ls.get([1, 0]) == Some(\"a\")\n  expected: ls.get([1, 0]) == Some(\"a\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<readonly number[], string>, __k: readonly number[]) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(ls, [1, 0]))) + " == " + __bynkShow((Some("a")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -173,11 +161,9 @@ async function test_distinct_and_distinctBy_compare_records_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const ls = [{ id: { region: "eu", n: 1 }, qty: 1 }, { id: { region: "eu", n: 1 }, qty: 2 }, { id: { region: "us", n: 1 }, qty: 3 }];
-    if (!(__bynkEq(distinctIds(ls), [{ region: "eu", n: 1 }, { region: "us", n: 1 }]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:63:10", 2287, 2370, "expect distinctIds(ls) == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  expected: distinctIds(ls) == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  actual:   " + __bynkShow((distinctIds(ls))) + " == " + __bynkShow(([{ region: "eu", n: 1 }, { region: "us", n: 1 }]))); }
-    if (!(__bynkEq((__bynkDistinctBy(ls, (l: Line) => l.id)).map((__x: Line) => ((l: Line) => l.qty)(__x)), [1, 3]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:64:10", 2380, 2434, "expect ls.distinctBy((l) => l.id).map((l) => l.qty) == [1, 3]\n  expected: ls.distinctBy((l) => l.id).map((l) => l.qty) == [1, 3]\n  actual:   " + __bynkShow(((__bynkDistinctBy(ls, (l: Line) => l.id)).map((__x: Line) => ((l: Line) => l.qty)(__x)))) + " == " + __bynkShow(([1, 3]))); }
+    if (!(__bynkEq(distinctIds(ls), [{ region: "eu", n: 1 }, { region: "us", n: 1 }]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:63:10", 2285, 2368, "expect distinctIds(ls) == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  expected: distinctIds(ls) == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  actual:   " + __bynkShow((distinctIds(ls))) + " == " + __bynkShow(([{ region: "eu", n: 1 }, { region: "us", n: 1 }]))); }
+    if (!(__bynkEq((__bynkDistinctBy(ls, (l: Line) => l.id)).map((__x: Line) => ((l: Line) => l.qty)(__x)), [1, 3]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:64:10", 2378, 2432, "expect ls.distinctBy((l) => l.id).map((l) => l.qty) == [1, 3]\n  expected: ls.distinctBy((l) => l.id).map((l) => l.qty) == [1, 3]\n  actual:   " + __bynkShow(((__bynkDistinctBy(ls, (l: Line) => l.id)).map((__x: Line) => ((l: Line) => l.qty)(__x)))) + " == " + __bynkShow(([1, 3]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -195,14 +181,12 @@ async function test_groupBy_and_joinOn_hash_record_keys_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const ls = [{ id: { region: "eu", n: 1 }, qty: 1 }, { id: { region: "us", n: 1 }, qty: 3 }, { id: { region: "eu", n: 1 }, qty: 2 }];
     const totals = __bynkGroupBy(ls, (l: Line) => l.id, (id: OrderId, rows: readonly Line[]) => (rows).map((__x: Line) => ((r: Line) => r.qty)(__x)));
-    if (!(__bynkEq(totals, [[1, 2], [3]]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:74:10", 2766, 2789, "expect totals == [[1, 2], [3]]\n  expected: totals == [[1, 2], [3]]\n  actual:   " + __bynkShow((totals)) + " == " + __bynkShow(([[1, 2], [3]]))); }
+    if (!(__bynkEq(totals, [[1, 2], [3]]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:74:10", 2764, 2787, "expect totals == [[1, 2], [3]]\n  expected: totals == [[1, 2], [3]]\n  actual:   " + __bynkShow((totals)) + " == " + __bynkShow(([[1, 2], [3]]))); }
     const names = [{ region: "us", n: 1 }];
     const joined = __bynkJoinOn(ls, names, (l: Line) => l.id, (n: OrderId) => n, (l: Line, n: OrderId) => l.qty);
-    if (!(__bynkEq(joined, [3]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:77:10", 2918, 2931, "expect joined == [3]\n  expected: joined == [3]\n  actual:   " + __bynkShow((joined)) + " == " + __bynkShow(([3]))); }
+    if (!(__bynkEq(joined, [3]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:77:10", 2916, 2929, "expect joined == [3]\n  expected: joined == [3]\n  actual:   " + __bynkShow((joined)) + " == " + __bynkShow(([3]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -220,17 +204,15 @@ async function test_a_generic_helper_over_a_Key_parameter() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
-    const { contains, getOr, values } = __ns_bynk_map;
     const ls = [{ id: { region: "eu", n: 1 }, qty: 1 }, { id: { region: "eu", n: 1 }, qty: 2 }, { id: { region: "us", n: 1 }, qty: 3 }];
     const counts = countBy(ls, (l: Line) => l.id);
-    if (!(__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(counts, { region: "eu", n: 1 }), Some(2)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:87:10", 3219, 3272, "expect counts.get(OrderId { region: \"eu\", n: 1 }) == Some(2)\n  expected: counts.get(OrderId { region: \"eu\", n: 1 }) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(counts, { region: "eu", n: 1 }))) + " == " + __bynkShow((Some(2)))); }
-    if (!(counts.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:88:10", 3282, 3302, "expect counts.length() == 2\n  expected: counts.length() == 2\n  actual:   " + __bynkShow((counts.size)) + " == " + __bynkShow((2))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(counts, { region: "eu", n: 1 }), Some(2)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:87:10", 3217, 3270, "expect counts.get(OrderId { region: \"eu\", n: 1 }) == Some(2)\n  expected: counts.get(OrderId { region: \"eu\", n: 1 }) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<OrderId, number>, __k: OrderId) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(counts, { region: "eu", n: 1 }))) + " == " + __bynkShow((Some(2)))); }
+    if (!(counts.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:88:10", 3280, 3300, "expect counts.length() == 2\n  expected: counts.length() == 2\n  actual:   " + __bynkShow((counts.size)) + " == " + __bynkShow((2))); }
     const byQty = index(ls, (l: Line) => l.qty);
-    if (!(byQty.size === 3)) { throw __bynkExpectFailure("tests/demo/keys.bynk:90:10", 3350, 3369, "expect byQty.length() == 3\n  expected: byQty.length() == 3\n  actual:   " + __bynkShow((byQty.size)) + " == " + __bynkShow((3))); }
+    if (!(byQty.size === 3)) { throw __bynkExpectFailure("tests/demo/keys.bynk:90:10", 3348, 3367, "expect byQty.length() == 3\n  expected: byQty.length() == 3\n  actual:   " + __bynkShow((byQty.size)) + " == " + __bynkShow((3))); }
     const statuses: readonly Status[] = [Status.Open, Status.Shipped, Status.Open];
     const byStatus = countBy(statuses, (s: Status) => s);
-    if (!(__bynkEq(((__m: ReadonlyMap<Status, number>, __k: Status) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(byStatus, Status.Open), Some(2)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:93:10", 3477, 3506, "expect byStatus.get(Open) == Some(2)\n  expected: byStatus.get(Open) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Status, number>, __k: Status) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(byStatus, Status.Open))) + " == " + __bynkShow((Some(2)))); }
+    if (!(__bynkEq(((__m: ReadonlyMap<Status, number>, __k: Status) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(byStatus, Status.Open), Some(2)))) { throw __bynkExpectFailure("tests/demo/keys.bynk:93:10", 3475, 3504, "expect byStatus.get(Open) == Some(2)\n  expected: byStatus.get(Open) == Some(2)\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Status, number>, __k: Status) => __m.has(__k) ? Some(__m.get(__k) as number) : None)(byStatus, Status.Open))) + " == " + __bynkShow((Some(2)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

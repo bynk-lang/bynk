@@ -2,8 +2,8 @@
 // commons bynk.locale
 
 import { Some, None } from "../__bynk_runtime/result.js";
+import { __bynkCmpString } from "../__bynk_runtime/compare.js";
 
-import { reverse } from "./list.js";
 import { LocaleTag, Message, MessageArg } from "./locale/types.js";
 import { join } from "./string.js";
 
@@ -18,14 +18,10 @@ export function render(tag: LocaleTag, msg: Message): string {
     return msg.code;
   } else {
     const init: readonly string[] = ([] as readonly string[]);
-    const parts = reverse(((__xs: readonly string[], __acc: readonly string[], __f: (acc: readonly string[], x: string) => readonly string[]) => {
+    const parts = ((__xs: readonly string[]) => [...__xs].reverse())(((__xs: readonly string[], __acc: readonly string[], __f: (acc: readonly string[], x: string) => readonly string[]) => {
       for (const __x of __xs) __acc = __f(__acc, __x);
       return __acc;
-    })([...[...msg.params.keys()]].sort((__a: string, __b: string) => {
-      const __ka = ((k: string) => k)(__a);
-      const __kb = ((k: string) => k)(__b);
-      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
-    }), init, (acc: readonly string[], k: string) => ((__d) => {
+    })([...[...msg.params.keys()]].sort((__a: string, __b: string) => __bynkCmpString(((k: string) => k)(__a), ((k: string) => k)(__b))), init, (acc: readonly string[], k: string) => ((__d) => {
       switch (__d.tag) {
         case "Some": {
           const arg = __d.value;

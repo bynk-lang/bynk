@@ -32,7 +32,7 @@ service api from http {
 }
 
 service about {
-	on call() -> Effect[String] given Reporter {
+	on call() -> Effect[String] by Caller given Reporter {
 		Reporter.describe()
 	}
 }

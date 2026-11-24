@@ -1,17 +1,14 @@
 commons shop {
-  uses bynk.list
-  uses bynk.map
-
   fn tally(names: List[String]) -> Map[String, Int] {
     let init: Map[String, Int] = Map.empty()
-    names.fold(init, (acc, name) => acc.insert(name, getOr(acc, name, 0) + 1))
+    names.fold(init, (acc, name) => acc.insert(name, acc.getOrElse(name, 0) + 1))
   }
 
   fn allValues(m: Map[String, Int]) -> List[Int] {
-    values(m)
+    m.values()
   }
 
   fn hasEntry(m: Map[String, Int], name: String) -> Bool {
-    contains(m, name)
+    m.contains(name)
   }
 }

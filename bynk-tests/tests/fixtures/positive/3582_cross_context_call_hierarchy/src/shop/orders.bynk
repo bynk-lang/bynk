@@ -3,7 +3,7 @@ context shop.orders
 consumes shop.pay
 
 service place {
-  on call(total: Int) -> Effect[Result[Int, Int]] {
+  on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
     let paid <- shop.pay.charge(total)
     paid
   }

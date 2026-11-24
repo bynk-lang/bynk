@@ -7,7 +7,7 @@ type Quote = {
 }
 
 service quotes {
-  on call(sku: String, price: Float) -> Effect[Result[Quote, ()]] {
+  on call(sku: String, price: Float) -> Effect[Result[Quote, ()]] by Caller {
     Ok(Quote { sku: sku, price: price * 1.2, qty: 1 })
   }
 }

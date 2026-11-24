@@ -38,13 +38,13 @@ flowchart LR
 
 - **`Events`** is the first-party capability that emits one: `Events.emit[E](value)`,
   `given Events` on the handler. Like every generic capability operation
-  (`Idempotency.dedup[T]`, for the same reason — see
+  whose arguments determine its type parameter (`Idempotency.remember`, see
   [First-party `bynk` capabilities](/reference/bynk-capabilities/)), the
-  type argument is always explicit, never inferred from `value`'s type.
+  type argument is inferred from `value`; writing `Events.emit[E](value)` means the same.
 
   ```bynk,fragment
   service markPaid {
-    on call(orderId: String) -> Effect[()] given Events {
+    on call(orderId: String) -> Effect[()] by Caller given Events {
       Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
     }
   }
@@ -430,7 +430,7 @@ consumes commerce.order
 consumes bynk { Events }
 
 service leak {
-  on call() -> Effect[()] given Events {
+  on call() -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: "x" })
   }
 }

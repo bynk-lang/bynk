@@ -8,13 +8,13 @@ exports transparent { Dir, Entry }
 type Dir = { name: String, entries: List[Entry] }
 
 service dirs {
-  on call(d: Dir) -> Effect[Dir] {
+  on call(d: Dir) -> Effect[Dir] by Caller {
     Effect.pure(d)
   }
 }
 
 service exprs {
-  on call(e: Expr) -> Effect[Expr] {
+  on call(e: Expr) -> Effect[Expr] by Caller {
     Effect.pure(e)
   }
 }

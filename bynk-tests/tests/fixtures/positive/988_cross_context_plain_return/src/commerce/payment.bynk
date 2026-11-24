@@ -5,7 +5,7 @@ exports transparent { Receipt }
 type Receipt = { id: String }
 
 service authorise {
-  on call(id: String) -> Effect[Receipt] {
+  on call(id: String) -> Effect[Receipt] by Caller {
     Receipt { id: id }
   }
 }
