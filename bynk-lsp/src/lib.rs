@@ -3802,6 +3802,13 @@ impl LanguageServer for Backend {
             return Ok(Some(CompletionResponse::Array(items)));
         }
         let files = self.project_content(&uri).await;
+        // #3911: inside `@name("…")` on a `headers` record's field, the common header names.
+        if let Some(items) =
+            bynk_ide::header_completion::header_name_candidates_at(&text, offset, files.as_deref())
+        {
+            let items = items.into_iter().map(to_completion_item).collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
         // #2134: inside a suite's or case's `env { }` block, at a name position,
         // offer the secret names actors declare and the `Secrets.get` literals.
         if completion::in_env_name_position(&text, offset) {

@@ -174,9 +174,14 @@ on PUT("/archives/:name") (name: ArchiveName, headers: UploadHeaders, body: Stre
 - **A header is client-supplied input, not proof of identity.** The record is decoded after the
   route's actor has run, like every other input. Use an [actor](/reference/actors/) for
   authentication. A credential header the route's seam consumed (`Authorization` on a `Bearer`
-  route) reads as absent here too.
+  route, the signature header, a `SignedCookie` route's session cookie within a `cookie` field) reads
+  as absent here too. A required field that reads such a header is a `400` on every request; take the
+  identity from the actor instead.
 - **Headers the platform adds.** A proxy or Cloudflare may add or rewrite headers
   (`CF-Connecting-IP`, `CF-Ray`, …); for platform facts, prefer [`cf: RequestCf`](#request-cf).
+- **A list item cannot hold a comma or a double quote.** The router splits at commas outside
+  quoted strings and keeps the quotes, so such an item would not arrive as one value. `bynk client`
+  and a `system` test driver refuse it (`headers.<field>`) rather than send a different list.
 - `bynk client` sends the fields as request headers, and `bynk openapi` describes them as `in: header`
   parameters. A test passes a `T` value for `headers`; at `system` it is sent as headers, and a `Wire`
   argument carries header text (`name: value` lines) to probe the decoding.

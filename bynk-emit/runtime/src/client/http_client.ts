@@ -265,15 +265,19 @@ export function __cookieString(wire: JsonValue, fields: readonly __QueryField[])
  */
 export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[]): Record<string, string> {
   const out: Record<string, string> = {};
+  // A field is a list when its wire value is an array.
+  const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
+  const lists = new globalThis.Set(
+    fields.filter((f) => globalThis.Array.isArray(record[f.name])).map((f) => f.wire ?? f.name),
+  );
   new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
-    if (/[\x00-\x08\x0A-\x1F\x7F]/.test(value)) {
-      throw new __Refusal({
-        kind: "StructuralMismatch",
-        path: `headers.${name}`,
-        expected: "header text with no control character",
-        actual: value,
-      });
-    }
+    const bad = (expected: string): never => {
+      throw new __Refusal({ kind: "StructuralMismatch", path: `headers.${name}`, expected, actual: value });
+    };
+    if (/[\x00-\x08\x0A-\x1F\x7F]/.test(value)) bad("header text with no control character");
+    // A list's items are joined with `, ` and split again by the router at commas outside quotes, so an
+    // item holding a comma or a quote would not arrive as one item: it is refused, not sent as two.
+    if (lists.has(name) && /[,"]/.test(value)) bad("a list item with no comma or double quote");
     out[name] = name in out ? `${out[name]}, ${value}` : value;
   });
   return out;

@@ -213,7 +213,7 @@ fn bind_headers_param(
         return false;
     };
     let mut args = vec![ident("request"), TsExpr::array(field_specs_exprs(fields))];
-    if !route.hidden_headers.is_empty() {
+    if !route.hidden_headers.is_empty() || route.signed_cookie.is_some() {
         args.push(TsExpr::array(
             route
                 .hidden_headers
@@ -221,6 +221,10 @@ fn bind_headers_param(
                 .map(|n| str_lit(crate::emitter::escape_ts_string(n)))
                 .collect(),
         ));
+    }
+    // A `SignedCookie` actor's session cookie is hidden from a `cookie` field, as from `RequestHeaders`.
+    if let Some(cookie) = &route.signed_cookie {
+        args.push(str_lit(crate::emitter::escape_ts_string(cookie)));
     }
     guarded.push(const_("__h", call(ident("__headersObject"), args)));
     guarded.push(if_(

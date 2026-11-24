@@ -1809,3 +1809,26 @@ test("applyCors: exposes WWW-Authenticate when the response carries a challenge"
   );
   assert.equal(res.headers.get("access-control-expose-headers"), "WWW-Authenticate");
 });
+
+test("headersObject: a SignedCookie's session cookie is hidden from a cookie field", () => {
+  const req = new Request("https://x.test/", { headers: { cookie: "sid=secret; theme=dark" } });
+  const spec = [{ name: "cookie", kind: "string" as const, list: false, option: true }];
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { cookie: { kind: "Some", value: "sid=secret; theme=dark" } } });
+  assert.deepEqual(headersObject(req, spec, undefined, "sid"), {
+    ok: true,
+    value: { cookie: { kind: "Some", value: "theme=dark" } },
+  });
+  const only = new Request("https://x.test/", { headers: { cookie: "sid=secret" } });
+  assert.deepEqual(headersObject(only, spec, undefined, "sid"), { ok: true, value: {} });
+});
+
+test("headerPairs: repeated Wire lines combine; a list item with a comma or quote is refused", () => {
+  assert.deepEqual(headerPairs("X-Tag: a\nx-tag: b\nno colon\nHost: h"), { "x-tag": "a, b", host: "h" });
+  assert.throws(
+    () => headerPairs({ tags: ["a,b"] }, [{ name: "tags", kind: "string", list: true, option: false }]),
+    /does not survive/,
+  );
+  assert.throws(() => headerPairs({ tags: ['say "x"'] }), /does not survive/);
+  // A non-list value may hold a comma (a `Date`).
+  assert.deepEqual(headerPairs({ date: "Tue, 15 Nov 1994" }), { date: "Tue, 15 Nov 1994" });
+});

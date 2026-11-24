@@ -44,25 +44,26 @@ const COMMON_HEADERS: &[(&str, &str)] = &[
     ("x-request-id", "a caller-chosen id to correlate logs"),
 ];
 
-/// The header names to offer when `line_prefix` ends inside the string of an `@name("…")` on a
-/// field of a record that some handler of this source or project takes as `headers`, or `None`.
-pub(crate) fn header_name_candidates(
-    line_prefix: &str,
-    doc_text: &str,
+/// The header names to offer when the cursor at `offset` is inside the string of an `@name("…")`
+/// on a field of a record that some handler of this source or project takes as `headers`, or `None`.
+pub fn header_name_candidates_at(
+    text: &str,
+    offset: usize,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Option<Vec<Completion>> {
-    let at = line_prefix.rfind("@name(\"")?;
-    if line_prefix[at + 7..].contains('"') {
+    let before = text.get(..offset)?;
+    let line = before.rsplit('\n').next().unwrap_or("");
+    let at = line.rfind("@name(\"")?;
+    if line[at + 7..].contains('"') {
         return None;
     }
-    // The record the cursor's line belongs to: the word before the innermost open brace.
-    let pos = doc_text.find(line_prefix)?;
-    let open = innermost_open_brace(doc_text, pos + line_prefix.len())?;
-    let head = doc_text[..open].trim_end().trim_end_matches('=').trim_end();
+    // The record the cursor is in: the word before the innermost open brace.
+    let open = innermost_open_brace(text, offset)?;
+    let head = text[..open].trim_end().trim_end_matches('=').trim_end();
     let name = head
         .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
         .next()?;
-    if !taken_as_headers(name, doc_text, files) {
+    if !taken_as_headers(name, text, files) {
         return None;
     }
     Some(
@@ -107,18 +108,33 @@ fn taken_as_headers(
 mod tests {
     use super::*;
 
-    const SRC: &str = "context api\n\ntype Up = {\n  @name(\"con\") length: Int,\n}\n\ntype Prefs = {\n  @name(\"x\") n: Int,\n}\n\nservice api from http {\n  on GET(\"/u\") (headers: Up, cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"x\") }\n}\n";
+    const SRC: &str = "context api\n\ntype Prefs = {\n  @name(\"x\") n: Int,\n}\n\ntype Up = {\n  @name(\"con\") length: Int,\n}\n\nservice api from http {\n  on GET(\"/u\") (headers: Up, cookies: Prefs) -> Effect[HttpResult[String]] by v: Visitor { Ok(\"x\") }\n}\n";
+
+    /// The offset just after `needle`'s `@name("` (the cursor inside the string).
+    fn inside(needle: &str) -> usize {
+        SRC.find(needle).unwrap() + needle.len()
+    }
 
     #[test]
     fn header_names_are_offered_in_a_headers_records_name_annotation() {
-        let got = header_name_candidates("  @name(\"con", SRC, None).expect("offers");
+        let got = header_name_candidates_at(SRC, inside("@name(\"con"), None).expect("offers");
         assert!(got.iter().any(|c| c.label == "content-length"));
         assert!(got.iter().any(|c| c.label == "idempotency-key"));
     }
 
+    /// Two records whose `@name` lines share the same indented prefix: the cursor's own record
+    /// decides, wherever the other one sits.
     #[test]
-    fn a_cookie_record_or_a_closed_string_gets_none() {
-        assert!(header_name_candidates("  @name(\"x", SRC, None).is_none());
-        assert!(header_name_candidates("  @name(\"con\") len", SRC, None).is_none());
+    fn the_cursors_record_decides_when_two_name_lines_share_a_prefix() {
+        // `  @name("` opens both records' lines; only the second record is the `headers` one.
+        assert!(header_name_candidates_at(SRC, inside("@name(\"x"), None).is_none());
+        assert!(header_name_candidates_at(SRC, inside("@name(\"con"), None).is_some());
+    }
+
+    #[test]
+    fn a_closed_string_gets_none() {
+        let src = SRC.replace("@name(\"con\") length", "@name(\"con\") len");
+        let at = src.find("@name(\"con\")").unwrap() + "@name(\"con\") le".len();
+        assert!(header_name_candidates_at(&src, at, None).is_none());
     }
 }

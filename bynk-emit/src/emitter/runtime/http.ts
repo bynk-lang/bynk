@@ -1293,12 +1293,19 @@ export function headersObject(
   request: Request,
   fields: readonly QueryField[],
   hidden?: readonly string[],
+  hideCookie?: string,
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const hide = new Set((hidden ?? []).map((h) => h.toLowerCase()));
   const lowered = fields.map((f) => ({ ...f, wire: wireName(f).toLowerCase() }));
   const search = new URLSearchParams();
   for (const f of lowered) {
-    const raw = hide.has(f.wire) ? null : request.headers.get(f.wire);
+    let raw = hide.has(f.wire) ? null : request.headers.get(f.wire);
+    // A `SignedCookie` actor's credential is consumed at the seam: the `Cookie` a field reads omits it,
+    // as the raw view and the `cookies` forms do (#3386).
+    if (raw !== null && f.wire === "cookie" && hideCookie !== undefined) {
+      const rest = cookiePairs(raw).filter(([n]) => n !== hideCookie);
+      raw = rest.length === 0 ? null : rest.map(([n, v]) => `${n}=${v}`).join("; ");
+    }
     if (raw === null) continue;
     for (const v of f.list ? splitHeaderList(raw) : [raw.trim()]) search.append(f.wire, v);
   }
@@ -1384,7 +1391,11 @@ export function headerPairs(source: unknown, fields?: readonly QueryField[]): Re
     const lines: Record<string, string> = {};
     for (const line of source.split("\n")) {
       const i = line.indexOf(":");
-      if (i > 0) lines[line.slice(0, i).trim().toLowerCase()] = line.slice(i + 1).trim();
+      if (i <= 0) continue;
+      const name = line.slice(0, i).trim().toLowerCase();
+      const value = line.slice(i + 1).trim();
+      // A repeated line is one combined value, as on the wire.
+      lines[name] = name in lines ? `${lines[name]}, ${value}` : value;
     }
     return lines;
   }
@@ -1394,7 +1405,18 @@ export function headerPairs(source: unknown, fields?: readonly QueryField[]): Re
   const out: Record<string, string> = {};
   const query = queryString(source as JsonValue, fields);
   if (query === "") return out;
+  const lists = new Set((fields ?? []).filter((f) => f.list).map((f) => wireName(f)));
+  const listNames = new Set(
+    Object.keys((source ?? {}) as Record<string, JsonValue>).filter(
+      (k) => Array.isArray((source as Record<string, JsonValue>)[k]),
+    ),
+  );
   new URLSearchParams(query.slice(1)).forEach((value, name) => {
+    // A list's items are joined with `, ` and split again by the router, so an item holding a comma or
+    // a quote would not arrive as one: the driver refuses it rather than send a different list.
+    if ((lists.has(name) || listNames.has(name)) && /[,"]/.test(value)) {
+      throw new Error(`headers.${name}: a list item with a comma or a quote does not survive a header (${JSON.stringify(value)})`);
+    }
     out[name] = name in out ? `${out[name]}, ${value}` : value;
   });
   return out;
