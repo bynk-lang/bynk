@@ -2,8 +2,8 @@
 //! helpers `fetch` catches into, and the member guard that marks the router's own answers.
 
 use crate::ts_build::{
-    and_expr, binary, block, call, cond_expr, expr_stmt, ident, member, method_call, new, null_lit,
-    num_lit, paren, str_lit,
+    and_expr, binary, block, call, cond_expr, const_, expr_stmt, ident, if_, member, method_call,
+    new, null_lit, num_lit, paren, return_, str_lit,
 };
 use bynk_check::wire_format::CallCheck;
 use bynk_ts::{TsExpr, TsStmt, TsSwitchCase};
@@ -116,6 +116,29 @@ pub(super) fn own_path_guard(member_mode: bool, prefix: &str, names: &[String]) 
         starts,
         method_call(str_array(names), "includes", vec![rest]),
     )
+}
+
+/// #3932: the head of `fetch`'s fault handler, `const __busy = __agentBusyResponse(e, __route);
+/// if (__busy !== null) return __busy;`: a caught `AgentBusy` answers `503` with `Retry-After`
+/// and goes no further, so it is not logged or reported as a fault.
+pub(super) fn agent_busy_answer() -> Vec<TsStmt> {
+    vec![
+        const_(
+            "__busy",
+            call(
+                ident("__agentBusyResponse"),
+                vec![ident("e"), ident("__route")],
+            ),
+        ),
+        if_(
+            binary(
+                bynk_ts::TsBinaryOp::StrictNotEq,
+                ident("__busy"),
+                null_lit(),
+            ),
+            return_(Some(ident("__busy"))),
+        ),
+    ]
 }
 
 /// #2192: `__bynkReportFault(ctx, e);`, in an entry-point catch clause.

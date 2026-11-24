@@ -1577,10 +1577,10 @@ impl<'a> Parser<'a> {
                     });
                     seen_item = true;
                 }
-                Some(TokenKind::Agent) => {
+                Some(TokenKind::Agent | TokenKind::At) => {
                     let next_span = self.peek().unwrap().span;
                     let doc = self.finalize_doc(item_doc, next_span, &mut leading);
-                    match self.parse_agent_decl() {
+                    match self.parse_annotated_agent_decl() {
                         Ok(mut a) => {
                             a.documentation = doc;
                             a.trivia.leading = leading;
@@ -3512,6 +3512,24 @@ impl<'a> Parser<'a> {
         Ok(Some(SchemaDispatch { pattern, span }))
     }
 
+    /// #3932: an agent declaration with the `@name(args)` annotations written before `agent`
+    /// (`@busyAfter(5.seconds)`). The annotations are part of the declaration: its span starts at
+    /// the first of them, and a run with no `agent` after it is the ordinary "expected `agent`"
+    /// parse error, so an annotation can never silently attach to nothing.
+    fn parse_annotated_agent_decl(&mut self) -> Result<AgentDecl, CompileError> {
+        let mut annotations = Vec::new();
+        while self.peek_kind() == Some(TokenKind::At) {
+            annotations.push(self.parse_annotation()?);
+        }
+        let first = annotations.first().map(|a| a.span);
+        let mut agent = self.parse_agent_decl()?;
+        if let Some(first) = first {
+            agent.span = first.merge(agent.span);
+        }
+        agent.annotations = annotations;
+        Ok(agent)
+    }
+
     fn parse_agent_decl(&mut self) -> Result<AgentDecl, CompileError> {
         let kw = self.expect(TokenKind::Agent, "to start an agent declaration")?;
         let name = self.expect_ident("after `agent`")?;
@@ -3728,6 +3746,7 @@ impl<'a> Parser<'a> {
         }
         Ok(AgentDecl {
             trailing_comments,
+            annotations: Vec::new(),
             name,
             replaces,
             key_name,

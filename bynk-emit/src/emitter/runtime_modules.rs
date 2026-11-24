@@ -44,6 +44,7 @@ pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[
 
 /// Every name a runtime module exports, with the module that defines it.
 pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
+    ("AGENT_BUSY_HEADER", "agent"),
     ("AGENT_CHAIN_HEADER", "agent"),
     ("AGENT_CHAIN_MAX", "agent"),
     ("AGENT_QUEUE_WAIT_MS", "agent"),
@@ -311,6 +312,8 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__WorkerVersionMetadata", "storage"),
     ("__WorkersConnection", "connection"),
     ("__acceptHibernatableConnection", "connection"),
+    ("__agentBusyAfter", "agent"),
+    ("__agentBusyResponse", "agent"),
     ("__applyCache", "http"),
     ("__applyCors", "http"),
     ("__applyEdgeCache", "http"),
@@ -547,6 +550,8 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__withPlainJson", "http"),
     ("acceptHibernatableConnection", "connection"),
     ("agentBusy", "agent"),
+    ("agentBusyAfter", "agent"),
+    ("agentBusyResponse", "agent"),
     ("applyCache", "http"),
     ("applyCors", "http"),
     ("applyEdgeCache", "http"),

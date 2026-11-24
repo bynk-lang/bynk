@@ -3,6 +3,7 @@
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __multipartMediaTypeMatches, __multipartObject } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -144,6 +145,8 @@ export default {
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
+      const __busy = __agentBusyResponse(e, __route);
+      if (__busy !== null) return __busy;
       globalThis.console.error(`upload.api ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
       __bynkReportFault(ctx, e);
       return __faultResponse("upload.api", __route);

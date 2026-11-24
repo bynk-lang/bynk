@@ -3,6 +3,7 @@
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
 import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 
@@ -96,6 +97,8 @@ export default {
       }
       return new globalThis.Response("Not Found", { status: 404 });
     } catch (e) {
+      const __busy = __agentBusyResponse(e, __route);
+      if (__busy !== null) return __busy;
       globalThis.console.error(`hooks.github ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
       __bynkReportFault(ctx, e);
       return __faultResponse("hooks.github", __route);

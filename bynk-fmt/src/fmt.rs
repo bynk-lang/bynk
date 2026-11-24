@@ -2304,6 +2304,10 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &a.documentation {
             self.emit_doc(doc);
         }
+        for ann in &a.annotations {
+            self.push(&annotation_to_string(ann));
+            self.newline();
+        }
         match &a.replaces {
             Some(old) => self.push(&format!("agent {} replaces {} {{", a.name.name, old.name)),
             None => self.push(&format!("agent {} {{", a.name.name)),

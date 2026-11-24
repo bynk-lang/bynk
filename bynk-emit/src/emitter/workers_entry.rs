@@ -50,8 +50,8 @@ use http_policy::{
 };
 use queue::{collect_queue_routes, push_message_entries};
 use respond::{
-    MISS_HELPER, REPORT_FAULT_HELPER, fault_detail, miss, report_fault, text_response,
-    try_catch_stmt,
+    MISS_HELPER, REPORT_FAULT_HELPER, agent_busy_answer, fault_detail, miss, report_fault,
+    text_response, try_catch_stmt,
 };
 use scheduled::{collect_cron_routes, emit_scheduled_handler};
 use websocket::{collect_ws_open_routes, ws_upgrade_dispatch};
@@ -60,7 +60,10 @@ pub(crate) use wire::{deserialise_call, wire_ident};
 /// What `fetch`'s catch does with a fault (#1825): log it, report it, and answer
 /// the bare 500. #3580: a traced build also hands the fault to the request's record.
 fn fault_handler(context: &str, trace: bool) -> Vec<TsStmt> {
-    let mut handler = vec![expr_stmt(method_call(
+    // #3932: `AgentBusy` is load, not a fault: it answers `503` with `Retry-After` and is neither
+    // logged here (the queue logged it where it gave up) nor reported as a fault.
+    let mut handler = agent_busy_answer();
+    handler.push(expr_stmt(method_call(
         ident("globalThis.console"),
         "error",
         vec![
@@ -70,7 +73,7 @@ fn fault_handler(context: &str, trace: bool) -> Vec<TsStmt> {
             ),
             fault_detail("e"),
         ],
-    ))];
+    )));
     if trace {
         handler.push(expr_stmt(call(ident("__traceFault"), vec![ident("e")])));
     }
