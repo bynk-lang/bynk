@@ -3,7 +3,9 @@
 //! Moved out of `lower.rs` byte for byte.
 
 use bynk_check::checker::{NamedKind, Ty, TyId};
-use bynk_syntax::ast::{BaseType, Expr, PredKind, Refinement, TypeBody, TypeDecl, TypeRef};
+use bynk_syntax::ast::{
+    BaseType, Expr, PredBound, PredKind, Refinement, TypeBody, TypeDecl, TypeRef,
+};
 
 use super::super::internal_fault::undefined_node;
 use super::super::lower_ctx::LowerCtx;
@@ -48,9 +50,14 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                             lo = lo.max(a.value);
                             hi = hi.min(b.value);
                         }
+                        PredKind::AtLeast(PredBound::Int(a)) => lo = lo.max(a.value),
+                        PredKind::AtMost(PredBound::Int(b)) => hi = hi.min(b.value),
                         PredKind::Matches(..)
                         | PredKind::InRangeF(..)
                         | PredKind::InRangeD(..)
+                        | PredKind::InRangeDur(..)
+                        | PredKind::AtLeast(_)
+                        | PredKind::AtMost(_)
                         | PredKind::MinLength(..)
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)
@@ -79,6 +86,9 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                         PredKind::InRange(..)
                         | PredKind::InRangeF(..)
                         | PredKind::InRangeD(..)
+                        | PredKind::InRangeDur(..)
+                        | PredKind::AtLeast(_)
+                        | PredKind::AtMost(_)
                         | PredKind::MaxLength(..)
                         | PredKind::NonNegative
                         | PredKind::Positive => {}
@@ -103,9 +113,14 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                             lo = lo.max(a.value);
                             hi = hi.min(b.value);
                         }
+                        PredKind::AtLeast(PredBound::Float(a)) => lo = lo.max(a.value),
+                        PredKind::AtMost(PredBound::Float(b)) => hi = hi.min(b.value),
                         PredKind::Matches(..)
                         | PredKind::InRange(..)
                         | PredKind::InRangeD(..)
+                        | PredKind::InRangeDur(..)
+                        | PredKind::AtLeast(_)
+                        | PredKind::AtMost(_)
                         | PredKind::MinLength(..)
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)
@@ -122,8 +137,44 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             }
             Some(num_lit(lo.to_string()))
         }
-        // v0.86: `Duration` carries no refinement; `0` millis is its default.
-        BaseType::Duration | BaseType::Instant => Some(num_lit("0".to_string())),
+        // #3948: the smallest `Duration` the refinement admits, in milliseconds
+        // (`0` when it is unrefined).
+        BaseType::Duration => {
+            let mut lo: i64 = 0;
+            let mut hi = i64::MAX;
+            if let Some(r) = refinement {
+                for p in &r.predicates {
+                    match &p.kind {
+                        PredKind::Positive => lo = lo.max(1),
+                        PredKind::InRangeDur(a, b) => {
+                            lo = lo.max(a.millis);
+                            hi = hi.min(b.millis);
+                        }
+                        PredKind::AtLeast(PredBound::Duration(a)) => lo = lo.max(a.millis),
+                        PredKind::AtMost(PredBound::Duration(b)) => hi = hi.min(b.millis),
+                        PredKind::NonNegative
+                        | PredKind::InRangeD(..)
+                        | PredKind::Matches(..)
+                        | PredKind::InRange(..)
+                        | PredKind::InRangeF(..)
+                        | PredKind::AtLeast(_)
+                        | PredKind::AtMost(_)
+                        | PredKind::MinLength(..)
+                        | PredKind::MaxLength(..)
+                        | PredKind::Length(..)
+                        | PredKind::NonEmpty
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
+                    }
+                }
+            }
+            if lo > hi {
+                lo = hi;
+            }
+            Some(num_lit(lo.to_string()))
+        }
+        // v0.86: `Instant` carries no refinement; `0` millis is its default.
+        BaseType::Instant => Some(num_lit("0".to_string())),
         // v0.110: `Bytes` carries no refinement; the empty octet sequence is
         // its default.
         BaseType::Bytes => Some(empty_bytes_node()),
@@ -134,8 +185,24 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
             let mut scale = 2u32;
             if let Some(r) = refinement {
                 for p in &r.predicates {
-                    if let PredKind::InRangeD(a, b) = &p.kind {
-                        scale = scale.max(a.scale).max(b.scale);
+                    match &p.kind {
+                        PredKind::InRangeD(a, b) => scale = scale.max(a.scale).max(b.scale),
+                        PredKind::AtLeast(PredBound::Decimal(a))
+                        | PredKind::AtMost(PredBound::Decimal(a)) => scale = scale.max(a.scale),
+                        PredKind::InRangeDur(..)
+                        | PredKind::NonNegative
+                        | PredKind::Positive
+                        | PredKind::Matches(..)
+                        | PredKind::InRange(..)
+                        | PredKind::InRangeF(..)
+                        | PredKind::AtLeast(_)
+                        | PredKind::AtMost(_)
+                        | PredKind::MinLength(..)
+                        | PredKind::MaxLength(..)
+                        | PredKind::Length(..)
+                        | PredKind::NonEmpty
+                        | PredKind::IsoDate
+                        | PredKind::Cron => {}
                     }
                 }
                 for p in &r.predicates {
@@ -155,9 +222,25 @@ fn refinement_default(base: BaseType, refinement: Option<&Refinement>) -> Option
                                 hi = Some(hi.map_or(v, |h| h.min(v)));
                             }
                         }
+                        PredKind::AtLeast(PredBound::Decimal(a)) => {
+                            match scaled_coef(&a.coef, a.scale, scale) {
+                                Some(v) => lo = lo.max(v),
+                                None => {
+                                    return Some(decimal_lit(&a.coef, a.scale));
+                                }
+                            }
+                        }
+                        PredKind::AtMost(PredBound::Decimal(b)) => {
+                            if let Some(v) = scaled_coef(&b.coef, b.scale, scale) {
+                                hi = Some(hi.map_or(v, |h| h.min(v)));
+                            }
+                        }
                         PredKind::Matches(..)
                         | PredKind::InRange(..)
                         | PredKind::InRangeF(..)
+                        | PredKind::InRangeDur(..)
+                        | PredKind::AtLeast(_)
+                        | PredKind::AtMost(_)
                         | PredKind::MinLength(..)
                         | PredKind::MaxLength(..)
                         | PredKind::Length(..)

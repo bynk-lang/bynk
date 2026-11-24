@@ -23,6 +23,8 @@ adapter bynk.cloudflare {
 		AnalyticsSql,
 	}
 	exports transparent {
+		KvTtl,
+		KvCacheTtl,
 		KvExpiration,
 		KvPut,
 		KvGet,
@@ -105,14 +107,31 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	A KV expiry span: a `Duration` of at least 60 seconds, the shortest the
+	platform accepts. A literal or constant such as `30.days` is checked when
+	the program compiles (`30.seconds` is a compile error); a computed span goes
+	through `KvTtl.of(d)`, which gives a `ValidationError` when it is too short.
+	Whole seconds are taken, rounding towards zero, as `Duration.toSeconds` does.
+	---
+	type KvTtl = Duration where AtLeast(60.seconds)
+
+	---
+	How long a `Kv.getWith` read may be served from the edge cache: a `Duration`
+	of at least 30 seconds, the shortest the platform accepts. Checked as
+	`KvTtl` is.
+	---
+	type KvCacheTtl = Duration where AtLeast(30.seconds)
+
+	---
 	When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
-	duration (a part second rounds up), or `At` an instant. Either must be at
-	least 60 seconds away. KV has further expiry forms, so a `match` over this
-	type needs a wildcard.
+	`KvTtl` (whole seconds, rounding towards zero), or `At` an instant. An
+	`At` must be at least 60 seconds away, which is checked when the write is
+	made. KV has further expiry forms, so a `match` over this type needs a
+	wildcard.
 	---
 	type KvExpiration =
 		| Never
-		| After(ttl: Duration)
+		| After(ttl: KvTtl)
 		| At(instant: Instant)
 
 	---
@@ -128,11 +147,11 @@ adapter bynk.cloudflare {
 
 	---
 	The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
-	served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
-	platform's default of 60, and is the default.
+	served from Cloudflare's edge cache (a `KvCacheTtl`, at least 30 seconds);
+	`None` keeps the platform's default of 60, and is the default.
 	---
 	type KvGet = {
-		cacheTtl: Option[Duration] = None,
+		cacheTtl: Option[KvCacheTtl] = None,
 	}
 
 	---
@@ -189,15 +208,16 @@ adapter bynk.cloudflare {
 	of a text value gives its UTF-8 bytes, and reading a binary value as text
 	decodes it as UTF-8, replacing what is not. Keep each key to one kind.
 
-	A key over 512 bytes, metadata over 1024 bytes, an expiry under 60 seconds
-	away, a `cacheTtl` under 30 seconds, or a `limit` outside 1 to 1000 faults
-	the new operations before the platform is called; a value over 25 MiB
-	faults with the platform's error.
+	A key over 512 bytes, metadata over 1024 bytes, a `KvExpiration.At` under 60
+	seconds away, or a `limit` outside 1 to 1000 faults the new operations
+	before the platform is called; a value over 25 MiB faults with the
+	platform's error. A TTL under 60 seconds, or a `cacheTtl` under 30, is
+	never reached: `KvTtl` and `KvCacheTtl` refuse it first.
 	---
 	capability Kv {
 		fn get(key: String) -> Effect[Option[String]]
 		fn put(key: String, value: String) -> Effect[()]
-		fn putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]
+		fn putTtl(key: String, value: String, ttl: KvTtl) -> Effect[()]
 		fn delete(key: String) -> Effect[()]
 		fn list(prefix: Option[String]) -> Effect[List[String]]
 		fn getWith(key: String, options: KvGet) -> Effect[Option[KvEntry]]

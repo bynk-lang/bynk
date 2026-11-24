@@ -1,0 +1,3 @@
+commons demo {
+  type Ratio = Float where AtLeast(1)
+}

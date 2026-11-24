@@ -3,25 +3,60 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../__bynk_runtime/bytes.js";
-import type { DecodeError } from "../__bynk_runtime/errors.js";
+import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
 import { BytesResponse, FetchError, Request, Response } from "../bynk.js";
 
 /**
+ * A KV expiry span: a `Duration` of at least 60 seconds, the shortest the
+ * platform accepts. A literal or constant such as `30.days` is checked when
+ * the program compiles (`30.seconds` is a compile error); a computed span goes
+ * through `KvTtl.of(d)`, which gives a `ValidationError` when it is too short.
+ * Whole seconds are taken, rounding towards zero, as `Duration.toSeconds` does.
+ */
+export type KvTtl = number & { readonly __brand: "KvTtl" };
+
+export const KvTtl = {
+  of(value: number): Result<KvTtl, ValidationError> {
+    if (!(value >= 60000)) {
+      return Err({ field: "KvTtl", message: "must be at least 60.seconds", value });
+    }
+    return Ok(value as KvTtl);
+  },
+};
+
+/**
+ * How long a `Kv.getWith` read may be served from the edge cache: a `Duration`
+ * of at least 30 seconds, the shortest the platform accepts. Checked as
+ * `KvTtl` is.
+ */
+export type KvCacheTtl = number & { readonly __brand: "KvCacheTtl" };
+
+export const KvCacheTtl = {
+  of(value: number): Result<KvCacheTtl, ValidationError> {
+    if (!(value >= 30000)) {
+      return Err({ field: "KvCacheTtl", message: "must be at least 30.seconds", value });
+    }
+    return Ok(value as KvCacheTtl);
+  },
+};
+
+/**
  * When a `Kv.putWith` or `Kv.putBytes` entry expires: `Never`, `After` a
- * duration (a part second rounds up), or `At` an instant. Either must be at
- * least 60 seconds away. KV has further expiry forms, so a `match` over this
- * type needs a wildcard.
+ * `KvTtl` (whole seconds, rounding towards zero), or `At` an instant. An
+ * `At` must be at least 60 seconds away, which is checked when the write is
+ * made. KV has further expiry forms, so a `match` over this type needs a
+ * wildcard.
  */
 export type KvExpiration =
     { readonly tag: "Never" }
-  | { readonly tag: "After"; readonly ttl: number }
+  | { readonly tag: "After"; readonly ttl: KvTtl }
   | { readonly tag: "At"; readonly instant: number };
 
 export const KvExpiration = {
   Never: { tag: "Never" } as KvExpiration,
-  After: (ttl: number): KvExpiration => ({ tag: "After", ttl }),
+  After: (ttl: KvTtl): KvExpiration => ({ tag: "After", ttl }),
   At: (instant: number): KvExpiration => ({ tag: "At", instant }),
 };
 
@@ -41,11 +76,11 @@ export const KvPut = {
 
 /**
  * The options of a `Kv.getWith` read. `cacheTtl` is how long the read may be
- * served from Cloudflare's edge cache, at least 30 seconds; `None` keeps the
- * platform's default of 60, and is the default.
+ * served from Cloudflare's edge cache (a `KvCacheTtl`, at least 30 seconds);
+ * `None` keeps the platform's default of 60, and is the default.
  */
 export interface KvGet {
-  readonly cacheTtl: Option<number>;
+  readonly cacheTtl: Option<KvCacheTtl>;
 }
 
 export const KvGet = {
@@ -1435,15 +1470,16 @@ export const ContainerError = {
  * of a text value gives its UTF-8 bytes, and reading a binary value as text
  * decodes it as UTF-8, replacing what is not. Keep each key to one kind.
  *
- * A key over 512 bytes, metadata over 1024 bytes, an expiry under 60 seconds
- * away, a `cacheTtl` under 30 seconds, or a `limit` outside 1 to 1000 faults
- * the new operations before the platform is called; a value over 25 MiB
- * faults with the platform's error.
+ * A key over 512 bytes, metadata over 1024 bytes, a `KvExpiration.At` under 60
+ * seconds away, or a `limit` outside 1 to 1000 faults the new operations
+ * before the platform is called; a value over 25 MiB faults with the
+ * platform's error. A TTL under 60 seconds, or a `cacheTtl` under 30, is
+ * never reached: `KvTtl` and `KvCacheTtl` refuse it first.
  */
 export interface Kv {
   get(key: string): globalThis.Promise<Option<string>>;
   put(key: string, value: string): globalThis.Promise<void>;
-  putTtl(key: string, value: string, ttlSeconds: number): globalThis.Promise<void>;
+  putTtl(key: string, value: string, ttl: KvTtl): globalThis.Promise<void>;
   delete(key: string): globalThis.Promise<void>;
   list(prefix: Option<string>): globalThis.Promise<readonly string[]>;
   getWith(key: string, options: KvGet): globalThis.Promise<Option<KvEntry>>;
@@ -3254,6 +3290,23 @@ export function __deserialise_IndexInfo(json: __JsonValue, path: string = "$"): 
   return Ok({ dimensions: __dimensions, metric: __metric } as IndexInfo);
 }
 
+export function __serialise_KvCacheTtl(value: KvCacheTtl): __JsonValue {
+  return value as unknown as number;
+}
+
+export function __deserialise_KvCacheTtl(json: __JsonValue, path: string = "$"): Result<KvCacheTtl, __BoundaryError> {
+  if (typeof json !== "number") {
+    return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
+  }
+  const validated = (typeof (KvCacheTtl as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (KvCacheTtl as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as KvCacheTtl) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as KvCacheTtl);
+}
+
 export function __serialise_KvEntry(value: KvEntry): __JsonValue {
   return {
     value: value.value as __JsonValue,
@@ -3281,7 +3334,7 @@ export function __serialise_KvExpiration(value: KvExpiration): __JsonValue {
     case "Never":
       return { kind: "Never" };
     case "After": {
-      return { kind: "After", ttl: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.ttl) };
+      return { kind: "After", ttl: __serialise_KvTtl(value.ttl) };
     }
     case "At": {
       return { kind: "At", instant: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.instant) };
@@ -3299,13 +3352,9 @@ export function __deserialise_KvExpiration(json: __JsonValue, path: string = "$"
     case "Never":
       return Ok({ tag: "Never" } as KvExpiration);
     case "After": {
-      if (typeof obj["ttl"] !== "number") {
-        return Err({ kind: "StructuralMismatch", path: `${path}.ttl`, expected: "number", actual: typeof obj["ttl"] });
-      }
-      if (!globalThis.Number.isSafeInteger(obj["ttl"])) {
-        return Err({ kind: "StructuralMismatch", path: `${path}.ttl`, expected: "safe integer", actual: String(obj["ttl"]) });
-      }
-      const __ttl = obj["ttl"];
+      const __r_ttl = __deserialise_KvTtl(obj["ttl"], `${path}.ttl`);
+      if (__r_ttl.tag === "Err") return __r_ttl;
+      const __ttl = __r_ttl.value;
       return Ok({ tag: "After", ttl: __ttl } as KvExpiration);
     }
     case "At": {
@@ -3325,7 +3374,7 @@ export function __deserialise_KvExpiration(json: __JsonValue, path: string = "$"
 
 export function __serialise_KvGet(value: KvGet): __JsonValue {
   return {
-    cacheTtl: __serialise_Option_Duration(value.cacheTtl),
+    cacheTtl: __serialise_Option_KvCacheTtl(value.cacheTtl),
   };
 }
 
@@ -3335,7 +3384,7 @@ export function __deserialise_KvGet(json: __JsonValue, path: string = "$"): Resu
   }
   const obj = json as { [k: string]: __JsonValue };
   const __d_cacheTtl: __JsonValue = "cacheTtl" in obj ? obj["cacheTtl"] : { kind: "None" };
-  const __r_cacheTtl = __deserialise_Option_Duration(__d_cacheTtl, `${path}.cacheTtl`);
+  const __r_cacheTtl = __deserialise_Option_KvCacheTtl(__d_cacheTtl, `${path}.cacheTtl`);
   if (__r_cacheTtl.tag === "Err") return __r_cacheTtl;
   const __cacheTtl = __r_cacheTtl.value;
   return Ok({ cacheTtl: __cacheTtl } as KvGet);
@@ -3434,6 +3483,23 @@ export function __deserialise_KvPut(json: __JsonValue, path: string = "$"): Resu
   if (__r_metadata.tag === "Err") return __r_metadata;
   const __metadata = __r_metadata.value;
   return Ok({ expiration: __expiration, metadata: __metadata } as KvPut);
+}
+
+export function __serialise_KvTtl(value: KvTtl): __JsonValue {
+  return value as unknown as number;
+}
+
+export function __deserialise_KvTtl(json: __JsonValue, path: string = "$"): Result<KvTtl, __BoundaryError> {
+  if (typeof json !== "number") {
+    return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
+  }
+  const validated = (typeof (KvTtl as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (KvTtl as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as KvTtl) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as KvTtl);
 }
 
 export function __serialise_MetaValue(value: MetaValue): __JsonValue {
@@ -5499,43 +5565,39 @@ export function __deserialise_List_InboundAttachment(json: __JsonValue, path: st
   return Ok(out);
 }
 
-export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+export function __serialise_Option_KvCacheTtl(value: Option<KvCacheTtl>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_KvCacheTtl(value.value) };
   return { kind: "None" };
 }
 
-function __option_value_Duration(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
-  }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
-  }
-  const __v = raw;
+function __option_value_KvCacheTtl(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_KvCacheTtl(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
   return Ok(__v);
 }
 
-export function __deserialise_Option_Duration(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+export function __deserialise_Option_KvCacheTtl(json: __JsonValue, path: string = "$"): Result<Option<KvCacheTtl>, __BoundaryError> {
   if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
+    return Ok(None as Option<KvCacheTtl>);
   }
   if (typeof json === "object" && !globalThis.Array.isArray(json)) {
     const obj = json as { [k: string]: __JsonValue };
     const __keys = globalThis.Object.keys(obj);
     if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
+      return Ok(None as Option<KvCacheTtl>);
     }
     if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Duration(obj["value"], `${path}.value`);
+      const __t = __option_value_KvCacheTtl(obj["value"], `${path}.value`);
       if (__t.tag === "Err") {
         return __t;
       }
-      return Ok(Some(__t.value as number) as Option<number>);
+      return Ok(Some(__t.value as KvCacheTtl) as Option<KvCacheTtl>);
     }
   }
-  const __b = __option_value_Duration(json, path);
+  const __b = __option_value_KvCacheTtl(json, path);
   if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
+    return Ok(Some(__b.value as KvCacheTtl) as Option<KvCacheTtl>);
   }
   if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
@@ -5661,6 +5723,50 @@ export function __deserialise_List_Condition(json: __JsonValue, path: string = "
     out.push(__el as Condition);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Duration(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Duration(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Duration(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Duration(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
 
 export function __serialise_List_R2Object(value: readonly R2Object[]): __JsonValue {

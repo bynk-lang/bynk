@@ -44,8 +44,8 @@ use bynk_ide::wire_contract::{
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
 use bynk_syntax::ast::{
-    BaseType, Handler, HttpVariantPayload, JsonOptions, PredKind, ServiceDecl, ServiceProtocol,
-    TypeDecl, TypeRef, effective_json_options, http_variant,
+    BaseType, Handler, HttpVariantPayload, JsonOptions, PredBound, PredKind, ServiceDecl,
+    ServiceProtocol, TypeDecl, TypeRef, effective_json_options, http_variant,
 };
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
@@ -1359,6 +1359,15 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
         match p {
             PredKind::Positive | PredKind::NonNegative | PredKind::InRange(..) if decimal => {}
             PredKind::InRangeD(..) => {}
+            // #3948: a `Decimal` schema is a string, as above.
+            PredKind::AtLeast(PredBound::Decimal(_)) | PredKind::AtMost(PredBound::Decimal(_)) => {}
+            PredKind::AtLeast(b) => tighten_min(s, "minimum", bound_number(b)),
+            PredKind::AtMost(b) => tighten_max(s, "maximum", bound_number(b)),
+            // A `Duration` is a number of milliseconds on the wire.
+            PredKind::InRangeDur(a, b) => {
+                tighten_min(s, "minimum", a.millis as f64);
+                tighten_max(s, "maximum", b.millis as f64);
+            }
             PredKind::NonEmpty => tighten_min(s, "minLength", 1.0),
             // #2867: JSON Schema's `date` is RFC 3339 `full-date`, the rule
             // `IsoDate` enforces; validators that ignore `format` still see
@@ -1444,6 +1453,17 @@ fn tighten_max(s: &mut Map<String, Value>, key: &str, n: f64) {
     let cur = s.get(key).and_then(Value::as_f64);
     if cur.is_none_or(|c| n < c) {
         s.insert(key.into(), num(n));
+    }
+}
+
+/// A one-sided bound as a JSON number: a `Duration` in milliseconds, its wire
+/// form. (A `Decimal` bound is handled before this.)
+fn bound_number(b: &PredBound) -> f64 {
+    match b {
+        PredBound::Int(a) => a.value as f64,
+        PredBound::Float(a) => a.value,
+        PredBound::Duration(a) => a.millis as f64,
+        PredBound::Decimal(_) => 0.0,
     }
 }
 
@@ -1547,6 +1567,9 @@ fn render_pred(p: &PredKind) -> String {
         PredKind::InRange(a, b) => format!("InRange({}, {})", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("InRange({}, {})", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("AtLeast({})", b.lexeme()),
+        PredKind::AtMost(b) => format!("AtMost({})", b.lexeme()),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
@@ -1567,6 +1590,9 @@ fn pred_prose(p: &PredKind) -> String {
         PredKind::InRange(a, b) => format!("must be in range [{}, {}]", a.value, b.value),
         PredKind::InRangeF(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
         PredKind::InRangeD(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        PredKind::InRangeDur(a, b) => format!("must be in range [{}, {}]", a.lexeme, b.lexeme),
+        PredKind::AtLeast(b) => format!("must be at least {}", b.lexeme()),
+        PredKind::AtMost(b) => format!("must be at most {}", b.lexeme()),
         PredKind::MinLength(n) => format!("length must be at least {n}"),
         PredKind::MaxLength(n) => format!("length must be at most {n}"),
         PredKind::Length(n) => format!("length must be exactly {n}"),

@@ -1,0 +1,11 @@
+context shapes
+
+exports opaque { Shape }
+
+type Shape = | Dot | Circle(radius: Int)
+
+service origin {
+  on call() -> Effect[Shape] by Caller {
+    Effect.pure(Dot)
+  }
+}
