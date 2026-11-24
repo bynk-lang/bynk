@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A statement-form `expect r is Ok(x)` keeps `x` bound for the rest of the block, so a case reads `expect r is Ok(greeting)` then `expect greeting.startsWith("Hello")`
-probes: ast_importers
----
+# 0921 — A statement-form expect keeps the names its `is` binds
 
-## ADR: expect-is-bindings
-title: A statement-form expect keeps the names its `is` binds
-summary: Scope, emission and exclusions of `expect v is P(x)` bindings after the statement
+- **Status:** Accepted (v0.665)
 
 **Context.** A failed `expect` ends the case, so after `expect r is Ok(n)` the case knows `r` is `Ok`, but `n` was unbound (`bynk.resolve.unknown_name`). Tests fell back to a `match … _ => expect false` staircase (#3981).
 
