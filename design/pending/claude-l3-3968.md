@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
+probes: emit_diagnostics, diagnostic_coverage, explained_codes, ast_importers
 changelog: `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` and `parTraverseTryWith` bound a concurrent fan-out with a `ParOptions { limit }` from the new `bynk.par` commons
 ---
 

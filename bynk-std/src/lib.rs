@@ -1336,7 +1336,7 @@ pub const UNITS: &[Unit] = &[
         identity_path: "bynk/par.bynk",
         source: BYNK_PAR_SRC,
         binding: Binding::None,
-        id_block: 10,
+        id_block: 11,
         platform: None,
         env_providers: &[],
         stability: Stability::Stable,
@@ -2147,7 +2147,7 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
-                ("bynk.par", 10),
+                ("bynk.par", 11),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
