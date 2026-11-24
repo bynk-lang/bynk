@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0937](0937-suite-view-unaliases-target-signatures.md) | **A suite sees its target's function signatures under declared type names** (v0.677.3) — How a suite resolves a target function written with a consumed-type alias | Accepted (v0.677.3) |
 | [0936](0936-selected-consumed-type-beats-unselected-adapter-export.md) | **A selected consumed type wins over an unselected standard-library export of the same name** (v0.677.1) — Name precedence between a file's own, selected consumed, and unselected `bynk` types | Accepted (v0.677.1) |
 | [0935](0935-list-combinators-without-tuples.md) | **filterMap, zipWith, takeWhile, skipWhile and count(p) on List** (v0.677) — Adds the five list combinators a language without tuples needs, with zipWith stopping at the shorter list | Accepted (v0.677) |
 | [0934](0934-string-methods-and-list-join.md) | **String method completion, List[String].join, and bynk.string deprecated** (v0.676) — Adds nine String kernel methods and join on a List[String], and deprecates the one-function bynk.string commons | Accepted (v0.676) |

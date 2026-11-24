@@ -51,6 +51,19 @@
                 "type": "string"
               },
               "violation": {
+                "description": "The refinement a value broke. The offending value is never echoed.",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "field",
+                  "message"
+                ],
                 "type": "object"
               }
             },
