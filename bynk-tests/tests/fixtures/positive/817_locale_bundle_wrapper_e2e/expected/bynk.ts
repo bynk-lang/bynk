@@ -474,10 +474,9 @@ export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");
  * when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
  * handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-
  * style write-then-flush the provider itself is responsible for, not a
- * distinct control-flow form here. The explicit `[E]` type argument follows
- * the `Idempotency.remember[T]` precedent: a generic capability operation's
- * type parameter is never inferred, even where an argument's type would
- * determine it.
+ * distinct control-flow form here. The type argument `[E]` is inferred from
+ * the argument, as for `Idempotency.remember[T]`: `Events.emit(e)` and
+ * `Events.emit[E](e)` mean the same.
  */
 export interface Events {
   emit<E>(event: E): globalThis.Promise<void>;
