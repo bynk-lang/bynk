@@ -6160,6 +6160,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Key = | Id(n: Int) | Name(n: String)\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) | Name(n) => \"key\"    // ✗ `n` is an `Int` and a `String`\n    }\n}\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) => \"id\"               // ✓ one arm each\n        Name(n) => n\n    }\n}",
     },
     Explain {
+        code: "bynk.types.ord_order_changed",
+        blurb: "A `derives Ord` type orders by declaration order: a record by its fields in turn, a sum \
+                or enum by its variants and then their payloads. Moving a field or variant changes \
+                how every value of the type sorts, and nothing else would notice, so bynk.schema.lock \
+                records the order of each of the project's `derives Ord` types under `[orders]` and a \
+                build that finds a different one fails until the change is accepted. Swapping two \
+                existing fields or variants, or inserting one anywhere but the end, is a change; \
+                adding at the end, removing, and renaming in place are not, and the lock follows \
+                them. If the new order is intended, run `bynk lock accept-order <Type>` (or \
+                `--all`) and commit the lock with the change; otherwise put the declaration back.",
+        example: "// tasks.bynk, with `Priority` recorded as Low < Medium < High\n\
+                  type Priority = enum { High, Low, Medium } derives Ord    // ✗ the order changed\n\
+                  \n\
+                  type Priority = enum { Low, Medium, High } derives Ord    // ✓ the recorded order",
+    },
+    Explain {
         code: "bynk.types.pattern_arity",
         blurb: "A variant pattern takes one binding for each payload field the variant \
                 declares, in order, or none to ignore the payload. A different count, or any \
@@ -10562,6 +10578,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.or_pattern_type_mismatch",
         "An or-pattern's alternatives give a shared binding different types (or refinements).",
         &["match_arm", "is_expr"],
+    ),
+    d(
+        "bynk.types.ord_order_changed",
+        "A `derives Ord` type's field or variant order differs from the one `bynk.schema.lock` records under `[orders]`, so every sort, comparison, `min` and `max` on it would change; accept it with `bynk lock accept-order`.",
     ),
     dg(
         "bynk.types.pattern_arity",

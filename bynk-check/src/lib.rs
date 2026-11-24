@@ -74,6 +74,7 @@ pub mod memo;
 pub mod mysql_sql;
 pub mod narrowing;
 pub mod oracle;
+pub mod ord_order;
 pub mod packages;
 pub mod pg_sql;
 pub mod phase_timing;

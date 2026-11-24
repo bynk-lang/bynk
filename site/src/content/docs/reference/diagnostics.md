@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **919** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **920** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -1009,6 +1009,7 @@ There are **919** codes in total. Every code is an error unless it is marked **W
 - [`bynk.types.opaque_unsafe_outside`](/reference/diagnostics/bynk.types.opaque_unsafe_outside/) — `.unsafe` on an opaque type was used outside its defining context.
 - [`bynk.types.or_pattern_binding_mismatch`](/reference/diagnostics/bynk.types.or_pattern_binding_mismatch/) — An or-pattern's alternatives don't all bind the same set of names.
 - [`bynk.types.or_pattern_type_mismatch`](/reference/diagnostics/bynk.types.or_pattern_type_mismatch/) — An or-pattern's alternatives give a shared binding different types (or refinements).
+- [`bynk.types.ord_order_changed`](/reference/diagnostics/bynk.types.ord_order_changed/) — A `derives Ord` type's field or variant order differs from the one `bynk.schema.lock` records under `[orders]`, so every sort, comparison, `min` and `max` on it would change; accept it with `bynk lock accept-order`.
 - [`bynk.types.pattern_arity`](/reference/diagnostics/bynk.types.pattern_arity/) — A pattern binds the wrong number of payload fields.
 - [`bynk.types.pattern_type_mismatch`](/reference/diagnostics/bynk.types.pattern_type_mismatch/) — A pattern's type does not match the matched value.
 - [`bynk.types.polynomial_regex`](/reference/diagnostics/bynk.types.polynomial_regex/) — A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree; a regex method's pattern has no bound to excuse it.
