@@ -55,7 +55,7 @@ export class Window {
     const __state = { ...(await this.loadState()) };
     const __result = await (async () => {
       const __r0 = await (() => {
-        __state.start = ((__wild364: number) => ms)(__state.start);
+        __state.start = ((__wild363: number) => ms)(__state.start);
         return undefined;
       })();
       return __state.start;
