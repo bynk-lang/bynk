@@ -65,7 +65,7 @@ export function __deserialise_Placed(json: __JsonValue, path: string = "$"): Res
   }
   const __total = obj["total"];
   if (!(__total >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.total`, violation: { field: "total", message: "must be non-negative", value: __total } });
+    return Err({ kind: "RefinementViolation", path: `${path}.total`, violation: { field: "total", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __total } });
   }
   return Ok({ id: __id, total: __total } as Placed);
 }

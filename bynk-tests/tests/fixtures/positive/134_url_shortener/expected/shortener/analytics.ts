@@ -10,10 +10,10 @@ export type ShortCode = string & { readonly __brand: "ShortCode" };
 export const ShortCode = {
   of(value: string): Result<ShortCode, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 3)) {
-      return Err({ field: "ShortCode", message: "length must be at least 3", value });
+      return Err({ field: "ShortCode", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value });
     }
     if (!(__bynkCodePointLength(value) <= 16)) {
-      return Err({ field: "ShortCode", message: "length must be at most 16", value });
+      return Err({ field: "ShortCode", message: "length must be at most 16", rule: { tag: "MaxLength", limit: 16 }, value });
     }
     return Ok(value as ShortCode);
   },
@@ -27,10 +27,10 @@ export type LongUrl = string & { readonly __brand: "LongUrl" };
 export const LongUrl = {
   of(value: string): Result<LongUrl, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 1)) {
-      return Err({ field: "LongUrl", message: "length must be at least 1", value });
+      return Err({ field: "LongUrl", message: "length must be at least 1", rule: { tag: "MinLength", limit: 1 }, value });
     }
     if (!(__bynkCodePointLength(value) <= 2048)) {
-      return Err({ field: "LongUrl", message: "length must be at most 2048", value });
+      return Err({ field: "LongUrl", message: "length must be at most 2048", rule: { tag: "MaxLength", limit: 2048 }, value });
     }
     return Ok(value as LongUrl);
   },

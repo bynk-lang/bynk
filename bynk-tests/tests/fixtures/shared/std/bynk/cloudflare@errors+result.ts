@@ -18,7 +18,7 @@ export type KvTtl = number & { readonly __brand: "KvTtl" };
 export const KvTtl = {
   of(value: number): Result<KvTtl, ValidationError> {
     if (!(value >= 60000)) {
-      return Err({ field: "KvTtl", message: "must be at least 60.seconds", value });
+      return Err({ field: "KvTtl", message: "must be at least 60.seconds", rule: { tag: "AtLeast", bound: { tag: "DurationBound", value: 60000 } }, value });
     }
     return Ok(value as KvTtl);
   },
@@ -34,7 +34,7 @@ export type KvCacheTtl = number & { readonly __brand: "KvCacheTtl" };
 export const KvCacheTtl = {
   of(value: number): Result<KvCacheTtl, ValidationError> {
     if (!(value >= 30000)) {
-      return Err({ field: "KvCacheTtl", message: "must be at least 30.seconds", value });
+      return Err({ field: "KvCacheTtl", message: "must be at least 30.seconds", rule: { tag: "AtLeast", bound: { tag: "DurationBound", value: 30000 } }, value });
     }
     return Ok(value as KvCacheTtl);
   },

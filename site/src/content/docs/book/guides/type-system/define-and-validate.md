@@ -58,6 +58,26 @@ fn parseAge(raw: Int) -> Result[Age, ValidationError] {
 `Age.of(raw)` returns `Ok(age)` if `raw` satisfies the predicate, or
 `Err(validationError)` otherwise.
 
+## Map a failure to a form message
+
+A `ValidationError` names the rule that failed as `e.rule`, a `ValidationRule` a `match`
+can be exhaustive over, so a form can say what is wrong without parsing English:
+
+```bynk,fragment
+fn noteProblem(e: ValidationError) -> String {
+  match e.rule {
+    MaxLength(limit) => "Keep it to \(limit) characters",
+    MinLength(limit) => "At least \(limit) characters",
+    NonEmpty => "Required",
+    _ => e.message,
+  }
+}
+```
+
+The `_ => e.message` arm is the way to opt out of the rest: `message` is still the
+human default, generated from the rule. An HTTP client reading a `400` gets the same
+rule in `violation.rule`, and never the rejected value.
+
 ## Handle the `Result`
 
 Propagate the error with `?` inside a function that returns a `Result`:

@@ -1,7 +1,8 @@
 import type { Result } from "./result.ts";
 import type { Option } from "./result.ts";
 import { Ok, Err, Some, None } from "./result.ts";
-import type { ValidationError } from "./errors.ts";
+import type { ValidationBound, ValidationError, ValidationRule } from "./errors.ts";
+import { __bynkDecimalToString } from "./decimal.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
@@ -28,14 +29,40 @@ export type BoundaryError =
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
-// #4278: a refinement violation as it goes on the wire in a `400`: the field and the message,
-// never the offending value. A rejected password failing `MinLength` must not be echoed back, so
-// `value` stays runtime-only. Applied to the body of every JSON `400` the generated handlers
-// answer; any body that is not a `RefinementViolation` passes through untouched.
+// #3952 (Decision D): a refinement violation as it goes on the wire in a `400`: the field,
+// the message and the rule, never the offending value. A rejected password failing
+// `MinLength` must not be echoed back, so `value` stays runtime-only. Applied to the body of
+// every `RefinementViolation` answer; any other body passes through untouched.
+//
+// The rule is written as every sum is on the wire, with `kind` in place of the in-memory
+// `tag`; a `Decimal` bound is its canonical text and a `Duration` its milliseconds.
+function wireBound(b: ValidationBound): Record<string, unknown> {
+  return b.tag === "DecimalBound"
+    ? { kind: b.tag, value: __bynkDecimalToString(b.value) }
+    : { kind: b.tag, value: b.value };
+}
+
+function wireRule(r: ValidationRule): Record<string, unknown> {
+  switch (r.tag) {
+    case "InRange":
+      return { kind: r.tag, lo: wireBound(r.lo), hi: wireBound(r.hi) };
+    case "AtLeast":
+    case "AtMost":
+      return { kind: r.tag, bound: wireBound(r.bound) };
+    default: {
+      const { tag, ...rest } = r;
+      return { kind: tag, ...rest };
+    }
+  }
+}
+
 export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
   const violation = body.violation as ValidationError | undefined;
   if (body.kind !== "RefinementViolation" || violation === undefined) return body;
-  return { ...body, violation: { field: violation.field, message: violation.message } };
+  return {
+    ...body,
+    violation: { field: violation.field, message: violation.message, rule: wireRule(violation.rule) },
+  };
 }
 
 // v0.177 (#643): the deployed callee's compiled contract is not the one this

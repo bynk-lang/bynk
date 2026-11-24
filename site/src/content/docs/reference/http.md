@@ -310,6 +310,19 @@ on GET("/activity") (query: ActivityFilter) -> Effect[HttpResult[List[Activity]]
 `RefinementViolation` or `StructuralMismatch` body a bad `body` gets (the `path`
 names the field, `query.limit`).
 
+A `RefinementViolation` body names the field, the message and the rule that failed, and
+never the value that was rejected, so a rejected password is not echoed back:
+
+```json
+{ "kind": "RefinementViolation", "path": "body.note",
+  "violation": { "field": "Note", "message": "length must be at most 280",
+                 "rule": { "kind": "MaxLength", "limit": 280 } } }
+```
+
+`rule` is the `ValidationRule` of `e.rule` ([types](/reference/types/#validationerror)),
+written as every sum is on the wire; a `Decimal` bound is its canonical text and a `Duration`
+bound its milliseconds. A client that read `violation.value` from an earlier body must stop.
+
 A field of `T` is a value a query string can carry:
 
 - a `String`, `Int`, `Bool` or `Decimal`, a refined or opaque type over one of

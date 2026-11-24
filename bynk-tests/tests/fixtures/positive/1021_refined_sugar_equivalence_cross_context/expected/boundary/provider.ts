@@ -10,7 +10,7 @@ export type Token = string & { readonly __brand: "boundary.provider.Token" };
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Token);
   },

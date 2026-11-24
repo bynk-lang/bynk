@@ -372,6 +372,7 @@ fn numeric_guard_stmt(name: &str, method: &str, message: &str) -> bynk_ts::TsStm
         cond,
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(name.to_string())),
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(message.to_string())),
+        bynk_ts::well_formed_rule_expr(),
         false,
     )
 }
@@ -383,6 +384,7 @@ fn guard_if_stmt(
     cond: bynk_ts::TsExpr,
     field: bynk_ts::TsExpr,
     message: bynk_ts::TsExpr,
+    rule: bynk_ts::TsExpr,
     decimal: bool,
 ) -> bynk_ts::TsStmt {
     let value_entry = if decimal {
@@ -396,6 +398,7 @@ fn guard_if_stmt(
     let err_obj = bynk_ts::TsExpr::object_entries(vec![
         bynk_ts::TsObjectEntry::prop("field".to_string(), field),
         bynk_ts::TsObjectEntry::prop("message".to_string(), message),
+        bynk_ts::TsObjectEntry::prop("rule".to_string(), rule),
         value_entry,
     ]);
     let return_stmt = bynk_ts::TsStmt::return_stmt(
@@ -433,6 +436,7 @@ fn pred_check_stmt(type_name: &str, pred: &PredKind, base: BaseType) -> bynk_ts:
         cond_expr,
         bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(type_name.to_string())),
         bynk_ts::TsExpr::VerbatimExpr(format!("\"{msg}\""), bynk_ts::VerbatimOrigin::Emit),
+        bynk_ts::pred_rule_expr(pred),
         base == BaseType::Decimal,
     )
 }

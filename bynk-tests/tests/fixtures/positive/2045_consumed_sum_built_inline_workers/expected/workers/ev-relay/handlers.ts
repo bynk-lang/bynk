@@ -121,10 +121,10 @@ export function __deserialise_Code(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be non-negative", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be non-negative", rule: { tag: "NonNegative" }, value: json } });
   }
   return Ok(json as unknown as ev_store.Code);
 }

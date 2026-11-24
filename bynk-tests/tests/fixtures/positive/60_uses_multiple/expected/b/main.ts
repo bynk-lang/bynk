@@ -10,7 +10,7 @@ export type Beta = string & { readonly __brand: "Beta" };
 export const Beta = {
   of(value: string): Result<Beta, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Beta", message: "must be non-empty", value });
+      return Err({ field: "Beta", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Beta);
   },

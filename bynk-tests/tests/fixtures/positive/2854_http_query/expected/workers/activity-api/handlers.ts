@@ -13,7 +13,7 @@ export type RepoName = string & { readonly __brand: "activity.api.RepoName" };
 export const RepoName = {
   of(value: string): Result<RepoName, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "^[^/]+/[^/]+$" + ")$", "u").test(value))) {
-      return Err({ field: "RepoName", message: "must match /^[^/]+/[^/]+$/", value });
+      return Err({ field: "RepoName", message: "must match /^[^/]+/[^/]+$/", rule: { tag: "Matches", pattern: "^[^/]+/[^/]+$" }, value });
     }
     return Ok(value as RepoName);
   },
@@ -24,7 +24,7 @@ export type Day = string & { readonly __brand: "activity.api.Day" };
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "^\\d{4}-\\d{2}-\\d{2}$" + ")$", "u").test(value))) {
-      return Err({ field: "Day", message: "must match /^\\d{4}-\\d{2}-\\d{2}$/", value });
+      return Err({ field: "Day", message: "must match /^\\d{4}-\\d{2}-\\d{2}$/", rule: { tag: "Matches", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }, value });
     }
     return Ok(value as Day);
   },
@@ -35,10 +35,10 @@ export type Limit = number & { readonly __brand: "activity.api.Limit" };
 export const Limit = {
   of(value: number): Result<Limit, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Limit", message: "must be a safe integer", value });
+      return Err({ field: "Limit", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 500)) {
-      return Err({ field: "Limit", message: "must be in range [1, 500]", value });
+      return Err({ field: "Limit", message: "must be in range [1, 500]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 500 } }, value });
     }
     return Ok(value as Limit);
   },

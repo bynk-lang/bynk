@@ -11,7 +11,7 @@ export type Amount = { readonly coefficient: bigint; readonly scale: number } & 
 export const Amount = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Amount, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Amount", message: "must be positive", value: __bynkDecimalToString(value) });
+      return Err({ field: "Amount", message: "must be positive", rule: { tag: "Positive" }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Amount);
   },
@@ -70,7 +70,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
   }
   const __fee = __b_fee.value;
   if (!((((__fee).coefficient * 10n ** globalThis.BigInt(2) >= (0n) * 10n ** globalThis.BigInt((__fee).scale)) && ((__fee).coefficient * 10n ** globalThis.BigInt(2) <= (500n) * 10n ** globalThis.BigInt((__fee).scale))))) {
-    return Err({ kind: "RefinementViolation", path: `${path}.fee`, violation: { field: "fee", message: "must be in range [0.00, 5.00]", value: __bynkDecimalToString(__fee) } });
+    return Err({ kind: "RefinementViolation", path: `${path}.fee`, violation: { field: "fee", message: "must be in range [0.00, 5.00]", rule: { tag: "InRange", lo: { tag: "DecimalBound", value: { coefficient: 0n, scale: 2 } }, hi: { tag: "DecimalBound", value: { coefficient: 500n, scale: 2 } } }, value: __bynkDecimalToString(__fee) } });
   }
   return Ok({ amount: __amount, fee: __fee } as Money);
 }

@@ -336,18 +336,66 @@ shows them in use.
 
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
-A `ValidationError` has two `String` fields:
+A `ValidationError` has two `String` fields and the rule that failed:
 
 | Field | Meaning |
 |---|---|
 | `field` | the name of the refined type or field that failed validation |
-| `message` | a human-readable description of the failure |
+| `message` | a human-readable description of the failure, generated from the rule |
+| `rule` | the predicate that failed, with its argument, as a `ValidationRule` |
+
+`ValidationRule` is a closed sum with a variant per predicate, and `Bound` carries a
+numeric argument of whichever base the refined type has. Both are in scope with no
+`uses`, as `ValidationError` is:
+
+```bynk,fragment
+type ValidationRule =
+  | NonNegative
+  | Positive
+  | InRange(lo: Bound, hi: Bound)
+  | AtLeast(bound: Bound)
+  | AtMost(bound: Bound)
+  | NonEmpty
+  | MinLength(limit: Int)
+  | MaxLength(limit: Int)
+  | Length(limit: Int)
+  | Matches(pattern: String)
+  | IsoDate
+  | Cron
+  | WellFormed
+
+type Bound =
+  | IntBound(value: Int)
+  | FloatBound(value: Float)
+  | DecimalBound(value: Decimal)
+  | DurationBound(value: Duration)
+```
+
+`WellFormed` is a value that is not a valid member of its base type at all (a number that is
+not finite, an `Int` outside the safe range), before any predicate was tried. A `match` on
+`e.rule` is checked for exhaustiveness, so a new predicate is a visible change; the `_` arm
+opts out:
+
+```bynk,fragment
+fn noteProblem(e: ValidationError) -> String {
+  match e.rule {
+    MaxLength(limit) => "Keep it to \(limit) characters",
+    MinLength(limit) => "At least \(limit) characters",
+    NonEmpty => "Required",
+    _ => e.message,
+  }
+}
+```
+
+The variants name a `ValidationRule` only where the context says so (a `match` or `is` on
+one, an expected type, the other side of `==` or `!=`), so a type of your own with a
+`Positive` or `MaxLength` variant is untouched. `ValidationRule.MaxLength(…)` always works.
 
 It has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
 `"\(e.field): \(e.message)"`. The offending value is also carried at runtime
-but is not reachable from Bynk yet, so `e.value` is refused
-(`bynk.types.unknown_field`).
+but is not reachable from Bynk, so `e.value` is refused
+(`bynk.types.unknown_field`), and it is never written to an HTTP response.
 
 ## Connection
 

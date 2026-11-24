@@ -1,0 +1,59 @@
+---
+#3952: a refinement failure names the predicate that failed, and its argument,
+as `e.rule`: a `ValidationRule` that a `match` is checked for exhaustiveness over.
+One refined type per predicate.
+---
+commons rules.rules
+
+type Count = Int where NonNegative
+type Price = Int where Positive
+type Qty = Int where InRange(1, 100)
+type Ratio = Float where InRange(0.0, 1.5)
+type Money = Decimal where InRange(0.00d, 99.50d)
+type Wait = Duration where InRange(1.second, 1.minute)
+type Floor = Int where AtLeast(10)
+type Cap = Int where AtMost(10)
+type Slow = Duration where AtLeast(5.seconds)
+type Name = String where NonEmpty
+type Short = String where MinLength(3)
+type Note = String where MaxLength(5)
+type Code = String where Length(4)
+type Slug = String where Matches("^[a-z]+$")
+type Day = String where IsoDate
+type Nightly = String where Cron
+
+fn describe(e: ValidationError) -> String {
+  match e.rule {
+    NonNegative => "non-negative",
+    Positive => "positive",
+    InRange(lo, hi) => "range",
+    AtLeast(bound) => "at least",
+    AtMost(bound) => "at most",
+    NonEmpty => "non-empty",
+    MinLength(limit) => "min \(limit)",
+    MaxLength(limit) => "max \(limit)",
+    Length(limit) => "length \(limit)",
+    Matches(pattern) => "matches \(pattern)",
+    IsoDate => "iso date",
+    Cron => "cron",
+    WellFormed => "well formed",
+  }
+}
+
+fn explain(e: ValidationError) -> String {
+  match e.rule {
+    MaxLength(limit) => "Keep it to \(limit) characters",
+    MinLength(limit) => "At least \(limit) characters",
+    NonEmpty => "Required",
+    _ => e.message,
+  }
+}
+
+type Grade = | Positive | MaxLength(n: Int)
+
+fn gradeName(g: Grade) -> String {
+  match g {
+    Positive => "up",
+    MaxLength(n) => "max",
+  }
+}

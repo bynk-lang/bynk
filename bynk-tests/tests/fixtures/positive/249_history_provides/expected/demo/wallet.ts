@@ -13,10 +13,10 @@ export type Amount = number & { readonly __brand: "demo.wallet.Amount" };
 export const Amount = {
   of(value: number): Result<Amount, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Amount", message: "must be a safe integer", value });
+      return Err({ field: "Amount", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Amount", message: "must be positive", value });
+      return Err({ field: "Amount", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Amount);
   },

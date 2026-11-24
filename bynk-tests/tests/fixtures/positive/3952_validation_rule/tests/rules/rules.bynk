@@ -1,0 +1,63 @@
+---
+#3952: every predicate's failure carries its own rule, with its argument.
+---
+suite rules.rules
+
+fn failed[T](r: Result[T, ValidationError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => describe(e),
+  }
+}
+
+fn said[T](r: Result[T, ValidationError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => explain(e),
+  }
+}
+
+fn plain[T](r: Result[T, ValidationError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => e.message,
+  }
+}
+
+case "an integer predicate names itself" {
+  expect failed(Count.of(-1)) == "non-negative"
+  expect failed(Price.of(0)) == "positive"
+  expect failed(Qty.of(0)) == "range"
+  expect failed(Floor.of(3)) == "at least"
+  expect failed(Cap.of(11)) == "at most"
+}
+
+case "a float, a decimal and a duration range name the same rule" {
+  expect failed(Ratio.of(2.0)) == "range"
+  expect failed(Money.of(100.00d)) == "range"
+  expect failed(Wait.of(2.minutes)) == "range"
+  expect failed(Slow.of(1.second)) == "at least"
+}
+
+case "a string predicate names itself" {
+  expect failed(Name.of("")) == "non-empty"
+  expect failed(Short.of("ab")) == "min 3"
+  expect failed(Note.of("too long")) == "max 5"
+  expect failed(Code.of("abc")) == "length 4"
+  expect failed(Slug.of("ABC")) == "matches ^[a-z]+$"
+  expect failed(Day.of("2026-13-45")) == "iso date"
+  expect failed(Nightly.of("nope")) == "cron"
+}
+
+case "a failure keeps its human message beside the rule" {
+  expect said(Note.of("too long")) == "Keep it to 5 characters"
+  expect said(Short.of("ab")) == "At least 3 characters"
+  expect said(Name.of("")) == "Required"
+  expect said(Qty.of(0)) == plain(Qty.of(0))
+  expect plain(Qty.of(0)) == "must be in range [1, 100]"
+}
+
+case "a type of your own keeps its Positive and MaxLength variants" {
+  expect gradeName(Positive) == "up"
+  expect gradeName(MaxLength(3)) == "max"
+}
