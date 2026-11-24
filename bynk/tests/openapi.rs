@@ -287,6 +287,34 @@ fn typed_path_parameters_carry_their_schema() {
     assert_eq!(schema("p")["type"], "string");
 }
 
+/// #3911: a typed `headers` record is described as `in: header` parameters, one per field, under
+/// each field's wire name; the raw `RequestHeaders` view declares none.
+#[test]
+fn a_typed_headers_record_is_described_as_header_parameters() {
+    let dir = scratch("typed-headers");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"typed\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/typed.bynk"),
+        "context typed\n\ntype UploadHeaders = {\n  @name(\"content-length\") length: Int where NonNegative,\n  @name(\"if-match\") ifMatch: Option[String],\n  tags: List[String] = [],\n}\n\nservice api from http {\n  on GET(\"/up\") (headers: UploadHeaders) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n  on GET(\"/raw\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let ps = d["paths"]["/up"]["get"]["parameters"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let by = |name: &str| ps.iter().find(|p| p["name"] == name).unwrap().clone();
+    assert_eq!(by("content-length")["in"], "header");
+    assert_eq!(by("content-length")["required"], true);
+    assert_eq!(by("content-length")["schema"]["type"], "integer");
+    assert_eq!(by("if-match")["required"], false);
+    assert_eq!(by("tags")["schema"]["type"], "array");
+    assert!(d["paths"]["/raw"]["get"].get("parameters").is_none());
+}
+
 #[test]
 fn yaml_carries_the_same_document() {
     let dir = scratch("yaml");

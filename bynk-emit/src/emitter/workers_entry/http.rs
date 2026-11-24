@@ -2,7 +2,7 @@
 
 use super::field_specs::{
     FieldSpec, MultipartSpec, cookies_field_specs, effective_max_body, field_specs_exprs,
-    form_field_specs, multipart_spec, query_field_specs,
+    form_field_specs, headers_field_specs, multipart_spec, query_field_specs,
 };
 use super::http_policy::param_count;
 use super::respond::{
@@ -103,6 +103,10 @@ pub(super) struct HttpRoute {
     /// `cookieObject` reads them off the `Cookie` header: `(name, wire kind, list,
     /// option)`. `None` when the route takes no `cookies` parameter.
     pub(super) cookies_fields: Option<Vec<FieldSpec>>,
+    /// #3911: the fields of the handler's typed `headers` record, as the runtime's
+    /// `headersObject` reads them off the request's headers. `None` when the route takes
+    /// the raw `RequestHeaders` view or no `headers` parameter.
+    pub(super) headers_fields: Option<Vec<FieldSpec>>,
     /// #3276: a `@multipart` route's body fields (as `form_fields`, with the `File`
     /// fields kind `"file"`) and its per-file and part-count caps.
     pub(super) multipart: Option<MultipartSpec>,
@@ -188,7 +192,70 @@ fn bind_request_record_param(
     if p.name.name == "cf" {
         return bind_cf_param(route, p, guarded, call_args, wrappers, ru);
     }
+    if p.name.name == "headers" {
+        return bind_headers_param(route, p, guarded, call_args, wrappers, ru);
+    }
     bind_cookies_param(route, p, guarded, call_args, wrappers, ru)
+}
+
+/// #3911: bind a handler's typed `headers` record: the request's headers are decoded by
+/// `headersObject` (names compare without case, a `List` field splits its comma-separated
+/// value) and the record's own codec checks refinements and fills defaults, answering `400`
+/// at `headers.<field>` as a `body` does. A header the route's seam consumed reads as absent.
+/// Returns whether the parameter was a typed one (the raw `RequestHeaders` view binds below,
+/// and a `:headers` path segment is a path parameter instead).
+fn bind_headers_param(
+    route: &HttpRoute,
+    p: &bynk_syntax::ast::Param,
+    guarded: &mut Vec<TsStmt>,
+    call_args: &mut Vec<TsExpr>,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> bool {
+    let Some(fields) = &route.headers_fields else {
+        return false;
+    };
+    let mut args = vec![ident("request"), TsExpr::array(field_specs_exprs(fields))];
+    if !route.hidden_headers.is_empty() || route.signed_cookie.is_some() {
+        args.push(TsExpr::array(
+            route
+                .hidden_headers
+                .iter()
+                .map(|n| str_lit(crate::emitter::escape_ts_string(n)))
+                .collect(),
+        ));
+    }
+    // A `SignedCookie` actor's session cookie is hidden from a `cookie` field, as from `RequestHeaders`.
+    if let Some(cookie) = &route.signed_cookie {
+        args.push(str_lit(crate::emitter::escape_ts_string(cookie)));
+    }
+    guarded.push(const_("__h", call(ident("__headersObject"), args)));
+    guarded.push(if_(
+        TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(member(ident("__h"), "ok")),
+        },
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__h"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    let dser = deserialise_call(&p.type_ref, &member(ident("__h"), "value"), "headers", ru);
+    guarded.push(const_("__r_headers", dser));
+    guarded.push(if_(
+        strict_eq(member(ident("__r_headers"), "tag"), str_lit("Err")),
+        return_(Some(stamp_rejection(
+            json_response(member(ident("__r_headers"), "error"), 400),
+            cors_const,
+            security_const,
+            rejected,
+        ))),
+    ));
+    guarded.push(const_("headers", member(ident("__r_headers"), "value")));
+    call_args.push(ident("headers"));
+    true
 }
 
 /// #3277: bind a handler's `cookies` parameter. `cookies: RequestCookies` (decision A) is the
@@ -1524,6 +1591,7 @@ pub(super) fn collect_http_routes(
             {
                 let query_fields = query_field_specs(h, &path, visible_types);
                 let cookies_fields = cookies_field_specs(h, &path, visible_types);
+                let headers_fields = headers_field_specs(h, &path, visible_types);
                 let path_kinds = path_param_kinds(h, &path, visible_types);
                 http_routes.push(HttpRoute {
                     service: (*sname).clone(),
@@ -1563,6 +1631,7 @@ pub(super) fn collect_http_routes(
                     query_fields,
                     form_fields: form_field_specs(h, visible_types),
                     cookies_fields,
+                    headers_fields,
                     multipart: multipart_spec(service.limits.as_ref(), h, visible_types),
                 });
             }

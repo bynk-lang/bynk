@@ -2539,8 +2539,13 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.headers_field_not_stringy",
+        blurb: "A header is a single text value (or a comma-separated list of them), so each field of the `headers` record must be one a header can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` (a header that may be absent) or a `List` (a comma-separated value, split respecting quoted strings). A nested record or any other type is refused. Flatten the record, or keep structured data in a `String` and decode it yourself. `query` and `cookies` records follow the same rule: `bynk.http.query_field_not_stringy`, `bynk.http.cookies_field_not_stringy`.",
+        example: "type Range = { from: Int, to: Int }\n\ntype Upload = { range: Range }   // ✗ a header is one value, not a record\n\ntype Upload = { from: Int, to: Int }   // ✓\n\non PUT(\"/files\") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.headers_wrong_type",
-        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` must be typed `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`.",
+        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` is either a record the router decodes and validates (`headers: UploadHeaders`, one field per header, named by the field or by `@name(\"if-match\")`, answering `400` when the request does not fit), or `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. The record's fields are held to `bynk.http.headers_field_not_stringy`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
@@ -8303,8 +8308,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
     )),
     dg(
+        "bynk.http.headers_field_not_stringy",
+        "A field of an HTTP handler's `headers` record has a type a header cannot carry.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.headers_wrong_type",
-        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
+        "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.",
         &["http_handler"],
     ),
     dg(

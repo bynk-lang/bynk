@@ -1,0 +1,48 @@
+suite shop.api {
+	case "a typed headers record reaches the handler" {
+		let r <- api.GET("/probe", UploadHeaders { length: 42, key: Some("abcdefgh"), tags: ["a", "b"], mode: Some(Slow), priority: 1 })
+		expect r is Ok("42 abcdefgh 2 slow 1")
+	}
+
+	case "the raw view still works" {
+		let r <- api.GET("/raw", RequestHeaders.of(["X-Probe: yes"]))
+		expect r is Ok("yes")
+	}
+}
+
+suite shop.api as system {
+	case "a typed record is sent as headers" {
+		let r <- api.GET("/probe", UploadHeaders { length: 7, key: Some("abcdefgh"), tags: ["a", "b", "c"], mode: Some(Fast), priority: 9 })
+		expect r is Ok("7 abcdefgh 3 fast 9")
+	}
+
+	case "absent headers take None and their defaults" {
+		let r <- api.GET("/probe", Wire("Content-Length: 3"))
+		expect r is Handled(Ok("3 - 0 - 5"))
+	}
+
+	case "names match without case, a list splits and quoted commas stay" {
+		let r <- api.GET("/probe", Wire("CONTENT-length:  12 \nX-Tag: a, \"b,c\", d\nX-Mode: Slow"))
+		expect r is Handled(Ok("12 - 3 slow 5"))
+	}
+
+	case "a missing required header is a mismatch" {
+		let r <- api.GET("/probe", Wire("X-Tag: a"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a non-numeric content-length is a mismatch" {
+		let r <- api.GET("/probe", Wire("Content-Length: lots"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+
+	case "a refinement failure is a violation" {
+		let r <- api.GET("/probe", Wire("Content-Length: 1\nIdempotency-Key: short"))
+		expect r is Rejected(RefinementViolation(_))
+	}
+
+	case "an unknown enum variant is a mismatch" {
+		let r <- api.GET("/probe", Wire("Content-Length: 1\nX-Mode: Medium"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+}

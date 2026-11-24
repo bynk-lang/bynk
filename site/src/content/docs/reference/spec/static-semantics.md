@@ -1866,8 +1866,15 @@ opaque type over one, or an enum, or an `Option` or `List` of one
 (`bynk.http.query_wrong_type`, `bynk.http.query_field_not_stringy`); the router
 MUST decode a record `query` from the request's query string and validate it, with
 a `400` on a violation, before the handler runs, ignoring keys the record does not
-declare and refusing a repeated key on a field that is not a `List`. A
-`RequestQuery` MUST NOT appear outside an HTTP handler's `query` parameter
+declare and refusing a repeated key on a field that is not a `List`. A parameter
+named `headers` that no `:headers` segment binds (#3911) MUST be `RequestHeaders` or
+a record type, whose fields are each one of the same leaves, or an `Option` or `List`
+of one (`bynk.http.headers_wrong_type`, `bynk.http.headers_field_not_stringy`); the
+router MUST decode a record `headers` from the request's headers, comparing names
+without case and reading a field's `@name` as its header name, and validate it, with a
+`400` naming `headers.<field>` on a violation, before the handler runs: a `List` field
+MUST split the combined value at commas outside quoted strings, and any other field
+reads the combined value, trimmed. A `RequestQuery` MUST NOT appear outside an HTTP handler's `query` parameter
 (`bynk.http.query_not_http`, `bynk.types.request_query_at_boundary`). Constructing a `Raw` variant (v0.111) MUST
 supply exactly two arguments — a `Bytes` body then a `String` content-type
 (`bynk.types.variant_arity`, `bynk.types.argument_mismatch`) — and yields
