@@ -39,7 +39,7 @@ function __makeTestDeps() {
 async function test_a_shared_variant_name_takes_the_other_operand_s_sum() {
   try {
     const deps = {};
-    const { DbError, Grade, Level, MailError, above, dbFailed, failedDown, flipped, notLimited, wrapped } = __ns_demo_errors;
+    const { DbError, Grade, Level, MailError, above, bracketed, dbFailed, failedDown, flipped, inList, notLimited, someOnLeft, wrapped } = __ns_demo_errors;
     type DbError = __ns_demo_errors.DbError;
     type Grade = __ns_demo_errors.Grade;
     type Level = __ns_demo_errors.Level;
@@ -64,7 +64,7 @@ async function test_a_shared_variant_name_takes_the_other_operand_s_sum() {
 async function test_through_Option() {
   try {
     const deps = {};
-    const { DbError, Grade, Level, MailError, above, dbFailed, failedDown, flipped, notLimited, wrapped } = __ns_demo_errors;
+    const { DbError, Grade, Level, MailError, above, bracketed, dbFailed, failedDown, flipped, inList, notLimited, someOnLeft, wrapped } = __ns_demo_errors;
     type DbError = __ns_demo_errors.DbError;
     type Grade = __ns_demo_errors.Grade;
     type Level = __ns_demo_errors.Level;
@@ -85,7 +85,7 @@ async function test_through_Option() {
 async function test_an_ordering_operator_on_a_shared_enum_variant() {
   try {
     const deps = {};
-    const { DbError, Grade, Level, MailError, above, dbFailed, failedDown, flipped, notLimited, wrapped } = __ns_demo_errors;
+    const { DbError, Grade, Level, MailError, above, bracketed, dbFailed, failedDown, flipped, inList, notLimited, someOnLeft, wrapped } = __ns_demo_errors;
     type DbError = __ns_demo_errors.DbError;
     type Grade = __ns_demo_errors.Grade;
     type Level = __ns_demo_errors.Level;
@@ -93,6 +93,29 @@ async function test_an_ordering_operator_on_a_shared_enum_variant() {
     if (!(above(Level.High))) { throw __bynkExpectFailure("tests/demo/errors.bynk:20:10", 513, 524, "expect above(High)"); }
     if (!(!above(Level.Medium))) { throw __bynkExpectFailure("tests/demo/errors.bynk:21:10", 534, 548, "expect !above(Medium)"); }
     if (!(!above(Level.Low))) { throw __bynkExpectFailure("tests/demo/errors.bynk:22:10", 558, 569, "expect !above(Low)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_through_a_list__a_bracket_and_the_left_of_Some() {
+  try {
+    const deps = {};
+    const { DbError, Grade, Level, MailError, above, bracketed, dbFailed, failedDown, flipped, inList, notLimited, someOnLeft, wrapped } = __ns_demo_errors;
+    type DbError = __ns_demo_errors.DbError;
+    type Grade = __ns_demo_errors.Grade;
+    type Level = __ns_demo_errors.Level;
+    type MailError = __ns_demo_errors.MailError;
+    if (!(inList([MailError.Failed("x")]))) { throw __bynkExpectFailure("tests/demo/errors.bynk:26:10", 638, 659, "expect inList([Failed(\"x\")])"); }
+    if (!(!inList([MailError.Failed("y")]))) { throw __bynkExpectFailure("tests/demo/errors.bynk:27:10", 669, 691, "expect !inList([Failed(\"y\")])"); }
+    if (!(someOnLeft(Some(MailError.Failed("x"))))) { throw __bynkExpectFailure("tests/demo/errors.bynk:28:10", 701, 730, "expect someOnLeft(Some(Failed(\"x\")))"); }
+    if (!(!someOnLeft(None))) { throw __bynkExpectFailure("tests/demo/errors.bynk:29:10", 740, 757, "expect !someOnLeft(None)"); }
+    if (!(bracketed(MailError.Failed("x")))) { throw __bynkExpectFailure("tests/demo/errors.bynk:30:10", 767, 789, "expect bracketed(Failed(\"x\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -116,7 +139,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a shared variant name takes the other operand's sum", "through Option", "an ordering operator on a shared enum variant"];
+export const __bynkCases: readonly string[] = ["a shared variant name takes the other operand's sum", "through Option", "an ordering operator on a shared enum variant", "through a list, a bracket and the left of Some"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -136,6 +159,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("an ordering operator on a shared enum variant")) {
     const started = __bynkCaseNow();
     const r = { name: "an ordering operator on a shared enum variant", ...(await test_an_ordering_operator_on_a_shared_enum_variant()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("through a list, a bracket and the left of Some")) {
+    const started = __bynkCaseNow();
+    const r = { name: "through a list, a bracket and the left of Some", ...(await test_through_a_list__a_bracket_and_the_left_of_Some()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

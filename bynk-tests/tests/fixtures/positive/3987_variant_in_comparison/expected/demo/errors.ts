@@ -71,3 +71,15 @@ export function flipped(e: MailError): boolean {
 export function dbFailed(e: DbError): boolean {
   return __bynkEq(e, DbError.Failed("down"));
 }
+
+export function inList(errs: readonly MailError[]): boolean {
+  return __bynkEq(errs, [MailError.Failed("x")]);
+}
+
+export function someOnLeft(o: Option<MailError>): boolean {
+  return __bynkEq(Some(MailError.Failed("x")), o);
+}
+
+export function bracketed(e: MailError): boolean {
+  return __bynkEq(e, (MailError.Failed("x")));
+}
