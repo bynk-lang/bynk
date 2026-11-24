@@ -39,6 +39,7 @@ fn binding_gen_entries(
                         &b.name.name,
                     ),
                     shrink: TsExpr::array(vec![]),
+                    show_shape: None,
                 });
             gen_descriptor_entry(Some(str_lit(b.name.name.clone())), &bg)
         })
@@ -588,6 +589,7 @@ pub(super) fn emit_test_history_property_function(
                                     &p.name.name,
                                 ),
                                 shrink: TsExpr::array(vec![]),
+                                show_shape: None,
                             });
                         gen_descriptor_entry(None, &bg)
                     })
@@ -783,6 +785,7 @@ pub(super) fn emit_contract_attack_function(
                         &p.name.name,
                     ),
                     shrink: TsExpr::array(vec![]),
+                    show_shape: None,
                 });
             gen_descriptor_entry(Some(str_lit(p.name.name.clone())), &bg)
         })
