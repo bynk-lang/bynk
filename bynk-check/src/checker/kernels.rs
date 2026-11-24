@@ -863,6 +863,9 @@ pub(crate) fn check_list_kernel_method(
         Some(ListOp::LeftJoin) => Some(tys.intern(Ty::List(check_equi_join(
             args, elem, span, false, true, ctx,
         )?))),
+        Some(ListOp::Join) if args.len() == 1 => {
+            super::string_more::check_list_join(method, args, elem, span, ctx)
+        }
         Some(ListOp::Join) => {
             Some(tys.intern(Ty::List(check_pred_join(args, elem, span, false, ctx)?)))
         }
@@ -2609,6 +2612,17 @@ pub(crate) fn check_string_kernel_method(
         Some(StringOp::IndexOf) => Some((vec![tys.intern(s.clone())], Ty::Option(tys.intern(int)))),
         Some(StringOp::Chars) => Some((vec![], strings)),
         Some(StringOp::Concat) => Some((vec![tys.intern(s.clone())], s.clone())),
+        Some(
+            o @ (StringOp::IsEmpty
+            | StringOp::TrimStart
+            | StringOp::TrimEnd
+            | StringOp::PadStart
+            | StringOp::PadEnd
+            | StringOp::Repeat
+            | StringOp::Lines
+            | StringOp::LastIndexOf
+            | StringOp::ReplaceFirst),
+        ) => Some(super::string_more::signature(o, tys)),
         // K2 (#2594): percent-encoding over the UTF-8 bytes.
         Some(StringOp::PercentEncode) => Some((vec![], s.clone())),
         Some(StringOp::PercentDecode) => Some((vec![], Ty::Option(tys.intern(s.clone())))),
@@ -2623,7 +2637,8 @@ pub(crate) fn check_string_kernel_method(
                  `length`, `split`, `trim`, `contains`, `startsWith`, `endsWith`, \
                  `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`, \
                  `percentEncode`, `percentDecode`, `matchesRegex`, `containsRegex`, `findRegex`, \
-                 `findAllRegex`, `replaceRegex`, `splitRegex`",
+                 `findAllRegex`, `replaceRegex`, `splitRegex`, `isEmpty`, `trimStart`, `trimEnd`, \
+                 `padStart`, `padEnd`, `repeat`, `lines`, `lastIndexOf`, `replaceFirst`",
                 method.name
             ),
         ));
@@ -2656,6 +2671,9 @@ pub(crate) fn check_string_kernel_method(
             &format!("the `String.{}` argument", method.name),
             ctx,
         );
+    }
+    if matches!(op, Some(StringOp::PadStart | StringOp::PadEnd)) {
+        super::string_more::check_pad_fill(method, args, ctx);
     }
     // K6c (#2600): a regex method's pattern must be a string literal, so the
     // compile-time ReDoS checks can see it; then it is checked as a `Matches`

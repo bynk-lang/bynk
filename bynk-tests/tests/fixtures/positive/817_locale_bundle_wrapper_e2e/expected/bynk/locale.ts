@@ -5,7 +5,6 @@ import { Some, None } from "../__bynk_runtime/result.js";
 import { __bynkCmpString } from "../__bynk_runtime/compare.js";
 
 import { LocaleTag, Message, MessageArg } from "./locale/types.js";
-import { join } from "./string.js";
 
 /**
  * Renders `msg`. Slice 1 has no bundle/lookup mechanism: the output is
@@ -33,7 +32,7 @@ export function render(tag: LocaleTag, msg: Message): string {
       }
       throw new globalThis.Error("non-exhaustive match");
     })(((__m: ReadonlyMap<string, MessageArg>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as MessageArg) : None)(msg.params, k))));
-    return msg.code.concat(" {").concat(join(parts, ", ")).concat("}");
+    return msg.code.concat(" {").concat((parts).join(", ")).concat("}");
   }
 }
 

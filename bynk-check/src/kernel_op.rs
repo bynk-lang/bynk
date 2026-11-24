@@ -130,7 +130,7 @@ kernel_ops! {
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
         JoinOn = "joinOn", "joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> List[V]";
         LeftJoin = "leftJoin", "leftJoin(other: List[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> List[V]";
-        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]";
+        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V], or join(sep: String) -> String for a List[String]";
         GroupBy = "groupBy", "groupBy(key: T -> K, into: (K, List[T]) -> V) -> List[V]";
         @hidden
         // v0.119 (ADR 0155): `run.upTo(step)` on a synthesised history `Step`
@@ -251,6 +251,17 @@ kernel_ops! {
         // K2 (#2594): RFC 3986 percent-encoding over the UTF-8 bytes.
         PercentEncode = "percentEncode", "percentEncode() -> String";
         PercentDecode = "percentDecode", "percentDecode() -> Option[String]";
+        // #3978: the everyday methods the kernel lacked. Widths and counts are in
+        // code points (padding) or code units (`lastIndexOf`, like `indexOf`).
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        TrimStart = "trimStart", "trimStart() -> String";
+        TrimEnd = "trimEnd", "trimEnd() -> String";
+        PadStart = "padStart", "padStart(width: Int, fill: String) -> String";
+        PadEnd = "padEnd", "padEnd(width: Int, fill: String) -> String";
+        Repeat = "repeat", "repeat(n: Int) -> String";
+        Lines = "lines", "lines() -> List[String]";
+        LastIndexOf = "lastIndexOf", "lastIndexOf(sub: String) -> Option[Int]";
+        ReplaceFirst = "replaceFirst", "replaceFirst(from: String, to: String) -> String";
         // K6c (#2600): regex methods over a string-literal pattern.
         MatchesRegex = "matchesRegex", "matchesRegex(pattern: String) -> Bool";
         ContainsRegex = "containsRegex", "containsRegex(pattern: String) -> Bool";

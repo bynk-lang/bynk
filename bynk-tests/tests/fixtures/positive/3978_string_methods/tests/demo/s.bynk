@@ -1,0 +1,55 @@
+suite demo.s
+
+case "padStart pads to a width, and leaves a wide string alone" {
+	expect invoiceNo(42) == "INV-000042"
+	expect "hello".padStart(3, "-") == "hello"
+	expect "x".padStart(6, "ab") == "ababax"
+}
+
+case "padStart and padEnd count code points, so an astral character is one position" {
+	expect "😀".padStart(4, "-") == "---😀"
+	expect "😀".padEnd(3, "-") == "😀--"
+	expect "a".padStart(3, "😀") == "😀😀a"
+}
+
+case "padEnd cuts a multi-character fill to fit" {
+	expect rightAligned("x", 6) == "xababa"
+}
+
+case "join on a List[String], with an empty list" {
+	let none: List[String] = []
+	expect csvRow(["a", "b", "c"]) == "a,b,c"
+	expect csvRow(none) == ""
+	expect csvRow(["only"]) == "only"
+}
+
+case "isEmpty, trimStart and trimEnd" {
+	expect isBlank("   ")
+	expect !isBlank("  x")
+	expect "".isEmpty()
+	expect trimmedBoth("  hi  ") == "hi"
+	expect "  hi  ".trimStart() == "hi  "
+	expect "  hi  ".trimEnd() == "  hi"
+}
+
+case "lines splits on LF and CRLF, with no empty last line" {
+	let none: List[String] = []
+	expect lineList("a\nb\nc") == ["a", "b", "c"]
+	expect lineList("a\r\nb\r\n") == ["a", "b"]
+	expect lineList("") == none
+	expect lineCount("a\n\nb") == 3
+	expect lineList("a\rb") == ["a\rb"]
+}
+
+case "lastIndexOf, and replaceFirst inserting literally" {
+	expect lastDot("a.b.c") == Some(3)
+	expect lastDot("abc") == None
+	expect firstOnly("a-a-a", "a", "b") == "b-a-a"
+	expect firstOnly("price", "price", "$&") == "$&"
+	expect firstOnly("abc", "z", "y") == "abc"
+}
+
+case "repeat makes n copies" {
+	expect stars(3) == "***"
+	expect stars(0) == ""
+}

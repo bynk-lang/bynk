@@ -1,0 +1,44 @@
+---
+#3978: the `String` methods the kernel lacked, and `join` on a `List[String]`.
+---
+commons demo.s
+
+fn invoiceNo(n: Int) -> String {
+	"INV-\(n.toString().padStart(6, "0"))"
+}
+
+fn rightAligned(s: String, width: Int) -> String {
+	s.padEnd(width, "ab")
+}
+
+fn csvRow(cells: List[String]) -> String {
+	cells.join(",")
+}
+
+fn isBlank(s: String) -> Bool {
+	s.trimStart().isEmpty()
+}
+
+fn trimmedBoth(s: String) -> String {
+	s.trimStart().trimEnd()
+}
+
+fn lineCount(s: String) -> Int {
+	s.lines().length()
+}
+
+fn lineList(s: String) -> List[String] {
+	s.lines()
+}
+
+fn lastDot(s: String) -> Option[Int] {
+	s.lastIndexOf(".")
+}
+
+fn firstOnly(s: String, old: String, new: String) -> String {
+	s.replaceFirst(old, new)
+}
+
+fn stars(n: Int) -> String {
+	"*".repeat(n)
+}
