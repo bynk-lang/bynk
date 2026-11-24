@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An `on call` handler must state its actor, `by Caller` at least (`bynk.actor.missing_by_on_call`), as an HTTP route must; `bynk check --fix=bynk.actor.missing_by_on_call` inserts it
-breaking: An `on call` handler with no `by` clause, on the handler or the service header, is now `bynk.actor.missing_by_on_call`; it used to default silently to `Caller`. Run `bynk check --fix=bynk.actor.missing_by_on_call` to insert `by Caller`, which is what the handler did before, then narrow it if you want fewer callers. Agents, cron, queue and `Events` handlers are unchanged.
----
+# 0891 — An `on call` handler must state its actor
 
-## ADR: on-call-requires-by
-title: An `on call` handler must state its actor
-summary: Supersedes ADR 0082's silent `Caller` default for `on call`
+- **Status:** Accepted (v0.642)
 
 **Context.** ADR 0082 gave `on call` a silent default actor, `Caller`, on the
 premise that the `Internal` channel is trusted ("the channel itself is the

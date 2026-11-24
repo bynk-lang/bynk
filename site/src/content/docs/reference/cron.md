@@ -9,7 +9,7 @@ Cron handlers run on a schedule. Like HTTP handlers, they are declared in a
 
 ```bynk,ignore
 service <Name> from cron {
-  on schedule("<schedule>") (at: Int) -> Effect[Result[(), E]] {
+  on schedule("<schedule>") (at: Instant) -> Effect[Result[(), E]] {
     …
   }
 }
@@ -18,13 +18,15 @@ service <Name> from cron {
 - **Schedule:** a cron expression as a string literal in `schedule("…")`, in
   exactly Cloudflare's syntax (see [Schedule syntax](#schedule-syntax)). An
   invalid one is `bynk.cron.invalid_schedule`, and the message names the failing
-  field.
-- **Parameter:** *optional*, at most one. If present it must be `Int` and
-  receives the scheduled fire time as Unix epoch **milliseconds**; otherwise
-  `bynk.cron.bad_params`. Cron has no built-in clock, so this parameter is how a
-  handler learns the time — and unlike "now", it is the exact, schedule-aligned
-  instant (useful for bucketing and idempotency). Wrap it in your own time type
-  inside the body if you want stronger typing.
+  field. Schedules run in **UTC**.
+- **Parameter:** *optional*, at most one. If present it must be `Instant` and
+  receives the scheduled fire time; otherwise `bynk.cron.bad_params`. An `Int`
+  parameter, the spelling before v0.90's `Instant` reached cron, is that error
+  too: write `at: Instant`, and `at.toEpochMillis()` where the body needs the
+  number. For "now", use `Clock.now()`; the parameter is the exact,
+  schedule-aligned instant, which stays the same when a run starts late (useful
+  for bucketing and idempotency). It works directly with `Duration` arithmetic
+  (`at - 1.hours`) and `Instant` comparison.
 - **Return type:** must be `Effect[Result[(), E]]` for some error type `E`
   (`bynk.cron.return_not_effect_result`).
 - **Placement:** only inside a `service`, never an `agent`
@@ -81,7 +83,7 @@ stays visible in the handler body.
 context reaper
 
 service sweeper from cron {
-	on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+	on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
 		Ok(())
 	}
 }

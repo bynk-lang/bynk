@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.642.0
+
+An `on call` handler with no `by` clause, on the handler or the service header, is now `bynk.actor.missing_by_on_call`; it used to default silently to `Caller`. Run `bynk check --fix=bynk.actor.missing_by_on_call` to insert `by Caller`, which is what the handler did before, then narrow it if you want fewer callers. Agents, cron, queue and `Events` handlers are unchanged.
+
 ## v0.641.0
 
 The compiled JavaScript moves from `<output>/../out-js` to `<output>/out-js`, and the emitted `tsconfig.json` now has `"outDir": "./out-js"` and excludes `out-js`; anything that read `../out-js` (a script running the `tsc`-built JavaScript, a Wrangler or CI step pointing at it) must read `<output>/out-js`, and a `tsconfig.json` copied from an earlier output needs the same two changes. `out-js` is now compiler-owned: a later `bynk build` or `bynk test` into the same `--output` removes the `.js`, `.map` and `.json` files it did not write, so copy `out-js` elsewhere (or run it) before the next build.
