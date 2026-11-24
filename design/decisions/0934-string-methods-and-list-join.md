@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `String` gains `isEmpty`, `trimStart`, `trimEnd`, `padStart`, `padEnd`, `repeat`, `lines`, `lastIndexOf` and `replaceFirst`, `List[String]` gains `join(sep)`, and `bynk.string` is deprecated
----
+# 0934 — String method completion, List[String].join, and bynk.string deprecated
 
-## ADR: string-methods-and-list-join
-title: String method completion, List[String].join, and bynk.string deprecated
-summary: Adds nine String kernel methods and join on a List[String], and deprecates the one-function bynk.string commons
+- **Status:** Accepted (v0.676)
 
 **Context.** The `String` kernel lacked everyday operations, and joining a list was the free function `join(parts, sep)` in `bynk.string`, a commons that held nothing else, the same half-finished move ADR 0116 left for `List`.
 

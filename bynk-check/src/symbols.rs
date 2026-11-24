@@ -609,6 +609,24 @@ impl UnitTable {
         self.unselected_consumed_types.iter().cloned().collect()
     }
 
+    /// #4270: [`UnitTable::unselected_names`] less the names a selected type of a
+    /// user unit took (`imported_from` says whose each name now is): a consumed
+    /// `Refusal` is in scope, whatever `bynk` exports under that name.
+    pub fn unselected_names_in(
+        &self,
+        imported_from: &std::collections::HashMap<String, String>,
+    ) -> std::collections::HashSet<String> {
+        self.unselected_consumed_types
+            .iter()
+            .filter(|n| {
+                imported_from
+                    .get(*n)
+                    .is_none_or(|owner| is_first_party_name(owner))
+            })
+            .cloned()
+            .collect()
+    }
+
     /// The parts of this table that are **not** a function of the unit's own
     /// files (#3243 S2.3b): everything `phase_symbol_tables` builds from a unit's
     /// own sources is covered by hashing those sources, so a file-check digest
