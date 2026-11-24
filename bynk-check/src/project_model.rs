@@ -8480,7 +8480,7 @@ mod firstparty_injection_tests {
         add(cloudflare, "bynk.cloudflare");
         add(map, "bynk.map");
         add(list, "bynk.list");
-        add(locale || string, "bynk.string");
+        add(string, "bynk.string");
         // The `bynk` adapter's own `uses bynk.locale.types`, seen because the
         // adapter was injected before the scan ran.
         add(locale || locale_types || bynk, "bynk.locale.types");

@@ -2507,7 +2507,8 @@ in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
 (deprecated: every function is now a `List`, `Map` or `Set` method, and each call warns with a
 fix to it; `bynk.set` has `union`,
 `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`),
-`bynk.string` (string helpers) and `bynk.url` (URLs and query strings, below).
+`bynk.string` (deprecated: its one function, `join`, is now `xs.join(sep)` on a `List[String]`, and a call warns with a fix to it)
+and `bynk.url` (URLs and query strings, below).
 These are ordinary functions with no effects; see the
 [type system reference](/reference/types/).
 
