@@ -1256,6 +1256,62 @@ export function cookieObject(
   return fieldsObject(search, fields, "cookies", false);
 }
 
+/** #3911 (decision B): the items of a header's list value (RFC 9110 §5.6.1): comma-separated,
+ *  commas inside a quoted string do not split, and each item is trimmed. Empty items are dropped,
+ *  as the RFC's list syntax allows them. `a, "b,c", d` is `a`, `"b,c"`, `d` (the quotes stay: values
+ *  are not otherwise decoded). */
+export function splitHeaderList(value: string): string[] {
+  const items: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (let i = 0; i < value.length; i++) {
+    const c = value[i];
+    if (quoted && c === "\\" && i + 1 < value.length) {
+      current += c + value[++i];
+      continue;
+    }
+    if (c === '"') quoted = !quoted;
+    if (c === "," && !quoted) {
+      items.push(current);
+      current = "";
+    } else {
+      current += c;
+    }
+  }
+  items.push(current);
+  return items.map((i) => i.trim()).filter((i) => i !== "");
+}
+
+/** #3911 (decisions A-C): decode the request's headers into the JSON object a record's codec reads,
+ *  field by field, by the typed `query` rules. Names compare without case (`wire` or the field's
+ *  name, lowercased); repeated lines are one value, as `Headers` combines them; a `List` field
+ *  splits it ([`splitHeaderList`]) and any other reads it whole, trimmed. Values are not otherwise
+ *  decoded. A header the route's auth seam consumed (`hidden`) reads as absent. A rejection names
+ *  `headers.<field>`. This is the one "header text to typed value" step; a later use (an actor's
+ *  envelope, #918) calls it rather than adding a second decoder. */
+export function headersObject(
+  request: Request,
+  fields: readonly QueryField[],
+  hidden?: readonly string[],
+  hideCookie?: string,
+): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
+  const hide = new Set((hidden ?? []).map((h) => h.toLowerCase()));
+  const lowered = fields.map((f) => ({ ...f, wire: wireName(f).toLowerCase() }));
+  const search = new URLSearchParams();
+  for (const f of lowered) {
+    let raw = hide.has(f.wire) ? null : request.headers.get(f.wire);
+    // A `SignedCookie` actor's credential is consumed at the seam: the `Cookie` a field reads omits it,
+    // as the raw view and the `cookies` forms do (#3386).
+    if (raw !== null && f.wire === "cookie" && hideCookie !== undefined) {
+      const rest = cookiePairs(raw).filter(([n]) => n !== hideCookie);
+      raw = rest.length === 0 ? null : rest.map(([n, v]) => `${n}=${v}`).join("; ");
+    }
+    if (raw === null) continue;
+    for (const v of f.list ? splitHeaderList(raw) : [raw.trim()]) search.append(f.wire, v);
+  }
+  return fieldsObject(search, lowered, "headers", false);
+}
+
 // #3277 (decision A, second form): an HTTP handler's `cookies: RequestCookies` — a
 // read-only view of the request's cookies, for a name a record field cannot spell
 // (`__Host-sid`). `get` is the first cookie of a name, `all` every one in header
@@ -1323,6 +1379,47 @@ export function cookieString(wire: JsonValue, fields?: readonly QueryField[]): s
   const pairs: string[] = [];
   new URLSearchParams(query.slice(1)).forEach((value, name) => pairs.push(`${name}=${value}`));
   return pairs.join("; ");
+}
+
+/** #3911: the headers a system-tier driver sends for a handler's `headers` argument: header text
+ *  (`Wire`), a typed
+ *  record's wire form (what the record's `serialise_*` makes) as `name -> value` (a list's items
+ *  joined with `, `, a name written as its `@name`), or a `RequestHeaders` view's own headers. */
+export function headerPairs(source: unknown, fields?: readonly QueryField[]): Record<string, string> {
+  // A raw case sends header text: `name: value` lines, one per line (a line without a colon is ignored).
+  if (typeof source === "string") {
+    const lines: Record<string, string> = {};
+    for (const line of source.split("\n")) {
+      const i = line.indexOf(":");
+      if (i <= 0) continue;
+      const name = line.slice(0, i).trim().toLowerCase();
+      const value = line.slice(i + 1).trim();
+      // A repeated line is one combined value, as on the wire.
+      lines[name] = name in lines ? `${lines[name]}, ${value}` : value;
+    }
+    return lines;
+  }
+  if (source !== null && typeof source === "object" && REQUEST_HEADER_PAIRS in (source as object)) {
+    return requestHeaderPairs(source as RequestHeaders);
+  }
+  const out: Record<string, string> = {};
+  const query = queryString(source as JsonValue, fields);
+  if (query === "") return out;
+  const lists = new Set((fields ?? []).filter((f) => f.list).map((f) => wireName(f)));
+  const listNames = new Set(
+    Object.keys((source ?? {}) as Record<string, JsonValue>).filter(
+      (k) => Array.isArray((source as Record<string, JsonValue>)[k]),
+    ),
+  );
+  new URLSearchParams(query.slice(1)).forEach((value, name) => {
+    // A list's items are joined with `, ` and split again by the router, so an item holding a comma or
+    // a quote would not arrive as one: the driver refuses it rather than send a different list.
+    if ((lists.has(name) || listNames.has(name)) && /[,"]/.test(value)) {
+      throw new Error(`headers.${name}: a list item with a comma or a quote does not survive a header (${JSON.stringify(value)})`);
+    }
+    out[name] = name in out ? `${out[name]}, ${value}` : value;
+  });
+  return out;
 }
 
 /** #3276 (decisions B-D): decode a form body (`application/x-www-form-urlencoded`)
@@ -1956,5 +2053,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

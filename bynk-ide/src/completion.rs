@@ -1206,7 +1206,7 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
     (
         "headers",
         "RequestHeaders",
-        "the request's headers, read-only",
+        "the request's headers: a record `T` decoded from them and validated before the handler runs (`400` on a violation), or a raw, read-only `RequestHeaders` view",
     ),
     (
         "cookies",
@@ -2008,6 +2008,15 @@ pub fn variants_for_ty(
         Ty::Named { name, .. } => sum_type_variants(name, doc_text, files),
         Ty::Result(..) => built_in_variants(&["Ok", "Err"], "Result"),
         Ty::Option(..) => built_in_variants(&["Some", "None"], "Option"),
+        // #3878: a case's view of a queue verdict also has `Undecodable`, a body that did not decode.
+        Ty::QueueResult => {
+            let mut names: Vec<&str> = bynk_syntax::ast::QUEUE_VARIANTS
+                .iter()
+                .map(|v| v.name)
+                .collect();
+            names.push(bynk_check::checker::QUEUE_UNDECODABLE);
+            built_in_variants(&names, "QueueResult")
+        }
         _ => Vec::new(),
     }
 }
@@ -5641,6 +5650,17 @@ fn Box.size(self) -> Int { 1 }
             .map(|c| c.label)
             .collect();
         assert_eq!(got, vec!["Some".to_string(), "None".to_string()]);
+    }
+
+    #[test]
+    fn a_queue_verdict_offers_undecodable_after_its_own_variants() {
+        // #3878: a `system` case's `expect r is ` on a queue address.
+        let verdict = TYS.intern(Ty::QueueResult);
+        let got: Vec<String> = variants_for_ty(verdict, &TYS, "", None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(got, ["Ack", "Retry", "Undecodable"]);
     }
 
     #[test]

@@ -264,6 +264,7 @@ const WORKER_ORDER: &[&str] = &[
     "__pathLeaf",
     "__queryObject",
     "__cookieObject",
+    "__headersObject",
     "__multipartMediaTypeMatches",
     "__multipartObject",
     "__formMediaTypeMatches",

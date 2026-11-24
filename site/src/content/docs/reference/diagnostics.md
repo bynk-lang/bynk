@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **924** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **922** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -328,13 +328,10 @@ There are **924** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.body_on_get_or_delete`](/reference/diagnostics/bynk.http.body_on_get_or_delete/) — A GET or DELETE handler declares a `body` parameter.
 - [`bynk.http.cache_bad_immutable`](/reference/diagnostics/bynk.http.cache_bad_immutable/) — A `@cache` annotation's `immutable` is not a `Bool` literal.
 - [`bynk.http.cache_bad_max_age`](/reference/diagnostics/bynk.http.cache_bad_max_age/) — A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal.
-- [`bynk.http.cache_bad_no_store`](/reference/diagnostics/bynk.http.cache_bad_no_store/) — A `@cache` annotation's `noStore` is not a `Bool` literal.
 - [`bynk.http.cache_bad_scope`](/reference/diagnostics/bynk.http.cache_bad_scope/) — A `@cache` annotation's `scope` is not `public` or `private`.
 - [`bynk.http.cache_duplicate`](/reference/diagnostics/bynk.http.cache_duplicate/) — A handler carries more than one `@cache` annotation.
 - [`bynk.http.cache_max_age_fractional_seconds`](/reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/) — A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds.
-- [`bynk.http.cache_no_store_conflict`](/reference/diagnostics/bynk.http.cache_no_store_conflict/) — A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`.
 - [`bynk.http.cache_on_non_get`](/reference/diagnostics/bynk.http.cache_on_non_get/) — A `@cache` annotation is placed on a handler that is not `on http GET`.
-- [`bynk.http.cache_public_authenticated`](/reference/diagnostics/bynk.http.cache_public_authenticated/) — A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.
 - [`bynk.http.cache_public_reads_cookies`](/reference/diagnostics/bynk.http.cache_public_reads_cookies/) — A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another.
 - [`bynk.http.cache_unknown_arg`](/reference/diagnostics/bynk.http.cache_unknown_arg/) — A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).
 - [`bynk.http.cf_wrong_type`](/reference/diagnostics/bynk.http.cf_wrong_type/) — An HTTP handler's `cf` parameter is not typed `RequestCf`.
@@ -371,7 +368,8 @@ There are **924** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.form_on_sum_route`](/reference/diagnostics/bynk.http.form_on_sum_route/) — A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself.
 - [`bynk.http.form_unknown_arg`](/reference/diagnostics/bynk.http.form_unknown_arg/) — A `@form` annotation is given an argument; it takes none.
 - [`bynk.http.header_question_not_found`](/reference/diagnostics/bynk.http.header_question_not_found/) — <span class="diagnostic-severity">Warning</span> `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).
-- [`bynk.http.headers_wrong_type`](/reference/diagnostics/bynk.http.headers_wrong_type/) — An HTTP handler's `headers` parameter is not typed `RequestHeaders`.
+- [`bynk.http.headers_field_not_stringy`](/reference/diagnostics/bynk.http.headers_field_not_stringy/) — A field of an HTTP handler's `headers` record has a type a header cannot carry.
+- [`bynk.http.headers_wrong_type`](/reference/diagnostics/bynk.http.headers_wrong_type/) — An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.
 - [`bynk.http.invalid_path`](/reference/diagnostics/bynk.http.invalid_path/) — An HTTP route path is malformed.
 - [`bynk.http.json_duplicate`](/reference/diagnostics/bynk.http.json_duplicate/) — A handler carries more than one `@json` annotation.
 - [`bynk.http.json_invalid_arg`](/reference/diagnostics/bynk.http.json_invalid_arg/) — A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`.

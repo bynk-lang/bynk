@@ -288,6 +288,14 @@ reported through `__bynkReportFault`, so Cloudflare's Cron Past Events shows the
 as failed; a throw is logged with its stack, reported and rethrown. An unmatched
 `event.cron` logs one warning.
 
+A queue consumer's entry (#3878) never retries a message whose body does not decode as the
+handler's message type. It calls `__bynkUndecodable`, which logs one record naming the queue, the
+message type and the decode error's path and kind (never the body), and then either sends
+`msg.body` unchanged to the consumer's dead-letter queue through its `__BYNK_DLQ_<QUEUE>`
+producer binding (a `[[queues.producers]]` entry of the generated `wrangler.toml`) and acks, or,
+with no dead-letter queue, reports a fault through `__bynkReportFault` and acks. A failed
+dead-letter send retries the message.
+
 A **detached effect** (`e.detach()`) lowers on the Workers target to
 `__bynkDetach(<effect>, deps.__exec, <site>)`: the effect's `Promise` is handed to the
 execution context's `waitUntil` rather than awaited, so it settles *after* the

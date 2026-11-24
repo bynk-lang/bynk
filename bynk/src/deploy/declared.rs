@@ -69,7 +69,8 @@ pub(crate) fn declared_bindings(
                 jurisdiction: jurisdiction.clone(),
             }),
             BindingSource::RateLimitInstance { .. } => out.ratelimits.push(name),
-            BindingSource::QueueProducer { queue, .. } => out.producer_queues.push(queue.clone()),
+            BindingSource::QueueProducer { queue, .. }
+            | BindingSource::QueueDeadLetter { queue } => out.producer_queues.push(queue.clone()),
             BindingSource::AnalyticsDataset { .. } => out.analytics_datasets.push(AnalyticsDecl {
                 name: names::analytics_dataset_name(dir, &name),
                 binding: name,

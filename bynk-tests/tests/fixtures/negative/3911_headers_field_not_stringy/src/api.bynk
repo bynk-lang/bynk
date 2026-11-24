@@ -1,0 +1,14 @@
+context api
+
+type Range = { from: Int, to: Int }
+
+type Upload = {
+  range: Range,
+  @name("if-match") ifMatch: Option[String],
+}
+
+service api from http {
+  on PUT("/files") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

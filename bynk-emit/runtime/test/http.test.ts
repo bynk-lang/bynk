@@ -17,6 +17,9 @@ import {
   untilBodyTooLarge,
   applyCors,
   applyChallenge,
+  headersObject,
+  headerPairs,
+  splitHeaderList,
   corsPreflightResponse,
   applySecurityHeaders,
   weakETag,
@@ -1717,6 +1720,50 @@ test("cfObject: isEUCountry is \"1\" in the EU and otherwise omitted or false", 
   assert.deepEqual(cfObject(requestWithCf({})), {});
 });
 
+test("splitHeaderList: splits on commas outside quotes and trims", () => {
+  assert.deepEqual(splitHeaderList('a, "b,c", d'), ["a", '"b,c"', "d"]);
+  assert.deepEqual(splitHeaderList('W/"x", "y\\",z"'), ['W/"x"', '"y\\",z"']);
+  assert.deepEqual(splitHeaderList(" , a ,, b ,"), ["a", "b"]);
+  assert.deepEqual(splitHeaderList(""), []);
+});
+
+test("headersObject: names match without case, a List splits, others read whole and trimmed", () => {
+  const req = new Request("https://x.test/", {
+    headers: { "Content-Length": " 42 ", "X-Tag": 'a, "b,c", d', "Date": "Tue, 15 Nov 1994 08:12:31 GMT" },
+  });
+  const r = headersObject(req, [
+    { name: "length", wire: "content-length", kind: "int", list: false, option: false },
+    { name: "tag", wire: "X-TAG", kind: "string", list: true, option: false },
+    { name: "date", kind: "string", list: false, option: false },
+    { name: "key", wire: "idempotency-key", kind: "string", list: false, option: true },
+  ]);
+  assert.deepEqual(r, {
+    ok: true,
+    value: { length: 42, tag: ["a", '"b,c"', "d"], date: "Tue, 15 Nov 1994 08:12:31 GMT" },
+  });
+});
+
+test("headersObject: an unreadable value passes on as text; a hidden header reads as absent", () => {
+  const req = new Request("https://x.test/", { headers: { "content-length": "abc", authorization: "Bearer t" } });
+  const spec = [
+    { name: "length", wire: "content-length", kind: "int" as const, list: false, option: false },
+    { name: "auth", wire: "authorization", kind: "string" as const, list: false, option: true },
+  ];
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { length: "abc", auth: { kind: "Some", value: "Bearer t" } } });
+  assert.deepEqual(headersObject(req, spec, ["Authorization"]), { ok: true, value: { length: "abc" } });
+});
+
+test("headerPairs: a record's wire form becomes header lines; a list joins; an enum is its name", () => {
+  assert.deepEqual(
+    headerPairs(
+      { length: 42, tag: ["a", "b"], key: { kind: "Some", value: "k" }, none: { kind: "None" }, s: { kind: "Open" } },
+      [{ name: "length", wire: "content-length", kind: "int", list: false, option: false }],
+    ),
+    { "content-length": "42", tag: "a, b", key: "k", s: "Open" },
+  );
+  assert.deepEqual(headerPairs({}, []), {});
+});
+
 test("applyChallenge: a 401 gets one challenge line each; others are untouched", () => {
   const req = new Request("https://x.test/");
   const res = applyChallenge(new Response(null, { status: 401 }), req, [
@@ -1769,4 +1816,27 @@ test("privateByDefault: says private unless a Cache-Control is already set", () 
   const cached = applyCache(httpResultToResponse(HttpResult.Ok(1), id), 60, "public");
   assert.equal(privateByDefault(cached).headers.get("cache-control"), "public, max-age=60");
   assert.equal(privateByDefault(noStore(httpResultToResponse(HttpResult.Ok(1), id))).headers.get("cache-control"), "no-store");
+});
+
+test("headersObject: a SignedCookie's session cookie is hidden from a cookie field", () => {
+  const req = new Request("https://x.test/", { headers: { cookie: "sid=secret; theme=dark" } });
+  const spec = [{ name: "cookie", kind: "string" as const, list: false, option: true }];
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { cookie: { kind: "Some", value: "sid=secret; theme=dark" } } });
+  assert.deepEqual(headersObject(req, spec, undefined, "sid"), {
+    ok: true,
+    value: { cookie: { kind: "Some", value: "theme=dark" } },
+  });
+  const only = new Request("https://x.test/", { headers: { cookie: "sid=secret" } });
+  assert.deepEqual(headersObject(only, spec, undefined, "sid"), { ok: true, value: {} });
+});
+
+test("headerPairs: repeated Wire lines combine; a list item with a comma or quote is refused", () => {
+  assert.deepEqual(headerPairs("X-Tag: a\nx-tag: b\nno colon\nHost: h"), { "x-tag": "a, b", host: "h" });
+  assert.throws(
+    () => headerPairs({ tags: ["a,b"] }, [{ name: "tags", kind: "string", list: true, option: false }]),
+    /does not survive/,
+  );
+  assert.throws(() => headerPairs({ tags: ['say "x"'] }), /does not survive/);
+  // A non-list value may hold a comma (a `Date`).
+  assert.deepEqual(headerPairs({ date: "Tue, 15 Nov 1994" }), { date: "Tue, 15 Nov 1994" });
 });

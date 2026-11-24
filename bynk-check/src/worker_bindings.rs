@@ -99,6 +99,11 @@ pub enum BindingSource {
     /// Never seen by handlers: they reach it through the instance's
     /// `WorkersQueue`.
     QueueProducer { capability: String, queue: String },
+    /// #3878: the `[[queues.producers]]` binding through which a queue consumer sends a message
+    /// it cannot decode to its dead-letter queue `queue`, as written (`bynk deploy`
+    /// environment-qualifies it). The consumer's own, named after its queue, and never seen by
+    /// handlers: only the generated `queue` entry reads it.
+    QueueDeadLetter { queue: String },
     /// Standard-library P3b (#2582): the `[[analytics_engine_datasets]]`
     /// binding of an `Analytics` instance (`capability Signups = Analytics`),
     /// one dataset per instance under a derived name. Never seen by handlers:
@@ -255,6 +260,9 @@ impl BindingSource {
             Self::QueueProducer { capability, queue } => format!(
                 "the queue producer binding of derived capability `{capability}` (to queue `{queue}`)"
             ),
+            Self::QueueDeadLetter { queue } => {
+                format!("the dead-letter producer binding of a queue consumer (to queue `{queue}`)")
+            }
             Self::AnalyticsDataset { capability } => {
                 format!("the Analytics Engine binding of derived capability `{capability}`")
             }
@@ -803,7 +811,7 @@ fn declared_at(
                 };
                 (d.name.name == *capability && d.derived.is_some()).then_some(d.span)
             }),
-            BindingSource::EventsFanout { .. } => None,
+            BindingSource::EventsFanout { .. } | BindingSource::QueueDeadLetter { .. } => None,
         }?;
         Some((parsed[i].identity_path(), span))
     })
