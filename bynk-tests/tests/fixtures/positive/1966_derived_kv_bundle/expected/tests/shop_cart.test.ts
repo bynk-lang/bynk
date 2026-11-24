@@ -92,7 +92,7 @@ function __bynkRecordDeps(deps: any, spec: Record<string, string[]>, obs: { log:
 
 type __Kv_get_Call = { key: string };
 type __Kv_put_Call = { key: string; value: string };
-type __Kv_putTtl_Call = { key: string; value: string; ttlSeconds: number };
+type __Kv_putTtl_Call = { key: string; value: string; ttl: __ns_bynk_cloudflare.KvTtl };
 type __Kv_delete_Call = { key: string };
 type __Kv_list_Call = { prefix: Option<string> };
 type __Kv_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
@@ -102,7 +102,7 @@ type __Kv_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: 
 type __Kv_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
 type __PriceCache_get_Call = { key: string };
 type __PriceCache_put_Call = { key: string; value: string };
-type __PriceCache_putTtl_Call = { key: string; value: string; ttlSeconds: number };
+type __PriceCache_putTtl_Call = { key: string; value: string; ttl: __ns_bynk_cloudflare.KvTtl };
 type __PriceCache_delete_Call = { key: string };
 type __PriceCache_list_Call = { prefix: Option<string> };
 type __PriceCache_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
@@ -113,7 +113,7 @@ type __PriceCache_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
 type __Prices_price_Call = { sku: string };
 type __Sessions_get_Call = { key: string };
 type __Sessions_put_Call = { key: string; value: string };
-type __Sessions_putTtl_Call = { key: string; value: string; ttlSeconds: number };
+type __Sessions_putTtl_Call = { key: string; value: string; ttl: __ns_bynk_cloudflare.KvTtl };
 type __Sessions_delete_Call = { key: string };
 type __Sessions_list_Call = { prefix: Option<string> };
 type __Sessions_getWith_Call = { key: string; options: __ns_bynk_cloudflare.KvGet };
@@ -134,7 +134,7 @@ class __Stub_PriceCache {
   }
 
   async get(key: string): globalThis.Promise<Option<string>> {
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -162,6 +162,7 @@ class __Stub_PriceCache {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -169,6 +170,7 @@ class __Stub_PriceCache {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -255,9 +257,8 @@ function __bynkTest_PriceCache(): __ns_bynk_cloudflare.Kv {
   };
   const expiryOf = (e: Expiration): number | undefined => {
     if (e.tag === "After") {
-      const ttl = e.ttl ?? 0;
-      if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return 0 + globalThis.Math.ceil(ttl / 1000) * 1000;
+      // `KvTtl` carries the 60-second floor; whole seconds round towards zero.
+      return 0 + globalThis.Math.trunc((e.ttl ?? 0) / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
@@ -282,10 +283,10 @@ function __bynkTest_PriceCache(): __ns_bynk_cloudflare.Kv {
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
-    // the platform and the integration tier do.
-    async putTtl(key, value, ttlSeconds) {
-      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + ttlSeconds * 1000 });
+    // Unchecked, as `putTtl` always was (its `KvTtl` carries the floor); its
+    // expiry is kept and listed, as the platform and the integration tier do.
+    async putTtl(key, value, ttl) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + globalThis.Math.trunc(ttl / 1000) * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -295,9 +296,6 @@ function __bynkTest_PriceCache(): __ns_bynk_cloudflare.Kv {
     },
     async getWith(key, options) {
       checkKey(key);
-      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
-        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
-      }
       const e = store.get(key);
       return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
     },
@@ -346,9 +344,8 @@ function __bynkTest_Sessions(): __ns_bynk_cloudflare.Kv {
   };
   const expiryOf = (e: Expiration): number | undefined => {
     if (e.tag === "After") {
-      const ttl = e.ttl ?? 0;
-      if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return 0 + globalThis.Math.ceil(ttl / 1000) * 1000;
+      // `KvTtl` carries the 60-second floor; whole seconds round towards zero.
+      return 0 + globalThis.Math.trunc((e.ttl ?? 0) / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
@@ -373,10 +370,10 @@ function __bynkTest_Sessions(): __ns_bynk_cloudflare.Kv {
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
-    // the platform and the integration tier do.
-    async putTtl(key, value, ttlSeconds) {
-      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + ttlSeconds * 1000 });
+    // Unchecked, as `putTtl` always was (its `KvTtl` carries the floor); its
+    // expiry is kept and listed, as the platform and the integration tier do.
+    async putTtl(key, value, ttl) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + globalThis.Math.trunc(ttl / 1000) * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -386,9 +383,6 @@ function __bynkTest_Sessions(): __ns_bynk_cloudflare.Kv {
     },
     async getWith(key, options) {
       checkKey(key);
-      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
-        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
-      }
       const e = store.get(key);
       return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
     },
@@ -437,9 +431,8 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
   };
   const expiryOf = (e: Expiration): number | undefined => {
     if (e.tag === "After") {
-      const ttl = e.ttl ?? 0;
-      if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return 0 + globalThis.Math.ceil(ttl / 1000) * 1000;
+      // `KvTtl` carries the 60-second floor; whole seconds round towards zero.
+      return 0 + globalThis.Math.trunc((e.ttl ?? 0) / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
@@ -464,10 +457,10 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
-    // the platform and the integration tier do.
-    async putTtl(key, value, ttlSeconds) {
-      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + ttlSeconds * 1000 });
+    // Unchecked, as `putTtl` always was (its `KvTtl` carries the floor); its
+    // expiry is kept and listed, as the platform and the integration tier do.
+    async putTtl(key, value, ttl) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: 0 + globalThis.Math.trunc(ttl / 1000) * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -477,9 +470,6 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     },
     async getWith(key, options) {
       checkKey(key);
-      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
-        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
-      }
       const e = store.get(key);
       return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
     },
@@ -525,7 +515,7 @@ async function test_an_instance_is_in_memory() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], PriceCache: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Prices: ["price"], Sessions: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -553,6 +543,7 @@ async function test_an_instance_is_in_memory() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -560,6 +551,7 @@ async function test_an_instance_is_in_memory() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -626,7 +618,7 @@ async function test_instances_are_separate() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], PriceCache: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Prices: ["price"], Sessions: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -654,6 +646,7 @@ async function test_instances_are_separate() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -661,6 +654,7 @@ async function test_instances_are_separate() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -724,7 +718,7 @@ async function test_a_stubbed_instance_answers() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps("a stubbed instance answers");
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -752,6 +746,7 @@ async function test_a_stubbed_instance_answers() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -759,6 +754,7 @@ async function test_a_stubbed_instance_answers() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -820,7 +816,7 @@ async function test_instances_are_separate_at_integration() {
     __ns_shop_cart.__resetAgents();
     const deps = __makeTestDeps();
     const { Cart, __makeCart, peek, price, remember, touch } = __ns_shop_cart;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -848,6 +844,7 @@ async function test_instances_are_separate_at_integration() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -855,6 +852,7 @@ async function test_instances_are_separate_at_integration() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;

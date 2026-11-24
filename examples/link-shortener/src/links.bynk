@@ -24,7 +24,7 @@ service api from http {
 		match Slug.of(raw.slice(0, 8)) {
 			Err(_) => ServerError("could not generate a slug"),
 			Ok(code) => {
-				let _ <- Kv.putTtl(keyOf(code), body.target, 86400)
+				let _ <- Kv.putTtl(keyOf(code), body.target, 1.day)
 				Created(CreatedView { code: code, target: body.target })
 			},
 		}

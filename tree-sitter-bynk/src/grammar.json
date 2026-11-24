@@ -2256,6 +2256,14 @@
         },
         {
           "type": "STRING",
+          "value": "AtLeast"
+        },
+        {
+          "type": "STRING",
+          "value": "AtMost"
+        },
+        {
+          "type": "STRING",
           "value": "MinLength"
         },
         {
@@ -2351,6 +2359,35 @@
             {
               "type": "SYMBOL",
               "name": "decimal_literal"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "-"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "number_literal"
+            },
+            {
+              "type": "STRING",
+              "value": "."
+            },
+            {
+              "type": "SYMBOL",
+              "name": "identifier"
             }
           ]
         },

@@ -22,9 +22,21 @@ is no `.unsafe` escape hatch (that is opaque-only).
 | `NonNegative` | value ≥ 0 |
 | `Positive` | value > 0 |
 | `InRange(lo, hi)` | lo ≤ value ≤ hi (inclusive) |
+| `AtLeast(lo)` | value ≥ lo (inclusive) |
+| `AtMost(hi)` | value ≤ hi (inclusive) |
 
-These apply to `Int`, `Float` and `Decimal`. The `InRange` bounds are literals of
-the base's own type: `0`, `0.0` or `0.00d`.
+These apply to `Int`, `Float`, `Decimal` and `Duration`. The `InRange`, `AtLeast`
+and `AtMost` bounds are literals of the base's own type: `0`, `0.0`, `0.00d` or,
+for a `Duration`, `1.second`; a bound of another type is
+`bynk.types.no_numeric_coercion`. `AtLeast` and `AtMost` state a one-sided limit
+without inventing the other end; they overlap `NonNegative` (`AtLeast(0)`) as
+`InRange` already does, and an `AtLeast` above an `AtMost` is
+`bynk.types.empty_refinement`.
+
+A `Duration` is compared in milliseconds, so `type Ttl = Duration where AtLeast(60.seconds)`
+admits `30.days` and refuses `30.seconds` when the program compiles, and `Ttl.of(d)` gives a
+`ValidationError` for a computed span under a minute. The `bynk.cloudflare` KV types
+`KvTtl` and `KvCacheTtl` are such refinements ([KV](/reference/bynk-capabilities/#metadata-expiry-and-binary-values)).
 
 ### String
 
