@@ -177,6 +177,13 @@ adapters, never a context. Another project depends on it under
 [`[package]`](/reference/tooling/manifest/#package) and
 [Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/).
 
+### prelude type {#term-prelude-type}
+
+A compiler-known type a unit can name with no import, as `Option` can. A prelude
+type's declaring unit is reached as if the unit had written `uses` for it
+whenever the unit names the type or writes a method that yields one. `Ordering`
+is the first. See [Ordering](/reference/types/#ordering).
+
 ### project vs legacy mode {#term-project-vs-legacy-mode}
 
 *Project mode* is a `bynk.toml`-driven directory layout (a `src`/`tests` split,

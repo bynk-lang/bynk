@@ -49,7 +49,10 @@ pub fn compute_is_uses_commons_type(
     types: &HashMap<String, Arc<TypeDecl>>,
     name: &str,
 ) -> bool {
-    matches!(imported_from_kind.get(name), Some(UnitKind::Commons)) && types.contains_key(name)
+    // #4231: the prelude `Ordering` is shared by every context as it is, not
+    // rebranded per context, so it is constructible anywhere.
+    matches!(imported_from_kind.get(name), Some(UnitKind::Commons))
+        && types.get(name).is_some_and(|t| !is_prelude_type(t))
 }
 
 #[cfg(test)]
@@ -110,6 +113,54 @@ mod compute_is_uses_commons_type_tests {
         assert!(
             !compute_is_uses_commons_type(&kinds, &types, "Local"),
             "absent from imported_from_kind entirely — a local declaration"
+        );
+    }
+
+    /// #4231: the prelude `Ordering` (declared by `bynk.ordering`) is not rebranded,
+    /// but a lookalike of the same name and variants declared in a user's file is.
+    #[test]
+    fn the_prelude_ordering_is_exempt_and_a_lookalike_is_not() {
+        use bynk_syntax::ast::{SumBody, Variant};
+        let sum = |file| {
+            let variant = |n: &str| Variant {
+                name: Ident {
+                    name: n.to_string(),
+                    span: Span::default(),
+                },
+                payload: Vec::new(),
+                documentation: None,
+                span: Span::default(),
+                trivia: Trivia::default(),
+            };
+            let mut decl = (*bare_record_type("Ordering")).clone();
+            decl.body = TypeBody::Sum(SumBody {
+                variants: ["Less", "Equal", "Greater"].map(variant).to_vec(),
+                trailing_comments: Default::default(),
+                span: Span::default(),
+                embeds: Vec::new(),
+            });
+            decl.span = Span::new_in(file, 0, 0);
+            Arc::new(decl)
+        };
+        let unit = crate::firstparty::UNITS
+            .iter()
+            .find(|u| u.name == bynk_std::ORDERING_UNIT)
+            .expect("bynk.ordering is registered");
+        let mut kinds = HashMap::new();
+        kinds.insert("Ordering".to_string(), UnitKind::Commons);
+        let mut types = HashMap::new();
+        types.insert(
+            "Ordering".to_string(),
+            sum(crate::project_model::firstparty_file_id(unit)),
+        );
+        assert!(
+            !compute_is_uses_commons_type(&kinds, &types, "Ordering"),
+            "the first-party Ordering is shared by every context as it is"
+        );
+        types.insert("Ordering".to_string(), sum(bynk_syntax::span::FileId(0)));
+        assert!(
+            compute_is_uses_commons_type(&kinds, &types, "Ordering"),
+            "a user's own Ordering with the same variants is rebranded like any commons type"
         );
     }
 }
@@ -4751,7 +4802,7 @@ pub(crate) fn bare_variant_owners<'a>(
     // says so, so a sum of the author's own that shares `Less`/`Equal`/`Greater`
     // is never ambiguous with it.
     if in_scope.len() > 1 {
-        in_scope.retain(|t| !is_prelude_ordering(t));
+        in_scope.retain(|t| !is_prelude_type(t));
     }
     if in_scope.is_empty() {
         left_out
@@ -4760,14 +4811,19 @@ pub(crate) fn bare_variant_owners<'a>(
     }
 }
 
-/// #3955: whether `t` is the `Ordering` of `bynk.ordering`, which a unit reaches
-/// without writing `uses`. Its variants resolve only from context (an expected
-/// type, the other operand of a comparison, a `match`), unless nothing else in
-/// scope declares the name.
-pub(crate) fn is_prelude_ordering(t: &TypeDecl) -> bool {
-    t.name.name == "Ordering"
-        && matches!(&t.body, TypeBody::Sum(s)
-            if s.variants.iter().map(|v| v.name.name.as_str()).eq(["Less", "Equal", "Greater"]))
+/// #3955, #4231: whether `t` is a prelude type ([`bynk_std::PRELUDE_TYPES`]), the
+/// declaration of a first-party unit a unit reaches without writing `uses`. Its
+/// variants resolve only from context (an expected type, the other operand of a
+/// comparison, a `match`) unless nothing else in scope declares the name, and it
+/// is shared by every context as it is, not rebranded.
+pub(crate) fn is_prelude_type(t: &TypeDecl) -> bool {
+    bynk_std::PRELUDE_TYPES.iter().any(|p| {
+        p.name == t.name.name
+            && crate::firstparty::UNITS
+                .iter()
+                .find(|u| u.name == p.unit)
+                .is_some_and(|u| t.span.file == crate::project_model::firstparty_file_id(u))
+    })
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its
