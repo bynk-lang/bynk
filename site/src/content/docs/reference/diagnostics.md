@@ -416,7 +416,7 @@ There are **921** codes in total. Every code is an error unless it is marked **W
 ## History properties
 
 - [`bynk.history.not_an_agent`](/reference/diagnostics/bynk.history.not_an_agent/) — A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155).
-- [`bynk.history.not_generable`](/reference/diagnostics/bynk.history.not_generable/) — A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155).
+- [`bynk.history.not_generable`](/reference/diagnostics/bynk.history.not_generable/) — A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` pattern with a lookahead), so its call-history cannot be driven (testing track slice 7, ADR 0155).
 - [`bynk.history.outside_property`](/reference/diagnostics/bynk.history.outside_property/) — `History[Agent]` appears outside a `property`'s `for all` binding — it is a test-only generator, not a value type (testing track slice 7, ADR 0155).
 - [`bynk.history.restates_invariant`](/reference/diagnostics/bynk.history.restates_invariant/) — A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).
 
