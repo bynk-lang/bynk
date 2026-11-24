@@ -1,15 +1,6 @@
----
-level: minor
-changelog: `bynk test` builds its JavaScript into `<output>/out-js`, inside the output directory, and the emitted `tsconfig.json` follows (`outDir` is `./out-js`, and `out-js` is excluded from the project), so concurrent runs whose `--output`s share a parent no longer overwrite one another's compiled tree
-breaking: The compiled JavaScript moves from `<output>/../out-js` to `<output>/out-js`, and the emitted `tsconfig.json` now has `"outDir": "./out-js"` and excludes `out-js`; anything that read `../out-js` (a script running the `tsc`-built JavaScript, a Wrangler or CI step pointing at it) must read `<output>/out-js`, and a `tsconfig.json` copied from an earlier output needs the same two changes. `out-js` is now compiler-owned: a later `bynk build` or `bynk test` into the same `--output` removes the `.js`, `.map` and `.json` files it did not write, so copy `out-js` elsewhere (or run it) before the next build.
----
-fix: build `bynk test`'s JavaScript inside the output directory (#4159)
+# 0890 — The compiled JavaScript lives inside the output root
 
-Closes #4159.
-
-## ADR: out-js-inside-the-output-root
-title: The compiled JavaScript lives inside the output root
-summary: `<output>/out-js` replaces the sibling `<output>/../out-js`, so a run's artefacts are private to it
+- **Status:** Accepted (v0.641)
 
 **Context.** `bynk test` ran `tsc -p <output>/tsconfig.json`, whose `outDir` was `../out-js`, so the executed JavaScript lived beside the output directory. Two runs whose `--output`s shared a parent (every system test passing `--output <tmp>/<name>`, or two parallel `bynk test` invocations) shared one `<parent>/out-js`. Each run's `tsc` overwrote the other's tree while `node` was reading it, so a run could execute another project's JavaScript or a half-written tree. That was the root cause of the flaky `a_detached_failure_in_a_cron_or_queue_handler_is_counted` (#4000): the runner's stream ended without `run-end` and the run exited 0 with an incomplete report. Tests worked around it by giving each run its own parent directory, a convention each new test had to remember.
 

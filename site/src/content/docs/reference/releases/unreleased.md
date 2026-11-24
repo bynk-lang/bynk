@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.641.0** | `bynk test` builds its JavaScript into `<output>/out-js`, inside the output directory, and the emitted `tsconfig.json` follows (`outDir` is `./out-js`, and `out-js` is excluded from the project), so concurrent runs whose `--output`s share a parent no longer overwrite one another's compiled tree |
 | **v0.640.100** | Internal restructuring: the project-mode module builder moves out of `emitter.rs` into `project.rs`, `boundary.rs` and `consumed.rs`; no output changes |
 | **v0.640.99** | Internal restructuring: `emit.rs` is now a thin facade over one file per declaration kind (agent handlers and dispatch, the agent class and the suite declarations move out); no output changes |
 | **v0.640.98** | `bynk test --format json`, `--format ndjson` and `--coverage` now exit non-zero when the report ends in an `error`, so a runner that ends before `run-end` can no longer leave an incomplete report (a suite with no `cases`) behind an exit status of 0 |
