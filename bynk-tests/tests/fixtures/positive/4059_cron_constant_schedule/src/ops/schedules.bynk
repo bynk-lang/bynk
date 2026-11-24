@@ -1,0 +1,5 @@
+commons ops.schedules
+
+// #3875: a schedule shared by name. A commons cannot name the prelude's
+// `CronSchedule`, so a shared constant is a `String`.
+const Hourly: String = "0 * * * *"
