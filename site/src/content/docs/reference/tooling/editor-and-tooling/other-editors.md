@@ -97,8 +97,8 @@ language-servers = ["bynk-lsp"]
 [[grammar]]
 name = "bynk"
 # The grammar lives in the tree-sitter-bynk/ directory of the bynk repository.
-# rev is the commit the v0.639.1 release tag points to.
-source = { git = "https://github.com/bynk-lang/bynk", rev = "e43b4487940e3e8549ce62233d067b65ef7a33b5", subpath = "tree-sitter-bynk" }
+# rev is the commit the v0.655.0 release tag points to.
+source = { git = "https://github.com/bynk-lang/bynk", rev = "fa54b799494161b7add05e91e71deffee507b76e", subpath = "tree-sitter-bynk" }
 ```
 
 The `[language-server]` table names the command; the `[[language]]` stanza
@@ -111,7 +111,7 @@ rejects a tag name there. To pin the grammar to the release you installed,
 look up the commit its tag points to:
 
 ```sh
-git ls-remote https://github.com/bynk-lang/bynk 'refs/tags/v0.639.1^{}'
+git ls-remote https://github.com/bynk-lang/bynk 'refs/tags/v0.655.0^{}'
 ```
 
 Then fetch and build the grammar, and copy the highlight queries from the
@@ -176,8 +176,8 @@ repository = "https://github.com/your-name/zed-bynk"
 
 [grammars.bynk]
 repository = "https://github.com/bynk-lang/bynk"
-# The commit the v0.639.1 release tag points to.
-rev = "e43b4487940e3e8549ce62233d067b65ef7a33b5"
+# The commit the v0.655.0 release tag points to.
+rev = "fa54b799494161b7add05e91e71deffee507b76e"
 path = "tree-sitter-bynk"
 
 [language_servers.bynk-lsp]
