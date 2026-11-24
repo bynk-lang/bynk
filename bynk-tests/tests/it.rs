@@ -349,6 +349,8 @@ mod system {
     mod compile_sources_stdin;
     #[path = "compile_strips_suites.rs"]
     mod compile_strips_suites;
+    #[path = "consumed_construction_workers.rs"]
+    mod consumed_construction_workers;
     #[path = "container_workerd.rs"]
     mod container_workerd;
     #[path = "contract_behaviour.rs"]

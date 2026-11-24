@@ -1,0 +1,31 @@
+context app
+
+consumes shapes { Port, Shape, Pt, Price, Code as Tag }
+
+fn port(n: Int) -> Result[Port, ValidationError] {
+  Port.of(n)
+}
+
+fn circle(r: Int) -> Shape {
+  Circle(r)
+}
+
+fn qualified(r: Int) -> Shape {
+  Shape.Circle(r)
+}
+
+fn dot() -> Shape {
+  Dot
+}
+
+fn pt(x: Int, y: Int) -> Pt {
+  Pt { x: x, y: y }
+}
+
+fn price(d: Decimal) -> Result[Price, ValidationError] {
+  Price.of(d)
+}
+
+fn tag(s: String) -> Result[Tag, ValidationError] {
+  Tag.of(s)
+}
