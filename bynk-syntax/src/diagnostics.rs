@@ -1471,7 +1471,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.bad_params",
-        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Instant`: the time the schedule fired. Drop the parameter, or type it `Instant`. A parameter typed `Int` (the old spelling) is this error too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number.",
+        blurb: "A scheduled trigger carries two things: the time it fired and the schedule that fired it. So an `on schedule` handler takes at most two parameters, told apart by type and in either order: an `Instant` (the scheduled time) and exactly `CronSchedule` (the schedule expression that fired this run). A second parameter of the same type, a third parameter, or any other type is this error. A parameter typed `Int` (the old spelling of the time) is too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number. Drop the parameter if the handler does not need it.",
         example: "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     },
     Explain {
@@ -7389,7 +7389,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.bad_params",
-        "A cron handler declares more than one parameter, or a non-`Instant` one.",
+        "A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two.",
         &["cron_handler"],
     ),
     dg(
