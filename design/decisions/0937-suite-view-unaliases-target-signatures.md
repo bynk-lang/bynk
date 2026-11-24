@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `bynk test` no longer panics when a suite checks a function that returns a consumed type renamed with `as`
----
+# 0937 — A suite sees its target's function signatures under declared type names
 
-## ADR: suite-view-unaliases-target-signatures
-title: A suite sees its target's function signatures under declared type names
-summary: How a suite resolves a target function written with a consumed-type alias
+- **Status:** Accepted (v0.677.3)
 
 **Context.** A suite is not a consuming context (#2890): it names a consumed type by the name its unit declares, never by the target's `as` alias. The target's own functions are written with the alias, so a case calling `fn tag() -> Tag` resolved `Tag` against a view that does not bind it. The call's type became `Ty::Error`, and the suite emitter then panicked with internal error #28.
 
