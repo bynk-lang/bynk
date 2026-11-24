@@ -1740,6 +1740,7 @@ max_batch_size = 10
                 | BindingSource::R2Instance { .. }
                 | BindingSource::RateLimitInstance { .. }
                 | BindingSource::QueueProducer { .. }
+                | BindingSource::QueueDeadLetter { .. }
                 | BindingSource::AnalyticsDataset { .. }
                 | BindingSource::D1Database { .. }
                 | BindingSource::StoredSecret { .. }

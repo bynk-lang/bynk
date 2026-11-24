@@ -13,6 +13,34 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   ctx.waitUntil(fault);
 }
 
+async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, env: unknown, binding: string | undefined, queue: string, type: string, error: unknown, msg: { readonly body: unknown; ack(): void; retry(): void }): globalThis.Promise<void> {
+  const cause = error as { readonly kind?: unknown; readonly path?: unknown } | null;
+  const path = typeof cause === "object" && cause !== null && typeof cause.path === "string" ? cause.path : "$";
+  const kind = typeof cause === "object" && cause !== null && typeof cause.kind === "string" ? cause.kind : "";
+  const dlq = binding === undefined ? undefined : (env as globalThis.Record<string, { send(body: unknown, options?: { contentType?: string }): globalThis.Promise<void> } | undefined>)[binding];
+  if (binding !== undefined && dlq === undefined) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, `the producer binding ${binding} is missing from env`);
+    msg.retry();
+    return;
+  }
+  if (dlq === undefined) {
+    globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: "dropped" });
+    __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} received a message that is not a ${type} (${kind} at ${path})`));
+    msg.ack();
+    return;
+  }
+  try {
+    const raw = msg.body instanceof globalThis.ArrayBuffer || globalThis.ArrayBuffer.isView(msg.body);
+    await dlq.send(msg.body, { contentType: raw ? "bytes" : "json" });
+  } catch (thrown) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    msg.retry();
+    return;
+  }
+  globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: "dead-lettered" });
+  msg.ack();
+}
+
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
@@ -50,10 +78,10 @@ export default {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_Job((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue backoff-jobs deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "backoff-jobs", "Job", __r.error, msg); continue; }
             const result = await surface.queue_backoff_0(__r.value, { attempts: msg.attempts, sentAt: msg.timestamp.getTime() });
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue backoff-jobs retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue backoff-jobs retry", (result as { readonly reason: string }).reason); msg.retry(); }
           } catch (e) {
             globalThis.console.error("queue backoff-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }
@@ -64,10 +92,10 @@ export default {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_Job((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue flipped-jobs deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "flipped-jobs", "Job", __r.error, msg); continue; }
             const result = await surface.queue_flipped_0({ attempts: msg.attempts, sentAt: msg.timestamp.getTime() }, __r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue flipped-jobs retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue flipped-jobs retry", (result as { readonly reason: string }).reason); msg.retry(); }
           } catch (e) {
             globalThis.console.error("queue flipped-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }
@@ -78,10 +106,10 @@ export default {
         for (const msg of batch.messages) {
           try {
             const __r = handlers.__deserialise_Job((msg.body as __JsonValue), "$");
-            if (__r.tag === "Err") { globalThis.console.error("queue plain-jobs deserialise failed", __r.error); msg.retry(); continue; }
+            if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "plain-jobs", "Job", __r.error, msg); continue; }
             const result = await surface.queue_plain_0(__r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue plain-jobs retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue plain-jobs retry", (result as { readonly reason: string }).reason); msg.retry(); }
           } catch (e) {
             globalThis.console.error("queue plain-jobs threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }

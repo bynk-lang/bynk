@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **921** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **922** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -368,7 +368,8 @@ There are **921** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.form_on_sum_route`](/reference/diagnostics/bynk.http.form_on_sum_route/) — A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself.
 - [`bynk.http.form_unknown_arg`](/reference/diagnostics/bynk.http.form_unknown_arg/) — A `@form` annotation is given an argument; it takes none.
 - [`bynk.http.header_question_not_found`](/reference/diagnostics/bynk.http.header_question_not_found/) — <span class="diagnostic-severity">Warning</span> `?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).
-- [`bynk.http.headers_wrong_type`](/reference/diagnostics/bynk.http.headers_wrong_type/) — An HTTP handler's `headers` parameter is not typed `RequestHeaders`.
+- [`bynk.http.headers_field_not_stringy`](/reference/diagnostics/bynk.http.headers_field_not_stringy/) — A field of an HTTP handler's `headers` record has a type a header cannot carry.
+- [`bynk.http.headers_wrong_type`](/reference/diagnostics/bynk.http.headers_wrong_type/) — An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.
 - [`bynk.http.invalid_path`](/reference/diagnostics/bynk.http.invalid_path/) — An HTTP route path is malformed.
 - [`bynk.http.json_duplicate`](/reference/diagnostics/bynk.http.json_duplicate/) — A handler carries more than one `@json` annotation.
 - [`bynk.http.json_invalid_arg`](/reference/diagnostics/bynk.http.json_invalid_arg/) — A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`.
