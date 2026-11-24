@@ -1,0 +1,27 @@
+suite ops.mail {
+
+consumes bynk.cloudflare { QueueDelivery }
+  case "a handler without delivery is unchanged" {
+    let r <- plain.message(Job { id: "a" })
+    expect r == Ack
+  }
+
+  case "the default delivery is the first attempt" {
+    let r <- backoff.message(Job { id: "b" })
+    expect r == Retry("attempt 1")
+  }
+
+  case "attempts rise across retries" {
+    let first <- backoff.message(Job { id: "c" }, QueueDelivery { attempts: 2, sentAt: Instant.fromEpochMillis(0) })
+    expect first == Retry("attempt 2")
+    let last <- backoff.message(Job { id: "c" }, QueueDelivery { attempts: 3, sentAt: Instant.fromEpochMillis(0) })
+    expect last == Ack
+  }
+
+  case "delivery may come first in the handler" {
+    let early <- flipped.message(Job { id: "d" })
+    expect early == Retry("sent at 0")
+    let sent <- flipped.message(Job { id: "d" }, QueueDelivery { attempts: 1, sentAt: Instant.fromEpochMillis(5000) })
+    expect sent == Ack
+  }
+}

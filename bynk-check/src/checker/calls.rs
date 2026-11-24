@@ -4584,34 +4584,9 @@ fn check_test_service_address(
         return handler_outcome(handler, ctx);
     }
 
-    // `svc.message(msg)` — the queue message handler.
+    // `svc.message(msg)` / `svc.message(msg, delivery)` — the queue message handler.
     if method.name == "message" {
-        ctx.callees.insert(
-            expr_id,
-            Callee::TestService {
-                service: id.name.clone(),
-                address: HandlerAddress::Message,
-                extra_headers: false,
-            },
-        );
-        let matched = sig
-            .handlers
-            .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Message));
-        let Some(handler) = matched else {
-            ctx.errors.push(CompileError::new(
-                "bynk.test.service_unknown_route",
-                method.span,
-                format!("`{}` declares no `on message(...)` handler", id.name),
-            ));
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        };
-        let params = handler.params.clone();
-        check_address_args(&id.name, "message", &params, args, method.span, ctx);
-        return handler_outcome(handler, ctx);
+        return check_message_address(sig, id, method, args, expr_id, ctx);
     }
 
     // #2052: `svc.event(payload)` / `svc.event(payload, envelope)` — one
@@ -5036,6 +5011,63 @@ fn is_asset_value(e: &Expr, ctx: &Ctx) -> bool {
             .unwrap_or_else(|| ctx.input.assets.contains_key(&id.name)),
         _ => false,
     }
+}
+
+/// `svc.message(msg)` / `svc.message(msg, delivery)` (#3880): the queue consumer's address.
+/// A handler's `QueueDelivery` parameter is filled by the address, from its optional second
+/// argument, so the message is the address's first parameter.
+fn check_message_address(
+    sig: &TestServiceSig,
+    id: &Ident,
+    method: &Ident,
+    args: &[Expr],
+    expr_id: bynk_syntax::ast::ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let matched = sig
+        .handlers
+        .iter()
+        .find(|h| matches!(&h.kind, HandlerKind::Message));
+    // #3880: a handler's `QueueDelivery` parameter is filled by the address, from its
+    // optional second argument, so the message is the address's first parameter.
+    let delivery = matched.and_then(|h| {
+        h.params
+            .iter()
+            .position(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+    });
+    ctx.callees.insert(
+        expr_id,
+        Callee::TestService {
+            service: id.name.clone(),
+            address: HandlerAddress::Message { delivery },
+            extra_headers: false,
+        },
+    );
+    let Some(handler) = matched else {
+        ctx.errors.push(CompileError::new(
+            "bynk.test.service_unknown_route",
+            method.span,
+            format!("`{}` declares no `on message(...)` handler", id.name),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    };
+    let mut params: Vec<bynk_syntax::ast::Param> = handler
+        .params
+        .iter()
+        .filter(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+        .cloned()
+        .collect();
+    if let Some(at) = delivery {
+        // The optional delivery follows the message.
+        if args.len() > 1 {
+            params.push(handler.params[at].clone());
+        }
+    }
+    check_address_args(&id.name, "message", &params, args, method.span, ctx);
+    handler_outcome(handler, ctx)
 }
 
 /// #3874: a cron handler's `CronSchedule` parameter is filled from the address's

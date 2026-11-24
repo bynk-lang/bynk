@@ -120,10 +120,14 @@ fn urgentFirst(ts: List[Task]) -> List[Task] {
 ```
 
 Here the highest priority comes first and equal priorities sort by title. The
-sort is stable, like `sortBy`. `Ordering` needs no `uses`: a unit that calls
-`compare` or `sortWith` has it in scope. Its variants are an `Ordering` only where
-the context says so (a `match` on one, or `a.compare(b) == Less`), so a type of
-your own with a `Less` variant is unaffected; `Ordering.Less` always works.
+sort is stable, like `sortBy`. `Ordering` needs no `uses`, and it works the same in
+a context as in a commons: a unit that names it or calls `compare` or `sortWith`
+has it in scope, and a context can build `Ordering.Less` directly, with no
+rebrand. Its variants are an `Ordering` only where the context says so (a `match`
+on one, or `a.compare(b) == Less`), so a type of your own with a `Less` variant
+is unaffected; `Ordering.Less` always works. A type of your own named `Ordering`
+wins in your unit (and in any unit that `uses` it), and the built-in `compare`
+then has no `Ordering` to answer with.
 
 ## Generic code: `T: Ord`
 
