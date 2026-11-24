@@ -1,0 +1,1 @@
+bynk.http.raw_bad_content_type

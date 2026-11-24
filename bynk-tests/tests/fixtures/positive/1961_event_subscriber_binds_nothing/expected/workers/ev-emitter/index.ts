@@ -40,6 +40,9 @@ export default {
         const __m = __matchPath("/ping/:n", path);
         if (method === "POST" && __m) {
           __route = "POST /ping/:n";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_n = __m.params["n"];
           const n = __raw_n;
           const result = await surface.http_POST_ping_Param_n(n);

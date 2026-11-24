@@ -39,6 +39,18 @@ handler is [`@raw`](#raw-request-bodies), which takes the request's octets as
 `Bytes` instead, or [`@form`](#form-bodies), which decodes an HTML form post into
 the same kind of record.
 
+A JSON `body` route also checks the request's media type. A `Content-Type` that is
+present and is neither `application/json` nor a `+json` type
+(`application/problem+json`, `application/vnd.x+json`) is a `415 UnsupportedMediaType`
+whose `details` say to send `Content-Type: application/json`: a form or a
+`multipart/form-data` post to a JSON route is refused plainly, rather than as a
+confusing `400 MalformedJson`. A request with no `Content-Type` is accepted. The check
+ignores parameters (`; charset=utf-8`) and case, comes before the auth seam and the
+body read, and is the same rejection as a `@raw` route's, so
+[`on rejected`](#rendering-rejections) renders it. Note that `curl -d '{…}'` sends
+`Content-Type: application/x-www-form-urlencoded` unless `-H 'content-type: application/json'`
+is given, so it gets the `415`.
+
 ## Request headers
 
 A handler that needs the request's headers declares a `headers: RequestHeaders`
@@ -328,7 +340,8 @@ variant, so there the same response reads as `Conflict(_)`.
 ## Rendering rejections
 
 The router refuses some requests before any handler runs: a `400` for a body or
-path parameter that fails to parse or validate, a `405` for a method the path
+path parameter that fails to parse or validate (or for a path whose percent-encoding
+does not decode, `MalformedPath`), a `405` for a method the path
 doesn't declare, a `413` for a body over its cap, a `415` for a `@raw`, `@form` or `@multipart` route's
 other content type, and a `401` from a `Signature` seam. Each answers in Bynk's own
 shape, `{ "kind": …, "details": … }` or no body. A service whose contract says
@@ -346,7 +359,8 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 
 `why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
 `RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
-`UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MethodNotAllowed` or `Unauthorized`.
+`UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MalformedPath(detail)`,
+`MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
 `RawError` of that status; the router keeps its other headers (the `Allow` of a
@@ -955,14 +969,16 @@ service registry from http {
 
 - **The annotation.** `@raw` is legal only on a `POST`/`PUT`/`PATCH` handler that
   has a `body`, at most once, and `body` must be typed `Bytes`. `contentType` is
-  required: a media type (`type/subtype`), or `"*/*"` to accept any. Parameters
+  required: a media type (`type/subtype`), a non-empty list of them
+  (`["image/png", "image/jpeg"]`, any of which is accepted; the handler reads which
+  one arrived from `headers`), or `"*/*"` alone to accept any. Parameters
   such as `charset` are not part of the match.
 - **Without it,** a `body: Bytes` keeps its base64-in-JSON wire form. `@raw` is
   opt-in because making every `Bytes` body raw would silently break every caller
   that sends base64 JSON.
 - **`415 UnsupportedMediaType`.** The request's `Content-Type`, with parameters
-  stripped and compared case-insensitively, must equal the declared media type
-  (unless it is `"*/*"`). A missing or different one is a synthesised `415`,
+  stripped and compared case-insensitively, must equal the declared media type, or
+  one of the declared list (unless it is `"*/*"`). A missing or different one is a synthesised `415`,
   `{ kind: "UnsupportedMediaType", details: "…" }`. Like the `413`, it is a router
   decision, not an `HttpResult` the handler returns, and it comes before the auth
   seam and the body read.
@@ -1550,7 +1566,7 @@ flowchart TD
   known -->|no| nf["404"]
   known -->|yes, OPTIONS| opt["204 + Allow"]
   known -->|yes, other| m405["405 + Allow"]
-  params --> ctype{"@raw or @form route and Content-Type matches?"}
+  params --> ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
   ctype -->|no| m415["415"]
   ctype -->|yes| body{"body valid?"}
   body -->|over the cap| m413["413"]
@@ -1567,8 +1583,9 @@ flowchart TD
 *Validation happens once, at the edge; the handler only ever sees valid input.*
 
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
-on method **and** path. On a match, path parameters are bound and a typed
-[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's
+on method **and** path. On a match, path parameters are bound (a path that is not valid percent-encoding is a
+`400 MalformedPath`, never a `500`) and a typed
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
 then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
 `400` at the boundary, before the handler runs. The handler then runs as an

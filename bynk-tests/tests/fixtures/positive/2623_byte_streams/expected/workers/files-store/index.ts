@@ -100,6 +100,9 @@ export default {
         const __m = __matchPath("/files/:key", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /files/:key";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_key = __m.params["key"];
           const key = __raw_key;
           const result = await surface.http_GET_files_Param_key(key);
@@ -111,6 +114,9 @@ export default {
         const __m = __matchPath("/shelves/:name", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /shelves/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_GET_shelves_Param_name(name);

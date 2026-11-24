@@ -1493,10 +1493,14 @@ fn render_handler_annotation_hover(
             Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
             None => "none — a `@raw` route needs one (`bynk.http.raw_body_unbounded`)".to_string(),
         };
-        let content_type = match handler.raw_content_type() {
-            Some("*/*") => "any".to_string(),
-            Some(ct) => format!("`{ct}`"),
-            None => "—".to_string(),
+        let content_type = match handler.raw_content_types().as_slice() {
+            [] => "—".to_string(),
+            ["*/*"] => "any".to_string(),
+            types => types
+                .iter()
+                .map(|ct| format!("`{ct}`"))
+                .collect::<Vec<_>>()
+                .join(", "),
         };
         return format!(
             "```bynk\n{sig}\n```\n\n\
@@ -1504,7 +1508,7 @@ fn render_handler_annotation_hover(
              sent, with no JSON and no base64. Type it `Stream[Bytes]` instead to receive it as \
              it arrives, read once and counted against the cap as it is read. Any other \
              `Content-Type` is answered `415 Unsupported Media Type`.\n\n\
-             - **`contentType`** — the media type accepted: {content_type}.\n\
+             - **`contentType`** (`String | List[String]`) — the media type accepted, or any of the listed ones: {content_type}.\n\
              - **Effective body cap** — {cap}."
         );
     }

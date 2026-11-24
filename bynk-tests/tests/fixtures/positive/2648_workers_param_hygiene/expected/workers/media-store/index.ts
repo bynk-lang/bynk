@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -110,6 +110,9 @@ export default {
       {
         if (method === "POST" && path === "/echo") {
           __route = "POST /echo";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
           let __body_json: __JsonValue;
           try {
             __body_json = (await request.json()) as __JsonValue;
@@ -127,6 +130,9 @@ export default {
         const __m = __matchPath("/at/:url/:path", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /at/:url/:path";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_url = __m.params["url"];
           const __id_url = __raw_url;
           const __raw_path = __m.params["path"];
@@ -140,6 +146,9 @@ export default {
         const __m = __matchPath("/bearer/:request/:result", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /bearer/:request/:result";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_request = __m.params["request"];
           const __id_request = __raw_request;
           const __raw_result = __m.params["result"];
@@ -153,6 +162,9 @@ export default {
         const __m = __matchPath("/sum/:request/:result", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /sum/:request/:result";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_request = __m.params["request"];
           const __id_request = __raw_request;
           const __raw_result = __m.params["result"];
@@ -166,6 +178,9 @@ export default {
         const __m = __matchPath("/by/:request/:result/:surface", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /by/:request/:result/:surface";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_request = __m.params["request"];
           const __id_request = __raw_request;
           const __raw_result = __m.params["result"];

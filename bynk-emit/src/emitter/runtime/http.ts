@@ -3,23 +3,62 @@ import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
 import type { HttpResult } from "./httpresult.ts";
 
+// #3908: the path's segments, percent-decoded once (empty segments dropped, so
+// `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
+// percent-encoding: no route can match such a path, and it is the client's
+// error, not a fault.
+export function decodePath(path: string): string[] | null {
+  const out: string[] = [];
+  for (const raw of path.split("/")) {
+    if (raw === "") continue;
+    try {
+      out.push(decodeURIComponent(raw));
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+
+// The 1-based position of the first segment of `path` that is not valid
+// percent-encoding, counting non-empty segments. Names a position, never the content.
+function malformedSegment(path: string): number {
+  const raw = path.split("/").filter(Boolean);
+  for (let i = 0; i < raw.length; i++) {
+    try {
+      decodeURIComponent(raw[i]);
+    } catch {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
 // Match a path pattern (e.g., "/orders/:id") against a request path.
-// Returns the captured parameter map, or null on no match.
+// Returns the captured parameter map, or null on no match. #3908: a path with
+// malformed percent-encoding whose shape the pattern would match answers
+// `malformed` (a description naming the segment's position) instead of
+// throwing, so the route answers a `400 MalformedPath` before its handler,
+// actor or body is touched.
 export function matchPath(
   pattern: string,
   path: string,
-): { params: Record<string, string> } | null {
+): { params: Record<string, string>; malformed?: string } | null {
   const patternSegments = pattern.split("/").filter(Boolean);
   const pathSegments = path.split("/").filter(Boolean);
   if (patternSegments.length !== pathSegments.length) return null;
+  for (let i = 0; i < patternSegments.length; i++) {
+    const p = patternSegments[i];
+    if (!p.startsWith(":") && p !== pathSegments[i]) return null;
+  }
+  const decoded = decodePath(path);
+  if (decoded === null) {
+    return { params: {}, malformed: `path segment ${malformedSegment(path)} is not valid percent-encoding` };
+  }
   const params: Record<string, string> = {};
   for (let i = 0; i < patternSegments.length; i++) {
     const p = patternSegments[i];
-    if (p.startsWith(":")) {
-      params[p.slice(1)] = decodeURIComponent(pathSegments[i]);
-    } else if (p !== pathSegments[i]) {
-      return null;
-    }
+    if (p.startsWith(":")) params[p.slice(1)] = decoded[i];
   }
   return { params };
 }
@@ -639,6 +678,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
   switch (body.kind) {
     case "MalformedJson":
     case "MalformedForm":
+    case "MalformedPath":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
       return str(body.details);
@@ -709,17 +749,31 @@ export async function renderRejection(
 // The `BoundaryError.kind`s the router emits when it refuses input *before* the
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
-const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "StructuralMismatch"]);
+const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "MalformedPath", "StructuralMismatch"]);
 
-// Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
-// parameters (`; charset=…`) are not part of the match, the comparison is
-// case-insensitive, `"*/*"` accepts anything, and a missing header matches only
-// that wildcard.
-export function mediaTypeMatches(request: Request, declared: string): boolean {
-  if (declared === "*/*") return true;
+// Whether `request`'s `Content-Type` is a media type a `@raw` route declares (#3912:
+// one, or any of a list): parameters (`; charset=…`) are not part of the match,
+// the comparison is case-insensitive, `"*/*"` accepts anything, and a missing
+// header matches only that wildcard.
+export function mediaTypeMatches(request: Request, declared: string | readonly string[]): boolean {
+  const types = typeof declared === "string" ? [declared] : declared;
+  if (types.includes("*/*")) return true;
   const given = request.headers.get("content-type");
   if (given === null) return false;
-  return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return types.some((t) => mediaType === t.toLowerCase());
+}
+
+// #3912: whether `request`'s `Content-Type` is one a JSON `body` route can mean:
+// absent (a client that sends no type, such as a bare `curl --data-binary`),
+// `application/json`, or a `+json` type (`application/problem+json`). A form,
+// multipart or any other type is refused with `415`. Parameters are ignored and
+// the comparison is case-insensitive.
+export function jsonMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  if (given === null || given.trim() === "") return true;
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return mediaType === "application/json" || mediaType.endsWith("+json");
 }
 
 // #2341 (decision A): an HTTP handler's `headers: RequestHeaders` — a read-only
@@ -1852,5 +1906,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };
