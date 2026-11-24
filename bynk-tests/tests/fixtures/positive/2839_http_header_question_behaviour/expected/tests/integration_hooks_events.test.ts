@@ -124,14 +124,14 @@ async function __sysdrive_events_http_POST_event(headers: { get(name: string): {
   const __body = body;
   const __sig = await __bynkSignHmacSha256(__body, (__bynkEnv["EVENTS_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["EVENTS_SECRET"] ?? ""), false, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/event`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json", "X-Hub-Signature-256": __sig.signature }, body: __body as BufferSource });
+  const __req = new globalThis.Request(`https://test/event`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), "X-Hub-Signature-256": __sig.signature }, body: __body as BufferSource });
   const __res = await __h.env.HOOKS_EVENTS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_events_http_POST_event(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, __sub: string) {
   const __sig = await __bynkSignHmacSha256(body, (__bynkEnv["EVENTS_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["EVENTS_SECRET"] ?? ""), false, 0);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/event`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "text/plain; charset=utf-8", "X-Hub-Signature-256": __sig.signature }, body: body });
+  const __req = new globalThis.Request(`https://test/event`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...__requestHeaderPairs(headers), "X-Hub-Signature-256": __sig.signature }, body: body });
   const __res = await __h.env.HOOKS_EVENTS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -166,13 +166,13 @@ async function __sysdrive_rawforged_events_http_POST_event(headers: { get(name: 
 async function __sysdrive_events_http_POST_lookup(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: globalThis.Uint8Array, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/lookup`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/octet-stream" }, body: __body as BufferSource });
+  const __req = new globalThis.Request(`https://test/lookup`, { method: "POST", headers: { "content-type": "application/octet-stream", ...__requestHeaderPairs(headers) }, body: __body as BufferSource });
   const __res = await __h.env.HOOKS_EVENTS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_events_http_POST_lookup(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/lookup`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "text/plain; charset=utf-8" }, body: body });
+  const __req = new globalThis.Request(`https://test/lookup`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...__requestHeaderPairs(headers) }, body: body });
   const __res = await __h.env.HOOKS_EVENTS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }

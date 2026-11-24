@@ -271,9 +271,9 @@ pub(in crate::emitter) fn lower_system_schedule_call(
     if let ExprKind::Ident(id) = &receiver.kind {
         let address = test_address(cx, e);
         let driver = match &address {
-            Some(HandlerAddress::Schedule { expr: Some(expr) }) => {
-                cx.system_schedule_driver(&id.name, expr)
-            }
+            Some(HandlerAddress::Schedule {
+                expr: Some(expr), ..
+            }) => cx.system_schedule_driver(&id.name, expr),
             Some(HandlerAddress::Message) => cx.system_message_driver(&id.name),
             _ => None,
         };
@@ -721,13 +721,27 @@ pub(in crate::emitter) fn lower_test_service_call(
     if let Some(facts) = handler_facts(cx, &svc.name) {
         // cron address: the emitted key is position-indexed among the service's same-kind
         // handlers; cron drops the leading schedule string.
-        if let Some(HandlerAddress::Schedule { expr: Some(expr) }) = &address {
+        if let Some(HandlerAddress::Schedule {
+            expr: Some(expr),
+            param,
+        }) = &address
+        {
             let idx = facts.cron.iter().position(|c| c == expr);
             let key = crate::emitter::cron_handler_method_name(
                 &svc.name,
                 idx.unwrap_or(facts.cron.len()),
             );
-            let rest = lower_args(&args[1..], cx, pre);
+            let mut rest = lower_args(&args[1..], cx, pre);
+            // #3874: a `CronSchedule` parameter holds the address's own schedule.
+            if let Some(at) = param {
+                // The literal is a valid `CronSchedule` the checker matched to the
+                // handler; the brand is a type, so it is cast to it.
+                let schedule = crate::ts_build::as_expr(
+                    str_lit(expr.clone()),
+                    bynk_ts::TsType::named("never"),
+                );
+                rest.insert((*at).min(rest.len()), schedule);
+            }
             return settle(address_call(&svc.name, &key, rest, deps));
         }
         if let Some(HandlerAddress::Ws(shape)) = &address {

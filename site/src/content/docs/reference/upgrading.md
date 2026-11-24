@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.654.0
+
+A JSON `body` route now answers `415 UnsupportedMediaType` to a request whose `Content-Type` is present and is neither `application/json` nor a `+json` type, where it tried to parse the body (a form post got a `400 MalformedJson`). A client that posts JSON labelled as a form, such as `curl -d '{…}'` without a header, must send `Content-Type: application/json`; a request with no `Content-Type` is still accepted.
+
 ## v0.652.0
 
 A cron schedule with irregular whitespace (a double space, a tab, a leading or trailing space) now fails as `bynk.cron.invalid_schedule`, as does any schedule Cloudflare would reject (`61 * * * *`); write the fields separated by single spaces (the note gives the corrected form). A schedule that smuggled a `"` or `\` into a field, which the old field-count check let reach `wrangler.toml`, is refused too, closing that TOML-injection path.

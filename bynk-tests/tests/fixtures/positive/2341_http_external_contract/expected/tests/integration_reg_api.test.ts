@@ -135,13 +135,13 @@ async function __sysdrive_raw_api_http_GET_whoami(headers: { get(name: string): 
 async function __sysdrive_api_http_PUT_packages_Param_name(name: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
   const __body = globalThis.JSON.stringify(body as __JsonValue);
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json" }, body: __body });
+  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers) }, body: __body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_PUT_packages_Param_name(name: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json" }, body: body });
+  const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "PUT", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers) }, body: body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -156,7 +156,7 @@ async function __sysdrive_api_http_POST_notes_Param_id(id: string, body: string,
     __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json", ...__auth }, body: __body });
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), ...__auth }, body: __body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -170,7 +170,7 @@ async function __sysdrive_raw_api_http_POST_notes_Param_id(id: string, body: str
     __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}`;
   }
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { ...__requestHeaderPairs(headers), "content-type": "application/json", ...__auth }, body: body });
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), ...__auth }, body: body });
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
