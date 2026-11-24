@@ -280,6 +280,34 @@ pub(in crate::emitter) fn lower_duration_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (DurationOp::ToMillis, []) => Some(identity(&mut pre, receiver, cx)),
+        // #3948: whole units, rounding towards zero. `+ 0` turns the `-0` of a
+        // part unit below zero into `0`.
+        (
+            DurationOp::ToSeconds
+            | DurationOp::ToMinutes
+            | DurationOp::ToHours
+            | DurationOp::ToDays,
+            [],
+        ) => {
+            let factor = match op {
+                DurationOp::ToSeconds => "1000",
+                DurationOp::ToMinutes => "60000",
+                DurationOp::ToHours => "3600000",
+                DurationOp::ToDays | DurationOp::ToMillis | DurationOp::ToString => "86400000",
+            };
+            let kids = operands(&mut pre, cx, &[receiver]);
+            let [recv] = take::<1, _>(kids);
+            let quotient = TsExpr::Binary {
+                op: TsBinaryOp::Div,
+                left: Box::new(recv),
+                right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num(factor.to_string()))),
+            };
+            Some(TsExpr::Binary {
+                op: TsBinaryOp::Add,
+                left: Box::new(math_call("trunc", vec![quotient])),
+                right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num("0".to_string()))),
+            })
+        }
         (DurationOp::ToString, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("String", kids))

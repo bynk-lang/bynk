@@ -59,8 +59,11 @@ export class WorkersKv implements Kv {
 
   // v0.23 (0051): TTL as a distinct op — Bynk has no optional parameters,
   // and a distinct method beats an options record until options proliferate.
-  async putTtl(key: string, value: string, ttlSeconds: number): Promise<void> {
-    await this.ns().put(key, value, { expirationTtl: ttlSeconds });
+  // #3948: the span arrives as a `Duration` (milliseconds) already at least 60
+  // seconds (`KvTtl`); whole seconds round towards zero, as every `Duration`
+  // conversion does.
+  async putTtl(key: string, value: string, ttl: number): Promise<void> {
+    await this.ns().put(key, value, { expirationTtl: Math.trunc(ttl / 1000) });
   }
 
   async delete(key: string): Promise<void> {
@@ -93,7 +96,6 @@ export class WorkersKv implements Kv {
   private static readonly MAX_KEY_BYTES = 512;
   private static readonly MAX_METADATA_BYTES = 1024;
   private static readonly MIN_EXPIRY_SECONDS = 60;
-  private static readonly MIN_CACHE_TTL_SECONDS = 30;
   private static readonly MAX_PAGE = 1000;
 
   private static fault(why: string): never {
@@ -106,7 +108,8 @@ export class WorkersKv implements Kv {
   }
 
   // The write options as KV takes them: `expirationTtl` or `expiration` in
-  // whole seconds (a part second rounds up), and the metadata object.
+  // whole seconds (a part second rounds towards zero, #3948), and the metadata
+  // object.
   private static putOptions(options: KvPut): {
     expirationTtl?: number;
     expiration?: number;
@@ -119,11 +122,8 @@ export class WorkersKv implements Kv {
     }
     const e: KvExpiration = options.expiration;
     if (e.tag === "After") {
-      const seconds = Math.ceil(e.ttl / 1000);
-      if (seconds < WorkersKv.MIN_EXPIRY_SECONDS) {
-        WorkersKv.fault(`an expiry is at least 60 seconds away, not ${e.ttl} ms`);
-      }
-      return { expirationTtl: seconds, metadata };
+      // `KvTtl` already carries the 60-second floor (#3948).
+      return { expirationTtl: Math.trunc(e.ttl / 1000), metadata };
     }
     if (e.tag === "At") {
       const seconds = Math.ceil(e.instant / 1000);
@@ -152,10 +152,8 @@ export class WorkersKv implements Kv {
     WorkersKv.checkKey(key);
     let cacheTtl: number | undefined;
     if (options.cacheTtl.tag === "Some") {
-      cacheTtl = Math.ceil(options.cacheTtl.value / 1000);
-      if (cacheTtl < WorkersKv.MIN_CACHE_TTL_SECONDS) {
-        WorkersKv.fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
-      }
+      // `KvCacheTtl` already carries the 30-second floor (#3948).
+      cacheTtl = Math.trunc(options.cacheTtl.value / 1000);
     }
     const r = await this.ns().getWithMetadata(key, cacheTtl === undefined ? { type: "text" } : { type: "text", cacheTtl });
     return r.value === null ? None : Some({ value: r.value, metadata: WorkersKv.metadataOf(r.metadata) });

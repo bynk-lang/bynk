@@ -24,8 +24,8 @@ export function compose(env: Env) {
     async expireAt(id: string, inSeconds: number) {
       return handlers.expireAt.call(id, inSeconds, deps);
     },
-    async expireSoon(id: string) {
-      return handlers.expireSoon.call(id, deps);
+    async expireSoon(id: string, seconds: number) {
+      return handlers.expireSoon.call(id, seconds, deps);
     },
     async pages(cursor: Option<string>) {
       return handlers.pages.call(cursor, deps);

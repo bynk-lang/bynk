@@ -6,7 +6,7 @@ from a random UUID and expiring on their own.
 What it shows:
 
 - **KV persistence with a TTL** — `consumes bynk.cloudflare { Kv }` and
-  `Kv.putTtl(key, value, 86400)`. The mapping disappears after a day with no
+  `Kv.putTtl(key, value, 1.day)`. The mapping disappears after a day with no
   sweep to write.
 - **A first-party capability** — `Random.uuid()` mints the code; it is injected
   by the platform, not constructed by you.

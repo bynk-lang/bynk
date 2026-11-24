@@ -324,6 +324,11 @@ kernel_ops! {
 /// (D3/D4); the kernel is the explicit escape to raw milliseconds (D5).
     DurationOp {
         ToMillis = "toMillis", "toMillis() -> Int";
+        // #3948: the whole-unit conversions round towards zero.
+        ToSeconds = "toSeconds", "toSeconds() -> Int (whole seconds, rounding towards zero)";
+        ToMinutes = "toMinutes", "toMinutes() -> Int (whole minutes, rounding towards zero)";
+        ToHours = "toHours", "toHours() -> Int (whole hours, rounding towards zero)";
+        ToDays = "toDays", "toDays() -> Int (whole days, rounding towards zero)";
         ToString = "toString", "toString() -> String";
     }
 /// The `Instant` kernel (v0.90, ADR 0114). Comparison/arithmetic are operators

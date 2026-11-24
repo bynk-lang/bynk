@@ -29,6 +29,7 @@ pub(super) fn lower_const_literal_node(e: &Expr) -> Option<bynk_ts::TsExpr> {
             scale,
             negated,
         } => decimal_lit(&format!("{}{coef}", sign(negated)), scale),
+        RefinableLiteral::Duration { millis } => num_lit(millis.to_string()),
         RefinableLiteral::Str(s) => str_lit(s),
     })
 }

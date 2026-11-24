@@ -556,13 +556,18 @@ pub(super) fn refined_check_as_bool(
             let (cond, _) = bynk_ts::pred_condition_and_message_over(&p.kind, &recv, Some(base));
             // A range is one bracketed term; every other predicate stands bare.
             terms.push(match &p.kind {
-                PredKind::InRange(..) | PredKind::InRangeF(..) if base != BaseType::Decimal => {
+                PredKind::InRange(..) | PredKind::InRangeF(..) | PredKind::InRangeDur(..)
+                    if base != BaseType::Decimal =>
+                {
                     TsExpr::Paren(Box::new(cond))
                 }
                 PredKind::Matches(..)
                 | PredKind::InRange(..)
                 | PredKind::InRangeF(..)
                 | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
                 | PredKind::MinLength(..)
                 | PredKind::MaxLength(..)
                 | PredKind::Length(..)

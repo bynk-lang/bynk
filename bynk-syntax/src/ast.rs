@@ -290,7 +290,8 @@ pub enum ExportKind {
 pub enum Visibility {
     /// Token-only outside the context: hold, pass, compare; no inspect, no construct.
     Opaque,
-    /// Readable shape outside the context: inspect fields, match variants; no construct.
+    /// Readable shape outside the context: inspect fields, match variants, and
+    /// construct (`.of`, a variant, a record literal; #3948). Not `.unsafe`.
     Transparent,
 }
 
@@ -3212,6 +3213,57 @@ pub struct DecimalBound {
     pub span: Span,
 }
 
+/// A `Duration` refinement bound (#3948): `InRange(1.second, 1.day)`,
+/// `AtLeast(60.seconds)`. `millis` is the erased value the checks compare.
+#[derive(Debug, Clone)]
+pub struct DurationBound {
+    pub millis: i64,
+    /// The bound as written (`60.seconds`, `-1.second`).
+    pub lexeme: String,
+    pub span: Span,
+}
+
+/// The bound of a one-sided predicate (`AtLeast`, `AtMost`, #3948), of the
+/// base's own type.
+#[derive(Debug, Clone)]
+pub enum PredBound {
+    Int(IntBound),
+    Float(FloatBound),
+    Decimal(DecimalBound),
+    Duration(DurationBound),
+}
+
+impl PredBound {
+    /// The bound as written.
+    pub fn lexeme(&self) -> &str {
+        match self {
+            PredBound::Int(b) => &b.lexeme,
+            PredBound::Float(b) => &b.lexeme,
+            PredBound::Decimal(b) => &b.lexeme,
+            PredBound::Duration(b) => &b.lexeme,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            PredBound::Int(b) => b.span,
+            PredBound::Float(b) => b.span,
+            PredBound::Decimal(b) => b.span,
+            PredBound::Duration(b) => b.span,
+        }
+    }
+
+    /// The base type this bound's literal belongs to.
+    pub fn base(&self) -> BaseType {
+        match self {
+            PredBound::Int(_) => BaseType::Int,
+            PredBound::Float(_) => BaseType::Float,
+            PredBound::Decimal(_) => BaseType::Decimal,
+            PredBound::Duration(_) => BaseType::Duration,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Refinement {
     pub predicates: Vec<RefinementPred>,
@@ -3253,6 +3305,12 @@ pub enum PredKind {
     InRangeF(FloatBound, FloatBound),
     /// `InRange` with decimal bounds (#2622): `InRange(0.00d, 100.00d)`.
     InRangeD(DecimalBound, DecimalBound),
+    /// `InRange` with `Duration` bounds (#3948): `InRange(1.second, 1.day)`.
+    InRangeDur(DurationBound, DurationBound),
+    /// One-sided lower bound, inclusive (#3948): `AtLeast(60.seconds)`.
+    AtLeast(PredBound),
+    /// One-sided upper bound, inclusive (#3948).
+    AtMost(PredBound),
     MinLength(i64),
     MaxLength(i64),
     Length(i64),
@@ -3325,7 +3383,12 @@ impl PredKind {
     pub fn name(&self) -> &'static str {
         match self {
             PredKind::Matches(_) => "Matches",
-            PredKind::InRange(..) | PredKind::InRangeF(..) | PredKind::InRangeD(..) => "InRange",
+            PredKind::InRange(..)
+            | PredKind::InRangeF(..)
+            | PredKind::InRangeD(..)
+            | PredKind::InRangeDur(..) => "InRange",
+            PredKind::AtLeast(_) => "AtLeast",
+            PredKind::AtMost(_) => "AtMost",
             PredKind::MinLength(_) => "MinLength",
             PredKind::MaxLength(_) => "MaxLength",
             PredKind::Length(_) => "Length",
@@ -4438,8 +4501,11 @@ impl ExprKind {
             ExprKind::IntLit { .. } | ExprKind::FloatLit { .. } | ExprKind::DecimalLit { .. } => {
                 self.number_literal(false)
             }
-            ExprKind::DurationLit { .. }
-            | ExprKind::InterpStr(..)
+            // #3948: a `Duration` literal, in milliseconds (it has no negated form).
+            ExprKind::DurationLit { millis, .. } => {
+                Some(RefinableLiteral::Duration { millis: *millis })
+            }
+            ExprKind::InterpStr(..)
             | ExprKind::BoolLit(..)
             | ExprKind::Ident(..)
             | ExprKind::Call { .. }
@@ -4600,6 +4666,8 @@ pub enum RefinableLiteral<'a> {
         scale: u32,
         negated: bool,
     },
+    /// A `Duration` literal's resolved milliseconds (#3948).
+    Duration { millis: i64 },
     /// A string literal's value.
     Str(&'a str),
 }

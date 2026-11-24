@@ -445,7 +445,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 
 | Capability | Operations |
 |---|---|
-| **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttlSeconds: Int) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values). |
+| **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttl: KvTtl) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values). |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
 | **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]` · `getStream(key) -> Effect[Option[R2Body]]` · `putStream(key, body: Stream[Bytes], size: Int) -> Effect[R2Object]` · `putStreamWith(key, body, size, options: R2Put) -> Effect[Option[R2Object]]` · `createUpload(key, options: R2UploadOptions) -> Effect[R2Upload]` · `uploadPart(upload, partNumber: Int, body: Bytes) -> Effect[R2Part]` · `completeUpload(upload, parts: List[R2Part]) -> Effect[R2Object]` · `abortUpload(upload) -> Effect[()]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
@@ -496,9 +496,11 @@ experimental: list each one you use under `[unstable] allow`
 unchanged.
 
 ```bynk
-type KvExpiration = | Never | After(ttl: Duration) | At(instant: Instant)
+type KvTtl      = Duration where AtLeast(60.seconds)
+type KvCacheTtl = Duration where AtLeast(30.seconds)
+type KvExpiration = | Never | After(ttl: KvTtl) | At(instant: Instant)
 type KvPut      = { expiration: KvExpiration = KvExpiration.Never, metadata: Map[String, String] = Map.empty() }
-type KvGet      = { cacheTtl: Option[Duration] = None }
+type KvGet      = { cacheTtl: Option[KvCacheTtl] = None }
 type KvEntry    = { value: String, metadata: Map[String, String] }
 type KvKey      = { name: String, expiration: Option[Instant], metadata: Map[String, String] }
 type KvList     = { prefix: Option[String], cursor: Option[String], limit: Option[Int] }
@@ -506,13 +508,14 @@ type KvListing  = { keys: List[KvKey], cursor: Option[String] }
 ```
 
 - `putWith(key, value, options)` writes text with an expiry and metadata.
-  `After(ttl)` is relative, with a part second rounding up, and `At(instant)` is
-  absolute. Either must be at least 60 seconds away. Metadata is at most 1024
-  bytes once serialised as JSON. `putTtl` stays as the short form of
-  `After`.
+  `After(ttl)` is relative and `At(instant)` is absolute. Either must be at
+  least 60 seconds away: for `After`, the `KvTtl` type carries that floor, and
+  whole seconds are taken, rounding towards zero (as `Duration.toSeconds` does).
+  Metadata is at most 1024 bytes once serialised as JSON. `putTtl` stays as the
+  short form of `After`, with the same `KvTtl`.
 - `getWith(key, options)` reads a value with its metadata. `cacheTtl` lets
-  Cloudflare's edge serve the read from cache for that long, at least 30
-  seconds; `None` keeps the platform's 60.
+  Cloudflare's edge serve the read from cache for that long; a `KvCacheTtl`
+  is at least 30 seconds, and `None` keeps the platform's 60.
 - `getBytes` and `putBytes` read and write binary values. `putBytes` takes the
   same `KvPut`.
 - `listPage(options)` reads one page of keys, in key order, with each key's
@@ -530,9 +533,13 @@ Text and binary values share a namespace, as on the platform. `getBytes` of a
 text value gives its UTF-8 bytes, and reading a binary value as text decodes it
 as UTF-8, replacing what isn't. Keep each key to one kind.
 
-A key over 512 bytes, metadata over the limit, an expiry under 60 seconds away,
-a `cacheTtl` under 30 seconds or a `limit` outside 1 to 1000 faults the call
-before the platform sees it. A value over 25 MiB faults with the platform's
+A key over 512 bytes, metadata over the limit, an `At` expiry under 60 seconds
+away or a `limit` outside 1 to 1000 faults the call before the platform sees
+it. A TTL under 60 seconds or a `cacheTtl` under 30 never gets that far:
+`KvTtl` and `KvCacheTtl` refuse it first. A literal or constant
+(`const Retention: KvTtl = 30.days`) is checked when the program compiles, and
+a computed span goes through `KvTtl.of(d)`, which returns a `ValidationError`
+when it is too short; `30.seconds` is `bynk.refine.literal_violates`. A value over 25 MiB faults with the platform's
 error. In tests the namespace is in memory: it keeps metadata and expiry
 (expiry is not enforced), checks the same limits, and pages in key order.
 
