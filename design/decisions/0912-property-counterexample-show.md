@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A failing `for all x: Decimal` (or `Bytes`) prints its counterexample in Bynk's own form (`x = 0d`) instead of `[object Object]`
----
+# 0912 — Property counterexamples print Decimal and Bytes in Bynk's form
 
-## ADR: property-counterexample-show
-title: Property counterexamples print Decimal and Bytes in Bynk's form
-summary: The test runtime's value printer renders a Decimal as its literal and a Bytes as `Bytes.fromHex(…)`
+- **Status:** Accepted (v0.657.1)
 
 **Context.** `__bynkShow` used `JSON.stringify`, which throws on a Decimal's `bigint` coefficient and fell back to `String(v)`, giving `[object Object]` (#4198). `Instant` and `Duration` are plain numbers at runtime, so they never hit that fallback.
 
