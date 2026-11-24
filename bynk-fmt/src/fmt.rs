@@ -3553,6 +3553,9 @@ fn stub_clause_to_string(pv: &StubClause) -> String {
         },
         StubRhs::Fails(_) => "fails".to_string(),
         StubRhs::Never(_) => "never".to_string(),
+        StubRhs::Rejected(refusal, _) => format!("rejected {}", refusal.name),
+        StubRhs::Faulted(_) => "faulted".to_string(),
+        StubRhs::Unreachable(_) => "unreachable".to_string(),
         StubRhs::ReturnsEach(outcomes, _) => {
             let items = outcomes
                 .iter()

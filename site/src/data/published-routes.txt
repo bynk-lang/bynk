@@ -271,6 +271,8 @@
 /book/reference/diagnostics/bynk.asset.unsafe_path/
 /book/reference/diagnostics/bynk.boundary.ambiguous_type/
 /book/reference/diagnostics/bynk.boundary.structural_mismatch/
+/book/reference/diagnostics/bynk.call.outcome_construction/
+/book/reference/diagnostics/bynk.call.outcome_not_in_scope/
 /book/reference/diagnostics/bynk.capability.base_not_instantiable/
 /book/reference/diagnostics/bynk.capability.derived_outside_context/
 /book/reference/diagnostics/bynk.capability.instance_only/
@@ -829,6 +831,7 @@
 /book/reference/diagnostics/bynk.stub.bad_sequence/
 /book/reference/diagnostics/bynk.stub.generic_op/
 /book/reference/diagnostics/bynk.stub.not_a_seam/
+/book/reference/diagnostics/bynk.stub.outcome_word/
 /book/reference/diagnostics/bynk.stub.rhs_type/
 /book/reference/diagnostics/bynk.stub.unknown_op/
 /book/reference/diagnostics/bynk.suite.const_name_clash/
@@ -1391,6 +1394,8 @@
 /reference/diagnostics/bynk.asset.unsafe_path/
 /reference/diagnostics/bynk.boundary.ambiguous_type/
 /reference/diagnostics/bynk.boundary.structural_mismatch/
+/reference/diagnostics/bynk.call.outcome_construction/
+/reference/diagnostics/bynk.call.outcome_not_in_scope/
 /reference/diagnostics/bynk.capability.base_not_instantiable/
 /reference/diagnostics/bynk.capability.derived_outside_context/
 /reference/diagnostics/bynk.capability.instance_only/
@@ -1955,6 +1960,7 @@
 /reference/diagnostics/bynk.stub.bad_sequence/
 /reference/diagnostics/bynk.stub.generic_op/
 /reference/diagnostics/bynk.stub.not_a_seam/
+/reference/diagnostics/bynk.stub.outcome_word/
 /reference/diagnostics/bynk.stub.rhs_type/
 /reference/diagnostics/bynk.stub.unknown_op/
 /reference/diagnostics/bynk.suite.const_name_clash/

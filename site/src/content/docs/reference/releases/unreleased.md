@@ -7,3 +7,5 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.655.2** | A virtual-time stub (`returns … after <d>`) at the `unit` tier no longer fails `tsc` with TS2559 |
+| **v0.655.1** | A path with malformed percent-encoding is a `400 MalformedPath` rejection, no longer a `500` fault |

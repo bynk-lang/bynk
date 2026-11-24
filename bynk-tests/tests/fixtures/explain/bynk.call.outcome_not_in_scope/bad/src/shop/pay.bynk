@@ -1,0 +1,7 @@
+context shop.pay
+
+service authorise {
+	on call(total: Int) -> Effect[Int] by Caller {
+		Effect.pure(total)
+	}
+}
