@@ -364,7 +364,8 @@ fn regex_parts(literal: &str, extra: &str, anchored: bool) -> (String, String) {
     } else {
         pat
     };
-    (source, format!("{flags}{extra}"))
+    // #3950: every Bynk regex runs in Unicode mode.
+    (source, format!("{flags}{extra}u"))
 }
 
 /// [`regex_construction`] as a node: `new globalThis.RegExp("<source>", "<flags>")`. The `Str`

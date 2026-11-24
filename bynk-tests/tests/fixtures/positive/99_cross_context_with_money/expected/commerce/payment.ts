@@ -2,6 +2,7 @@
 // context commerce.payment
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import { Money as __CommonsMoney } from "./money.js";
@@ -12,7 +13,7 @@ export type Token = string & { readonly __brand: "commerce.payment.Token" };
 
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "T-[0-9]+" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "T-[0-9]+" + ")$", "u").test(value))) {
       return Err({ field: "Token", message: "must match /T-[0-9]+/", value });
     }
     return Ok(value as Token);

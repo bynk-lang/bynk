@@ -537,8 +537,8 @@ groups it would splice in).
   cannot prove unambiguous, and no ambiguity it finds (`bynk.types.catastrophic_regex`,
   `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
   here).
-- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
-  classes work on UTF-16 code units. A pattern may open with one inline-flag
+- Semantics are JS `RegExp` in Unicode mode (`u`), as for `Matches` (#3950): `.`
+  and classes work on code points, and `\w`, `\d` and `\b` stay ASCII. A pattern may open with one inline-flag
   group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
   flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
   runs under those flags: under `s`, `.` matches every code unit, and under
@@ -861,7 +861,7 @@ an `Int` is rejected (`bynk.types.predicate_base_mismatch`) — and MUST be
 internally consistent: an `InRange` MUST NOT be inverted
 (`bynk.types.inverted_range`), a length MUST NOT be negative
 (`bynk.types.negative_length`), a `Matches` regex MUST be valid
-(`bynk.types.invalid_regex`) and MUST be safe to backtrack (below), and the
+(`bynk.types.invalid_regex`; in Unicode mode, with the same optional leading `(?i)`/`(?s)` group as the `String` regex methods and no `(?m)`) and MUST be safe to backtrack (below), and the
 predicates together MUST admit at least one value (`bynk.types.empty_refinement`
 — on `Float`, `Positive` excludes the lower endpoint `0.0`, so
 `InRange(-1.0, 0.0) && Positive` is empty).

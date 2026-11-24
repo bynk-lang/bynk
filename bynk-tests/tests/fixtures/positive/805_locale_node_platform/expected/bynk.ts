@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result, type Option } from "./__bynk_runtime/result.js";
 import { __bynkIsCron } from "./__bynk_runtime/time.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
@@ -14,7 +15,7 @@ export type Uuid = string & { readonly __brand: "Uuid" };
 
 export const Uuid = {
   of(value: string): Result<Uuid, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$", "u").test(value))) {
       return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", value });
     }
     return Ok(value as Uuid);

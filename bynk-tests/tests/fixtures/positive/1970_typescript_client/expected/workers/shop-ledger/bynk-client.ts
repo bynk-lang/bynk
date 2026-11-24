@@ -165,7 +165,7 @@ export function __deserialise_Currency(json: __JsonValue, path: string = "$"): R
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}" + ")$").test(json))) {
+  if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(json))) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Currency", message: "must match /[A-Z]{3}/", value: json } });
   }
   return Ok(json as unknown as Currency);

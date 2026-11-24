@@ -31,6 +31,19 @@ commons pricing {
 }
 ```
 
+A `String` can be constrained by a pattern too. `Matches` runs the regex in
+Unicode mode, so `\p{L}` admits letters beyond ASCII, which an international name needs:
+
+```bynk
+commons people {
+	type DisplayName = String where MinLength(1) && MaxLength(40) && Matches(r"[\p{L}\p{M}' -]+")
+}
+```
+
+(A raw string, `r"…"`, because `\p` is not an escape in an ordinary string.) `\w` and
+`\d` stay ASCII in JavaScript; use `\p{L}` and `\p{Nd}` for the Unicode forms. A leading
+`(?i)` makes the match case-insensitive.
+
 ## Validate with `.of`
 
 Untrusted input must be checked at runtime. Every refined type has an `.of`
