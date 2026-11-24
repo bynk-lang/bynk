@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.655.0** | A cron handler can take its schedule: `(schedule: CronSchedule, at: Instant)` in either order, so a run key such as `"sweeper:\(schedule)@\(at.toEpochMillis())"` needs no repeated literal |
 | **v0.654.0** | A JSON body route answers `415` to non-JSON media types, and `@raw(contentType:)` accepts a list of types |
 | **v0.653.0** | A constant names a cron schedule: `on schedule(Nightly)` and `svc.schedule(Nightly)` accept a `String` or `CronSchedule` constant, resolved to its literal at compile time |
 | **v0.652.2** | Internal: the module-size cap now binds every back-half file, with no exemptions, now that Phase 2 of the back-half paydown has taken every one under 2,000 lines |

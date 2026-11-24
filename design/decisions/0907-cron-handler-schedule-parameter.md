@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A cron handler can take its schedule: `(schedule: CronSchedule, at: Instant)` in either order, so a run key such as `"sweeper:\(schedule)@\(at.toEpochMillis())"` needs no repeated literal
----
+# 0907 — A cron handler can take the schedule that fired it
 
-## ADR: cron-handler-schedule-parameter
-title: A cron handler can take the schedule that fired it
-summary: Up to two parameters, told apart by type, in either order: an `Instant` and exactly `CronSchedule`
+- **Status:** Accepted (v0.655)
 
 **Context.** A handler could not see which schedule fired it, since only the
 generated entry sees `event.cron`, so a run key for `Idempotency.claim` either
