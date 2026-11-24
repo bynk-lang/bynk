@@ -6290,21 +6290,25 @@ pub fn collect_unit_methods(
 
 /// #4270: whether the consumed export `type_name` of `target` takes the place of
 /// a type a braced `consumes` of a first-party unit left out. Only a selected
-/// export of a user unit does: a local declaration, or another first-party
-/// unit's type, still wins over (or stands beside) an unselected one.
+/// export of a user unit does, and only from a first-party unit this context
+/// consumes: a local declaration, or a first-party type reached any other way
+/// (`uses`), still wins over (or conflicts with) it.
 fn displaces_unselected_import(
     table: &crate::symbols::UnitTable,
     type_name: &str,
     target: &str,
     imported_from: &HashMap<String, String>,
+    consumed: &[String],
     has_local_value: bool,
 ) -> bool {
     !has_local_value
         && !crate::symbols::is_first_party_name(target)
         && table.unselected_consumed_types.contains(type_name)
-        && imported_from
-            .get(type_name)
-            .is_some_and(|o| crate::symbols::is_first_party_name(o))
+        && imported_from.get(type_name).is_some_and(|o| {
+            // The occupant is a first-party unit this context consumes (whose
+            // braces left the name out), not one it reaches with `uses`.
+            crate::symbols::is_first_party_name(o) && consumed.contains(o)
+        })
 }
 
 /// #2887: the alias the `name_conflict` note suggests for `target`'s export
@@ -6384,6 +6388,7 @@ pub fn merge_consumed_exports(
                 type_name,
                 t,
                 imported_from,
+                &unit_info[name].consumes,
                 local_value.is_some(),
             );
             if displaces_unselected {
