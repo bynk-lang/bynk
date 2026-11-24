@@ -970,9 +970,21 @@ impl<'a> Parser<'a> {
     /// keyword-hygiene batch (#548); formerly a pun on `provides`.
     fn parse_stub_clause(&mut self) -> Result<StubClause, CompileError> {
         let kw = self.expect(TokenKind::Stub, "to start a `stub` clause")?;
-        let capability = self.expect_ident("the capability after `stub`")?;
+        let mut capability = self.expect_ident("the capability after `stub`")?;
         self.expect(TokenKind::Dot, "after the capability in a `stub` clause")?;
-        let method = self.expect_ident("the method name after `.`")?;
+        let mut method = self.expect_ident("the method name after `.`")?;
+        // #3892: a consumed service written by its qualified context path
+        // (`stub shop.pay.authorise(_) …`): every segment before the last is
+        // the context, kept as one dotted name.
+        while self.peek_kind() == Some(TokenKind::Dot) {
+            self.bump();
+            let next = self.expect_ident("the method name after `.`")?;
+            capability = Ident {
+                name: format!("{}.{}", capability.name, method.name),
+                span: capability.span.merge(method.span),
+            };
+            method = next;
+        }
         self.expect(
             TokenKind::LParen,
             "after the method name in a `stub` clause",

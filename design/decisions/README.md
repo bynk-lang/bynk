@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0900](0900-stub-consumed-services.md) | **A consumed context's service is a `stub` seam below `system`** (v0.649) — `stub` substitutes a consumed service, so a handler that calls another context is testable in-process | Accepted (v0.649) |
 | [0899](0899-seam-consumed-credential-hidden-from-request-headers.md) | **A seam's consumed credential header is omitted from the handler's `RequestHeaders`** (v0.648.1) — Bearer, Oidc and Signature routes hide their credential header, as SignedCookie hides its cookie | Accepted (v0.648.1) |
 | [0898](0898-map-and-set-get-the-list-treatment.md) | **Map and Set are as complete as methods as List became under ADR 0116** (v0.648) — Adds the missing Map and Set methods, with insertion order specified, and deprecates bynk.map and bynk.set | Accepted (v0.648) |
 | [0897](0897-events-emit-infers-its-type-argument.md) | **A capability operation's type parameter is inferred from its arguments, `Events.emit` included** (v0.647.1) — Inference covers every generic capability op whose arguments determine it; the owner-only check runs on the inferred type | Accepted (v0.647.1) |

@@ -112,6 +112,12 @@ pub struct ResolvedStub {
     pub cap: String,
     /// The capability declaration, for op parameter names and return types.
     pub cap_decl: CapabilityDecl,
+    /// #3892: when the seam is a consumed context's services rather than a
+    /// capability, that context's qualified name. `cap_decl` is then a synthetic
+    /// capability with one operation per stubbed service (its parameters and
+    /// return type those of the service's `on call` handler), so the stub
+    /// machinery treats a service as an operation.
+    pub service_context: Option<String>,
     /// The `stub` clauses for this capability, in match order (case-scoped
     /// first so they take precedence over suite-scoped in the emitted if-chain).
     pub clauses: Vec<StubClause>,
@@ -249,6 +255,7 @@ pub fn phase_test_bodies(
             parsed,
             unit_tables,
             unit_consumes,
+            unit_consumes_aliases,
             errors,
         );
 
@@ -331,6 +338,7 @@ pub fn phase_test_bodies(
 /// declared seam of the target nor reachable through a consumed context is
 /// `bynk.stub.not_a_seam`, an unknown method is `bynk.stub.unknown_op`,
 /// and an empty `returns each []` is `bynk.stub.bad_sequence`.
+#[allow(clippy::too_many_arguments)]
 fn resolve_stubs(
     target_name: &str,
     target_kind: UnitKind,
@@ -338,6 +346,7 @@ fn resolve_stubs(
     parsed: &[ParsedFile],
     unit_tables: &HashMap<String, UnitTable>,
     unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     errors: &mut Vec<CompileError>,
 ) -> HashMap<String, ResolvedStub> {
     let target_table = unit_tables.get(target_name);
@@ -416,6 +425,31 @@ fn resolve_stubs(
     let mut out: HashMap<String, ResolvedStub> = HashMap::new();
     for (pc, scope, identity_path, fixtures, fns, types, consts) in collected {
         let cap_name = pc.capability.name.clone();
+        // #3892: a consumed context named by its alias or qualified path is a
+        // seam for its services.
+        let consumed_ctx = resolve_cap(&cap_name).is_none().then(|| {
+            unit_consumes_aliases
+                .get(target_name)
+                .and_then(|a| a.get(&cap_name).cloned())
+                .or_else(|| target_consumed.iter().find(|q| **q == cap_name).cloned())
+        });
+        if let Some(Some(ctx)) = consumed_ctx {
+            resolve_service_stub(
+                &ctx,
+                &cap_name,
+                pc,
+                scope,
+                identity_path,
+                fixtures,
+                fns,
+                types,
+                consts,
+                unit_tables,
+                &mut out,
+                errors,
+            );
+            continue;
+        }
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
             // non-existent capability. Either way it is not a seam.
@@ -484,6 +518,7 @@ fn resolve_stubs(
         let entry = out.entry(cap_name.clone()).or_insert_with(|| ResolvedStub {
             cap: cap_name.clone(),
             cap_decl: cap_decl.clone(),
+            service_context: None,
             clauses: Vec::new(),
             clause_scopes: Vec::new(),
             clause_fixtures: Vec::new(),
@@ -500,6 +535,99 @@ fn resolve_stubs(
         entry.clause_consts.push(consts);
     }
     out
+}
+
+/// #3892: fold a `stub <context>.<service>(…)` clause into the seam map. The
+/// consumed context is the seam and each stubbed service one operation of it,
+/// typed from the service's `on call` handler, so the clause is checked and
+/// lowered as a capability operation is.
+#[allow(clippy::too_many_arguments)]
+fn resolve_service_stub(
+    ctx: &str,
+    seam: &str,
+    pc: StubClause,
+    scope: StubScope,
+    identity_path: PathBuf,
+    fixtures: Vec<FixtureDecl>,
+    fns: Vec<FnDecl>,
+    types: Vec<TypeDecl>,
+    consts: Vec<ConstDecl>,
+    unit_tables: &HashMap<String, UnitTable>,
+    out: &mut HashMap<String, ResolvedStub>,
+    errors: &mut Vec<CompileError>,
+) {
+    let handler = unit_tables
+        .get(ctx)
+        .and_then(|t| t.services.get(&pc.method.name))
+        .and_then(|s| s.handlers.iter().find(|h| h.kind == HandlerKind::Call));
+    let Some(handler) = handler else {
+        errors.push(
+            CompileError::new(
+                "bynk.stub.unknown_op",
+                pc.method.span,
+                format!("`{}` is not a service of `{ctx}`", pc.method.name),
+            )
+            .with_note("a `stub` on a consumed context names one of its services"),
+        );
+        return;
+    };
+    if let StubRhs::ReturnsEach(outcomes, span) = &pc.rhs
+        && outcomes.is_empty()
+    {
+        errors.push(CompileError::new(
+            "bynk.stub.bad_sequence",
+            *span,
+            format!(
+                "`stub {seam}.{} returns each []` has no outcomes — a sequence needs at least one",
+                pc.method.name
+            ),
+        ));
+        return;
+    }
+    let op = CapabilityOp {
+        name: pc.method.clone(),
+        type_params: Vec::new(),
+        params: handler.params.clone(),
+        return_type: handler.return_type.clone(),
+        annotations: Vec::new(),
+        documentation: None,
+        span: handler.span,
+        trivia: Default::default(),
+    };
+    let entry = out.entry(seam.to_string()).or_insert_with(|| ResolvedStub {
+        cap: seam.to_string(),
+        cap_decl: CapabilityDecl {
+            name: pc.capability.clone(),
+            ops: Vec::new(),
+            derived: None,
+            documentation: None,
+            span: pc.capability.span,
+            trailing_comments: Vec::new(),
+            trivia: Default::default(),
+        },
+        service_context: Some(ctx.to_string()),
+        clauses: Vec::new(),
+        clause_scopes: Vec::new(),
+        clause_fixtures: Vec::new(),
+        clause_fns: Vec::new(),
+        clause_types: Vec::new(),
+        clause_consts: Vec::new(),
+        identity_path: identity_path.clone(),
+    });
+    if !entry
+        .cap_decl
+        .ops
+        .iter()
+        .any(|o| o.name.name == op.name.name)
+    {
+        entry.cap_decl.ops.push(op);
+    }
+    entry.clauses.push(pc);
+    entry.clause_scopes.push(scope);
+    entry.clause_fixtures.push(fixtures);
+    entry.clause_fns.push(fns);
+    entry.clause_types.push(types);
+    entry.clause_consts.push(consts);
 }
 
 /// v0.118: infer a `system`-tier suite's wired participants — the target's
@@ -2067,7 +2195,7 @@ fn check_test_bodies(
             check_bad_signature_tier(case, tier, &mut errors);
             check_wire_tier(case, tier, &mut errors);
             if tier != bynk_syntax::ast::TestTier::System {
-                crossing.check_case(target_name, case, tier, &mut errors);
+                crossing.check_case_stubbed(stubs, target_name, case, tier, &mut errors);
             }
         }
         // v0.114: generative `property` blocks — check their `for all` bindings,
@@ -2093,7 +2221,7 @@ fn check_test_bodies(
                 d1_sql,
                 parsed[i].source(),
             );
-            crossing.check_property(target_name, prop, &mut errors);
+            crossing.check_property_stubbed(stubs, target_name, prop, &mut errors);
             check_advance_in_property(prop, &mut errors);
             check_snapshot_in_property(prop, &mut errors);
         }
@@ -2357,6 +2485,31 @@ type CrossCall = (String, String);
 /// A same-context agent handler: `(agent, handler)`.
 type AgentHandler = (String, String);
 
+/// #3892: the consumed services a body stubs, as `(context, service)`: every
+/// clause that applies to every run or its suite's, plus the case's own when
+/// `case` names one.
+fn stubbed_services(
+    stubs: &HashMap<String, ResolvedStub>,
+    case: Option<&str>,
+) -> HashSet<CrossCall> {
+    let mut out = HashSet::new();
+    for rp in stubs.values() {
+        let Some(ctx) = &rp.service_context else {
+            continue;
+        };
+        for (clause, scope) in rp.clauses.iter().zip(&rp.clause_scopes) {
+            let applies = match scope {
+                StubScope::Case(name) => case == Some(name.as_str()),
+                _ => true,
+            };
+            if applies {
+                out.insert((ctx.clone(), clause.method.name.clone()));
+            }
+        }
+    }
+    out
+}
+
 /// #1737: what in the target reaches another context, for the
 /// `bynk.tier.cross_context_needs_system` gate: each service, and each agent
 /// handler, that does, with the cross-context call it reaches.
@@ -2387,6 +2540,12 @@ struct CrossingServices<'a> {
     consumed: &'a [String],
     aliases: Option<&'a HashMap<String, String>>,
     unit_tables: &'a HashMap<String, UnitTable>,
+    /// #3892: the consumed services the body under check stubs. A stub makes the
+    /// call legal below `system`: the double answers, no context is reached.
+    stubbed: HashSet<CrossCall>,
+    /// The maps this was built from, to rebuild it per case's stubs.
+    consumes: &'a HashMap<String, Vec<String>>,
+    all_aliases: &'a HashMap<String, HashMap<String, String>>,
 }
 
 impl<'a> CrossingServices<'a> {
@@ -2395,6 +2554,24 @@ impl<'a> CrossingServices<'a> {
         unit_tables: &'a HashMap<String, UnitTable>,
         unit_consumes: &'a HashMap<String, Vec<String>>,
         unit_consumes_aliases: &'a HashMap<String, HashMap<String, String>>,
+    ) -> Self {
+        Self::of_stubbed(
+            target_name,
+            unit_tables,
+            unit_consumes,
+            unit_consumes_aliases,
+            HashSet::new(),
+        )
+    }
+
+    /// [`Self::of`], with the consumed services a body stubs (#3892): they are
+    /// no crossing, whatever reaches them.
+    fn of_stubbed(
+        target_name: &str,
+        unit_tables: &'a HashMap<String, UnitTable>,
+        unit_consumes: &'a HashMap<String, Vec<String>>,
+        unit_consumes_aliases: &'a HashMap<String, HashMap<String, String>>,
+        stubbed: HashSet<CrossCall>,
     ) -> Self {
         let mut this = CrossingServices {
             services: HashMap::new(),
@@ -2406,6 +2583,9 @@ impl<'a> CrossingServices<'a> {
                 .unwrap_or(&[]),
             aliases: unit_consumes_aliases.get(target_name),
             unit_tables,
+            consumes: unit_consumes,
+            all_aliases: unit_consumes_aliases,
+            stubbed,
         };
         let Some(table) = this.table else {
             return this;
@@ -2508,7 +2688,7 @@ impl<'a> CrossingServices<'a> {
         let mut edges = Vec::new();
         for e in exprs_in_order(block) {
             if hit.is_none() {
-                hit = self.cross_call(e);
+                hit = self.cross_call(e).filter(|c| !self.stubbed.contains(c));
             }
             if let Some(edge) = self.dispatch(e, &bound) {
                 edges.push(edge);
@@ -2627,10 +2807,58 @@ impl<'a> CrossingServices<'a> {
             errors.push(
                 CompileError::new("bynk.tier.cross_context_needs_system", e.span, message)
                     .with_note(format!(
-                        "below `system` a test runs in-process, with no other context stood up to call (`stub` doubles capabilities, not a context's services); {promote}"
+                        "below `system` a test runs in-process, with no other context stood up to call; stub the service (`stub <context>.<service>(…) returns …`) to substitute it, or {promote}"
                     )),
             );
         }
+    }
+
+    /// This gate over the services `case` (or, with `None`, only its suite) stubs.
+    fn with_stubs(
+        &self,
+        target_name: &str,
+        stubs: &HashMap<String, ResolvedStub>,
+        case: Option<&str>,
+    ) -> Option<CrossingServices<'a>> {
+        let stubbed = stubbed_services(stubs, case);
+        (!stubbed.is_empty()).then(|| {
+            Self::of_stubbed(
+                target_name,
+                self.unit_tables,
+                self.consumes,
+                self.all_aliases,
+                stubbed,
+            )
+        })
+    }
+
+    /// [`Self::check_case`], with the services the case or its suite stubs.
+    fn check_case_stubbed(
+        &self,
+        stubs: &HashMap<String, ResolvedStub>,
+        target_name: &str,
+        case: &Case,
+        tier: TestTier,
+        errors: &mut Vec<CompileError>,
+    ) {
+        let gate = self.with_stubs(target_name, stubs, Some(&case.name));
+        gate.as_ref()
+            .unwrap_or(self)
+            .check_case(target_name, case, tier, errors);
+    }
+
+    /// [`Self::check_property`], with the services its suite stubs.
+    fn check_property_stubbed(
+        &self,
+        stubs: &HashMap<String, ResolvedStub>,
+        target_name: &str,
+        prop: &PropertyDecl,
+        errors: &mut Vec<CompileError>,
+    ) {
+        let gate = self.with_stubs(target_name, stubs, None);
+        gate.as_ref()
+            .unwrap_or(self)
+            .check_property(target_name, prop, errors);
     }
 
     /// The gate for a non-`system` `case`.
@@ -3581,6 +3809,18 @@ pub fn register_call_record_types(
             caps.push((n, d));
         }
     }
+    // #3892: a consumed context's services, whose `with`/`trace` records read
+    // the `on call` parameters.
+    let service_seams = consumed_service_seam_decls(
+        unit_tables,
+        &resolved.cross_context.consumed_contexts,
+        &resolved.cross_context.aliases,
+    );
+    for (n, d) in &service_seams {
+        if !table.capabilities.contains_key(n) {
+            caps.push((n, d));
+        }
+    }
     for (cap_name, decl) in caps {
         for op in &decl.ops {
             let fields: Vec<RecordField> = op
@@ -3786,6 +4026,95 @@ fn add_consumed_adapter_capabilities(
     }
 }
 
+/// #3892: a consumed context's services as seams, one synthetic capability per
+/// context named by what the target calls it (its alias, else its last path
+/// segment, the key its surface double sits under in the test `deps`), with one
+/// operation per service: the parameters and return type of its `on call`
+/// handler. Observation (`expect Pay.authorise called …`), `with` and `trace`
+/// read them as they read a capability's.
+pub fn consumed_service_seam_decls(
+    unit_tables: &HashMap<String, UnitTable>,
+    consumed: &[String],
+    aliases: &HashMap<String, String>,
+) -> std::collections::BTreeMap<String, CapabilityDecl> {
+    let mut out = std::collections::BTreeMap::new();
+    for ctx in consumed {
+        let Some(table) = unit_tables.get(ctx) else {
+            continue;
+        };
+        if table.kind == Some(UnitKind::Adapter) || table.services.is_empty() {
+            continue;
+        }
+        let mut names: Vec<String> = aliases
+            .iter()
+            .filter(|(_, q)| *q == ctx)
+            .map(|(alias, _)| alias.clone())
+            .collect();
+        if names.is_empty() {
+            names.push(ctx.rsplit('.').next().unwrap_or(ctx).to_string());
+        }
+        let mut ops: Vec<CapabilityOp> = table
+            .services
+            .values()
+            .filter_map(|svc| {
+                let h = svc.handlers.iter().find(|h| h.kind == HandlerKind::Call)?;
+                Some(CapabilityOp {
+                    name: svc.name.clone(),
+                    type_params: Vec::new(),
+                    params: h.params.clone(),
+                    return_type: h.return_type.clone(),
+                    annotations: Vec::new(),
+                    documentation: None,
+                    span: h.span,
+                    trivia: Default::default(),
+                })
+            })
+            .collect();
+        ops.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+        for name in names {
+            out.entry(name.clone()).or_insert_with(|| CapabilityDecl {
+                name: Ident {
+                    name: name.clone(),
+                    span: Span::default(),
+                },
+                ops: ops.clone(),
+                derived: None,
+                documentation: None,
+                span: Span::default(),
+                trailing_comments: Vec::new(),
+                trivia: Default::default(),
+            });
+        }
+    }
+    out
+}
+
+/// #3892: the seams of [`consumed_service_seam_decls`] as the observation
+/// checker reads capabilities.
+fn add_consumed_service_seams(
+    map: &mut HashMap<String, checker::CapabilityInfo>,
+    resolved: &ResolvedCommons,
+    unit_tables: &HashMap<String, UnitTable>,
+    tys: &Arc<Types>,
+) {
+    let cross = &resolved.cross_context;
+    for (name, decl) in
+        consumed_service_seam_decls(unit_tables, &cross.consumed_contexts, &cross.aliases)
+    {
+        let ops = decl
+            .ops
+            .iter()
+            .map(|op| build_capability_op_info(op, &resolved.types, tys))
+            .collect();
+        map.entry(name.clone())
+            .or_insert_with(|| checker::CapabilityInfo {
+                name,
+                ops,
+                derived_from: None,
+            });
+    }
+}
+
 /// Type-check a test `case`/`property` body against the target unit's privileges,
 /// returning the inferred `expr_types` map and the `Callee` classification
 /// recorded alongside it. The **check** path feeds real diagnostic/ref sinks;
@@ -3886,6 +4215,7 @@ fn typecheck_case_body_recording(
         }
     }
     add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, resolved, tys);
+    add_consumed_service_seams(&mut capability_info_map, resolved, unit_tables, tys);
 
     // All declared capabilities are implicitly "given" inside a test body;
     // the test runner wires them via the mocked deps. We feed the same map
@@ -4959,6 +5289,7 @@ fn check_property_body(
         }
     }
     add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, &resolved, tys);
+    add_consumed_service_seams(&mut capability_info_map, &resolved, unit_tables, tys);
     let given_declared: Vec<String> = capability_info_map.keys().cloned().collect();
     let return_ty = checker::resolve_type_ref(&synthetic_return, &resolved.types, tys).unwrap();
     let return_ty_span = prop.span;

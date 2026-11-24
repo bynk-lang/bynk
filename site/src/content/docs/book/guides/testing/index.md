@@ -10,6 +10,7 @@ collaborators — in one context, or wired across the real cross-context edge.
 **Do**
 - [Write tests and stub collaborators](/book/guides/testing/write-tests/)
 - [Test tiers](/book/guides/testing/integration/)
+- [Test a handler that calls another context](/book/guides/testing/test-a-handler-that-calls-another-context/)
 - [Run your tests](/book/guides/testing/run-tests/)
 - [Check what a request stored](/book/guides/testing/check-what-the-app-stored/)
 - [Try an expression against your project](/book/guides/testing/try-an-expression/)

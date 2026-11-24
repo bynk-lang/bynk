@@ -12,6 +12,38 @@ use bynk_syntax::ast::{Case, FnName};
 use bynk_ts::{TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType, TsTypeMember};
 use std::sync::Arc;
 
+/// #3892: `(name, [service, …])` for each consumed context that declares
+/// services, named by its alias or its last path segment, the key its surface
+/// double sits under in the test `deps`.
+fn consumed_service_seams(
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+) -> Vec<(String, TsExpr)> {
+    let aliases = unit_consumes_aliases.get(target_name);
+    let mut out: Vec<(String, TsExpr)> = Vec::new();
+    for q in unit_consumes.get(target_name).into_iter().flatten() {
+        let Some(table) = unit_tables.get(q) else {
+            continue;
+        };
+        if table.kind == Some(UnitKind::Adapter) || table.services.is_empty() {
+            continue;
+        }
+        let key = aliases
+            .and_then(|a| a.iter().find(|(_, v)| *v == q).map(|(k, _)| k.clone()))
+            .unwrap_or_else(|| q.rsplit('.').next().unwrap_or(q.as_str()).to_string());
+        let mut services: Vec<&String> = table.services.keys().collect();
+        services.sort();
+        out.push((
+            key,
+            TsExpr::array(services.into_iter().map(str_lit).collect()),
+        ));
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
 /// Emit the shared per-runner scope setup — agent reset, the `deps` factory, and
 /// the destructurings (see [`emit_ns_destructure`]) that bring the target's,
 /// `uses`', and consumed contexts' names into scope. Shared by `case` and
@@ -80,10 +112,18 @@ pub(super) fn emit_test_scope_setup(
                     .map(|(cap, decl, _)| (cap, decl))
                     .collect();
             seams.extend(table.capabilities.iter());
-            if seams.is_empty() {
+            // #3892: a consumed context's services are seams too, by the name
+            // the target reaches the context under.
+            let service_seams = consumed_service_seams(
+                target_name,
+                unit_tables,
+                unit_consumes,
+                unit_consumes_aliases,
+            );
+            if seams.is_empty() && service_seams.is_empty() {
                 return None;
             }
-            let entries: Vec<(String, TsExpr)> = seams
+            let mut entries: Vec<(String, TsExpr)> = seams
                 .iter()
                 .map(|(c, decl)| {
                     let mut ops: Vec<&String> = decl.ops.iter().map(|o| &o.name.name).collect();
@@ -94,6 +134,7 @@ pub(super) fn emit_test_scope_setup(
                     )
                 })
                 .collect();
+            entries.extend(service_seams);
             Some(TsExpr::object(entries))
         })
     } else {
@@ -552,6 +593,7 @@ pub(super) fn emit_test_case_function(
         unit_tables,
         unit_uses,
         unit_consumes,
+        unit_consumes_aliases,
         hidden,
         tys,
         suite_fns.types,
@@ -740,6 +782,8 @@ pub(super) fn observation_call_record_types(
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
 ) -> Vec<TsStmt> {
     let Some(table) = unit_tables.get(target_name) else {
         return Vec::new();
@@ -771,6 +815,32 @@ pub(super) fn observation_call_record_types(
         for n in unit_tables[owner].types.keys() {
             type_ns.entry(n.clone()).or_insert_with(|| uns.clone());
         }
+        caps.entry(cap).or_insert(decl);
+    }
+    // #3892: a consumed context's services are seams too, their parameter types
+    // qualified by the context's namespace.
+    let consumed: &[String] = unit_consumes
+        .get(target_name)
+        .map_or(&[][..], Vec::as_slice);
+    let service_seams = bynk_check::test_suites::consumed_service_seam_decls(
+        unit_tables,
+        consumed,
+        &unit_consumes_aliases
+            .get(target_name)
+            .cloned()
+            .unwrap_or_default(),
+    );
+    for q in consumed {
+        if let Some(t) = unit_tables.get(q)
+            && t.kind != Some(UnitKind::Adapter)
+            && !t.services.is_empty()
+        {
+            for n in public_types(t) {
+                type_ns.entry(n.clone()).or_insert_with(|| test_ns(q));
+            }
+        }
+    }
+    for (cap, decl) in &service_seams {
         caps.entry(cap).or_insert(decl);
     }
     let mut stmts = Vec::new();

@@ -1,0 +1,7 @@
+context shop.stock
+
+service reserve {
+  on call(sku: String) -> Effect[Result[(), String]] by Caller {
+    Effect.pure(Ok(()))
+  }
+}

@@ -97,6 +97,8 @@ pub(super) fn emit_test_deps(
     // how its value is built.
     let mut tops: Vec<(String, (String, String), TopDep)> = Vec::new();
     let mut surface_entries: Vec<(String, TsExpr)> = Vec::new();
+    // #3892: `(surface key, local, value)` of each stubbed consumed context.
+    let mut service_doubles: Vec<(String, String, TsExpr)> = Vec::new();
     // #1975: an adapter target's deps are its own capabilities, built from
     // its binding: the binding is the unit under test.
     if matches!(target_kind, UnitKind::Context | UnitKind::Adapter)
@@ -185,12 +187,18 @@ pub(super) fn emit_test_deps(
                 .cloned()
                 .unwrap_or_else(|| q.rsplit('.').next().unwrap_or(q.as_str()).to_string());
             let other_ns = test_ns(q);
-            surface_entries.push((
-                key,
-                undefined_as_unknown_as(format!(
-                    "globalThis.ReturnType<typeof {other_ns}.__makeSurface>"
-                )),
-            ));
+            let surface_ty = format!("globalThis.ReturnType<typeof {other_ns}.__makeSurface>");
+            // #3892: a consumed context whose services the suite stubs answers
+            // from its `__Stub_<…>` double, which is also a top-level entry so
+            // the recording wrapper sees its calls. The services it does not
+            // stub throw a named error when called.
+            if let Some(local) =
+                stub_service_double(stubs, q, &key, &surface_ty, &mut service_doubles)
+            {
+                surface_entries.push((key, ident(local)));
+                continue;
+            }
+            surface_entries.push((key, undefined_as_unknown_as(surface_ty)));
         }
     }
 
@@ -282,6 +290,7 @@ pub(super) fn emit_test_deps(
             declare(&dep.id, &built, &mut declared, &mut body);
         }
     }
+    body.extend(service_double_consts(&service_doubles));
     let mut entries: Vec<(String, TsExpr)> = built
         .into_iter()
         .map(|dep| {
@@ -293,6 +302,7 @@ pub(super) fn emit_test_deps(
             (dep.key, value)
         })
         .collect();
+    entries.extend(service_double_entries(&service_doubles));
     if !surface_entries.is_empty() {
         entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
     }
@@ -396,6 +406,50 @@ pub(super) fn emit_test_deps(
         units,
         doubles,
     }
+}
+
+/// #3892: the double of a consumed context whose services the suite stubs, built
+/// over nothing so an unstubbed service throws a named error. Records
+/// `(surface key, local, value)` and returns the local, or `None` when no
+/// service of `ctx` is stubbed.
+fn stub_service_double(
+    stubs: &HashMap<String, ResolvedStub>,
+    ctx: &str,
+    key: &str,
+    surface_ty: &str,
+    doubles: &mut Vec<(String, String, TsExpr)>,
+) -> Option<String> {
+    let rp = stubs
+        .values()
+        .find(|rp| rp.service_context.as_deref() == Some(ctx))?;
+    let local = format!("__svc_{key}");
+    let value = stub_overlay(rp, surface_ty, Some(undefined_as_unknown_as(surface_ty)));
+    doubles.push((key.to_string(), local.clone(), value));
+    Some(local)
+}
+
+/// The `const __svc_<key> = …;` statements declaring each service double.
+fn service_double_consts(doubles: &[(String, String, TsExpr)]) -> Vec<TsStmt> {
+    doubles
+        .iter()
+        .map(|(_, local, value)| {
+            TsStmt::const_stmt(
+                TsBindingName::Ident(local.clone()),
+                None,
+                value.clone(),
+                None,
+            )
+        })
+        .collect()
+}
+
+/// The same doubles by their context's name at the top level of the deps, where
+/// `__bynkRecordDeps` wraps each operation to record its calls.
+fn service_double_entries(doubles: &[(String, String, TsExpr)]) -> Vec<(String, TsExpr)> {
+    doubles
+        .iter()
+        .map(|(key, local, _)| (key.clone(), ident(local.clone())))
+        .collect()
 }
 
 /// What [`emit_test_deps`] built (#1863).
