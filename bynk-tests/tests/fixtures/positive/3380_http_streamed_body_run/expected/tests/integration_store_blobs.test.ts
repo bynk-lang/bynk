@@ -7,123 +7,9 @@ import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaderPairs }
 import * as __ns_store_blobs from "../workers/store-blobs/handlers.js";
 import worker___ns_store_blobs from "../workers/store-blobs/index.js";
 
-class ExpectationError extends Error {
-  location: string;
-  start: number;
-  end: number;
-  actual?: string;
-  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
-    super(`${detail}\n  at ${location}`);
-    this.location = location;
-    this.start = start;
-    this.end = end;
-    this.actual = actual;
-  }
-}
-// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
-// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
-// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
-// (the `--format json` record) carries the whole text.
-function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
-  if (was === undefined) return { line: "" };
-  let full: string;
-  try { full = was(); } catch { return { line: "" }; }
-  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
-  return { line: `\n  ${label} was ${shown}`, actual: full };
-}
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
-  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
-  return new ExpectationError(location, start, end, detail + w.line, w.actual);
-}
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
-}
-// #2272: the declaration an invariant or transition violation names, as a failed case
-// reports it. `undefined` for any other error, so it is omitted from the report.
-function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
-  const v = e && e.invariantViolation;
-  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
-}
-// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
-// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
-// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
-function __bynkShowLeaf(x: any): unknown {
-  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
-    const neg = x.coefficient < 0n;
-    let digits = (neg ? -x.coefficient : x.coefficient).toString();
-    let text = digits;
-    if (x.scale > 0) {
-      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
-      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
-    }
-    return (neg ? "-" : "") + text + "d";
-  }
-  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
-  return x;
-}
-function __bynkShow(v: unknown): string {
-  try {
-    if (typeof v === "bigint") return String(v);
-    const leaf = __bynkShowLeaf(v);
-    if (typeof leaf === "string" && leaf !== v) return leaf;
-    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
-    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
-      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
-    }
-    return JSON.stringify(v) ?? String(v);
-  } catch { return String(v); }
-}
+<<bynk-shared: testing/expectation>>
 
-// #4229: a `Duration` as the largest unit literal that holds it exactly (`3.seconds`,
-// `1.hour`, `1500.milliseconds`), an integral count only; anything else prints as the number.
-function __bynkShowDuration(ms: number): string {
-  if (!Number.isInteger(ms)) return String(ms);
-  const units: Array<[number, string, string]> = [
-    [86400000, "day", "days"],
-    [3600000, "hour", "hours"],
-    [60000, "minute", "minutes"],
-    [1000, "second", "seconds"],
-  ];
-  if (ms === 0) return "0.seconds";
-  const abs = Math.abs(ms);
-  for (const [size, one, many] of units) {
-    if (abs % size === 0) {
-      const n = ms / size;
-      return `${n}.${Math.abs(n) === 1 ? one : many}`;
-    }
-  }
-  return `${ms}.${abs === 1 ? "millisecond" : "milliseconds"}`;
-}
-function __bynkShowFields(v: any, shapes: Record<string, any>): string {
-  return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + (shapes[k] != null ? __bynkShowTyped(v[k], shapes[k]) : __bynkShow(v[k]))).join(",") + "}";
-}
-// A value printed beside the shape of the `Duration`s and `Instant`s in its type
-// (`bynk-emit/src/testgen/show_shape.rs`): `"D"`, `"I"`, `["l", s]`, `["o", s]`,
-// `["res", ok, err]`, `["r", { f: s }]`, `["s", { Variant: { f: s } }]`.
-function __bynkShowTyped(v: unknown, shape: any): string {
-  try {
-    if (shape === "D" && typeof v === "number") return __bynkShowDuration(v);
-    if (shape === "I" && typeof v === "number") return `Instant.fromEpochMillis(${v})`;
-    if (Array.isArray(shape)) {
-      const obj = v as any;
-      switch (shape[0]) {
-        case "l": if (Array.isArray(v)) return "[" + v.map((e) => __bynkShowTyped(e, shape[1])).join(",") + "]"; break;
-        case "o": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1] }); break;
-        case "res": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1], error: shape[2] }); break;
-        case "r": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1]); break;
-        case "s": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1][obj.tag] ?? {}); break;
-      }
-    }
-  } catch { /* fall through to the type-blind printer */ }
-  return __bynkShow(v);
-}
-
-let __bynkClockNow = 0;
-function __bynkAdvanceClock(by: number): void {
-  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
-  __bynkClockNow += by;
-}
-const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
+<<bynk-shared: testing/clock>>
 function __buildHarness() {
   const env___ns_store_blobs: any = {};
   env___ns_store_blobs.__bynkClock = __bynkClock;
@@ -138,17 +24,7 @@ function __makeHarness() {
   return (__bynkHarness ??= __buildHarness());
 }
 
-function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
-function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
-  const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const p = __b64url(JSON.stringify(payload));
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
-  return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
-}
+<<bynk-shared: testing/jwt_signer>>
 async function __sysdrive_blobs_http_PUT_blobs_Param_name(name: string, body: AsyncIterable<globalThis.Uint8Array>, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __it = body[globalThis.Symbol.asyncIterator]();
   const __body = new globalThis.ReadableStream<Uint8Array>({ async pull(c) {
@@ -304,19 +180,7 @@ async function test_a_streamed_overrun_is_rendered_by_on_rejected__like_any_othe
   }
 }
 
-type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+<<bynk-shared: testing/case_timing>>
 
 export const __bynkCases: readonly string[] = ["a streamed body round-trips through the router", "a body of exactly the cap is delivered whole", "a body past the cap is refused on the bytes read, with no content-length to go by", "a streamed route refuses another content type", "a streamed overrun is rendered by on rejected, like any other 413"];
 

@@ -1097,9 +1097,14 @@ mod tests {
     /// a hand-rebuilt approximation of it.
     #[test]
     fn matches_the_real_fixtures_own_tests_main_ts_byte_for_byte() {
+        // #4235: the fixture's snapshot names the shared filter fragment rather than copying it.
         let expected = include_str!(
             "../../../bynk-tests/tests/fixtures/positive/109_test_with_opaque_construction/\
              expected/tests/main.ts"
+        )
+        .replace(
+            "<<bynk-shared: testing/test_filter>>\n",
+            include_str!("../../../bynk-tests/tests/fixtures/shared/testing/test_filter.ts"),
         );
         let tests = vec![RunnableTest {
             snapshot_files: Vec::new(),
