@@ -2,13 +2,14 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type CountryCode = string & { readonly __brand: "CountryCode" };
 
 export const CountryCode = {
   of(value: string): Result<CountryCode, ValidationError> {
-    if (!(value.length === 2)) {
+    if (!(__bynkCodePointLength(value) === 2)) {
       return Err({ field: "CountryCode", message: "length must be exactly 2", value });
     }
     return Ok(value as CountryCode);

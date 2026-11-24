@@ -1,0 +1,27 @@
+---
+#3954, #3949: `String` orders and measures by code point, not UTF-16 code unit. An emoji
+(U+1F600, above U+FFFF) sorts after a fullwidth tilde (U+FF5E), as UTF-8 byte order,
+storage and SQL do. `<`, `sortBy`, `min`, `max` and an `Ord` witness agree, and a length
+predicate counts an emoji once.
+---
+commons demo.order
+
+uses bynk.list
+
+type Pair = String where MaxLength(2)
+
+type Pairs = { name: String } derives Ord
+
+fn emoji() -> String { "\u{1F600}" }
+
+fn tilde() -> String { "\u{FF5E}" }
+
+fn sorted(xs: List[String]) -> List[String] { xs.sortBy((s) => s) }
+
+fn byRecord(xs: List[Pairs]) -> List[Pairs] { xs.sortBy((p) => p) }
+
+fn literal() -> Pair { "\u{1F642}\u{1F642}" }
+
+fn checked() -> Result[Pair, ValidationError] { Pair.of("\u{1F642}\u{1F642}") }
+
+fn tooLong() -> Result[Pair, ValidationError] { Pair.of("\u{1F642}\u{1F642}\u{1F642}") }

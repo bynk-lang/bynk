@@ -2,6 +2,7 @@
 // commons shop.values
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -23,7 +24,7 @@ export type CustomerId = string & { readonly __brand: "CustomerId" };
 
 export const CustomerId = {
   of(value: string): Result<CustomerId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "CustomerId", message: "must be non-empty", value });
     }
     return Ok(value as CustomerId);

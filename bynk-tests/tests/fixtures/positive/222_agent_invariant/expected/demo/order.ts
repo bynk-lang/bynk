@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import { type ValidationError, __invariantViolation } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
@@ -13,7 +14,7 @@ export type AuthId = string & { readonly __brand: "demo.order.AuthId" };
 
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "AuthId", message: "must be non-empty", value });
     }
     return Ok(value as AuthId);

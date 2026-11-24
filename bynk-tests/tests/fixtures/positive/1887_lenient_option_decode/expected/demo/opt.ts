@@ -3,6 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
@@ -17,7 +18,7 @@ export type Name = string & { readonly __brand: "Name" };
 
 export const Name = {
   of(value: string): Result<Name, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Name", message: "must be non-empty", value });
     }
     return Ok(value as Name);

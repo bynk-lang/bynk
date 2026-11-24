@@ -5,5 +5,5 @@ fn notify(id: Int) -> Effect[()] {
 }
 
 fn notifyAll(ids: List[Int]) -> Effect[()] {
-  do ids.parTraverse((id: Int) => notify(id))
+  do ids.parForEach((id: Int) => notify(id))
 }
