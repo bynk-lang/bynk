@@ -3032,7 +3032,8 @@ existing (ADR 0037). The whole kernel:
 | `List[T]` | `fold(init: A, f: (A, T) -> A)` | `A` |
 | `List[T]` | `foldEff(init: A, f: (A, T) -> Effect[A])` | `Effect[A]` |
 | `List[T]` | `forEach(f: T -> Effect[()])` | `Effect[()]` |
-| `List[T]` | `parTraverse(f: T -> Effect[()])` | `Effect[()]` |
+| `List[T]` | `parForEach(f: T -> Effect[()])` | `Effect[()]` |
+| `List[T]` | `parTraverse(f: T -> Effect[U])` | `Effect[List[U]]` |
 | `List[T]` | `traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` |
 | `List[T]` | `parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` |
 | `List[T]` | `traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` |
@@ -3065,7 +3066,7 @@ existing (ADR 0037). The whole kernel:
 | `Map[K, V]` | `insert(k: K, v: V)` | `Map[K, V]` |
 
 A method outside the kernel is `bynk.types.method_not_found`; a wrong arity
-is `bynk.types.method_arity`. **`foldEff`, `forEach`, `parTraverse`,
+is `bynk.types.method_arity`. **`foldEff`, `forEach`, `parForEach`, `parTraverse`,
 `traverseAll`, `parTraverseAll`, `traverseTry`, and `parTraverseTry` are effect
 operations**: each runs its
 effectful function value, so calling one in a pure context is
@@ -3073,8 +3074,8 @@ effectful function value, so calling one in a pure context is
 [§5.5](#55-effects-capabilities--providers). `forEach(f: T -> Effect[()])`
 (v0.146, [ADR 0170](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0170-do-statement-implicit-unit-and-list-foreach.md))
 is the `Query.forEach` terminal over an eager list — the effect-per-element loop,
-**sequential** (each element awaited in order). `parTraverse(f: T -> Effect[()])`
-(v0.147, [ADR 0171](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0171-list-partraverse.md))
+**sequential** (each element awaited in order). `parForEach(f: T -> Effect[()])`
+(v0.147, named `parTraverse` until #3967; [ADR 0171](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0171-list-partraverse.md))
 is its **concurrent** sibling — the `Query.parTraverse` fan-out over an eager
 list, issuing every element's effect at once and awaiting them together, so a
 slow element does not head-of-line-block the rest; the order in which side
@@ -3089,8 +3090,8 @@ program sees does not depend on timing. Later faults ride on the raised one as
 `suppressed` and are not catchable separately. A fast fault therefore waits for a
 slow sibling. A synchronous throw from `f` is a fault of that element only: the
 elements before and after it are still issued and awaited. The same holds for
-`parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
-([#2662](https://github.com/bynk-lang/bynk/issues/2662)). The closure of all three
+`parTraverse` (#3967: `parTraverse(f: T -> Effect[U])` returns `Effect[List[U]]`, the values in input order, with the same fault rule), `parTraverseAll` and `parTraverseTry` and for the `Query`/`Map` broadcast forms
+([#2662](https://github.com/bynk-lang/bynk/issues/2662)). The closure of all of them
 MUST NOT write a `store` (see the `par` block above).
 
 The **collect-all** pair `traverseAll` / `parTraverseAll` (v0.148,

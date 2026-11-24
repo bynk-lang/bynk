@@ -18,33 +18,33 @@ agent Tally {
   }
 
   on call nested(n: Int) -> Effect[()] {
-    let _ <- [1, 2, 3].parTraverse((x: Int) => [4, 5].forEach((y: Int) => counts.put("k", y)))
+    let _ <- [1, 2, 3].parForEach((x: Int) => [4, 5].forEach((y: Int) => counts.put("k", y)))
     Effect.pure(())
   }
 
   on call named(n: Int) -> Effect[()] {
     let f = (x: Int) => counts.put("k", x)
-    let _ <- [1, 2, 3].parTraverse(f)
+    let _ <- [1, 2, 3].parForEach(f)
     Effect.pure(())
   }
 
   on call called(n: Int) -> Effect[()] {
     let f = (x: Int) => counts.put("k", x)
-    let _ <- [1, 2, 3].parTraverse((x: Int) => f(x))
+    let _ <- [1, 2, 3].parForEach((x: Int) => f(x))
     Effect.pure(())
   }
 
   on call aliased(n: Int) -> Effect[()] {
     let f = (x: Int) => counts.put("k", x)
     let g = f
-    let _ <- [1, 2, 3].parTraverse(g)
+    let _ <- [1, 2, 3].parForEach(g)
     Effect.pure(())
   }
 
   on call shadowed(n: Int) -> Effect[()] {
     let f = (x: Int) => counts.put("k", x)
     let _ <- [1, 2, 3].forEach(f)
-    let _ <- [1, 2, 3].parTraverse((f: Int) => Effect.pure(()))
+    let _ <- [1, 2, 3].parForEach((f: Int) => Effect.pure(()))
     Effect.pure(())
   }
 
@@ -54,7 +54,7 @@ agent Tally {
       let f = (y: Int) => Effect.pure(())
       f(x)
     })
-    let _ <- [1, 2, 3].parTraverse(f)
+    let _ <- [1, 2, 3].parForEach(f)
     Effect.pure(())
   }
 }

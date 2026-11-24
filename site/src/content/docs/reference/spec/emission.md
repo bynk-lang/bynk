@@ -927,11 +927,11 @@ to v0.20a. `prepend` is the spread `[x, ...xs]`, evaluating the argument first; 
 is `[...xs, x]` and `concat` is `[...xs, ...ys]`, each evaluating the receiver
 before the argument, as written; `insert` copies
 (`new Map(m).set(k, v)`) — the emitted value is never mutated in place.
-**`fold`, `foldEff`, `forEach`, `parTraverse`, `traverseAll`, and
+**`fold`, `foldEff`, `forEach`, `parForEach`, `parTraverse`, `traverseAll`, and
 `parTraverseAll` emit as a single loop** (an IIFE; `async` for the effectful
 ones) — iteration is the kernel's, so no user-visible recursion or stack growth
 exists. `forEach` (v0.146) is the `for…await` analogue of the `Query.forEach`
-terminal, awaiting each step **in sequence**; `parTraverse` (v0.147) is the
+terminal, awaiting each step **in sequence**; `parForEach` (v0.147) is the
 `await __bynkSettleAll(xs.map((x) => () => f(x)))` analogue of `Query.parTraverse`
 (§7.4 `settleAll`; it was `Promise.all` until #2662), issuing every element's effect
 **concurrently**, in input order, and waiting for all of them to settle before it
