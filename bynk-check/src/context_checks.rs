@@ -5609,21 +5609,11 @@ fn validate_http_handler(
     for p in &handler.params {
         let is_path = path_param_names.iter().any(|n| n == &p.name.name.as_str());
         let is_body = p.name.name == "body";
-        // #2341 (decision A): `headers` is the request's headers, and must be
-        // typed `RequestHeaders`.
+        // #2341 (decision A): `headers` is the request's headers: `RequestHeaders`, or (#3911)
+        // a record `T` the router decodes and validates.
         let is_headers = !is_path && p.name.name == "headers";
-        if is_headers && !matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
-            errors.push(
-                CompileError::new(
-                    "bynk.http.headers_wrong_type",
-                    p.type_ref.span(),
-                    format!(
-                        "an HTTP handler's `headers` parameter must be typed `RequestHeaders` (got `{}`)",
-                        ts_type_ref_display(&p.type_ref),
-                    ),
-                )
-                .with_note("`headers: RequestHeaders` gives the handler the request's headers"),
-            );
+        if is_headers {
+            validate_headers_param(p, types, errors);
         }
         // #2854: `query` is the request's query string, a record `T` the router
         // decodes and validates, or the raw `RequestQuery` view.
@@ -5811,6 +5801,8 @@ enum RequestSurface {
     Cookies,
     Query,
     Form,
+    /// #3911: the `headers` record, whose names compare without case.
+    Headers,
 }
 
 /// #3446: the records a handler of this unit decodes as its `cookies` parameter, in any file
@@ -5844,7 +5836,7 @@ fn is_http_token(s: &str) -> bool {
 
 /// #3343: `@name("…")` before a record field names the key it has on the wire,
 /// where that is not an identifier (`__Host-sid`). It is legal only on a record
-/// used as the `cookies`, `query` or `@form`/`@multipart` `body` parameter of an
+/// used as the `cookies`, `headers`, `query` or `@form`/`@multipart` `body` parameter of an
 /// `on http` handler (the readers that take names off a request); it takes one
 /// string literal; and two fields may not share a wire name (nor, for cookies and
 /// query, differ only in case).
@@ -5863,6 +5855,7 @@ pub(crate) fn validate_field_names(
             for p in &h.params {
                 let surface = match p.name.name.as_str() {
                     "cookies" => Some(RequestSurface::Cookies),
+                    "headers" => Some(RequestSurface::Headers),
                     "query" => Some(RequestSurface::Query),
                     "body"
                         if h.annotations
@@ -5966,7 +5959,7 @@ pub(crate) fn validate_field_names(
                             "bynk.types.field_name_not_request_record",
                             ann.span,
                             format!(
-                                "`@name` is on a field of `{name}`, which is not the `cookies`, `query` or `@form`/`@multipart` `body` record of an HTTP handler"
+                                "`@name` is on a field of `{name}`, which is not the `cookies`, `headers`, `query` or `@form`/`@multipart` `body` record of an HTTP handler"
                             ),
                         )
                         .with_note(
@@ -5979,6 +5972,12 @@ pub(crate) fn validate_field_names(
                     {
                         Some(
                             "a cookie name must be an RFC 9110 token (no spaces, quotes or separators)",
+                        )
+                    } else if surfaces.contains(&RequestSurface::Headers)
+                        && !is_http_token(&literal)
+                    {
+                        Some(
+                            "a header name must be an RFC 9110 token (no spaces, quotes or separators)",
                         )
                     } else if literal.is_empty() {
                         Some("a wire name must not be empty")
@@ -6014,9 +6013,11 @@ pub(crate) fn validate_field_names(
         let case_matters = surfaces
             .iter()
             .any(|s| matches!(s, RequestSurface::Cookies | RequestSurface::Query));
+        let headers = surfaces.contains(&RequestSurface::Headers);
         for (i, (a, span)) in wire.iter().enumerate() {
             for (b, _) in &wire[..i] {
-                if a == b {
+                // #3911: header names compare without case, so a difference of case is the same name.
+                if a == b || (headers && a.eq_ignore_ascii_case(b)) {
                     errors.push(CompileError::new(
                         "bynk.types.field_name_duplicate",
                         *span,
@@ -6033,6 +6034,61 @@ pub(crate) fn validate_field_names(
                     );
                 }
             }
+        }
+    }
+}
+
+/// #3911: an HTTP handler's `headers` parameter is `RequestHeaders` (#2341), or a record whose
+/// fields are each a leaf a header can carry (the typed-`query` set: a `String`, `Int`, `Bool` or
+/// `Decimal`, a refined or opaque type over one, an enum), an `Option` of one, or a `List` of one
+/// (a comma-separated list).
+fn validate_headers_param(
+    p: &Param,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    if matches!(p.type_ref, TypeRef::RequestHeaders(_)) {
+        return;
+    }
+    let record = match &p.type_ref {
+        TypeRef::Named(id) => match types.get(&id.name).map(|t| &t.body) {
+            Some(TypeBody::Record(r)) => Some(r),
+            _ => None,
+        },
+        _ => None,
+    };
+    let Some(record) = record else {
+        errors.push(
+            CompileError::new(
+                "bynk.http.headers_wrong_type",
+                p.type_ref.span(),
+                format!(
+                    "an HTTP handler's `headers` parameter must be a record type or `RequestHeaders` (got `{}`)",
+                    ts_type_ref_display(&p.type_ref),
+                ),
+            )
+            .with_note(
+                "`headers: UploadHeaders` decodes the request's headers into the record `UploadHeaders`, one field per header (named by the field, or by `@name(\"if-match\")`), and answers `400` when it does not fit; `headers: RequestHeaders` gives the handler the request's headers raw",
+            ),
+        );
+        return;
+    };
+    for f in &record.fields {
+        if !is_query_field_type(&f.type_ref, types) {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.headers_field_not_stringy",
+                    f.type_ref.span(),
+                    format!(
+                        "field `{}` of the `headers` record has type `{}`, which a header cannot carry",
+                        f.name.name,
+                        ts_type_ref_display(&f.type_ref),
+                    ),
+                )
+                .with_note(
+                    "a header field is a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a comma-separated list)",
+                ),
+            );
         }
     }
 }
@@ -7580,7 +7636,7 @@ pub fn reject_fn_types(
                     "bynk.types.field_name_record_not_boundary",
                     id.span,
                     format!(
-                        "`{}` has `@name` fields, so it can only be a `cookies`, `query` or `@form`/`@multipart` `body` parameter, not {what}",
+                        "`{}` has `@name` fields, so it can only be a `cookies`, `headers`, `query` or `@form`/`@multipart` `body` parameter, not {what}",
                         id.name
                     ),
                 )

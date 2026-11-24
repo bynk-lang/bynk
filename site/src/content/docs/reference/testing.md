@@ -253,6 +253,25 @@ The one exception is a [`SignedCookie`](/reference/actors/#signed-cookies) route
 sets `Sec-Fetch-Site` and `Origin` itself probes the route's CSRF check
 (`RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])`).
 
+### Sending typed headers
+
+A handler that declares [`headers: T`](/reference/http/#typed-headers), a record, takes a `T` value as
+its argument, in the parameter's position. At `unit` and `integration` the value reaches the handler
+directly. At `system` it is sent as the request's headers, each field under its `@name`, and a `Wire`
+argument sends header text instead, one `name: value` line per header, to probe the router's decoding:
+
+```bynk,fragment
+suite reg.api as system {
+	case "a bad content-length is refused before the handler" {
+		let r <- api.PUT("/archives/:name", "a", Wire("Content-Length: lots"), Wire("zip"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+}
+```
+
+A route that declares a typed `headers` takes no trailing `RequestHeaders` argument: the record is
+the case's headers.
+
 A route that declares no `headers:` parameter can still be sent headers in a
 `system` case, by a trailing `RequestHeaders` argument after the route's own
 arguments. A route that negotiates `Locale.current()` against `Accept-Language`

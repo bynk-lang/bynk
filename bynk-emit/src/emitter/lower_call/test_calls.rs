@@ -328,11 +328,16 @@ struct RawSlots {
     form: bool,
     /// #3277: the `cookies` record's position, when the route takes one.
     cookies: Option<(usize, TypeRef)>,
+    /// #3911: the typed `headers` record's position, when the route takes one. Unlike the
+    /// others it is converted in every call, typed or raw: the driver sends its wire form.
+    headers: Option<(usize, TypeRef)>,
 }
 
 /// How a typed argument becomes its string slot.
 #[derive(Clone, Copy)]
 enum Wire {
+    /// #3911: the wire form itself, which a driver writes as headers.
+    Value,
     Cookie,
     Query,
     Form,
@@ -362,12 +367,27 @@ impl RawSlots {
             query: at(crate::emitter::QUERY_ROUTE_SUFFIX),
             form: at(crate::emitter::FORM_ROUTE_SUFFIX).is_some(),
             cookies: at(crate::emitter::COOKIES_ROUTE_SUFFIX),
+            headers: cx
+                .system_http_route_body(&(
+                    route.0.clone(),
+                    route.1.clone(),
+                    route_with(&route.2, crate::emitter::HEADERS_ROUTE_SUFFIX),
+                ))
+                .cloned(),
         }
     }
 
     /// Argument `i`, as the slot the driver takes. A typed argument mixed into a raw call is
     /// converted to its `string` slot; a path param coerces via `String(...)`.
     fn slot(&self, i: usize, a: &Expr, lowered: bynk_ts::TsExpr, cx: &LowerCtx) -> bynk_ts::TsExpr {
+        // #3911: a typed `headers` record reaches either driver as its wire form (a `Wire`
+        // argument is header text already).
+        if let Some((at, ty)) = &self.headers
+            && *at == i
+            && !matches!(&a.kind, ExprKind::Wire(_))
+        {
+            return serialised(lowered, ty, Wire::Value, cx);
+        }
         if !self.is_raw || matches!(&a.kind, ExprKind::Wire(_)) {
             return lowered;
         }
@@ -414,6 +434,7 @@ fn serialised(
     let value = lowered;
     let ser = crate::emitter::serialisation::serialise_expr_via(ty, &paren_as_any(value), ns, ru);
     match wire {
+        Wire::Value => ser,
         Wire::Cookie => call(ident("__cookieString"), vec![ser]),
         Wire::Query => call(ident("__queryString"), vec![ser]),
         Wire::Form => call(

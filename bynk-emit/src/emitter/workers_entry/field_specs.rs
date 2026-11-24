@@ -196,6 +196,28 @@ pub(super) fn cookies_field_specs(
     Some(record_field_specs(rec, types, false))
 }
 
+/// #3911: the fields of a handler's typed `headers` record, as the runtime's `headersObject`
+/// reads them off the request's headers, or `None` when the handler takes the raw
+/// `RequestHeaders` view (or has no `headers` parameter, or binds `:headers` in its path).
+pub(crate) fn headers_field_specs(
+    h: &Handler,
+    path: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Option<Vec<FieldSpec>> {
+    use bynk_syntax::ast::TypeBody;
+    if path.split('/').any(|seg| seg == ":headers") {
+        return None;
+    }
+    let p = h.params.iter().find(|p| p.name.name == "headers")?;
+    let TypeRef::Named(id) = &p.type_ref else {
+        return None;
+    };
+    let Some(TypeBody::Record(rec)) = types.get(&id.name).map(|t| &t.body) else {
+        return None;
+    };
+    Some(record_field_specs(rec, types, false))
+}
+
 /// #3276: the body field spec of a `@form` or `@multipart` handler, as the system
 /// test drivers write the body (`(name, wire kind, list, option)`).
 pub fn form_body_specs(
