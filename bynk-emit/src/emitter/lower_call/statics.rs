@@ -20,7 +20,7 @@ use super::super::lower::{
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{key_is_plain, take};
 use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
-use super::super::{Expr, ExprKind, Ident, TypeRef};
+use super::super::{Expr, ExprKind, Ident, TypeBody, TypeDecl, TypeRef};
 use super::codec_statics::lower_json_codec_call;
 use super::kernel_scalar::identity;
 use super::query::stream_generator;
@@ -118,11 +118,10 @@ pub(in crate::emitter) fn lower_type_static_call(
 /// invoked copy of the owner's `of`, so the guards run in this Worker and no value
 /// import crosses to the owner's. `None` for a type that is not refined or opaque.
 fn lower_consumed_refine(
-    decl: &bynk_syntax::ast::TypeDecl,
+    decl: &TypeDecl,
     arg: bynk_ts::TsExpr,
     cx: &mut LowerCtx,
 ) -> Option<bynk_ts::TsExpr> {
-    use bynk_syntax::ast::TypeBody;
     let (base, refinement, is_opaque) = match &decl.body {
         TypeBody::Refined {
             base, refinement, ..
