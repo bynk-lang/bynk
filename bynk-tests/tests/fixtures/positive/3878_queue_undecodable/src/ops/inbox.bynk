@@ -1,0 +1,27 @@
+context ops.inbox
+
+uses ops.codes
+
+// #3878: a message whose body does not decode as the consumer's message type is never retried.
+
+type Job = { id: String, code: Code }
+
+service inbox from queue("jobs") {
+  delivery { deadLetter: None }
+
+  on message(job: Job) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+service kept from queue("kept-jobs") {
+  delivery { deadLetter: "kept-jobs-dlq" }
+
+  on message(job: Job) -> Effect[QueueResult] {
+    if job.id == "retry" {
+      Retry("asked to")
+    } else {
+      Ack
+    }
+  }
+}
