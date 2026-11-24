@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.658.0** | A cron run that returns `Err` or throws is marked failed in Cron Past Events and logs a labelled record naming the schedule, service, error type and variant (no payload); an unmatched `event.cron` warns |
 | **v0.657.1** | A failing `for all x: Decimal` (or `Bytes`) prints its counterexample in Bynk's own form (`x = 0d`) instead of `[object Object]` |
 | **v0.657.0** | `==`, `!=` and the ordering operators give a bare variant name that two sums share the other operand's sum as its expected type, so `e == Failed("down")` and `o == Some(Failed("x"))` resolve |
 | **v0.656.0** | `<context>.<service>.outcome(args)` returns a `CallOutcome` (`Handled`, `Rejected`, `Faulted`, `Unreachable`), so a caller can handle a failed cross-context call; `bynk` gains `CallOutcome`, `CallFailure` and `Refusal`, and a consumed service's `stub` gains `rejected`, `faulted` and `unreachable` |
