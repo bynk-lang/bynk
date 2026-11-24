@@ -1699,14 +1699,14 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | sum | each variant |
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
+| plain `Bool` | `true` and `false` |
+| plain `Bytes` | always empty |
+| plain `Decimal` | always `0` at scale 0 |
+| plain `Duration` | always `0` ms, never negative |
+| plain `Float` | finite values from `-1000` to `1000`, no boundary values and no shrinking; never `NaN`, `-0` or `±Infinity`, so a generated `Float` always encodes on the [wire](/reference/wire-format/) |
+| plain `Instant` | always the epoch (`0` ms) |
 | plain `Int` | `-1000` to `1000`, led by the boundaries `0`, `1000` and `-1000`; shrinks toward `0` |
 | plain `String` | 0 to 8 lowercase letters (`a`–`z`), led by `""`; no whitespace, non-ASCII or astral characters; shrinks toward shorter strings |
-| plain `Bool` | `true` and `false` |
-| plain `Float` | finite values from `-1000` to `1000`, no boundary values and no shrinking; never `NaN`, `-0` or `±Infinity`, so a generated `Float` always encodes on the [wire](/reference/wire-format/) |
-| plain `Decimal` | always `0` at scale 0 |
-| plain `Instant` | always the epoch (`0` ms) |
-| plain `Duration` | always `0` ms, never negative |
-| plain `Bytes` | always empty |
 
 The plain rows are what a bare `for all x: T` draws, and what a record field of
 that type draws. Only `Int`, `String`, `Bool` and `Float` vary; to test
