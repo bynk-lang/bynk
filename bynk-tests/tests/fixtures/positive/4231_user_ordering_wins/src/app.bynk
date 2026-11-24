@@ -1,0 +1,15 @@
+// #4231: a type of the unit's own named `Ordering`, or a variant named `Less`,
+// takes precedence locally over the prelude.
+context app
+
+type Ordering = enum { Asc, Desc }
+
+type Dir = enum { Less, More }
+
+fn direction(x: Int) -> Dir {
+  if x < 0 { Less } else { More }
+}
+
+fn order(desc: Bool) -> Ordering {
+  if desc { Desc } else { Asc }
+}
