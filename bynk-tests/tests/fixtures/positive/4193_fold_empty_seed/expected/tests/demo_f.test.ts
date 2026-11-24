@@ -65,7 +65,7 @@ function __makeTestDeps() {
 async function test_an_empty_List_seed() {
   try {
     const deps = {};
-    const { Post, copy, index, tagCount, tagsOf, viaMap, viaSet } = __ns_demo_f;
+    const { Post, copy, index, sizeOf, tagCount, tagsOf, total, viaArg, viaMap, viaSet } = __ns_demo_f;
     type Post = __ns_demo_f.Post;
     if (!(__bynkEq(copy([1, 2, 3]), [1, 2, 3]))) { throw __bynkExpectFailure("tests/demo/f.bynk:4:9", 50, 78, "expect copy([1, 2, 3]) == [1, 2, 3]\n  expected: copy([1, 2, 3]) == [1, 2, 3]\n  actual:   " + __bynkShow((copy([1, 2, 3]))) + " == " + __bynkShow(([1, 2, 3]))); }
     return { pass: true };
@@ -81,7 +81,7 @@ async function test_an_empty_List_seed() {
 async function test_an_empty_Map_seed() {
   try {
     const deps = {};
-    const { Post, copy, index, tagCount, tagsOf, viaMap, viaSet } = __ns_demo_f;
+    const { Post, copy, index, sizeOf, tagCount, tagsOf, total, viaArg, viaMap, viaSet } = __ns_demo_f;
     type Post = __ns_demo_f.Post;
     if (!(index([1, 2]).size === 2)) { throw __bynkExpectFailure("tests/demo/f.bynk:8:9", 117, 144, "expect index([1, 2]).length() == 2\n  expected: index([1, 2]).length() == 2\n  actual:   " + __bynkShow((index([1, 2]).size)) + " == " + __bynkShow((2))); }
     return { pass: true };
@@ -97,7 +97,7 @@ async function test_an_empty_Map_seed() {
 async function test_an_empty_Set_seed__in_a_return_and_in_a_typed_let() {
   try {
     const deps = {};
-    const { Post, copy, index, tagCount, tagsOf, viaMap, viaSet } = __ns_demo_f;
+    const { Post, copy, index, sizeOf, tagCount, tagsOf, total, viaArg, viaMap, viaSet } = __ns_demo_f;
     type Post = __ns_demo_f.Post;
     const posts = [{ id: 1, tags: new globalThis.Set<string>(["a", "b"]) }, { id: 2, tags: new globalThis.Set<string>(["b", "c"]) }];
     if (!(tagsOf(posts).size === 3)) { throw __bynkExpectFailure("tests/demo/f.bynk:13:9", 313, 340, "expect tagsOf(posts).length() == 3\n  expected: tagsOf(posts).length() == 3\n  actual:   " + __bynkShow((tagsOf(posts).size)) + " == " + __bynkShow((3))); }
@@ -115,10 +115,28 @@ async function test_an_empty_Set_seed__in_a_return_and_in_a_typed_let() {
 async function test_folds_over_a_Set_and_a_Map_with_an_empty_seed() {
   try {
     const deps = {};
-    const { Post, copy, index, tagCount, tagsOf, viaMap, viaSet } = __ns_demo_f;
+    const { Post, copy, index, sizeOf, tagCount, tagsOf, total, viaArg, viaMap, viaSet } = __ns_demo_f;
     type Post = __ns_demo_f.Post;
     if (!(__bynkEq(viaSet(new globalThis.Set<number>([5])), [5]))) { throw __bynkExpectFailure("tests/demo/f.bynk:18:9", 436, 462, "expect viaSet(Set.of([5])) == [5]\n  expected: viaSet(Set.of([5])) == [5]\n  actual:   " + __bynkShow((viaSet(new globalThis.Set<number>([5])))) + " == " + __bynkShow(([5]))); }
     if (!(__bynkEq(viaMap(new globalThis.Map(new globalThis.Map<string, number>()).set("k", 1)), ["k"]))) { throw __bynkExpectFailure("tests/demo/f.bynk:19:9", 471, 514, "expect viaMap(Map.empty().insert(\"k\", 1)) == [\"k\"]\n  expected: viaMap(Map.empty().insert(\"k\", 1)) == [\"k\"]\n  actual:   " + __bynkShow((viaMap(new globalThis.Map(new globalThis.Map<string, number>()).set("k", 1)))) + " == " + __bynkShow((["k"]))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_an_empty_seed_as_an_argument_with_a_concrete_parameter_type__and_a_non_empty_seed() {
+  try {
+    const deps = {};
+    const { Post, copy, index, sizeOf, tagCount, tagsOf, total, viaArg, viaMap, viaSet } = __ns_demo_f;
+    type Post = __ns_demo_f.Post;
+    const posts = [{ id: 1, tags: new globalThis.Set<string>(["a"]) }, { id: 2, tags: new globalThis.Set<string>(["a", "b"]) }];
+    if (!(viaArg(posts) === 2)) { throw __bynkExpectFailure("tests/demo/f.bynk:24:9", 710, 728, "expect viaArg(posts) == 2\n  expected: viaArg(posts) == 2\n  actual:   " + __bynkShow((viaArg(posts))) + " == " + __bynkShow((2))); }
+    if (!(total([1, 2, 3]) === 6)) { throw __bynkExpectFailure("tests/demo/f.bynk:25:9", 737, 758, "expect total([1, 2, 3]) == 6\n  expected: total([1, 2, 3]) == 6\n  actual:   " + __bynkShow((total([1, 2, 3]))) + " == " + __bynkShow((6))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -142,7 +160,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["an empty List seed", "an empty Map seed", "an empty Set seed, in a return and in a typed let", "folds over a Set and a Map with an empty seed"];
+export const __bynkCases: readonly string[] = ["an empty List seed", "an empty Map seed", "an empty Set seed, in a return and in a typed let", "folds over a Set and a Map with an empty seed", "an empty seed as an argument with a concrete parameter type, and a non-empty seed"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -168,6 +186,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("folds over a Set and a Map with an empty seed")) {
     const started = __bynkCaseNow();
     const r = { name: "folds over a Set and a Map with an empty seed", ...(await test_folds_over_a_Set_and_a_Map_with_an_empty_seed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an empty seed as an argument with a concrete parameter type, and a non-empty seed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an empty seed as an argument with a concrete parameter type, and a non-empty seed", ...(await test_an_empty_seed_as_an_argument_with_a_concrete_parameter_type__and_a_non_empty_seed()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

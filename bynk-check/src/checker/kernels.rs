@@ -509,7 +509,11 @@ pub(crate) fn check_list_kernel_method(
             if !arity(2, ctx) {
                 return None;
             }
-            let acc = type_of(&args[0], ctx.fold_init_expected.take(), ctx)?;
+            let acc = type_of(
+                &args[0],
+                super::collections::fold_seed_expected(&args[0], ctx),
+                ctx,
+            )?;
             let step = Ty::Fn {
                 params: vec![acc, elem],
                 ret: acc,

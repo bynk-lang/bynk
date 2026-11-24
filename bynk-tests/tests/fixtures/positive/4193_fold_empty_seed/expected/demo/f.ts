@@ -51,3 +51,21 @@ export function viaSet(xs: ReadonlySet<number>): readonly number[] {
 export function viaMap(m: ReadonlyMap<string, number>): readonly string[] {
   return __bynkMapFold(m, ([] as readonly string[]), (acc: readonly string[], k: string, v: number) => [...acc, k]);
 }
+
+export function sizeOf(s: ReadonlySet<string>): number {
+  return s.size;
+}
+
+export function viaArg(posts: readonly Post[]): number {
+  return sizeOf(((__xs: readonly Post[], __acc: ReadonlySet<string>, __f: (acc: ReadonlySet<string>, x: Post) => ReadonlySet<string>) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(posts, new globalThis.Set<string>(), (acc: ReadonlySet<string>, p: Post) => __bynkSetUnion(acc, p.tags)));
+}
+
+export function total(xs: readonly number[]): number {
+  return ((__xs: readonly number[], __acc: number, __f: (acc: number, x: number) => number) => {
+    for (const __x of __xs) __acc = __f(__acc, __x);
+    return __acc;
+  })(xs, 0, (acc: number, x: number) => acc + x);
+}

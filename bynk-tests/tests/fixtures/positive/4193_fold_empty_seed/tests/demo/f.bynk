@@ -18,3 +18,9 @@ case "folds over a Set and a Map with an empty seed" {
 	expect viaSet(Set.of([5])) == [5]
 	expect viaMap(Map.empty().insert("k", 1)) == ["k"]
 }
+
+case "an empty seed as an argument with a concrete parameter type, and a non-empty seed" {
+	let posts = [Post { id: 1, tags: Set.of(["a"]) }, Post { id: 2, tags: Set.of(["a", "b"]) }]
+	expect viaArg(posts) == 2
+	expect total([1, 2, 3]) == 6
+}

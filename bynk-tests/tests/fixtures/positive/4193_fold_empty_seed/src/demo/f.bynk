@@ -29,3 +29,16 @@ fn viaSet(xs: Set[Int]) -> List[Int] {
 fn viaMap(m: Map[String, Int]) -> List[String] {
 	m.fold(List.empty(), (acc, k, v) => acc.append(k))
 }
+
+fn sizeOf(s: Set[String]) -> Int {
+	s.length()
+}
+
+fn viaArg(posts: List[Post]) -> Int {
+	sizeOf(posts.fold(Set.empty(), (acc, p) => acc.union(p.tags)))
+}
+
+// A non-empty seed is typed exactly as before.
+fn total(xs: List[Int]) -> Int {
+	xs.fold(0, (acc, x) => acc + x)
+}
