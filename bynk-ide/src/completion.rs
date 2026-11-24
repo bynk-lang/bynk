@@ -3900,10 +3900,16 @@ mod tests {
             got.sort();
             got
         };
-        assert_eq!(at("type Qty = Int where InRange(1, "), ["Ceiling", "MaxQty"]);
+        assert_eq!(
+            at("type Qty = Int where InRange(1, "),
+            ["Ceiling", "MaxQty"]
+        );
         assert_eq!(at("type N = String where MaxLength("), ["MaxQty"]);
         assert_eq!(at("type S = String where Matches("), ["Pattern"]);
-        assert_eq!(predicate_argument_types("type Q = Int where Positive"), None);
+        assert_eq!(
+            predicate_argument_types("type Q = Int where Positive"),
+            None
+        );
         assert_eq!(
             predicate_argument_types("type Q = Int where InRange(1, 2) && AtMost("),
             Some(&["Int", "Float", "Decimal", "Duration"][..])

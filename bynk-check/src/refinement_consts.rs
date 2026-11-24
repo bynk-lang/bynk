@@ -17,8 +17,8 @@
 
 use bynk_syntax::ast::{
     BaseType, BoundRefusal, ConstRef, DecimalBound, DurationBound, ExprKind, FloatBound, IntBound,
-    PendingArg, PendingPred, PredBound, PredKind, Refinement, RefinementPred, TypeRef,
-    UnaryOp, UnresolvedBound,
+    PendingArg, PendingPred, PredBound, PredKind, Refinement, RefinementPred, TypeRef, UnaryOp,
+    UnresolvedBound,
 };
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
@@ -91,11 +91,9 @@ fn refusal(scope: &Scope, name: &str, want: BaseType, owner: Option<&str>) -> Bo
         return BoundRefusal::Unknown;
     };
     match &found.decl.ty {
-        TypeRef::Named(ty) if Some(ty.name.as_str()) == owner => BoundRefusal::Cycle(vec![
-            name.to_string(),
-            ty.name.clone(),
-            name.to_string(),
-        ]),
+        TypeRef::Named(ty) if Some(ty.name.as_str()) == owner => {
+            BoundRefusal::Cycle(vec![name.to_string(), ty.name.clone(), name.to_string()])
+        }
         TypeRef::Base(b, _) if *b == want => BoundRefusal::NotLiteral,
         ty => BoundRefusal::Declared(crate::context_checks::ts_type_ref_display(ty)),
     }
@@ -169,12 +167,8 @@ fn resolve_pred(
             continue;
         };
         let want = argument_base(&pending.name, base);
-        let found = crate::consts::resolve_const_literal(
-            |u| scope.lookup(u),
-            scope.unit,
-            &id.name,
-            want,
-        );
+        let found =
+            crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, want);
         match found.and_then(|f| literal_arg(&f.literal.kind, id.span).map(|a| (f, a))) {
             Some((f, literal)) => {
                 let same_file = f.owner.is_none() && scope.file_consts.contains(&id.name);
