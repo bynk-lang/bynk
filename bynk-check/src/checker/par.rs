@@ -453,11 +453,14 @@ pub(super) fn reject_store_write_in_closure(method: &Ident, args: &[Expr], ctx: 
         PAR_FOR_EACH, PAR_TRAVERSE, PAR_TRAVERSE_ALL, PAR_TRAVERSE_TRY,
     };
     let name = method.name.as_str();
-    if args.len() != 1
-        || (name != PAR_FOR_EACH
-            && name != PAR_TRAVERSE
-            && name != PAR_TRAVERSE_ALL
-            && name != PAR_TRAVERSE_TRY)
+    // #3968: a `…With` form takes its options after the closure.
+    let plain = name.strip_suffix("With").unwrap_or(name);
+    let want_args = if plain == name { 1 } else { 2 };
+    if args.len() != want_args
+        || (plain != PAR_FOR_EACH
+            && plain != PAR_TRAVERSE
+            && plain != PAR_TRAVERSE_ALL
+            && plain != PAR_TRAVERSE_TRY)
     {
         return;
     }

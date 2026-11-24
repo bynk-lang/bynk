@@ -5,6 +5,7 @@
 //! keyed-helper choice, key-function types) are plain functions here.
 
 mod basics;
+mod pool;
 
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::kernel_op::ListOp;
@@ -200,6 +201,14 @@ pub(super) fn lower_list_kernel(
         (ListOp::ParTraverseAll | ListOp::ParTraverse, [f]) => {
             Some(list_par_traverse_all(&a, f, p, cx))
         }
+        // #3968: the bounded forms.
+        (
+            ListOp::ParForEachWith
+            | ListOp::ParTraverseWith
+            | ListOp::ParTraverseAllWith
+            | ListOp::ParTraverseTryWith,
+            [f, options],
+        ) => Some(pool::lower_pool(&a, op, f, options, p, cx)),
         (name @ (ListOp::SequenceAll | ListOp::SequenceTry), []) => {
             Some(list_sequence(&a, name, p, cx))
         }

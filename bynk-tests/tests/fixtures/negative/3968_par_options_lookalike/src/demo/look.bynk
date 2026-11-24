@@ -1,0 +1,14 @@
+context demo.look
+
+// A record of the same name declared here is not `bynk`'s `ParOptions`: it has no
+// provenance, and the emitted call reads `limit` without a check.
+
+type ParOptions = {
+  limit: Int,
+}
+
+service bad {
+  on call(xs: List[Int]) -> Effect[()] by Caller {
+    xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 4 })
+  }
+}

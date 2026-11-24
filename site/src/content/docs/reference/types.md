@@ -870,11 +870,15 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.forEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for each element, in order |
 | `xs.traverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for each element, in order, and collect the results |
 | `xs.parForEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
+| `xs.parForEachWith(f, options: ParOptions)` | `Effect[()]` | `parForEach` with at most `options.limit` steps in flight |
 | `xs.parTraverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for every element concurrently; the values come back in input order |
 | `xs.traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | run `f` for each element in order, keeping every outcome |
 | `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
+| `xs.parTraverseAllWith(f, options: ParOptions)` | `Effect[List[Result[U, E]]]` | `parTraverseAll`, bounded the same way |
 | `xs.traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | run `f` for each element in order, stopping at the first `Err` |
 | `xs.parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | the same, concurrently |
+| `xs.parTraverseTryWith(f, options: ParOptions)` | `Effect[Result[List[U], E]]` | `parTraverseTry`, bounded; once a step returns `Err` no further step starts |
+| `xs.parTraverseWith(f, options: ParOptions)` | `Effect[List[U]]` | `parTraverse`, bounded the same way |
 
 The effect methods form one grid of names:
 
@@ -886,6 +890,8 @@ The effect methods form one grid of names:
 **An empty seed (#4193).** `fold` takes its accumulator type from `init`, so an empty collection as the seed (`List.empty()`, `Set.empty()`, `Map.empty()`) has nothing to take a type from unless the fold itself is expected to produce one. It then takes it from there: a typed `let` (`let tags: Set[String] = posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))`), a function's return type, or an argument position. `Set.fold` and `Map.fold` follow the same rule. A fold with an empty seed and no such context is `bynk.types.uninferable_element_type`, and its note says to annotate the result or pass a typed seed. The step function does not settle the type.
 
 Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
+
+**Bounding a fan-out (#3968).** The plain `par…` forms start every step at once. The four `…With` forms take a second argument, a [`ParOptions`](#par-options) record `{ limit: Int }` from the first-party `bynk` adapter (`consumes bynk { ParOptions }`); it has no default, so a call always states its bound. `limit` is a whole number from 1 to 1000, and the steps run on a sliding pool: a new step starts as soon as any in-flight step settles. Results stay in input order and faults follow the plain forms (every started step settles, the first fault in input order is raised). A `limit` that is a literal or constant outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`, since nothing then overlaps (the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly, though they also stop at the first failed step, where the pool still starts the rest). A limit only known at run time is checked by the runtime, which faults the call. The closure rules, including `bynk.par.store_write_in_closure`, are the plain forms'. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194), which would give the future spelling `limit:`; it is not implemented.
 
 The methods returning an `Effect` can only be called where effects are allowed.
 A method not in this table is `bynk.types.method_not_found`. The rest of this
@@ -1402,6 +1408,18 @@ order of such a type as meaningful.
 implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
 "add `derives Ord`" suggestion is never applied by `bynk check --fix` or
 **Fix all**, because opting in is a decision about what the order is.
+
+## ParOptions {#par-options}
+
+`ParOptions` (#3968) is the options record taken by the bounded fan-out methods `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` and `parTraverseTryWith` (see [List methods](#list-methods)). It is exported by the first-party `bynk` adapter, beside `FetchOptions`, so a context brings it in with `consumes bynk { ParOptions }`.
+
+```bynk,fragment
+type ParOptions = {
+	limit: Int,
+}
+```
+
+`limit` is the most steps in flight at once. It has no default: a call always states it. It must be a whole number from 1 to 1000. A literal or constant outside that range is the error `bynk.list.par_limit_range`, a `limit` of 1 is the warning `bynk.list.par_limit_one` (nothing then overlaps), and a limit only known at run time is checked by the runtime, which faults the call. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194); if accepted they would give the future spelling `limit:`.
 
 ## Query
 

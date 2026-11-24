@@ -1821,6 +1821,10 @@ fn body_performs_effects(e: &Expr, ctx: &Ctx) -> bool {
                     | PAR_TRAVERSE_ALL
                     | TRAVERSE_TRY
                     | PAR_TRAVERSE_TRY
+                    | "parForEachWith"
+                    | "parTraverseWith"
+                    | "parTraverseAllWith"
+                    | "parTraverseTryWith"
             ) {
                 return true;
             }

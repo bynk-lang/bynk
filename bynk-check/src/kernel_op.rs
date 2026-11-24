@@ -87,6 +87,12 @@ kernel_ops! {
         // v0.150 (ADR 0174): short-circuit collect — stop at the first `Err`.
         TraverseTry = "traverseTry", "traverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
         ParTraverseTry = "parTraverseTry", "parTraverseTry(f: T -> Effect[Result[U, E]]) -> Effect[Result[List[U], E]]";
+        // #3968: the concurrent forms with a bound on the steps in flight, taking a
+        // `bynk` `ParOptions { limit }`; the plain forms are unchanged.
+        ParForEachWith = "parForEachWith", "parForEachWith(f: T -> Effect[()], options: ParOptions) -> Effect[()]";
+        ParTraverseWith = "parTraverseWith", "parTraverseWith(f: T -> Effect[U], options: ParOptions) -> Effect[List[U]]";
+        ParTraverseAllWith = "parTraverseAllWith", "parTraverseAllWith(f: T -> Effect[Result[U, E]], options: ParOptions) -> Effect[List[Result[U, E]]]";
+        ParTraverseTryWith = "parTraverseTryWith", "parTraverseTryWith(f: T -> Effect[Result[U, E]], options: ParOptions) -> Effect[Result[List[U], E]]";
         // #2806: pure `Result` accumulation over a `List[Result[T, E]]` receiver.
         SequenceAll = "sequenceAll", "sequenceAll() -> Result[List[T], List[E]]";
         SequenceTry = "sequenceTry", "sequenceTry() -> Result[List[T], E]";
