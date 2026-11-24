@@ -133,8 +133,8 @@ suite quantities {
 }
 ```
 
-A `Matches`-refined string cannot be fabricated blindly — a bare `Val` of one is
-rejected ([`bynk.val.needs_pin`](/reference/diagnostics/bynk.val.needs_pin/)); pin it
+A `Matches`-refined string cannot be fabricated blindly by `Val` (a `for all` draws members
+of its pattern instead) — a bare `Val` of one is rejected ([`bynk.val.needs_pin`](/reference/diagnostics/bynk.val.needs_pin/)); pin it
 instead, or give the type an example once, where it is declared, so every `Val`
 of it (and the derived smoke) has a value:
 

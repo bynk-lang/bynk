@@ -1752,9 +1752,8 @@ extra inline predicates needs a pin, since the example was never checked against
 
 An example is a test witness only: it changes neither what the type accepts, nor
 its wire format, contract hash or emitted code. A pinned `Val[T](lit)` overrides
-it. A `for all` over such a type is **still** refused (`bynk.val.needs_pin`),
-because a property over one value would run the same case every time; use
-`Val`. `bynk test --smoke` uses examples, so a route with a patterned path
+it. An example serves `Val` only: a `for all` over such a type draws from the pattern
+itself ([below](#properties)) and does not use it. `bynk test --smoke` uses examples, so a route with a patterned path
 parameter or body field has its *answers* case run.
 
 ## `property` / `for all` — generative tests {#properties}
@@ -1785,7 +1784,8 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | `Int where NonNegative` | `0` and small non-negatives |
 | `Int where InRange(a, b)` | `a`, `b`, and interior values |
 | `String where MinLength(k)` / `Length(k)` | strings at and above length `k` |
-| `String where Matches(…)` | **must pin** (`bynk.val.needs_pin`) — no generator; an `@example` serves `Val`, not `for all` |
+| `String where Matches(…)` | members of the pattern's language, drawn by a random walk of the pattern that includes the shortest member and members at each repeat's bounds (`{3,8}` gives 3- and 8-character runs); shrinks to shorter members, then to earlier characters. Length predicates bound the walk; any other predicate (a second `Matches`, `IsoDate`) filters the draws, and a draw budget that runs out fails the property naming the combination. Every draw is re-checked against the pattern, so a disagreement fails loudly. A pattern the walk cannot honour (a lookaround, a backreference, a word boundary or an anchor inside the pattern, a Unicode property escape, a negated class under `(?i)`) is `bynk.val.needs_pin`, naming the construct |
+| `String where IsoDate` | real calendar dates across 0000 to 9999, mostly the present era, biased to leap days, month ends and the first and last years; shrinks toward `0000-01-01` |
 | sum | each variant |
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
@@ -1816,7 +1816,9 @@ Widening the draws changed which counterexamples a given seed finds, so a seed
 recorded from an earlier version may now reproduce a different failure (or none).
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
-`String where Matches(re)` has no generator and must be pinned instead; an **agent**
+`String where Matches(re)` whose pattern the walk cannot honour, and a `Cron`
+refinement, have no generator and must be pinned instead (a bare `Val` still pins every
+`Matches`, `IsoDate` and `Cron`: only a `for all` draws them); an **agent**
 cannot be generated (`bynk.val.agent_not_generable`) — behavioural agent testing
 over handler sequences is a later slice.
 

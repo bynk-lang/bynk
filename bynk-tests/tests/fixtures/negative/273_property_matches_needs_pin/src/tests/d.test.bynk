@@ -1,5 +1,5 @@
 suite demo.d {
-  // A `Matches` refinement has no refinement-driven generator; pin instead.
+  // #4121: a `Matches` pattern the walk cannot honour (a lookahead) has no generator; pin instead.
   property "codes cannot be generated" {
     for all c: Code {
       expect c == c

@@ -4505,8 +4505,8 @@ fn expr_struct_eq(a: &Expr, b: &Expr) -> bool {
 pub const PROP_GEN_DEPTH: u32 = 12;
 
 /// Whether a `for all x: T` binding's type is refinement-generable: refined
-/// types must not carry a `Matches` or `IsoDate` predicate (no
-/// refinement-driven generator),
+/// types must not carry a `Cron` predicate or a `Matches` pattern the walk cannot honour (no
+/// refinement-driven generator, #4121),
 /// and sums/records must have every component recursively generable within the
 /// depth cap. Mirrors the checker's `can_mock_bare`.
 pub fn prop_binding_generable(
@@ -4547,10 +4547,54 @@ pub fn prop_binding_generable(
     }
 }
 
-/// Whether a (field-inline) refinement has no refinement-driven generator
-/// (`Matches`, `IsoDate`), the same set `Val[T]` pins (`refinement_needs_pin`).
+/// Whether a (field-inline) refinement has no refinement-driven generator: a `Cron`, or a
+/// `Matches` pattern the walk cannot honour (#4121). `Val[T]` still pins every `Matches`,
+/// `IsoDate` and `Cron` (`refinement_needs_pin`); a `for all` draws a `Matches` and an `IsoDate`.
 fn refinement_lacks_generator(refinement: Option<&Refinement>) -> bool {
-    refinement.is_some_and(crate::checker::refinement_needs_pin)
+    refinement_pin_reason(refinement).is_some()
+}
+
+/// #4121: why a refinement cannot be drawn from, naming the construct, if it cannot.
+fn refinement_pin_reason(refinement: Option<&Refinement>) -> Option<String> {
+    refinement?.predicates.iter().find_map(|p| match &p.kind {
+        PredKind::Cron => Some("a `Cron` refinement has no generator".to_string()),
+        PredKind::Matches(pattern) => crate::regex_walk::unwalkable_reason(pattern).map(|why| {
+            format!("`Matches(\"{pattern}\")` uses {why}, which a generator cannot honour")
+        }),
+        _ => None,
+    })
+}
+
+/// #4121: the reason a `for all` binding's type cannot be generated, for the diagnostic: the first
+/// construct `prop_binding_generable` refuses, when it is a refinement.
+pub fn prop_binding_pin_reason(
+    ty: checker::TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    depth: u32,
+    tys: &Arc<Types>,
+) -> Option<String> {
+    if depth == 0 {
+        return None;
+    }
+    let checker::Ty::Named { name, .. } = &*tys.get(ty) else {
+        return None;
+    };
+    let component = |t: &bynk_syntax::ast::TypeRef| {
+        checker::resolve_type_ref(t, types, tys)
+            .and_then(|t| prop_binding_pin_reason(t, types, depth - 1, tys))
+    };
+    match &types.get(name)?.body {
+        TypeBody::Refined { refinement, .. } | TypeBody::Opaque { refinement, .. } => {
+            refinement_pin_reason(refinement.as_ref())
+        }
+        TypeBody::Sum(s) => s
+            .variants
+            .first()
+            .and_then(|v| v.payload.iter().find_map(|f| component(&f.type_ref))),
+        TypeBody::Record(r) => r.fields.iter().find_map(|f| {
+            refinement_pin_reason(f.refinement.as_ref()).or_else(|| component(&f.type_ref))
+        }),
+    }
 }
 
 /// The refinement of a resolved refined/opaque named type, if any — used by the
@@ -4921,7 +4965,7 @@ pub fn check_history_binding(
                     "bynk.history.not_generable",
                     span,
                     format!(
-                        "`History[{}]` cannot be driven — handler `{}`'s parameter `{}: {}` is not generable (e.g. a `Matches` refinement)",
+                        "`History[{}]` cannot be driven — handler `{}`'s parameter `{}: {}` is not generable (e.g. a `Cron` refinement)",
                         agent_id.name,
                         h.method_name.as_ref().map(|m| m.name.as_str()).unwrap_or(""),
                         p.name.name,
@@ -5245,9 +5289,11 @@ fn check_property_body(
                     "bynk.val.needs_pin",
                     b.type_ref.span(),
                     format!(
-                        "`for all {}: {}` cannot generate a value (e.g. a `Matches` refinement); a property cannot bind it",
+                        "`for all {}: {}` cannot generate a value{}; a property cannot bind it",
                         b.name.name,
-                        ts_type_ref_display(&b.type_ref)
+                        ts_type_ref_display(&b.type_ref),
+                        prop_binding_pin_reason(ty, &resolved.types, PROP_GEN_DEPTH, tys)
+                            .map_or_else(String::new, |why| format!(": {why}"))
                     ),
                 )
                 .with_note("supply the witness in a `case` with a pinned `Val[T](...)` instead"),
