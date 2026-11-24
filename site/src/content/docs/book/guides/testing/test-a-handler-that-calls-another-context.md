@@ -71,7 +71,7 @@ delay or withhold the answer, as for a capability.
   runs a real cross-context call in-process by accident.
 - At `integration` a stubbed call's arguments and result also cross the consumed
   context's wire codecs, so a value the wire cannot carry (a `Float` that is `NaN`,
-  say) fails the call there although it passes at `unit`.
+  bare or nested, say) fails the call there although it passes at `unit`.
 - A stub checks your handler against the service's *declared* signature, not its
   behaviour. A `system` suite, which stands the contexts up and calls over the
   real wire, remains the end-to-end check. See

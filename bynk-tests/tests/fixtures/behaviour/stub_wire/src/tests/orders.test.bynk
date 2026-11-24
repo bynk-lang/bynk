@@ -12,4 +12,10 @@ suite shop.orders {
     let r <- placeOrder.call(10)
     expect r is Ok("r2")
   }
+
+  case "a bare Float result passes at unit" {
+    stub Pay.rate(_) returns 0.0 / 0.0
+    let r <- quote.call(1.0)
+    expect r != 1.0
+  }
 }

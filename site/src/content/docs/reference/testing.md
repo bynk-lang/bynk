@@ -1237,8 +1237,8 @@ suite shop.orders {
   context's own codecs, as a real call does. At `unit` the values reach the
   handler directly. A value the wire cannot carry (a `Float` that is `NaN` or
   infinite, say) passes at `unit` and fails the call at `integration`, with the
-  codec's error. A base-typed argument or result has no codec to cross and passes
-  as it is. The wire needs the consumed context's `workers` output, which
+  codec's error. A bare `Float`, `Int` or other base-typed argument or result crosses
+  its codec too. The wire needs the consumed context's `workers` output, which
   `bynk test` builds for a suite that stubs a service at `integration`.
 - **A call's failure is stubbed with `rejected`, `faulted` and `unreachable`** (#3894),
   the outcomes `<context>.<service>.outcome(args)` hands back as a `CallOutcome`:

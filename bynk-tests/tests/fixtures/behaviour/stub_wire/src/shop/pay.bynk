@@ -10,3 +10,9 @@ service authorise {
     Effect.pure(Err("down"))
   }
 }
+
+service rate {
+  on call(base: Float) -> Effect[Float] by Caller {
+    Effect.pure(base)
+  }
+}

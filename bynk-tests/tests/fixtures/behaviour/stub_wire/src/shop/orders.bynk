@@ -11,3 +11,10 @@ service placeOrder {
     }
   }
 }
+
+service quote {
+  on call(base: Float) -> Effect[Float] by Caller {
+    let r <- Pay.rate(base)
+    Effect.pure(r)
+  }
+}
