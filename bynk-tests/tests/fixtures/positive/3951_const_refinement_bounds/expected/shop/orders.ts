@@ -5,7 +5,7 @@ import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkCodePointLength, __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
-import { MaxQty } from "./limits.js";
+import { Count, MaxQty } from "./limits.js";
 
 /**
  * #3951: constants in refinement bounds, from this unit and from a `uses`d
@@ -82,6 +82,13 @@ export const Code = {
     }
     return Ok(value as Code);
   },
+};
+
+export interface Line {
+  readonly count: Count;
+}
+
+export const Line = {
 };
 
 var __const_Floor: { v: number } | undefined;

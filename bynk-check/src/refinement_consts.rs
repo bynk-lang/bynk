@@ -226,6 +226,21 @@ pub fn pending_errors(pred: &RefinementPred, base: BaseType) -> Vec<CompileError
         .iter()
         .map(|u| bound_error(&pending.name, base, u))
         .collect();
+    // A constant the resolution pass never reached (it keeps no record of one
+    // it did not try) is reported as the unresolved reference it is.
+    if errors.is_empty() {
+        errors.extend(pending.args.iter().filter_map(|a| match a {
+            PendingArg::Const(id) => Some(bound_error(
+                &pending.name,
+                base,
+                &UnresolvedBound {
+                    name: id.clone(),
+                    why: BoundRefusal::NotLiteral,
+                },
+            )),
+            _ => None,
+        }));
+    }
     if errors.is_empty() {
         errors.push(
             CompileError::new(

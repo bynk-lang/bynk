@@ -15,6 +15,9 @@ type Ratio = Float where InRange(0.0, Ceiling)
 type Wait = Duration where AtMost(Window)
 type Code = String where Length(MinNote)
 
+// A field typed with a refined type from the used commons.
+type Line = { count: Count where AtMost(MaxQty) }
+
 fn tooMany() -> String {
   "at most \(MaxQty) per order"
 }

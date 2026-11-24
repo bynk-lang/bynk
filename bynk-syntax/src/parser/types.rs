@@ -829,6 +829,18 @@ impl<'a> Parser<'a> {
             }
         }
         let close = self.expect(TokenKind::RParen, &format!("after the `{name}` arguments"))?;
+        let want = if matches!(name, "InRange") { 2 } else { 1 };
+        if args.len() != want {
+            return Err(CompileError::new(
+                "bynk.parse.expected_token",
+                start.merge(close.span),
+                format!(
+                    "`{name}` takes {want} argument{}, found {}",
+                    if want == 1 { "" } else { "s" },
+                    args.len()
+                ),
+            ));
+        }
         Ok(Some(RefinementPred {
             // A placeholder the resolution pass replaces; nothing reads it while
             // `pending` is set.

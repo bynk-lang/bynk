@@ -122,14 +122,16 @@ function __makeTestDeps() {
 async function test_a_quantity_is_bounded_by_the_constants() {
   try {
     const deps = {};
-    const { Code, Floor, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
+    const { Code, Floor, Line, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
     type Code = __ns_shop_orders.Code;
+    type Line = __ns_shop_orders.Line;
     type Note = __ns_shop_orders.Note;
     type Qty = __ns_shop_orders.Qty;
     type Ratio = __ns_shop_orders.Ratio;
     type Slug = __ns_shop_orders.Slug;
     type Wait = __ns_shop_orders.Wait;
-    const { Ceiling, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    const { Ceiling, Count, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    type Count = __ns_shop_limits.Count;
     if (!((qty(1).tag === "Ok"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:7:10", 158, 171, "expect qty(1).isOk()"); }
     if (!((qty(100).tag === "Ok"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:8:10", 181, 196, "expect qty(100).isOk()"); }
     if (!((qty(0).tag === "Err"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:9:10", 206, 220, "expect qty(0).isErr()"); }
@@ -147,14 +149,16 @@ async function test_a_quantity_is_bounded_by_the_constants() {
 async function test_a_note_is_bounded_by_a_length_constant() {
   try {
     const deps = {};
-    const { Code, Floor, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
+    const { Code, Floor, Line, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
     type Code = __ns_shop_orders.Code;
+    type Line = __ns_shop_orders.Line;
     type Note = __ns_shop_orders.Note;
     type Qty = __ns_shop_orders.Qty;
     type Ratio = __ns_shop_orders.Ratio;
     type Slug = __ns_shop_orders.Slug;
     type Wait = __ns_shop_orders.Wait;
-    const { Ceiling, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    const { Ceiling, Count, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    type Count = __ns_shop_limits.Count;
     if (!((note("hi").tag === "Ok"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:14:10", 307, 324, "expect note(\"hi\").isOk()"); }
     if (!((note("").tag === "Ok"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:15:10", 334, 349, "expect note(\"\").isOk()"); }
     return { pass: true };
@@ -170,14 +174,16 @@ async function test_a_note_is_bounded_by_a_length_constant() {
 async function test_a_pattern_constant_is_the_pattern() {
   try {
     const deps = {};
-    const { Code, Floor, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
+    const { Code, Floor, Line, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
     type Code = __ns_shop_orders.Code;
+    type Line = __ns_shop_orders.Line;
     type Note = __ns_shop_orders.Note;
     type Qty = __ns_shop_orders.Qty;
     type Ratio = __ns_shop_orders.Ratio;
     type Slug = __ns_shop_orders.Slug;
     type Wait = __ns_shop_orders.Wait;
-    const { Ceiling, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    const { Ceiling, Count, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    type Count = __ns_shop_limits.Count;
     if (!((slug("abc").tag === "Ok"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:19:10", 405, 423, "expect slug(\"abc\").isOk()"); }
     if (!((slug("ABC").tag === "Err"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:20:10", 433, 452, "expect slug(\"ABC\").isErr()"); }
     return { pass: true };
@@ -193,14 +199,16 @@ async function test_a_pattern_constant_is_the_pattern() {
 async function test_a_float_bound_constant() {
   try {
     const deps = {};
-    const { Code, Floor, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
+    const { Code, Floor, Line, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
     type Code = __ns_shop_orders.Code;
+    type Line = __ns_shop_orders.Line;
     type Note = __ns_shop_orders.Note;
     type Qty = __ns_shop_orders.Qty;
     type Ratio = __ns_shop_orders.Ratio;
     type Slug = __ns_shop_orders.Slug;
     type Wait = __ns_shop_orders.Wait;
-    const { Ceiling, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    const { Ceiling, Count, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    type Count = __ns_shop_limits.Count;
     if (!((ratio(2.5).tag === "Ok"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:24:10", 497, 514, "expect ratio(2.5).isOk()"); }
     if (!((ratio(2.6).tag === "Err"))) { throw __bynkExpectFailure("tests/shop/orders.bynk:25:10", 524, 542, "expect ratio(2.6).isErr()"); }
     return { pass: true };
@@ -216,14 +224,16 @@ async function test_a_float_bound_constant() {
 async function test_a_literal_at_the_constant_s_value_is_admitted_at_compile_time() {
   try {
     const deps = {};
-    const { Code, Floor, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
+    const { Code, Floor, Line, Note, Qty, Ratio, Slug, Wait, note, qty, ratio, slug, tooMany } = __ns_shop_orders;
     type Code = __ns_shop_orders.Code;
+    type Line = __ns_shop_orders.Line;
     type Note = __ns_shop_orders.Note;
     type Qty = __ns_shop_orders.Qty;
     type Ratio = __ns_shop_orders.Ratio;
     type Slug = __ns_shop_orders.Slug;
     type Wait = __ns_shop_orders.Wait;
-    const { Ceiling, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    const { Ceiling, Count, MaxNote, MaxQty, MinNote, SlugPattern, Window } = __ns_shop_limits;
+    type Count = __ns_shop_limits.Count;
     const top: Qty = (100 as any);
     if (!(top === 100)) { throw __bynkExpectFailure("tests/shop/orders.bynk:30:10", 647, 657, "expect top == 100\n  expected: top == 100\n  actual:   " + __bynkShow((top)) + " == " + __bynkShow((100))); }
     return { pass: true };

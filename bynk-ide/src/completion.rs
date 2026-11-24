@@ -1154,7 +1154,21 @@ fn predicate_argument_types(line_prefix: &str) -> Option<&'static [&'static str]
     match name {
         "Matches" => Some(&["String"]),
         "MinLength" | "MaxLength" | "Length" => Some(&["Int"]),
-        "InRange" | "AtLeast" | "AtMost" => Some(&["Int", "Float", "Decimal", "Duration"]),
+        "InRange" | "AtLeast" | "AtMost" => {
+            // A `type X = <Base> where` or `field: <Base> where` line names the
+            // base, and the constant must be declared exactly it.
+            let base = line_prefix[..line_prefix.rfind(" where ")?]
+                .rsplit(|c: char| !c.is_alphanumeric())
+                .next()
+                .unwrap_or("");
+            Some(match base {
+                "Int" => &["Int"],
+                "Float" => &["Float"],
+                "Decimal" => &["Decimal"],
+                "Duration" => &["Duration"],
+                _ => &["Int", "Float", "Decimal", "Duration"],
+            })
+        }
         _ => None,
     }
 }
@@ -3904,9 +3918,12 @@ mod tests {
             got.sort();
             got
         };
+        assert_eq!(at("type Qty = Int where InRange(1, "), ["MaxQty"]);
+        assert_eq!(at("type R = Float where AtMost("), ["Ceiling"]);
         assert_eq!(
-            at("type Qty = Int where InRange(1, "),
-            ["Ceiling", "MaxQty"]
+            at("type Q = Other where InRange(1, "),
+            ["Ceiling", "MaxQty"],
+            "an unnamed base keeps every numeric constant"
         );
         assert_eq!(at("type N = String where MaxLength("), ["MaxQty"]);
         assert_eq!(at("type S = String where Matches("), ["Pattern"]);
@@ -3916,7 +3933,7 @@ mod tests {
         );
         assert_eq!(
             predicate_argument_types("type Q = Int where InRange(1, 2) && AtMost("),
-            Some(&["Int", "Float", "Decimal", "Duration"][..])
+            Some(&["Int"][..])
         );
     }
 

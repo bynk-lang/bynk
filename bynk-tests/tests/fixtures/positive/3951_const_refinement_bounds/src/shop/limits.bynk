@@ -10,3 +10,5 @@ const MinNote: Int = MaxNote
 const SlugPattern: String = "^[a-z]+$"
 const Ceiling: Float = 2.5
 const Window: Duration = 5.minutes
+
+type Count = Int where Positive
