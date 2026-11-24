@@ -400,6 +400,10 @@ pub const FORM_ROUTE_SUFFIX: &str = "?form";
 /// typed record in a mixed typed-and-`Wire` call is sent as a `Cookie` header.
 pub const COOKIES_ROUTE_SUFFIX: &str = "?cookies";
 
+/// #3911: marks a route's typed `headers` record in the system drivers' route-body map, so
+/// the record reaches a driver as its wire form, which the driver sends as request headers.
+pub const HEADERS_ROUTE_SUFFIX: &str = "?headers";
+
 /// Emit the commons-level doc block (if any) at the current position.
 /// #1478: real-node-internally already (a single `TsStmtKind::DocComment`,
 /// the same shape [`emit_doc_block`] itself builds — inlined directly here

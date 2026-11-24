@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0931](0931-realistic-domain-generators.md) | **Plain-type generators draw across a realistic domain, with the boundaries that break code** (v0.673) — What each plain type draws under `for all`, what shrinks, and what stays finite | Accepted (v0.673) |
 | [0930](0930-agent-busy-503.md) | **`AgentBusy` answers `503` with `Retry-After`, and `@busyAfter(d)` lowers the 30-second wait** (v0.672) — A busy agent instance is load, not a fault: an HTTP route answers 503, and an agent may lower its queue wait | Accepted (v0.672) |
 | [0929](0929-typed-show-for-time.md) | **The test printer is told where a Duration or Instant sits in a value's type** (v0.671.1) — Generator descriptors and `is` failure reports carry a shape, so Duration and Instant print as Bynk values | Accepted (v0.671.1) |
 | [0928](0928-consumer-built-context-types.md) | **A consumer builds a context's transparent types itself** (v0.671) — a consumer lowers `.of` and a sum variant of a consumed context's type inline, so no value import crosses the Worker boundary, and the checker's adapter-only qualification goes | Accepted (v0.671) |
