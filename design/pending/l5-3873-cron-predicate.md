@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: A `Cron` refinement predicate and the `CronSchedule` type admit exactly Cloudflare's cron syntax; a schedule's fields are now checked, with `bynk.cron.numeric_weekday` and `bynk.cron.uneven_step` warnings
 breaking: A cron schedule with irregular whitespace (a double space, a tab, a leading or trailing space) now fails as `bynk.cron.invalid_schedule`, as does any schedule Cloudflare would reject (`61 * * * *`); write the fields separated by single spaces (the note gives the corrected form).
 ---

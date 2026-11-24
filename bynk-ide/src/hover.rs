@@ -215,14 +215,6 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         {
             return Some(content);
         }
-        // 3b. #3873: inside the string literal of `on schedule("…")`: the
-        //     schedule's fields, named. Before rung 4, which would otherwise
-        //     answer the literal with the handler's wire contract.
-        if let Some(text) = a.snapshots.get(a.rel)
-            && let Some(content) = describe_cron_schedule_literal(text, a.offset)
-        {
-            return Some(content);
-        }
         // 4. #855: the handler HEADER — the `on` keyword, the HTTP method /
         //    handler-kind token, and any route string literal. No earlier rung
         //    (nor any later lexical one) ever answers here today: `GET` lexes
@@ -250,7 +242,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
                 tys,
                 a.context_count,
             ) {
-                return Some(wire_contract_standalone(&model));
+                return Some(with_cron_schedule(text, a.offset, &model));
             }
         }
         // 4b. #2460: the cursor inside a doc-comment `[Name]` link previews
@@ -436,8 +428,6 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
         // #2867: the `IsoDate` refinement predicate, in a `where` clause.
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
-        // #3873: the `Cron` predicate and the `CronSchedule` type, likewise.
-        .or_else(|| describe_cron_predicate(&name, &text[..span.start]))
 }
 
 /// #3873: hover for the `Cron` predicate name after `where` or `&&`: its rule.
@@ -456,6 +446,20 @@ fn describe_cron_predicate(name: &str, before: &str) -> Option<String> {
          `Json.decode` and the HTTP boundary."
             .to_string()
     })
+}
+
+/// #3873: on a cron handler's header, with the cursor inside the schedule's
+/// string literal, the schedule's fields are named ahead of the wire contract.
+fn with_cron_schedule(
+    text: &str,
+    offset: usize,
+    model: &crate::wire_contract::WireContractModel,
+) -> String {
+    let contract = wire_contract_standalone(model);
+    match describe_cron_schedule_literal(text, offset) {
+        Some(fields) => format!("{fields}\n\n---\n\n{contract}"),
+        None => contract,
+    }
 }
 
 /// #3873: hover inside the string literal of `on schedule("…")`: the schedule's
@@ -486,6 +490,10 @@ pub(crate) fn describe_cron_schedule_literal(text: &str, offset: usize) -> Optio
 /// #2867: hover for the `IsoDate` predicate name after `where` or `&&`: its rule
 /// and the `Instant` pairing the guide documents.
 fn describe_iso_date_predicate(name: &str, before: &str) -> Option<String> {
+    // #3873: the `Cron` predicate hovers the same way.
+    if name == "Cron" {
+        return describe_cron_predicate(name, before);
+    }
     if name != "IsoDate" {
         return None;
     }
@@ -1012,6 +1020,28 @@ fn doc_link_hover(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+
+    /// #3873: `Cron` hovers with its rule inside a `where` clause only, and the
+    /// schedule literal of `on schedule("…")` names its fields.
+    #[test]
+    fn cron_predicate_and_schedule_literal_hover() {
+        let src = "commons demo.m\n\ntype S = String where Cron\n";
+        let h = hover_at(src, "Cron", 0).expect("`Cron` hovers");
+        assert!(h.contains("cron schedule"), "{h}");
+        let elsewhere = hover_at("commons demo.m\n\nfn Cron() -> Int { 1 }\n", "Cron", 0);
+        assert!(!elsewhere.is_some_and(|h| h.contains("refinement predicate")));
+
+        let line = "  on schedule(\"0 2 * * MON-FRI\") () -> Effect[Result[(), String]] {";
+        let at = line.find("2 *").unwrap();
+        let h = describe_cron_schedule_literal(line, at).expect("fields named");
+        assert!(
+            h.contains("- minute: `0`") && h.contains("- day of week: `MON-FRI`"),
+            "{h}"
+        );
+        assert!(describe_cron_schedule_literal(line, 0).is_none());
+        let bad = "  on schedule(\"61 * * * *\") () -> Effect[Result[(), String]] {";
+        assert!(describe_cron_schedule_literal(bad, 16).is_none());
+    }
     use super::*;
 
     fn hover_at(src: &str, needle: &str, nth: usize) -> Option<String> {
