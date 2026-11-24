@@ -54,7 +54,7 @@ time, and claim a key built from both with `Idempotency.claim`:
 service sweeper from cron {
 	on schedule("0 2 * * *") (schedule: CronSchedule, at: Instant)
 			-> Effect[Result[(), SweepError]] given Idempotency {
-		let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hours)
+		let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hour)
 		match claim {
 			Claimed => sweep(at),
 			AlreadyClaimed => Ok(()),

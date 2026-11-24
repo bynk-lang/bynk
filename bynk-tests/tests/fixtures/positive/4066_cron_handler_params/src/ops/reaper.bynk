@@ -57,7 +57,7 @@ service sweeper from cron {
 
 	// A ready-made run key: the service, the schedule and the scheduled time.
 	on schedule("0 6 * * *") (schedule: CronSchedule, at: Instant) -> Effect[Result[(), String]] given Idempotency {
-		let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hours)
+		let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hour)
 		match claim {
 			Claimed => {
 				let _ <- Seen("s").count()

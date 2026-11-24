@@ -1856,7 +1856,7 @@ MUST supply the same two arguments, with the same codes and result. Constructing
 `Bytes` body, a `String` content-type, then a `String` entity tag — with the same
 codes and result; the tag's syntax is checked at run time
 ([§7.4.3](/reference/spec/runtime-library/#743-httpresult)), not here. A cron handler MUST take at most two parameters, at most one `Instant` (the
-scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, and a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
+scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
