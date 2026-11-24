@@ -16,9 +16,11 @@ the same build:
 |-----------------------|-------------------------------------------------|
 | Linux x86_64          | `bynk-<tag>-x86_64-unknown-linux-gnu.tar.gz`    |
 | Linux arm64           | `bynk-<tag>-aarch64-unknown-linux-gnu.tar.gz`   |
-| macOS Intel           | `bynk-<tag>-x86_64-apple-darwin.tar.gz`         |
-| macOS Apple silicon   | `bynk-<tag>-aarch64-apple-darwin.tar.gz`        |
 | Windows x86_64        | `bynk-<tag>-x86_64-pc-windows-msvc.zip`         |
+
+Prebuilt macOS binaries are paused for now, because GitHub's macOS runners were
+holding releases back. On macOS, [build from source](#build-from-source)
+(`cargo install bynk bynk-lsp`) until they return.
 
 `<tag>` is the release tag, such as `v0.330.4`. The Linux binaries are built on
 Ubuntu 24.04 and need a glibc at least that new. Each release also has a
@@ -35,13 +37,13 @@ sha256sum --check --ignore-missing SHA256SUMS   # must print "OK"
 tar -xzf "bynk-$tag-$target.tar.gz"
 ```
 
-On macOS use `shasum -a 256 --check --ignore-missing SHA256SUMS`. On Windows,
+On Windows,
 compare `(Get-FileHash bynk-<tag>-x86_64-pc-windows-msvc.zip).Hash` with the
 archive's line in `SHA256SUMS`, then extract the `.zip`. Releases also carry
 signed build provenance, which `gh attestation verify <archive> --repo
 bynk-lang/bynk` checks.
 
-Put the two binaries on your `PATH`. On Linux and macOS, for example:
+Put the two binaries on your `PATH`. On Linux, for example:
 
 ```sh
 install -m 0755 "bynk-$tag-$target"/bynk "bynk-$tag-$target"/bynk-lsp \
