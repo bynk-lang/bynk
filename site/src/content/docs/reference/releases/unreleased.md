@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.673.0** | A `for all` draws each plain type across its realistic domain (a wide `Int`, a `String` with whitespace and astral characters, and `Decimal`, `Instant`, `Duration`, `Bytes` and `Float` with boundaries), so a seed recorded earlier may now find a different counterexample |
 | **v0.672.0** | An agent call that waits past its queue limit (`AgentBusy`) now answers `503` with `Retry-After: 1` at an HTTP route, logged as busy rather than reported as a fault; `@busyAfter(d)` before `agent` lowers the 30-second wait |
 | **v0.671.2** | Releases no longer publish prebuilt macOS binaries for now (GitHub's macOS runners were holding releases back); on macOS, `install.sh` says so and points to `cargo install bynk bynk-lsp` |
 | **v0.671.1** | A failing `for all` over a `Duration` or `Instant`, and a failed `expect … is …` whose subject holds one, print it in Bynk's form (`3.seconds`, `Instant.fromEpochMillis(0)`) instead of as bare milliseconds |

@@ -1,0 +1,5 @@
+commons demo.m
+
+type Percent = Int where InRange(0, 100)
+
+type Tag = String where MaxLength(3)
