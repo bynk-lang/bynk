@@ -159,7 +159,7 @@ const LEFT: &str = "context left
 uses geo
 
 service api {
-  on call(p: Point) -> Effect[Point] {
+  on call(p: Point) -> Effect[Point] by Caller {
     Effect.pure(Point { x: p.x + 1, y: p.y })
   }
 }
@@ -173,7 +173,7 @@ exports transparent { Page }
 type Page[T] = { items: List[T] }
 
 service list {
-  on call() -> Effect[Page[Int]] {
+  on call() -> Effect[Page[Int]] by Caller {
     Effect.pure(Page { items: [1] })
   }
 }
@@ -186,7 +186,7 @@ consumes demo.payment
 fn size(p: Page[Int]) -> Int { p.items.length() }
 
 service count {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let p <- demo.payment.list()
     Effect.pure(size(p))
   }
@@ -414,11 +414,11 @@ const ROWS: &[Row] = &[
             ("t/model.bynk", MODEL),
             (
                 "t/vault.bynk",
-                "context t.vault\n\nexports transparent { Box }\n\ntype Repo = Int\n\ntype Box = { n: Int }\n\nservice open {\n  on call() -> Effect[Box] {\n    Effect.pure(Box { n: 1 })\n  }\n}\n",
+                "context t.vault\n\nexports transparent { Box }\n\ntype Repo = Int\n\ntype Box = { n: Int }\n\nservice open {\n  on call() -> Effect[Box] by Caller {\n    Effect.pure(Box { n: 1 })\n  }\n}\n",
             ),
             (
                 "t/web.bynk",
-                "context t.web\n\nuses t.model\nconsumes t.vault as Vault\n\nservice ping {\n  on call() -> Effect[Int] {\n    let b <- Vault.open()\n    Effect.pure(b.n)\n  }\n}\n",
+                "context t.web\n\nuses t.model\nconsumes t.vault as Vault\n\nservice ping {\n  on call() -> Effect[Int] by Caller {\n    let b <- Vault.open()\n    Effect.pure(b.n)\n  }\n}\n",
             ),
             (
                 "tests/web.bynk",

@@ -51,7 +51,7 @@ provides Takedown = BucketTakedown given Files {
 }
 
 service takedown {
-  on call(name: String) -> Effect[Int] given Takedown {
+  on call(name: String) -> Effect[Int] by Caller given Takedown {
     let direct <- Takedown.take(name)
     let via <- Takedown.takeVia(name)
     Effect.pure(direct + via)

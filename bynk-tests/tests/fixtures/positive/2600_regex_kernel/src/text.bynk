@@ -34,7 +34,7 @@ fn fields(s: String) -> List[String] {
 }
 
 service clean {
-	on call(input: String) -> Effect[String] {
+	on call(input: String) -> Effect[String] by Caller {
 		Effect.pure(input.trim().replaceRegex("[^a-z0-9]+", "-"))
 	}
 }

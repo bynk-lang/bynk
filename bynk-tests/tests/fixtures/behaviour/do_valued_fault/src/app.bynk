@@ -5,7 +5,7 @@ capability Store {
 }
 
 service jobs {
-  on call() -> Effect[()] given Store {
+  on call() -> Effect[()] by Caller given Store {
     do Store.count()
   }
 }

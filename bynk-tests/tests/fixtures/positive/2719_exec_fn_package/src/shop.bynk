@@ -13,7 +13,7 @@ provides Audit = NoAudit {
 }
 
 service api {
-  on call(n: Int) -> Effect[Int] given Audit {
+  on call(n: Int) -> Effect[Int] by Caller given Audit {
     let r <- announce((x) => Audit.note(x), n)
     Effect.pure(r)
   }

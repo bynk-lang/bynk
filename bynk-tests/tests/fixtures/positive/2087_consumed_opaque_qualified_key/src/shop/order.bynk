@@ -9,7 +9,7 @@ type Code = opaque String
 type Order = { id: String, code: Code }
 
 service place {
-  on call(id: String) -> Effect[Order] {
+  on call(id: String) -> Effect[Order] by Caller {
     Order { id: id, code: Code.unsafe("c-\(id)") }
   }
 }

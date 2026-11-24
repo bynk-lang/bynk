@@ -5,7 +5,7 @@ context shop.ledger
 consumes shop.order
 
 service take {
-  on call(o: Order) -> Effect[Int] {
+  on call(o: Order) -> Effect[Int] by Caller {
     o.b.n
   }
 }

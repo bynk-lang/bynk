@@ -1,7 +1,7 @@
 context app
 
 service id {
-	on call(s: String) -> Effect[Result[String, String]] {
+	on call(s: String) -> Effect[Result[String, String]] by Caller {
 		if s == "" { Err("empty") } else { Ok(s) }
 	}
 }

@@ -11,7 +11,7 @@ provides Clock = FixedClock {
 }
 
 service hello {
-  on call(name: String) -> Effect[Result[String, ()]]
+  on call(name: String) -> Effect[Result[String, ()]] by Caller
       given Clock {
     let n <- Clock.now()
     Ok("hello")

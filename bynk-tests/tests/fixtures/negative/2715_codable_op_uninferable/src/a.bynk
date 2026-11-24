@@ -5,7 +5,7 @@ capability Audit {
 }
 
 service s {
-  on call() -> Effect[()] given Audit {
+  on call() -> Effect[()] by Caller given Audit {
     Audit.putAll([])
   }
 }

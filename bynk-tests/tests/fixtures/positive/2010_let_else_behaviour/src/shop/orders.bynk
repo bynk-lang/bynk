@@ -64,7 +64,7 @@ context shop.orders {
   Each step undoes what the earlier steps did when it fails.
   ---
   service place {
-    on call(id: String, qty: Int, card: Int) -> Effect[Result[String, Problem]] {
+    on call(id: String, qty: Int, card: Int) -> Effect[Result[String, Problem]] by Caller {
       let Ok(_) <- Order(id).open() else { Err(Taken) }
       let Ok(_) <- Stock("widget").reserve(qty) else {
         do Order(id).reject()
@@ -83,11 +83,11 @@ context shop.orders {
   }
 
   service status {
-    on call(id: String) -> Effect[String] { Order(id).view() }
+    on call(id: String) -> Effect[String] by Caller { Order(id).view() }
   }
 
   service stock {
-    on call() -> Effect[Int] { Stock("widget").level() }
+    on call() -> Effect[Int] by Caller { Stock("widget").level() }
   }
 
   ---

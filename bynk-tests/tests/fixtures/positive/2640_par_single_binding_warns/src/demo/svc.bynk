@@ -13,7 +13,7 @@ provides Users = FixedUsers {
 }
 
 service lookup {
-  on call(id: Int) -> Effect[String] given Users {
+  on call(id: Int) -> Effect[String] by Caller given Users {
     par {
       let user <- Users.get(id)
     }

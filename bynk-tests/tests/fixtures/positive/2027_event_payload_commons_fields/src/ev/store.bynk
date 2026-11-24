@@ -8,11 +8,11 @@ exports transparent { Batch }
 type Batch = { lines: List[Line], first: Option[Line], qtys: List[Qty], page: Page[Line] }
 
 service batch {
-  on call(b: Batch) -> Effect[Batch] { b }
+  on call(b: Batch) -> Effect[Batch] by Caller { b }
 }
 
 service sample {
-  on call() -> Effect[Batch] {
+  on call() -> Effect[Batch] by Caller {
     let line = Line { qty: 1, tag: someTag() }
     Batch { lines: [line], first: None, qtys: [1], page: Page { items: [] } }
   }

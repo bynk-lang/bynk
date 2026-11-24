@@ -3,7 +3,7 @@ context boundary.provider
 type Token = String where NonEmpty
 
 service verify {
-  on call(token: Token) -> Effect[Result[Int, Int]] {
+  on call(token: Token) -> Effect[Result[Int, Int]] by Caller {
     Effect.pure(Ok(0))
   }
 }

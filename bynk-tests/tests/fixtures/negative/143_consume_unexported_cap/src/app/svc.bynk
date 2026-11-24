@@ -3,5 +3,5 @@ context app.svc
 consumes tokens { Nope }
 
 service s {
-  on call() -> Effect[Int] { 1 }
+  on call() -> Effect[Int] by Caller { 1 }
 }

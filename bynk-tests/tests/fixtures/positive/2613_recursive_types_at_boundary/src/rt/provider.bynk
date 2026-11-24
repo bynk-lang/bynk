@@ -6,7 +6,7 @@ consumes bynk { Events }
 event Planted = { tree: Tree }
 
 service trees {
-  on call(t: Tree) -> Effect[Tree] {
+  on call(t: Tree) -> Effect[Tree] by Caller {
     Effect.pure(t)
   }
 }
@@ -15,25 +15,25 @@ service trees {
 // payload field and published. (The subscriber-side payload decoder is not
 // pinned here.)
 service gardener {
-  on call(t: Tree) -> Effect[()] given Events {
+  on call(t: Tree) -> Effect[()] by Caller given Events {
     let _ <- Events.emit[Planted](Planted { tree: t })
   }
 }
 
 service exprs {
-  on call(e: Expr) -> Effect[Expr] {
+  on call(e: Expr) -> Effect[Expr] by Caller {
     Effect.pure(e)
   }
 }
 
 service indexes {
-  on call(i: Index) -> Effect[Index] {
+  on call(i: Index) -> Effect[Index] by Caller {
     Effect.pure(i)
   }
 }
 
 service dirs {
-  on call(d: Dir) -> Effect[Dir] {
+  on call(d: Dir) -> Effect[Dir] by Caller {
     Effect.pure(d)
   }
 }

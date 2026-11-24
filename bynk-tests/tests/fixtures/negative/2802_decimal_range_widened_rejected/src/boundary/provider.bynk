@@ -6,7 +6,7 @@ context boundary.provider
 type Price = Decimal where InRange(1.00d, 5.00d)
 
 service quote {
-  on call(price: Price) -> Effect[Result[Int, Int]] {
+  on call(price: Price) -> Effect[Result[Int, Int]] by Caller {
     Effect.pure(Ok(0))
   }
 }

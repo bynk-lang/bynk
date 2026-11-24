@@ -23,7 +23,7 @@ fn generic[T](e: Effect[T]) -> Effect[()] {
 }
 
 service writes {
-  on call(key: String) -> Effect[String] given Store {
+  on call(key: String) -> Effect[String] by Caller given Store {
     do Store.touch()
     do Store.count()
     do Store.upsert(key)

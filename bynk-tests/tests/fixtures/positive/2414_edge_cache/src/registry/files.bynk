@@ -40,7 +40,7 @@ service files from http {
 }
 
 service takedown {
-	on call(hex: String) -> Effect[Bool] given Edge {
+	on call(hex: String) -> Effect[Bool] by Caller given Edge {
 		Edge.purge(["/dl/sha256/\(hex)"])
 	}
 }

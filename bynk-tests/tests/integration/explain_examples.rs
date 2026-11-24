@@ -861,7 +861,7 @@ fn marked_lines_are_compared_without_comment_or_indent() {
 fn a_block_body_is_indented_past_the_line_that_opens_it() {
     // Two spaces or four per level, nested blocks, and a blank line all pass.
     assert!(layout_failures("fn f() -> Int {\n  1\n}").is_empty());
-    let nested = "service s {\n    on call() -> Int {   // ✗ why\n        1\n    }\n}";
+    let nested = "service s {\n    on call() -> Int by Caller {   // ✗ why\n        1\n    }\n}";
     assert!(layout_failures(nested).is_empty());
     assert!(layout_failures("fn f() -> Int { … }\nf(1)  // ✗\nf(2)  // ✓").is_empty());
     // The regression (#3163): the body's indentation was written as source

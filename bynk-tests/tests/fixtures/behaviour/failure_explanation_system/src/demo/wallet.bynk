@@ -11,7 +11,7 @@ agent Wallet {
 // Called from the case directly, as a service, so the refusal happens in the
 // agent behind the call and not in the case's own process.
 service overdraw {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     Wallet("s").spend(5)
   }
 }

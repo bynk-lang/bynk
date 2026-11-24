@@ -22,7 +22,7 @@ agent Tally {
 }
 
 service read {
-	on call(id: TallyId) -> Effect[Result[Int, TallyError]] {
+	on call(id: TallyId) -> Effect[Result[Int, TallyError]] by Caller {
 		let tally = Tally(id)
 		let total <- tally.current()
 		total

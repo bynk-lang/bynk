@@ -41,8 +41,8 @@ fn fixture() -> PathBuf {
 }
 
 /// Run `bynk test` on the fixture with `extra` arguments, into its own
-/// output tree (the runner writes a sibling `out-js`, so runs must not share
-/// a parent).
+/// output tree (the runner writes its `out-js` inside it, so runs must not share
+/// an output directory).
 fn run(out_dir: &str, extra: &[&str]) -> std::process::Output {
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(out_dir)

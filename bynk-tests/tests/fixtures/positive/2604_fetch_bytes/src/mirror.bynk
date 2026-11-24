@@ -6,7 +6,7 @@ context mirror
 consumes bynk { Fetch, FetchOptions, Redirect, Request, Method, FetchError }
 
 service copy {
-	on call(source: String, target: String) -> Effect[Int] given Fetch {
+	on call(source: String, target: String) -> Effect[Int] by Caller given Fetch {
 		let options = FetchOptions { timeout: Some(10.seconds), redirect: Follow }
 		let got <- Fetch.receiveBytes(Request { method: Get, url: source, contentType: None, authorization: None, headers: Map.empty(), body: None }, options)
 		match got {
@@ -25,7 +25,7 @@ service copy {
 }
 
 service note {
-	on call(url: String) -> Effect[String] given Fetch {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
 		let got <- Fetch.receiveBytes(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }, FetchOptions { timeout: None, redirect: Follow })
 		match got {
 			Ok(r) => Effect.pure(r.body.decodeUtf8().getOrElse("<binary>"))

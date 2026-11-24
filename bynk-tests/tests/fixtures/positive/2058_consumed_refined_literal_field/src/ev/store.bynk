@@ -8,5 +8,5 @@ type Code = Int where InRange(1, 99)
 type Item = { code: Code, name: String }
 
 service put {
-  on call(i: Item) -> Effect[Int] { i.code }
+  on call(i: Item) -> Effect[Int] by Caller { i.code }
 }

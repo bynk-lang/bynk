@@ -1099,11 +1099,11 @@ mod tests {
         assert!(Arc::ptr_eq(&first, &second));
     }
 
-    const PAYMENT: &str = "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+    const PAYMENT: &str = "context shop.payment\n\nservice charge {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n";
 
     fn consumer(name: &str, arg: &str) -> String {
         format!(
-            "context shop.{name}\n\nconsumes shop.payment\n\nservice place {{\n  on call() -> Effect[Int] {{\n    let n <- shop.payment.charge({arg})\n    Effect.pure(n)\n  }}\n}}\n"
+            "context shop.{name}\n\nconsumes shop.payment\n\nservice place {{\n  on call() -> Effect[Int] by Caller {{\n    let n <- shop.payment.charge({arg})\n    Effect.pure(n)\n  }}\n}}\n"
         )
     }
 

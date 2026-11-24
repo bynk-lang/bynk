@@ -20,7 +20,7 @@ agent Order {
 // #1823: `Cents` appears in no signature of this context, only in the call to
 // `Payment.authorise`. Its codec was not imported (TS2304).
 service place {
-  on call() -> Effect[Bool] {
+  on call() -> Effect[Bool] by Caller {
     do Order("o1").begin(someone())
     Payment.authorise(priced().price)
   }

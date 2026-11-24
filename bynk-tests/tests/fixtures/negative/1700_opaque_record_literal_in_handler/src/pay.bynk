@@ -5,7 +5,7 @@ exports opaque { Receipt }
 type Receipt = { amount: Int }
 
 service charge {
-  on call(amount: Int) -> Effect[Receipt] {
+  on call(amount: Int) -> Effect[Receipt] by Caller {
     Effect.pure(Receipt { amount: amount })
   }
 }

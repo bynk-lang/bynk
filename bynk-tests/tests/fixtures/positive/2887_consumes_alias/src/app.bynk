@@ -17,20 +17,20 @@ fn algorithmName(d: CryptoDigest) -> String {
 }
 
 service hashing {
-	on call(token: String) -> Effect[String] given Crypto {
+	on call(token: String) -> Effect[String] by Caller given Crypto {
 		let h <- Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
 		Effect.pure(h.toHex())
 	}
 }
 
 service total {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		Effect.pure(empty().total)
 	}
 }
 
 service name {
-	on call() -> Effect[String] {
+	on call() -> Effect[String] by Caller {
 		Effect.pure(algorithmName(CryptoDigest.Sha384))
 	}
 }

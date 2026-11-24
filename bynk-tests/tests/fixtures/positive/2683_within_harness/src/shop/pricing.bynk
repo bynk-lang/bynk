@@ -21,7 +21,7 @@ provides Ledger = NoLedger {
 }
 
 service quotes {
-	on call(id: Int) -> Effect[String] given Pricing {
+	on call(id: Int) -> Effect[String] by Caller given Pricing {
 		let r <- Pricing.quote(id).within(2.seconds)
 		match r {
 			Ok(q) => Effect.pure("quoted \(q)")
@@ -33,14 +33,14 @@ service quotes {
 // The abandoned effect keeps going: a slow ledger write that the handler gave
 // up on is still performed.
 service booking {
-	on call(id: Int) -> Effect[Bool] given Ledger {
+	on call(id: Int) -> Effect[Bool] by Caller given Ledger {
 		let r <- Ledger.book(id).within(1.seconds)
 		Effect.pure(r.isOk())
 	}
 }
 
 service many {
-	on call(ids: List[Int]) -> Effect[Int] given Pricing {
+	on call(ids: List[Int]) -> Effect[Int] by Caller given Pricing {
 		let rs <- ids.parTraverseAll((id) => Pricing.quote(id).within(2.seconds))
 		Effect.pure(rs.length())
 	}
@@ -48,7 +48,7 @@ service many {
 
 // Inside a `par` block each `within` bounds its own effect alone.
 service together {
-	on call(id: Int) -> Effect[String] given Pricing {
+	on call(id: Int) -> Effect[String] by Caller given Pricing {
 		par {
 			let a <- Pricing.quote(id).within(2.seconds)
 			let b <- Pricing.quote(id + 1).within(2.seconds)

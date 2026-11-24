@@ -1,7 +1,7 @@
 context shop.clock
 
 service now {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n + 1
   }
 }

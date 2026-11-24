@@ -3,14 +3,12 @@
 
 import { Some, None } from "../__bynk_runtime/result.js";
 
-import { reverse } from "./list.js";
-
 /**
  * Returns the values of `m`, one per key (order follows `m.keys()`).
  */
 export function values<K, V>(m: ReadonlyMap<K, V>): readonly V[] {
   const init: readonly V[] = ([] as readonly V[]);
-  return reverse(((__xs: readonly K[], __acc: readonly V[], __f: (acc: readonly V[], x: K) => readonly V[]) => {
+  return ((__xs: readonly V[]) => [...__xs].reverse())(((__xs: readonly K[], __acc: readonly V[], __f: (acc: readonly V[], x: K) => readonly V[]) => {
     for (const __x of __xs) __acc = __f(__acc, __x);
     return __acc;
   })([...m.keys()], init, (acc: readonly V[], k: K) => ((__d) => {

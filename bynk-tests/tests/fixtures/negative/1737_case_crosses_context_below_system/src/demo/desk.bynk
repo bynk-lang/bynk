@@ -18,24 +18,24 @@ agent Counter {
 }
 
 service check {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Vault.open(n)
   }
 }
 
 service tally {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Counter("c").bump(n)
   }
 }
 
 service letBound {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let c = Counter("c")
     c.bump(n)
   }
 }
 
 service local {
-  on call(n: Int) -> Effect[Int] { n + 1 }
+  on call(n: Int) -> Effect[Int] by Caller { n + 1 }
 }

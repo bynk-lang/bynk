@@ -285,8 +285,8 @@ fn run_fixture(fixture: &Path, scratch: &Path) -> Vec<String> {
     } else {
         copy.join("src")
     };
-    // Each run gets its own parent directory: the runner writes its executed
-    // `out-js` tree as a *sibling* of `--output` (see `property_behaviour.rs`).
+    // Each run gets its own output directory: the runner writes its executed
+    // `out-js` tree inside `--output`.
     let output = scratch.join(name).join("run").join("out");
 
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
@@ -397,7 +397,7 @@ fn run_mutated(fixture: &Path, scratch: &Path, tag: &str, needle: &str) -> Vec<(
             r#"#!/bin/sh
 "{real_tsc}" "$@" || exit $?
 while [ $# -gt 0 ]; do [ "$1" = -p ] && P="$2"; shift; done
-OUTJS="$(dirname "$(dirname "$P")")/out-js"
+OUTJS="$(dirname "$P")/out-js"
 FILES=$(grep -rlF '{needle}' "$OUTJS" --include=auth.js)
 [ -n "$FILES" ] || {{ echo "mutation anchor not found: {needle}" >&2; exit 99; }}
 for f in $FILES; do sed -i.bak 's/{needle}/void 0/' "$f"; done

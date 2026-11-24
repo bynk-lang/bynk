@@ -114,7 +114,7 @@ context assistant {
 	consumes workers_ai { Ai, AiError }
 
 	service summarise {
-		on call(text: String) -> Effect[String] given Ai {
+		on call(text: String) -> Effect[String] by Caller given Ai {
 			let reply <- Ai.complete("@cf/meta/llama-3.2-1b-instruct", "Summarise: \(text)")
 			match reply {
 				Ok(summary) => summary,

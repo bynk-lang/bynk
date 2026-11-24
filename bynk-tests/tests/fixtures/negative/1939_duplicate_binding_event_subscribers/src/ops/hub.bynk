@@ -8,7 +8,7 @@ event Pinged = {
 }
 
 service ping {
-  on call(id: String) -> Effect[()] given Events {
+  on call(id: String) -> Effect[()] by Caller given Events {
     Events.emit[Pinged](Pinged { id: id })
   }
 }

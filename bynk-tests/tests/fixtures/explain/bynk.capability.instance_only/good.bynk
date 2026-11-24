@@ -6,7 +6,7 @@ consumes bynk.cloudflare { D1 }
 capability Orders = D1
 
 service probe {
-    on call() -> Effect[()] given Orders {
+    on call() -> Effect[()] by Caller given Orders {
         let _ <- Orders.run("DELETE FROM orders", [])
         ()
     }

@@ -8,7 +8,7 @@ adapter tokens {
   provides Jwt = JoseJwt
 
   service login {
-    on call(x: Int) -> Effect[Int] {
+    on call(x: Int) -> Effect[Int] by Caller {
       x
     }
   }

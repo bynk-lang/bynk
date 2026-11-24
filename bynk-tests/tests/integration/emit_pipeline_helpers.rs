@@ -11,7 +11,7 @@ const MATH: &str = "commons demo.math\n\nfn double(n: Int) -> Int { n * 2 }\n";
 
 #[test]
 fn a_workers_build_emits_one_worker_directory_per_context() {
-    let shop = "context demo.shop\n\nservice api {\n  on call(n: Int) -> Effect[Int] {\n    Effect.pure(n)\n  }\n}\n";
+    let shop = "context demo.shop\n\nservice api {\n  on call(n: Int) -> Effect[Int] by Caller {\n    Effect.pure(n)\n  }\n}\n";
     let out = emit_workers(&[("demo/shop.bynk", shop)]);
     for doc in ["index.ts", "compose.ts", "handlers.ts", "wrangler.toml"] {
         out.text(&format!("workers/demo-shop/{doc}"));

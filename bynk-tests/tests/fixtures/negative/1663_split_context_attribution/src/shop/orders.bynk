@@ -5,7 +5,7 @@ context shop
 fn bad() -> Int { "not an int" }
 
 service orders {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure("orders")
   }
 }

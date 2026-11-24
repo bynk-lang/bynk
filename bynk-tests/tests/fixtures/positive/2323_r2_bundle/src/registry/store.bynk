@@ -14,7 +14,7 @@ capability Archives = R2
 capability Indexes = R2 @jurisdiction("eu")
 
 service archive {
-	on call(key: String, body: Bytes) -> Effect[Bool] given Archives {
+	on call(key: String, body: Bytes) -> Effect[Bool] by Caller given Archives {
 		let stored <- Archives.putWith(key, body, R2Put {
 			contentType: Some("application/octet-stream"),
 			metadata: Map.empty().insert("origin", "test"),
@@ -25,18 +25,18 @@ service archive {
 }
 
 service fetch {
-	on call(key: String) -> Effect[Option[Bytes]] given Archives { Archives.get(key) }
+	on call(key: String) -> Effect[Option[Bytes]] by Caller given Archives { Archives.get(key) }
 }
 
 service size {
-	on call(key: String) -> Effect[Option[Int]] given Archives {
+	on call(key: String) -> Effect[Option[Int]] by Caller given Archives {
 		let head <- Archives.head(key)
 		head.map((o) => o.size)
 	}
 }
 
 service swap {
-	on call(key: String, etag: String, body: Bytes) -> Effect[Bool] given Indexes {
+	on call(key: String, etag: String, body: Bytes) -> Effect[Bool] by Caller given Indexes {
 		let stored <- Indexes.putWith(key, body, R2Put {
 			contentType: None,
 			metadata: Map.empty(),
@@ -47,18 +47,18 @@ service swap {
 }
 
 service write {
-	on call(key: String, body: Bytes) -> Effect[String] given Indexes {
+	on call(key: String, body: Bytes) -> Effect[String] by Caller given Indexes {
 		let o <- Indexes.put(key, body)
 		o.etag
 	}
 }
 
 service remove {
-	on call(key: String) -> Effect[()] given Archives { Archives.delete(key) }
+	on call(key: String) -> Effect[()] by Caller given Archives { Archives.delete(key) }
 }
 
 service names {
-	on call(prefix: String) -> Effect[List[String]] given Archives {
+	on call(prefix: String) -> Effect[List[String]] by Caller given Archives {
 		let page <- Archives.list(Some(prefix), None)
 		page.keys.map((o) => o.key)
 	}

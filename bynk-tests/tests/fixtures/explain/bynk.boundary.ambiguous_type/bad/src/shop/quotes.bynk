@@ -7,7 +7,7 @@ type Amount = { cents: Int }
 type Wrap = { inner: Amount }
 
 service wrap {
-    on call() -> Effect[Wrap] {
+    on call() -> Effect[Wrap] by Caller {
         Effect.pure(Wrap { inner: Amount { cents: 2 } })
     }
 }

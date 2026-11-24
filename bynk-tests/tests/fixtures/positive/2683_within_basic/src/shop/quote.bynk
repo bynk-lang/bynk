@@ -26,7 +26,7 @@ provides Audit = NoAudit {
 
 // The plain form: match the Result.
 service quotes {
-	on call(id: Int) -> Effect[String] given Pricing {
+	on call(id: Int) -> Effect[String] by Caller given Pricing {
 		let r <- Pricing.quote(id).within(2.seconds)
 		match r {
 			Ok(q) => Effect.pure("quoted \(q)")
@@ -37,14 +37,14 @@ service quotes {
 
 // In a lambda written in the handler: it closes over the handler's deps.
 service many {
-	on call(ids: List[Int]) -> Effect[List[Result[Int, TimedOut]]] given Pricing {
+	on call(ids: List[Int]) -> Effect[List[Result[Int, TimedOut]]] by Caller given Pricing {
 		ids.parTraverseAll((id) => Pricing.quote(id).within(1.seconds))
 	}
 }
 
 // An effect that already returns a Result gains a second layer (no special case).
 service nested {
-	on call(id: Int) -> Effect[Bool] given Pricing {
+	on call(id: Int) -> Effect[Bool] by Caller given Pricing {
 		let r <- Pricing.tryQuote(id).within(3.seconds)
 		match r {
 			Ok(Ok(q)) => Effect.pure(true)
@@ -56,7 +56,7 @@ service nested {
 
 // Inside a `par` binding, as each binding alone would.
 service both {
-	on call(id: Int) -> Effect[Int] given Pricing, Audit {
+	on call(id: Int) -> Effect[Int] by Caller given Pricing, Audit {
 		par {
 			let a <- Pricing.quote(id).within(2.seconds)
 			let b <- Pricing.quote(id + 1).within(2.seconds)

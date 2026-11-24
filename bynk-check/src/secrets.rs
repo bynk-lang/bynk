@@ -312,7 +312,7 @@ mod tests {
         .collect()
     }
 
-    const LITERAL_READ: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\nservice probe {\n  on call() -> Effect[Option[String]] given Secrets {\n    Secrets.get(\"API_KEY\")\n  }\n}\n";
+    const LITERAL_READ: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\nservice probe {\n  on call() -> Effect[Option[String]] by Caller given Secrets {\n    Secrets.get(\"API_KEY\")\n  }\n}\n";
 
     #[test]
     fn a_literal_argument_is_collected_and_warns_nothing() {
@@ -324,7 +324,7 @@ mod tests {
         assert!(warnings.is_empty());
     }
 
-    const COMPUTED_READ: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\nservice probe {\n  on call(key: String) -> Effect[Option[String]] given Secrets {\n    Secrets.get(key)\n  }\n}\n";
+    const COMPUTED_READ: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\nservice probe {\n  on call(key: String) -> Effect[Option[String]] by Caller given Secrets {\n    Secrets.get(key)\n  }\n}\n";
 
     #[test]
     fn a_computed_argument_warns_once_and_marks_the_read_set_incomplete() {
@@ -337,7 +337,7 @@ mod tests {
         assert_eq!(warnings[0].category, "bynk.secrets.computed_name");
     }
 
-    const NESTED_IN_MATCH_ARM: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\ntype Choice = enum { A, B }\n\nservice probe {\n  on call(key: String, choice: Choice) -> Effect[Option[String]] given Secrets {\n    match choice {\n      A => Secrets.get(key)\n      B => Secrets.get(\"FIXED\")\n    }\n  }\n}\n";
+    const NESTED_IN_MATCH_ARM: &str = "context net.probe\n\nconsumes bynk { Secrets }\n\ntype Choice = enum { A, B }\n\nservice probe {\n  on call(key: String, choice: Choice) -> Effect[Option[String]] by Caller given Secrets {\n    match choice {\n      A => Secrets.get(key)\n      B => Secrets.get(\"FIXED\")\n    }\n  }\n}\n";
 
     #[test]
     fn a_call_nested_inside_a_match_arm_is_still_found() {

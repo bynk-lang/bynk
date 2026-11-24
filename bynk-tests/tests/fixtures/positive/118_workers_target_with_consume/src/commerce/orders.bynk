@@ -20,7 +20,7 @@ service placeOrder {
   payment's error variants to orders' own OrderError shape (the
   anti-corruption-layer pattern).
   ---
-  on call(total: Money) -> Effect[Result[(), OrderError]] {
+  on call(total: Money) -> Effect[Result[(), OrderError]] by Caller {
     let auth <- Payment.authorise(total)
     match auth {
       Ok(_) => Ok(())

@@ -14,7 +14,7 @@ type Item = { id: String, qty: Int, note: Option[String], live: Bool }
 type Loose = { id: String, qty: Int }
 
 service setup {
-	on call() -> Effect[Bool] given Stock {
+	on call() -> Effect[Bool] by Caller given Stock {
 		let made <- Stock.run("CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, qty, note TEXT, live INTEGER NOT NULL DEFAULT 1, \"order\" TEXT)", [])
 		match made {
 			Ok(_) => true
@@ -24,33 +24,33 @@ service setup {
 }
 
 service put {
-	on call(id: String, qty: Int, live: Bool) -> Effect[Bool] given Stock {
+	on call(id: String, qty: Int, live: Bool) -> Effect[Bool] by Caller given Stock {
 		let r <- Stock.run("INSERT INTO items (id, qty, live) VALUES (?1, ?2, ?3)", [Text(id), Integer(qty), Boolean(live)])
 		r is Ok(_)
 	}
 }
 
 service putWord {
-	on call(id: String) -> Effect[Bool] given Stock {
+	on call(id: String) -> Effect[Bool] by Caller given Stock {
 		let r <- Stock.run("INSERT INTO items (id, qty) VALUES (?1, 'many')", [Text(id)])
 		r is Ok(_)
 	}
 }
 
 service listing {
-	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] given Stock {
+	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] by Caller given Stock {
 		Stock.select[Item]("FROM items WHERE qty >= ?1 ORDER BY id", [Integer(min)])
 	}
 }
 
 service lookup {
-	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] given Stock {
+	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] by Caller given Stock {
 		Stock.firstAs[Item]("FROM items WHERE id = ?1", [Text(id)])
 	}
 }
 
 service loose {
-	on call() -> Effect[String] given Stock {
+	on call() -> Effect[String] by Caller given Stock {
 		let r <- Stock.select[Loose]("FROM items ORDER BY id", [])
 		match r {
 			Ok(_) => "ok"
@@ -71,7 +71,7 @@ fn jsonText(e: DecodeError) -> String {
 
 // #2957: the same, through `let … else match` and `firstAs`.
 service looseOne {
-	on call() -> Effect[String] given Stock {
+	on call() -> Effect[String] by Caller given Stock {
 		let Ok(row) <- Stock.firstAs[Loose]("FROM items ORDER BY id", []) else match {
 			Err(Sql(e)) => Effect.pure(sqlText(e)),
 			Err(Decode(e)) => Effect.pure(jsonText(e)),
@@ -82,7 +82,7 @@ service looseOne {
 
 // A column the table lacks is the statement's own failure.
 service missing {
-	on call() -> Effect[String] given Stock {
+	on call() -> Effect[String] by Caller given Stock {
 		let r <- Stock.select[Gone]("FROM items", [])
 		match r {
 			Ok(_) => "ok"

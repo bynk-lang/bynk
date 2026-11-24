@@ -77,7 +77,7 @@ agent Counter {
 }
 
 service api {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     unreachable("service")
   }
 }
@@ -97,7 +97,7 @@ service api {
 /// A `detach` names its own site in the runtime report.
 #[test]
 fn a_detach_names_its_location() {
-    let src = "context demo.jobs\n\ncapability Logger {\n  fn info(msg: String) -> Effect[()]\n}\n\nprovides Logger = MemLogger {\n  fn info(msg: String) -> Effect[()] {\n    Effect.pure(())\n  }\n}\n\nservice api {\n  on call(n: Int) -> Effect[Int] given Logger {\n    do Logger.info(\"hi\").detach()\n    Effect.pure(n)\n  }\n}\n";
+    let src = "context demo.jobs\n\ncapability Logger {\n  fn info(msg: String) -> Effect[()]\n}\n\nprovides Logger = MemLogger {\n  fn info(msg: String) -> Effect[()] {\n    Effect.pure(())\n  }\n}\n\nservice api {\n  on call(n: Int) -> Effect[Int] by Caller given Logger {\n    do Logger.info(\"hi\").detach()\n    Effect.pure(n)\n  }\n}\n";
     let path = "demo/jobs.bynk";
     let text = emit(&[(path, src)], BuildTarget::Workers);
     let want = location(path, src, "Logger.info(\"hi\").detach()");

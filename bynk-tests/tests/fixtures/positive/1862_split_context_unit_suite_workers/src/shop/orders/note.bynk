@@ -7,5 +7,5 @@ uses shop.values
 // `handlers.ts` re-exports it from one of them as `type Note` (TS1205
 // otherwise, under `isolatedModules`).
 service note {
-  on call(n: Note) -> Effect[Note] { n }
+  on call(n: Note) -> Effect[Note] by Caller { n }
 }

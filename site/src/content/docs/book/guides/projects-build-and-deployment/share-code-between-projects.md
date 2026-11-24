@@ -97,7 +97,7 @@ context auth.sessions
 consumes money.tokens
 
 service login {
-	on call(secret: String) -> Effect[String] given money.tokens.Jwt {
+	on call(secret: String) -> Effect[String] by Caller given money.tokens.Jwt {
 		let token <- money.tokens.Jwt.sign("u1", secret)
 		token
 	}
