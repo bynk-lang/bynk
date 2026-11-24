@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/ticks") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/ticks", path) !== null) {
           __route = "GET /ticks";
           const result = await surface.http_GET_ticks();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_Feed);
@@ -61,7 +61,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_Feed);
       }
-      if (path === "/ticks") {
+      if (__matchPath("/ticks", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_Feed);

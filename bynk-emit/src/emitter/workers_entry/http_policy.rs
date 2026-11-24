@@ -61,9 +61,13 @@ pub(super) fn derive_allowed_methods(
 /// `405`/`OPTIONS` for a cross-origin path is stamped with `applyCors` (D5).
 pub(super) struct PathMethods {
     pub(super) path: String,
-    pub(super) has_params: bool,
-    /// Alphabetical, e.g. `["GET", "HEAD", "OPTIONS"]`.
+    /// Alphabetical, e.g. `["GET", "HEAD", "OPTIONS"]`. #3909: the union over the
+    /// routes that match every path this one does (`GET /users/me` beside
+    /// `PUT /users/:id` answers a `POST` to `/users/me` with both).
     pub(super) methods: Vec<String>,
+    /// #3909: routes that match only some of this path's requests, each with the
+    /// `Allow` it adds when the request is one of them, decided at request time.
+    pub(super) partial: Vec<(String, String)>,
     pub(super) cors_const: Option<String>,
     /// v0.141 (ADR 0164): the owning service's security policy constant, so a
     /// synthesised `405`/`OPTIONS` for the path is stamped with the same headers
@@ -89,16 +93,33 @@ pub(super) fn build_path_method_table(
         }
     }
     paths.sort();
+    // #3909: the most specific pattern first, so the first block whose pattern
+    // matches the request is the one whose `Allow` is the union of its matches.
+    let keys: Vec<(&str, &str)> = paths.iter().map(|p| ("", p.as_str())).collect();
+    let order = bynk_check::route_order::order(&keys);
+    let paths: Vec<String> = order.into_iter().map(|i| paths[i].clone()).collect();
+    let allow_of = |only: &dyn Fn(&str) -> bool| {
+        derive_allowed_methods(
+            http_routes
+                .iter()
+                .filter(|r| only(&r.path))
+                .map(|r| r.method),
+        )
+    };
     paths
-        .into_iter()
+        .iter()
         .map(|path| {
-            let methods = derive_allowed_methods(
-                http_routes
-                    .iter()
-                    .filter(|r| r.path == path)
-                    .map(|r| r.method),
-            );
-            let has_params = param_count(&path) > 0;
+            let methods = allow_of(&|p| bynk_check::route_order::covers(p, path));
+            let partial: Vec<(String, String)> = paths
+                .iter()
+                .filter(|q| {
+                    *q != path
+                        && bynk_check::route_order::overlap(q, path)
+                        && !bynk_check::route_order::covers(q, path)
+                })
+                .map(|q| (q.clone(), allow_of(&|p| p == q).join(", ")))
+                .collect();
+            let path = path.clone();
             // A path is expected unique across a context's HTTP surface (the same
             // note ADR 0159 makes); if two services declare it, the first CORS
             // owner wins the stamping.
@@ -120,8 +141,8 @@ pub(super) fn build_path_method_table(
                 .and_then(|r| r.rejected.clone());
             PathMethods {
                 path,
-                has_params,
                 methods,
+                partial,
                 cors_const,
                 security_const,
                 rejected,
@@ -271,18 +292,14 @@ pub(super) fn build_security_services(
 /// `OPTIONS` (lacks it) falls through to the generic `204 + Allow`, so the two
 /// `OPTIONS` answers compose instead of colliding.
 pub(super) fn cors_preflight(cs: &CorsService, security_services: &[SecurityService]) -> TsStmt {
-    let mut cond_terms = cs.paths.iter().map(|(path, has_params)| {
-        if *has_params {
-            strict_neq(
-                call(
-                    ident("__matchPath"),
-                    vec![str_lit(path.clone()), ident("path")],
-                ),
-                null_lit(),
-            )
-        } else {
-            strict_eq(ident("path"), str_lit(path.clone()))
-        }
+    let mut cond_terms = cs.paths.iter().map(|(path, _)| {
+        strict_neq(
+            call(
+                ident("__matchPath"),
+                vec![str_lit(path.clone()), ident("path")],
+            ),
+            null_lit(),
+        )
     });
     let first = cond_terms
         .next()
@@ -326,6 +343,26 @@ pub(super) fn cors_preflight(cs: &CorsService, security_services: &[SecurityServ
     if_(full_cond, block(vec![return_(Some(stamped))]))
 }
 
+/// The `Allow` value of a path's fall-through: its methods, plus (#3909) those of
+/// the routes that match only some of its requests, added at request time when the
+/// request is one of them.
+fn allow_expr(pm: &PathMethods, allow: String) -> TsExpr {
+    if pm.partial.is_empty() {
+        return str_lit(allow);
+    }
+    let extras = pm
+        .partial
+        .iter()
+        .map(|(pattern, methods)| {
+            TsExpr::array(vec![str_lit(pattern.clone()), str_lit(methods.clone())])
+        })
+        .collect();
+    call(
+        ident("__allowUnion"),
+        vec![str_lit(allow), ident("path"), TsExpr::array(extras)],
+    )
+}
+
 /// The method-aware router fall-through for one known path (v0.139, ADR 0162): a
 /// request that matched no dispatch block and reaches a live path under an
 /// unhandled method is a bare `OPTIONS` ⇒ `204 + Allow`, any other method ⇒
@@ -334,17 +371,13 @@ pub(super) fn cors_preflight(cs: &CorsService, security_services: &[SecurityServ
 /// cross-origin `405`/`OPTIONS` is not invisible to the browser.
 pub(super) fn method_fall_through(pm: &PathMethods, member_mode: bool) -> TsStmt {
     let allow = pm.methods.join(", ");
-    let match_cond = if pm.has_params {
-        strict_neq(
-            call(
-                ident("__matchPath"),
-                vec![str_lit(pm.path.clone()), ident("path")],
-            ),
-            null_lit(),
-        )
-    } else {
-        strict_eq(ident("path"), str_lit(pm.path.clone()))
-    };
+    let match_cond = strict_neq(
+        call(
+            ident("__matchPath"),
+            vec![str_lit(pm.path.clone()), ident("path")],
+        ),
+        null_lit(),
+    );
     let mut fallthrough_body: Vec<TsStmt> = Vec::new();
     // OPTIONS → 204, everything else → 405; both carry the derived Allow.
     fallthrough_body.push(const_(
@@ -361,7 +394,7 @@ pub(super) fn method_fall_through(pm: &PathMethods, member_mode: bool) -> TsStmt
             ("status".to_string(), ident("__status")),
             (
                 "headers".to_string(),
-                TsExpr::object(vec![("allow".to_string(), str_lit(allow))]),
+                TsExpr::object(vec![("allow".to_string(), allow_expr(pm, allow))]),
             ),
         ]),
     ]);
