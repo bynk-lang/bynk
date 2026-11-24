@@ -371,7 +371,8 @@ pub fn emit_wrangler_toml(
             ),
             // P2 (#2578): the queue as the declaration names it; `bynk
             // deploy` environment-qualifies it, as it does a consumer's.
-            BindingSource::QueueProducer { queue, .. } => TomlBlock::array_table(
+            BindingSource::QueueProducer { queue, .. }
+            | BindingSource::QueueDeadLetter { queue } => TomlBlock::array_table(
                 WranglerKey::QueueProducers,
                 vec![
                     TomlEntry::kv("binding", name),
@@ -732,7 +733,9 @@ pub(crate) fn binding_ts_type(source: &BindingSource) -> &'static str {
         BindingSource::Kv | BindingSource::KvInstance { .. } => "__KVNamespace",
         BindingSource::R2Instance { .. } => "__R2Bucket",
         BindingSource::RateLimitInstance { .. } => "__RateLimiter",
-        BindingSource::QueueProducer { .. } => "__QueueProducer",
+        BindingSource::QueueProducer { .. } | BindingSource::QueueDeadLetter { .. } => {
+            "__QueueProducer"
+        }
         BindingSource::AnalyticsDataset { .. } => "__AnalyticsDataset",
         BindingSource::D1Database { .. } => "__D1Database",
         BindingSource::StoredSecret { .. } => "__SecretsStoreSecret",

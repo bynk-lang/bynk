@@ -1,0 +1,11 @@
+context api
+
+type Range = { from: Int, to: Int }
+
+type Upload = { range: Range }
+
+service api from http {
+    on PUT("/files") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

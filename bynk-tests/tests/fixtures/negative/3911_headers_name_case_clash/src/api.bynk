@@ -1,0 +1,12 @@
+context api
+
+type Probe = {
+  @name("X-Trace") a: String,
+  @name("x-trace") b: String,
+}
+
+service api from http {
+  on GET("/p") (headers: Probe) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("x")
+  }
+}

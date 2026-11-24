@@ -1062,8 +1062,12 @@
       "summary": "A field of a `@form` body record has a type a form cannot carry."
     },
     {
+      "code": "bynk.http.headers_field_not_stringy",
+      "summary": "A field of an HTTP handler's `headers` record has a type a header cannot carry."
+    },
+    {
       "code": "bynk.http.headers_wrong_type",
-      "summary": "An HTTP handler's `headers` parameter is not typed `RequestHeaders`."
+      "summary": "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`."
     },
     {
       "code": "bynk.http.invalid_path",

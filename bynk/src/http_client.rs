@@ -458,8 +458,12 @@ fn route_of(
             params.push(ParamInput::Cookies {
                 ty: p.type_ref.clone(),
             });
+        } else if name == "headers" && matches!(p.type_ref, TypeRef::Named(_)) {
+            params.push(ParamInput::Headers {
+                ty: p.type_ref.clone(),
+            });
         }
-        // The raw `query` and `cookies` views and `headers` declare nothing a caller supplies.
+        // The raw `query`, `cookies` and `headers` views declare nothing a caller supplies.
     }
     let success = match success_of(h) {
         Some(TypeRef::Unit(_)) | None => None,
