@@ -5355,7 +5355,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.tier.cross_context_needs_system",
-        blurb: "Below `system` a case runs in one process. No other context is stood up, and a `stub` doubles capabilities, not another context's services. So a `unit` or `integration` case, or a `property`, that reaches another context, directly or through a service or agent handler, has nothing to call. Promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
+        blurb: "Below `system` a case runs in one process. No other context is stood up, so a `unit` or `integration` case, or a `property`, that reaches another context's service, directly or through a service or agent handler, has nothing to call unless the service is stubbed: `stub Pay.authorise(_) returns …` substitutes it, and only the services left unstubbed are reported. Stub each service the case reaches, promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
         example: "suite demo.desk {\n    case \"the desk checks\" {\n        let n <- check.call(5)   // ✗ `check` calls `demo.vault`, another context\n    }\n}\n\nsuite demo.desk as system {\n    case \"the desk checks\" {\n        let n <- demo.desk.check(5)   // ✓ both contexts are stood up\n    }\n}",
     },
     Explain {

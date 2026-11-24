@@ -8023,7 +8023,7 @@
     "summary": "A `system`-tier case drives a `from websocket` service by address (`svc.open(tc, …)`, `svc.message(tc, frame)`, `svc.close(tc)`); a deployed WebSocket is a real upgrade through the Worker and a Durable Object, which a `system` case does not drive, so the case runs at `unit` or `integration`."
   },
   {
-    "blurb": "Below `system` a case runs in one process. No other context is stood up, and a `stub` doubles capabilities, not another context's services. So a `unit` or `integration` case, or a `property`, that reaches another context, directly or through a service or agent handler, has nothing to call. Promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
+    "blurb": "Below `system` a case runs in one process. No other context is stood up, so a `unit` or `integration` case, or a `property`, that reaches another context's service, directly or through a service or agent handler, has nothing to call unless the service is stubbed: `stub Pay.authorise(_) returns …` substitutes it, and only the services left unstubbed are reported. Stub each service the case reaches, promote the case to a `system` suite, which wires the contexts, or test the unit that does not cross.",
     "category": "Test tiers",
     "categoryAnchor": "test-tiers",
     "code": "bynk.tier.cross_context_needs_system",

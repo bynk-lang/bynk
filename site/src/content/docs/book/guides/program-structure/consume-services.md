@@ -186,6 +186,11 @@ The call is the same Bynk code on both targets, but the emitted wiring differs:
 See [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/) for the
 target details.
 
+## Test a handler that calls another context
+
+A handler that calls a consumed service can be tested in-process by stubbing the
+service. See [Test a handler that calls another context](/book/guides/testing/test-a-handler-that-calls-another-context/).
+
 ## Related
 
 - Reference: [type system](/reference/types/).

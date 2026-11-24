@@ -97,6 +97,8 @@ pub(super) fn emit_test_deps(
     // how its value is built.
     let mut tops: Vec<(String, (String, String), TopDep)> = Vec::new();
     let mut surface_entries: Vec<(String, TsExpr)> = Vec::new();
+    // #3892: `(surface key, local, value)` of each stubbed consumed context.
+    let mut service_doubles: Vec<(String, String, TsExpr)> = Vec::new();
     // #1975: an adapter target's deps are its own capabilities, built from
     // its binding: the binding is the unit under test.
     if matches!(target_kind, UnitKind::Context | UnitKind::Adapter)
@@ -185,12 +187,25 @@ pub(super) fn emit_test_deps(
                 .cloned()
                 .unwrap_or_else(|| q.rsplit('.').next().unwrap_or(q.as_str()).to_string());
             let other_ns = test_ns(q);
-            surface_entries.push((
-                key,
-                undefined_as_unknown_as(format!(
-                    "globalThis.ReturnType<typeof {other_ns}.__makeSurface>"
-                )),
-            ));
+            let surface_ty = format!("globalThis.ReturnType<typeof {other_ns}.__makeSurface>");
+            // #3892: a consumed context whose services the suite stubs answers
+            // from its `__Stub_<…>` double, which is also a top-level entry so
+            // the recording wrapper sees its calls. The services it does not
+            // stub throw a named error when called.
+            if let Some(rp) = stubs
+                .values()
+                .find(|rp| rp.service_context.as_deref() == Some(q.as_str()))
+            {
+                let local = format!("__svc_{key}");
+                service_doubles.push((
+                    key.clone(),
+                    local.clone(),
+                    stub_overlay(rp, &surface_ty, Some(undefined_as_unknown_as(&surface_ty))),
+                ));
+                surface_entries.push((key, ident(local)));
+                continue;
+            }
+            surface_entries.push((key, undefined_as_unknown_as(surface_ty)));
         }
     }
 
@@ -282,6 +297,14 @@ pub(super) fn emit_test_deps(
             declare(&dep.id, &built, &mut declared, &mut body);
         }
     }
+    for (_, local, value) in &service_doubles {
+        body.push(TsStmt::const_stmt(
+            TsBindingName::Ident(local.clone()),
+            None,
+            value.clone(),
+            None,
+        ));
+    }
     let mut entries: Vec<(String, TsExpr)> = built
         .into_iter()
         .map(|dep| {
@@ -293,6 +316,11 @@ pub(super) fn emit_test_deps(
             (dep.key, value)
         })
         .collect();
+    // The same double, by its context's name at the top level, where
+    // `__bynkRecordDeps` wraps each operation to record its calls.
+    for (key, local, _) in &service_doubles {
+        entries.push((key.clone(), ident(local.clone())));
+    }
     if !surface_entries.is_empty() {
         entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
     }
