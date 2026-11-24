@@ -1,0 +1,13 @@
+context svc
+
+type EmailJob = { to: String }
+
+service outbox from queue("outbound-email") {
+  delivery { deadLetter: "outbound-email-dlq" }
+  on message(message: EmailJob) -> Effect[QueueResult] { Ack }
+}
+
+service review from queue("outbound-email-dlq") {
+  delivery { deadLetter: None }
+  on message(message: String) -> Effect[QueueResult] { Ack }
+}

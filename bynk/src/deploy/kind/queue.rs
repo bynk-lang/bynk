@@ -187,6 +187,14 @@ impl ResourceKind for Queue {
         queue.action = held_verb(queue.action, on.holds(Self::ID, None, &queue.queue));
     }
 
+    /// #3877: a queue's name (a consumer's, a producer's or a dead-letter queue's) gains `-<environment>`
+    /// outside `default`, and Cloudflare takes 63 characters at most. The build can check the name alone;
+    /// only the plan knows the environment, so a name that overflows once qualified is refused here, before
+    /// anything is created.
+    fn name_problem(cx: &ProjectCx<'_>) -> Option<String> {
+        queue_name_problem(cx.resources, cx.ledger.environment)
+    }
+
     fn orphans_in(orphans: &Orphans) -> &[String] {
         &orphans.queues
     }
@@ -291,6 +299,26 @@ impl ResourceKind for Queue {
     ) -> Result<Applied<Queue>, DeployFailure> {
         apply_queues(cx, step.declared)
     }
+}
+
+/// #3877: the first queue of `resources` whose environment-qualified name is longer than Cloudflare's 63
+/// characters, as a message naming the Worker and the environment, or `None`.
+pub(crate) fn queue_name_problem(
+    resources: &BTreeMap<String, Resources>,
+    environment: &str,
+) -> Option<String> {
+    for (worker, declared) in resources {
+        for queue in declared.all_queues() {
+            let physical = env_qualify(environment, &queue);
+            if physical.len() > 63 {
+                return Some(format!(
+                    "queue `{physical}` (`{queue}` of `{worker}`) cannot be created in environment `{environment}`: with `-{environment}` added the name is {} characters and Cloudflare takes 63 at most; shorten the queue's name",
+                    physical.len()
+                ));
+            }
+        }
+    }
+    None
 }
 
 /// A Worker's queues' step (1D.2b): every queue it consumes or sends to, read from its
