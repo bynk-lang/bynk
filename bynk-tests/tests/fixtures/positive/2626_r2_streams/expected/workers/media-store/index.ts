@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
@@ -30,7 +30,7 @@ export default {
         const __body = await __verifyCall(request, env, "media.store");
         if (typeof __body !== "string") return __body;
         const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
+        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
           case "abandon": {
@@ -44,15 +44,15 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.key", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["key"]);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
-            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
             const id = __r_id.value;
             const result = await surface.abandon(key, id);
             const body = null;
@@ -69,10 +69,10 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const result = await surface.begin(key);
             const body = result as __JsonValue;
@@ -89,15 +89,15 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_src = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.src", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["src"]);
-            if (__r_src.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_src.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_src.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_src.error)), { status: 400, headers: { "content-type": "application/json" } });
             const src = __r_src.value;
             const __r_dst = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.dst", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["dst"]);
-            if (__r_dst.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_dst.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_dst.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_dst.error)), { status: 400, headers: { "content-type": "application/json" } });
             const dst = __r_dst.value;
             const result = await surface.copy(src, dst);
             const body = handlers.__serialise_Option_Int(result);
@@ -114,21 +114,21 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.key", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["key"]);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const __r_id = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.id", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["id"]);
-            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_id.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } });
             const id = __r_id.value;
             const __r_first = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.first", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["first"]);
-            if (__r_first.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_first.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_first.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_first.error)), { status: 400, headers: { "content-type": "application/json" } });
             const first = __r_first.value;
             const __r_last = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.last", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["last"]);
-            if (__r_last.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_last.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_last.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_last.error)), { status: 400, headers: { "content-type": "application/json" } });
             const last = __r_last.value;
             const result = await surface.finish(key, id, first, last);
             const body = result as __JsonValue;
@@ -145,10 +145,10 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(args);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const result = await surface.read(key);
             const body = handlers.__serialise_Option_String(result);
@@ -165,15 +165,15 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.key", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["key"]);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const __r_data = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.data", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$.data", expected: "base64 string", actual: typeof __v } as __BoundaryError))(argsObj["data"]);
-            if (__r_data.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_data.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_data.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_data.error)), { status: 400, headers: { "content-type": "application/json" } });
             const data = __r_data.value;
             const result = await surface.save(key, data);
             const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
@@ -190,18 +190,18 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.key", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["key"]);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const __r_data = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.data", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$.data", expected: "base64 string", actual: typeof __v } as __BoundaryError))(argsObj["data"]);
-            if (__r_data.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_data.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_data.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_data.error)), { status: 400, headers: { "content-type": "application/json" } });
             const data = __r_data.value;
             const __r_size = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$.size", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.size", expected: "safe integer", actual: String(__v) } as __BoundaryError))(argsObj["size"]);
-            if (__r_size.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_size.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_size.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_size.error)), { status: 400, headers: { "content-type": "application/json" } });
             const size = __r_size.value;
             const result = await surface.saveExactly(key, data, size);
             const body = ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(result);
@@ -218,15 +218,15 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_key = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$.key", expected: "string", actual: typeof __v } as __BoundaryError))(argsObj["key"]);
-            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_key.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_key.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_key.error)), { status: 400, headers: { "content-type": "application/json" } });
             const key = __r_key.value;
             const __r_data = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.data", expected: "base64 string", actual: "invalid base64" } as __BoundaryError))(__bynkBytesFromBase64(__v)) : Err({ kind: "StructuralMismatch", path: "$.data", expected: "base64 string", actual: typeof __v } as __BoundaryError))(argsObj["data"]);
-            if (__r_data.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_data.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_data.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_data.error)), { status: 400, headers: { "content-type": "application/json" } });
             const data = __r_data.value;
             const result = await surface.saveNew(key, data);
             const body = result as __JsonValue;
@@ -242,7 +242,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /echo/:text";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_text = __m.params["text"];
           const text = __raw_text;
@@ -256,7 +256,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /videos/:key";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_key = __m.params["key"];
           const key = __raw_key;
