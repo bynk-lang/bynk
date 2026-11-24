@@ -1,0 +1,7 @@
+context shop.admin
+
+service audit {
+  on call(id: String) -> Effect[Int] by Caller {
+    Effect.pure(1)
+  }
+}

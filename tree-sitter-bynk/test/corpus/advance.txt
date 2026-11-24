@@ -41,7 +41,7 @@ suite shop.holds as system {
     let calls = trace(Logger.log)
     let trace = (s: String) => s
     let label = trace("x")
-    advance Clock by 1.minutes
+    advance Clock by 1.minute
     let advance = 2
     let bumped = advance + 1
     expect "\(label) \(trace)" == "x"

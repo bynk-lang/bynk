@@ -4,7 +4,7 @@ consumes bynk
 
 // #2719: this unit has a function that needs the execution context.
 fn tick(n: Int) -> Effect[()] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(())
 }
 

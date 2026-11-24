@@ -2649,21 +2649,21 @@ impl<'a> Parser<'a> {
                                 )
                             })?;
                         // #3386: `<int>.<unit>` is a duration literal (`ttl = 12.hours`).
+                        // #3947: an integer literal followed by `.<identifier>` is
+                        // always a duration attempt; the unit must agree with `n`.
                         if self.peek_kind() == Some(TokenKind::Dot)
                             && self.nth_kind(1) == Some(TokenKind::Ident)
-                            && let Some(unit) = self.nth(1).and_then(|u| {
-                                crate::ast::DurationUnit::from_name(self.slice(u.span))
-                            })
                         {
                             self.bump();
                             let u = self.expect_ident("as a duration unit")?;
+                            let unit = super::duration::resolve_duration_unit(n, &u.name, u.span)?;
                             let millis = n.checked_mul(unit.millis()).ok_or_else(|| {
                                 CompileError::new(
                                     "bynk.duration.literal_overflow",
                                     t.span.merge(u.span),
                                     format!(
                                         "the duration `{n}.{}` overflows the millisecond range",
-                                        unit.name()
+                                        unit.name_for(n)
                                     ),
                                 )
                             })?;

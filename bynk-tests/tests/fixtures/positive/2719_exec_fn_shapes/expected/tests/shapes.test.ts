@@ -432,7 +432,7 @@ async function test_a_fast_call_is_within_the_bound() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const ok = await __bynkSettleVirtual(deps, bounded(deps.Quotes.quote(1), deps.__exec));
-    if (!(ok === true)) { throw __bynkExpectFailure("tests/shapes.bynk:21:10", 538, 548, "expect ok == true\n  expected: ok == true\n  actual:   " + __bynkShow((ok)) + " == " + __bynkShow((true))); }
+    if (!(ok === true)) { throw __bynkExpectFailure("tests/shapes.bynk:21:10", 537, 547, "expect ok == true\n  expected: ok == true\n  actual:   " + __bynkShow((ok)) + " == " + __bynkShow((true))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -470,7 +470,7 @@ async function test_a_method_that_bounds_a_call() {
     type Uuid = __ns_bynk.Uuid;
     const box = await __bynkSettleVirtual(deps, Box.make(2, deps.__exec));
     const n = await __bynkSettleVirtual(deps, Box.bump(box, 3, deps.__exec));
-    if (!(n === 5)) { throw __bynkExpectFailure("tests/shapes.bynk:27:10", 648, 654, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
+    if (!(n === 5)) { throw __bynkExpectFailure("tests/shapes.bynk:27:10", 647, 653, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

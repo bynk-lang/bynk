@@ -2950,22 +2950,39 @@ pub enum DurationUnit {
     Days,
 }
 
+/// Which spelling of a [`DurationUnit`] a literal used: `hour` or `hours`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitForm {
+    Singular,
+    Plural,
+}
+
 impl DurationUnit {
-    /// Resolve a unit name (`minutes`) to its variant, or `None` if it is not one
-    /// of the closed set. Used by the parser to recognise an `<int>.<unit>`
-    /// literal; an unrecognised name leaves the expression a field access.
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "milliseconds" => DurationUnit::Milliseconds,
-            "seconds" => DurationUnit::Seconds,
-            "minutes" => DurationUnit::Minutes,
-            "hours" => DurationUnit::Hours,
-            "days" => DurationUnit::Days,
-            _ => return None,
+    /// Every unit, in ascending size.
+    pub const ALL: [DurationUnit; 5] = [
+        DurationUnit::Milliseconds,
+        DurationUnit::Seconds,
+        DurationUnit::Minutes,
+        DurationUnit::Hours,
+        DurationUnit::Days,
+    ];
+
+    /// Resolve a unit name (`minutes`, `minute`) to its variant and the form it
+    /// was written in, or `None` if it is not one of the closed set (#3947).
+    /// Used by the parser to recognise an `<int>.<unit>` literal.
+    pub fn from_name(name: &str) -> Option<(Self, UnitForm)> {
+        Self::ALL.into_iter().find_map(|u| {
+            if u.name() == name {
+                Some((u, UnitForm::Plural))
+            } else if u.singular_name() == name {
+                Some((u, UnitForm::Singular))
+            } else {
+                None
+            }
         })
     }
 
-    /// The unit name as written.
+    /// The plural unit name (`hours`), the one written with every number but `1`.
     pub fn name(self) -> &'static str {
         match self {
             DurationUnit::Milliseconds => "milliseconds",
@@ -2973,6 +2990,26 @@ impl DurationUnit {
             DurationUnit::Minutes => "minutes",
             DurationUnit::Hours => "hours",
             DurationUnit::Days => "days",
+        }
+    }
+
+    /// The singular unit name (`hour`), the one written with `1`.
+    pub fn singular_name(self) -> &'static str {
+        match self {
+            DurationUnit::Milliseconds => "millisecond",
+            DurationUnit::Seconds => "second",
+            DurationUnit::Minutes => "minute",
+            DurationUnit::Hours => "hour",
+            DurationUnit::Days => "day",
+        }
+    }
+
+    /// The unit name that agrees with `value`: singular for `1`, plural otherwise.
+    pub fn name_for(self, value: i64) -> &'static str {
+        if value == 1 {
+            self.singular_name()
+        } else {
+            self.name()
         }
     }
 

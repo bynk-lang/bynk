@@ -5,6 +5,6 @@ consumes bynk
 // #2683: `within` needs an effectful body; a pure function is refused with the
 // same remedy as `detach`.
 fn bounded(e: Effect[Int]) -> Int {
-	let b = e.within(1.seconds)
+	let b = e.within(1.second)
 	0
 }

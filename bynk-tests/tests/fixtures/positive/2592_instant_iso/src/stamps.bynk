@@ -19,7 +19,7 @@ fn roundTrips(ms: Int) -> Bool {
 service clock {
 	on call(text: String) -> Effect[String] by Caller {
 		match Instant.fromIso(text) {
-			Some(i) => Effect.pure((i + 1.hours).toIso())
+			Some(i) => Effect.pure((i + 1.hour).toIso())
 			None => Effect.pure("not an instant")
 		}
 	}

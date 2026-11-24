@@ -1289,6 +1289,7 @@
 /reference/diagnostics/bynk.actor.bearer_missing_secret/
 /reference/diagnostics/bynk.actor.binder_shadows_param/
 /reference/diagnostics/bynk.actor.by_on_agent/
+/reference/diagnostics/bynk.actor.caller_not_admitted/
 /reference/diagnostics/bynk.actor.duplicate_sum_scheme/
 /reference/diagnostics/bynk.actor.foreign_context_name_unkeyable/
 /reference/diagnostics/bynk.actor.foreign_duplicate_secret/
@@ -1338,6 +1339,7 @@
 /reference/diagnostics/bynk.actor.signed_cookie_write_literal/
 /reference/diagnostics/bynk.actor.sum_requires_binder/
 /reference/diagnostics/bynk.actor.unknown_actor/
+/reference/diagnostics/bynk.actor.unknown_context/
 /reference/diagnostics/bynk.actor.unknown_scheme/
 /reference/diagnostics/bynk.actor.unreachable_sum_arm/
 /reference/diagnostics/bynk.adapter.consumes_context/
@@ -1475,6 +1477,8 @@
 /reference/diagnostics/bynk.detach.store_op/
 /reference/diagnostics/bynk.doc.unresolved_link/
 /reference/diagnostics/bynk.duration.literal_overflow/
+/reference/diagnostics/bynk.duration.unit_agreement/
+/reference/diagnostics/bynk.duration.unknown_unit/
 /reference/diagnostics/bynk.effect.bind_in_pure_context/
 /reference/diagnostics/bynk.effect.bind_on_non_effect/
 /reference/diagnostics/bynk.effect.capability_in_pure_context/

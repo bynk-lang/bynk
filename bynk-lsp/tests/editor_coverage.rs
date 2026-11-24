@@ -60,7 +60,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     // `removed` before `agent` at item position.
     let source = "context Scaffold\n\nagent A replaces Z {\n  key id: String\n  store items: Cell[Int] = 0\n  migrate from 1 {\n    drop gone\n  }\n  on call read() -> Effect[Int] {\n    Effect.pure(0)\n  }\n}\n\nremoved agent Y\n";
     // #2137: `advance` is a keyword only in a test case's statement position.
-    let case = "suite Scaffold {\n  case \"t\" {\n    advance Clock by 1.minutes\n  }\n}\n";
+    let case = "suite Scaffold {\n  case \"t\" {\n    advance Clock by 1.minute\n  }\n}\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "advance") {
         let offset = case.find(kw.word).expect("`advance` is in the fixture");
         assert!(

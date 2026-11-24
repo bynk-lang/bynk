@@ -228,6 +228,10 @@ pub fn complete_in(
     if let Some((record, field)) = cookie_field_receiver(line_prefix) {
         return cookie_field_members(&record, &field, doc_text, files);
     }
+    // 3d. #3947: `<int>.<cursor>` — the `Duration` units that agree with the number.
+    if let Some(units) = crate::duration_completion::duration_unit_candidates(line_prefix) {
+        return units;
+    }
     // 4. `UpperIdent.<cursor>` — name-receiver members: sum variants, refined/
     //    opaque `of`/`unsafe`, capability ops, or built-in type statics.
     if let Some(receiver) = member_receiver(line_prefix) {
@@ -292,6 +296,10 @@ pub fn complete_in(
     //      — the constraint names.
     if is_constraint_position(line_prefix) {
         return constraint_candidates();
+    }
+    // 4g'. #3890: `actor A = Caller where <cursor>` — the `Caller` predicate.
+    if is_caller_refinement_where(line_prefix) {
+        return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
     }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
@@ -1708,6 +1716,13 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
     };
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
+}
+
+/// #3890: the cursor follows `where` in an `actor <Name> = Caller where …`
+/// refinement, whose predicate is `IsContext(…)` (not the type predicates).
+fn is_caller_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Caller where")
 }
 
 /// v0.124 (slice 3): the cursor is completing the argument to a leading clause
@@ -3965,11 +3980,18 @@ mod tests {
 
     #[test]
     fn value_receiver_and_decimal_are_not_expression_positions() {
-        // A trailing `x.`/`1.` is a member/decimal context, not an expression
-        // start — `complete()` yields nothing (the value-receiver path is
-        // handler-side; see `record_value_and_decimal_receivers_yield_nothing`).
+        // A trailing `x.` is a member context, not an expression start —
+        // `complete()` yields nothing (the value-receiver path is handler-side;
+        // see `record_value_and_decimal_receivers_yield_nothing`). A trailing
+        // `1.` offers the `Duration` units (#3947), not expressions.
         assert!(complete("  let p = q.", "context a.b\n", None).is_empty());
-        assert!(complete("  let n = 1.", "context a.b\n", None).is_empty());
+        let units = complete("  let n = 1.", "context a.b\n", None);
+        assert!(
+            units
+                .iter()
+                .all(|c| c.detail.as_deref() == Some("`Duration` unit"))
+        );
+        assert_eq!(units.len(), 5);
     }
 
     /// Free `fn` names declared in a unit source (registry-driven test helper).
@@ -4433,7 +4455,7 @@ mod tests {
 
     #[test]
     fn a_signed_cookie_actor_offers_issue_and_expire() {
-        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hour), identity = UserId }\n";
         let items = complete("    User.", doc, None);
         let issue = find(&items, "issue", CompletionKind::Member).expect("`issue` offered");
         assert_eq!(
@@ -4630,8 +4652,12 @@ fn Box.size(self) -> Int { 1 }
         assert!(complete("  Point.", doc, None).is_empty(), "record");
         // A lowercase value receiver is deferred to slice 3.
         assert!(complete("  let p = q.", doc, None).is_empty(), "value");
-        // A decimal literal is not a member access.
-        assert!(complete("  let n = 1.", doc, None).is_empty(), "decimal");
+        // An integer literal's `.` is a `Duration` unit (#3947), singular after `1`.
+        let units: Vec<_> = complete("  let n = 1.", doc, None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(units, ["millisecond", "second", "minute", "hour", "day"]);
     }
 
     #[test]

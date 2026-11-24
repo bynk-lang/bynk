@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **904** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **908** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -17,6 +17,7 @@ There are **904** codes in total. Every code is an error unless it is marked **W
 - [`bynk.actor.bearer_missing_secret`](/reference/diagnostics/bynk.actor.bearer_missing_secret/) — A `Bearer` actor does not name its signing secret.
 - [`bynk.actor.binder_shadows_param`](/reference/diagnostics/bynk.actor.binder_shadows_param/) — A `by` actor binder collides with a handler parameter of the same name.
 - [`bynk.actor.by_on_agent`](/reference/diagnostics/bynk.actor.by_on_agent/) — A `by` actor clause was placed on an agent `on call` handler, which has no actor.
+- [`bynk.actor.caller_not_admitted`](/reference/diagnostics/bynk.actor.caller_not_admitted/) — A call is made from a context the callee's `Caller` refinement does not admit.
 - [`bynk.actor.duplicate_sum_scheme`](/reference/diagnostics/bynk.actor.duplicate_sum_scheme/) — Two peers in a multi-actor sum share an authentication scheme.
 - [`bynk.actor.foreign_context_name_unkeyable`](/reference/diagnostics/bynk.actor.foreign_context_name_unkeyable/) — A context declaring a `Foreign` actor has a name no call key can be named from.
 - [`bynk.actor.foreign_duplicate_secret`](/reference/diagnostics/bynk.actor.foreign_duplicate_secret/) — A `Foreign` actor's secret is also another actor's secret in the same context.
@@ -66,6 +67,7 @@ There are **904** codes in total. Every code is an error unless it is marked **W
 - [`bynk.actor.signed_cookie_write_literal`](/reference/diagnostics/bynk.actor.signed_cookie_write_literal/) — An untyped `Cookie` literal is named like a `SignedCookie` actor's session cookie.
 - [`bynk.actor.sum_requires_binder`](/reference/diagnostics/bynk.actor.sum_requires_binder/) — A multi-actor sum `by` clause has no binder to match the resolved actor.
 - [`bynk.actor.unknown_actor`](/reference/diagnostics/bynk.actor.unknown_actor/) — A handler's `by` clause names an actor that is not declared.
+- [`bynk.actor.unknown_context`](/reference/diagnostics/bynk.actor.unknown_context/) — `IsContext(…)` names something that is not a context of the project.
 - [`bynk.actor.unknown_scheme`](/reference/diagnostics/bynk.actor.unknown_scheme/) — An actor declares an authentication scheme that is not compiler-known.
 - [`bynk.actor.unreachable_sum_arm`](/reference/diagnostics/bynk.actor.unreachable_sum_arm/) — A multi-actor sum has an arm unreachable after a catch-all (`None`) peer.
 
@@ -479,6 +481,8 @@ There are **904** codes in total. Every code is an error unless it is marked **W
 - [`bynk.detach.in_pure_context`](/reference/diagnostics/bynk.detach.in_pure_context/) — A `detach` was used in a pure (non-effectful) context.
 - [`bynk.detach.store_op`](/reference/diagnostics/bynk.detach.store_op/) — A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached.
 - [`bynk.duration.literal_overflow`](/reference/diagnostics/bynk.duration.literal_overflow/) — A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range.
+- [`bynk.duration.unit_agreement`](/reference/diagnostics/bynk.duration.unit_agreement/) — A `Duration` literal's unit does not agree with its number: `1` takes the singular unit, every other number the plural.
+- [`bynk.duration.unknown_unit`](/reference/diagnostics/bynk.duration.unknown_unit/) — An integer literal is followed by a word that is not a `Duration` unit.
 - [`bynk.email.bad_params`](/reference/diagnostics/bynk.email.bad_params/) — An email `on message` handler does not take exactly one `InboundEmail` parameter.
 - [`bynk.email.duplicate_address`](/reference/diagnostics/bynk.email.duplicate_address/) — Two `from email` services claim the same recipient address.
 - [`bynk.email.duplicate_handler`](/reference/diagnostics/bynk.email.duplicate_handler/) — A `from email` service declares more than one `on message` handler; it has exactly one.

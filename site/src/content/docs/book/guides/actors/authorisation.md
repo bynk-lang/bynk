@@ -53,11 +53,24 @@ so you use an `Admin` anywhere a `User` fits.
 
 ## The rules
 
-- The **base must be a `Bearer` actor** — only a token carries claims to test.
-- The **predicate must be in the closed set** above.
-- A refinement is a handler's sole `by` contract; it is **never a sum member**
-  (use it as the whole contract, or narrow inside a
+A refinement narrows a base actor by a predicate drawn from a closed set for
+that base:
+
+| Base | Predicate | Narrows by | In a sum |
+|---|---|---|---|
+| a `Bearer` actor | `hasClaim("n")`, `claimEquals("n", "v")` | the verified token's claims | never a member |
+| `Caller` | `IsContext(a.b, …)` | the calling context | the sum's one `Internal` member |
+
+Both compose with `&&`, `||` and `!`, and a predicate from the other base is
+`bynk.actor.refinement_predicate_unsupported`. Any other base is
+`bynk.actor.refinement_base_unsupported`.
+
+- A `Bearer` refinement is a handler's sole `by` contract; it is **never a sum
+  member** (use it as the whole contract, or narrow inside a
   [resolved arm](/book/guides/actors/multiple-callers/)).
+- A refinement over `Caller` restricts which contexts may call a service. It is
+  decided at compile time against the project's calls; see
+  [Know which context called you](/book/guides/actors/cross-context-callers/#restrict-who-may-call).
 
 ## Testing it
 

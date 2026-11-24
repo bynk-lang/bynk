@@ -4937,7 +4937,7 @@ mod tests {
     #[test]
     fn a_rate_limiter_hovers_with_its_stanza() {
         // P3 (#2342): the emitted limit and window, and the counting caveat.
-        let src = "context a\nconsumes bynk.cloudflare { RateLimit }\ncapability LoginLimit = RateLimit @limit(20) @period(1.minutes)\n";
+        let src = "context a\nconsumes bynk.cloudflare { RateLimit }\ncapability LoginLimit = RateLimit @limit(20) @period(1.minute)\n";
         let tokens = tokenize(src).unwrap();
         let (unit, _) = parse_unit_with_recovery(&tokens, src);
         let Some(SourceUnit::Context(ctx)) = unit else {

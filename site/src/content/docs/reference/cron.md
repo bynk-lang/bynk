@@ -26,7 +26,7 @@ service <Name> from cron {
   number. For "now", use `Clock.now()`; the parameter is the exact,
   schedule-aligned instant, which stays the same when a run starts late (useful
   for bucketing and idempotency). It works directly with `Duration` arithmetic
-  (`at - 1.hours`) and `Instant` comparison.
+  (`at - 1.hour`) and `Instant` comparison.
 - **Return type:** must be `Effect[Result[(), E]]` for some error type `E`
   (`bynk.cron.return_not_effect_result`).
 - **Placement:** only inside a `service`, never an `agent`

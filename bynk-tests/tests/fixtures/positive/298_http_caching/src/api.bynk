@@ -10,7 +10,7 @@ service api from http {
   cors {
     origins: ["https://app.example.com"],
     credentials: false,
-    maxAge: 1.hours,
+    maxAge: 1.hour,
   }
 
   // Opt-in freshness (public) + the automatic ETag/304.
@@ -32,7 +32,7 @@ service api from http {
 
   // The minimum accepted maxAge (exactly one whole second) — the lower
   // boundary #1231 added a diagnostic for on the fractional side.
-  @cache(maxAge: 1.seconds)
+  @cache(maxAge: 1.second)
   on GET("/edge") () -> Effect[HttpResult[String]] by v: Visitor {
     Ok("edge")
   }

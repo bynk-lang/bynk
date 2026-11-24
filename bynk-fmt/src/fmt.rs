@@ -2489,7 +2489,7 @@ impl<'a> Formatter<'a> {
                         format!("{} = {n}", arg.key.name)
                     }
                     bynk_syntax::ast::SchemeArgValue::Duration { value, unit, .. } => {
-                        format!("{} = {value}.{}", arg.key.name, unit.name())
+                        format!("{} = {value}.{}", arg.key.name, unit.name_for(*value))
                     }
                     bynk_syntax::ast::SchemeArgValue::Ident(id) => {
                         format!("{} = {id}", arg.key.name)

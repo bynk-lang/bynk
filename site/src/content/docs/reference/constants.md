@@ -67,7 +67,7 @@ expression: one that needs nothing evaluated at run time.
 | Allowed | Example |
 |---|---|
 | a literal, including a negative number | `3`, `-1`, `0.5`, `true`, `"hello"`, `()` |
-| a `Duration` literal | `30.seconds`, `5.minutes` |
+| a `Duration` literal | `30.seconds`, `1.minute` (singular with `1`, plural otherwise) |
 | a record, list or variant over static values | `Page { size: 50, offset: 0 }`, `[1, 2, 3]`, `Circle(2)`, `Colour.Red` |
 | `Some`, `None`, `Ok`, `Err` over static values | `Some(MaxRetries)` |
 | an opaque type's `T.unsafe(lit)`, in its defining commons | `UserId.unsafe("admin")` |

@@ -7,7 +7,7 @@ service api from http {
   cors {
     origins: ["https://app.example.com"],
     credentials: false,
-    maxAge: 1.hours,
+    maxAge: 1.hour,
   }
 
   on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {

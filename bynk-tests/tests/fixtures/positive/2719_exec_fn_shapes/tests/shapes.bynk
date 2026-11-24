@@ -16,7 +16,7 @@ suite shapes {
 	}
 
 	case "a fast call is within the bound" {
-		stub Quotes.quote(_) returns 7 after 1.seconds
+		stub Quotes.quote(_) returns 7 after 1.second
 		let ok <- bounded(Quotes.quote(1))
 		expect ok == true
 	}

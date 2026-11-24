@@ -60,6 +60,7 @@ pub mod capability_path;
 pub mod completion;
 pub mod doc_link_urls;
 pub mod documentation;
+mod duration_completion;
 pub mod first_party_docs;
 pub mod hover;
 pub mod index_queries;

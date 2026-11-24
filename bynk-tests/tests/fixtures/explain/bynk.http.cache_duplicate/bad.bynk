@@ -1,7 +1,7 @@
 context api
 
 service api from http {
-    @cache(maxAge: 1.minutes)
+    @cache(maxAge: 1.minute)
     @cache(maxAge: 5.minutes)
     on GET("/links") () -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")

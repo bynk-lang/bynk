@@ -33,7 +33,7 @@ consumes bynk { Idempotency, Claim }
 
 service api from http {
   on POST(\"/hooks/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+    let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok(\"duplicate\") }
     Ok(\"processed\")
   }
 }
@@ -44,7 +44,7 @@ service replay from http {
     match cached {
       Some(v) => Ok(v),
       None => {
-        let _ <- Idempotency.remember[String](id, \"computed\", 1.hours)
+        let _ <- Idempotency.remember[String](id, \"computed\", 1.hour)
         Ok(\"fresh\")
       }
     }

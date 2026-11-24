@@ -466,8 +466,12 @@ pub fn caller_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     // `CallerId` is yielded only by the `Caller` prelude actor; a local actor
     // never declares it. A binder that collides with a param is suppressed
     // upstream, mirroring the other seams.
-    let is_caller = !actors.contains_key(name)
+    // #3890: a refinement over `Caller` yields the same `CallerId`.
+    let is_caller = (!actors.contains_key(name)
         && prelude_actor(name).map(|c| c.identity) == Some(Identity::CallerId)
+        || actors
+            .get(name)
+            .is_some_and(|d| caller_refinement(d, actors).is_some()))
         && !handler.params.iter().any(|p| p.name.name == binder.name);
     is_caller.then(|| binder.name.clone())
 }
@@ -528,6 +532,11 @@ pub fn foreign_caller_of(decl: &ActorDecl) -> Option<ForeignCaller> {
 pub struct CallAdmission {
     /// Whether a Bynk context is admitted.
     pub contexts: bool,
+    /// #3890: when contexts are admitted only by a refinement over `Caller`
+    /// (`actor Admin = Caller where IsContext(…)`), its predicate. `None` with
+    /// `contexts` set admits every context. A handler has at most one
+    /// `Internal` member, so one predicate is enough.
+    pub caller_predicate: Option<CallerPredicate>,
     /// The foreign callers admitted, in `by` order.
     pub foreign: Vec<ForeignCaller>,
     /// For a sum, the members in `by` order: `None` for the member that
@@ -543,6 +552,9 @@ pub enum CallSumMember {
     Caller,
     /// A declared foreign caller, with no identity beyond its actor.
     Foreign(ForeignCaller),
+    /// #3890: a refinement over `Caller`: a Bynk context the predicate admits,
+    /// with its name as the identity, tagged by the refinement's name.
+    Refined(String, CallerPredicate),
 }
 
 impl CallSumMember {
@@ -551,7 +563,23 @@ impl CallSumMember {
         match self {
             CallSumMember::Caller => "Caller",
             CallSumMember::Foreign(f) => &f.actor,
+            CallSumMember::Refined(name, _) => name,
         }
+    }
+}
+
+impl CallAdmission {
+    /// #3890: the tag the resolved `Internal` member carries in a sum: the
+    /// refinement's name, or `Caller`.
+    pub fn internal_tag(&self) -> &str {
+        self.sum
+            .iter()
+            .flatten()
+            .find_map(|m| match m {
+                CallSumMember::Refined(name, _) => Some(name.as_str()),
+                _ => None,
+            })
+            .unwrap_or("Caller")
     }
 }
 
@@ -566,12 +594,14 @@ pub fn call_admission_for(
     let Some(by) = handler.by_clause.as_ref() else {
         return Some(CallAdmission {
             contexts: true,
+            caller_predicate: None,
             foreign: Vec::new(),
             sum: None,
         });
     };
     let mut admission = CallAdmission {
         contexts: false,
+        caller_predicate: None,
         foreign: Vec::new(),
         sum: None,
     };
@@ -589,6 +619,14 @@ pub fn call_admission_for(
                     admission.foreign.push(f.clone());
                     members.push(CallSumMember::Foreign(f));
                 }
+            }
+            // #3890: a refinement over `Caller` admits the contexts its
+            // predicate admits.
+            Some(decl) if caller_refinement(decl, actors).is_some() => {
+                let pred = caller_refinement(decl, actors).expect("checked above");
+                admission.contexts = true;
+                admission.caller_predicate = Some(pred.clone());
+                members.push(CallSumMember::Refined(actor.name.clone(), pred));
             }
             Some(_) => {
                 admission.contexts = true;
@@ -924,6 +962,104 @@ pub fn parse_claim_predicate(e: &Expr) -> Result<ClaimPredicate, Span> {
         },
         _ => Err(e.span),
     }
+}
+
+/// #3890: the closed predicate vocabulary for a refinement over `Caller`
+/// (`actor Admin = Caller where IsContext(shop.admin)`). `IsContext` is a
+/// fixed, compiler-known check (capitalised, as `Matches` and `NonEmpty` are),
+/// decided at compile time against the project's call graph, and again at run
+/// time on the caller the signature proved. The combinators are the claim
+/// predicates', so `!IsContext(shop.legacy)` reads as a deny-list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallerPredicate {
+    /// `IsContext(a.b, c.d)` — the calling context is one of the named ones.
+    IsContext(Vec<String>),
+    And(Box<CallerPredicate>, Box<CallerPredicate>),
+    Or(Box<CallerPredicate>, Box<CallerPredicate>),
+    Not(Box<CallerPredicate>),
+}
+
+impl CallerPredicate {
+    /// Whether the named calling context passes the predicate.
+    pub fn admits(&self, context: &str) -> bool {
+        match self {
+            CallerPredicate::IsContext(names) => names.iter().any(|n| n == context),
+            CallerPredicate::And(l, r) => l.admits(context) && r.admits(context),
+            CallerPredicate::Or(l, r) => l.admits(context) || r.admits(context),
+            CallerPredicate::Not(inner) => !inner.admits(context),
+        }
+    }
+
+    /// Every context name the predicate mentions, in source order.
+    pub fn mentioned(&self) -> Vec<&str> {
+        match self {
+            CallerPredicate::IsContext(names) => names.iter().map(String::as_str).collect(),
+            CallerPredicate::And(l, r) | CallerPredicate::Or(l, r) => {
+                let mut out = l.mentioned();
+                out.extend(r.mentioned());
+                out
+            }
+            CallerPredicate::Not(inner) => inner.mentioned(),
+        }
+    }
+}
+
+/// A qualified name written as an expression: `shop.admin` is a field access
+/// on an identifier.
+pub fn dotted_name(e: &Expr) -> Option<String> {
+    match &e.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        ExprKind::FieldAccess { receiver, field } => {
+            Some(format!("{}.{}", dotted_name(receiver)?, field.name))
+        }
+        _ => None,
+    }
+}
+
+/// Recognise the `Caller` predicate vocabulary in a refinement `where`
+/// expression. `Err(span)` points at the first sub-expression outside it (for
+/// `bynk.actor.refinement_predicate_unsupported`).
+pub fn parse_caller_predicate(e: &Expr) -> Result<CallerPredicate, Span> {
+    match &e.kind {
+        ExprKind::Paren(inner) => parse_caller_predicate(inner),
+        ExprKind::BinOp(BinOp::And, l, r) => Ok(CallerPredicate::And(
+            Box::new(parse_caller_predicate(l)?),
+            Box::new(parse_caller_predicate(r)?),
+        )),
+        ExprKind::BinOp(BinOp::Or, l, r) => Ok(CallerPredicate::Or(
+            Box::new(parse_caller_predicate(l)?),
+            Box::new(parse_caller_predicate(r)?),
+        )),
+        ExprKind::UnaryOp(UnaryOp::Not, inner) => Ok(CallerPredicate::Not(Box::new(
+            parse_caller_predicate(inner)?,
+        ))),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+            ..
+        } if type_args.is_empty() && name.name == "IsContext" && !args.is_empty() => args
+            .iter()
+            .map(|a| dotted_name(a).ok_or(a.span))
+            .collect::<Result<Vec<_>, _>>()
+            .map(CallerPredicate::IsContext),
+        ExprKind::Call { name, .. } => Err(name.span),
+        _ => Err(e.span),
+    }
+}
+
+/// #3890: the predicate of a refinement over the prelude `Caller` actor, or
+/// `None` for any other actor (a malformed predicate reads as `None` too: the
+/// checker reports it).
+pub fn caller_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<CallerPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Caller" || actors.contains_key("Caller") {
+        return None;
+    }
+    parse_caller_predicate(&r.predicate).ok()
 }
 
 fn js_str_escape(s: &str) -> String {

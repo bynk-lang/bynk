@@ -52,7 +52,7 @@ service once {
     match seen {
       Some(_) => Effect.pure(false)
       None => {
-        let _ <- Idempotency.remember[Bool](key, true, 1.hours)
+        let _ <- Idempotency.remember[Bool](key, true, 1.hour)
         Effect.pure(true)
       }
     }

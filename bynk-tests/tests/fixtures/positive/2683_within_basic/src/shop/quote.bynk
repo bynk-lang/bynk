@@ -38,7 +38,7 @@ service quotes {
 // In a lambda written in the handler: it closes over the handler's deps.
 service many {
 	on call(ids: List[Int]) -> Effect[List[Result[Int, TimedOut]]] by Caller given Pricing {
-		ids.parTraverseAll((id) => Pricing.quote(id).within(1.seconds))
+		ids.parTraverseAll((id) => Pricing.quote(id).within(1.second))
 	}
 }
 

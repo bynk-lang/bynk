@@ -25,7 +25,7 @@ suite ck.holds {
 
 	// A computed negative amount faults the case: the clock only moves forward.
 	case "a negative advance faults" {
-		let back = 0.minutes - 1.minutes
+		let back = 0.minutes - 1.minute
 		advance Clock by back
 	}
 }

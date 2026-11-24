@@ -36,7 +36,7 @@ consumes bynk { Idempotency, Claim }
 
 service api from http {
 \ton GET(\"/claim/:id\") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-\t\tlet Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
+\t\tlet Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok(\"duplicate\") }
 \t\tOk(\"processed\")
 \t}
 
@@ -45,7 +45,7 @@ service api from http {
 \t\tmatch seen {
 \t\t\tSome(v) => Ok(v),
 \t\t\tNone => {
-\t\t\t\tlet _ <- Idempotency.remember[String](id, \"remembered\", 1.hours)
+\t\t\t\tlet _ <- Idempotency.remember[String](id, \"remembered\", 1.hour)
 \t\t\t\tOk(\"fresh\")
 \t\t\t},
 \t\t}

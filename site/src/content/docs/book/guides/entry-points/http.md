@@ -54,7 +54,7 @@ and a string literal such as `"2026-11-03"` is checked at compile time.
 
 A `Day` is still a `String`, so it interpolates and stores as one. To reach the
 day's first instant, pair it with `Instant.fromIso`, which is always `Some` for
-a `Day`; add `+ 1.days` for the next day:
+a `Day`; add `+ 1.day` for the next day:
 
 ```bynk,fragment
 let start = Instant.fromIso("\(day)T00:00:00Z")
@@ -248,7 +248,7 @@ That is all it takes. From the policy the compiler:
 The allowed **methods** are taken from the routes you already declared — you never
 restate them. Allowed **headers** default to `content-type` (plus `Authorization`
 when the service authenticates with a Bearer actor). Add `credentials: true` to
-allow cookies / `Authorization`, and `maxAge: 1.hours` to let the browser cache
+allow cookies / `Authorization`, and `maxAge: 1.hour` to let the browser cache
 the preflight. A request from an origin *not* on the list simply gets no grant, so
 the browser blocks it — the same fail-closed posture as authentication.
 
@@ -393,16 +393,16 @@ That adds `Cache-Control: private, max-age=300`. Reach for `scope: public` only
 when a **shared** cache or CDN should store the response too:
 
 ```bynk,fragment
-@cache(maxAge: 1.hours, scope: public)
+@cache(maxAge: 1.hour, scope: public)
 on GET("/config") () -> Effect[HttpResult[String]] by v: Visitor {
   Ok("…")
 }
 ```
 
 The default is `private` — a per-user cache, never a shared one — because that is
-the safe choice for anything that might vary by caller. Durations are plural
-(`5.minutes`, `1.hours`), and `@cache` is only valid on a `GET` returning `Ok`;
-the compiler flags a singular unit or a misplaced annotation.
+the safe choice for anything that might vary by caller. A duration's unit agrees with
+its number (`5.minutes`, `1.hour`), and `@cache` is only valid on a `GET` returning `Ok`;
+the compiler flags a bare number or a misplaced annotation.
 
 See [HTTP → Caching](/reference/http/#caching) for the eligibility rules and
 the full field table.

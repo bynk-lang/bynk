@@ -4,14 +4,14 @@ consumes bynk { Idempotency, Claim }
 
 service api from http {
   on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
+    let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok("duplicate") }
     Ok("processed")
   }
 
   // A claim is released when the handler fails with a 5xx, and kept (confirmed)
   // when it completes with a 4xx.
   on POST("/flaky/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
+    let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok("duplicate") }
     if id == "down" {
       ServerError("upstream down")
     } else if id == "invalid" {
@@ -28,7 +28,7 @@ service replay from http {
     match cached {
       Some(v) => Ok(v),
       None => {
-        let _ <- Idempotency.remember[String](id, "computed", 1.hours)
+        let _ <- Idempotency.remember[String](id, "computed", 1.hour)
         Ok("fresh")
       }
     }
@@ -38,7 +38,7 @@ service replay from http {
 // A returned `Err` releases the claim too.
 service ledger {
   on call(id: String) -> Effect[Result[String, String]] by Caller given Idempotency {
-    let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok("duplicate") }
+    let Claim.Claimed <- Idempotency.claim(id, 1.hour) else { Ok("duplicate") }
     if id == "bad" { Err("rejected") } else { Ok("done") }
   }
 }
@@ -51,7 +51,7 @@ fn once[T: Codable](key: String, value: T) -> Effect[Option[T]] given Idempotenc
   match seen {
     Some(v) => Some(v),
     None => {
-      let _ <- Idempotency.remember[T](key, value, 1.hours)
+      let _ <- Idempotency.remember[T](key, value, 1.hour)
       None
     },
   }

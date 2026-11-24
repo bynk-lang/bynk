@@ -1,7 +1,7 @@
 context api
 
 service api from http {
-    cors { origins: ["https://app.example.com"], maxAge: 1.hours }
+    cors { origins: ["https://app.example.com"], maxAge: 1.hour }
 
     on GET("/items") () -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")

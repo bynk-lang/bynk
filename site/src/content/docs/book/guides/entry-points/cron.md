@@ -32,7 +32,7 @@ To learn when the run fired, declare a single `Instant` parameter — it receive
 the scheduled time. It is the exact, schedule-aligned instant (better than
 `Clock.now()` for bucketing or idempotency keys, because it stays the same when a
 run starts late), and it works directly with `Duration` arithmetic such as
-`at - 1.hours`. Schedules run in UTC. Where you need the number, use
+`at - 1.hour`. Schedules run in UTC. Where you need the number, use
 `at.toEpochMillis()`:
 
 ```bynk

@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.650.0** | A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`) admits named calling contexts, checked at compile time (`bynk.actor.caller_not_admitted`, `bynk.actor.unknown_context`) and again at the callee (`403`) |
 | **v0.649.0** | A consumed context's service is a `stub` seam at `unit` and `integration`: `stub Pay.authorise(_) returns Ok(…)` substitutes it, `expect Pay.authorise called once` observes it, and `bynk.tier.cross_context_needs_system` names only the services left unstubbed |
 | **v0.648.1** | A `Bearer`, `Oidc` or `Signature` route's handler no longer sees the credential its seam verified in `RequestHeaders` |
 | **v0.648.0** | `Map` gains `remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`, `mapValues`, `fold` and `Map.of`, `Set` gains `union`, `intersect`, `difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`, and `bynk.map` and `bynk.set` are deprecated in favour of the methods |
