@@ -1,13 +1,6 @@
----
-level: patch
-probes: ts_writes
-raises: ts_writes — the route's `applyChallenge` wrap and the upgrade's challenge array are built as typed nodes in the entry emitter (#3914)
-changelog: Every `401` Bynk sends carries a `WWW-Authenticate` challenge derived from the route's actor (`Bearer`, `Bynk-Signature`, `Bynk-Cookie` or `Bynk`), and a CORS service exposes it
----
+# 0918 — Every 401 carries a WWW-Authenticate challenge
 
-## ADR: www-authenticate-on-401
-title: Every 401 carries a WWW-Authenticate challenge
-summary: The challenge follows the route's actor, uses a registered scheme where one exists, and is exposed to browsers by CORS
+- **Status:** Accepted (v0.662.1)
 
 **Context.** RFC 9110 §15.5.2 says a server generating a `401` MUST send a `WWW-Authenticate` header with at least one challenge. Bynk sent none: the `Bearer`, `Oidc`, `Signature` and `SignedCookie` seams answered a bare `401`, and so did a handler's own `Unauthorized`. Clients that read the challenge (the scheme, or RFC 6750's `error="invalid_token"` to refresh a token) got nothing.
 
