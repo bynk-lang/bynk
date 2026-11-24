@@ -13,6 +13,23 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   ctx.waitUntil(fault);
 }
 
+async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, variants: readonly string[], run: () => globalThis.Promise<T>): globalThis.Promise<T> {
+  try {
+    const result = await run();
+    if (result.tag === "Err") {
+      const error = result.error as { readonly tag?: unknown } | null;
+      const variant = typeof error === "object" && error !== null && typeof error.tag === "string" && variants.includes(error.tag) ? error.tag : "";
+      globalThis.console.error({ message: "a cron run returned Err", level: "error", fields: { site, type: errType, variant } });
+      __bynkReportFault(ctx, new globalThis.Error(`${site} returned ${errType}${variant === "" ? "" : `.${variant}`}`));
+    }
+    return result;
+  } catch (thrown) {
+    globalThis.console.error(`${site} faulted`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    __bynkReportFault(ctx, thrown);
+    throw thrown;
+  }
+}
+
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
@@ -108,7 +125,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/echo") {
+        if (method === "POST" && __matchPath("/echo", path) !== null) {
           __route = "POST /echo";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -207,7 +224,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/echo") {
+      if (__matchPath("/echo", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -224,20 +241,19 @@ export default {
       return __faultResponse("media.store", __route);
     }
   },
-  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env): globalThis.Promise<void> {
+  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (event.cron) {
       case "*/5 * * * *": {
-        const result = await surface.cron_ticker_0(event.scheduledTime);
-        if (result.tag === "Err") globalThis.console.error("cron */5 * * * * failed", result.error);
+        const result = await __bynkCronRun(ctx, "cron `*/5 * * * *` (ticker)", "String", [], () => surface.cron_ticker_0(event.scheduledTime));
         return;
       }
       case "0 * * * *": {
-        const result = await surface.cron_ticker2_0(event.scheduledTime);
-        if (result.tag === "Err") globalThis.console.error("cron 0 * * * * failed", result.error);
+        const result = await __bynkCronRun(ctx, "cron `0 * * * *` (ticker2)", "String", [], () => surface.cron_ticker2_0(event.scheduledTime));
         return;
       }
       default:
+        globalThis.console.warn("cron expression matches no `on schedule` handler in this context:", event.cron);
         return;
     }
   },

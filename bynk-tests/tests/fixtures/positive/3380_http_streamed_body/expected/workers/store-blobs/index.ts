@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/small") {
+        if (method === "POST" && __matchPath("/small", path) !== null) {
           __route = "POST /small";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
@@ -85,7 +85,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_blobs);
       }
-      if (path === "/small") {
+      if (__matchPath("/small", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_blobs);

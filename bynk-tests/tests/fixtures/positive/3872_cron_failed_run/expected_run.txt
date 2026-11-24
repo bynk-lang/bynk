@@ -1,0 +1,3 @@
+# #3872: an Err run is reported and still the case's result; a throwing run fails its case once.
+passed=2 failed=1
+fail a throwing run fails the case

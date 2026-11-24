@@ -115,8 +115,14 @@ function __bynkFault(what: string, e: unknown): Error {
 async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec) => Promise<void>): Promise<T> {
   const exec = __bynkJobExec();
   const log = globalThis.console.error;
-  // The entry logs an `Err` run; the case reads that `Err` as the result.
-  globalThis.console.error = (...args: unknown[]): void => { if (args[0] !== `cron ${cron} failed`) log(...args); };
+  // #3872: the entry reports an `Err` run (a structured record, and a fault to the platform). The double records
+  // that report without counting it (the list is this case's: reset per call): the case reads the `Err` as the result, so counting would report it twice.
+  const cronReports: unknown[] = ((globalThis as unknown as { __bynkCronReports?: unknown[] }).__bynkCronReports = []);
+  globalThis.console.error = (...args: unknown[]): void => {
+    const record = args[0] as { message?: unknown } | null;
+    if (typeof record === "object" && record !== null && record.message === "a cron run returned Err") cronReports.push(record);
+    else log(...args);
+  };
   try {
     await __bynkJobSettle(exec, run(exec));
   } catch (e) {

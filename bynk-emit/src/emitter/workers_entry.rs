@@ -50,8 +50,7 @@ use http_policy::{
 };
 use queue::{collect_queue_routes, push_message_entries};
 use respond::{
-    MISS_HELPER, REPORT_FAULT_HELPER, fault_detail, miss, report_fault, text_response,
-    try_catch_stmt,
+    MISS_HELPER, fault_detail, fault_helpers, miss, report_fault, text_response, try_catch_stmt,
 };
 use scheduled::{collect_cron_routes, emit_scheduled_handler};
 use websocket::{collect_ws_open_routes, ws_upgrade_dispatch};
@@ -674,11 +673,7 @@ pub fn emit_worker_entry(
     if !cron_routes.is_empty() {
         default_entries.push(emit_scheduled_handler(
             &cron_routes,
-            if edge_cache {
-                &fault_exec_params
-            } else {
-                &exec_params
-            },
+            &fault_exec_params,
             &other_compose_args,
             scheduled_result_hook,
         ));
@@ -703,7 +698,10 @@ pub fn emit_worker_entry(
         program.push(TsStmt::raw_using(MISS_HELPER, &[]));
     }
     // 1A.38: fixed authored snippet, no interpolation
-    program.push(TsStmt::raw_using(REPORT_FAULT_HELPER, &[]));
+    program.push(TsStmt::raw_using(
+        fault_helpers(!cron_routes.is_empty()),
+        &[],
+    ));
     program.push(TsStmt::decl(
         TsDecl::ExportDefault(TsExpr::multiline_object_entries(default_entries)),
         None,

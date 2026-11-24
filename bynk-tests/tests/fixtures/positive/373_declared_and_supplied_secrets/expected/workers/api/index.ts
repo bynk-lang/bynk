@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,14 +36,14 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/me") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/me", path) !== null) {
           __route = "GET /me";
           const result = await surface.http_GET_me(request);
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Profile, { weakEtag: true }), request), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/me") {
+      if (__matchPath("/me", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

@@ -2,7 +2,7 @@
 // Worker entry point for context `items`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/items") {
+        if (method === "POST" && __matchPath("/items", path) !== null) {
           __route = "POST /items";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -54,7 +54,7 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_ItemView), __security_api);
         }
       }
-      if (path === "/items") {
+      if (__matchPath("/items", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

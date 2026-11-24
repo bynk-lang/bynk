@@ -38,7 +38,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/admin/stats") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/admin/stats", path) !== null) {
           __route = "GET /admin/stats";
           const result = await surface.http_GET_admin_stats();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_admin);
@@ -46,7 +46,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/health") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/health", path) !== null) {
           __route = "GET /health";
           const result = await surface.http_GET_health();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_health);
@@ -104,12 +104,12 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_admin);
       }
-      if (path === "/admin/stats") {
+      if (__matchPath("/admin/stats", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_admin);
       }
-      if (path === "/health") {
+      if (__matchPath("/health", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_health);

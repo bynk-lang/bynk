@@ -37,7 +37,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/hook") {
+        if (method === "POST" && __matchPath("/hook", path) !== null) {
           __route = "POST /hook";
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -62,7 +62,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/json") {
+        if (method === "POST" && __matchPath("/json", path) !== null) {
           __route = "POST /json";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -81,7 +81,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/priced") {
+        if (method === "POST" && __matchPath("/priced", path) !== null) {
           __route = "POST /priced";
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -102,7 +102,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/search") {
+        if (method === "POST" && __matchPath("/search", path) !== null) {
           __route = "POST /search";
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -131,7 +131,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/signup") {
+        if (method === "POST" && __matchPath("/signup", path) !== null) {
           __route = "POST /signup";
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -178,17 +178,17 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/hook") {
+      if (__matchPath("/hook", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/json") {
+      if (__matchPath("/json", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/priced") {
+      if (__matchPath("/priced", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -198,12 +198,12 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/search") {
+      if (__matchPath("/search", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/signup") {
+      if (__matchPath("/signup", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

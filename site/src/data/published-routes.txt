@@ -1677,6 +1677,7 @@
 /reference/diagnostics/bynk.http.stream_body_signature/
 /reference/diagnostics/bynk.http.unbound_path_param/
 /reference/diagnostics/bynk.http.unknown_handler_annotation/
+/reference/diagnostics/bynk.http.unreachable_route/
 /reference/diagnostics/bynk.index.bad_argument/
 /reference/diagnostics/bynk.index.missing/
 /reference/diagnostics/bynk.index.unkeyable_key/
