@@ -1049,6 +1049,14 @@ impl HandlerAddress {
         }
     }
 
+    /// A `schedule` address before its expression is read (#3874).
+    pub fn schedule_unread() -> HandlerAddress {
+        HandlerAddress::Schedule {
+            expr: None,
+            param: None,
+        }
+    }
+
     /// [`HandlerAddress::schedule`] for a handler with a `CronSchedule` parameter at
     /// position `param` (#3874).
     pub fn schedule_with_param(expr: &str, param: Option<usize>) -> HandlerAddress {
