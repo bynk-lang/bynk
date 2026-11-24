@@ -102,6 +102,11 @@ pub(super) struct HttpRoute {
     pub(super) multipart: Option<MultipartSpec>,
 }
 
+/// #3994: the cookie argument of `__requestHeaders` when only headers are hidden: no cookie.
+fn no_cookie_arg() -> TsExpr {
+    ident("undefined")
+}
+
 /// #2341: the `RequestHeaders` a handler is passed. #3386: on a `SignedCookie` route the session
 /// cookie is hidden from its `Cookie` header, as it is from the `cookies` views.
 fn request_headers_arg(route: &HttpRoute) -> TsExpr {
@@ -112,7 +117,7 @@ fn request_headers_arg(route: &HttpRoute) -> TsExpr {
         .map(|h| str_lit(crate::emitter::escape_ts_string(h)));
     // #3994: a seam's credential header is hidden too (the third argument).
     if cookie.is_some() || !route.hidden_headers.is_empty() {
-        args.push(cookie.unwrap_or_else(|| ident("undefined")));
+        args.push(cookie.unwrap_or_else(no_cookie_arg));
     }
     if !route.hidden_headers.is_empty() {
         args.push(TsExpr::Array {

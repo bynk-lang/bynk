@@ -22,6 +22,16 @@ suite ci.api as system {
 		expect r is Ok("hidden hi")
 	}
 
+	case "a Signature-or-Visitor sum hides the signature header" {
+		let signed <- api.POST("/either", RequestHeaders.empty(), "hi") by Processor
+		expect signed is Ok("hidden")
+	}
+
+	case "the Visitor arm of a Bearer sum loses an Authorization header it was sent" {
+		let open <- api.GET("/sum", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
+		expect open is Ok("hidden")
+	}
+
 	case "a route with no credential keeps the header view" {
 		let r <- api.GET("/open", RequestHeaders.of(["Authorization: Bearer abc"])) by Visitor
 		expect r is Ok("seen")

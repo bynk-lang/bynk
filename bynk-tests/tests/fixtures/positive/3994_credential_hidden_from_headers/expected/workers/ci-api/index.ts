@@ -77,6 +77,13 @@ export default {
         }
       }
       {
+        if (method === "POST" && path === "/either") {
+          __route = "POST /either";
+          const result = await surface.http_POST_either(request, __requestHeaders(request, undefined, ["x-sig"]));
+          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+        }
+      }
+      {
         if (method === "POST" && path === "/hook") {
           __route = "POST /hook";
           let __body_json: __JsonValue;
@@ -112,6 +119,11 @@ export default {
       if (path === "/bearer-raw") {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (path === "/either") {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       if (path === "/hook") {

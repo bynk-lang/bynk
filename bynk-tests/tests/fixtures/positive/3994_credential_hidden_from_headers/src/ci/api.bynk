@@ -49,6 +49,15 @@ service api from http {
 		}
 	}
 
+	// A `Signature` member and a `Visitor` member: the union rule hides the signature header, and
+	// an `Authorization` header is hidden on a Bearer sum's `Visitor` arm (`/sum`).
+	on POST("/either") (headers: RequestHeaders, body: String) -> Effect[HttpResult[String]] by who: Processor | Visitor {
+		match headers.get("x-sig") {
+			Some(_) => Ok("leaked")
+			None => Ok("hidden")
+		}
+	}
+
 	on POST("/hook") (headers: RequestHeaders, body: String) -> Effect[HttpResult[String]] by Processor {
 		match headers.get("x-sig") {
 			Some(_) => Ok("leaked \(body)")

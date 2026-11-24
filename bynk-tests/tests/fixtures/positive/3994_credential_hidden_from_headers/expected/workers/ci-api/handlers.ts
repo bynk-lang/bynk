@@ -65,6 +65,18 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
+  async http_POST_either(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, deps: { who: { tag: "Processor" } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {
+    const __r0 = headers.get("x-sig");
+    switch (__r0.tag) {
+      case "Some": {
+        return HttpResult.Ok("leaked");
+      }
+      case "None": {
+        return HttpResult.Ok("hidden");
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
   async http_POST_hook(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, deps: {}): globalThis.Promise<HttpResult<string>> {
     const __r0 = headers.get("x-sig");
     switch (__r0.tag) {
