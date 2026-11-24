@@ -1,0 +1,68 @@
+context shop.orders
+
+consumes shop.pay as Pay
+consumes shop.pay { Receipt, PaymentError }
+consumes shop.stock
+consumes bynk { CallOutcome, CallFailure, TimedOut }
+
+type OrderError =
+  | Payment(reason: PaymentError)
+  | Upstream(failure: CallFailure)
+  embeds PaymentError as Payment, CallFailure as Upstream
+
+// `handled()` with `?` and `embeds`: one layer each.
+fn settle(o: CallOutcome[Result[Receipt, PaymentError]]) -> Result[Receipt, OrderError] {
+  let paid = o.handled()?
+  let receipt = paid?
+  Ok(receipt)
+}
+
+// An agent handler may call a service with `.outcome`.
+agent Basket {
+  key id: String
+
+  store paid: Cell[Int]
+
+  on call charge(total: Int) -> Effect[Bool] {
+    let o <- Pay.authorise.outcome(total)
+    match o {
+      Handled(Ok(_)) => {
+        let _ <- paid.update((c) => c + total)
+        true
+      }
+      Handled(Err(_)) => false
+      Rejected(_) => false
+      Faulted => false
+      Unreachable(_) => false
+    }
+  }
+}
+
+service placeOrder {
+  on call(sku: String, total: Int) -> Effect[Result[String, String]] by Caller {
+    let reserved <- shop.stock.reserve(sku)
+    let o <- Pay.authorise.outcome(total)
+    match o {
+      Handled(Ok(receipt)) => Effect.pure(Ok(receipt.id))
+      Handled(Err(_)) => {
+        let _ <- shop.stock.release(sku)
+        Effect.pure(Err("declined"))
+      }
+      Rejected(_) => Effect.pure(Err("rejected"))
+      Faulted => Effect.pure(Err("faulted"))
+      Unreachable(_) => Effect.pure(Err("unreachable"))
+    }
+  }
+}
+
+// A deadline composes: `Result[CallOutcome[…], TimedOut]`.
+service bounded {
+  on call(total: Int) -> Effect[String] by Caller {
+    let r <- Pay.authorise.outcome(total).within(2.seconds)
+    match r {
+      Ok(Handled(_)) => Effect.pure("answered")
+      Ok(_) => Effect.pure("failed")
+      Err(_) => Effect.pure("late")
+    }
+  }
+}

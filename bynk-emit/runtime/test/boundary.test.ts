@@ -5,7 +5,9 @@ import {
   MAX_BODY_BYTES,
   SIGNATURE_HEADER,
   TIMESTAMP_HEADER,
+  callOutcome,
   callService,
+  callServiceOutcome,
   faultResponse,
   FAULT_HEADER,
   checkStoredLayout,
@@ -737,4 +739,111 @@ test("readCapped cuts a streamed body off at the cap when no length is declared"
 test("readCapped refuses a declared length over the cap without reading", async () => {
   const request = post(new Uint8Array(2), { "content-length": "100" });
   assert.equal(await readCapped(request, 50), undefined);
+});
+
+// #3894: `callServiceOutcome` reports each way a call can fail as a value, with the
+// failure logged once; `callService` is unchanged.
+async function outcomeOf(binding: ServiceBinding): Promise<{ outcome: unknown; logged: unknown[][] }> {
+  const logged: unknown[][] = [];
+  const original = globalThis.console.error;
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  try {
+    const outcome = await callServiceOutcome(binding, "authorise", null, deser<number, string>(), "shop.orders", "0000000000000000", ENV, "shop.payment");
+    return { outcome, logged };
+  } finally {
+    globalThis.console.error = original;
+  }
+}
+
+test("callServiceOutcome: an answered call is Handled, nothing logged", async () => {
+  const { outcome, logged } = await outcomeOf(bindingReturning({ ok: 7 }));
+  assert.deepEqual(outcome, { tag: "Handled", result: { tag: "Ok", value: 7 } });
+  assert.deepEqual(logged, []);
+});
+
+test("callServiceOutcome: the callee's own Err is Handled", async () => {
+  const { outcome } = await outcomeOf(bindingReturning({ err: "declined" }));
+  assert.deepEqual(outcome, { tag: "Handled", result: { tag: "Err", error: "declined" } });
+});
+
+test("callServiceOutcome: each refusal before the handler runs is Rejected, by its wire check", async () => {
+  const refusals: [Response, string][] = [
+    [new Response("Payload Too Large", { status: 413 }), "TooLarge"],
+    [new Response("Unauthorized", { status: 401 }), "NotAuthenticated"],
+    [new Response(JSON.stringify({ kind: "UnsupportedWireVersion" }), { status: 400 }), "UnsupportedWire"],
+    [new Response("Not found", { status: 404 }), "NoSuchService"],
+    [new Response("Forbidden", { status: 403 }), "NotAdmitted"],
+    [new Response(JSON.stringify({ kind: "ContractMismatch", service: "authorise", expected: "a", actual: "b" }), { status: 409 }), "StaleContract"],
+    [new Response(JSON.stringify({ kind: "MalformedJson" }), { status: 400 }), "Undecodable"],
+    [new Response(JSON.stringify({ kind: "StructuralMismatch", path: "$" }), { status: 400 }), "Undecodable"],
+    [new Response("not json", { status: 400 }), "Undecodable"],
+  ];
+  for (const [response, refusal] of refusals) {
+    const { outcome } = await outcomeOf({ fetch: async () => response });
+    assert.deepEqual(outcome, { tag: "Rejected", reason: { tag: refusal } }, refusal);
+  }
+});
+
+test("callServiceOutcome: a stale contract is logged once, as callService logs it", async () => {
+  const detail = { kind: "ContractMismatch", service: "authorise", expected: "a", actual: "b" };
+  const { logged } = await outcomeOf(bindingReturning(detail, { status: 409 }));
+  assert.deepEqual(logged, [["ContractMismatch shop.orders -> authorise", detail]]);
+});
+
+test("callServiceOutcome: a marked 500 is Faulted, logged once", async () => {
+  const { outcome, logged } = await outcomeOf({ fetch: async () => faultResponse("shop.payment", "call authorise") });
+  assert.deepEqual(outcome, { tag: "Faulted" });
+  assert.deepEqual(logged, [["CalleeFaulted shop.orders -> shop.payment call authorise"]]);
+});
+
+test("callServiceOutcome: any other status is Unreachable with it, logged once", async () => {
+  for (const status of [500, 502, 503]) {
+    const { outcome, logged } = await outcomeOf(bindingReturning({}, { status }));
+    assert.deepEqual(outcome, { tag: "Unreachable", status: { tag: "Some", value: status } });
+    assert.equal(logged.length, 1);
+  }
+});
+
+test("callServiceOutcome: a fetch that throws is Unreachable with no status, logged once", async () => {
+  const { outcome, logged } = await outcomeOf({
+    fetch: async () => {
+      throw new TypeError("network lost");
+    },
+  });
+  assert.deepEqual(outcome, { tag: "Unreachable", status: { tag: "None" } });
+  assert.equal(logged.length, 1);
+});
+
+test("callServiceOutcome: an unreadable 200 stays a fault", async () => {
+  await assert.rejects(
+    () => outcomeOf({ fetch: async () => new Response("not json", { status: 200 }) }),
+    (e: Error) => (e as any).boundaryError.kind === "MalformedJson",
+  );
+  await assert.rejects(
+    () => outcomeOf(bindingReturning({ neither: 1 })),
+    (e: Error) => (e as any).boundaryError.kind === "MalformedJson",
+  );
+});
+
+test("callServiceOutcome: refuses to send without the edge's key, as callService does", async () => {
+  await assert.rejects(() =>
+    callServiceOutcome(bindingReturning({ ok: 1 }), "svc", null, deser<number, string>(), "shop.orders", "", {}, "shop.payment"),
+  );
+});
+
+test("callOutcome: a result is Handled; a fault is Faulted; a marked stub reads back as its outcome", async () => {
+  const original = globalThis.console.error;
+  globalThis.console.error = () => {};
+  try {
+    assert.deepEqual(await callOutcome(Promise.resolve(3)), { tag: "Handled", result: 3 });
+    assert.deepEqual(await callOutcome(Promise.reject(new Error("boom"))), { tag: "Faulted" });
+    const rejected = Object.assign(new Error("stub"), { bynkCallStub: { tag: "Rejected", reason: "NotAdmitted" } });
+    assert.deepEqual(await callOutcome(Promise.reject(rejected)), { tag: "Rejected", reason: { tag: "NotAdmitted" } });
+    const unreachable = Object.assign(new Error("stub"), { bynkCallStub: { tag: "Unreachable" } });
+    assert.deepEqual(await callOutcome(Promise.reject(unreachable)), { tag: "Unreachable", status: { tag: "None" } });
+  } finally {
+    globalThis.console.error = original;
+  }
 });

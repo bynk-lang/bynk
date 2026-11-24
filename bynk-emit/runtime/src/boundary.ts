@@ -1,5 +1,6 @@
 import type { Result } from "./result.ts";
-import { Ok, Err } from "./result.ts";
+import type { Option } from "./result.ts";
+import { Ok, Err, Some, None } from "./result.ts";
 import type { ValidationError } from "./errors.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
@@ -58,6 +59,14 @@ export interface CalleeFaulted {
   readonly service: string;
   readonly status: number;
 }
+
+// #3894: the shape of the `bynk` adapter's `CallOutcome[R]`, which the generated
+// code declares: the runtime builds one structurally.
+export type CallOutcome<R> =
+  | { readonly tag: "Handled"; readonly result: R }
+  | { readonly tag: "Rejected"; readonly reason: { readonly tag: string } }
+  | { readonly tag: "Faulted" }
+  | { readonly tag: "Unreachable"; readonly status: Option<number> };
 
 /// #2193: the header a callee's fault response names its context in.
 export const FAULT_HEADER = "X-Bynk-Fault";
@@ -469,7 +478,15 @@ export async function verifyCall(
 export const WIRE_VERSION_HEADER = "X-Bynk-Wire";
 export const WIRE_VERSION = "1";
 
-export async function callService<R>(
+// What one call came to before it is a return value or a thrown fault: shared
+// by `callService` (which throws) and `callServiceOutcome` (which reports it as
+// a `CallOutcome`).
+type CallRaw<R> =
+  | { readonly kind: "ok"; readonly value: R }
+  | { readonly kind: "error"; readonly error: CallError }
+  | { readonly kind: "thrown"; readonly thrown: unknown };
+
+async function callServiceCore<R>(
   binding: ServiceBinding,
   servicePath: string,
   argsJson: JsonValue,
@@ -497,7 +514,7 @@ export async function callService<R>(
   // which the signature binds the request to.
   env: unknown = undefined,
   calleeContext: string = "",
-): Promise<R> {
+): Promise<CallRaw<R>> {
   const body = JSON.stringify(argsJson);
   const path = `/_bynk/call/${servicePath}`;
   const signed = await signedHeaders(env, callerContext, calleeContext, path, contractHash, WIRE_VERSION, body, `the call to ${servicePath}`);
@@ -512,7 +529,12 @@ export async function callService<R>(
     },
     body,
   });
-  const response = await binding.fetch(request);
+  let response: Response;
+  try {
+    response = await binding.fetch(request);
+  } catch (thrown) {
+    return { kind: "thrown", thrown };
+  }
   if (!response.ok) {
     // Read the body **once**: the stream is consumed on first read, so a second
     // read throws `TypeError: Body is unusable` — which would replace the very
@@ -536,7 +558,7 @@ export async function callService<R>(
         // #1826: logged on the caller's side too, with both hashes, before the
         // fault: the caller's catch reports only `BoundaryError: ContractMismatch`.
         globalThis.console.error(`ContractMismatch ${callerContext} -> ${servicePath}`, detail);
-        throw boundaryError(detail);
+        return { kind: "error", error: detail };
       }
     }
     // #2193: a marked 500 is the callee's own fault. Logged here too, naming
@@ -551,25 +573,125 @@ export async function callService<R>(
         status: response.status,
       };
       globalThis.console.error(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`);
-      throw boundaryError(detail);
+      return { kind: "error", error: detail };
     }
-    throw boundaryError({
-      kind: "Transport",
-      status: response.status,
-      details: raw,
-    });
+    return { kind: "error", error: { kind: "Transport", status: response.status, details: raw } };
   }
   let responseJson: JsonValue;
   try {
     responseJson = (await response.json()) as JsonValue;
   } catch (e) {
-    throw boundaryError({ kind: "MalformedJson", details: String(e) });
+    return { kind: "error", error: { kind: "MalformedJson", details: String(e) } };
   }
   const result = deserialiseResult(responseJson);
   if (result.tag === "Err") {
-    throw boundaryError(result.error);
+    return { kind: "error", error: result.error };
   }
-  return result.value;
+  return { kind: "ok", value: result.value };
+}
+
+export async function callService<R>(
+  binding: ServiceBinding,
+  servicePath: string,
+  argsJson: JsonValue,
+  deserialiseResult: (json: JsonValue, path?: string) => Result<R, BoundaryError>,
+  callerContext: string = "",
+  contractHash: string = "",
+  env: unknown = undefined,
+  calleeContext: string = "",
+): Promise<R> {
+  const raw = await callServiceCore(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext);
+  if (raw.kind === "ok") return raw.value;
+  if (raw.kind === "thrown") throw raw.thrown;
+  throw boundaryError(raw.error);
+}
+
+// #3894: `<context>.<service>.outcome(args)`. The same call as `callService`,
+// but a failure to reach the callee's handler is a value, not a thrown fault:
+// each of the callee's refusals (`reference/wire-format.md`) is a `Rejected`,
+// its marked `500` is `Faulted`, and any other status or a thrown `fetch` is
+// `Unreachable`. A failure to read a `200` stays a fault: the contract hashes
+// make it a toolchain bug, not an outcome. The failure is logged once, as
+// `callService` logs it (`ContractMismatch`, `CalleeFaulted`), and by this
+// function for the rest.
+export async function callServiceOutcome<R>(
+  binding: ServiceBinding,
+  servicePath: string,
+  argsJson: JsonValue,
+  deserialiseResult: (json: JsonValue, path?: string) => Result<R, BoundaryError>,
+  callerContext: string = "",
+  contractHash: string = "",
+  env: unknown = undefined,
+  calleeContext: string = "",
+): Promise<CallOutcome<R>> {
+  const raw = await callServiceCore(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext);
+  if (raw.kind === "ok") return { tag: "Handled", result: raw.value };
+  if (raw.kind === "thrown") {
+    globalThis.console.error(`CallUnreachable ${callerContext} -> ${servicePath}`);
+    return { tag: "Unreachable", status: None };
+  }
+  const outcome = outcomeOfCallError<R>(raw.error);
+  if (outcome === null) throw boundaryError(raw.error);
+  if (raw.error.kind === "Transport") {
+    globalThis.console.error(`Call${outcome.tag} ${callerContext} -> ${servicePath} status ${raw.error.status}`);
+  }
+  return outcome;
+}
+
+// #3894: the callee's answer to a refused or failed call, as the caller's
+// `CallOutcome`; `null` when it is not a refusal or a failure to reach (an
+// unreadable `200`).
+function outcomeOfCallError<R>(error: CallError): CallOutcome<R> | null {
+  const refused = (reason: string): CallOutcome<R> => ({ tag: "Rejected", reason: { tag: reason } });
+  switch (error.kind) {
+    case "ContractMismatch":
+      return refused("StaleContract");
+    case "CalleeFaulted":
+      return { tag: "Faulted" };
+    case "Transport": {
+      switch (error.status) {
+        case 413:
+          return refused("TooLarge");
+        case 401:
+          return refused("NotAuthenticated");
+        case 404:
+          return refused("NoSuchService");
+        case 403:
+          return refused("NotAdmitted");
+        case 400: {
+          let kind: unknown = null;
+          try {
+            kind = (JSON.parse(error.details) as { kind?: unknown }).kind;
+          } catch {
+            // Not a JSON body: an undecodable one.
+          }
+          return refused(kind === "UnsupportedWireVersion" ? "UnsupportedWire" : "Undecodable");
+        }
+        default:
+          return { tag: "Unreachable", status: Some(error.status) };
+      }
+    }
+    default:
+      return null;
+  }
+}
+
+// #3894: the `bundle` target has no wire, so `.outcome(…)` awaits the in-process
+// call: a result is `Handled`, a fault is `Faulted`. A test stub that is
+// `rejected` or `unreachable` throws a marked error (`__bynkCallStub`), which
+// reads back as that outcome.
+export async function callOutcome<R>(call: Promise<R>): Promise<CallOutcome<R>> {
+  try {
+    return { tag: "Handled", result: await call };
+  } catch (e) {
+    const stub = (e as { bynkCallStub?: { tag: string; reason?: string; status?: number } } | null)?.bynkCallStub;
+    if (stub?.tag === "Rejected") return { tag: "Rejected", reason: { tag: stub.reason ?? "" } };
+    if (stub?.tag === "Unreachable") {
+      return { tag: "Unreachable", status: stub.status === undefined ? None : Some(stub.status) };
+    }
+    globalThis.console.error("CalleeFaulted bundle call");
+    return { tag: "Faulted" };
+  }
 }
 
 // Events track, slice 0: the fan-out DO's own delivery to one subscriber,

@@ -175,11 +175,14 @@ fn unit_modules_reach_host_globals_through_global_this() {
             scanned += 1;
             let code = code_only(&fs::read_to_string(&file).expect("readable"));
             for name in HOST_GLOBALS {
-                if declares(&code, name) {
-                    continue;
-                }
+                // Count first: one pass over the module, and most modules
+                // have no bare reference to most globals. `declares` is a
+                // dozen passes, so it runs only when there is something
+                // to excuse. The corpus is ~28 MB of unit modules; checking
+                // `declares` first made this test the suite's slowest
+                // (~30s alone, >120s on a loaded CI runner).
                 let n = bare_references(&code, name);
-                if n > 0 {
+                if n > 0 && !declares(&code, name) {
                     violations.push(format!("{}: {n} bare `{name}`", file.display()));
                 }
             }
