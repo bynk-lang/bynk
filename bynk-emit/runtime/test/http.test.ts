@@ -16,6 +16,7 @@ import {
   requestBodyStream,
   untilBodyTooLarge,
   applyCors,
+  applyChallenge,
   corsPreflightResponse,
   applySecurityHeaders,
   weakETag,
@@ -1713,4 +1714,51 @@ test("cfObject: isEUCountry is \"1\" in the EU and otherwise omitted or false", 
   assert.deepEqual(cfObject(requestWithCf({ isEUCountry: "1" })), { isEuCountry: true });
   assert.deepEqual(cfObject(requestWithCf({ isEUCountry: false })), { isEuCountry: false });
   assert.deepEqual(cfObject(requestWithCf({})), {});
+});
+
+test("applyChallenge: a 401 gets one challenge line each; others are untouched", () => {
+  const req = new Request("https://x.test/");
+  const res = applyChallenge(new Response(null, { status: 401 }), req, [
+    'Bearer realm="Shop"',
+    'Bynk-Cookie realm="Shop"',
+  ]);
+  assert.deepEqual(res.headers.get("www-authenticate"), 'Bearer realm="Shop", Bynk-Cookie realm="Shop"');
+  const ok = applyChallenge(new Response("ok"), req, ['Bearer realm="Shop"']);
+  assert.equal(ok.headers.has("www-authenticate"), false);
+});
+
+test("applyChallenge: invalid_token only when a bearer token was presented", () => {
+  const bare = applyChallenge(new Response(null, { status: 401 }), new Request("https://x.test/"), [
+    'Bearer realm="Shop"',
+    'Bynk-Signature realm="Shop", header="x-sig"',
+  ]);
+  assert.match(bare.headers.get("www-authenticate")!, /^Bearer realm="Shop", Bynk-Signature/);
+  assert.doesNotMatch(bare.headers.get("www-authenticate")!, /error=/);
+  const bad = applyChallenge(
+    new Response(null, { status: 401 }),
+    new Request("https://x.test/", { headers: { authorization: "Bearer abc" } }),
+    ['Bearer realm="Shop"', 'Bynk-Cookie realm="Shop"'],
+  );
+  assert.equal(
+    bad.headers.get("www-authenticate"),
+    'Bearer realm="Shop", error="invalid_token", Bynk-Cookie realm="Shop"',
+  );
+});
+
+test("applyChallenge: keeps a challenge the response already has", () => {
+  const res = applyChallenge(
+    new Response(null, { status: 401, headers: { "www-authenticate": "Custom" } }),
+    new Request("https://x.test/"),
+    ['Bearer realm="Shop"'],
+  );
+  assert.equal(res.headers.get("www-authenticate"), "Custom");
+});
+
+test("applyCors: exposes WWW-Authenticate when the response carries a challenge", () => {
+  const res = applyCors(
+    applyChallenge(new Response(null, { status: 401 }), new Request("https://x.test/"), ['Bearer realm="S"']),
+    listPolicy,
+    "https://app.example.com",
+  );
+  assert.equal(res.headers.get("access-control-expose-headers"), "WWW-Authenticate");
 });
