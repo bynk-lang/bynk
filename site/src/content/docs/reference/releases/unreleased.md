@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.661.1** | Fix `bynk check` panicking with "the events service has no recorded subscriber shape" when a test suite delivers an event with `Svc.event(e, env)` |
 | **v0.661.0** | A `delivery { }` section on a `from queue` service sets the consumer's retries, retry delay, dead-letter queue, batching and concurrency in `wrangler.toml`; `bynk deploy` qualifies and creates the dead-letter queue; every queue consumer without a `deadLetter` now draws the warning `bynk.queue.no_dead_letter` (write `deadLetter: None` to say deleting is intended) |
 | **v0.660.0** | `Matches` and the `String` regex methods run in Unicode mode (`u`), `Matches` accepts a leading `(?i)` or `(?s)` group, a refinement's `RegExp` is built once, and OpenAPI writes a `(?i)` pattern out or leaves it out with a note |
 | **v0.659.0** | Routes are tried in a defined order (at the first differing segment a literal beats a `:name`), a route no request can reach is `bynk.http.unreachable_route`, and a literal route matches `/items/` and percent-decoded paths |
