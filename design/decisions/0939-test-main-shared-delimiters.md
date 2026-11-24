@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The generated `tests/main.ts` marks the fixed part of its `main()` with comments, so the snapshot harness can share it between fixtures
----
+# 0939 — The emitter delimits the shared part of `tests/main.ts` for the snapshot harness
 
-## ADR: test-main-shared-delimiters
-title: The emitter delimits the shared part of `tests/main.ts` for the snapshot harness
-summary: Inert begin and end comments around the fixed part of `main()`, with a variant name
+- **Status:** Accepted (v0.678.1)
 
 **Context.** #4235 stopped copying shared generated sources into every fixture's snapshots, but the fixed part of the generated `main()` in `tests/main.ts` has no delimiter the emitter writes, so a one-line change to it re-blessed every expected `tests/main.ts` (382 files).
 
