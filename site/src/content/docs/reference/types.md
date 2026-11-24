@@ -858,17 +858,21 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.concat(other: List[T])` | `List[T]` | `xs`, then `other` |
 | `xs.map(f: T -> U)` | `List[U]` | `f` applied to each element |
 | `xs.filter(p: T -> Bool)` | `List[T]` | the elements for which `p` holds |
+| `xs.filterMap(f: T -> Option[U])` | `List[U]` | the `Some` results of `f`, in order (#3963) |
 | `xs.flatMap(f: T -> List[U])` | `List[U]` | each element's list, joined in order |
 | `xs.sortBy(key: T -> K)` | `List[T]` | smallest key first; stable |
 | `xs.sortByDescending(key: T -> K)` | `List[T]` | largest key first; stable |
 | `xs.sort()` | `List[T]` | the elements themselves, smallest first; stable (`T` must be `Ord`) |
 | `xs.sortWith(compare: (T, T) -> Ordering)` | `List[T]` | ordered by your comparator, which returns an [`Ordering`](#ordering); stable |
 | `xs.take(n: Int)` | `List[T]` | the first `n` elements (all of them when there are fewer) |
+| `xs.takeWhile(p: T -> Bool)` | `List[T]` | the longest prefix for which `p` holds (#3963) |
 | `xs.skip(n: Int)` | `List[T]` | all but the first `n` |
+| `xs.skipWhile(p: T -> Bool)` | `List[T]` | what is left after the longest prefix for which `p` holds (#3963) |
 | `xs.distinct()` | `List[T]` | repeats dropped, each element at its first position |
 | `xs.distinctBy(key: T -> K)` | `List[T]` | the first element for each key |
 | `xs.fold(init: U, step: (U, T) -> U)` | `U` | `step` applied from `init` across the list, in order |
 | `xs.count()` | `Int` | the element count (the same as `length()`) |
+| `xs.count(p: T -> Bool)` | `Int` | how many elements satisfy `p`, counted without building a list (#3963) |
 | `xs.any(p: T -> Bool)` | `Bool` | `p` holds for at least one element; `false` when empty |
 | `xs.all(p: T -> Bool)` | `Bool` | `p` holds for every element; `true` when empty |
 | `xs.sum(key: T -> K)` | `K` | the total of the keys; the zero when empty |
@@ -882,6 +886,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.join(other, on, into)` | `List[V]` | predicate join |
 | `xs.join(sep: String)` | `String` | for a `List[String]`: the elements joined with `sep`, `""` when empty. Any other element type is `bynk.types.method_not_found`: map to `String` first (#3978) |
 | `xs.groupBy(key, into)` | `List[V]` | one result per key, in first-seen key order |
+| `xs.zipWith(other: List[U], f: (T, U) -> V)` | `List[V]` | `f` applied to the elements of `xs` and `other` pairwise; stops at the shorter list (#3963) |
 | `rs.sequenceAll()` | `Result[List[T], List[E]]` | for a `List[Result[T, E]]`: every value, or every error |
 | `rs.sequenceTry()` | `Result[List[T], E]` | for a `List[Result[T, E]]`: every value, or the first error |
 | `xs.foldEff(init: U, step: (U, T) -> Effect[U])` | `Effect[U]` | `fold` with an effectful step |
@@ -916,7 +921,7 @@ A method not in this table is `bynk.types.method_not_found`. The rest of this
 section groups them and gives the rules.
 
 **Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `sortWith`, `sort`, `reverse`,
-`take`, `skip`, `distinct`, `distinctBy`.
+`take`, `takeWhile`, `skip`, `skipWhile`, `filterMap`, `zipWith`, `distinct`, `distinctBy`.
 
 **Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
 returns `Ok` of every value, or `Err` of the list of **every** error in input order;
