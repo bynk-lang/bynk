@@ -1,0 +1,2 @@
+bynk.types.uninferable_element_type
+annotate its result

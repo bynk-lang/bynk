@@ -1,0 +1,20 @@
+suite demo.f
+
+case "an empty List seed" {
+	expect copy([1, 2, 3]) == [1, 2, 3]
+}
+
+case "an empty Map seed" {
+	expect index([1, 2]).length() == 2
+}
+
+case "an empty Set seed, in a return and in a typed let" {
+	let posts = [Post { id: 1, tags: Set.of(["a", "b"]) }, Post { id: 2, tags: Set.of(["b", "c"]) }]
+	expect tagsOf(posts).length() == 3
+	expect tagCount(posts) == 3
+}
+
+case "folds over a Set and a Map with an empty seed" {
+	expect viaSet(Set.of([5])) == [5]
+	expect viaMap(Map.empty().insert("k", 1)) == ["k"]
+}

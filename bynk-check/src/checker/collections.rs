@@ -86,7 +86,7 @@ pub(super) fn check_map_more(
                 Some(tys.intern(Ty::Map(key, u)))
             }
             MapOp::Fold => {
-                let acc = type_of(&args[0], None, ctx)?;
+                let acc = type_of(&args[0], ctx.fold_init_expected.take(), ctx)?;
                 let step = Ty::Fn {
                     params: vec![acc, key, val],
                     ret: acc,
@@ -159,7 +159,7 @@ pub(super) fn check_set_more(
                 Some(tys.intern(Ty::Set(u)))
             }
             SetOp::Fold => {
-                let acc = type_of(&args[0], None, ctx)?;
+                let acc = type_of(&args[0], ctx.fold_init_expected.take(), ctx)?;
                 let step = Ty::Fn {
                     params: vec![acc, elem],
                     ret: acc,

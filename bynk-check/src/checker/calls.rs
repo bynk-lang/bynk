@@ -301,6 +301,7 @@ pub(crate) fn check_fn_in(
         effectful,
         agent_state_ty: None,
         commit_seen: false,
+        fold_init_expected: None,
         caps: match fn_caps {
             Some(c) => {
                 let given_entries: Vec<(String, Span)> = f
@@ -509,6 +510,7 @@ fn type_static_initialiser(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx::default(),
             in_test_body: false,
             oidc_binder: None,
@@ -3359,6 +3361,9 @@ pub(crate) fn check_method_call(
         _ => None,
     };
     let recv_ty = type_of(receiver, recv_expected, ctx)?;
+    // #4193: a `fold`'s result is its accumulator, so what the call is expected to
+    // produce is what an empty `init` (`Set.empty()`) should take its type from.
+    ctx.fold_init_expected = if method.name == "fold" { expected } else { None };
     if type_args_pending && !receiver_has_generic_instance_method(recv_ty, method, ctx) {
         reject_method_type_args(method, args, span, ctx);
         return None;
