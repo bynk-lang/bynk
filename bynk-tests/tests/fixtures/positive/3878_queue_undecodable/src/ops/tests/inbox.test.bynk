@@ -1,0 +1,25 @@
+// #3878: the verdict a `system` case sees for a body that cannot be decoded is `Undecodable`,
+// whether the consumer drops it or has a dead-letter queue.
+suite ops.inbox as system {
+  uses ops.codes
+
+  case "a decodable message is acked" {
+    let r <- inbox.message(Job { id: "j1", code: goodCode() })
+    expect r is Ack
+  }
+
+  case "an undecodable message is neither acked nor retried" {
+    let r <- inbox.message(Job { id: "j2", code: badCode() })
+    expect r is Undecodable
+  }
+
+  case "a consumer with a dead-letter queue reads Undecodable too" {
+    let r <- kept.message(Job { id: "j3", code: badCode() })
+    expect r is Undecodable
+  }
+
+  case "a handler's own verdict is unchanged" {
+    let r <- kept.message(Job { id: "retry", code: goodCode() })
+    expect r is Retry("asked to")
+  }
+}

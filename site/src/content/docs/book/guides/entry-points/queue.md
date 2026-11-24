@@ -26,7 +26,10 @@ service outbox from queue("outbound-email") {
 ```
 
 The `message` parameter is deserialised from the queue body before the handler
-runs — a malformed message is retried, so the body always sees a valid value.
+runs, so the body always sees a valid value. A message that does not decode is
+never retried, because the same bytes would fail again: it is sent to the
+consumer's dead-letter queue, or dropped and reported when it has none (see
+[Messages that cannot be decoded](/reference/queue/#messages-that-cannot-be-decoded)).
 
 ## Acknowledge or retry
 
