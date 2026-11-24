@@ -1872,10 +1872,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # macOS binaries are paused (#4263): unpinned, install.sh must refuse with
+      # the cargo-install pointer; pinned to a release that has macOS archives,
+      # it must still install. Drop this step and the pin with #4263.
+      - name: install.sh refuses macOS when no release is pinned
+        if: runner.os == 'macOS'
+        run: |
+          if sh scripts/install.sh 2> err.txt; then
+            echo "::error::install.sh installed on macOS with no pinned release"
+            exit 1
+          fi
+          grep -q "no prebuilt macOS binaries are published" err.txt || { cat err.txt; exit 1; }
       - name: install.sh
         if: runner.os != 'Windows'
         env:
           BYNK_INSTALL_DIR: ${{ runner.temp }}/b
+          BYNK_VERSION: ${{ runner.os == 'macOS' && 'v0.655.0' || '' }}
         # Seed the copies an older release left behind: the latest release
         # ships neither bynkc nor bynkc-lsp, so an upgrade must remove both.
         run: |
