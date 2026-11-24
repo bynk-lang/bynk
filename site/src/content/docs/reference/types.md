@@ -257,23 +257,34 @@ date; `Instant.fromIso("\\(day)T00:00:00Z")` is always `Some` for such a `Day`.
 
 A `String` has no direct character access; its operations are methods. Lengths
 and indices count **UTF-16 code units**, except `chars`, which splits by code
-point, and the two percent-encoding methods, which work on the UTF-8 bytes.
+point, `padStart` and `padEnd`, whose width counts code points (so an emoji is one
+position, as in the length predicates), and the two percent-encoding methods,
+which work on the UTF-8 bytes.
 
 | Method | Returns | |
 |---|---|---|
 | `s.length()` | `Int` | the code-unit count |
+| `s.isEmpty()` | `Bool` | `s` has no characters (#3978) |
 | `s.concat(t: String)` | `String` | `s`, then `t` (the same as `"\(s)\(t)"`) |
 | `s.trim()` | `String` | without leading and trailing whitespace |
+| `s.trimStart()` | `String` | without leading whitespace, as `trim` defines it (#3978) |
+| `s.trimEnd()` | `String` | without trailing whitespace (#3978) |
 | `s.toUpper()` | `String` | upper-cased (locale-independent) |
 | `s.toLower()` | `String` | lower-cased (locale-independent) |
 | `s.contains(sub: String)` | `Bool` | `sub` occurs somewhere in `s` |
 | `s.startsWith(sub: String)` | `Bool` | `s` begins with `sub` |
 | `s.endsWith(sub: String)` | `Bool` | `s` ends with `sub` |
 | `s.indexOf(sub: String)` | `Option[Int]` | where `sub` first occurs; `None` when it does not, never `-1` |
+| `s.lastIndexOf(sub: String)` | `Option[Int]` | where `sub` last occurs, a code-unit index like `indexOf`'s (#3978) |
 | `s.slice(start: Int, end: Int)` | `String` | the code units from `start` up to `end`; a negative index is `0`, with no wrap-around |
 | `s.replace(from: String, to: String)` | `String` | **every** occurrence of `from` replaced by `to`, inserted literally (no `$1` or `$&`) |
+| `s.replaceFirst(from: String, to: String)` | `String` | the **first** occurrence of `from` replaced by `to`, inserted literally (#3978) |
 | `s.split(sep: String)` | `List[String]` | the pieces between each `sep` |
 | `s.chars()` | `List[String]` | one string per **code point**, so an astral character is one element |
+| `s.lines()` | `List[String]` | split on `\n` and `\r\n` (not a lone `\r`); a trailing line break gives no empty last element, and `""` gives `[]` (#3978) |
+| `s.padStart(width: Int, fill: String)` | `String` | `fill` repeated at the start until `s` is `width` **code points** wide, the last repeat cut to fit; unchanged if already that wide. An empty `fill` literal is `bynk.string.empty_pad_fill`, a computed one faults (#3978) |
+| `s.padEnd(width: Int, fill: String)` | `String` | the same at the end (#3978) |
+| `s.repeat(n: Int)` | `String` | `n` copies of `s`; a negative `n` faults (#3978) |
 | `s.percentEncode()` | `String` | RFC 3986 percent-encoding of the UTF-8 bytes: every byte outside `A–Z a–z 0–9 - . _ ~` becomes `%XX` |
 | `s.percentDecode()` | `Option[String]` | reverses `percentEncode`; `None` for a `%` not followed by two hex digits, or bytes that are not UTF-8. `+` stays `+` |
 | `s.matchesRegex(pattern)` | `Bool` | the whole string matches; see [Regular expressions](#regular-expressions) |
@@ -285,8 +296,8 @@ point, and the two percent-encoding methods, which work on the UTF-8 bytes.
 
 `Int.parse(s)` and `Float.parse(s)` turn a string into a number (see above), and
 `toString()` on `Int`, `Float`, `Decimal`, `Duration` and `Instant` goes the other
-way. More string functions are in the `bynk.string` commons, and URLs and query
-strings in `bynk.url`, written over `percentEncode` and `percentDecode` (see
+way. Joining a list is `xs.join(sep)` on a `List[String]` (see [List methods](#list-methods)); the `bynk.string` commons
+is deprecated for it. URLs and query strings are in `bynk.url`, written over `percentEncode` and `percentDecode` (see
 [Related first-party modules](/reference/bynk-capabilities/#related-first-party-modules)).
 A method not in this table is `bynk.types.method_not_found`.
 
@@ -869,6 +880,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
 | `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
 | `xs.join(other, on, into)` | `List[V]` | predicate join |
+| `xs.join(sep: String)` | `String` | for a `List[String]`: the elements joined with `sep`, `""` when empty. Any other element type is `bynk.types.method_not_found`: map to `String` first (#3978) |
 | `xs.groupBy(key, into)` | `List[V]` | one result per key, in first-seen key order |
 | `rs.sequenceAll()` | `Result[List[T], List[E]]` | for a `List[Result[T, E]]`: every value, or every error |
 | `rs.sequenceTry()` | `Result[List[T], E]` | for a `List[Result[T, E]]`: every value, or the first error |
