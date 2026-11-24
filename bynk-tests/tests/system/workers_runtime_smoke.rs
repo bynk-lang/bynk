@@ -840,12 +840,23 @@ fn serve_smoke_with(
     serve_smoke_with_args(files, tag, port_base, lock, persist, &[])
 }
 
+/// Two free loopback ports from the OS: wrangler's server and its inspector.
+fn free_ports() -> (u16, u16) {
+    // Both are held until both are known, so they differ; they are released for wrangler to bind.
+    let a = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+    let b = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+    (
+        a.local_addr().expect("a bound address").port(),
+        b.local_addr().expect("a bound address").port(),
+    )
+}
+
 /// [`serve_smoke_with`], passing `extra` to `wrangler dev` (state-migrations
 /// S4, #2259: a `--var` for the sweep's key).
 fn serve_smoke_with_args(
     files: &[(&str, &str)],
     tag: &str,
-    port_base: u16,
+    _port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
     extra: &[String],
@@ -885,8 +896,10 @@ fn serve_smoke_with_args(
         "smoke layout changed — update this test's worker path"
     );
 
-    let port = port_base + (std::process::id() % 10000) as u16;
-    let inspector_port = port + 1;
+    // #4174: ports the OS has just handed out, not a pid-derived number. A pid-derived `base +
+    // pid % 10000` collided with another test's (`Address already in use`), wrangler exited
+    // at once, and the wait below polled the dead process for the whole boot window.
+    let (port, inspector_port) = free_ports();
     let mut args: Vec<String> = [
         "dev",
         "--port",
@@ -910,7 +923,7 @@ fn serve_smoke_with_args(
             .stderr(Stdio::piped()),
         &tmp.join("registry"),
     );
-    let child = match child {
+    let mut child = match child {
         Ok(c) => c,
         Err(e) => {
             if skip(&format!("could not launch npx: {e}")) {
@@ -924,6 +937,25 @@ fn serve_smoke_with_args(
     let url = format!("http://127.0.0.1:{port}/");
     let mut last_err = String::new();
     loop {
+        // A wrangler that has already exited will never serve: say so now, with what it said,
+        // instead of waiting out the boot window.
+        if let Ok(Some(status)) = child.child().try_wait() {
+            let mut logs = String::new();
+            if let Some(mut e) = child.child().stderr.take() {
+                let _ = e.read_to_string(&mut logs);
+            }
+            assert!(
+                !logs.contains("Address already in use"),
+                "wrangler dev could not bind its ports ({status}): {logs}"
+            );
+            if skip(&format!(
+                "wrangler dev exited ({status}) before serving (likely no network to \
+                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+            )) {
+                return None;
+            }
+            unreachable!()
+        }
         if Instant::now() > deadline {
             let mut child = child;
             // Stop first: the pipe reaches EOF only once the whole group is gone.
