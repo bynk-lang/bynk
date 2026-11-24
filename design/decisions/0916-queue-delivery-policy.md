@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `delivery { }` section on a `from queue` service sets the consumer's retries, retry delay, dead-letter queue, batching and concurrency in `wrangler.toml`; `bynk deploy` qualifies and creates the dead-letter queue; every queue consumer without a `deadLetter` now draws the warning `bynk.queue.no_dead_letter` (write `deadLetter: None` to say deleting is intended)
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0916 — A queue consumer's delivery policy is declared in source
 
-## ADR: queue-delivery-policy
-title: A queue consumer's delivery policy is declared in source
-summary: A `delivery { }` section sets retries, retry delay, dead-letter queue, batching and concurrency, and the dead-letter queue is checked, qualified and created like any queue
+- **Status:** Accepted (v0.661)
 
 **Context.** Bynk generated `[[queues.consumers]]` with only `queue` and a fixed `max_batch_size = 10`. Cloudflare's `max_retries` defaults to 3 and, without a dead-letter queue, a message that reaches the limit is deleted. `wrangler.toml` is generated, so nothing in Bynk could change either, and a dashboard setting is overwritten by the next `bynk deploy`.
 
