@@ -260,6 +260,7 @@ const WORKER_ORDER: &[&str] = &[
     "__jsonMediaTypeMatches",
     "__allowUnion",
     "__requestHeaders",
+    "__pathLeaf",
     "__queryObject",
     "__cookieObject",
     "__multipartMediaTypeMatches",
