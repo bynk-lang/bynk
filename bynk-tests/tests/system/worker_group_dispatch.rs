@@ -239,7 +239,7 @@ fn without_a_group_each_context_keeps_its_own_worker_and_marks_nothing() {
     let _ = fs::remove_dir_all(&root);
 }
 
-const SCRIPT: &str = r#"import worker from "./out-js/workers/core/index.js";
+const SCRIPT: &str = r#"import worker from "./out/out-js/workers/core/index.js";
 const ctx = { waitUntil() {} };
 const results = [];
 const show = async (label, request) => {
@@ -327,11 +327,15 @@ fn run_group(root: &Path) -> Option<Vec<serde_json::Value>> {
         .output()
         .expect("run tsc");
     assert!(emitted.status.success(), "tsc failed:\n{}", text(&emitted));
-    fs::write(root.join("out-js/package.json"), "{\"type\":\"module\"}").unwrap();
+    fs::write(
+        root.join("out/out-js/package.json"),
+        "{\"type\":\"module\"}",
+    )
+    .unwrap();
     // The email runtime imports `postal-mime`, an npm dependency of a project with
     // an email service. These cases never reach the parser (they stop at the size
     // cap or the recipient), so a stub stands in for it.
-    let stub = root.join("out-js/node_modules/postal-mime");
+    let stub = root.join("out/out-js/node_modules/postal-mime");
     fs::create_dir_all(&stub).unwrap();
     fs::write(
         stub.join("package.json"),

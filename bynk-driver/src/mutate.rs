@@ -1054,9 +1054,8 @@ pub fn run(program: &str, args: MutateArgs) -> ExitCode {
     let next = std::sync::atomic::AtomicUsize::new(0);
     let finished = std::sync::atomic::AtomicUsize::new(0);
     let worker = |w: usize| {
-        // `bynk test` puts its compiled JavaScript beside the output
-        // directory (`<parent>/out-js`), so a job needs a parent of its own,
-        // not just its own `out`.
+        // `bynk test` puts its compiled JavaScript inside the output directory
+        // (`<out>/out-js`), so each job needs an output directory of its own.
         let dir = if jobs == 1 {
             "out".to_string()
         } else {

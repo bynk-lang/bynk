@@ -51,10 +51,8 @@ fn observation_sugar_and_trace_agree_at_runtime() {
         return;
     }
 
-    // Each run gets its own parent dir: the runner derives the executed
-    // `out-js` tree as a *sibling* of `--output`, so a shared parent (e.g. two
-    // behavioural tests both rooted directly under `CARGO_TARGET_TMPDIR`)
-    // would race the emitted `.js` a concurrent test's `tsc`/`node` run reads.
+    // Each run gets its own output dir: the runner writes the executed `out-js` tree
+    // inside `--output` (#4159), so concurrent runs cannot race each other's `.js`.
     let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("observation-out")
         .join("out");
