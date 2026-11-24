@@ -1865,8 +1865,10 @@
 /reference/diagnostics/bynk.queue.delivery_not_queue/
 /reference/diagnostics/bynk.queue.duplicate_consumer/
 /reference/diagnostics/bynk.queue.invalid_name/
+/reference/diagnostics/bynk.queue.message_type_mismatch/
 /reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
+/reference/diagnostics/bynk.queue.untyped_send/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/
 /reference/diagnostics/bynk.race.outside_handler/
