@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `Events.emit(e)` infers its event type from the argument, as `Idempotency.remember` infers `T`
----
+# 0897 — A capability operation's type parameter is inferred from its arguments, `Events.emit` included
 
-## ADR: events-emit-infers-its-type-argument
-title: A capability operation's type parameter is inferred from its arguments, `Events.emit` included
-summary: Inference covers every generic capability op whose arguments determine it; the owner-only check runs on the inferred type
+- **Status:** Accepted (v0.647.1)
 
 **Context.** `Events.emit[E](event: E)` was refused as `bynk.generics.uninferable_type_arg` without a written
 `[E]`, though its argument determines `E`. Capability-operation inference ran only for operations with

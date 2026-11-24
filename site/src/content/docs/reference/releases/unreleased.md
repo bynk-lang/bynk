@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.647.1** | `Events.emit(e)` infers its event type from the argument, as `Idempotency.remember` infers `T` |
 | **v0.647.0** | `String` orders and its length predicates count by code point, agreeing with storage, SQL and OpenAPI |
 | **v0.646.0** | `List.parTraverse` now returns the steps' values in input order and the old unit-returning form is `parForEach`, completing the grid `forEach`/`traverse`/`traverseAll`/`traverseTry` and `parForEach`/`parTraverse`/`parTraverseAll`/`parTraverseTry` |
 | **v0.645.0** | `.of` on a named type with no predicate is total and returns the type; "alias" is renamed "named type" |
