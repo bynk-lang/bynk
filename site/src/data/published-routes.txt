@@ -2290,6 +2290,7 @@
 /reference/releases/v0-606-0/
 /reference/releases/v0-614-0/
 /reference/releases/v0-639-1/
+/reference/releases/v0-653-0/
 /reference/releases/v0-66-0/
 /reference/releases/v0-77-0/
 /reference/releases/v0-78-0/
