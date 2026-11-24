@@ -633,6 +633,18 @@ The response-JSON policy (#2858).
 
 One `name: value` field of a `json` policy.
 
+#### delivery_policy {#441a9-delivery_policy}
+
+{{#grammar delivery_policy}}
+
+The queue consumer's delivery policy (#3877).
+
+#### delivery_field {#441b0-delivery_field}
+
+{{#grammar delivery_field}}
+
+One `name: value` field of a `delivery` policy.
+
 ### §4.4.2 service_protocol
 
 {{#grammar service_protocol}}

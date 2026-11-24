@@ -1,6 +1,8 @@
 context demo
 
 service worker from queue("jobs") {
+
+  delivery { deadLetter: None }
     on message(message: String) -> Effect[QueueResult] {
         Effect.pure(Ack)
     }

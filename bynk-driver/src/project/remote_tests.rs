@@ -8,7 +8,7 @@
 mod tests {
     use crate::project::{BuildTarget, RemoteTests, compile_files_in_memory_remote};
 
-    const API: &str = "context shop.api\n\nconsumes bynk { Clock }\n\nservice api from http {\n  on GET(\"/n\") () -> Effect[HttpResult[Int]] by Visitor {\n    Ok(1)\n  }\n}\n\nservice tick from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice inbox from queue(\"q\") {\n  on message(n: Int) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
+    const API: &str = "context shop.api\n\nconsumes bynk { Clock }\n\nservice api from http {\n  on GET(\"/n\") () -> Effect[HttpResult[Int]] by Visitor {\n    Ok(1)\n  }\n}\n\nservice tick from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice inbox from queue(\"q\") {\n  delivery { deadLetter: None }\n  on message(n: Int) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
 
     fn suite(body: &str) -> String {
         format!("suite shop.api as system {{\n  case \"c\" {{\n{body}\n  }}\n}}\n")

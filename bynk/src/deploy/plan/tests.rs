@@ -563,6 +563,36 @@ fn a_named_environment_plans_its_own_qualified_buckets() {
     );
 }
 
+/// #3877: `bynk deploy --env staging` plans the dead-letter queue under its qualified name, as
+/// `create or reuse` (it is recorded only when Bynk makes it), beside the consumer's own queue.
+#[test]
+fn a_named_environment_plans_a_qualified_dead_letter_queue() {
+    let declared = project(vec![(
+        "shop",
+        Resources::default()
+            .consumes(&["outbound-email"])
+            .produces(&["outbound-email-dlq"]),
+    )]);
+    let order = names(&["shop"]);
+    let plan = derive_plan(
+        &order,
+        &declared,
+        &DeployLock::default(),
+        &SecretSource::default(),
+        false,
+        "staging",
+    );
+    let report = plan_report(&plan, DeployFormat::Short);
+    assert!(
+        report.contains("queue create outbound-email-staging\n"),
+        "{report}"
+    );
+    assert!(
+        report.contains("queue create or reuse outbound-email-dlq-staging\n"),
+        "{report}"
+    );
+}
+
 #[test]
 fn a_changed_jurisdiction_is_a_recreate_that_says_the_old_bucket_stays() {
     let declared = shop_with_buckets();
@@ -762,6 +792,32 @@ fn an_orphaned_bucket_is_shown_with_its_name_and_kept() {
         "{report}"
     );
     assert!(!plan.orphans.has_prunable());
+}
+
+#[test]
+fn a_queue_name_that_overflows_once_qualified_is_refused_by_the_plan() {
+    // #3877: a consumer's, producer's or dead-letter queue's name gains `-<environment>`.
+    let edge = "a".repeat(55);
+    let resources = project(vec![(
+        "shop",
+        Resources::default()
+            .consumes(&["jobs"])
+            .produces(&[edge.as_str()]),
+    )]);
+    assert!(queue_name_problem(&resources, "default").is_none());
+    assert!(
+        queue_name_problem(&resources, "staging").is_none(),
+        "55 + `-staging` is exactly 63"
+    );
+    let longer = "a".repeat(56);
+    let resources = project(vec![(
+        "shop",
+        Resources::default().produces(&[longer.as_str()]),
+    )]);
+    let message = queue_name_problem(&resources, "staging").expect("56 + `-staging` is 64");
+    assert!(message.contains("environment `staging`"), "{message}");
+    assert!(message.contains("64 characters"), "{message}");
+    assert!(queue_name_problem(&resources, "default").is_none());
 }
 
 #[test]
