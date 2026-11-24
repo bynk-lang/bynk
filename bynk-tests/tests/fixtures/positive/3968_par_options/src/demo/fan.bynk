@@ -1,0 +1,41 @@
+context demo.fan
+
+// #3968: the bounded `…With` fan-out forms take a `ParOptions { limit }` from `bynk`.
+
+consumes bynk { ParOptions }
+
+const WIDTH: Int = 4
+
+fn check(id: Int) -> Result[Int, String] {
+	if id > 2 { Err("big") } else { Ok(id) }
+}
+
+service tenfold {
+	on call(ids: List[Int]) -> Effect[List[Int]] by Caller {
+		ids.parTraverseWith((id: Int) => Effect.pure(id * 10), ParOptions { limit: 2 })
+	}
+}
+
+service tenfoldConst {
+	on call(ids: List[Int]) -> Effect[List[Int]] by Caller {
+		ids.parTraverseWith((id: Int) => Effect.pure(id * 10), ParOptions { limit: WIDTH })
+	}
+}
+
+service touch {
+	on call(ids: List[Int]) -> Effect[()] by Caller {
+		ids.parForEachWith((id: Int) => Effect.pure(()), ParOptions { limit: 3 })
+	}
+}
+
+service collect {
+	on call(ids: List[Int], width: Int) -> Effect[List[Result[Int, String]]] by Caller {
+		ids.parTraverseAllWith((id: Int) => Effect.pure(check(id)), ParOptions { limit: width })
+	}
+}
+
+service tryAll {
+	on call(ids: List[Int], width: Int) -> Effect[Result[List[Int], String]] by Caller {
+		ids.parTraverseTryWith((id: Int) => Effect.pure(check(id)), ParOptions { limit: width })
+	}
+}

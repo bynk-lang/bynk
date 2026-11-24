@@ -1,0 +1,9 @@
+context demo.fan
+
+consumes bynk { ParOptions }
+
+service run {
+    on call(xs: List[Int]) -> Effect[()] by Caller {
+        xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })
+    }
+}

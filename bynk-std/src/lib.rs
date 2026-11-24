@@ -312,6 +312,15 @@ pub const LOCALE_TYPES_UNIT: &str = "bynk.locale.types";
 /// `bynk.locale`'s value-level API.
 pub const BYNK_LOCALE_TYPES_SRC: &str = include_str!("../lib/core/bynk.locale.types.bynk");
 
+/// Inside the reserved `bynk.*` prefix; reached implicitly by any unit that
+/// mentions `compare`, `sortWith` or `Ordering` (#3955), as if it wrote
+/// `uses bynk.ordering`.
+pub const ORDERING_UNIT: &str = "bynk.ordering";
+
+/// `bynk.ordering` — the `Ordering` enum (`Less`, `Equal`, `Greater`) that
+/// `compare` and `sortWith` use, with `then` and `reverse`.
+pub const BYNK_ORDERING_SRC: &str = include_str!("../lib/core/bynk.ordering.bynk");
+
 /// The reserved `bynk` conformance-surface adapter (env-free core). It has no
 /// `binding` clause — the toolchain supplies one per platform (see
 /// [`Platform::bynk_binding_source`]).
@@ -1323,6 +1332,22 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    Unit {
+        name: ORDERING_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/ordering.bynk",
+        source: BYNK_ORDERING_SRC,
+        binding: Binding::None,
+        // 11, not 10: the test-support `bynk.testing` unit takes 10.
+        id_block: 11,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
     #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
@@ -2125,6 +2150,7 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
+                ("bynk.ordering", 11),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2156,6 +2182,7 @@ mod tests {
                 "bynk.crypto",
                 "bynk.url",
                 "bynk.set",
+                "bynk.ordering",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

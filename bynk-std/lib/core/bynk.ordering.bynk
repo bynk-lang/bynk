@@ -1,0 +1,39 @@
+commons bynk.ordering {
+	---
+	How one value compares with another: `Less`, `Equal` or `Greater`. It is what
+	`a.compare(b)` returns on every type that has an order, and what a `sortWith`
+	comparator returns. Its own order is `Less < Equal < Greater`, so it can be
+	stored, matched and compared like any enum.
+
+	Its variants name an `Ordering` only where the context says so (a `match` or
+	`is` on one, an expected type, the other side of `==`, `!=` or an ordering
+	operator): a bare `Less` is never an `Ordering` on its own, so a type of your
+	own with a `Less` variant is unaffected. `Ordering.Less` always works.
+	---
+	type Ordering = enum { Less, Equal, Greater } derives Ord
+
+	---
+	`next` when `self` is `Equal`, otherwise `self`: the way to break a tie, so
+	`a.x.compare(b.x).then(a.y.compare(b.y))` orders by `x` and then by `y`.
+	`next` is a value, evaluated either way, not a lambda.
+	---
+	fn Ordering.then(self, next: Ordering) -> Ordering {
+		match self {
+			Equal => next,
+			Less => Ordering.Less,
+			Greater => Ordering.Greater,
+		}
+	}
+
+	---
+	The opposite order: `Less` and `Greater` swap and `Equal` stays. Use it to
+	sort one key in descending order inside a multi-key comparator.
+	---
+	fn Ordering.reverse(self) -> Ordering {
+		match self {
+			Less => Ordering.Greater,
+			Equal => Ordering.Equal,
+			Greater => Ordering.Less,
+		}
+	}
+}

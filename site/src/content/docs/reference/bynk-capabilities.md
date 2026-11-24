@@ -201,6 +201,10 @@ type FetchOptions = {
   redirect: Redirect = Redirect.Follow,
 }
 
+type ParOptions = {
+  limit: Int,
+}
+
 type Request = {
   method: Method,
   url: String,

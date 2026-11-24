@@ -333,6 +333,8 @@ const TEST_ORDER: &[&str] = &[
     "__bynkInstantFromIso",
     "__bynkJoinOn",
     "__bynkMapInsert",
+    "__bynkOrdering",
+    "__bynkOrderingSign",
     "__bynkSetInsert",
     "__bynkSetOf",
     "__bynkSetRemove",
