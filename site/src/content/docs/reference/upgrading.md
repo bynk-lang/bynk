@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.651.0
+
+`1.hours` (and every `1.<plural unit>`) no longer parses as a `Duration` literal: it is `bynk.duration.unit_agreement`, with a machine-applicable fix-it (`bynk check --fix`) writing `1.hour`. `5.hour` is the same error, and a word after an integer literal that names no unit (`5.hr`) is `bynk.duration.unknown_unit`, where it used to be a field access on an `Int`.
+
 ## v0.648.1
 
 A handler on a `by` route that reads `headers.bearer()` or `headers.get("authorization")` (or the `Signature` header) now gets `None`, because the seam consumed it; take the identity from the `by` binding instead.
