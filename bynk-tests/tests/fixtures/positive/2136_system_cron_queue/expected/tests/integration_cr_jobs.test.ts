@@ -165,9 +165,9 @@ async function test_the_sweeper_runs__then_the_count_is_read_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(960000);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:7:10", 356, 366, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:7:10", 381, 391, "expect r is Ok(_)"); }
     const c = await __sysdrive_api_http_GET_count(undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 1))) { throw __bynkExpectFailure("tests/jobs.bynk:9:10", 416, 426, "expect c is Ok(1)"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 1))) { throw __bynkExpectFailure("tests/jobs.bynk:9:10", 441, 451, "expect c is Ok(1)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -183,9 +183,9 @@ async function test_the_sweeper_s_own_Err_is_what_the_address_yields() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(-1);
-    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "the scheduled time is before the epoch"))) { throw __bynkExpectFailure("tests/jobs.bynk:14:10", 546, 596, "expect r is Err(\"the scheduled time is before the epoch\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "the scheduled time is before the epoch"))) { throw __bynkExpectFailure("tests/jobs.bynk:14:10", 596, 646, "expect r is Err(\"the scheduled time is before the epoch\")"); }
     const c = await __sysdrive_api_http_GET_count(undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:16:10", 646, 656, "expect c is Ok(0)"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:16:10", 696, 706, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -203,10 +203,10 @@ async function test_a_delivery_is_counted_once__however_often_it_is_delivered() 
     const d = { id: "d1", qty: 6 };
     const a = await __sysdrive_message_deliveries(d);
     const b = await __sysdrive_message_deliveries(d);
-    if (!(((__c: boolean) => __c)(a.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:23:10", 844, 852, "expect a is Ack"); }
-    if (!(((__c: boolean) => __c)(b.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:24:10", 862, 870, "expect b is Ack"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:23:10", 894, 902, "expect a is Ack"); }
+    if (!(((__c: boolean) => __c)(b.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:24:10", 912, 920, "expect b is Ack"); }
     const c = await __sysdrive_api_http_GET_count(undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 6))) { throw __bynkExpectFailure("tests/jobs.bynk:26:10", 920, 930, "expect c is Ok(6)"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 6))) { throw __bynkExpectFailure("tests/jobs.bynk:26:10", 970, 980, "expect c is Ok(6)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -222,7 +222,7 @@ async function test_a_consumer_s_Retry_carries_its_reason() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d2", qty: -1 });
-    if (!(((__c: boolean) => __c)(r.tag === "Retry" && r.reason === "a delivery cannot be negative"))) { throw __bynkExpectFailure("tests/jobs.bynk:31:10", 1054, 1097, "expect r is Retry(\"a delivery cannot be negative\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Retry" && r.reason === "a delivery cannot be negative"))) { throw __bynkExpectFailure("tests/jobs.bynk:31:10", 1104, 1147, "expect r is Retry(\"a delivery cannot be negative\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -238,9 +238,9 @@ async function test_a_consumer_that_faults_is_retried() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d3", qty: 0 });
-    if (!(((__c: boolean) => __c)(r.tag === "Retry"))) { throw __bynkExpectFailure("tests/jobs.bynk:36:10", 1216, 1229, "expect r is Retry(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Retry"))) { throw __bynkExpectFailure("tests/jobs.bynk:36:10", 1266, 1279, "expect r is Retry(_)"); }
     const c = await __sysdrive_api_http_GET_count(undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:38:10", 1279, 1289, "expect c is Ok(0)"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:38:10", 1329, 1339, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -256,7 +256,7 @@ async function test_each_case_starts_from_clean_state() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const c = await __sysdrive_api_http_GET_count(undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:43:10", 1387, 1397, "expect c is Ok(0)"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === 0))) { throw __bynkExpectFailure("tests/jobs.bynk:43:10", 1437, 1447, "expect c is Ok(0)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -272,7 +272,7 @@ async function test_a_cron_handler_that_faults_fails_the_case() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_1(0);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:50:10", 1650, 1660, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:50:10", 1725, 1735, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

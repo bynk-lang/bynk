@@ -1101,7 +1101,7 @@ pub fn describe_system_job_address_at<'s>(
         return None;
     }
     Some(if name == "schedule" {
-        "**`svc.schedule(\"<expr>\", at)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
+        "**`svc.schedule(\"<expr>\", at: Instant)`** at `system` — runs the cron handler through the Worker's `scheduled` entry, with `{ cron, scheduledTime: at }`, and yields the handler's own `Result`.".to_string()
     } else {
         "**`q.message(m)`** at `system` — delivers `m` through the Worker's `queue` entry, after a JSON round trip, and yields `Ack` or `Retry(reason)` as the consumer acknowledged or retried it.".to_string()
     })

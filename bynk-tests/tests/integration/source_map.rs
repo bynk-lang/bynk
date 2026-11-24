@@ -958,12 +958,12 @@ const CRON_QUEUE_FIXTURE: &str = "context reps {
   }
 
   service sweeper from cron {
-    on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+    on schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
       let _ <- Counter(\"c\").bump(1)
       Ok(())
     }
 
-    on schedule(\"0 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+    on schedule(\"0 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
       let _ <- Counter(\"d\").bump(2)
       Ok(())
     }

@@ -1,0 +1,8 @@
+suite cr.jobs as system {
+	case "the window starts an hour before the scheduled time, over the wire" {
+		let r <- sweeper.schedule("0 * * * *", Instant.fromEpochMillis(7200000))
+		expect r is Ok(_)
+		let w <- api.GET("/window") by Visitor
+		expect w is Ok(3600000)
+	}
+}

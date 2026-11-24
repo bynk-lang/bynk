@@ -3022,6 +3022,37 @@ fn lint_header_question(inner: &Expr, span: Span, ctx: &mut Ctx) {
     ctx.errors.push(err);
 }
 
+/// #3946: `T.of(x)?` where `T` is a named type with no predicate. `.of` cannot
+/// fail there, so it returns `T` and the `?` is the error; say why and offer to
+/// drop it.
+fn with_total_of_fix(err: CompileError, inner: &Expr, question: Span, ctx: &Ctx) -> CompileError {
+    let Some(Callee::Refine(decl)) = ctx.callees.get(&inner.id) else {
+        return err;
+    };
+    let Some(base) = type_decl_base(decl) else {
+        return err;
+    };
+    if !bynk_syntax::ast::of_is_total(
+        base,
+        type_decl_refinement(decl),
+        matches!(decl.body, TypeBody::Opaque { .. }),
+    ) {
+        return err;
+    }
+    err.with_note(format!(
+        "`{0}` has no predicate, so `{0}.of` cannot fail and returns `{0}` directly",
+        decl.name.name
+    ))
+    .with_suggestion(
+        "drop the `?`",
+        vec![(
+            Span::new_in(question.file, inner.span.end, question.end),
+            String::new(),
+        )],
+        Applicability::MachineApplicable,
+    )
+}
+
 pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let inner_ty = type_of(inner, None, ctx)?;
@@ -3050,17 +3081,16 @@ pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<
         return None;
     }
     let Ty::Result(t, e) = &*tys.get(inner_ty) else {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.question_on_non_result",
-                inner.span,
-                format!(
-                    "the `?` operator requires a `Result[T, E]` value (or an `Option[T]` in an HttpResult handler), but got `{}`",
-                    inner_ty.display(tys)
-                ),
-            )
-            .with_label(span, "this `?` requires a Result"),
-        );
+        let err = CompileError::new(
+            "bynk.types.question_on_non_result",
+            inner.span,
+            format!(
+                "the `?` operator requires a `Result[T, E]` value (or an `Option[T]` in an HttpResult handler), but got `{}`",
+                inner_ty.display(tys)
+            ),
+        )
+        .with_label(span, "this `?` requires a Result");
+        ctx.errors.push(with_total_of_fix(err, inner, span, ctx));
         return None;
     };
     // v0.5: `?` is also valid inside `Effect[Result[T, E]]` — the `Err` is
