@@ -1,0 +1,50 @@
+context ops.reaper
+uses ops.schedules
+
+consumes bynk { CronSchedule }
+
+// A constant declared exactly `CronSchedule` is checked against `Cron` where it
+// is declared, and again where it names a schedule.
+const Nightly: CronSchedule = "0 2 * * *"
+const NightlyAgain: CronSchedule = Nightly
+
+agent Runs {
+	key id: String
+	store n: Cell[Int]
+
+	on call bump(by: Int) -> Effect[Int] {
+		let _ <- n.update((x) => x + by)
+		n
+	}
+
+	on call read() -> Effect[Int] {
+		n
+	}
+}
+
+service sweeper from cron {
+	// By a `CronSchedule` constant (here through a second constant).
+	on schedule(NightlyAgain) () -> Effect[Result[(), String]] {
+		let _ <- Runs("r").bump(1)
+		Ok(())
+	}
+
+	// By a `String` constant from a used commons.
+	on schedule(Hourly) () -> Effect[Result[(), String]] {
+		let _ <- Runs("r").bump(10)
+		Ok(())
+	}
+
+	// By a literal, as before.
+	on schedule("30 4 * * *") () -> Effect[Result[(), String]] {
+		let _ <- Runs("r").bump(100)
+		Ok(())
+	}
+}
+
+service api from http {
+	on GET("/runs") () -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Runs("r").read()
+		Ok(n)
+	}
+}

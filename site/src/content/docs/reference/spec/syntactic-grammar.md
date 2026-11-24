@@ -687,7 +687,8 @@ The HTTP verbs a route may handle. Well-formedness: §5.
 
 {{#grammar cron_handler}}
 
-`on schedule("expr")`, parameters, `->`, a return type, an optional `given`
+`on schedule("expr")` (or `on schedule(Name)`, naming a constant that is bound to the
+schedule), parameters, `->`, a return type, an optional `given`
 clause, and a block body. Valid only in a `from cron` service. Well-formedness: §5.
 
 ### §4.4.7 queue_handler

@@ -696,11 +696,19 @@ fn request_body_of(
     handler: &Handler,
     ty: &TypeRef,
 ) -> Value {
-    if let Some(ct) = handler.raw_content_type() {
-        return json!({
-            "required": true,
-            "content": { ct: { "schema": { "type": "string", "format": "binary" } } },
-        });
+    let raw_types = handler.raw_content_types();
+    if !raw_types.is_empty() {
+        // #3912: one media-type entry per accepted type.
+        let content: serde_json::Map<String, Value> = raw_types
+            .into_iter()
+            .map(|ct| {
+                (
+                    ct.to_string(),
+                    json!({ "schema": { "type": "string", "format": "binary" } }),
+                )
+            })
+            .collect();
+        return json!({ "required": true, "content": content });
     }
     let shape = wire::wire_ref(ty, r.types);
     // #3276: a `@form` route's body is the same record under the form media type.

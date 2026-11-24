@@ -1,0 +1,41 @@
+suite r.api as system {
+	case "a JSON route takes application/json" {
+		let r <- api.POST("/notes", Note { text: "a" }) by Visitor
+		expect r is Ok("a")
+	}
+
+	case "a JSON route takes application/problem+json" {
+		let r <- api.POST("/notes", Wire("{\"text\": \"b\"}"), RequestHeaders.of(["Content-Type: application/problem+json"])) by Visitor
+		expect r is Handled(Ok("b"))
+	}
+
+	case "a JSON route takes an empty Content-Type" {
+		let r <- api.POST("/notes", Wire("{\"text\": \"c\"}"), RequestHeaders.of(["Content-Type: "])) by Visitor
+		expect r is Handled(Ok("c"))
+	}
+
+	case "a JSON route refuses a form with 415" {
+		let r <- api.POST("/notes", Wire("text=d"), RequestHeaders.of(["Content-Type: application/x-www-form-urlencoded"])) by Visitor
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a JSON route refuses multipart with 415" {
+		let r <- api.POST("/notes", Wire("x"), RequestHeaders.of(["Content-Type: multipart/form-data; boundary=x"])) by Visitor
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+
+	case "a raw route takes the first listed type" {
+		let r <- api.POST("/avatars", Wire("abc"), RequestHeaders.of(["Content-Type: image/png"])) by Visitor
+		expect r is Handled(Ok(3))
+	}
+
+	case "a raw route takes the second listed type" {
+		let r <- api.POST("/avatars", Wire("abcd"), RequestHeaders.of(["Content-Type: image/jpeg"])) by Visitor
+		expect r is Handled(Ok(4))
+	}
+
+	case "a raw route refuses an unlisted type with 415" {
+		let r <- api.POST("/avatars", Wire("abc"), RequestHeaders.of(["Content-Type: image/gif"])) by Visitor
+		expect r is Rejected(UnsupportedMediaType(_))
+	}
+}

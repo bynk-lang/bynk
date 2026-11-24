@@ -418,7 +418,7 @@ opaque handle — inspecting it from outside the owning context is rejected
 its constructors (`.of`, `.unsafe`, a variant), or an opaque one with record
 syntax, from outside (`bynk.context.external_construction`). The exception is an
 **adapter's** `transparent` types (`bynk.cloudflare`'s `KvTtl`, say): a consumer
-builds one with `.of`, a variant or record syntax, never with `.unsafe`. Decoding creates a
+builds one with `.of`, a variant or record syntax, never with `.unsafe`. A context's own `transparent` types follow in #4213. Decoding creates a
 value too: a context MUST NOT decode such a type through `Json.decode`,
 `Json.decodeSql` or a `Codable` witness, nor take one in an HTTP or queue
 handler's input (`bynk.context.external_decode`); the value comes from a service

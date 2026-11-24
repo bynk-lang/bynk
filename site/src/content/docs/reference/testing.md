@@ -1614,6 +1614,13 @@ case "placing an order stores it" {
 | record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` takes its `@example`, or must pin) |
 | opaque | `.unsafe(<base zero>)` |
 
+The plain types are **not** `Val` types: `Val[Bool]`, `Val[Bytes]`, `Val[Decimal]`,
+`Val[Duration]`, `Val[Float]`, `Val[Instant]`, `Val[Int]` and `Val[String]` are each refused
+(`bynk.val.unsupported_kind`), so write the value you mean. A refined or opaque
+type over one is fabricated as the rows above say. `Val` of a record or sum fills
+a plain `Int`, `String`, `Bool`, `Float` or `Decimal` field with `0`, `""`,
+`true`, `0.0` or `0` (scale 0).
+
 `Val[T]` is test-only (`bynk.val.outside_test`). A pin must be a compile-time
 literal (`bynk.val.pin_not_literal`), must satisfy the refinement
 (`bynk.val.literal_violates`), and is only accepted where the kind supports it
@@ -1682,7 +1689,7 @@ The body is one or more `expect`s: the **same predicate surface** as a `case`, a
 
 Generation draws from `T`'s **refinement domain** and includes boundary values:
 
-| Type | `for all` / `Val` generates |
+| Type | `for all` generates |
 |---|---|
 | `Int where Positive` | `1`, small positives, and the boundary |
 | `Int where NonNegative` | `0` and small non-negatives |
@@ -1692,6 +1699,22 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | sum | each variant |
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
+| plain `Bool` | `true` and `false` |
+| plain `Bytes` | always empty |
+| plain `Decimal` | always `0` at scale 0 |
+| plain `Duration` | always `0` ms, never negative |
+| plain `Float` | finite values from `-1000` up to but not including `1000`, no boundary values and no shrinking; never `NaN`, `-0` or `±Infinity`, so a generated `Float` always encodes on the [wire](/reference/wire-format/) |
+| plain `Instant` | always the epoch (`0` ms) |
+| plain `Int` | `-1000` to `1000`, led by the boundaries `0`, `1000` and `-1000`; shrinks toward `0` |
+| plain `String` | 0 to 8 lowercase letters (`a`–`z`), led by `""`; no whitespace, non-ASCII or astral characters; shrinks toward shorter strings |
+
+The plain rows are what a bare `for all x: T` draws. A record field of that type
+draws from the same range, but without the boundary values or shrinking: a record
+is led by its all-default value and is not shrunk. Only `Int`, `String`, `Bool` and `Float` vary; to test
+a `Decimal`, `Instant`, `Duration` or `Bytes` over more than one value, build it
+from a generated `Int` or `String` in the property's body, or write cases. The
+refined rows above give `Decimal`, `Float` and `Int` their bounds; a refined
+`Instant`, `Duration` or `Bytes` still draws its single value.
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
 `String where Matches(re)` has no generator and must be pinned instead; an **agent**

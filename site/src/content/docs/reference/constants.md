@@ -113,6 +113,13 @@ reads the annotation, so the value is written once and checked as the literal
 would be. A keyword argument such as `@cache(scope: public)` is a word, not a
 value, and stays as written.
 
+The `schedule(…)` of a cron handler (and a test's `svc.schedule(…)` address) takes
+a constant too, and there the rule is the type the position expects rather than
+"exactly the base type": a constant declared `String`, or exactly the refined
+`CronSchedule`, is accepted, and the literal it resolves to is checked against
+`Cron`. A constant of another refined type is refused, which keeps named types
+distinct inside a context. See [Cron](/reference/cron/#naming-a-schedule-with-a-constant).
+
 ## What it becomes
 
 A constant is an exported TypeScript function of the declaring module, typed by

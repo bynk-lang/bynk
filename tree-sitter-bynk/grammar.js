@@ -1263,7 +1263,8 @@ module.exports = grammar({
         "on",
         "schedule",
         "(",
-        field("schedule", $.string_literal),
+        // #3875: a string literal, or the name of a constant that is one.
+        field("schedule", choice($.string_literal, $.identifier)),
         ")",
         "(",
         optional(sep1($.param, ",")),
