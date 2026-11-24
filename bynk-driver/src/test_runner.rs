@@ -815,6 +815,14 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         if rel.starts_with("tests/integration_") {
             has_integration = true;
         }
+        // #4190: a case's stubbed cross-context call imports the consumed
+        // context's wire codecs from the `workers` output.
+        if rel.starts_with("tests/")
+            && std::fs::read_to_string(output_root.join(path))
+                .is_ok_and(|t| t.contains(bynk_emit::testgen::WIRE_IMPORT_MARK))
+        {
+            has_integration = true;
+        }
     }
 
     // v0.16: integration tests stand their participants up as real Workers, so

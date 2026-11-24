@@ -64,6 +64,8 @@ pub(super) enum TestRuntimeModule {
     Snapshot,
     /// #291: `__bynkOverlay`, the layer a `stub` puts over a seam's tier default.
     StubOverlay,
+    /// #4190: `__bynkWireStub`, the codec round trip a stubbed call makes at `integration`.
+    StubWire,
     /// #2273: the `--suite` / `--case` filter `tests/main.ts` applies.
     TestFilter,
     /// #2683: the harness clock on virtual time.
@@ -72,7 +74,7 @@ pub(super) enum TestRuntimeModule {
 
 impl TestRuntimeModule {
     /// Every module, in the table's order.
-    pub(super) const ALL: [TestRuntimeModule; 20] = [
+    pub(super) const ALL: [TestRuntimeModule; 21] = [
         TestRuntimeModule::AssetGet,
         TestRuntimeModule::CaseTiming,
         TestRuntimeModule::Clock,
@@ -91,6 +93,7 @@ impl TestRuntimeModule {
         TestRuntimeModule::Settle,
         TestRuntimeModule::Snapshot,
         TestRuntimeModule::StubOverlay,
+        TestRuntimeModule::StubWire,
         TestRuntimeModule::TestFilter,
         TestRuntimeModule::VirtualTime,
     ];
@@ -116,6 +119,7 @@ impl TestRuntimeModule {
             TestRuntimeModule::Settle => "settle",
             TestRuntimeModule::Snapshot => "snapshot",
             TestRuntimeModule::StubOverlay => "stub_overlay",
+            TestRuntimeModule::StubWire => "stub_wire",
             TestRuntimeModule::TestFilter => "test_filter",
             TestRuntimeModule::VirtualTime => "virtual_time",
         }

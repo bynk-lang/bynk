@@ -1,0 +1,12 @@
+context shop.pay
+
+exports transparent { Quantity, Receipt }
+
+type Quantity = Int where InRange(1, 100)
+type Receipt = { id: String, rate: Float }
+
+service authorise {
+  on call(total: Int, units: Quantity) -> Effect[Result[Receipt, String]] by Caller {
+    Effect.pure(Err("down"))
+  }
+}

@@ -1,0 +1,15 @@
+suite shop.orders {
+  consumes shop.pay { Receipt }
+
+  case "a value the wire cannot carry passes at unit" {
+    stub Pay.authorise(_, _) returns Ok(Receipt { id: "r1", rate: 0.0 / 0.0 })
+    let r <- placeOrder.call(10)
+    expect r is Ok("r1")
+  }
+
+  case "an ordinary value passes" {
+    stub Pay.authorise(_, _) returns Ok(Receipt { id: "r2", rate: 0.5 })
+    let r <- placeOrder.call(10)
+    expect r is Ok("r2")
+  }
+}
