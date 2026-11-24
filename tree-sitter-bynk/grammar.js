@@ -605,6 +605,8 @@ module.exports = grammar({
       choice(
         "Matches",
         "InRange",
+        "AtLeast",
+        "AtMost",
         "MinLength",
         "MaxLength",
         "Length",
@@ -623,6 +625,8 @@ module.exports = grammar({
         seq(optional("-"), $.number_literal),
         seq(optional("-"), $.float_literal),
         seq(optional("-"), $.decimal_literal),
+        // #3948: a `Duration` bound — `AtLeast(60.seconds)`, `InRange(1.second, 1.day)`.
+        seq(optional("-"), $.number_literal, ".", $.identifier),
         $.string_literal,
       ),
 

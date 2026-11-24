@@ -242,18 +242,21 @@ built-in predicates joined by `&&`. Each predicate applies to a specific base
 
 {{#grammar predicate_name}}
 
-**On `Int`, `Float` and `Decimal`:**
+**On `Int`, `Float`, `Decimal` and `Duration`:**
 
 | Predicate | Holds when |
 |---|---|
 | `NonNegative` | value ≥ 0 |
 | `Positive` | value > 0 |
 | `InRange(lo, hi)` | lo ≤ value ≤ hi (inclusive) |
+| `AtLeast(lo)` | value ≥ lo (inclusive) |
+| `AtMost(hi)` | value ≤ hi (inclusive) |
 
-`InRange` bounds are numeric literals whose type must **match the base**
-(v0.21): integer bounds on `Int` (`InRange(0, 10)`), float bounds on `Float`
-(`InRange(0.0, 1.0)`), decimal bounds on `Decimal` (`InRange(0.00d, 1.00d)`,
-compared by value). A bound of another numeric type — or a mix — is
+`InRange`, `AtLeast` and `AtMost` bounds are literals whose type must **match
+the base** (v0.21): integer bounds on `Int` (`InRange(0, 10)`), float bounds on
+`Float` (`InRange(0.0, 1.0)`), decimal bounds on `Decimal` (`InRange(0.00d, 1.00d)`,
+compared by value), `Duration` literals on `Duration` (`AtLeast(60.seconds)`,
+compared in milliseconds). A bound of another type — or a mix — is
 `bynk.types.no_numeric_coercion`. On `Float`, `Positive` excludes `0.0`
 exactly as it excludes `0` on `Int`, and the `.of` constructor additionally
 requires the value to be **finite** ([§7.2](/reference/spec/emission/#72-targets)).
@@ -413,7 +416,9 @@ field-level construction — whereas an `exports opaque` type exposes only an
 opaque handle — inspecting it from outside the owning context is rejected
 (`bynk.context.opaque_inspection`), as is building a context-owned type through
 its constructors (`.of`, `.unsafe`, a variant), or an opaque one with record
-syntax, from outside (`bynk.context.external_construction`). Decoding creates a
+syntax, from outside (`bynk.context.external_construction`). The exception is an
+**adapter's** `transparent` types (`bynk.cloudflare`'s `KvTtl`, say): a consumer
+builds one with `.of`, a variant or record syntax, never with `.unsafe`. A context's own `transparent` types follow in #4213. Decoding creates a
 value too: a context MUST NOT decode such a type through `Json.decode`,
 `Json.decodeSql` or a `Codable` witness, nor take one in an HTTP or queue
 handler's input (`bynk.context.external_decode`); the value comes from a service

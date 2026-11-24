@@ -1,0 +1,9 @@
+context app
+
+consumes shapes
+
+// #3948: what a context exports transparent a consumer builds; an opaque
+// export stays the owner's, a variant included.
+fn round(r: Int) -> Shape {
+  Shape.Circle(r)
+}

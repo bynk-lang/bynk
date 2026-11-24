@@ -9038,6 +9038,10 @@
           "named": true
         },
         {
+          "type": "identifier",
+          "named": true
+        },
+        {
           "type": "number_literal",
           "named": true
         },
@@ -13786,6 +13790,14 @@
   },
   {
     "type": "@",
+    "named": false
+  },
+  {
+    "type": "AtLeast",
+    "named": false
+  },
+  {
+    "type": "AtMost",
     "named": false
   },
   {

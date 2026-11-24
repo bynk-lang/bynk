@@ -602,6 +602,18 @@ enum SignedNumLit {
     Int(IntBound),
     Float(FloatBound),
     Decimal(DecimalBound),
+    Duration(DurationBound),
+}
+
+impl SignedNumLit {
+    fn into_pred_bound(self) -> PredBound {
+        match self {
+            SignedNumLit::Int(b) => PredBound::Int(b),
+            SignedNumLit::Float(b) => PredBound::Float(b),
+            SignedNumLit::Decimal(b) => PredBound::Decimal(b),
+            SignedNumLit::Duration(b) => PredBound::Duration(b),
+        }
+    }
 }
 
 struct Parser<'a> {
