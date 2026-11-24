@@ -4,7 +4,7 @@
 import type { Result } from "./__bynk_runtime/result.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
-import { Port, Pt, Shape } from "./shapes.js";
+import { Port, Price, Pt, Shape, Code as Tag } from "./shapes.js";
 
 export function port(n: number): Result<Port, ValidationError> {
   return Port.of(n);
@@ -24,4 +24,12 @@ export function dot(): Shape {
 
 export function pt(x: number, y: number): Pt {
   return { x: x, y: y };
+}
+
+export function price(d: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
+  return Price.of(d);
+}
+
+export function tag(s: string): Result<Tag, ValidationError> {
+  return Tag.of(s);
 }

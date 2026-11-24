@@ -2532,7 +2532,8 @@ or with conflicting visibility, and an exported capability MUST have a provider
 (the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
 compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
 `bynk.boundary.structural_mismatch`); outside its owning context, an
-`exports opaque` type MUST NOT be built through its constructors (`.of`, a
+`exports opaque` type, and a type declared `opaque` however it is exported,
+MUST NOT be built through its constructors (`.of`, a
 variant) or with record syntax, inspected
 (`bynk.context.external_construction`, `bynk.context.opaque_inspection`) or
 decoded from JSON (`bynk.context.external_decode`), and `.unsafe` MUST NOT be

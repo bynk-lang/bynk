@@ -3,10 +3,14 @@
 // consumer builds them itself, so no value import crosses the Worker boundary.
 context shapes
 
-exports transparent { Port, Shape, Pt }
+exports transparent { Port, Shape, Pt, Price, Code }
 
 type Port = Int where InRange(1, 65535)
 
 type Shape = | Dot | Circle(radius: Int)
 
 type Pt = { x: Int, y: Int }
+
+type Price = Decimal where Positive
+
+type Code = String where Matches("[A-Z]{3}")

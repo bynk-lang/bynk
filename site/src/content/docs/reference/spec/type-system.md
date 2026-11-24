@@ -416,7 +416,8 @@ construction — whereas an `exports opaque` type exposes only an opaque handle 
 inspecting it from outside the owning context is rejected
 (`bynk.context.opaque_inspection`), as is building it through its constructors
 (`.of`, a variant) or with record syntax from outside
-(`bynk.context.external_construction`). A `transparent` type, whether a
+(`bynk.context.external_construction`); so is a type declared `opaque`, however
+it is exported. A `transparent` type, whether a
 context's or an adapter's (`bynk.cloudflare`'s `KvTtl`, say), is built by a
 consumer with `.of`, a variant or record syntax; `.unsafe`, an unchecked
 assertion rather than a construction, stays the owner's on every type. Under the

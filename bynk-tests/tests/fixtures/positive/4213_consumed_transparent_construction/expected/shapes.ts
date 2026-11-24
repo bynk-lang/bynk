@@ -2,6 +2,8 @@
 // context shapes
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkDecimalToString } from "./__bynk_runtime/decimal.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Port = number & { readonly __brand: "shapes.Port" };
@@ -33,4 +35,26 @@ export interface Pt {
 }
 
 export const Pt = {
+};
+
+export type Price = { readonly coefficient: bigint; readonly scale: number } & { readonly __brand: "shapes.Price" };
+
+export const Price = {
+  of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
+    if (!((value).coefficient > 0n)) {
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
+    }
+    return Ok(value as Price);
+  },
+};
+
+export type Code = string & { readonly __brand: "shapes.Code" };
+
+export const Code = {
+  of(value: string): Result<Code, ValidationError> {
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
+      return Err({ field: "Code", message: "must match /[A-Z]{3}/", value });
+    }
+    return Ok(value as Code);
+  },
 };

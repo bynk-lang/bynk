@@ -190,7 +190,12 @@ fn emit_refined_type(
         ty: bynk_ts::TsType::named(name.clone()),
     };
     let total = bynk_syntax::ast::of_is_total(base, refinement, is_opaque);
-    let of_body = refined_of_body(t, shape_parts(base, refinement, is_opaque), runtime_use);
+    let of_body = refined_of_body(
+        t,
+        &name,
+        shape_parts(base, refinement, is_opaque),
+        runtime_use,
+    );
     let mut entries: Vec<bynk_ts::TsObjectEntry> = vec![bynk_ts::TsObjectEntry::Method {
         name: "of".to_string(),
         is_async: false,
@@ -255,8 +260,13 @@ fn emit_refined_type(
 /// branded return (`Ok(value as T)`, or `value as T` when the type has no
 /// predicate to check, #3946). Shared by the owner's companion and by a consumer
 /// that builds the type itself (#4213).
+///
+/// `t` names the type as its owner declares it (the `field` of a violation);
+/// `cast_name` is what the value is branded as in this module, which differs from
+/// it for a consumed type the module renames (`consumes c { T as U }`).
 pub(in crate::emitter) fn refined_of_body(
     t: &TypeDecl,
+    cast_name: &str,
     shape: RefinedShape<'_>,
     runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
@@ -278,7 +288,7 @@ pub(in crate::emitter) fn refined_of_body(
     }
     let cast = bynk_ts::TsExpr::As {
         expr: Box::new(bynk_ts::TsExpr::Ident("value".to_string())),
-        ty: bynk_ts::TsType::named(t.name.name.clone()),
+        ty: bynk_ts::TsType::named(cast_name.to_string()),
     };
     body.push(bynk_ts::TsStmt::return_stmt(
         Some(if total {

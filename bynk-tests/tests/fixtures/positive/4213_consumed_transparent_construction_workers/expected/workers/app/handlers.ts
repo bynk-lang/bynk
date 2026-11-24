@@ -2,11 +2,13 @@
 // context app
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 
-import { type Port, type Pt, type Shape } from "../shapes/handlers.js";
+import { type Port, type Price, type Pt, type Shape, type Code as Tag } from "../shapes/handlers.js";
 
-export { type Port, type Pt, type Shape };
+export { type Port, type Price, type Pt, type Shape, type Tag };
 
 export function port(n: number): Result<Port, ValidationError> {
   return ((value: number) => {
@@ -34,4 +36,22 @@ export function dot(): Shape {
 
 export function pt(x: number, y: number): Pt {
   return { x: x, y: y };
+}
+
+export function price(d: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
+  return ((value: { readonly coefficient: bigint; readonly scale: number }) => {
+    if (!((value).coefficient > 0n)) {
+      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
+    }
+    return Ok(value as Price);
+  })(d);
+}
+
+export function tag(s: string): Result<Tag, ValidationError> {
+  return ((value: string) => {
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
+      return Err({ field: "Code", message: "must match /[A-Z]{3}/", value });
+    }
+    return Ok(value as Tag);
+  })(s);
 }

@@ -131,8 +131,18 @@ fn lower_consumed_refine(
         } => (*base, refinement.as_ref(), true),
         TypeBody::Record(_) | TypeBody::Sum(_) => return None,
     };
+    // The guards report the type as its owner declares it, so a violation reads
+    // the same on every target; the brand cast keeps this module's own name.
+    let declared = cx
+        .consumed_declared_name(&decl.name.name)
+        .map(str::to_string);
+    let mut owner_view = decl.clone();
+    if let Some(declared) = declared {
+        owner_view.name.name = declared;
+    }
     let body = crate::emitter::refined_of_body(
-        decl,
+        &owner_view,
+        &decl.name.name,
         crate::emitter::shape_parts(base, refinement, is_opaque),
         cx.runtime_use(),
     );

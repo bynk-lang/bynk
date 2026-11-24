@@ -158,7 +158,11 @@ impl<'a> ModuleCtx<'a> {
             agent_method_givens: HashMap::new(),
             event_schema_versions: HashMap::new(),
             consumed_type_ns: HashMap::new(),
-            consumed_type_declared: HashMap::new(),
+            // #4213: a free function or method reads the same renames a handler does.
+            consumed_type_declared: unit
+                .project
+                .map(|p| p.consumed_type_aliases.clone())
+                .unwrap_or_default(),
             unit_name: String::new(),
             agent_called_contexts: Vec::new(),
             // #4213: a free function or method of a context is lowered through

@@ -80,9 +80,12 @@ function __makeTestDeps() {
 async function test_a_consumer_builds_a_context_s_transparent_types() {
   try {
     const deps = __makeTestDeps();
-    const { circle, dot, port, pt, qualified } = __ns_app;
-    const { Port, Pt, Shape } = __ns_shapes;
+    const { circle, dot, port, price, pt, qualified, tag } = __ns_app;
+    const { Code: Tag, Code, Port, Price, Pt, Shape } = __ns_shapes;
+    type Tag = __ns_shapes.Code;
+    type Code = __ns_shapes.Code;
     type Port = __ns_shapes.Port;
+    type Price = __ns_shapes.Price;
     type Pt = __ns_shapes.Pt;
     type Shape = __ns_shapes.Shape;
     const shapes = (deps as any).surface?.shapes;
