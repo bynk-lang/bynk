@@ -38,8 +38,11 @@ case "$(uname -s)" in
       *musl*) die "the prebuilt Linux binaries need glibc (this looks like musl); use 'cargo install bynk' instead" ;;
     esac
     os="unknown-linux-gnu" ;;
-  # macOS binaries are paused (#4263): build from source until they return.
-  Darwin) die "no prebuilt macOS binaries are published at the moment; use 'cargo install bynk bynk-lsp' instead" ;;
+  # macOS binaries are paused (#4263): releases from now on have none, so build
+  # from source until they return. A pinned earlier release still has them.
+  Darwin)
+    [ -n "${BYNK_VERSION:-}" ] || die "no prebuilt macOS binaries are published at the moment; use 'cargo install bynk bynk-lsp' instead (or pin an earlier release with BYNK_VERSION)"
+    os="apple-darwin" ;;
   *) die "unsupported OS '$(uname -s)' (on Windows use install.ps1)" ;;
 esac
 case "$(uname -m)" in
@@ -49,7 +52,7 @@ case "$(uname -m)" in
 esac
 target="$arch-$os"
 case "$target" in
-  x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu) ;;
+  x86_64-unknown-linux-gnu | aarch64-unknown-linux-gnu | x86_64-apple-darwin | aarch64-apple-darwin) ;;
   *) die "no prebuilt binaries for $target; use 'cargo install bynk' instead" ;;
 esac
 

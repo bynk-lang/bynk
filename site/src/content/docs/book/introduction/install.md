@@ -20,7 +20,8 @@ the same build:
 
 Prebuilt macOS binaries are paused for now, because GitHub's macOS runners were
 holding releases back. On macOS, [build from source](#build-from-source)
-(`cargo install bynk bynk-lsp`) until they return.
+(`cargo install bynk bynk-lsp`) until they return. The VS Code extension can't
+download them either, so on macOS put `bynk` and `bynk-lsp` on your `PATH` first.
 
 `<tag>` is the release tag, such as `v0.330.4`. The Linux binaries are built on
 Ubuntu 24.04 and need a glibc at least that new. Each release also has a
@@ -103,9 +104,10 @@ See the [CLI reference](/reference/tooling/bynk-cli/) for every flag and exit co
 through the VS Code extension rather than directly. Install it from the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode) (`bynk-lang.bynk-vscode`). It uses the
 `bynk-lsp` on your `PATH`, or downloads the matching release if there isn't
-one. It does the same for `bynk`, so with the extension you need no
+one. It does the same for `bynk`, so on Linux and Windows the extension needs no
 separate install or `cargo`: the downloaded tools go on the `PATH` of its
-integrated terminals. See [Set up editor support](/reference/tooling/editor-and-tooling/editor-support/).
+integrated terminals. On macOS, where prebuilt binaries are paused, install
+both with `cargo install bynk bynk-lsp` first. See [Set up editor support](/reference/tooling/editor-and-tooling/editor-support/).
 
 ## Build from source
 
