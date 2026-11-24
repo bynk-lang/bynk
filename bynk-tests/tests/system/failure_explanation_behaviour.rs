@@ -61,10 +61,12 @@ fn run_once(fixture: &str) -> serde_json::Value {
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/behaviour")
         .join(fixture);
-    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+    // The runner executes a tree beside `--output`, so both live under this
+    // per-process directory, which is removed once the document has parsed.
+    let run_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(fixture.replace('_', "-"))
-        .join(std::process::id().to_string())
-        .join("out");
+        .join(std::process::id().to_string());
+    let out_root = run_dir.join("out");
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(project)
@@ -73,13 +75,16 @@ fn run_once(fixture: &str) -> serde_json::Value {
         .args(["--format", "json", "--seed", "0x5f3a"])
         .output()
         .expect("run bynk test");
-    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+    let doc = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        // Left in place on this path, for whoever debugs the run.
         panic!(
             "stdout is one JSON document: {e}\nstdout: {}\nstderr: {}",
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         )
-    })
+    });
+    let _ = std::fs::remove_dir_all(&run_dir);
+    doc
 }
 
 fn case<'a>(doc: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
