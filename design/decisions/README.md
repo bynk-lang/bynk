@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0902](0902-duration-literal-unit-agreement.md) | **Duration literals use the unit that agrees with the number, and an unknown unit is its own error** (v0.651) — Singular exactly with 1, plural with every other number; an integer literal followed by a word is always a Duration attempt | Accepted (v0.651) |
 | [0901](0901-caller-refinement-is-context.md) | **Refinement actors over `Caller` admit named calling contexts** (v0.650) — `Caller` becomes a refinement base, `IsContext(…)` its predicate, decided against the project's call graph | Accepted (v0.650) |
 | [0900](0900-stub-consumed-services.md) | **A consumed context's service is a `stub` seam below `system`** (v0.649) — `stub` substitutes a consumed service, so a handler that calls another context is testable in-process | Accepted (v0.649) |
 | [0899](0899-seam-consumed-credential-hidden-from-request-headers.md) | **A seam's consumed credential header is omitted from the handler's `RequestHeaders`** (v0.648.1) — Bearer, Oidc and Signature routes hide their credential header, as SignedCookie hides its cookie | Accepted (v0.648.1) |
