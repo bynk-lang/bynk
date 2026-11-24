@@ -171,7 +171,7 @@ async function test_a_detached_Err_in_a_cron_handler_is_reported() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0(960000);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:6:10", 304, 314, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:6:10", 329, 339, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -187,7 +187,7 @@ async function test_a_detached_fault_in_a_cron_handler_is_reported() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_1(0);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:11:10", 429, 439, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/jobs.bynk:11:10", 479, 489, "expect r is Ok(_)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -203,7 +203,7 @@ async function test_a_detached_Err_in_a_queue_consumer_is_reported() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_deliveries({ id: "d1" });
-    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:16:10", 563, 571, "expect r is Ack"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("tests/jobs.bynk:16:10", 613, 621, "expect r is Ack"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

@@ -225,7 +225,7 @@ service api from http {
 }
 
 service checks from cron {
-  on schedule("*/5 * * * *") (at: Int) -> Effect[Result[(), String]] {
+  on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), String]] {
     Ok(())
   }
 }
@@ -240,7 +240,7 @@ service worker from queue("orders") {
 - HTTP result constructors map to status codes: `Ok` (200), `Created` (201),
   `NoContent` (204), `BadRequest`, `NotFound`, `ServerError`, and more. The
   handler return type is `Effect[HttpResult[T]]`.
-- Cron has no ambient clock — the scheduled time `at` is passed in.
+- The scheduled time `at` is an `Instant`, passed in (schedules run in UTC).
 - A queue handler returns `Effect[QueueResult]`: `Ack`, or `Retry(reason)`.
 - A `websocket` service has exactly one `on open` (which must name its actor with
   `by` and transfer the connection it receives into an agent), plus `on message`
