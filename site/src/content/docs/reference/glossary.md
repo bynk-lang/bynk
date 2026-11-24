@@ -161,6 +161,13 @@ else `old`/`new` are ordinary identifiers.
 A type whose representation is hidden outside its defining module; constructed and
 inspected only through its API. See [Type system](/reference/types/).
 
+### Ordering {#term-ordering}
+
+The enum `Less | Equal | Greater`: how one value compares with another. It is
+what `a.compare(b)` returns and what a `sortWith` comparator returns, and it has
+`then` and `reverse` to combine orderings. See
+[Ordering](/reference/types/#ordering).
+
 ### package {#term-package}
 
 A project with a `[package]` identity, `organisation/package` (`acme/money`),

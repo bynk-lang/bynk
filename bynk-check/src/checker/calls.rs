@@ -3363,6 +3363,19 @@ pub(crate) fn check_method_call(
         reject_method_type_args(method, args, span, ctx);
         return None;
     }
+    // #3955: the universal `compare` on every `Ord` receiver.
+    if method.name == "compare"
+        && let Some(r) = super::ordering::check_compare_method(recv_ty, method, args, span, ctx)
+    {
+        return record_kernel(
+            ctx,
+            expr_id,
+            recv_ty,
+            Some(KernelOp::Ord(crate::kernel_op::OrdOp::Compare)),
+            method,
+            r,
+        );
+    }
     // v0.20b: built-in kernel methods on the collection types. These are
     // compiler-known special forms typed directly here — generic in their
     // accumulator without the (deferred) declared-generic-methods feature;

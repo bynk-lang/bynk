@@ -1,0 +1,7 @@
+commons demo.order
+
+type Ordering = enum { Ascending, Descending }
+
+fn cmp(a: Int, b: Int) -> Ordering {
+  if a.compare(b) == Ordering.Ascending { Ascending } else { Descending }
+}

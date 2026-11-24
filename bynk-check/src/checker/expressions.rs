@@ -1951,7 +1951,7 @@ pub(crate) fn left_out_variant_owner<'a>(
         return None;
     };
     types.get(want).filter(|t| {
-        unselected.contains(want)
+        (unselected.contains(want) || crate::resolver::is_prelude_ordering(t))
             && matches!(&t.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
     })
 }
@@ -2350,9 +2350,19 @@ fn keeps_flexible_context(e: &Expr) -> bool {
 /// other operand's type can pick its owner.
 fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
     let shared = |name: &str| {
-        crate::resolver::bare_variant_owners(name, &ctx.input.types, &ctx.input.unselected_types)
-            .len()
-            > 1
+        let owners = crate::resolver::bare_variant_owners(
+            name,
+            &ctx.input.types,
+            &ctx.input.unselected_types,
+        );
+        // #3955: the implicit `Ordering` shares its variants' names with a sum
+        // of the author's own, and only the context says which is meant.
+        let beside_ordering = ctx.input.types.get("Ordering").is_some_and(|o| {
+            crate::resolver::is_prelude_ordering(o)
+                && matches!(&o.body, TypeBody::Sum(s) if s.variants.iter().any(|v| v.name.name == name))
+                && owners.iter().any(|t| !crate::resolver::is_prelude_ordering(t))
+        });
+        owners.len() > 1 || beside_ordering
     };
     match &e.kind {
         ExprKind::Ident(id) => shared(&id.name) || needs_expected_type(e),
