@@ -1,0 +1,12 @@
+{
+  "blurb": "`RequestQuery` is the query string of an HTTP request. A handler that is not an `on http` route, such as a `cron` schedule, answers no request, so it has no query string to take. Remove the parameter, or, if the work is a reply to a caller, make it an `on http` handler. On an HTTP route, `query` is a record or `RequestQuery` and nothing else: `bynk.http.query_wrong_type`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.query_not_http",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "service ticker from cron {\n    on schedule(\"*/5 * * * *\") (query: RequestQuery) -> Effect[Result[(), String]] { … }   // ✗ no request\n}\n\nservice ticker from http {\n    on GET(\"/ticks\") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓\n}",
+  "severity": "error",
+  "summary": "A `RequestQuery` appears on a handler that is not an HTTP route."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A purge reaches the edge cache only when it runs in the Worker's own `fetch`. An agent runs in a Durable Object, so an agent handler that reaches `EdgeCache`, with `given Edge` or through a provider that does, would not reach this Worker's cache. Purge from the service handler that calls the agent. A queue consumer and an `on schedule` handler have the same rule: `bynk.cloudflare.edge_cache_in_queue`, `bynk.cloudflare.edge_cache_in_schedule`.",
+  "category": "Cloudflare",
+  "categoryAnchor": "cloudflare",
+  "code": "bynk.cloudflare.edge_cache_in_agent",
+  "constructs": [],
+  "example": "capability Edge = EdgeCache\n\nagent Index {\n    key name: String\n\n    store hits: Cell[Int]\n\n    on call withdraw(path: String) -> Effect[Bool] given Edge {   // ✗ an agent's purge misses the Worker's cache\n        Edge.purge([path])\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+  "severity": "error",
+  "summary": "An agent handler reaches an `EdgeCache` instance, directly or through a provider's `given`; an agent's purge would not reach the Worker's cache."
+}

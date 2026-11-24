@@ -1,0 +1,10 @@
+{
+  "blurb": "A `SignedCookie` actor's session cookie is minted by `Actor.issue(identity)`, which signs it with the actor's key, and removed by `Actor.expire()`, and the CSRF check keys off that actor. A cookie record's `R.field.cookie(v)` or `R.field.expire()` whose field is read under the session cookie's name would write or clear the credential without any of that, so it is refused. Keep the session cookie out of the record and use the actor's own members.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_write_directly",
+  "constructs": [],
+  "example": "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],\n  theme: Option[String],\n}\n\nOk(\"x\").withCookie(Prefs.session.cookie(\"forged\"))   // ✗ the session cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(\"dark\"))        // ✓ another cookie",
+  "severity": "error",
+  "summary": "A cookie record's typed write names the session cookie that a `SignedCookie` actor consumes."
+}

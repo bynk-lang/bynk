@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.contracts_lock_oversized",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`bynk.contracts.lock` has one service accepting more older contracts than the build keeps comfortably (warning)."
+}

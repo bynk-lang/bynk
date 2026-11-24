@@ -1,0 +1,10 @@
+{
+  "blurb": "`bynk revert` finds the target in the Worker's deployment history: by default the deployment before the live code's own upload, or the version named by `--to`. It refuses that Worker when it cannot place the live version or the target: a Worker first added in the bad release has nothing before it, the live upload is out of the listed history, a gradual deployment is in progress, or the history could not be read. A version made live outside Bynk has no upload deployment to step back from; name the version to go back to with `--to`. The plan still judges the other Workers.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.history_unplaceable",
+  "constructs": [],
+  "example": "bynk revert --dry-run --context shop.orders\n  history   shop-orders  refused: the live version is a gradual deployment\n\nbynk revert --context shop.orders --to <version>",
+  "severity": "error",
+  "summary": "`bynk revert` refused for one Worker because its deployment history cannot be placed: it has no earlier deployment, the live upload is outside the listed history, a gradual deployment is in progress, or the history could not be read."
+}

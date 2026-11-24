@@ -1,0 +1,12 @@
+{
+  "blurb": "`@form` and `@multipart` decode a form body one key at a time, into the fields of a record, so the `body` must be a record type. A `String`, a list or any other type has no fields for the keys to fill. Declare a record with one field per form key and take it as `body`; each field is then held to `bynk.http.form_field_not_stringy`. A JSON body of another shape needs no annotation.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.form_body_not_record",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Signup = { email: String }\n\n@form\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a form decodes into a record\n\n@form\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "The `body` of a `@form` handler is not a record type."
+}

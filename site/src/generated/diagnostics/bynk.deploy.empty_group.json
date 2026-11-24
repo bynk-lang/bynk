@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group is a Worker made of the contexts it lists. A group that lists none would be a Worker with nothing to run, and its key would still claim a Worker name and a deploy record. That is almost always a mistake: contexts left out, or a group that should have been deleted. List the group's contexts, or remove the table.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.empty_group",
+  "constructs": [],
+  "example": "[deploy.workers.core]\ncontexts = []                                  // ✗ no context\n\ncontexts = [\"shop.orders\", \"shop.billing\"]   // ✓",
+  "severity": "error",
+  "summary": "A `[deploy.workers.<key>]` group lists no context."
+}

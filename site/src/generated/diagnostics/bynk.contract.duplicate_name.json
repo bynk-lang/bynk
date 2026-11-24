@@ -1,0 +1,10 @@
+{
+  "blurb": "Every `requires` and `ensures` clause has a name, and a failure report points at a clause by that name, so each name must be unique within one function, across both kinds. Rename the repeat; the error is on its name.",
+  "category": "Contracts",
+  "categoryAnchor": "contracts",
+  "code": "bynk.contract.duplicate_name",
+  "constructs": [],
+  "example": "fn inc(x: Int) -> Int\n  requires bigger: x > 0\n  ensures bigger: result > x      // ✗ `bigger` is already taken\n\nfn inc(x: Int) -> Int\n  requires positive: x > 0\n  ensures bigger: result > x      // ✓",
+  "severity": "error",
+  "summary": "A function declares two contract clauses (`requires`/`ensures`) with the same name."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A context may only depend on a capability that the context providing it exports. `exports capability { … }` is the provider's decision about what it offers other contexts, and a capability it leaves out stays its own. So `consumes clock { Clock }`, or a qualified `given clock.Clock`, is refused when `clock` does not list `Clock`. Add the name to the provider's `exports capability` clause (it must declare and provide the capability), or correct the spelling here. A context that is not consumed at all is `bynk.resolve.unconsumed_context`.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.cross_context_unknown_capability",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "// shop.bynk\ncontext shop\n\nconsumes clock { Clock }   // ✗ `clock` exports no `Clock`\n\n// clock.bynk\ncontext clock\n\nexports capability { Clock }   // ✓ the provider offers it",
+  "severity": "error",
+  "summary": "`given B.Cap` or `consumes B { Cap }` names a capability the consumed context does not export."
+}

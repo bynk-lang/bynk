@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter wraps code written in TypeScript. Its provider has no body: `provides Jwt = JoseJwt`, and the binding exports a class of that name. A Bynk body would be a second implementation beside the binding's. Remove the body and implement the operations in the binding, or, for a provider written in Bynk, move it to a context. An external provider in a context is `bynk.context.external_provider`.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.provider_has_body",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "adapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt {          // ✗ the binding supplies it\n        fn sign(secret: String) -> Effect[String] { secret }\n    }\n}\n\nadapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt            // ✓ no body\n}",
+  "severity": "error",
+  "summary": "A provider inside an `adapter` has a Bynk body; adapter providers must be external."
+}

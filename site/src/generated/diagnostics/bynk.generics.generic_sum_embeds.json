@@ -1,0 +1,12 @@
+{
+  "blurb": "`embeds E as V` lets `?` wrap an `E` error in the variant `V`, picking the variant by the error's type. In a generic sum that conversion would have to hold for every instantiation, which is not supported. Drop the `embeds` clause and wrap the error by hand where it is needed, with `.mapErr(Payment)`, or make the sum non-generic.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.generic_sum_embeds",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type PayError = enum { Declined }\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)\n    embeds PayError as Payment    // ✗ a generic sum cannot embed\n\ntype Failure[T] =\n    | Payment(reason: PayError)\n    | Other(value: T)             // ✓ no `embeds`; wrap with `.mapErr(Payment)`",
+  "severity": "error",
+  "summary": "A generic sum type carries an `embeds` clause; embedding into a generic sum is not supported (#593)."
+}

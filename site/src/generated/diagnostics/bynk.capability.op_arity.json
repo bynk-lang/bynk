@@ -1,0 +1,12 @@
+{
+  "blurb": "A call to a capability operation passes exactly the parameters its declaration lists, so `Clock.now(1)` against `fn now() -> Effect[Int]` has one argument too many. Pass the declared number of arguments. If the operation really needs another parameter, add it to the capability's declaration and to every provider of it.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.op_arity",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "capability Clock {\n  fn now() -> Effect[Int]\n}\n\nClock.now(1)                            // ✗ `now` takes no arguments\nClock.now()                             // ✓",
+  "severity": "error",
+  "summary": "A capability operation was called with the wrong number of arguments."
+}

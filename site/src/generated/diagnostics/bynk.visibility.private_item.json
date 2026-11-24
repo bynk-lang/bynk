@@ -1,0 +1,12 @@
+{
+  "blurb": "A `private` function, type, constant, asset or embed (or a `private` method) is visible only within its own unit, across all of that unit's files, and to the unit's suites. It is never visible through `uses`, so a unit that uses the commons cannot name it. The compiler reports that the name is private, not that it is unknown, so you know it exists. `private` keeps a helper out of the public surface, so it can change without breaking anyone. Call the commons' public function that does the job, or, if the item really belongs to the public surface, remove `private` where it is declared.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.visibility.private_item",
+  "constructs": [
+    "visibility_modifier"
+  ],
+  "example": "// pricing.bynk\ncommons pricing\n\nfn total(items: List[Item]) -> Int { … }\nprivate fn lineTotal(i: Item) -> Int { … }\n\n// shop.bynk\ncommons shop\n\nuses pricing\n\nfn cost(i: Item) -> Int {\n    lineTotal(i)      // ✗ `lineTotal` is a private function of `pricing`\n    total([i])        // ✓ the public function does the same job\n}",
+  "severity": "error",
+  "summary": "A reference from another unit names a `private` declaration, which is visible only within its own unit and that unit's suites."
+}

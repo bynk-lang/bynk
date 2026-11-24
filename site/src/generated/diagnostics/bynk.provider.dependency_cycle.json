@@ -1,0 +1,12 @@
+{
+  "blurb": "A provider's `given` lists the capabilities it is built from, and the context builds providers in dependency order. A capability that depends on itself, directly or through other providers, has no order to be built in, so every provider on the cycle is reported. Break the cycle: remove a `given` one side does not really need, move the part both need into a third capability that each depends on, or merge the two if they are one thing. Dependencies on other contexts follow `consumes`, which has its own check, `bynk.context.consumes_cycle`.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.dependency_cycle",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed given Clock {   // ✗ `Clock` is built from itself\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\nprovides Clock = Fixed {               // ✓ built from nothing\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}",
+  "severity": "error",
+  "summary": "Providers form a capability dependency cycle through `given`."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "An untyped `Cookie` literal is named for a field of a `cookies` record, so the next request is read by that field's decoder, and its literal value is one the decoder rejects (an enum is read by its exact, case-sensitive variant name, an `Int` by its digits, a `Bool` by `true` or `false`). The write compiles and is sent, and then every later request is answered `400`. It is an error. Write the cookie from the record, `Prefs.theme.cookie(Dark)`, which checks the value against the field.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_value_undecodable",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Ok(\"x\").withCookie(Cookie { name: \"mode\", value: \"dark\" })   // ✗ `Mode` is read as `Light` or `Dark`\n\nOk(\"x\").withCookie(Cookie { name: \"mode\", value: \"Dark\" })   // ✓",
+  "severity": "error",
+  "summary": "An untyped `Cookie` literal's value is one the record field that reads that cookie would reject."
+}

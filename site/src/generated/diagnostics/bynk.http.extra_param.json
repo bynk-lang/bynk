@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler's parameters are not free-form. Each is a path parameter, matching a `:name` in the route, or one of the three the router fills itself: `body`, `headers` and `query`. Any other name has nowhere to come from. Read a value from the query string with `query: RequestQuery` or a record, move it into the path, or drop it. A `:name` with no parameter is `bynk.http.unbound_path_param`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.extra_param",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/items\") (page: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ not in the path, and not `body`, `headers` or `query`\n\non GET(\"/items\") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "A handler parameter is not a path parameter, `body`, `headers` or `query`."
+}

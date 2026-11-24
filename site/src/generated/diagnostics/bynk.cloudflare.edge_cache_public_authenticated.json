@@ -1,0 +1,10 @@
+{
+  "blurb": "In a context with `EdgeCache`, the edge keys a response by its URL alone, and `scope: public` lets it share one response with every later caller. On a route whose actor authenticates, such as a `Bearer` one, that response belongs to one caller, so it would be served to the rest. Use `scope: private`, which is never shared at the edge, or serve the route `by Visitor`. See also `bynk.http.cache_public_reads_cookies`.",
+  "category": "Cloudflare",
+  "categoryAnchor": "cloudflare",
+  "code": "bynk.cloudflare.edge_cache_public_authenticated",
+  "constructs": [],
+  "example": "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
+  "severity": "error",
+  "summary": "In a context with `EdgeCache`, a `@cache(scope: public)` route is served by an actor that authenticates; its response would be shared at the edge with every caller."
+}

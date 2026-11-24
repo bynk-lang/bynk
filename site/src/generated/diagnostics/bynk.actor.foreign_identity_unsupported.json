@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Foreign` actor is its own identity: a handler tells foreign callers apart by matching on its `by` sum, not by a value carried in. So `identity` is refused, where a `Bearer` actor takes one from its token. Remove it.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.foreign_identity_unsupported",
+  "constructs": [],
+  "example": "type Who = String where NonEmpty\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\"), identity = Who }   // ✗ the actor is the identity\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }                   // ✓",
+  "severity": "error",
+  "summary": "A `Foreign` actor declares an `identity`."
+}

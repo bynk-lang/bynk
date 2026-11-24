@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect` states a claim that is checked when the case runs, so its predicate must be a `Bool`: true, or the case fails. A count or a record is not a claim. Compare the value with what you expect (`==`, `<`, `is`), or use a method that returns `Bool`. It is the same predicate surface that `invariant` and `ensures` use.",
+  "category": "Expectations",
+  "categoryAnchor": "expectations",
+  "code": "bynk.expect.not_bool",
+  "constructs": [
+    "expect_expr"
+  ],
+  "example": "// demo/count.bynk\nfn bump(n: Int) -> Int { n + 1 }\n\n// tests/count.test.bynk\nexpect bump(1)         // ✗ an Int is not a claim\nexpect bump(1) == 2    // ✓ compare it",
+  "severity": "error",
+  "summary": "`expect` was given a non-`Bool` predicate."
+}

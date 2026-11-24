@@ -1,0 +1,12 @@
+{
+  "blurb": "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.bad_params",
+  "constructs": [
+    "queue_handler"
+  ],
+  "example": "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+  "severity": "error",
+  "summary": "An `on message` handler does not take exactly one `message` parameter."
+}

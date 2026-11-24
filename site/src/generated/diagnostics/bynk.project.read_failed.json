@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.read_failed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A source file could not be read."
+}

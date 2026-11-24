@@ -1,0 +1,10 @@
+{
+  "blurb": "`Effect.pure(value)` is the only operation spelled on `Effect` itself in an expression: it lifts a plain value into `Effect[T]`. An effect otherwise comes from calling a handler or a capability's operation. Use `Effect.pure`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unknown_effect_method",
+  "constructs": [],
+  "example": "fn lift(n: Int) -> Effect[Int] {\n    Effect.of(n)                     // ✗ the only operation is `pure`\n}\n\nfn lift(n: Int) -> Effect[Int] {\n    Effect.pure(n)                   // ✓\n}",
+  "severity": "error",
+  "summary": "An unknown method on `Effect`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `SignedCookie` actor reads its session cookie at the boundary, verifies it and hands the handler only the identity, so the signed value never reaches handler code. A `cookies` record on the same route that names that cookie (by its own name or `@name`) would ask for the raw value, so it is refused, and the router leaves the cookie out of a raw `RequestCookies` view too. Read the identity from the `by` binder, and keep other cookies (a theme, a language) in the record.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_read_directly",
+  "constructs": [],
+  "example": "type Prefs = {\n  @name(\"__Host-session\") session: Option[String],   // ✗ the session cookie\n  theme: Option[String],\n}\n\ntype Prefs = {\n  theme: Option[String],   // ✓ other cookies only\n}",
+  "severity": "error",
+  "summary": "A typed `cookies` field reads the session cookie that a route's `SignedCookie` actor consumes."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A call to a service in a consumed context is an effect, as a capability call is, so it is only allowed in a body that is itself effectful. A handler is effectful, but a lambda inside it is a body of its own, and a service call alone does not make it effectful. Make the call in the handler body, bind it with `<-`, and use the result in the lambda.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.cross_context_in_pure_context",
+  "constructs": [],
+  "example": "on call() -> Effect[Int] by Caller {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] by Caller {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
+  "severity": "error",
+  "summary": "A cross-context call was made in a pure context."
+}

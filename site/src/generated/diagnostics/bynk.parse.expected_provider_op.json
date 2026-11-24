@@ -1,0 +1,12 @@
+{
+  "blurb": "A provider body implements the operations its capability declares, each starting with `fn` and carrying a body. The parser found something else where the next operation should begin. The commonest cause is leaving off the `fn`; an `on` handler, a `type` or a `let` does not belong in a provider either. The message names the token it found, and the position is where the operation should have started. A capability body has the same rule: `bynk.parse.expected_capability_op`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_provider_op",
+  "constructs": [
+    "provider_op"
+  ],
+  "example": "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = FixedClock {\n    now() -> Effect[Int] { Effect.pure(1) }       // ✗ an operation starts with `fn`\n}\n\nprovides Clock = FixedClock {\n    fn now() -> Effect[Int] { Effect.pure(1) }    // ✓\n}",
+  "severity": "error",
+  "summary": "Expected a provider operation."
+}

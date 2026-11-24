@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group lists the contexts to deploy together as one Worker, and only a context is deployed. A `commons` is compiled into each context that uses it, and an adapter into each context that consumes it, so neither has a Worker of its own to share. Remove the entry: the contexts that use the commons carry it with them.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.not_a_context",
+  "constructs": [],
+  "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"money\"]   // ✗ `money` is a commons\n\ncontexts = [\"shop.orders\"]            // ✓",
+  "severity": "error",
+  "summary": "A `[deploy.workers.<key>]` group lists a unit that is not a `context`; only contexts are deployed as Workers."
+}

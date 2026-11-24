@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.unreadable_file",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An `asset` names a file in the project's `assets/` folder that could not be read."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "Decoding creates a value, and a context may not create one of a type another context owns and exports opaque. A decoder would check no more than the base type, because the owner's predicate is the owner's secret. So a handler that takes such a type as its input (an HTTP, queue, event or WebSocket handler decodes it from bytes), and a `Json.decode`, `Json.decodeSql` or `Codable` witness of it, are refused. Take the plain form of the input and let the owner's service make the value. A reply from the owner's own service is fine: its decode is generated.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.external_decode",
+  "constructs": [],
+  "example": "// pay.bynk\ncontext pay\n\nexports opaque { Token }\n\ntype Token = opaque String where Matches(\"T-[0-9]+\")\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice api from http {\n    on POST(\"/t\") (body: Token) -> Effect[HttpResult[String]] by v: Visitor {     // ✗ `Token` cannot be decoded here\n    on POST(\"/t\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {    // ✓ take the plain input",
+  "severity": "error",
+  "summary": "A context decoded a type another context owns and exports opaque: through `Json.decode`, `Json.decodeSql` or a `Codable` witness, or as the input of an HTTP, queue, event or WebSocket handler. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type."
+}

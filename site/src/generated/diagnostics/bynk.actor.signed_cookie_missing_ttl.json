@@ -1,0 +1,10 @@
+{
+  "blurb": "A session cookie that never expires is the failure a language should not allow by omission, so `ttl` is required. It is how long an issued cookie is valid: the browser's `Max-Age` and the signed expiry both come from it. A stateless cookie cannot be revoked before it expires, so keep it short.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_missing_ttl",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` actor does not declare a `ttl`."
+}

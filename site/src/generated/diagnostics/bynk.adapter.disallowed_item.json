@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter wraps foreign code, so it holds only what describes that boundary: capabilities, the types that cross it, external providers and helper functions. A `service`, an `agent` or an `actor` has behaviour, state and an address of its own, and those belong to a context. Move the item into a context that `consumes` the adapter's capability, and leave the adapter as an interface to the foreign code.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.disallowed_item",
+  "constructs": [
+    "adapter_decl"
+  ],
+  "example": "adapter tokens {\n  binding \"./tokens.binding.ts\"\n  provides Jwt = JoseJwt\n  service login {                       // ✗ an adapter may not declare a service\n    on call(x: Int) -> Effect[Int] by Caller { … }\n  }\n}\n\nadapter tokens {\n  binding \"./tokens.binding.ts\"\n  provides Jwt = JoseJwt                // ✓ capabilities and providers only\n}",
+  "severity": "error",
+  "summary": "An `adapter` declared a `service`, `agent`, or other item it may not contain."
+}

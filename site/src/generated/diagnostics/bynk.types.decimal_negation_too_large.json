@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.decimal_negation_too_large",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A negated decimal literal would have more than 1000 characters of canonical text once its sign is counted, the most any `Decimal` may have (#2622)."
+}

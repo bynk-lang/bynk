@@ -1,0 +1,10 @@
+{
+  "blurb": "A `messages` block's tag must be a `LocaleTag`: a well-formed BCP-47 tag in its canonical casing, such as `en`, `fr`, `pt-BR` or `zh-Hans-CN`. The compiler checks it because the runtime hands the tag to `Intl`, which throws on a malformed one, and `render` must never fail. So `pt-br` is refused where `pt-BR` is accepted, and so is a bare word such as `klingon`. Rewrite the tag in canonical form.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.invalid_locale_tag",
+  "constructs": [],
+  "example": "messages \"pt-br\" @reference {           // ✗ a region is upper-case\n  \"cart.empty\" => \"A sua cesta está vazia.\"\n}\n\nmessages \"pt-BR\" @reference {           // ✓\n  \"cart.empty\" => \"A sua cesta está vazia.\"\n}",
+  "severity": "error",
+  "summary": "A `messages` block's locale tag is not a valid `LocaleTag` (e.g. `messages \"xx\"` where `xx` doesn't match the tag pattern)."
+}

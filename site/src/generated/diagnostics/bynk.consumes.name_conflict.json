@@ -1,0 +1,12 @@
+{
+  "blurb": "`consumes payment` brings every type that `payment` exports into scope under its own name, because the services' signatures use them. If this context already has something of that name, a type declared here or reached through `uses`, or a function, asset, service, agent or provider, a mention would mean two things, so the compiler refuses the clause. Rename the imported type with `as`: it is then in scope only under the alias, and is still the same type. `bynk.consumes.type_alias_conflict` is the same clash with an alias.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.name_conflict",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// payment.bynk\ncontext payment\n\nexports transparent { Amount }\n\n// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// orders.bynk\ncontext orders\n\nuses money\nconsumes payment                           // ✗ `Amount` is also in scope from `money`\nconsumes payment { Amount as PayAmount }   // ✓ `PayAmount` is `payment`'s",
+  "severity": "error",
+  "summary": "A `consumes` name collides with another name in scope."
+}

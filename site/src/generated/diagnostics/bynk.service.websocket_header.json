@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket service names its two frame types in the header, `from websocket(in: ClientFrame, out: ServerFrame)`: `in` is what the server decodes from the client and `out` is what it sends back. The labels are fixed and in that order, so the compiler can tell the two apart without guessing from the handlers. Spell them `in:` then `out:`.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.websocket_header",
+  "constructs": [],
+  "example": "service gateway from websocket(input: Frame, out: Frame) {   // ✗ the first label must be `in`\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {   // ✓\n    on open (room: RoomId) -> Effect[()] by user: Member { … }\n}",
+  "severity": "error",
+  "summary": "The `from websocket` header is malformed — it binds frame types as `websocket(in: <type>, out: <type>)` (real-time track slice 3)."
+}

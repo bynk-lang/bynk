@@ -1,0 +1,12 @@
+{
+  "blurb": "A `where` clause bounds a type parameter, so it must name one: the function's own, or, for a method, its receiver type's. A name that is neither is usually a misspelling. Correct it, or declare the parameter in the brackets after the function's name. A bound that does not exist is `bynk.generics.unknown_constraint`.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.unknown_where_param",
+  "constructs": [
+    "where_clause"
+  ],
+  "example": "fn same[T](a: T) -> T where U: Eq { a }   // ✗ `U` is not a parameter here\n\nfn same[T](a: T) -> T where T: Eq { a }   // ✓ bound a parameter that is declared",
+  "severity": "error",
+  "summary": "A method's `where` clause bounds a name that is not a type parameter of the method or of its receiver type."
+}

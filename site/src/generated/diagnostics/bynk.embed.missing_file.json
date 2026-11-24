@@ -1,0 +1,10 @@
+{
+  "blurb": "An `embed` compiles a file's text into the program as a `String`, so the file must exist when the project is built, or there is nothing to compile in. The path is relative to the project root and must name a regular file under `embeds/`; a symbolic link is not followed. Create the file, or correct the path. A file that exists but cannot be read is `bynk.embed.unreadable_file`.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.missing_file",
+  "constructs": [],
+  "example": "embed shell = \"embeds/page.html\"        // ✗ no such file in the project\nembed shell = \"embeds/page.html\"        // ✓ once embeds/page.html exists",
+  "severity": "error",
+  "summary": "An `embed` names a file that is not in the project's `embeds/` folder."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A `const` always states its type: `const Limit: Int = 100`. A constant is part of its unit's interface, so a reader, or a unit that `uses` it, can see its type without inferring it from the initialiser. Write the type after the name, before the `=`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.const_missing_type",
+  "constructs": [
+    "const_decl"
+  ],
+  "example": "const Limit = 100          // ✗ no type annotation\nconst Limit: Int = 100     // ✓",
+  "severity": "error",
+  "summary": "A `const` declaration has no type annotation; a constant's type is always written (`const Name: Type = …`)."
+}

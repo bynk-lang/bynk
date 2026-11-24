@@ -1,0 +1,10 @@
+{
+  "blurb": "A service is called by its name alone: a call from another context goes to `/_bynk/call/<service>`, and the address names no context. A `[deploy.workers.<key>]` group folds its members into one Worker, which answers all their services, so two members with a service of the same name would leave it unable to tell the calls apart. Rename one of the services, or put the contexts in different groups.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.service_name_conflict",
+  "constructs": [],
+  "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nservice lookup { … }\n\n// shop/billing.bynk\nservice lookup { … }    // ✗ `shop.orders` has a `lookup`\nservice invoice { … }   // ✓",
+  "severity": "error",
+  "summary": "Two members of one `[deploy.workers.<key>]` group declare a service of the same name; a Worker answers its members' services by name."
+}

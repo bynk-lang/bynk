@@ -1,0 +1,12 @@
+{
+  "blurb": "`within` hands the effect it abandons on a timeout to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the agent's work is bounded from outside. For a slow call out, `FetchOptions.timeout` bounds it inside the agent. The same rule holds for `bynk.race.in_agent_handler`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.within.in_agent_handler",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.second)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.second)   // ✓ the service handler has\n    }\n}",
+  "severity": "error",
+  "summary": "`e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to."
+}

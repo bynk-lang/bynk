@@ -1,0 +1,10 @@
+{
+  "blurb": "A `D1` database's migrations are the SQL files in `migrations/<database>/`, applied in number order, each once. So a file's name must give its place in that order: `NNNN_<name>.sql`, four digits, an underscore, then letters, digits, `_` or `-`, directly in its database's directory. A file named any other way, one in a nested folder, or one whose number another migration of the same database already has could not be put in order, so the build refuses it rather than skip it. Rename the file, or give it the next free number.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.migration_name",
+  "constructs": [],
+  "example": "migrations/shop-orders/1_create_orders.sql      // ✗ not four digits\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0002_add_total.sql     // ✗ `0002` is taken\n\nmigrations/shop-orders/0001_create_orders.sql   // ✓\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0003_add_total.sql       // ✓ the next free number",
+  "severity": "error",
+  "summary": "A file in the project's `migrations/` folder isn't `migrations/<database>/NNNN_<name>.sql`, or shares its number with another migration of the same database."
+}

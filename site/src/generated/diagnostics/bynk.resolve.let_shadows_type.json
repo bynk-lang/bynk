@@ -1,0 +1,12 @@
+{
+  "blurb": "A `let` may not take the name of a declared type. The same name would then mean a type in one position and a value in another within one body, which is hard to read and easy to get wrong. Choose a different name for the binding, conventionally in lower case. Reusing a function's name is `bynk.resolve.let_shadows_fn`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.let_shadows_type",
+  "constructs": [
+    "let_stmt"
+  ],
+  "example": "type Reps = Int where InRange(1, 100)\n\nfn run(n: Int) -> Int {\n    let Reps = n                 // ✗ shadows the type `Reps`\n    n\n}\n\nfn run(n: Int) -> Int {\n    let reps = n                 // ✓ a new name\n    reps\n}",
+  "severity": "error",
+  "summary": "A `let` binding shadows a type."
+}

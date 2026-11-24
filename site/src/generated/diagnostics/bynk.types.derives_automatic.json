@@ -1,0 +1,12 @@
+{
+  "blurb": "`derives` opts a type into a capability it does not have by default, and `Ord` is the only one: it needs every field to be orderable, so you ask for it. `Eq`, `Key` and `Codable` hold for a type without being asked, so naming one does nothing, and the compiler refuses it rather than leave a clause that suggests it matters. Remove the name, which the compiler's fix does. Any other name is `bynk.generics.unknown_constraint`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.derives_automatic",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type Point = { x: Int, y: Int } derives Eq    // ✗ `Eq` holds already\n\ntype Point = { x: Int, y: Int }               // ✓",
+  "severity": "error",
+  "summary": "A `derives` clause names `Eq`, `Key` or `Codable`, which hold for a type automatically; only `Ord` is opted into. The diagnostic carries a machine-applicable fix that removes the name (constrained-generics slice 1)."
+}

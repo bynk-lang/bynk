@@ -1,0 +1,12 @@
+{
+  "blurb": "A snapshot is keyed by its case and name, so it holds one value. A `property` runs its body once for each generated input, so there is no single value to store. Snapshot a fixed value in a `case`, and let the property assert what holds for every input.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.snapshot_in_property",
+  "constructs": [
+    "snapshot_expr"
+  ],
+  "example": "// tests/api.test.bynk\nproperty \"every n\" {\n    for all n: Int {\n        expect run(n) matches snapshot \"n\"   // ✗ many inputs, one snapshot\n    }\n}\n\ncase \"one n\" {\n    expect run(3) matches snapshot \"n\"       // ✓\n}",
+  "severity": "error",
+  "summary": "A `property` takes a snapshot; its body runs once per generated input, so the snapshot belongs in a `case` over a fixed value."
+}

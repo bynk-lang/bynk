@@ -1,0 +1,12 @@
+{
+  "blurb": "An opaque type hides its base representation from everything but the unit that declares it, so no other code can take a `Token` apart or forge one. `.raw` reads the base value and is allowed only there. Elsewhere, use what the defining unit offers: a method or accessor on the type. To make a value, use `Token.of(value)`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.opaque_raw_outside",
+  "constructs": [
+    "field_access"
+  ],
+  "example": "// token.bynk\ntype Token = opaque String\n\nfn Token.value(self) -> String {\n    self.raw\n}\n\n// app.bynk\nfn show(t: Token) -> String {\n    t.raw    // ✗ `Token` is opaque outside `token`\n}\n\nfn show(t: Token) -> String {\n    t.value()    // ✓ use the accessor `token` provides\n}",
+  "severity": "error",
+  "summary": "`.raw` on an opaque type was used outside its defining commons."
+}

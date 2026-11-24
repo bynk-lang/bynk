@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.decimal_literal_too_large",
+  "constructs": [
+    "decimal_literal"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A decimal literal has more than 100 fraction digits or more than 1000 characters, the most any `Decimal` may have (#2622)."
+}

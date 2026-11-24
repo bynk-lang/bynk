@@ -1,0 +1,10 @@
+{
+  "blurb": "A `requires` or `ensures` clause is a claim the function can meet or break, so its predicate must be a `Bool`. A value of another type, such as an `Int`, claims nothing that could fail. Write a comparison or another `Bool` expression over the parameters (and `result`, in an `ensures`).",
+  "category": "Contracts",
+  "categoryAnchor": "contracts",
+  "code": "bynk.contract.not_bool",
+  "constructs": [],
+  "example": "fn inc(x: Int) -> Int\n  ensures bigger: result + 1      // ✗ an `Int`, not a `Bool`\n\nfn inc(x: Int) -> Int\n  ensures bigger: result > x      // ✓",
+  "severity": "error",
+  "summary": "A contract predicate does not have type `Bool`."
+}

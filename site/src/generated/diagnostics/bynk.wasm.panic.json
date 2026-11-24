@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.wasm.panic",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "The in-browser compiler panicked internally (a compiler bug, reported as a diagnostic instead of crashing the page)."
+}

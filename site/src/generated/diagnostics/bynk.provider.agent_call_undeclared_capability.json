@@ -1,0 +1,12 @@
+{
+  "blurb": "A provider calls an agent handler, and the handler needs a capability the provider's `given` does not list. A handler's `given` is widened to cover the agent handlers it calls, but a provider's is not. The provider is constructed with exactly the capabilities in its `given`, and those are all it can hand on to the agent. So the provider must list everything the agent handler needs: the handler's own `given`, and the `given` of any agent handler it calls in turn.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.agent_call_undeclared_capability",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "agent Index {\n    key name: String\n    store hits: Cell[Int]\n    on call withdraw() -> Effect[()] given Files { … }\n}\n\nprovides Takedown = Bucket given Clock {\n    fn take(name: String) -> Effect[()] { Index(name).withdraw() }   // ✗ `withdraw` needs `Files`\n}\n\nprovides Takedown = Bucket given Clock, Files {  // ✓ `Files` is listed\n    fn take(name: String) -> Effect[()] { Index(name).withdraw() }\n}",
+  "severity": "error",
+  "summary": "A provider calls an agent handler that needs a capability the provider's `given` does not list."
+}

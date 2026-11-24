@@ -1,0 +1,10 @@
+{
+  "blurb": "`@raw` marks a request body as untouched octets, so it belongs on a `POST`, `PUT` or `PATCH` route with a `body: Bytes` parameter. On a `GET`, a `DELETE` or a route with no `body` there is nothing for it to mark. It is about the request, not the response: to answer with bytes, return `Raw(body, contentType)`. `@form` on such a route is `bynk.http.form_on_bodyless`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.raw_on_bodyless",
+  "constructs": [],
+  "example": "@raw(contentType: \"image/png\")   // ✗ a `GET` has no body\non GET(\"/avatars/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓ an upload route\n@limit(maxBody: 5_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@raw` annotation is placed on a handler that takes no body."
+}

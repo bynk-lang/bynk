@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.checksum_mismatch",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A git dependency's store entry, or a freshly fetched commit, doesn't hash to the checksum `bynk.lock` records; `bynk` refuses to build it."
+}

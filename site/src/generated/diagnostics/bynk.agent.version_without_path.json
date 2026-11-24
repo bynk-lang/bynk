@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.version_without_path",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning)."
+}

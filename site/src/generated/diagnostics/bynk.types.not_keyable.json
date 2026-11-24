@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Map` key, a `Set` element, or the key of a `distinct`, `distinctBy`, `groupBy` or join, must be a `Key` type, one whose equal values can always be found again. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes` and `Decimal` are, as are `Option` and `List` of a key and records, sums and enums made only of keys. A `Float` never is, at any depth, because `NaN` is not equal to itself, so a key holding one could never be looked up. Key on a type that is: an `Int` count of cents, say, or a `String`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.not_keyable",
+  "constructs": [
+    "generic_type_ref"
+  ],
+  "example": "fn distinctPrices(xs: List[Float]) -> Int {\n    let seen: Set[Float] = Set.of(xs)    // ✗ `Float` is not a `Key`\n    seen.length()\n}\n\nfn distinctPrices(xs: List[Int]) -> Int {\n    let seen: Set[Int] = Set.of(xs)      // ✓ `Int` is\n    seen.length()\n}",
+  "severity": "error",
+  "summary": "A `Map` key, `Set` element, or `distinct`/`distinctBy`/`groupBy`/join key, or an argument to a `Key`-bounded parameter, is not `Key`. `String`, `Int`, `Bool`, `Instant`, `Duration`, `Bytes`, `Option`/`List` of a key type, refined and opaque types over them, and records, sums and enums made only of key types are; a `Float` is never one, at any depth, because `NaN` is not equal to itself (constrained-generics slice 2)."
+}
