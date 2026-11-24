@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `fold` seeded with an empty collection (`Set.empty()`, `List.empty()`, `Map.empty()`) takes its accumulator type from the result the fold is expected to produce, and the error for one with no such context names the fix
----
+# 0919 — An empty fold seed takes its type from the fold's expected result
 
-## ADR: fold-seed-takes-expected-type
-title: An empty fold seed takes its type from the fold's expected result
-summary: Passes the fold call's expected type to its empty seed, rather than inferring the accumulator from the step function
+- **Status:** Accepted (v0.663)
 
 **Context.** `fold` typed its accumulator from `init` alone, with no expected type, so `posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))` was `bynk.types.uninferable_element_type` even where the fold's result type was known (a typed `let`, a return type). The accepted decision on #4193 was to infer the accumulator from `init` and the step function together.
 

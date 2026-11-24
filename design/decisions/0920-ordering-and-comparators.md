@@ -1,12 +1,6 @@
----
-level: minor
-breaking: `Bytes.compare` returns an `Ordering` (`Less`, `Equal` or `Greater`) instead of `-1`, `0` or `1`; a program that compares the result with an `Int` must match on the `Ordering`
-changelog: `Ordering` and a universal `compare`, with `then`, `reverse` and `List.sortWith`; `Bytes.compare` returns an `Ordering`
----
+# 0920 — `Ordering`, a universal `compare` and `sortWith`
 
-## ADR: ordering-and-comparators
-title: `Ordering`, a universal `compare` and `sortWith`
-summary: `a.compare(b)` answers an `Ordering` on every `Ord` type, `then` and `reverse` combine them, `List.sortWith` sorts by a comparator that returns one, and `Ordering`'s variants resolve only from context
+- **Status:** Accepted (v0.664)
 
 **Context.** `sortBy` orders by one key in declaration order, `Bytes.compare` returned a bare `Int`, and a multi-key or mixed-direction order had no spelling. #3955 asks for the order a type already has (its `Ord`) to be readable as a value, and for a sort that takes a comparator.
 
