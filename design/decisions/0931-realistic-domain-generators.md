@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `for all` draws each plain type across its realistic domain (a wide `Int`, a `String` with whitespace and astral characters, and `Decimal`, `Instant`, `Duration`, `Bytes` and `Float` with boundaries), so a seed recorded earlier may now find a different counterexample
----
+# 0931 — Plain-type generators draw across a realistic domain, with the boundaries that break code
 
-## ADR: realistic-domain-generators
-title: Plain-type generators draw across a realistic domain, with the boundaries that break code
-summary: What each plain type draws under `for all`, what shrinks, and what stays finite
+- **Status:** Accepted (v0.673)
 
 **Context.** `Decimal`, `Instant`, `Duration` and `Bytes` drew one fixed value, `Int` drew -1000..1000, `String` 0 to 8 lowercase letters and `Float` finite values in [-1000, 1000] with no boundaries, so a property over them was weaker than it looked (#4199).
 
