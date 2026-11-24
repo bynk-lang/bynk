@@ -562,6 +562,43 @@ fn a_plain_json_route_and_a_tagged_one_decode_to_the_same_null() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// #3911: a typed `headers` record is sent as request headers, under each field's `@name`.
+const HEADERS_DRIVER: &str = r#"
+import worker from "./out/workers/shop-api/index.js";
+import { createClient } from "./dist/api.js";
+const viaWorker = (url, init) => worker.fetch(new Request(url, init), {});
+const c = createClient({ baseUrl: "http://api.test", fetch: viaWorker });
+console.log("keys", Object.keys(c.api).sort().join(","));
+const show = (label, v) => console.log(label, JSON.stringify(v));
+show("probe", await c.api.getProbe({ length: 7, key: "abcdefgh", tags: ["a", "b"], mode: { tag: "Slow" } }));
+show("short", await c.api.getProbe({ length: 7, key: "x", tags: [] }));
+"#;
+
+#[test]
+fn a_typed_headers_record_is_sent_as_headers_by_the_client() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("typed-headers");
+    let proj = dir.join("project");
+    copy_project(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive/3911_http_typed_headers"),
+        &proj,
+    );
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the typed headers client");
+    let out = run_driver(&dir, HEADERS_DRIVER, &[]);
+    assert_eq!(
+        line(&out, "probe"),
+        r#"{"status":200,"kind":"Ok","body":"7 abcdefgh 2 slow 5"}"#
+    );
+    // The client checks the refinement before sending, as the server would.
+    assert!(line(&out, "short").contains("Invalid"), "{out}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// `GET path` on `port`: the response, or why there is none yet.
 fn get(port: u16, path: &str) -> Result<String, String> {
     let addr = format!("127.0.0.1:{port}");

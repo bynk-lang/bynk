@@ -233,6 +233,12 @@ pub fn complete_in(
     if let Some(items) = crate::call_outcome::outcome_member_candidates(line_prefix, doc_text) {
         return items;
     }
+    // 3b''. #3911: `@name("<cursor>` on a field of a `headers` record — common header names.
+    if let Some(names) =
+        crate::header_completion::header_name_candidates(line_prefix, doc_text, files)
+    {
+        return names;
+    }
     // 3c. #3446: `Record.field.<cursor>` on a cookie record — the typed cookie write and deletion.
     if let Some((record, field)) = cookie_field_receiver(line_prefix) {
         return cookie_field_members(&record, &field, doc_text, files);
@@ -1202,7 +1208,7 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
     (
         "headers",
         "RequestHeaders",
-        "the request's headers, read-only",
+        "the request's headers: a record `T` decoded from them and validated before the handler runs (`400` on a violation), or a raw, read-only `RequestHeaders` view",
     ),
     (
         "cookies",

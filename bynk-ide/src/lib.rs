@@ -63,6 +63,7 @@ pub mod doc_link_urls;
 pub mod documentation;
 mod duration_completion;
 pub mod first_party_docs;
+mod header_completion;
 pub mod hover;
 pub mod index_queries;
 pub mod locals_nav;

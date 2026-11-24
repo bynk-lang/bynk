@@ -774,7 +774,7 @@ fn header_handler_at(text: &str, offset: usize) -> Option<(String, bynk_syntax::
 }
 
 /// #2854: when the cursor is on the `query` parameter (or a use of it) of an
-/// `on http` handler whose type is a record, the keys the router reads off the
+/// `on http` handler whose type is a record (#3277 `cookies`, #3911 `headers` read the same way), the keys the router reads off the
 /// query string: each field's type, and whether it is required, optional, or
 /// defaulted (with the default). Empty for the raw `RequestQuery` view and for
 /// anything that is not that parameter.
@@ -795,6 +795,9 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
         }
         "cookies" => {
             "**Cookies** — parsed from the `Cookie` header, decoded and validated before the handler runs; unknown cookies are ignored."
+        }
+        "headers" => {
+            "**Request headers** — decoded and validated before the handler runs; names match without case, a `List` field splits a comma-separated value, unknown headers are ignored."
         }
         _ => return None,
     };
@@ -826,7 +829,11 @@ fn query_param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
     let Some(TypeBody::Record(record)) = info.types.get(&id.name).map(|t| &t.body) else {
         return None;
     };
-    let key = if word == "cookies" { "cookie" } else { "key" };
+    let key = match word {
+        "cookies" => "cookie",
+        "headers" => "header",
+        _ => "key",
+    };
     let mut out = format!("{heading}\n\n| {key} | type | |\n|---|---|---|\n");
     for f in &record.fields {
         let note = match (&f.type_ref, &f.init) {

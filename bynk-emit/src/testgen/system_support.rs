@@ -309,17 +309,15 @@ pub(super) fn emit_system_http_support(
                 .split('/')
                 .filter_map(|seg| seg.strip_prefix(':'))
                 .collect();
-            // #2341 (L4): a `headers: RequestHeaders` param is neither: the
-            // drivers send it as the request's headers.
-            let is_headers = |p: &&bynk_syntax::ast::Param| {
-                p.name.name == "headers"
-                    && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
-            };
+            // #2341 (L4), #3911: a `headers` param (the raw view or a typed record) is
+            // neither: the drivers send it as the request's headers.
+            let is_headers = |p: &&bynk_syntax::ast::Param| is_headers_param(p, &path_params);
+            let typed_headers = typed_headers_of(h, &path_params);
             // #2910: a route with no `headers:` param still takes the case's
             // request headers, as an optional trailing driver parameter. They
             // are spread first, so a header the driver sets itself wins.
             let declares_headers = h.params.iter().any(|p| is_headers(&p));
-            let headers_spread = request_headers_spread(declares_headers);
+            let headers_spread = headers_spread_of(typed_headers, declares_headers, &table.types);
             // A required slot ahead of `sub`: the call lowers `undefined` there
             // when the case sends none.
             let extra_headers_param = (!declares_headers).then(|| {
@@ -395,6 +393,12 @@ pub(super) fn emit_system_http_support(
             let cookies_param = h.params.iter().find(|p| is_cookies(p));
             let (typed_cookie, raw_cookie) =
                 cookie_headers(cookies_param, &type_ns, &table.types, runtime_use);
+            register_headers_route(
+                &mut route_body,
+                (sname, method.as_str(), &path),
+                h,
+                typed_headers,
+            );
             if let Some(cp) = cookies_param {
                 let key = (
                     sname.clone(),
@@ -1579,6 +1583,59 @@ fn cookie_headers(
             param: Some(ident(var)),
         },
     )
+}
+
+/// #2341, #3911: a `headers` parameter that no `:headers` segment binds and that is the raw
+/// `RequestHeaders` view or a typed record: the drivers send it as the request's headers.
+fn is_headers_param(p: &bynk_syntax::ast::Param, path_params: &[&str]) -> bool {
+    use bynk_syntax::ast::TypeRef;
+    p.name.name == "headers"
+        && !path_params.contains(&"headers")
+        && matches!(p.type_ref, TypeRef::RequestHeaders(_) | TypeRef::Named(_))
+}
+
+/// The spread of the request's headers into a driver's request init: a typed `headers` record's
+/// wire form (#3911), else the raw view's own headers, else the case's optional extra ones.
+fn headers_spread_of(
+    typed: Option<&bynk_syntax::ast::Param>,
+    declares_headers: bool,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> TsObjectEntry {
+    match typed {
+        Some(p) => typed_headers_spread(
+            crate::emitter::renamed_specs_source(&p.type_ref, types).map(crate::ts_build::raw_lit),
+        ),
+        None => request_headers_spread(declares_headers),
+    }
+}
+
+/// #3911: the handler's typed `headers` record parameter, if it has one.
+fn typed_headers_of<'a>(
+    h: &'a bynk_syntax::ast::Handler,
+    path_params: &[&str],
+) -> Option<&'a bynk_syntax::ast::Param> {
+    h.params.iter().find(|p| {
+        is_headers_param(p, path_params)
+            && matches!(p.type_ref, bynk_syntax::ast::TypeRef::Named(_))
+    })
+}
+
+/// #3911: record a typed `headers` parameter's position and type, so a call's argument for it
+/// reaches the driver as its wire form.
+fn register_headers_route(
+    route_body: &mut RouteBodyMap,
+    (service, method, path): (&str, &str, &str),
+    h: &bynk_syntax::ast::Handler,
+    typed: Option<&bynk_syntax::ast::Param>,
+) {
+    if let Some(hp) = typed {
+        let key = (
+            service.to_string(),
+            method.to_string(),
+            route_with(path, emitter::HEADERS_ROUTE_SUFFIX),
+        );
+        register_param_route(route_body, key, h, hp);
+    }
 }
 
 /// Record that the handler's parameter `param` is typed, so the system driver and

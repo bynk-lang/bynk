@@ -567,9 +567,13 @@ fn operation(
         } else if name == "cookies" {
             // #3277: a typed `cookies` record is one `in: cookie` parameter per field.
             parameters.extend(query_parameters(r, components, &p.type_ref, "cookie"));
+        } else if name == "headers" {
+            // #3911: a typed `headers` record is one `in: header` parameter per field; the raw
+            // `RequestHeaders` view declares none.
+            parameters.extend(query_parameters(r, components, &p.type_ref, "header"));
         }
-        // Any other param is a `headers` (the request's headers, read-only and
-        // untyped here); the checker admits no other.
+        // Any other param is the raw `RequestHeaders` view (read-only and untyped here); the
+        // checker admits no other.
     }
     if !parameters.is_empty() {
         op.insert("parameters".into(), Value::Array(parameters));

@@ -125,8 +125,61 @@ The view is read while the request is handled, never kept: `RequestHeaders` can'
 be a field of a type or cross a boundary (a call, a message, an agent), though a
 plain function may take it to share a check between handlers
 (`bynk.types.headers_at_boundary`). A parameter named `headers` must have this
-type (`bynk.http.headers_wrong_type`). A test builds one with
-[`RequestHeaders.of`](/reference/testing/#request-headers).
+type, or be a record (`bynk.http.headers_wrong_type`); see [a typed `headers`](#typed-headers).
+A test builds a `RequestHeaders` with [`RequestHeaders.of`](/reference/testing/#request-headers).
+
+### A typed `headers` {#typed-headers}
+
+A handler that reads headers it expects, say `Idempotency-Key`, `If-Match` or `Content-Length`,
+declares `headers: T`, where `T` is a record. The router decodes the request's headers into it,
+and validates them, before the handler runs, as it does a typed [`query`](#typed-query) and
+[`cookies`](#cookies): the handler sees only valid input.
+
+```bynk,ignore
+type IdempotencyKey = String where MinLength(16) && MaxLength(64)
+
+type UploadHeaders = {
+  @name("content-length")  length: Int where NonNegative,
+  @name("idempotency-key") key:    Option[IdempotencyKey],
+  @name("if-match")        ifMatch: Option[String],
+}
+
+@raw(contentType: "application/zip")
+on PUT("/archives/:name") (name: ArchiveName, headers: UploadHeaders, body: Stream[Bytes])
+    -> Effect[HttpResult[()]] by u: User given Archives {
+  let _ <- Archives.putStream(name.value, body, headers.length)
+  NoContent
+}
+```
+
+- **The field rules are `query`'s and `cookies`'s.** A field is a `String`, `Int`, `Bool` or
+  `Decimal`, an enum, or a refined or opaque type over one, an `Option` of one (an absent header
+  is `None`) or a `List` of one; a default fills an absent header; headers the record does not
+  declare are ignored (`bynk.http.headers_field_not_stringy`). A value that does not read as its
+  type, a missing required header and a refinement failure are each a `400` naming
+  `headers.<field>`, as `StructuralMismatch` or `RefinementViolation`.
+- **Names match without case.** A field's name, or its `@name`, is the header's name; `@name` is
+  needed for any header with a `-`. A `@name` must be an RFC 9110 token, and two fields whose names
+  differ only in case are the same header (`bynk.types.field_name_duplicate`).
+- **A `List` splits a comma-separated value.** Repeated header lines are one combined value, as
+  HTTP specifies, and a `List` field splits it at commas outside quoted strings
+  (RFC 9110 §5.6.1), so `a, "b,c", d` is three values. Any other field reads the combined value
+  whole, trimmed of surrounding whitespace, so `Date` and `User-Agent`, which contain commas, are
+  plain `String`s. The platform cannot tell a repeated line from a comma, so a field that must be
+  single uses a refinement.
+- **Values are not otherwise decoded.** There is no percent-decoding, as for cookies; a field that
+  must reject whitespace or an encoding uses a refinement.
+- **`RequestHeaders` stays**, and the two forms are exclusive: a handler has one `headers`
+  parameter, of either type. To enumerate or forward every header, use `RequestHeaders`.
+- **A header is client-supplied input, not proof of identity.** The record is decoded after the
+  route's actor has run, like every other input. Use an [actor](/reference/actors/) for
+  authentication. A credential header the route's seam consumed (`Authorization` on a `Bearer`
+  route) reads as absent here too.
+- **Headers the platform adds.** A proxy or Cloudflare may add or rewrite headers
+  (`CF-Connecting-IP`, `CF-Ray`, …); for platform facts, prefer [`cf: RequestCf`](#request-cf).
+- `bynk client` sends the fields as request headers, and `bynk openapi` describes them as `in: header`
+  parameters. A test passes a `T` value for `headers`; at `system` it is sent as headers, and a `Wire`
+  argument carries header text (`name: value` lines) to probe the decoding.
 
 ## Cloudflare request metadata {#request-cf}
 
@@ -1045,11 +1098,11 @@ service archives from http {
   limits { maxBody: 5_000_000_000 }
 
   @raw(contentType: "application/zip")
-  on PUT("/archives/:name") (name: ArchiveName, headers: RequestHeaders, body: Stream[Bytes])
+  on PUT("/archives/:name") (name: ArchiveName, headers: UploadHeaders, body: Stream[Bytes])
       -> Effect[HttpResult[()]] by u: User given Archives {
-    // `size` is the Int parsed from headers.get("content-length");
-    // R2.putStream needs the length up front.
-    let _ <- Archives.putStream(name.value, body, size)
+    // `headers.length` is the Int the router read from `content-length`
+    // (an `UploadHeaders`, as under "A typed `headers`" above); R2.putStream needs it up front.
+    let _ <- Archives.putStream(name.value, body, headers.length)
     NoContent
   }
 }
@@ -1080,7 +1133,7 @@ service archives from http {
   already done. A sink that fails whole is the safe pattern: `R2.putStream` stores
   nothing if its stream faults.
 - **Sinks.** `R2.putStream(key, body, size)` needs the length up front, so read it from
-  `headers.get("content-length")`; a stream with more or fewer bytes than `size` faults the
+  a typed `content-length` field of `headers`; a stream with more or fewer bytes than `size` faults the
   write and stores nothing. A chunked upload has no `Content-Length`, so it cannot go to
   `putStream`: pass it to [`Fetch.sendStream`](/reference/bynk-capabilities/#streamed-bodies),
   which needs no length, or answer `411`. A proxy reads the body first, then answers: it

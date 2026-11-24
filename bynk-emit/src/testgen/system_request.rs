@@ -32,6 +32,15 @@ pub(super) fn duplex_half() -> TsObjectEntry {
     })))
 }
 
+/// [`request_headers_spread`] for a typed `headers` record (#3911): the argument is the record's
+/// wire form (or `Wire` header text), written as headers by `__headerPairs`; `fields` is the
+/// table of renamed fields, when any field is renamed.
+pub(super) fn typed_headers_spread(fields: Option<TsExpr>) -> TsObjectEntry {
+    let mut args = vec![ident("headers")];
+    args.extend(fields);
+    TsObjectEntry::Spread(call(ident("__headerPairs"), args))
+}
+
 /// The spread of the case's request headers: `...__requestHeaderPairs(headers)` for a handler
 /// that declares a `headers` parameter, else the optional trailing `__extraHeaders` the case
 /// sends (#2910).

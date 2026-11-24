@@ -16,6 +16,9 @@ import {
   requestBodyStream,
   untilBodyTooLarge,
   applyCors,
+  headersObject,
+  headerPairs,
+  splitHeaderList,
   corsPreflightResponse,
   applySecurityHeaders,
   weakETag,
@@ -1713,4 +1716,48 @@ test("cfObject: isEUCountry is \"1\" in the EU and otherwise omitted or false", 
   assert.deepEqual(cfObject(requestWithCf({ isEUCountry: "1" })), { isEuCountry: true });
   assert.deepEqual(cfObject(requestWithCf({ isEUCountry: false })), { isEuCountry: false });
   assert.deepEqual(cfObject(requestWithCf({})), {});
+});
+
+test("splitHeaderList: splits on commas outside quotes and trims", () => {
+  assert.deepEqual(splitHeaderList('a, "b,c", d'), ["a", '"b,c"', "d"]);
+  assert.deepEqual(splitHeaderList('W/"x", "y\\",z"'), ['W/"x"', '"y\\",z"']);
+  assert.deepEqual(splitHeaderList(" , a ,, b ,"), ["a", "b"]);
+  assert.deepEqual(splitHeaderList(""), []);
+});
+
+test("headersObject: names match without case, a List splits, others read whole and trimmed", () => {
+  const req = new Request("https://x.test/", {
+    headers: { "Content-Length": " 42 ", "X-Tag": 'a, "b,c", d', "Date": "Tue, 15 Nov 1994 08:12:31 GMT" },
+  });
+  const r = headersObject(req, [
+    { name: "length", wire: "content-length", kind: "int", list: false, option: false },
+    { name: "tag", wire: "X-TAG", kind: "string", list: true, option: false },
+    { name: "date", kind: "string", list: false, option: false },
+    { name: "key", wire: "idempotency-key", kind: "string", list: false, option: true },
+  ]);
+  assert.deepEqual(r, {
+    ok: true,
+    value: { length: 42, tag: ["a", '"b,c"', "d"], date: "Tue, 15 Nov 1994 08:12:31 GMT" },
+  });
+});
+
+test("headersObject: an unreadable value passes on as text; a hidden header reads as absent", () => {
+  const req = new Request("https://x.test/", { headers: { "content-length": "abc", authorization: "Bearer t" } });
+  const spec = [
+    { name: "length", wire: "content-length", kind: "int" as const, list: false, option: false },
+    { name: "auth", wire: "authorization", kind: "string" as const, list: false, option: true },
+  ];
+  assert.deepEqual(headersObject(req, spec), { ok: true, value: { length: "abc", auth: { kind: "Some", value: "Bearer t" } } });
+  assert.deepEqual(headersObject(req, spec, ["Authorization"]), { ok: true, value: { length: "abc" } });
+});
+
+test("headerPairs: a record's wire form becomes header lines; a list joins; an enum is its name", () => {
+  assert.deepEqual(
+    headerPairs(
+      { length: 42, tag: ["a", "b"], key: { kind: "Some", value: "k" }, none: { kind: "None" }, s: { kind: "Open" } },
+      [{ name: "length", wire: "content-length", kind: "int", list: false, option: false }],
+    ),
+    { "content-length": "42", tag: "a, b", key: "k", s: "Open" },
+  );
+  assert.deepEqual(headerPairs({}, []), {});
 });
