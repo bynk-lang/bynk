@@ -1,0 +1,15 @@
+context demo.greet
+
+type Shape = | Circle(n: Int) | Square(n: Int) | Empty
+
+fn parse(n: Int) -> Result[Int, String] {
+  if n > 0 { Ok(n) } else { Err("not positive") }
+}
+
+fn shape(n: Int) -> Shape {
+  if n > 0 { Circle(n) } else { Empty }
+}
+
+fn find(n: Int) -> Option[Int] {
+  if n > 0 { Some(n) } else { None }
+}

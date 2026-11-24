@@ -5672,7 +5672,7 @@ fn validate_is_nested_payloads(
 /// The bindings the `is` tests in a condition introduce when it is true: the
 /// tests [`crate::narrowing::matched_is_tests`] proves matched (#1654, the rule
 /// the resolver and the emitter share). Later wins on a name collision.
-fn collect_is_bindings(expr: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
+pub(crate) fn collect_is_bindings(expr: &Expr, ctx: &mut Ctx) -> Vec<(String, TyId)> {
     collect_is_bindings_when(expr, true, ctx)
 }
 
@@ -5716,7 +5716,7 @@ pub(crate) fn collect_is_bindings_when(
 /// them in. Hover, go-to-definition, references and rename read these. Types come
 /// from the same per-test bindings the checker binds; a name the checker does not
 /// bind (a nested sub-pattern's) has no type here and is skipped.
-fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
+pub(crate) fn record_is_locals(cond: &Expr, when_true: bool, scope: Span, ctx: &mut Ctx) {
     let tys = ctx.tys;
     for test in crate::narrowing::matched_is_tests(cond, when_true) {
         let ExprKind::Is { pattern, .. } = &test.kind else {

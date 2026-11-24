@@ -1,0 +1,47 @@
+// #3981: a statement-form `expect … is P(x)` keeps `x` bound for the rest of the case.
+suite demo.greet {
+  case "a name bound by an is stays in scope" {
+    let r = parse(4)
+    expect r is Ok(n)
+    expect n == 4
+  }
+
+  case "a call subject binds too" {
+    expect parse(5) is Ok(m)
+    expect m == 5
+  }
+
+  case "a conjunction binds every name" {
+    let r = parse(6)
+    let o = find(7)
+    expect r is Ok(a) && o is Some(b)
+    expect a + b == 13
+  }
+
+  case "an or-pattern binds what every alternative binds" {
+    let s = shape(3)
+    expect s is Circle(k) | Square(k)
+    expect k == 3
+  }
+
+  case "a binding inside an if block lasts to the end of that block" {
+    let r = parse(2)
+    let v = if r is Ok(_) {
+      expect r is Ok(inner)
+      expect inner == 2
+      inner + 1
+    } else {
+      0
+    }
+    expect v == 3
+  }
+
+  case "an expression-form expect binds nothing beyond itself" {
+    let r = parse(8)
+    let v = match r {
+      Ok(x) => x
+      Err(_) => 0
+    }
+    expect v == 8
+  }
+}
