@@ -2,7 +2,7 @@
 // Worker entry point for context `ck.holds`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -48,7 +48,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_holds_Param_id(id);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"ck.holds\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -62,7 +62,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_holds_Param_id(id);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), request, ["Bynk realm=\"ck.holds\""]), __security_api);
         }
       }
       if (__matchPath("/holds/:id", path) !== null) {

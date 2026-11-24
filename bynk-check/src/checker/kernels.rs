@@ -88,7 +88,7 @@ pub(crate) fn check_collection_static(
                 ),
             )
             .with_note(
-                "annotate the binding (`let xs: List[T] = List.empty()`) or use it where the collection type is expected",
+                "annotate the binding (`let xs: List[T] = List.empty()`) or use it where the collection type is expected; for a `fold`, annotate its result (`let tags: Set[String] = xs.fold(Set.empty(), …)`) or pass a typed seed",
             ),
         );
     }
@@ -509,7 +509,11 @@ pub(crate) fn check_list_kernel_method(
             if !arity(2, ctx) {
                 return None;
             }
-            let acc = type_of(&args[0], None, ctx)?;
+            let acc = type_of(
+                &args[0],
+                super::collections::fold_seed_expected(&args[0], ctx),
+                ctx,
+            )?;
             let step = Ty::Fn {
                 params: vec![acc, elem],
                 ret: acc,
@@ -778,6 +782,7 @@ pub(crate) fn check_list_kernel_method(
             require_key_ord(key, &format!("List.{name}"), args[0].span, ctx);
             Some(tys.intern(Ty::List(elem)))
         }
+        Some(ListOp::SortWith) => check_sort_with(args, elem, span, ctx),
         Some(ListOp::Distinct) => {
             if !arity(0, ctx) {
                 return None;
@@ -1711,8 +1716,8 @@ pub(crate) fn check_instant_kernel_method(
 /// build-from-`String` direction) are resolved separately as type statics.
 ///
 /// #2016 (standard-library K1): `concat`, `slice` (clamped like
-/// `String.slice`), `compare` (unsigned lexicographic, `-1`/`0`/`1`; `Bytes`
-/// stays unorderable), `toHex` and `toBase64Url`.
+/// `String.slice`), `toHex` and `toBase64Url`. `compare` is no longer a `Bytes`
+/// kernel: #3955 made it the universal `Ordering`-returning method.
 pub(crate) fn check_bytes_kernel_method(
     method: &Ident,
     op: Option<BytesOp>,
@@ -1736,7 +1741,6 @@ pub(crate) fn check_bytes_kernel_method(
             vec![tys.intern(int.clone()), tys.intern(int.clone())],
             bytes,
         )),
-        Some(BytesOp::Compare) => Some((vec![tys.intern(bytes)], int)),
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -1745,7 +1749,7 @@ pub(crate) fn check_bytes_kernel_method(
             method.span,
             format!(
                 "the built-in `Bytes` type has no method `{}` — the kernel is `length`, \
-                 `concat`, `slice`, `compare`, `toHex`, `toBase64`, `toBase64Url`, `decodeUtf8`",
+                 `concat`, `slice`, `toHex`, `toBase64`, `toBase64Url`, `decodeUtf8`",
                 method.name
             ),
         ));
@@ -4542,6 +4546,54 @@ pub(crate) fn check_decimal_static(
         ctx,
     );
     Some(tys.intern(ret))
+}
+
+/// #3955: `xs.sortWith((a, b) => a.compare(b))`. The comparator returns an
+/// `Ordering`; the sort is stable, like `sortBy`.
+fn check_sort_with(args: &[Expr], elem: TyId, span: Span, ctx: &mut Ctx) -> Option<TyId> {
+    let tys = ctx.tys;
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`List.sortWith` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    let Some(ordering) = super::ordering::ordering_ty(ctx) else {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.method_not_found",
+                span,
+                "`List.sortWith` needs the `Ordering` of `bynk.ordering`, which is not in scope here",
+            )
+            .with_note(
+                "a single-file program cannot reach `bynk.ordering`; put the code in a project. A type of your own named `Ordering` also hides it",
+            ),
+        );
+        let _ = type_of(&args[0], None, ctx);
+        return None;
+    };
+    let want = tys.intern(Ty::Fn {
+        params: vec![elem, elem],
+        ret: ordering,
+    });
+    let actual = type_of(&args[0], Some(want), ctx)?;
+    if !compatible(actual, want, tys) {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.argument_mismatch",
+            args[0].span,
+            format!(
+                "the `List.sortWith` comparator has type `{}`, but `{}` is required",
+                actual.display(tys),
+                want.display(tys)
+            ),
+        ));
+    }
+    Some(tys.intern(Ty::List(elem)))
 }
 
 #[cfg(test)]

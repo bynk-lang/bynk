@@ -2152,6 +2152,7 @@ pub fn check_handler_body(
         effectful,
         agent_state_ty,
         commit_seen: false,
+        fold_init_expected: None,
         caps: CapabilityCtx {
             capabilities,
             declared_capabilities,
@@ -2333,6 +2334,7 @@ pub fn check_body(
         effectful: return_ty.is_effect(tys),
         agent_state_ty: None,
         commit_seen: false,
+        fold_init_expected: None,
         caps,
         in_test_body: true,
         oidc_binder: None,
@@ -2496,6 +2498,7 @@ pub fn check_invariants(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2653,6 +2656,7 @@ pub(crate) fn check_contracts(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2890,6 +2894,7 @@ pub fn check_transitions(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -3084,6 +3089,7 @@ pub fn check_migrations(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -3526,6 +3532,11 @@ pub(crate) struct Ctx<'a> {
     /// True if the enclosing function/handler returns `Effect[T]` (v0.5).
     /// Determines whether `<-` and capability calls are permitted.
     pub effectful: bool,
+    /// #4193: the expected result type of the `fold` call whose `init` is being
+    /// typed, so an empty collection there (`Set.empty()`) can take its element type
+    /// from the accumulator the call is expected to produce. Set by the call site just
+    /// before dispatch and taken by the fold arms; `None` everywhere else.
+    pub fold_init_expected: Option<TyId>,
     /// If inside an agent handler, the agent's state type and the agent's
     /// name. Used to validate `commit` statements.
     pub agent_state_ty: Option<TyId>,

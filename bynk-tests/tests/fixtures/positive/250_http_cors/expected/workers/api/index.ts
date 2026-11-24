@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -42,7 +42,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/ping", path) !== null) {
           __route = "GET /ping";
           const result = await surface.http_GET_ping();
-          const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
+          const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -56,7 +56,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_items_Param_id(id);
-          const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
+          const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

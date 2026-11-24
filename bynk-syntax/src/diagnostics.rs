@@ -6339,7 +6339,10 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 take a type from, and the compiler will not guess, because the element type \
                 becomes part of the type of everything the collection touches. Give it one: \
                 annotate the binding, as `let xs: List[Int] = []`, or use the empty value \
-                where a type is expected, such as an argument or a return value.",
+                where a type is expected, such as an argument or a return value. The seed \
+                of a `fold` is such a place: `fold(Set.empty(), …)` takes its type from the \
+                result the fold is expected to produce, so annotate the result (`let tags: \
+                Set[String] = xs.fold(Set.empty(), …)`).",
         example: "fn count() -> Int {\n    let xs = []                  // ✗ a list of what?\n    xs.length()\n}\n\n\
                   fn count() -> Int {\n    let xs: List[Int] = []       // ✓\n    xs.length()\n}",
     },

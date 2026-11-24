@@ -51,7 +51,7 @@ The methods:
 | `b.length()` | `Int` | the octet count |
 | `b.concat(other: Bytes)` | `Bytes` | `b`'s octets, then `other`'s |
 | `b.slice(start: Int, end: Int)` | `Bytes` | clamped like `String.slice`: a negative index is `0`, an end past the length is the length, and `start >= end` is empty |
-| `b.compare(other: Bytes)` | `Int` | `-1`, `0` or `1` in unsigned lexicographic order; a proper prefix sorts first |
+| `b.compare(other: Bytes)` | [`Ordering`](#ordering) | `Less`, `Equal` or `Greater` in unsigned lexicographic order; a proper prefix sorts first |
 | `b.toHex()` | `String` | lowercase, two digits per octet |
 | `b.toBase64()` | `String` | standard base64, padded |
 | `b.toBase64Url()` | `String` | base64url, unpadded (the JWT form) |
@@ -71,8 +71,8 @@ which compares in constant time.
 `Bytes` with the same octets are equal (unlike the number-erased base types, a
 `Bytes` is not compared by host reference). Equality is structural throughout,
 so a record carrying a `Bytes` field compares that field by content too. `Bytes` is **orderable**, unsigned lexicographic by octet with a proper prefix
-first, so `<` and a `sortBy` key work on it (`b.compare(other)` returns the same
-order as an `Int`). It is a `Key`: a `Map[Bytes, V]` or `Set[Bytes]` holds
+first, so `<` and a `sortBy` key work on it (`b.compare(other)` answers the same
+order as an [`Ordering`](#ordering)). It is a `Key`: a `Map[Bytes, V]` or `Set[Bytes]` holds
 bytes by content. It has no arithmetic.
 
 On the wire a `Bytes` **serialises as a base64 JSON string** (and deserialising
@@ -851,6 +851,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.sortBy(key: T -> K)` | `List[T]` | smallest key first; stable |
 | `xs.sortByDescending(key: T -> K)` | `List[T]` | largest key first; stable |
 | `xs.sort()` | `List[T]` | the elements themselves, smallest first; stable (`T` must be `Ord`) |
+| `xs.sortWith(compare: (T, T) -> Ordering)` | `List[T]` | ordered by your comparator, which returns an [`Ordering`](#ordering); stable |
 | `xs.take(n: Int)` | `List[T]` | the first `n` elements (all of them when there are fewer) |
 | `xs.skip(n: Int)` | `List[T]` | all but the first `n` |
 | `xs.distinct()` | `List[T]` | repeats dropped, each element at its first position |
@@ -888,13 +889,15 @@ The effect methods form one grid of names:
 | in order | `forEach` | `traverse` | `traverseAll` | `traverseTry` |
 | concurrently | `parForEach` | `parTraverse` | `parTraverseAll` | `parTraverseTry` |
 
+**An empty seed (#4193).** `fold` takes its accumulator type from `init`, so an empty collection as the seed (`List.empty()`, `Set.empty()`, `Map.empty()`) has nothing to take a type from unless the fold itself is expected to produce one. It then takes it from there: a typed `let` (`let tags: Set[String] = posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))`), a function's return type, or an argument position. `Set.fold` and `Map.fold` follow the same rule. A fold with an empty seed and no such context is `bynk.types.uninferable_element_type`, and its note says to annotate the result or pass a typed seed. The step function does not settle the type.
+
 Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
 
 The methods returning an `Effect` can only be called where effects are allowed.
 A method not in this table is `bynk.types.method_not_found`. The rest of this
 section groups them and gives the rules.
 
-**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `sort`, `reverse`,
+**Builders** (return a `List`): `map`, `filter`, `flatMap`, `sortBy`, `sortByDescending`, `sortWith`, `sort`, `reverse`,
 `take`, `skip`, `distinct`, `distinctBy`.
 
 **Collecting `Result`s** (pure; the receiver is a `List[Result[T, E]]`): `sequenceAll()`
@@ -1281,6 +1284,58 @@ type OrderId = opaque String
 - Opaque types are **excluded** from [literal admission](/reference/refined-types/).
 - An opaque type is not [`Ord`](#ordering-your-own-types) outside its defining
   unit unless it says `derives Ord`.
+
+## Ordering
+
+`Ordering` is how one value compares with another: `Less`, `Equal` or `Greater`.
+It is what `a.compare(b)` returns and what a [`sortWith`](#list-methods)
+comparator returns. It is an ordinary enum (it derives `Ord`, with
+`Less < Equal < Greater`), so it can be stored, matched and compared.
+
+```bynk,fragment
+commons demo.versions
+
+type Version = {
+	major: Int,
+	minor: Int,
+} derives Ord
+
+fn newestFirst(xs: List[Version]) -> List[Version] {
+	xs.sortWith((a, b) => a.major.compare(b.major).then(a.minor.compare(b.minor)).reverse())
+}
+
+fn describe(o: Ordering) -> String {
+	match o {
+		Less => "less",
+		Equal => "equal",
+		Greater => "greater",
+	}
+}
+```
+
+| Method | Returns | Meaning |
+|---|---|---|
+| `a.compare(b: T)` | `Ordering` | on any [`Ord`](#ordering-your-own-types) `T`: `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant`, `Bytes`, `Option` and `List` of an `Ord` type, refined types over them, and a type that declares `derives Ord` |
+| `o.then(next: Ordering)` | `Ordering` | `next` when `o` is `Equal`, otherwise `o`: the way to break a tie. `next` is a value, evaluated either way |
+| `o.reverse()` | `Ordering` | `Less` and `Greater` swap and `Equal` stays |
+
+`compare` uses the type's own order: the one `<` and `sortBy` use, so a `Float`
+orders `NaN` last and a `derives Ord` record orders by its fields in declaration
+order. A receiver that is not `Ord` is `bynk.types.not_orderable`. A type of
+your own that declares a method named `compare` keeps it: the built-in does not
+apply to that receiver.
+
+`Ordering` needs no `uses`: a unit that calls `.compare` or `.sortWith`, or
+names `Ordering`, has the `bynk.ordering` commons in scope as if it had written
+`uses bynk.ordering`. `compare` is not available in a single-file program
+(`bynk check page.bynk`), which has no other units to reach.
+
+Its variants name an `Ordering` only where the context says so: an expected type
+(`-> Ordering { Less }`), the other operand of `==`, `!=` or an ordering
+operator (`a.compare(b) == Less`), or a `match` or `is` on one. A bare `Less`
+with nothing around it is never an `Ordering` when a sum of your own declares
+`Less`, so a type with that variant is unaffected; `Ordering.Less` always works.
+See [shared variant names](#shared-variant-names).
 
 ## Ordering your own types
 
@@ -1755,7 +1810,9 @@ that a consumed unit exports (`bynk.cloudflare`'s `SqlError` has a `Failed`, and
 so may an enum of yours). A bare use of the name builds the sum the **expected
 type** names: an annotated `let`, a parameter, a return type, the operation a
 `stub` overrides, or the other operand of a comparison (`==`, `!=`, `<`, `<=`,
-`>`, `>=`).
+`>`, `>=`). The `Ordering` variants `Less`, `Equal` and `Greater` are shared this way
+with any sum of yours that uses those names, but they only ever resolve from
+one of these positions (see [`Ordering`](#ordering)).
 
 ```bynk
 type DbError = | Constraint(message: String) | Failed(message: String)
