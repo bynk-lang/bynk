@@ -421,8 +421,8 @@ capabilities flattened to bare names (`{ Cap, … }`). The braces may also name 
 type the unit exports, and rename it for this context with `T as Alias`
 (`consumes bynk.crypto { Crypto, Digest as CryptoDigest }`): the type is then in
 scope only under the alias, so it no longer clashes with a local or `uses` type
-of the same name. Only a type can be aliased, not a capability, and a type takes one alias. In a context split across files an alias applies to the whole
-context.
+of the same name. Only a type can be aliased, not a capability, and a type takes one alias. In a context split across files an alias is in scope
+only in the file that writes it.
 
 A suite is not a consuming context, so an alias is not in scope in a suite's
 cases: a case that writes the alias is `unknown name`. A suite names a consumed
@@ -430,13 +430,18 @@ type by the name its unit declares (`Digest`, not `CryptoDigest`). The one place
 suite may read the alias is a `stub` pattern, which resolves in the context under
 test.
 
-A context's `consumes` clauses apply to all its files. In a context split across
-files, each file may state what it consumes, repeating an aliased clause or a
-`{ Cap }` selection another file states; the same clause twice in one file is
-still an error. An alias names one unit, and a unit is consumed under one alias:
+Imports are per file. A name from another unit is in scope in a file only if
+that file's own `consumes` brings it in, so each file of a context states what it
+uses: `consumes bynk { TimedOut }` in one file does not bring `TimedOut` into a
+sibling file (`bynk.consumes.type_not_selected`). The context's dependencies (its
+wiring, deploy order and `consumes` graph) are the union of its files' `consumes`,
+so files may repeat an aliased clause or a `{ Cap }` selection another file
+states; the same clause twice in one file is still an error. An alias names one
+unit, and a unit is consumed under one alias across the context:
 `consumes shop.payment as Payment` in one file and `as Pay` in another is
-`bynk.consumes.alias_conflict`. A unit may also be consumed unaliased, by its
-qualified name, beside its alias.
+`bynk.consumes.alias_conflict`. The alias is nonetheless in scope only in the
+files that write it. A unit may also be consumed unaliased, by its qualified
+name, beside its alias.
 
 **Static semantics.**
 {{#grammar-semantics consumes_decl}}
