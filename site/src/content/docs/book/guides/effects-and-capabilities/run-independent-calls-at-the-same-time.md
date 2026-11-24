@@ -119,11 +119,11 @@ steps that return a `Result`.
 
 ```bynk,fragment
 commons demo.fan {
-  uses bynk.par
+	uses bynk.par
 
-  fn warm(ids: List[Int]) -> Effect[()] {
-    ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 8 })
-  }
+	fn warm(ids: List[Int]) -> Effect[()] {
+		ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 8 })
+	}
 }
 ```
 

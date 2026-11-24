@@ -1,0 +1,7 @@
+commons demo.fan {
+    uses bynk.par
+
+    fn run(xs: List[Int]) -> Effect[()] {
+        xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })
+    }
+}

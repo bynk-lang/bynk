@@ -74,18 +74,21 @@ export async function __bynkSettleAll<const T extends readonly (() => unknown)[]
 // that is a compile error, so this only faults a computed one.
 //
 // Not part of ADR 0310's published ABI: it is codegen.
-export const __BYNK_POOL_MAX = 1000;
+export const __poolMax = 1000;
 export async function __bynkSettlePool<T>(
   thunks: readonly (() => T)[],
   limit: number,
   stopOnErr: boolean = false,
 ): Promise<Awaited<T>[]> {
-  if (!Number.isInteger(limit) || limit < 1 || limit > __BYNK_POOL_MAX) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > __poolMax) {
     throw new Error(
-      `a concurrency \`limit\` is a whole number from 1 to ${__BYNK_POOL_MAX}, but got ${limit}`,
+      `a concurrency \`limit\` is a whole number from 1 to ${__poolMax}, but got ${limit}`,
     );
   }
-  const results: PromiseSettledResult<Awaited<T>>[] = new Array(thunks.length);
+  type Settled =
+    | { status: "fulfilled"; value: Awaited<T> }
+    | { status: "rejected"; reason: unknown };
+  const results: Settled[] = new Array(thunks.length);
   let next = 0;
   let stopped = false;
   const worker = async (): Promise<void> => {
