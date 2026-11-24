@@ -1,0 +1,7 @@
+context commerce.order
+
+exports transparent { PaymentConfirmed }
+
+event PaymentConfirmed = {
+  orderId: String,
+}

@@ -555,10 +555,18 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 if op == "emit"
         )
     {
+        // #4113: with no written `[E]`, `E` is the argument's own (checker-inferred) type.
+        let inferred = args
+            .first()
+            .and_then(|a| match cx.commons().expr_ty(a.id).as_deref() {
+                Some(bynk_check::checker::Ty::Named { name, .. }) => Some(name.clone()),
+                _ => None,
+            });
         let event_name = type_args
             .first()
             .and_then(type_ref_named_root)
             .map(str::to_string)
+            .or(inferred)
             .unwrap_or_else(|| {
                 // `Events.emit[E]` names an event the checker resolved: absent, a missing
                 // fact (1A.34). The name is only a placeholder then.

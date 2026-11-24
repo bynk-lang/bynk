@@ -53,6 +53,7 @@ mod calls;
 pub mod codable;
 mod cookie_lints;
 mod d1;
+mod events_emit;
 pub mod peek;
 pub use d1::{BatchPosition, D1DecodeSite, D1SqlSite, RowLink};
 pub(crate) mod equality;
