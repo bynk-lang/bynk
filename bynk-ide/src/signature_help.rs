@@ -177,6 +177,12 @@ pub fn resolve_label(
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Option<String> {
     if let Some((recv, member)) = callee.rsplit_once('.') {
+        // #3894: `<context>.<service>.outcome(…)`.
+        if member == "outcome"
+            && let Some(label) = crate::call_outcome::outcome_signature(recv, doc_text, files)
+        {
+            return Some(label);
+        }
         // #3446: `Record.field.cookie` / `Record.field.expire` on a cookie record.
         if let Some((record, field)) = recv.split_once('.') {
             return cookie_field_label(record, field, member, doc_text, files);

@@ -914,6 +914,16 @@ pub const EXPLANATIONS: &[Explain] = &[
                   shop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
     },
     Explain {
+        code: "bynk.call.outcome_construction",
+        blurb: "A `CallOutcome` or `CallFailure` says what a call came to, and only the compiled call knows that: whether the callee's handler ran, was refused, faulted, or could not be reached. So a program matches on one, and `.outcome(…)` and a test `stub` make them. Writing `Handled(…)`, `Faulted` or `CallFailure.Unreachable(…)` as a value would invent an outcome no call produced. To test a caller of a failing service, `stub` the service (`rejected NotAdmitted`, `faulted`, `unreachable`); to pass a failure along, use `handled()` and `?`.",
+        example: "// shop/orders.bynk\nlet o: CallOutcome[Int] = Faulted   // ✗ no call produced this\n\nlet paid = o.handled()?               // ✓ its failure, as a `Result`",
+    },
+    Explain {
+        code: "bynk.call.outcome_not_in_scope",
+        blurb: "`<context>.<service>.outcome(args)` returns `CallOutcome[_]`, and `CallOutcome` is declared in `bynk`, so a unit that wants `outcome` has to consume it. Without that the result type names a type the unit cannot see, and its `Handled`, `Rejected`, `Faulted` and `Unreachable` cases could not be matched. Add `consumes bynk { CallOutcome }` to the unit, or add `CallOutcome` to its existing `consumes bynk { … }` list.",
+        example: "// shop/orders.bynk\nlet o <- Pay.authorise.outcome(total)   // ✗ `CallOutcome` is not in scope\n\nconsumes bynk { CallOutcome }            // ✓ in the unit's header\nlet o <- Pay.authorise.outcome(total)",
+    },
+    Explain {
         code: "bynk.capability.base_not_instantiable",
         blurb: "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
         example: "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
@@ -1491,7 +1501,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
     },
     Explain {
@@ -4666,6 +4676,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   stub Meter.read() returns 7   // ✓",
     },
     Explain {
+        code: "bynk.stub.outcome_word",
+        blurb: "`rejected <Refusal>`, `faulted` and `unreachable` stand in for the outcome of a call to a consumed context's service, which `<context>.<service>.outcome(args)` hands back as a `CallOutcome`. They belong to a consumed service's `stub` alone: a capability's `stub` is a provider, and a provider faults with `fails`. And `rejected` names one of `bynk`'s `Refusal` cases (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`, `StaleContract`, `Undecodable`). `returns <value>` stubs a call the handler answered.",
+        example: "// tests/meter.test.bynk\nstub Meter.read() faulted   // ✗ `Meter` is a capability, not a consumed service\n\nstub Meter.read() fails     // ✓ a provider faults with `fails`",
+    },
+    Explain {
         code: "bynk.stub.rhs_type",
         blurb: "A `stub … returns <value>` stands in for a real provider, so the \
                 value must have the type the operation declares, as the real \
@@ -7144,6 +7159,15 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.boundary.structural_mismatch",
         "Data crossing a context boundary did not match the expected shape.",
+    ),
+    d(
+        "bynk.call.outcome_construction",
+        "A `CallOutcome` or `CallFailure` variant was written as a value in a context; only `.outcome(…)` and a test `stub` make them.",
+    ),
+    dg(
+        "bynk.call.outcome_not_in_scope",
+        "`<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope.",
+        &["method_call"],
     ),
     dg(
         "bynk.capability.base_not_instantiable",
@@ -9636,6 +9660,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.stub.not_a_seam",
         "A test `stub` overrides a capability the unit under test does not consume.",
+    ),
+    dg(
+        "bynk.stub.outcome_word",
+        "A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`.",
+        &["stub_clause"],
     ),
     d(
         "bynk.stub.rhs_type",

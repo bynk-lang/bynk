@@ -511,7 +511,9 @@ suite shop.inventory as system {
   `unit`, when the handler declares it; a handler that doesn't is fired at the
   epoch. The address yields
   the handler's `Result`, which the test build's entry hands back to the harness.
-  A cron handler that faults fails the case, as it does at `unit`.
+  A cron handler that faults fails the case, as it does at `unit`. A handler that
+  returns `Err` is reported to the platform by the entry; the double records that
+  report without counting it, since the case already reads the `Err` as its result.
 - **`q.message(m)`** (or `q.message(m, QueueDelivery { attempts: 4, sentAt: t })` when the
   handler declares a `QueueDelivery`) serialises `m` as the producer does, sends it through a JSON
   round trip, and calls `queue` with a one-message batch. A message whose type
@@ -1145,6 +1147,29 @@ suite shop.orders {
   none, the last segment of its path).
 - A service stub still ends at `system` as a capability's does:
   `bynk.stub.at_system`.
+- **A call's failure is stubbed with `rejected`, `faulted` and `unreachable`** (#3894),
+  the outcomes `<context>.<service>.outcome(args)` hands back as a `CallOutcome`:
+
+  ```bynk,fragment
+  suite shop.orders {
+  	consumes shop.pay { Receipt }
+
+  	case "a refused payment is undone" {
+  		stub Stock.reserve(_) returns Ok(())
+  		stub Pay.authorise(_) rejected NotAdmitted
+  		let r <- placeOrder.call("widget", 100)
+  		expect r is Err(_)
+  	}
+  }
+  ```
+
+  `returns <value>` is `Handled(value)`. `rejected <Refusal>` is `Rejected(<Refusal>)`, for
+  one of `TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`,
+  `StaleContract` or `Undecodable`. `faulted` is `Faulted`, and `unreachable` is
+  `Unreachable(None)`. These words belong to a consumed service alone
+  (`bynk.stub.outcome_word`; a capability's `stub` faults with `fails`), and are not
+  accepted inside `returns each`. A plain call to such a stub, written without
+  `.outcome`, faults as a real failed call does.
 
 ### Sequenced `stub` — `returns each`
 

@@ -12086,6 +12086,16 @@
           }
         ]
       },
+      "refusal": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "value": {
         "multiple": false,
         "required": false,
@@ -13954,6 +13964,10 @@
     "named": false
   },
   {
+    "type": "faulted",
+    "named": false
+  },
+  {
     "type": "faults",
     "named": false
   },
@@ -14204,6 +14218,10 @@
   },
   {
     "type": "unit",
+    "named": false
+  },
+  {
+    "type": "unreachable",
     "named": false
   },
   {

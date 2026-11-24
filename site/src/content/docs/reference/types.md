@@ -1743,8 +1743,9 @@ it keeps that name on the wire.
 Two sums in scope may declare the same variant name: two of your own, or two
 that a consumed unit exports (`bynk.cloudflare`'s `SqlError` has a `Failed`, and
 so may an enum of yours). A bare use of the name builds the sum the **expected
-type** names: an annotated `let`, a parameter, a return type, or the operation a
-`stub` overrides.
+type** names: an annotated `let`, a parameter, a return type, the operation a
+`stub` overrides, or the other operand of a comparison (`==`, `!=`, `<`, `<=`,
+`>`, `>=`).
 
 ```bynk
 type DbError = | Constraint(message: String) | Failed(message: String)
@@ -1754,6 +1755,13 @@ fn send() -> Result[Int, MailError] {
   Err(Failed("down"))          // MailError.Failed: the return type picks it
 }
 ```
+
+In a comparison the operand that is not a bare variant is typed first, and its
+sum is the bare variant's expected type, so `e == Failed("down")`,
+`e != RateLimited`, `o == Some(Failed("x"))` (through `Option`, `Result`, brackets and a list literal's first element) and,
+for a `derives Ord` sum, `p > Medium` resolve when `e: MailError`,
+`o: Option[MailError]` and `p` is a sum that declares `Medium`. When both sides are bare
+variants (`Failed("a") == Failed("b")`) nothing decides, so the name stays ambiguous.
 
 With no expected type naming one of them (`let e = Failed("down")`), the
 compiler does not pick one: the name is `bynk.resolve.ambiguous_variant`, and

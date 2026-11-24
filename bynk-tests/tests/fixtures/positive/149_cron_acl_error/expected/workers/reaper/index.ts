@@ -11,6 +11,23 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   ctx.waitUntil(fault);
 }
 
+async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, variants: readonly string[], run: () => globalThis.Promise<T>): globalThis.Promise<T> {
+  try {
+    const result = await run();
+    if (result.tag === "Err") {
+      const error = result.error as { readonly tag?: unknown } | null;
+      const variant = typeof error === "object" && error !== null && typeof error.tag === "string" && variants.includes(error.tag) ? error.tag : "";
+      globalThis.console.error({ message: "a cron run returned Err", level: "error", fields: { site, type: errType, variant } });
+      __bynkReportFault(ctx, new globalThis.Error(`${site} returned ${errType}${variant === "" ? "" : `.${variant}`}`));
+    }
+    return result;
+  } catch (thrown) {
+    globalThis.console.error(`${site} faulted`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    __bynkReportFault(ctx, thrown);
+    throw thrown;
+  }
+}
+
 export default {
   async fetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
     const url = new globalThis.URL(request.url);
@@ -39,15 +56,15 @@ export default {
       return __faultResponse("reaper", __route);
     }
   },
-  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env): globalThis.Promise<void> {
+  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (event.cron) {
       case "*/5 * * * *": {
-        const result = await surface.cron_sweeper_0();
-        if (result.tag === "Err") globalThis.console.error("cron */5 * * * * failed", result.error);
+        const result = await __bynkCronRun(ctx, "cron `*/5 * * * *` (sweeper)", "ReaperError", ["StorageUnavailable"], () => surface.cron_sweeper_0());
         return;
       }
       default:
+        globalThis.console.warn("cron expression matches no `on schedule` handler in this context:", event.cron);
         return;
     }
   },

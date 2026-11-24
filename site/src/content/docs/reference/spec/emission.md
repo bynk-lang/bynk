@@ -281,6 +281,13 @@ identifier as for `<-`, and the names are bound only after every expression is
 lowered. The join is imported only by a module that has a `par` block, so every
 other module emits byte-for-byte as before. The `parTraverse` family imports it too, in a module with no `par` block.
 
+The `scheduled` entry (#3872) always takes the execution context and runs each cron
+handler through `__bynkCronRun`: an `Err` is one structured `console.error` record
+(`{message, level, fields: {site, type, variant}}`, never the payload) and a fault
+reported through `__bynkReportFault`, so Cloudflare's Cron Past Events shows the run
+as failed; a throw is logged with its stack, reported and rethrown. An unmatched
+`event.cron` logs one warning.
+
 A **detached effect** (`e.detach()`) lowers on the Workers target to
 `__bynkDetach(<effect>, deps.__exec, <site>)`: the effect's `Promise` is handed to the
 execution context's `waitUntil` rather than awaited, so it settles *after* the

@@ -3107,6 +3107,12 @@ pub(crate) fn check_method_call(
         if let Some(consumed) = cross_context_prefix(receiver, ctx) {
             return check_cross_context_call(receiver, &consumed, method, args, span, expr_id, ctx);
         }
+        // #3894: `<context>.<service>.outcome(args)`.
+        if let Some(r) =
+            super::call_outcome::check_outcome_call(receiver, method, args, span, expr_id, ctx)
+        {
+            return r;
+        }
         // Looks like a dotted prefix (no local binding for the root). If the
         // chain matches the shape of a consumed-context call but the prefix
         // isn't actually consumed, surface an explicit diagnostic so the user
@@ -6081,7 +6087,7 @@ fn check_event_address(
 /// dotted qualified name appearing in `consumes`), return the consumed
 /// context's qualified name. Otherwise None. Local bindings, types, and
 /// capabilities take precedence — those are checked at the call site.
-fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
+pub(super) fn cross_context_prefix(receiver: &Expr, ctx: &Ctx) -> Option<String> {
     let info = &ctx.input.cross_context;
     if info.consumed_contexts.is_empty() && info.aliases.is_empty() {
         return None;
@@ -6744,7 +6750,7 @@ fn check_signature_owners_consumed(
     refused
 }
 
-fn check_cross_context_call(
+pub(super) fn check_cross_context_call(
     receiver: &Expr,
     consumed: &str,
     method: &Ident,
