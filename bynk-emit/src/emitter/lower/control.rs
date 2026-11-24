@@ -561,7 +561,15 @@ pub(super) fn lower_match_as_iife(
     let saved_await = std::mem::take(&mut cx.emitted_await);
     // The arrow's body keeps its marks (1A.15, Decision D).
     let mut body = Body::new();
+    // #3980: an `expect false` arm names its arm and the value matched.
+    let framed = {
+        let frame = super::expect_was::scrutinee_frame(discriminant, &ident("__d"), arms, cx);
+        cx.push_scrutinee(frame)
+    };
     match_dispatch(&mut body, &PatPath::ident("__d"), &disc_ty, arms, cx, false);
+    if framed {
+        cx.pop_scrutinee();
+    }
     let needs_async = cx.emitted_await;
     cx.emitted_await = saved_await || needs_async;
     cx.return_ty = saved;

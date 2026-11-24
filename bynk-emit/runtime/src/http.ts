@@ -1694,6 +1694,28 @@ export function applyCors<R extends Response>(
   response.headers.set("access-control-allow-origin", allowOrigin);
   if (allowOrigin !== "*") response.headers.append("vary", "Origin");
   if (policy.credentials) response.headers.set("access-control-allow-credentials", "true");
+  // #3914 (E): a `401`'s challenge is readable by a browser client.
+  if (response.headers.has("www-authenticate")) {
+    response.headers.append("access-control-expose-headers", "WWW-Authenticate");
+  }
+  return response;
+}
+
+// #3914 (RFC 9110 §15.5.2): every `401` carries a `WWW-Authenticate` challenge derived from
+// the route's actor(s), in the order given (one header line per challenge). A response that
+// already carries one is left alone. A `Bearer` challenge gains `error="invalid_token"` (RFC
+// 6750 §3) only when the request presented a bearer token, and never an `error_description`.
+export function applyChallenge<R extends Response>(
+  response: R,
+  request: Request,
+  challenges: readonly string[],
+): R {
+  if (response.status !== 401 || response.headers.has("www-authenticate")) return response;
+  const presented = /^\s*bearer\s+\S/i.test(request.headers.get("authorization") ?? "");
+  for (const c of challenges) {
+    const withError = presented && c.startsWith("Bearer ") ? `${c}, error="invalid_token"` : c;
+    response.headers.append("www-authenticate", withError);
+  }
   return response;
 }
 

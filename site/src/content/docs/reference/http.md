@@ -345,7 +345,7 @@ body.
 | Variant | Status | Payload |
 |---|---|---|
 | `BadRequest(message)` | 400 | message |
-| `Unauthorized` | 401 | none |
+| `Unauthorized` | 401 | none, with the route's [`WWW-Authenticate` challenge](/reference/actors/#the-401-challenge) |
 | `Forbidden` | 403 | none |
 | `NotFound` | 404 | none |
 | `MethodNotAllowed` | 405 | none |
@@ -434,7 +434,8 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 `MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
-`RawError` of that status; the router keeps its other headers (the `Allow` of a
+`RawError` of that status; the router keeps its other headers (the `WWW-Authenticate` of a
+`401`, the `Allow` of a
 `405`) and stamps the service's CORS and security headers as usual. Any other
 answer, another status or a fault in the handler sends the router's default
 response instead, and logs why. A service without `on rejected` is unchanged.
@@ -1360,7 +1361,8 @@ From this the compiler synthesises, for that service:
   credential-less by spec, so it must not be rejected by an actor check); and
 - **`Access-Control-Allow-Origin`** (plus `Vary: Origin`) stamped onto **every**
   response of the service — uniformly across the `Ok`/`Raw`/redirect/error/stream
-  variants.
+  variants. A `401` also lists `WWW-Authenticate` in `Access-Control-Expose-Headers`, so a
+  browser client can read the [challenge](/reference/actors/#the-401-challenge).
 
 ### Fields
 

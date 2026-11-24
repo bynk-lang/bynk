@@ -2,7 +2,7 @@
 // Worker entry point for context `secured`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -41,7 +41,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/admin/stats", path) !== null) {
           __route = "GET /admin/stats";
           const result = await surface.http_GET_admin_stats();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_admin);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"secured\""]), __security_admin);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -49,7 +49,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/health", path) !== null) {
           __route = "GET /health";
           const result = await surface.http_GET_health();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_health);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"secured\""]), __security_health);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -65,7 +65,7 @@ export default {
           if (__r_code.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_admin);
           const code = __r_code.value;
           const result = await surface.http_GET_admin_item_Param_code(code);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_admin);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"secured\""]), __security_admin);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -79,7 +79,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_products_Param_id(id);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_store);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"secured\""]), __security_store);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -95,7 +95,7 @@ export default {
           if (__r_code.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_store);
           const code = __r_code.value;
           const result = await surface.http_GET_store_Param_code(code);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_store);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"secured\""]), __security_store);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

@@ -240,6 +240,7 @@ const WORKER_ORDER: &[&str] = &[
     "__verifyCall",
     "__applyCache",
     "__CorsPolicy",
+    "__applyChallenge",
     "__applyCors",
     "__applyEdgeCache",
     "__corsPreflightResponse",
