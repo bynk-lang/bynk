@@ -1,0 +1,15 @@
+// #4198: a failing property over `Decimal` or `Bytes` prints its counterexample in
+// Bynk's own form, not `[object Object]` or an index map.
+suite demo.m {
+  property "a decimal differs from itself" {
+    for all x: Decimal {
+      expect x != x
+    }
+  }
+
+  property "bytes differ from themselves" {
+    for all b: Bytes {
+      expect b != b
+    }
+  }
+}

@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.656.0
+
+A context that writes a bare `consumes bynk` (no braces) and declares its own `CallOutcome`, `CallFailure` or `Refusal` now fails as `bynk.consumes.name_conflict`; rename the type, or consume only what you use with `consumes bynk { … }`.
+
 ## v0.655.1
 
 `BoundaryRejection` gains `MalformedPath(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `MalformedPath(_)`, or a `_` arm. A request whose path cannot be decoded now answers `400`, where it answered `500` and was reported as a fault.
