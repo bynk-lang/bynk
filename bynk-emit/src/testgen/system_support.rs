@@ -1880,6 +1880,18 @@ fn push_session_refusal_drivers(
     }
 }
 
+/// Where a case's own `RequestHeaders` sit among a route's request headers. A body
+/// route's `content-type` is the driver's default, so the case's headers go last and
+/// a `Content-Type` of its own overrides it (#3276 `@form`; #3912 JSON and `@raw`):
+/// how a case probes the route's `415`, or a listed `@raw` type. Otherwise they go first.
+fn spread_order(content_type_overridable: bool, spread: &TsObjectEntry) -> (Entries, Entries) {
+    if content_type_overridable {
+        (Vec::new(), vec![spread.clone()])
+    } else {
+        (vec![spread.clone()], Vec::new())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1924,17 +1936,5 @@ mod tests {
                 bynk_ts::print_expr(&pair)
             )
         );
-    }
-}
-
-/// Where a case's own `RequestHeaders` sit among a route's request headers. A body
-/// route's `content-type` is the driver's default, so the case's headers go last and
-/// a `Content-Type` of its own overrides it (#3276 `@form`; #3912 JSON and `@raw`):
-/// how a case probes the route's `415`, or a listed `@raw` type. Otherwise they go first.
-fn spread_order(content_type_overridable: bool, spread: &TsObjectEntry) -> (Entries, Entries) {
-    if content_type_overridable {
-        (Vec::new(), vec![spread.clone()])
-    } else {
-        (vec![spread.clone()], Vec::new())
     }
 }
