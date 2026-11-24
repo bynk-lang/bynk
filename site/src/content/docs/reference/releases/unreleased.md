@@ -7,6 +7,9 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.661.1** | Fix `bynk check` panicking with "the events service has no recorded subscriber shape" when a test suite delivers an event with `Svc.event(e, env)` |
+| **v0.661.0** | A `delivery { }` section on a `from queue` service sets the consumer's retries, retry delay, dead-letter queue, batching and concurrency in `wrangler.toml`; `bynk deploy` qualifies and creates the dead-letter queue; every queue consumer without a `deadLetter` now draws the warning `bynk.queue.no_dead_letter` (write `deadLetter: None` to say deleting is intended) |
+| **v0.660.0** | `Matches` and the `String` regex methods run in Unicode mode (`u`), `Matches` accepts a leading `(?i)` or `(?s)` group, a refinement's `RegExp` is built once, and OpenAPI writes a `(?i)` pattern out or leaves it out with a note |
 | **v0.659.0** | Routes are tried in a defined order (at the first differing segment a literal beats a `:name`), a route no request can reach is `bynk.http.unreachable_route`, and a literal route matches `/items/` and percent-decoded paths |
 | **v0.658.0** | A cron run that returns `Err` or throws is marked failed in Cron Past Events and logs a labelled record naming the schedule, service, error type and variant (no payload); an unmatched `event.cron` warns |
 | **v0.657.1** | A failing `for all x: Decimal` (or `Bytes`) prints its counterexample in Bynk's own form (`x = 0d`) instead of `[object Object]` |

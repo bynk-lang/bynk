@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `Matches` and the `String` regex methods run in Unicode mode (`u`), `Matches` accepts a leading `(?i)` or `(?s)` group, a refinement's `RegExp` is built once, and OpenAPI writes a `(?i)` pattern out or leaves it out with a note
-breaking: a `Matches` or regex-method pattern that is valid without the `u` flag but not with it (an identity escape such as `\-` outside a class, a `[\w-.]` range) is `bynk.types.invalid_regex`, with a note naming Unicode mode; drop the needless backslash
----
+# 0915 — One regex dialect: Unicode mode, a leading flag group, a `RegExp` built once
 
-## ADR: one-regex-dialect-unicode-mode
-title: One regex dialect: Unicode mode, a leading flag group, a `RegExp` built once
-summary: Matches and the String regex methods run under `u`, share check_regex_literal's flag group, and OpenAPI never publishes a pattern that disagrees with the check
+- **Status:** Accepted (v0.660)
 
 **Context.** `Matches` was validated and run without flags (`new RegExp("^(?:" + p + ")$")` on every check), while the `String` regex methods accepted a leading `(?i)`/`(?m)`/`(?s)` group. Without `u`, `\p{L}` is unavailable and `.` or a negated class matches half a surrogate pair.
 

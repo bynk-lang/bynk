@@ -300,8 +300,8 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     {
         return Some(content);
     }
-    // 5a. #2137: the contextual `advance` of `advance Clock by <Duration>`.
-    if let Some(content) = crate::symbols::describe_advance_at(text, span.start) {
+    // 5a. #2137, #3877: the contextual `advance`, and the queue `delivery` section.
+    if let Some(content) = crate::symbols::describe_contextual_word_at(text, span.start) {
         return Some(content);
     }
     // 5a. #3191: the contextual `by` of an actor clause (an ordinary `by` name

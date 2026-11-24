@@ -3489,6 +3489,12 @@ fn check_service_decls(
         }
     }
 
+    // #3877: validate each service's `delivery { }` policy, and warn of a queue
+    // consumer with no dead-letter queue.
+    for service in table.services.values() {
+        crate::queue_delivery::validate_delivery(service, errors);
+    }
+
     // #2858: validate each service's `json { }` policy, then refuse the one
     // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
     for service in table.services.values() {
@@ -7119,7 +7125,7 @@ fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<Compil
         errors.push(CompileError::new(
             "bynk.queue.invalid_name",
             handler.span,
-            "`on queue` requires a non-empty queue name",
+            "`from queue` requires a non-empty queue name",
         ));
     } else if !crate::project_model::is_queue_name(name) {
         errors.push(

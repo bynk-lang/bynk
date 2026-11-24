@@ -1,2 +1,3 @@
 bynk.context.duplicate_binding the Worker for `ops.hub` would declare two bindings named `KV`: the KV namespace binding of `bynk.cloudflare`'s `Kv` and the Durable Object binding of agent `Kv`
+bynk.queue.no_dead_letter
 # exact

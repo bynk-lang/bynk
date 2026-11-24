@@ -905,6 +905,9 @@ module.exports = grammar({
         // #2858: the optional `json { }` policy, likewise a header-position
         // `from http` concern restricted by the checker.
         optional(field("json", $.json_policy)),
+        // #3877: the optional `delivery { }` policy, a header-position
+        // `from queue` concern restricted by the checker.
+        optional(field("delivery", $.delivery_policy)),
         // v0.140 (ADR 0163): a handler may carry one or more `@name(args)`
         // annotations (`@cache(maxAge: 5.minutes)`, `@limit(maxBody: …)`) —
         // the same shape `store_annotation` already gives store fields.
@@ -958,6 +961,18 @@ module.exports = grammar({
         "}",
       ),
     json_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #3877: `delivery { <name>: <value>, … }`. `delivery` is a contextual
+    // keyword (like `json`); keys are ordinary identifiers matched against the
+    // closed set by the checker.
+    delivery_policy: ($) =>
+      seq(
+        "delivery",
+        "{",
+        repeat(seq($.delivery_field, optional(","))),
+        "}",
+      ),
+    delivery_field: ($) =>
       seq(field("name", $.identifier), ":", field("value", $._expression)),
     // v0.44: `from <protocol>` on the service header.
     // v0.103: `from websocket(in: I, out: O)` binds the inbound/outbound frame

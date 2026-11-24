@@ -1,6 +1,8 @@
 context demo.api
 
 service packer from queue("packing") {
+
+  delivery { deadLetter: None }
   on message(job: String) -> Effect[QueueResult] {
     Ack
   }
