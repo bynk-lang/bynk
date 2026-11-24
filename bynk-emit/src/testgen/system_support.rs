@@ -725,14 +725,10 @@ pub(super) fn emit_system_http_support(
             };
             let url = request_url(&path, typed_query.clone());
             let raw_url = request_url(&path, raw_query.clone());
-            // #3276: a `@form` route's `content-type` is the driver's default, so a
-            // case's own `Content-Type` (a trailing `RequestHeaders`) overrides it,
-            // which is how a case probes the route's `415`.
-            let (spread_first, spread_last): (Entries, Entries) = if is_form {
-                (Vec::new(), vec![headers_spread.clone()])
-            } else {
-                (vec![headers_spread.clone()], Vec::new())
-            };
+            let (spread_first, spread_last) = spread_order(
+                is_form || (body_arg.is_some() && !is_multipart),
+                &headers_spread,
+            );
             let verb = method.as_str();
             let cat = |parts: Vec<&Entries>| -> Entries {
                 parts.into_iter().flatten().cloned().collect()
@@ -1881,6 +1877,18 @@ fn push_session_refusal_drivers(
                 false,
             ));
         }
+    }
+}
+
+/// Where a case's own `RequestHeaders` sit among a route's request headers. A body
+/// route's `content-type` is the driver's default, so the case's headers go last and
+/// a `Content-Type` of its own overrides it (#3276 `@form`; #3912 JSON and `@raw`):
+/// how a case probes the route's `415`, or a listed `@raw` type. Otherwise they go first.
+fn spread_order(content_type_overridable: bool, spread: &TsObjectEntry) -> (Entries, Entries) {
+    if content_type_overridable {
+        (Vec::new(), vec![spread.clone()])
+    } else {
+        (vec![spread.clone()], Vec::new())
     }
 }
 

@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -41,6 +41,9 @@ export default {
       {
         if (method === "POST" && path === "/cart") {
           __route = "POST /cart";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
           let __body_json: __JsonValue;
           try {
             __body_json = (await request.json()) as __JsonValue;
@@ -57,6 +60,9 @@ export default {
       {
         if (method === "POST" && path === "/reject") {
           __route = "POST /reject";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
           let __body_json: __JsonValue;
           try {
             __body_json = (await request.json()) as __JsonValue;
@@ -74,6 +80,9 @@ export default {
         const __m = __matchPath("/cart/:sku", path);
         if (method === "PUT" && __m) {
           __route = "PUT /cart/:sku";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_sku = __m.params["sku"];
           const __r_sku = handlers.Sku.of(__raw_sku);
           if (__r_sku.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.sku", violation: __r_sku.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

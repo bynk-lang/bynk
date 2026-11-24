@@ -83,21 +83,6 @@ a `workers` cross-context signature is diagnosed as not-yet-supported — put it
 inside a record, whose typed codec base64-encodes it, or build with `--target
 bundle`.)
 
-### Cookie and SameSite {#cookie}
-
-`Cookie` is the record a handler attaches to a result with
-[`withCookie`](/reference/http/#setting-cookies). It is exported by `bynk`
-(`consumes bynk { Cookie }`), with `SameSite = enum { Strict, Lax, Unrestricted }`
-(`Unrestricted` is `SameSite=None`):
-
-```text
-Cookie = { name: String, value: String,
-           maxAge: Option[Duration] = None, expires: Option[Instant] = None,
-           domain: Option[String] = None, path: String = "/",
-           secure: Bool = true, httpOnly: Bool = true,
-           sameSite: SameSite = Lax, partitioned: Bool = false }
-```
-
 ### Decimal
 
 `Decimal` is an **exact base-10 number**: an arbitrary-precision integer
@@ -215,68 +200,6 @@ explicitly: `d.toMillis() -> Int` and the static `Duration.millis(n: Int) ->
 Duration`. It round-trips through the JSON codec as an integer. See
 [Operators](/reference/operators/#duration--instant-arithmetic).
 
-### Field annotations: `@name` {#field-name}
-
-A record field may carry `@name("…")` before it, naming the key the field has on an HTTP
-request where that is not an identifier:
-
-```bynk,fragment
-type Filter = {
-  @name("page-size") pageSize: Option[Int],
-  @name("filter[status]") status: Option[String],
-  owner: Option[String],
-}
-```
-
-The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
-only the key a request reader looks for changes. It is legal only on a field of a record used as the
-`cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
-(`bynk.types.field_name_not_request_record`), takes exactly one string literal, or
-a `String` constant bound to one (`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
-a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
-its JSON key is the field name. Two fields may not read the same name
-(`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
-(`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
-refused (`bynk.types.field_name_case_conflict`). The request readers apply it: a
-`cookies`, `query` or `@form`/`@multipart` `body` record reads each renamed field from its wire
-key (the typed system-test drivers and `Form.encode` write it there, and the OpenAPI document
-and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
-follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
-([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
-
-A name that two places must agree on can be a constant. `@name` accepts a bare reference
-to a constant declared exactly `String` (not a refined type) and bound to a string literal,
-or to another such constant, from this unit or a `uses`d commons:
-
-```bynk,fragment
-const VisitsCookie: String = "__Host-visits"
-
-type Prefs = {
-  @name(VisitsCookie) visits: Option[Int],
-}
-```
-
-The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token rule and the
-duplicate and case checks run on the resolved text, and a diagnostic points at the reference
-and names the constant. Go-to-definition, hover and rename work on it.
-
-### File {#file}
-
-`File` is the record a [`@multipart`](/reference/http/#multipart-bodies) body
-names an uploaded file part with. It is exported by `bynk` (`consumes bynk { File }`):
-
-```text
-File = { filename: Option[String], contentType: String, bytes: Bytes }
-```
-
-`filename` is the client's name for the file, `None` for a part with no `filename`;
-`contentType` is the type the client claimed; `bytes` is the whole part, and its size is
-`bytes.length()`. The name and the type are client-controlled, so neither is a storage key
-or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
-`Option` or in a `List` (one layer); a test builds one with a record literal. It is not a boundary
-type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
-a handler's parameter or result, an event or a call argument.
-
 ### Instant
 
 `Instant` (v0.90) is an **absolute point in time**, erased to a `number` of Unix
@@ -323,15 +246,6 @@ date; `Instant.fromIso("\\(day)T00:00:00Z")` is always `Some` for such a `Day`.
 
 `Instant.fromIso(t.toIso())` is `Some(t)` for every instant in the years 0000 to
 9999. Time zones, calendar fields and ISO durations are not part of the kernel.
-
-### RequestCookies {#request-cookies}
-
-`RequestCookies` is the raw, read-only view of an HTTP request's cookies, the type of a
-handler's `cookies` parameter when it needs a name a record field cannot spell. It has
-`get(name) -> Option[String]`, `all(name) -> List[String]` and `names() -> List[String]`,
-and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty()`. It is not
-a boundary type: it cannot be stored, sent or returned. See
-[Reading a prefixed cookie](/reference/http/#request-cookies).
 
 ### String {#string}
 
@@ -631,6 +545,52 @@ be generic (its base is a fixed primitive); only a record or **sum** body may be
 (`bynk.generics.generic_non_record`), and generic sums are described under
 [Sum types](#sum-types).
 
+## HTTP types
+
+The types an `on http` handler uses for cookies and uploaded files. See
+[HTTP](/reference/http/) for how a handler uses them.
+
+### Cookie and SameSite {#cookie}
+
+`Cookie` is the record a handler attaches to a result with
+[`withCookie`](/reference/http/#setting-cookies). It is exported by `bynk`
+(`consumes bynk { Cookie }`), with `SameSite = enum { Strict, Lax, Unrestricted }`
+(`Unrestricted` is `SameSite=None`):
+
+```text
+Cookie = { name: String, value: String,
+           maxAge: Option[Duration] = None, expires: Option[Instant] = None,
+           domain: Option[String] = None, path: String = "/",
+           secure: Bool = true, httpOnly: Bool = true,
+           sameSite: SameSite = Lax, partitioned: Bool = false }
+```
+
+### File {#file}
+
+`File` is the record a [`@multipart`](/reference/http/#multipart-bodies) body
+names an uploaded file part with. It is exported by `bynk` (`consumes bynk { File }`):
+
+```text
+File = { filename: Option[String], contentType: String, bytes: Bytes }
+```
+
+`filename` is the client's name for the file, `None` for a part with no `filename`;
+`contentType` is the type the client claimed; `bytes` is the whole part, and its size is
+`bytes.length()`. The name and the type are client-controlled, so neither is a storage key
+or proof of the content. A `File` is a field of a `@multipart` body record, alone, in an
+`Option` or in a `List` (one layer); a test builds one with a record literal. It is not a boundary
+type: `bynk.types.file_at_boundary` refuses it, or a record carrying one, in an agent's store,
+a handler's parameter or result, an event or a call argument.
+
+### RequestCookies {#request-cookies}
+
+`RequestCookies` is the raw, read-only view of an HTTP request's cookies, the type of a
+handler's `cookies` parameter when it needs a name a record field cannot spell. It has
+`get(name) -> Option[String]`, `all(name) -> List[String]` and `names() -> List[String]`,
+and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty()`. It is not
+a boundary type: it cannot be stored, sent or returned. See
+[Reading a prefixed cookie](/reference/http/#request-cookies).
+
 ## The JSON codec
 
 Four compiler-backed statics decode and encode JSON at a typed boundary:
@@ -707,9 +667,8 @@ A `DecodeError` has no string form, so `"\(e)"` is refused
 expected number, got string`. `kind` is a `String`, not a sum type, so compare it
 as text.
 
-`Json.encode` writes an `Option[U]` in Bynk's tagged form:
-`{"kind": "Some", "value": …}` or `{"kind": "None"}`. `Json.decode` accepts
-that form and also the forms other JSON producers use for an optional value:
+`Json.decode` accepts the tagged form and also the forms other JSON producers
+use for an optional value:
 
 | JSON for an `Option[U]` | Decodes to |
 |---|---|
@@ -1521,6 +1480,51 @@ fn kind(a: Account) -> String {
   for a construction, write `type: <value>`.
 
 The emitted TypeScript keeps the field name: `a.type`, `{ type: "Organization" }`.
+
+### Field annotations: `@name` {#field-name}
+
+A record field may carry `@name("…")` before it, naming the key the field has on an HTTP
+request where that is not an identifier:
+
+```bynk,fragment
+type Filter = {
+  @name("page-size") pageSize: Option[Int],
+  @name("filter[status]") status: Option[String],
+  owner: Option[String],
+}
+```
+
+The field is `pageSize` everywhere in Bynk (access, construction, defaults, refinements);
+only the key a request reader looks for changes. It is legal only on a field of a record used as the
+`cookies`, `query` or `@form`/`@multipart` `body` record of an `on http` handler
+(`bynk.types.field_name_not_request_record`), takes exactly one string literal, or
+a `String` constant bound to one (`bynk.types.field_name_bad_arg`), and such a record may not be used as a JSON body, a result,
+a store field, an event or a call argument (`bynk.types.field_name_record_not_boundary`), since
+its JSON key is the field name. Two fields may not read the same name
+(`bynk.types.field_name_duplicate`), a cookie name must be a token and no name may be empty
+(`bynk.types.field_name_invalid`), and cookie and query names that differ only in case are
+refused (`bynk.types.field_name_case_conflict`). The request readers apply it: a
+`cookies`, `query` or `@form`/`@multipart` `body` record reads each renamed field from its wire
+key (the typed system-test drivers and `Form.encode` write it there, and the OpenAPI document
+and hover name it), while a failure still names the field, as `query.pageSize`. A tracked
+follow-up moves `examples/sessions` to a typed `@name("__Host-sid")` read
+([#3343](https://github.com/bynk-lang/bynk/issues/3343)).
+
+A name that two places must agree on can be a constant. `@name` accepts a bare reference
+to a constant declared exactly `String` (not a refined type) and bound to a string literal,
+or to another such constant, from this unit or a `uses`d commons:
+
+```bynk,fragment
+const VisitsCookie: String = "__Host-visits"
+
+type Prefs = {
+  @name(VisitsCookie) visits: Option[Int],
+}
+```
+
+The compiler reads `@name(VisitsCookie)` as `@name("__Host-visits")`: the token rule and the
+duplicate and case checks run on the resolved text, and a diagnostic points at the reference
+and names the constant. Go-to-definition, hover and rename work on it.
 
 ### Field defaults {#field-defaults}
 

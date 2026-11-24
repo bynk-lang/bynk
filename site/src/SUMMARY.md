@@ -152,6 +152,7 @@
     - [Apply a breaking-change migration without an editor](guides/projects-build-and-deployment/apply-a-migration-without-an-editor.md)
     - [Run your project locally](guides/projects-build-and-deployment/run-locally.md)
     - [Deploy to Cloudflare](guides/projects-build-and-deployment/deploy-to-cloudflare.md)
+    - [Deploy from CI](guides/projects-build-and-deployment/deploy-from-ci.md)
     - [Roll back a deployment](guides/projects-build-and-deployment/roll-back-a-deployment.md)
     - [Contract skew across independently deployed contexts](guides/projects-build-and-deployment/contract-skew.md)
     - [Target Cloudflare Workers](guides/projects-build-and-deployment/cloudflare-workers.md)

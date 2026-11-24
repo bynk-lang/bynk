@@ -14,4 +14,10 @@ service api from http {
     on POST("/icons") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")
     }
+
+    @raw(contentType: ["image/png", "image/jpeg"])
+    @limit(maxBody: 1_000_000)
+    on POST("/photos") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
 }

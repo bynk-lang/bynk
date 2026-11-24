@@ -20,6 +20,8 @@ Use `--yes` in an automated, non-interactive invocation:
 bynk deploy --yes
 ```
 
+To deploy from GitHub Actions, see [Deploy from CI](/book/guides/projects-build-and-deployment/deploy-from-ci/).
+
 ## Review a plan
 
 `--dry-run` (or its `--plan` alias) changes nothing on Cloudflare or in the

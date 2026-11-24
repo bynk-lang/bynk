@@ -59,7 +59,7 @@ export default {
       {
         if (method === "POST" && path === "/github") {
           __route = "POST /github";
-          if (!__mediaTypeMatches(request, "application/json")) {
+          if (!__mediaTypeMatches(request, ["application/json"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_github);
           }
           const __contentLength = request.headers.get("content-length");
