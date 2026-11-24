@@ -1072,10 +1072,14 @@ fn hosted_takes_envelope(
         None => {
             runtime_use.note_internal_fault(
                 span,
-                format!(
-                    "the events service `{svc}` of unit `{target_name}` has no recorded \
-                     subscriber shape"
-                ),
+                [
+                    "the events service `",
+                    svc,
+                    "` of unit `",
+                    target_name,
+                    "` has no recorded subscriber shape",
+                ]
+                .concat(),
             );
             None
         }
