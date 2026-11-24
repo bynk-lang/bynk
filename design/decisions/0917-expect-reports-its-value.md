@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A failed `expect … is …`, and an `expect false` that is a `match` arm, report the value they tested (`r was {"tag":"Err",…}`), and `bynk test --format json` carries it as `actual`
-probes: ast_importers
----
+# 0917 — A failed expect reports the value it tested
 
-## ADR: expect-reports-its-value
-title: A failed expect reports the value it tested
-summary: How a failed `is` and a `match`-arm `expect false` show their subject, and what `--format json` adds
+- **Status:** Accepted (v0.662)
 
 **Context.** Only a top-level comparison reported expected-vs-actual. A failed `expect r is Ok(_)` said nothing of what `r` was, and `_ => expect false` was just as silent (#3980).
 

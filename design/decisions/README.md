@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0918](0918-www-authenticate-on-401.md) | **Every 401 carries a WWW-Authenticate challenge** (v0.662.1) — The challenge follows the route's actor, uses a registered scheme where one exists, and is exposed to browsers by CORS | Accepted (v0.662.1) |
+| [0917](0917-expect-reports-its-value.md) | **A failed expect reports the value it tested** (v0.662) — How a failed `is` and a `match`-arm `expect false` show their subject, and what `--format json` adds | Accepted (v0.662) |
 | [0916](0916-queue-delivery-policy.md) | **A queue consumer's delivery policy is declared in source** (v0.661) — A `delivery { }` section sets retries, retry delay, dead-letter queue, batching and concurrency, and the dead-letter queue is checked, qualified and created like any queue | Accepted (v0.661) |
 | [0915](0915-one-regex-dialect-unicode-mode.md) | **One regex dialect: Unicode mode, a leading flag group, a `RegExp` built once** (v0.660) — Matches and the String regex methods run under `u`, share check_regex_literal's flag group, and OpenAPI never publishes a pattern that disagrees with the check | Accepted (v0.660) |
 | [0914](0914-route-matching-order.md) | **A defined, positional order for matching routes, and unreachable routes refused** (v0.659) — At the first differing segment a literal beats a parameter; a route no request can reach is an error | Accepted (v0.659) |
