@@ -53,50 +53,56 @@ pub(super) fn check_map_more(
         return Some(None);
     }
     let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
-    Some(match op {
-        MapOp::IsEmpty => Some(bool_ty),
-        MapOp::Entries => Some(tys.intern(Ty::List(map_entry_ty(key, val, tys)))),
-        MapOp::Remove => {
-            check_arg(&args[0], key, "the `Map.remove` key", ctx);
-            Some(tys.intern(Ty::Map(key, val)))
+    // `?` inside returns from this closure only: a failed argument is reported
+    // already and types as `None`, which is still one of our methods.
+    let typed = |ctx: &mut Ctx| -> Option<TyId> {
+        match op {
+            MapOp::IsEmpty => Some(bool_ty),
+            MapOp::Entries => Some(tys.intern(Ty::List(map_entry_ty(key, val, tys)))),
+            MapOp::Remove => {
+                check_arg(&args[0], key, "the `Map.remove` key", ctx);
+                Some(tys.intern(Ty::Map(key, val)))
+            }
+            MapOp::Contains => {
+                check_arg(&args[0], key, "the `Map.contains` key", ctx);
+                Some(bool_ty)
+            }
+            MapOp::GetOrElse => {
+                check_arg(&args[0], key, "the `Map.getOrElse` key", ctx);
+                check_arg(&args[1], val, "the `Map.getOrElse` default", ctx);
+                Some(val)
+            }
+            MapOp::Filter => {
+                let p = Ty::Fn {
+                    params: vec![key, val],
+                    ret: bool_ty,
+                };
+                check_arg(&args[0], tys.intern(p), "the `Map.filter` predicate", ctx);
+                Some(tys.intern(Ty::Map(key, val)))
+            }
+            MapOp::MapValues => {
+                let u =
+                    check_kernel_fn_arg(&args[0], vec![val], "the `Map.mapValues` function", ctx)?;
+                Some(tys.intern(Ty::Map(key, u)))
+            }
+            MapOp::Fold => {
+                let acc = type_of(&args[0], None, ctx)?;
+                let step = Ty::Fn {
+                    params: vec![acc, key, val],
+                    ret: acc,
+                };
+                check_arg(
+                    &args[1],
+                    tys.intern(step),
+                    "the `Map.fold` step function",
+                    ctx,
+                );
+                Some(acc)
+            }
+            _ => unreachable!("filtered above"),
         }
-        MapOp::Contains => {
-            check_arg(&args[0], key, "the `Map.contains` key", ctx);
-            Some(bool_ty)
-        }
-        MapOp::GetOrElse => {
-            check_arg(&args[0], key, "the `Map.getOrElse` key", ctx);
-            check_arg(&args[1], val, "the `Map.getOrElse` default", ctx);
-            Some(val)
-        }
-        MapOp::Filter => {
-            let p = Ty::Fn {
-                params: vec![key, val],
-                ret: bool_ty,
-            };
-            check_arg(&args[0], tys.intern(p), "the `Map.filter` predicate", ctx);
-            Some(tys.intern(Ty::Map(key, val)))
-        }
-        MapOp::MapValues => {
-            let u = check_kernel_fn_arg(&args[0], vec![val], "the `Map.mapValues` function", ctx)?;
-            Some(tys.intern(Ty::Map(key, u)))
-        }
-        MapOp::Fold => {
-            let acc = type_of(&args[0], None, ctx)?;
-            let step = Ty::Fn {
-                params: vec![acc, key, val],
-                ret: acc,
-            };
-            check_arg(
-                &args[1],
-                tys.intern(step),
-                "the `Map.fold` step function",
-                ctx,
-            );
-            Some(acc)
-        }
-        _ => unreachable!("filtered above"),
-    })
+    };
+    Some(typed(ctx))
 }
 
 /// The `Set` methods #3961 adds; `None` for one it does not own.
@@ -126,45 +132,50 @@ pub(super) fn check_set_more(
     }
     let set = tys.intern(Ty::Set(elem));
     let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
-    Some(match op {
-        SetOp::IsEmpty => Some(bool_ty),
-        SetOp::Union | SetOp::Intersect | SetOp::Difference => {
-            check_arg(&args[0], set, &format!("the `Set.{name}` argument"), ctx);
-            Some(set)
+    // `?` inside returns from this closure only: a failed argument is reported
+    // already and types as `None`, which is still one of our methods.
+    let typed = |ctx: &mut Ctx| -> Option<TyId> {
+        match op {
+            SetOp::IsEmpty => Some(bool_ty),
+            SetOp::Union | SetOp::Intersect | SetOp::Difference => {
+                check_arg(&args[0], set, &format!("the `Set.{name}` argument"), ctx);
+                Some(set)
+            }
+            SetOp::IsSubsetOf => {
+                check_arg(&args[0], set, "the `Set.isSubsetOf` argument", ctx);
+                Some(bool_ty)
+            }
+            SetOp::Filter => {
+                let p = Ty::Fn {
+                    params: vec![elem],
+                    ret: bool_ty,
+                };
+                check_arg(&args[0], tys.intern(p), "the `Set.filter` predicate", ctx);
+                Some(set)
+            }
+            SetOp::Map => {
+                let u = check_kernel_fn_arg(&args[0], vec![elem], "the `Set.map` function", ctx)?;
+                check_key(ctx, u, args[0].span, &KeySite::SetElement);
+                Some(tys.intern(Ty::Set(u)))
+            }
+            SetOp::Fold => {
+                let acc = type_of(&args[0], None, ctx)?;
+                let step = Ty::Fn {
+                    params: vec![acc, elem],
+                    ret: acc,
+                };
+                check_arg(
+                    &args[1],
+                    tys.intern(step),
+                    "the `Set.fold` step function",
+                    ctx,
+                );
+                Some(acc)
+            }
+            _ => unreachable!("filtered above"),
         }
-        SetOp::IsSubsetOf => {
-            check_arg(&args[0], set, "the `Set.isSubsetOf` argument", ctx);
-            Some(bool_ty)
-        }
-        SetOp::Filter => {
-            let p = Ty::Fn {
-                params: vec![elem],
-                ret: bool_ty,
-            };
-            check_arg(&args[0], tys.intern(p), "the `Set.filter` predicate", ctx);
-            Some(set)
-        }
-        SetOp::Map => {
-            let u = check_kernel_fn_arg(&args[0], vec![elem], "the `Set.map` function", ctx)?;
-            check_key(ctx, u, args[0].span, &KeySite::SetElement);
-            Some(tys.intern(Ty::Set(u)))
-        }
-        SetOp::Fold => {
-            let acc = type_of(&args[0], None, ctx)?;
-            let step = Ty::Fn {
-                params: vec![acc, elem],
-                ret: acc,
-            };
-            check_arg(
-                &args[1],
-                tys.intern(step),
-                "the `Set.fold` step function",
-                ctx,
-            );
-            Some(acc)
-        }
-        _ => unreachable!("filtered above"),
-    })
+    };
+    Some(typed(ctx))
 }
 
 /// `Map.of(entries: List[MapEntry[K, V]]) -> Map[K, V]`: a later entry for a key
@@ -207,18 +218,18 @@ pub(super) fn check_map_of(
 }
 
 /// The `bynk.map` and `bynk.set` free functions and the method form each rewrites
-/// to: `(module, function, method)`. One table, read by the warning below and by
+/// to: `(module, function, method, arity)`. One table, read by the warning below and by
 /// the wasm `bynk_reference` catalogue so the two cannot drift.
-pub const BYNK_COLLECTION_DEPRECATED: &[(&str, &str, &str)] = &[
-    ("bynk.map", "values", "values"),
-    ("bynk.map", "contains", "contains"),
-    ("bynk.map", "getOr", "getOrElse"),
-    ("bynk.set", "union", "union"),
-    ("bynk.set", "intersect", "intersect"),
-    ("bynk.set", "difference", "difference"),
-    ("bynk.set", "isSubsetOf", "isSubsetOf"),
-    ("bynk.set", "filterSet", "filter"),
-    ("bynk.set", "mapSet", "map"),
+pub const BYNK_COLLECTION_DEPRECATED: &[(&str, &str, &str, usize)] = &[
+    ("bynk.map", "values", "values", 1),
+    ("bynk.map", "contains", "contains", 2),
+    ("bynk.map", "getOr", "getOrElse", 3),
+    ("bynk.set", "union", "union", 2),
+    ("bynk.set", "intersect", "intersect", 2),
+    ("bynk.set", "difference", "difference", 2),
+    ("bynk.set", "isSubsetOf", "isSubsetOf", 2),
+    ("bynk.set", "filterSet", "filter", 2),
+    ("bynk.set", "mapSet", "map", 2),
 ];
 
 /// A call to a deprecated `bynk.map`/`bynk.set` function: a non-failing warning
@@ -233,9 +244,9 @@ pub(super) fn warn_deprecated_collection_fn(
     let Some(module) = ctx.input.imported_from.get(&name.name).cloned() else {
         return;
     };
-    let Some(&(_, _, method)) = BYNK_COLLECTION_DEPRECATED
+    let Some(&(_, _, method, arity)) = BYNK_COLLECTION_DEPRECATED
         .iter()
-        .find(|(m, f, _)| *m == module && *f == name.name)
+        .find(|(m, f, _, _)| *m == module && *f == name.name)
     else {
         return;
     };
@@ -257,8 +268,9 @@ pub(super) fn warn_deprecated_collection_fn(
         "the `{module}` free functions are superseded by the `{}` methods (#3961); the method form reads left to right and chains",
         if module == "bynk.map" { "Map" } else { "Set" }
     ));
-    // The rewrite needs a receiver. A wrong-arity call is reported elsewhere.
-    if !args.is_empty() {
+    // The rewrite needs the function's own shape; a wrong-arity call is reported
+    // elsewhere and gets no fix.
+    if args.len() == arity {
         let mut edits = vec![(
             Span::new(name.span.start, args[0].span.start),
             String::new(),

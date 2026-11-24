@@ -1,0 +1,5 @@
+commons demo.mapfold
+
+fn bad(m: Map[String, Int]) -> Int {
+  m.fold(missing, (acc, k, v) => acc + v)
+}

@@ -195,8 +195,10 @@ fn units() -> (Vec<CapabilityEntry>, Vec<ModuleEntry>) {
                         } else {
                             bynk_check::checker::BYNK_COLLECTION_DEPRECATED
                                 .iter()
-                                .find(|(m, n, _)| m == unit_name && *n == id.name)
-                                .map(|(_, _, method)| format!("use the method form `.{method}(…)`"))
+                                .find(|(m, n, _, _)| m == unit_name && *n == id.name)
+                                .map(|(_, _, method, _)| {
+                                    format!("use the method form `.{method}(…)`")
+                                })
                         };
                         Some(Member {
                             name: id.name.clone(),
