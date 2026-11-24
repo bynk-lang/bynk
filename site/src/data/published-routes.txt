@@ -1869,6 +1869,7 @@
 /reference/diagnostics/bynk.record_spread.non_record_base/
 /reference/diagnostics/bynk.record_spread.type_mismatch/
 /reference/diagnostics/bynk.record_spread.unknown_field/
+/reference/diagnostics/bynk.refine.bound_not_literal/
 /reference/diagnostics/bynk.refine.literal_violates/
 /reference/diagnostics/bynk.registry.account_refused/
 /reference/diagnostics/bynk.registry.bad_archive/
