@@ -28,6 +28,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+// #4235: shared generated sources (the std, the test runtime) are snapshotted once.
+#[path = "../support/shared_snapshots.rs"]
+mod shared_snapshots;
+
 fn fixture_dirs(category: &str) -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -332,14 +336,21 @@ fn positive_fixtures() {
                         let actual = actual_by_path.get(&rel);
                         match actual {
                             Some(a) => {
-                                if *a != want {
+                                // #4235: shared regions compare against their shared
+                                // snapshot; the rest against this fixture's.
+                                let elided = shared_snapshots::elide(&rel, a);
+                                for f in shared_snapshots::check_regions(&elided.regions) {
+                                    all_ok = false;
+                                    report.push_str(&format!("\n--- {} ---\n{f}", rel.display()));
+                                }
+                                if elided.text != want {
                                     all_ok = false;
                                     report.push_str(&format!(
                                         "\n--- {}{} ---\n--- expected ---\n{}\n--- actual ---\n{}\n",
                                         rel.display(),
-                                        whitespace_note(a, &want),
+                                        whitespace_note(&elided.text, &want),
                                         want,
-                                        a,
+                                        elided.text,
                                     ));
                                 }
                             }
@@ -457,6 +468,7 @@ fn bless_positive_fixtures() {
     if std::env::var("BYNK_BLESS").is_err() {
         return;
     }
+    let mut shared = shared_snapshots::SharedBless::default();
     for dir in fixture_dirs("positive") {
         let src_dir = dir.join("src");
         if !src_dir.is_dir() {
@@ -499,9 +511,12 @@ fn bless_positive_fixtures() {
             if let Some(parent) = target_path.parent() {
                 fs::create_dir_all(parent).unwrap();
             }
-            fs::write(&target_path, doc.text()).unwrap();
+            let elided = shared_snapshots::elide(path, &doc.text());
+            shared.record(&dir, elided.regions);
+            fs::write(&target_path, elided.text).unwrap();
         }
     }
+    shared.write();
 }
 
 /// The `/* unknown */` placeholder must never reach emitted output. It is the
@@ -1062,4 +1077,30 @@ fn a_build_emits_the_same_bytes_every_time() {
             }
         }
     }
+}
+
+/// #4235: a shared region is elided only when it is the *current* shared text. A fixture whose
+/// emitted module carries a changed fragment keeps it in full, so its comparison fails with the
+/// whole difference instead of passing against a stale marker; and an untouched module elides.
+#[test]
+fn a_changed_test_runtime_fragment_is_not_elided() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "tests/fixtures/positive/1649_agent_state_round_trip/expected/tests/demo_state.test.ts",
+    );
+    let real = shared_snapshots::read_expanded(&path);
+    let rel = Path::new("tests/demo_state.test.ts");
+
+    let intact = shared_snapshots::elide(rel, &real);
+    assert!(intact.text.contains("<<bynk-shared: testing/expectation>>"));
+    assert!(!intact.text.contains("class ExpectationError"));
+    assert!(shared_snapshots::check_regions(&intact.regions).is_empty());
+
+    let changed = real.replacen("class ExpectationError", "class  ExpectationError", 1);
+    let out = shared_snapshots::elide(rel, &changed);
+    assert!(!out.text.contains("<<bynk-shared: testing/expectation>>"));
+    assert!(out.text.contains("class  ExpectationError"));
+    assert_ne!(
+        out.text, intact.text,
+        "the fixture's own comparison would fail"
+    );
 }

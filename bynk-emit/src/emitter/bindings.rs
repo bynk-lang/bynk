@@ -139,6 +139,7 @@ fn context_bindings(
         .collect();
     instances.sort_by(|a, b| a.0.cmp(b.0));
     let mut instances: Vec<WorkerBinding> = instances.into_iter().map(|(_, b)| b).collect();
+    instances.extend(dead_letter_bindings(table));
     if unit.idempotency {
         instances.push(bynk_check::worker_bindings::idempotency_binding());
     }
@@ -155,6 +156,21 @@ fn context_bindings(
         singletons,
         unit.publishes,
     )
+}
+
+/// #3878: the producer binding of each queue consumer's dead-letter queue, in queue order, by the
+/// consumer's own name (see [`dead_letter_binding`]).
+fn dead_letter_bindings(table: &UnitTable) -> Vec<WorkerBinding> {
+    bynk_check::symbols::queue_deliveries(table)
+        .into_iter()
+        .filter_map(|d| {
+            let queue = d.dead_letter?;
+            Some(WorkerBinding {
+                name: crate::emitter::workers_entry::dead_letter_binding(&d.queue),
+                source: BindingSource::QueueDeadLetter { queue },
+            })
+        })
+        .collect()
 }
 
 /// The binding of derived instance `cap`, by its base capability: every
@@ -302,7 +318,7 @@ fn rank(source: &BindingSource) -> u8 {
         // P3 (#2342): the rate limiters, after the buckets.
         BindingSource::RateLimitInstance { .. } => 5,
         // P2 (#2578): the queue producers, after the rate limiters.
-        BindingSource::QueueProducer { .. } => 6,
+        BindingSource::QueueProducer { .. } | BindingSource::QueueDeadLetter { .. } => 6,
         // P3b (#2582): the Analytics Engine datasets, after the producers.
         BindingSource::AnalyticsDataset { .. } => 7,
         // P4a (#2602): the D1 databases, after the datasets.

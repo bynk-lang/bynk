@@ -24,7 +24,8 @@ service <Name> from queue("<name>") {
   [Delivery metadata](#delivery-metadata)), in either order. Anything else is
   `bynk.queue.bad_params`. The
   message is deserialised from the queue body before the handler runs; a
-  malformed message is retried.
+  body that does not decode is never retried and the handler does not see it
+  ([Messages that cannot be decoded](#messages-that-cannot-be-decoded)).
 - **Return type:** must be `Effect[QueueResult]` — the verdict sum `Ack | Retry`
   (`bynk.queue.return_not_queue_result`). `Ack` confirms the message; `Retry`
   redelivers it, carrying a `String` reason for the log.
@@ -159,6 +160,35 @@ Bynk does not expose it until that has been shown on a deployed queue.
 
 A message whose own type is `QueueDelivery`, or a second `QueueDelivery`, is
 `bynk.queue.bad_params`.
+
+## Messages that cannot be decoded
+
+Only the generated entry decodes a message body, so the handler never sees a body that does
+not decode as its message type, and cannot decide what happens to it. The same bytes would
+never decode on a retry, so the entry **never retries** one. What it does instead depends on
+the consumer's `delivery { }`:
+
+| `delivery` | A message that cannot be decoded |
+|---|---|
+| `deadLetter: "q-dlq"` | sent to `q-dlq` unchanged (as JSON), then acknowledged; one log line |
+| `deadLetter: None`, or no section | acknowledged (dropped) and reported as a fault; one log line |
+
+- The dead-letter send goes through a `[[queues.producers]]` binding the generated
+  `wrangler.toml` adds for the consumer, named `__BYNK_DLQ_<QUEUE>` (the consumer's queue
+  name in upper case, `-` as `_`). It is the consumer's own, so a Worker group's members and
+  a context with several consumers never share one. If the send fails, or the binding is missing from `env`, the message is retried
+  as any other fault is, so nothing is lost while the dead-letter queue is unavailable.
+- The log line names the queue, the message type and the decode error's path and kind (for
+  example `StructuralMismatch` at `$.id`), never the body, which can hold user data and is
+  kept on the dead-letter queue for inspection.
+- Without a dead-letter queue the fault is reported through `waitUntil`, so the invocation
+  shows as faulted. Every message in the batch still gets an explicit `ack()` or `retry()`,
+  which the platform honours over the rejected promise, so nothing is redelivered.
+- A body that decoded before a consumer's message type changed fails now and is
+  dead-lettered, which is correct: a message that cannot be read is not the handler's to run.
+
+At the `system` tier the address yields `Undecodable` for such a body
+([testing](/reference/testing/#cron-queue-system)).
 
 ## Example
 

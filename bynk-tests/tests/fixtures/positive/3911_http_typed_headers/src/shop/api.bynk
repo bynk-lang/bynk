@@ -1,0 +1,33 @@
+context shop.api
+
+type IdempotencyKey = String where MinLength(8) && MaxLength(64)
+type Mode = enum { Fast, Slow }
+
+type UploadHeaders = {
+	@name("content-length") length: Int where NonNegative,
+	@name("idempotency-key") key: Option[IdempotencyKey],
+	@name("x-tag") tags: List[String] = [],
+	@name("x-mode") mode: Option[Mode],
+	priority: Int = 5,
+}
+
+service api from http {
+	// Typed headers: decoded, defaulted and validated before the handler runs.
+	on GET("/probe") (headers: UploadHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		let key = match headers.key {
+			Some(k) => "\(k)"
+			None => "-"
+		}
+		let mode = match headers.mode {
+			Some(Fast) => "fast"
+			Some(Slow) => "slow"
+			None => "-"
+		}
+		Ok("\(headers.length) \(key) \(headers.tags.length()) \(mode) \(headers.priority)")
+	}
+
+	// The raw view stays.
+	on GET("/raw") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(headers.get("x-probe").getOrElse("-"))
+	}
+}
