@@ -84,9 +84,11 @@ pub fn kernel_method_signature(
     // #3955: `compare` applies to every orderable receiver. A named type is
     // taken as orderable here (its `derives` is not known to this lookup; a
     // receiver that is not `Ord` is reported by the checker at the call).
-    let ord = bynk_check::kernel_methods::is_ord_receiver(ty, tys, &|_| true)
-        .then_some(bynk_check::kernel_methods::ORD_RECEIVER_TABLE)
-        .unwrap_or(&[]);
+    let ord = if bynk_check::kernel_methods::is_ord_receiver(ty, tys, &|_| true) {
+        bynk_check::kernel_methods::ORD_RECEIVER_TABLE
+    } else {
+        &[]
+    };
     bynk_check::kernel_methods::methods_for(ty, tys)
         .iter()
         .chain(ord)
