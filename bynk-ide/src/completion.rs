@@ -1539,7 +1539,7 @@ pub fn in_service_body_item_position(text: &str, offset: usize, line_prefix: &st
 
 /// The byte index of the innermost `(` still open at `offset` — the paren analogue
 /// of [`innermost_open_brace`], for `@cache( … )` argument-position detection.
-fn innermost_open_paren(text: &str, offset: usize) -> Option<usize> {
+pub(crate) fn innermost_open_paren(text: &str, offset: usize) -> Option<usize> {
     let bytes = text.as_bytes();
     let end = offset.min(bytes.len());
     let mut depth = 0i32;

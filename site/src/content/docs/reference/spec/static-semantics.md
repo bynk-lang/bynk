@@ -1891,7 +1891,8 @@ schedule is (`bynk.cron.invalid_schedule` otherwise), and duplicate detection an
 trigger table read it. A cron handler MUST take at most two parameters, at most one `Instant` (the
 scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
-parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
+parameter (plus, #3880, at most one `QueueDelivery` of `bynk.cloudflare`, in either order, which receives
+the platform's attempt count and send time), a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes). A `from queue` service MAY carry one `delivery { }` section (#3877), whose keys are the
 closed set `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours),
 `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole

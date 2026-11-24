@@ -254,6 +254,23 @@ export const R2Part = {
 };
 
 /**
+ * What Cloudflare knows about the delivery of a message to a queue consumer,
+ * as an `on message` handler's optional second parameter. `attempts` counts
+ * the times the consumer has been given the message, starting at 1, so a
+ * handler can back off or notice a message that keeps failing. `sentAt` is
+ * when the message was sent, so a message that was sent with a delay waited
+ * at least that long. Neither is a deduplication key: delivery is at least
+ * once, and only a key the producer writes into the message deduplicates.
+ */
+export interface QueueDelivery {
+  readonly attempts: number;
+  readonly sentAt: number;
+}
+
+export const QueueDelivery = {
+};
+
+/**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
  * it can be delivered: whole seconds (a part second rounds up), at most 12
  * hours; `None`, the default, delivers as soon as the queue can.
@@ -4249,6 +4266,35 @@ export function __deserialise_QueryOptions(json: __JsonValue, path: string = "$"
   if (__r_filter.tag === "Err") return __r_filter;
   const __filter = __r_filter.value;
   return Ok({ topK: __topK, returnValues: __returnValues, returnMetadata: __returnMetadata, namespace: __namespace, filter: __filter } as QueryOptions);
+}
+
+export function __serialise_QueueDelivery(value: QueueDelivery): __JsonValue {
+  return {
+    attempts: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.attempts),
+    sentAt: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Instant outside the safe-integer range at boundary"); return v as __JsonValue; })(value.sentAt),
+  };
+}
+
+export function __deserialise_QueueDelivery(json: __JsonValue, path: string = "$"): Result<QueueDelivery, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["attempts"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.attempts`, expected: "number", actual: typeof obj["attempts"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["attempts"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.attempts`, expected: "safe integer", actual: String(obj["attempts"]) });
+  }
+  const __attempts = obj["attempts"];
+  if (typeof obj["sentAt"] !== "number") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "number", actual: typeof obj["sentAt"] });
+  }
+  if (!globalThis.Number.isSafeInteger(obj["sentAt"])) {
+    return Err({ kind: "StructuralMismatch", path: `${path}.sentAt`, expected: "safe integer", actual: String(obj["sentAt"]) });
+  }
+  const __sentAt = obj["sentAt"];
+  return Ok({ attempts: __attempts, sentAt: __sentAt } as QueueDelivery);
 }
 
 export function __serialise_QueueSend(value: QueueSend): __JsonValue {
