@@ -1,10 +1,10 @@
 import type { DurableObjectState } from "./storage.ts";
 import { makeTestState } from "./storage.ts";
-import type { BoundaryError, JsonValue } from "./boundary.ts";
+import type { BoundaryError, CallOutcome, JsonValue } from "./boundary.ts";
 import { boundaryError } from "./boundary.ts";
 import { LAYOUT_PER_ENTRY } from "./entries.ts";
 import type { Result } from "./result.ts";
-import { Ok } from "./result.ts";
+import { None, Ok } from "./result.ts";
 
 // v0.9.2: agent instantiation + per-key state lifecycle.
 //
@@ -439,6 +439,42 @@ function contentionFault(kind: AgentContentionFault["kind"], agent: string, mess
   return e;
 }
 
+// #3933: which contention fault an error is. In the instance's own process it carries
+// `agentFault`; across a Durable Object boundary the caller has only the fault's message,
+// which begins with its kind (`contentionFault`).
+function contentionKindOf(e: unknown): AgentContentionFault["kind"] | undefined {
+  const fault = (e as { agentFault?: AgentContentionFault } | null)?.agentFault;
+  if (fault !== undefined) return fault.kind;
+  const message = (e as { message?: unknown } | null)?.message;
+  if (typeof message !== "string") return undefined;
+  if (message.startsWith("AgentBusy: ")) return "AgentBusy";
+  if (message.startsWith("ReentrantAgentCall: ")) return "ReentrantAgentCall";
+  return undefined;
+}
+
+/// #3933: `Agent(key).op.outcome(args)`: the agent call's failure as a value, a `CallOutcome` (the
+/// same type a cross-context call yields). An agent call that waited past its queue limit
+/// (`AgentBusy`) never started its handler: `Unreachable(None)`. A fault in the handler, an
+/// invariant violation and a rehydration violation are `Faulted`: the handler ran, and committed
+/// nothing. `ReentrantAgentCall` stays a fault (a call cycle is a bug, and a value would invite
+/// retrying it), as does a failure to encode the call or decode its answer (a toolchain bug).
+/// There is no wire to refuse an agent call, so `Rejected` never occurs. A fault turned into a
+/// value is logged once here as `AgentFaulted <Agent>.<op>`; `AgentBusy` was logged where the
+/// queue gave up.
+export async function callAgentOutcome<R>(call: Promise<R>, target: string): Promise<CallOutcome<R>> {
+  try {
+    return { tag: "Handled", result: await call };
+  } catch (e) {
+    const kind = contentionKindOf(e);
+    if (kind === "AgentBusy") return { tag: "Unreachable", status: None };
+    if (kind === "ReentrantAgentCall" || (e as { boundaryError?: unknown } | null)?.boundaryError !== undefined) {
+      throw e;
+    }
+    globalThis.console.error(`AgentFaulted ${target}`);
+    return { tag: "Faulted" };
+  }
+}
+
 export function reentrantAgentCall(agent: string): Error {
   return contentionFault(
     "ReentrantAgentCall",
@@ -703,5 +739,5 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, serialiseAgentKey as __serialiseAgentKey, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
+export { AGENT_WIRE_PASS as __AGENT_WIRE_PASS, StateRegistry as __StateRegistry, decodeAgentArgs as __decodeAgentArgs, decodeAgentKey as __decodeAgentKey, dispatchToEventsFanout as __dispatchToEventsFanout, encodeAgentResult as __encodeAgentResult, makeAgent as __makeAgent, serialiseAgentKey as __serialiseAgentKey, callAgentOutcome as __callAgentOutcome, serialiseAgentClass as __serialiseAgentClass, sweepAgentInstances as __sweepAgentInstances, wakeForMigration as __wakeForMigration };
 export type { AgentWire as __AgentWire, DurableObjectNamespace as __DurableObjectNamespace };
