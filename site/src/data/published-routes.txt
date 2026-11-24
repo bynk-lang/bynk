@@ -110,6 +110,7 @@
 /book/guides/projects-build-and-deployment/apply-a-migration-without-an-editor/
 /book/guides/projects-build-and-deployment/cloudflare-workers/
 /book/guides/projects-build-and-deployment/contract-skew/
+/book/guides/projects-build-and-deployment/deploy-from-ci/
 /book/guides/projects-build-and-deployment/deploy-to-cloudflare/
 /book/guides/projects-build-and-deployment/layout/
 /book/guides/projects-build-and-deployment/roll-back-a-deployment/
