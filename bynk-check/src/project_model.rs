@@ -5855,6 +5855,18 @@ pub fn phase_bundle_composition_unprovided(
     unit_flattened: &HashMap<String, HashMap<String, String>>,
     errors: &mut ErrorSink,
 ) {
+    // #3890: the whole-program call checks share this entry point, which both
+    // pipelines call once the per-unit checks are done: a call the callee's
+    // `Caller` refinement does not admit, and an `IsContext(…)` name that is no
+    // context.
+    crate::caller_admission::phase_caller_admission(
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_callees,
+        errors,
+    );
     if target != BuildTarget::Bundle || !errors.is_empty() {
         return;
     }

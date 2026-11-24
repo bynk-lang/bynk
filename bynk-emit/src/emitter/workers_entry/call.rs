@@ -61,13 +61,42 @@ pub(super) fn verify_gate(context: &str, foreign: bool) -> [TsStmt; 2] {
 /// handlers admit, actor name → the secret their calls verify under.
 pub(super) const FOREIGN_CALLERS: &str = "__FOREIGN_CALLERS";
 
+/// #3890: a `Caller` refinement's predicate as a TypeScript boolean over the
+/// proven caller name.
+fn caller_predicate_expr(pred: &bynk_check::actors::CallerPredicate, from: &TsExpr) -> TsExpr {
+    use bynk_check::actors::CallerPredicate as P;
+    match pred {
+        P::IsContext(names) => names
+            .iter()
+            .map(|n| strict_eq(from.clone(), str_lit(n.clone())))
+            .reduce(or_expr)
+            .unwrap_or_else(|| ident("false")),
+        P::And(l, r) => and_expr(
+            paren(caller_predicate_expr(l, from)),
+            paren(caller_predicate_expr(r, from)),
+        ),
+        P::Or(l, r) => or_expr(
+            paren(caller_predicate_expr(l, from)),
+            paren(caller_predicate_expr(r, from)),
+        ),
+        P::Not(inner) => TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(paren(caller_predicate_expr(inner, from))),
+        },
+    }
+}
+
 /// I3 (#1971): the published admission check for one `on call` handler, made
 /// after the service is found and before its contract is compared: the
 /// caller the signature proved must be one the handler's `by` clause admits.
 /// A Bynk context is admitted by `Caller`, a foreign caller only by its own
 /// actor, never by `Caller`; anyone else gets a bare `403` (authenticated, not
 /// admitted). For a sum it then builds the resolved actor, `__who`.
-fn admission_gate(admission: &bynk_check::actors::CallAdmission) -> Vec<TsStmt> {
+///
+/// `has_foreign` is whether this Worker holds a table of foreign callers
+/// (`__FOREIGN_CALLERS`); without one no caller is foreign, and the gate is
+/// only emitted for a handler a `Caller` refinement narrows (#3890).
+fn admission_gate(admission: &bynk_check::actors::CallAdmission, has_foreign: bool) -> Vec<TsStmt> {
     let from = || ident("__from");
     let mut admitted: Option<TsExpr> = None;
     let mut push = |e: TsExpr| {
@@ -77,9 +106,18 @@ fn admission_gate(admission: &bynk_check::actors::CallAdmission) -> Vec<TsStmt> 
         });
     };
     if admission.contexts {
-        push(TsExpr::Unary {
+        let not_foreign = has_foreign.then(|| TsExpr::Unary {
             op: bynk_ts::TsUnaryOp::Not,
             expr: Box::new(ident("__foreign")),
+        });
+        // #3890: a refinement over `Caller` admits only the contexts its
+        // predicate names — the second line of defence behind the compile-time
+        // call-edge check, since signing keys are per context pair.
+        push(match (&admission.caller_predicate, not_foreign) {
+            (Some(pred), Some(nf)) => and_expr(nf, paren(caller_predicate_expr(pred, &from()))),
+            (Some(pred), None) => caller_predicate_expr(pred, &from()),
+            (None, Some(nf)) => nf,
+            (None, None) => ident("true"),
         });
     }
     for f in &admission.foreign {
@@ -99,7 +137,7 @@ fn admission_gate(admission: &bynk_check::actors::CallAdmission) -> Vec<TsStmt> 
     )];
     // Whether the caller is a foreign one, read only where a context is
     // admitted too.
-    if admission.contexts {
+    if admission.contexts && has_foreign {
         stmts.push(const_(
             "__foreign",
             call(
@@ -122,7 +160,7 @@ fn admission_gate(admission: &bynk_check::actors::CallAdmission) -> Vec<TsStmt> 
         // The members in `by` order: a foreign one by its name, `Caller` for
         // any context. Admission above means one of them matches.
         let mut who = TsExpr::object(vec![
-            ("tag".to_string(), str_lit("Caller")),
+            ("tag".to_string(), str_lit(admission.internal_tag())),
             ("identity".to_string(), from()),
         ]);
         for m in members.iter().rev() {
@@ -247,10 +285,10 @@ pub(super) fn call_dispatch(
 
         // #1825: names the dispatch for the fault log below.
         let mut case_body: Vec<TsStmt> = vec![set_fault_route(format!("call {sname}"))];
-        if has_foreign
-            && let Some(admission) = bynk_check::actors::call_admission_for(h, &table.actors)
+        if let Some(admission) = bynk_check::actors::call_admission_for(h, &table.actors)
+            && (has_foreign || admission.caller_predicate.is_some())
         {
-            case_body.extend(admission_gate(&admission));
+            case_body.extend(admission_gate(&admission, has_foreign));
         }
         // v0.177 (#643): the deploy-skew check runs **before the body is read**.
         //

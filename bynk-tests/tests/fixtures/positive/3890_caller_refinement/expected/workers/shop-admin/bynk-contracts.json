@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "refund": "784325d1bb3df89a"
+  },
+  "expects": {
+    "shop.billing": {
+      "refunds": "84d7a2e7ac0ea079"
+    }
+  },
+  "provides_shapes": {
+    "refund": "Svc(\"refund\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "shop.billing": {
+      "refunds": "Svc(\"refunds\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+    }
+  }
+}

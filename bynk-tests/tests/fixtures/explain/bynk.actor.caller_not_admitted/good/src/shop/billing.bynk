@@ -1,0 +1,15 @@
+context shop.billing
+
+actor Admin = Caller where IsContext(shop.admin)
+
+service refunds {
+  on call(id: String) -> Effect[Int] by Admin {
+    Effect.pure(1)
+  }
+}
+
+service quote {
+  on call(id: String) -> Effect[Int] by Caller {
+    Effect.pure(2)
+  }
+}

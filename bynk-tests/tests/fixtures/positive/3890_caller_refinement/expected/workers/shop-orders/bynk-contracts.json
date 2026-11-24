@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "provides": {
+    "place": "d3829621e44ff6b1"
+  },
+  "expects": {
+    "shop.billing": {
+      "ship": "3055a7305438dd37"
+    }
+  },
+  "provides_shapes": {
+    "place": "Svc(\"place\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  },
+  "expects_shapes": {
+    "shop.billing": {
+      "ship": "Svc(\"ship\",P(\"order\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+    }
+  }
+}

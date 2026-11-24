@@ -1,0 +1,10 @@
+context shop.orders
+
+consumes shop.billing as Billing
+
+service place {
+  on call(id: String) -> Effect[Result[String, String]] by Caller {
+    let r <- Billing.refunds(id)
+    r
+  }
+}

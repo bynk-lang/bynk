@@ -2277,8 +2277,22 @@ claims to authorise against (`bynk.actor.refinement_base_unsupported`) — and i
 `where` predicate MUST be in the closed claim-predicate set: `hasClaim("name")`
 (the claim is present and truthy) and `claimEquals("name", "value")` (string
 equality), composed with `&&`, `||`, `!` (`bynk.actor.refinement_predicate_unsupported`).
-A refinement actor is a handler's sole `by` contract, never a sum member
-(`bynk.actor.refinement_in_sum`, §5.7a.1). By refinement elimination an `Admin`
+A refinement actor over a `Bearer` actor is a handler's sole `by` contract,
+never a sum member (`bynk.actor.refinement_in_sum`, §5.7a.1).
+
+`Caller` is also a refinement base: `actor Admin = Caller where IsContext(a.b, …)`
+admits a call only from the named contexts. `IsContext` takes one or more
+qualified context names, each of which MUST be a context of the project
+(`bynk.actor.unknown_context`); it is admissible only over `Caller`, composes with
+`&&`, `||` and `!`, and is the only predicate a `Caller` refinement takes
+(`bynk.actor.refinement_predicate_unsupported`). Such a refinement inherits
+`Caller`'s `Internal` scheme, its `CallerId` identity and its admissibility
+(`on call` only), and MAY be a sum's one `Internal` member. Because the
+predicate is over constants, it is decided exactly against the project's call
+graph: a cross-context call from a context no member of the callee's `by` clause
+admits is `bynk.actor.caller_not_admitted`, reported at the call; so is a test's
+call-site `by Admin("<context>")` naming a refused context. The callee evaluates
+the predicate again on the proven caller (§7.3.4d, check 6, `403`). By refinement elimination an `Admin`
 is usable wherever its base `User` is: a `by a: Admin` binder yields the base
 `User` identity. The invariant is discharged at the boundary (§7.3.4a): the scheme
 is verified (failure → 401), then the predicate is checked against the verified

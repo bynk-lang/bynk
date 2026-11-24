@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "old": "47926d2c74a3d207"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "old": "Svc(\"old\",P(\"id\",B(\"String\")),Ret(R(B(\"String\"),B(\"String\"))))"
+  }
+}

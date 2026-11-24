@@ -1,0 +1,6 @@
+suite shop.billing {
+  case "an unadmitted context cannot act as the admin" {
+    let r <- refunds.call("o1") by Admin("shop.orders")
+    expect r is Ok("o1")
+  }
+}

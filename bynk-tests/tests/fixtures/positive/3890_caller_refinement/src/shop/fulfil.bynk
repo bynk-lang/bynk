@@ -1,0 +1,10 @@
+context shop.fulfil
+
+consumes shop.billing as Billing
+
+service pack {
+  on call(id: String) -> Effect[Result[String, String]] by Caller {
+    let r <- Billing.book(id)
+    r
+  }
+}

@@ -1,0 +1,7 @@
+context shop.legacy
+
+service old {
+  on call(id: String) -> Effect[Result[String, String]] by Caller {
+    Ok(id)
+  }
+}

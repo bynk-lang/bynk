@@ -1207,6 +1207,9 @@ pub(crate) fn emit_make_surface(
             });
             continue;
         }
+        let internal_tag = admission
+            .as_ref()
+            .map_or_else(|| "Caller".to_string(), |a| a.internal_tag().to_string());
         let deps_arg = if admission.is_some_and(|a| a.sum.is_some()) {
             bynk_ts::TsExpr::object_entries(vec![
                 bynk_ts::TsObjectEntry::Spread(bynk_ts::TsExpr::Ident("deps".to_string())),
@@ -1215,7 +1218,7 @@ pub(crate) fn emit_make_surface(
                     bynk_ts::TsExpr::object(vec![
                         (
                             "tag".to_string(),
-                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str("Caller".to_string())),
+                            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(internal_tag)),
                         ),
                         (
                             "identity".to_string(),
@@ -1359,6 +1362,9 @@ pub(crate) fn call_sum_ts_type(members: &[bynk_check::actors::CallSumMember]) ->
                     tag_member("Caller", Some(bynk_ts::TsType::named("string")))
                 }
                 bynk_check::actors::CallSumMember::Foreign(f) => tag_member(&f.actor, None),
+                bynk_check::actors::CallSumMember::Refined(name, _) => {
+                    tag_member(name, Some(bynk_ts::TsType::named("string")))
+                }
             })
             .collect(),
     )

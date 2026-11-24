@@ -1,0 +1,10 @@
+context shop.admin
+
+consumes shop.billing as Billing
+
+service refund {
+  on call(id: String) -> Effect[Result[String, String]] by Caller {
+    let r <- Billing.refunds(id)
+    r
+  }
+}
