@@ -782,7 +782,19 @@ pub(super) fn check_unit_files(
             }));
         }
     }
-    if plan_failed || mode == Mode::Analyse {
+    if mode == Mode::Analyse && !plan_failed {
+        // #4233: `bynk check` still emits each suite's test module, and a
+        // case's `Svc.event(e, env)` reads the subscriber shapes; Build mode
+        // records them below, so an analysis records them here too.
+        for (_, typed, _) in checked {
+            if let Ok(program) = checker::certify(typed, Vec::new()) {
+                event_subscriber_shapes
+                    .extend(bynk_model::lower_event_subscriber_shapes_ir(&program));
+            }
+        }
+        return;
+    }
+    if plan_failed {
         return;
     }
     let exec_snapshot = Arc::new(exec_plan.clone());

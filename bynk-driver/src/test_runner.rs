@@ -1326,6 +1326,7 @@ fn discovery_suites(out: &ProjectOutput) -> Vec<Suite> {
                     refusals: None,
                     origin: c.doc.then(|| "doc".to_string()),
                     warnings: None,
+                    actual: None,
                     duration_ms: None,
                 })
                 .collect(),

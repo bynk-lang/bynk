@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 
@@ -40,7 +40,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/bearer", path) !== null) {
           __route = "GET /bearer";
           const result = await surface.http_GET_bearer(request, __requestHeaders(request, undefined, ["authorization"]));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"ci.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -48,7 +48,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/bearer-raw", path) !== null) {
           __route = "GET /bearer-raw";
           const result = await surface.http_GET_bearer_raw(request, __requestHeaders(request, undefined, ["authorization"]));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"ci.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -56,7 +56,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/oidc", path) !== null) {
           __route = "GET /oidc";
           const result = await surface.http_GET_oidc(request, __requestHeaders(request, undefined, ["authorization"]));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"ci.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -64,7 +64,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/open", path) !== null) {
           __route = "GET /open";
           const result = await surface.http_GET_open(__requestHeaders(request));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"ci.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -72,7 +72,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/sum", path) !== null) {
           __route = "GET /sum";
           const result = await surface.http_GET_sum(request, __requestHeaders(request, undefined, ["authorization"]));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"ci.api\"", "Bynk realm=\"ci.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -83,7 +83,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
           const result = await surface.http_POST_either(request, __requestHeaders(request, undefined, ["x-sig"]));
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\"", "Bynk realm=\"ci.api\""]), __security_api);
         }
       }
       {
@@ -100,11 +100,11 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __secret = (env as unknown as globalThis.Record<string, unknown>)["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["HOOK_SECRET"];
-          if (typeof __secret !== "string") return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_api);
+          if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\""]), __security_api);
           const __ts = request.headers.get("X-Ts");
-          if (__ts === null) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_api);
+          if (__ts === null) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\""]), __security_api);
           const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Sig"), __ts, 300);
-          if (!__ok) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_api);
+          if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\""]), __security_api);
           try {
             __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
           } catch {
@@ -114,7 +114,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_hook(__requestHeaders(request, undefined, ["x-sig"]), body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"ci.api\", header=\"X-Sig\""]), __security_api);
         }
       }
       if (__matchPath("/bearer", path) !== null) {

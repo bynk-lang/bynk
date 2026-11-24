@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __withPlainJson, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __withPlainJson, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -45,7 +45,7 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_plain);
           const query = __r_query.value;
           const result = await surface.http_GET_filtered(query);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_Int), { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_Int), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -53,7 +53,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/legacy", path) !== null) {
           __route = "GET /legacy";
           const result = await surface.http_GET_legacy();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), __security_legacy);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_legacy);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -61,7 +61,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/legacy/plain", path) !== null) {
           __route = "GET /legacy/plain";
           const result = await surface.http_GET_legacy_plain();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), __security_legacy);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_legacy);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -69,7 +69,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/plain", path) !== null) {
           __route = "GET /plain";
           const result = await surface.http_GET_plain();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Activity), { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Activity), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -77,7 +77,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/tagged", path) !== null) {
           __route = "GET /tagged";
           const result = await surface.http_GET_tagged();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, handlers.__serialise_Option_String, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -85,7 +85,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/top", path) !== null) {
           __route = "GET /top";
           const result = await surface.http_GET_top();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), __security_plain);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, __withPlainJson(handlers.__serialise_Option_String), { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_plain);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

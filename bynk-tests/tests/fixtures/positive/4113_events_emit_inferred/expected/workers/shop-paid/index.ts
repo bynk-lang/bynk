@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.paid`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 export { __EventsFanout } from "./events_fanout.js";
@@ -40,7 +40,7 @@ export default {
         if (method === "POST" && __matchPath("/paid", path) !== null) {
           __route = "POST /paid";
           const result = await surface.http_POST_paid();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.paid\""]), __security_api);
         }
       }
       if (__matchPath("/paid", path) !== null) {
