@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -39,7 +39,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/chunks", path) !== null) {
           __route = "GET /chunks";
           const result = await surface.http_GET_chunks();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_routes);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -47,7 +47,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/logo", path) !== null) {
           __route = "GET /logo";
           const result = await surface.http_GET_logo();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_routes);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -55,7 +55,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/notes", path) !== null) {
           __route = "GET /notes";
           const result = await surface.http_GET_notes();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -63,7 +63,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/ticks", path) !== null) {
           __route = "GET /ticks";
           const result = await surface.http_GET_ticks();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_routes);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -83,7 +83,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_routes);
           const body = __r_body.value;
           const result = await surface.http_POST_notes(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_routes);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __security_routes);
         }
       }
       {
@@ -96,7 +96,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_notes_Param_id(id);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_routes);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

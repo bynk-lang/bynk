@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __CorsPolicy, __applyChallenge, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -42,7 +42,7 @@ export default {
         if (method === "POST" && __matchPath("/logout", path) !== null) {
           __route = "POST /logout";
           const result = await surface.http_POST_logout();
-          return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: void) => null), __cors_api, request.headers.get("origin")), __security_api);
+          return __applySecurityHeaders(__applyCors(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"api\""]), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
       if (__matchPath("/logout", path) !== null) {
