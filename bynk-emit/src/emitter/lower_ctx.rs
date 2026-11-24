@@ -59,6 +59,9 @@ pub(crate) struct LowerCtx<'a> {
     /// #3980: the `match`es being lowered, innermost last, so an `expect false` arm can name its
     /// arm and the value matched (`lower::expect_was`).
     scrutinee_frames: Vec<super::lower::expect_was::ScrutineeFrame>,
+    /// #3981: whether a statement-form `expect … is P(x)` declares `x` for the statements after
+    /// it: a case body, not a `property` body (mirrors the checker's `expect_is_bindings`).
+    pub(crate) expect_is_bindings: bool,
     /// #2024: identifiers the generated scaffold around this body already
     /// binds in the body's own JS scope — a test runner's `deps`, `__obs`, and
     /// the target's destructured services, agents, functions and assets. A
@@ -185,6 +188,7 @@ impl<'a> LowerCtx<'a> {
             next_tmp: 0,
             shadow_scopes: vec![HashMap::new()],
             scrutinee_frames: Vec::new(),
+            expect_is_bindings: false,
             harness_bound: HashSet::new(),
             is_receiver_temps: HashMap::new(),
             is_temp_hoist: None,
