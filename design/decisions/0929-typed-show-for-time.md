@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A failing `for all` over a `Duration` or `Instant`, and a failed `expect … is …` whose subject holds one, print it in Bynk's form (`3.seconds`, `Instant.fromEpochMillis(0)`) instead of as bare milliseconds
----
+# 0929 — The test printer is told where a Duration or Instant sits in a value's type
 
-## ADR: typed-show-for-time
-title: The test printer is told where a Duration or Instant sits in a value's type
-summary: Generator descriptors and `is` failure reports carry a shape, so Duration and Instant print as Bynk values
+- **Status:** Accepted (v0.671.1)
 
 **Context.** At run time a `Duration` and an `Instant` are plain numbers, so the test runtime's value printer showed a failing `for all d: Duration` counterexample, and a failed `expect … is …` value, as a bare millisecond count (#4229, a follow-up to #4198).
 
