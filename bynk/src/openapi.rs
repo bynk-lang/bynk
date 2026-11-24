@@ -29,7 +29,7 @@
 //! | `InRange(a, b)`       | `minimum: a`, `maximum: b`                         |
 //! | `IsoDate`             | `format: date`, `minLength: 10`, `maxLength: 10`    |
 //! | `Cron`                | `x-bynk-format: cron`, `minLength: 9`              |
-//! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match) |
+//! | `Matches("p")`        | `pattern: "^(?:p)$"` (the codec anchors the match); a `(?i)` or `(?s)` group is written out, or the pattern is left out and noted |
 
 use bynk_driver::emsg;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1365,6 +1365,7 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
         return;
     }
     let mut patterns: Vec<String> = Vec::new();
+    let mut omitted: Vec<String> = Vec::new();
     // #2622: a `Decimal` schema is a string, so its numeric predicates have no
     // `minimum`/`maximum` form; they stay in `x-bynk-refinements` and the prose.
     let decimal = s.get("x-bynk-base").and_then(Value::as_str) == Some("Decimal");
@@ -1404,7 +1405,15 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
                 tighten_max(s, "maximum", b.value);
             }
             // The codec anchors the whole value; JSON Schema's `pattern` searches.
-            PredKind::Matches(p) => patterns.push(format!("^(?:{p})$")),
+            // #3950: JSON Schema's `pattern` has no flags, so a `(?i)`/`(?s)`
+            // pattern is rewritten to say the same thing without them, or left
+            // out (and said so below) when it cannot be: never published wrong.
+            PredKind::Matches(p) => match json_schema_pattern(p) {
+                Ok(pattern) => patterns.push(pattern),
+                Err(why) => {
+                    omitted.push(format!("the pattern `{p}` is not published, because {why}"))
+                }
+            },
         }
     }
     let mut it = patterns.into_iter();
@@ -1419,7 +1428,10 @@ fn refine(s: &mut Map<String, Value>, preds: &[PredKind]) {
     let written: Vec<String> = preds.iter().map(render_pred).collect();
     let prose: Vec<String> = preds.iter().map(pred_prose).collect();
     s.insert("x-bynk-refinements".into(), json!(written));
-    let note = format!("Re-validated at the boundary: {}.", prose.join("; "));
+    let mut note = format!("Re-validated at the boundary: {}.", prose.join("; "));
+    for why in &omitted {
+        note.push_str(&format!(" Note: {why}."));
+    }
     let d = match s.remove("description") {
         Some(Value::String(d)) => format!("{d}\n\n{note}"),
         _ => note,
@@ -1447,6 +1459,99 @@ fn tighten_max(s: &mut Map<String, Value>, key: &str, n: f64) {
     if cur.is_none_or(|c| n < c) {
         s.insert(key.into(), num(n));
     }
+}
+
+/// #3950: a `Matches` argument as a JSON Schema `pattern`. The schema language
+/// has no flags, so a leading `(?i)` is written out (each ASCII letter becomes a
+/// class, `a` as `[aA]`, a class gains the other case of its letters and ranges)
+/// and `(?s)` turns each `.` into `[\s\S]`. `Err` carries why it cannot be
+/// (a property or code-point escape, a non-ASCII letter, or a range across
+/// cases), and the pattern is then left out.
+fn json_schema_pattern(literal: &str) -> Result<String, &'static str> {
+    let (pat, flags) = bynk_syntax::ast::leading_regex_flag_group(literal).unwrap_or((literal, ""));
+    let (fold, dot_all) = (flags.contains('i'), flags.contains('s'));
+    if !fold && !dot_all {
+        return Ok(format!("^(?:{pat})$"));
+    }
+    let other_case = |c: char| {
+        if c.is_ascii_lowercase() {
+            c.to_ascii_uppercase()
+        } else {
+            c.to_ascii_lowercase()
+        }
+    };
+    let chars: Vec<char> = pat.chars().collect();
+    let mut out = String::new();
+    let mut in_class = false;
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        match c {
+            '\\' => {
+                let next = chars.get(i + 1).copied().ok_or("it ends in a backslash")?;
+                if fold && matches!(next, 'p' | 'P' | 'u' | 'x' | 'c' | 'k') {
+                    return Err(
+                        "it is case-insensitive and uses an escape with no case-insensitive form",
+                    );
+                }
+                out.push('\\');
+                out.push(next);
+                i += 2;
+                continue;
+            }
+            '[' if !in_class => {
+                in_class = true;
+                out.push('[');
+                if chars.get(i + 1) == Some(&'^') {
+                    out.push('^');
+                    i += 1;
+                }
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(']');
+            }
+            '(' if !in_class
+                && chars.get(i + 1) == Some(&'?')
+                && chars.get(i + 2) == Some(&'<')
+                && !matches!(chars.get(i + 3), Some('=') | Some('!')) =>
+            {
+                // A group's name is not text to fold.
+                while i < chars.len() && chars[i] != '>' {
+                    out.push(chars[i]);
+                    i += 1;
+                }
+                out.push('>');
+            }
+            '.' if !in_class && dot_all => out.push_str("[\\s\\S]"),
+            c if fold && c.is_alphabetic() => {
+                if !c.is_ascii() {
+                    return Err("it is case-insensitive and holds a non-ASCII letter");
+                }
+                let is_range = in_class
+                    && chars.get(i + 1) == Some(&'-')
+                    && chars.get(i + 2).is_some_and(|h| h.is_ascii_alphabetic());
+                if is_range {
+                    let hi = chars[i + 2];
+                    if c.is_ascii_lowercase() != hi.is_ascii_lowercase() {
+                        return Err("it is case-insensitive and holds a range across cases");
+                    }
+                    out.push_str(&format!("{c}-{hi}{}-{}", other_case(c), other_case(hi)));
+                    i += 3;
+                    continue;
+                }
+                if in_class {
+                    out.push(c);
+                    out.push(other_case(c));
+                } else {
+                    out.push_str(&format!("[{c}{}]", other_case(c)));
+                }
+            }
+            c => out.push(c),
+        }
+        i += 1;
+    }
+    Ok(format!("^(?:{out})$"))
 }
 
 /// The predicate as written: `InRange(1, 100)`.
@@ -1588,5 +1693,39 @@ fn yaml_value(v: &Value, indent: usize, out: &mut String) {
         out.push(' ');
         out.push_str(&yaml_scalar(v));
         out.push('\n');
+    }
+}
+
+#[cfg(test)]
+mod pattern_tests {
+    use super::json_schema_pattern;
+
+    #[test]
+    fn a_plain_pattern_is_anchored_as_written() {
+        assert_eq!(json_schema_pattern("[a-z]+").unwrap(), "^(?:[a-z]+)$");
+        // A property escape is published as is: no flag to lose.
+        assert_eq!(json_schema_pattern(r"[\p{L}]+").unwrap(), r"^(?:[\p{L}]+)$");
+    }
+
+    #[test]
+    fn a_case_insensitive_group_is_written_out() {
+        assert_eq!(
+            json_schema_pattern(r"(?i)[a-c]{3}-\d").unwrap(),
+            r"^(?:[a-cA-C]{3}-\d)$"
+        );
+        assert_eq!(json_schema_pattern("(?i)ab").unwrap(), "^(?:[aA][bB])$");
+        assert_eq!(json_schema_pattern("(?i)[xyz]").unwrap(), "^(?:[xXyYzZ])$");
+    }
+
+    #[test]
+    fn a_dot_all_group_widens_the_dot() {
+        assert_eq!(json_schema_pattern("(?s)a.b").unwrap(), r"^(?:a[\s\S]b)$");
+    }
+
+    #[test]
+    fn a_pattern_that_cannot_be_folded_is_left_out() {
+        assert!(json_schema_pattern(r"(?i)\p{L}+").is_err());
+        assert!(json_schema_pattern("(?i)é").is_err());
+        assert!(json_schema_pattern("(?i)[a-Z]").is_err());
     }
 }

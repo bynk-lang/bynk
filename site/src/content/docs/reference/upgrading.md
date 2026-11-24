@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.660.0
+
+a `Matches` or regex-method pattern that is valid without the `u` flag but not with it (an identity escape such as `\-` outside a class, a `[\w-.]` range) is `bynk.types.invalid_regex`, with a note naming Unicode mode; drop the needless backslash
+
 ## v0.659.0
 
 Routes that overlap are now tried by position, not by spelling: at the first segment where two routes of a method differ, a literal beats a `:name` (so `GET /a/b/:y` now beats `GET /a/:x/c` for `/a/b/c`, where the alphabetical tie-break picked `/a/:x/c`), and a route that every other route of its method answers first is refused with `bynk.http.unreachable_route`: remove it or make it match a path the others do not. Literal routes also now ignore empty segments (`/items/` reaches `GET /items`) and compare percent-decoded.

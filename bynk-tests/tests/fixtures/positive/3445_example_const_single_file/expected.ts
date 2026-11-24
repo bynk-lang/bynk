@@ -2,13 +2,14 @@
 // commons demo.names
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Tag = string & { readonly __brand: "Tag" };
 
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
       return Err({ field: "Tag", message: "must match /[A-Z]{3}/", value });
     }
     return Ok(value as Tag);

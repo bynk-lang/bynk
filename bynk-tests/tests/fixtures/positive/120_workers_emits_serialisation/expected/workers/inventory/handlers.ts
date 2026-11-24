@@ -2,6 +2,7 @@
 // context inventory
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -9,7 +10,7 @@ export type Sku = string & { readonly __brand: "inventory.Sku" };
 
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$", "u").test(value))) {
       return Err({ field: "Sku", message: "must match /[A-Z]{3}-[0-9]{4}/", value });
     }
     return Ok(value as Sku);

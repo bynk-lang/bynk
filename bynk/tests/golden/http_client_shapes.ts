@@ -272,6 +272,24 @@ export function __bynkCodePointLength(s: string): number {
   return n;
 }
 
+const regExps = new Map<string, RegExp>();
+
+/**
+ * The `RegExp` for a source and flags, built once (#3950). A refinement's
+ * `Matches` check runs on every construction, so it shares one compiled
+ * pattern; a non-global, non-sticky `RegExp`'s `test` keeps no state, which
+ * makes sharing safe.
+ */
+export function __bynkRegExp(source: string, flags: string): RegExp {
+  const key = `${flags}/${source}`;
+  let re = regExps.get(key);
+  if (re === undefined) {
+    re = new RegExp(source, flags);
+    regExps.set(key, re);
+  }
+  return re;
+}
+
 // The browser-safe runtime `bynk client` inlines into the module it generates.
 // No signing, no Web Crypto, no secret and no Workers types: only `fetch`, which
 // the caller may replace. The `Result`/`Option` helpers, the `Bytes` and
@@ -1064,7 +1082,7 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
   if (!(__bynkCodePointLength(json) === 5)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "length must be exactly 5", value: json } });
   }
-  if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}[0-9]{2}" + ")$").test(json))) {
+  if (!(__bynkRegExp("^(?:" + "[A-Z]{3}[0-9]{2}" + ")$", "u").test(json))) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[A-Z]{3}[0-9]{2}/", value: json } });
   }
   return Ok(json as unknown as __Wire_Sku);

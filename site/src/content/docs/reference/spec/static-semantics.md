@@ -537,8 +537,8 @@ groups it would splice in).
   cannot prove unambiguous, and no ambiguity it finds (`bynk.types.catastrophic_regex`,
   `bynk.types.polynomial_regex`; no length bound can excuse a polynomial one
   here).
-- Semantics are JS `RegExp` with `Matches`' flag set: no `u`, so `.` and
-  classes work on UTF-16 code units. A pattern may open with one inline-flag
+- Semantics are JS `RegExp` in Unicode mode (`u`), as for `Matches` (#3950): `.`
+  and classes work on code points, and `\w`, `\d` and `\b` stay ASCII. A pattern may open with one inline-flag
   group, `(?i)`, `(?m)`, `(?s)` or a combination, which becomes the `RegExp`
   flags; an unknown or repeated flag is `invalid_regex`. The ambiguity analysis
   runs under those flags: under `s`, `.` matches every code unit, and under
@@ -861,7 +861,7 @@ an `Int` is rejected (`bynk.types.predicate_base_mismatch`) — and MUST be
 internally consistent: an `InRange` MUST NOT be inverted
 (`bynk.types.inverted_range`), a length MUST NOT be negative
 (`bynk.types.negative_length`), a `Matches` regex MUST be valid
-(`bynk.types.invalid_regex`) and MUST be safe to backtrack (below), and the
+(`bynk.types.invalid_regex`; in Unicode mode, with the same optional leading `(?i)`/`(?s)` group as the `String` regex methods and no `(?m)`) and MUST be safe to backtrack (below), and the
 predicates together MUST admit at least one value (`bynk.types.empty_refinement`
 — on `Float`, `Positive` excludes the lower endpoint `0.0`, so
 `InRange(-1.0, 0.0) && Positive` is empty).
@@ -1881,7 +1881,15 @@ trigger table read it. A cron handler MUST take at most two parameters, at most 
 scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
-codes).
+codes). A `from queue` service MAY carry one `delivery { }` section (#3877), whose keys are the
+closed set `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours),
+`deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole
+seconds, 0 to 60) and `concurrency` (1 to 250), each written once, with a literal or a constant
+of its type (`bynk.queue.delivery_bad_option`); on any other service it is
+`bynk.queue.delivery_not_queue`. A consumer with no `deadLetter` key warns
+(`bynk.queue.no_dead_letter`; `deadLetter: None` silences it). The dead-letter queue MUST NOT be
+the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
+receives from (`bynk.queue.dead_letter_type_mismatch`).
 
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is

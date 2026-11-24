@@ -5,6 +5,7 @@
 //! Object bindings + `exports` entries are declared for every agent.
 
 pub mod environment;
+mod queue_consumer;
 
 use crate::emitter::bindings::{BindingSource, WorkerBinding};
 use crate::emitter::toml_doc::{TomlBlock, TomlDocument, TomlEntry, TomlValue};
@@ -254,6 +255,8 @@ pub fn emit_wrangler_toml(
     // v0.10b/v0.44: every `from queue("name")` service's bound queue name,
     // sorted+deduped (same reproducibility requirement as `crons`).
     queues: &[String],
+    // #3877: each consumer's `delivery { }` settings, by queue name.
+    deliveries: &[bynk_check::symbols::QueueDelivery],
     addresses: &[String], // #3328: the `from email` addresses
     // #1890: the merged flag list, [`compatibility_flags`]' first result.
     // The same for every Worker in the project, so the caller merges (and
@@ -519,12 +522,10 @@ pub fn emit_wrangler_toml(
     // `[[queues.consumers]]` binding. Already sorted+deduped by the caller
     // (#1191).
     for name in queues {
+        let delivery = deliveries.iter().find(|d| &d.queue == name);
         doc.push_block(TomlBlock::array_table(
             WranglerKey::QueueConsumers,
-            vec![
-                TomlEntry::kv("queue", TomlValue::str(name.clone())),
-                TomlEntry::kv("max_batch_size", TomlValue::Int(10)),
-            ],
+            queue_consumer::entries(name, delivery),
         ));
     }
 

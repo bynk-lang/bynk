@@ -2,6 +2,7 @@
 // commons commerce.identifiers
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import { __bynkIntDiv } from "./__bynk_runtime/int.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
@@ -9,7 +10,7 @@ export type Sku = string & { readonly __brand: "Sku" };
 
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[A-Z0-9]{3,16}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[A-Z0-9]{3,16}" + ")$", "u").test(value))) {
       return Err({ field: "Sku", message: "must match /[A-Z0-9]{3,16}/", value });
     }
     return Ok(value as Sku);
