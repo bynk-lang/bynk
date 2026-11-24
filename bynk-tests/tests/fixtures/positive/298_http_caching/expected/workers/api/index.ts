@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, type __CorsPolicy, __applyCors, __corsPreflightResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -36,11 +36,11 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (path === "/config" || path === "/edge" || path === "/plain" || path === "/private" || path === "/ticks" || path === "/items")) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/config", path) !== null || __matchPath("/edge", path) !== null || __matchPath("/plain", path) !== null || __matchPath("/private", path) !== null || __matchPath("/ticks", path) !== null || __matchPath("/items", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/config") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/config", path) !== null) {
           __route = "GET /config";
           const result = await surface.http_GET_config();
           const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 300, "public"), request), __cors_api, request.headers.get("origin")), __security_api);
@@ -48,7 +48,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/edge") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/edge", path) !== null) {
           __route = "GET /edge";
           const result = await surface.http_GET_edge();
           const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 1, "private"), request), __cors_api, request.headers.get("origin")), __security_api);
@@ -56,7 +56,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/plain") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/plain", path) !== null) {
           __route = "GET /plain";
           const result = await surface.http_GET_plain();
           const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
@@ -64,7 +64,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/private") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/private", path) !== null) {
           __route = "GET /private";
           const result = await surface.http_GET_private();
           const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 30, "private"), request), __cors_api, request.headers.get("origin")), __security_api);
@@ -72,7 +72,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/ticks") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/ticks", path) !== null) {
           __route = "GET /ticks";
           const result = await surface.http_GET_ticks();
           const __response = __applySecurityHeaders(__applyCors(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __cors_api, request.headers.get("origin")), __security_api);
@@ -80,7 +80,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/items") {
+        if (method === "POST" && __matchPath("/items", path) !== null) {
           __route = "POST /items";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
@@ -98,32 +98,32 @@ export default {
           return __applySecurityHeaders(__applyCors(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
-      if (path === "/config") {
+      if (__matchPath("/config", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/edge") {
+      if (__matchPath("/edge", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/items") {
+      if (__matchPath("/items", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/plain") {
+      if (__matchPath("/plain", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/private") {
+      if (__matchPath("/private", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
-      if (path === "/ticks") {
+      if (__matchPath("/ticks", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

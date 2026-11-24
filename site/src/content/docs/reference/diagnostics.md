@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **911** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **912** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -409,6 +409,7 @@ There are **911** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.stream_body_signature`](/reference/diagnostics/bynk.http.stream_body_signature/) — A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first.
 - [`bynk.http.unbound_path_param`](/reference/diagnostics/bynk.http.unbound_path_param/) — A `:name` route segment has no matching handler parameter.
 - [`bynk.http.unknown_handler_annotation`](/reference/diagnostics/bynk.http.unknown_handler_annotation/) — A handler carries an annotation outside the closed set (`@cache`/`@limit`).
+- [`bynk.http.unreachable_route`](/reference/diagnostics/bynk.http.unreachable_route/) — A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group).
 
 ## History properties
 

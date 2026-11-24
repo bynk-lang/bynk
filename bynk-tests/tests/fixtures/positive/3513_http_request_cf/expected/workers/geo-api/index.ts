@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/eu") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/eu", path) !== null) {
           __route = "GET /eu";
           const __r_cf = handlers.__deserialise_RequestCf(__cfObject(request), "cf");
           if (__r_cf.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_cf.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -47,7 +47,7 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/hello") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/hello", path) !== null) {
           __route = "GET /hello";
           const __r_cf = handlers.__deserialise_RequestCf(__cfObject(request), "cf");
           if (__r_cf.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_cf.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -93,7 +93,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/eu") {
+      if (__matchPath("/eu", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -103,7 +103,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/hello") {
+      if (__matchPath("/hello", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

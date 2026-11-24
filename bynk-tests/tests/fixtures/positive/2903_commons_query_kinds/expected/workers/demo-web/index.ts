@@ -2,7 +2,7 @@
 // Worker entry point for context `demo.web`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __queryObject } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/n") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/n", path) !== null) {
           __route = "GET /n";
           const __q = __queryObject(request, [{ name: "n", kind: "int", list: false, option: false }, { name: "s", kind: "enum", list: false, option: false }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -48,7 +48,7 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/n") {
+      if (__matchPath("/n", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
