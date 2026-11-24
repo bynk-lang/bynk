@@ -1,0 +1,34 @@
+---
+#3954, #3949: code-point order and length.
+---
+suite demo.order
+
+case "an emoji is greater than a fullwidth tilde" {
+  expect !(emoji() < tilde())
+  expect emoji() > tilde()
+  expect tilde() <= emoji()
+}
+
+case "sortBy, min and max agree with the operators" {
+  expect sorted([emoji(), tilde()]) == [tilde(), emoji()]
+  expect [emoji(), tilde()].sortByDescending((s) => s) == [emoji(), tilde()]
+  expect [emoji(), tilde()].min((s) => s) == Some(tilde())
+  expect [emoji(), tilde()].max((s) => s) == Some(emoji())
+}
+
+case "a derives Ord record agrees" {
+  let xs = [Pairs { name: emoji() }, Pairs { name: tilde() }]
+  expect byRecord(xs) == [Pairs { name: tilde() }, Pairs { name: emoji() }]
+}
+
+case "BMP-only text is unchanged" {
+  expect "a" < "b"
+  expect "ab" < "abc"
+  expect !("b" < "a")
+}
+
+case "a length predicate counts an emoji once" {
+  expect checked().isOk()
+  expect checked().ok() == Some(literal())
+  expect tooLong().isErr()
+}

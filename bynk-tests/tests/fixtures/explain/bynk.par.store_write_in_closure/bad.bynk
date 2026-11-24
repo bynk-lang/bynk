@@ -6,7 +6,7 @@ agent Tally {
     store counts: Map[String, Int]
 
     on call bump(xs: List[Int]) -> Effect[()] {
-        xs.parTraverse((x: Int) => {
+        xs.parForEach((x: Int) => {
             let o <- counts.get("k")
             counts.put("k", o.getOrElse(0) + 1)
         })

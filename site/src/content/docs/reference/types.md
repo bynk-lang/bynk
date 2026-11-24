@@ -574,7 +574,7 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.max(key: T -> K)` | `Option[K]` | the largest key; `None` when empty |
 | `xs.min()` | `Option[T]` | the smallest element; `None` when empty (`T` must be `Ord`) |
 | `xs.max()` | `Option[T]` | the largest element; `None` when empty (`T` must be `Ord`) |
-| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); `None` when empty |
+| `xs.average(key: T -> K)` | `Option[Float]` | the mean of the keys (`Option[Duration]` for a `Duration` key); a `Decimal` key is refused (`bynk.query.sum_needs_numeric`); `None` when empty |
 | `xs.joinOn(other, left, right, into)` | `List[V]` | equi-join; see [Joins and grouping](#joins-and-grouping) |
 | `xs.leftJoin(other, left, right, into)` | `List[V]` | left outer join |
 | `xs.join(other, on, into)` | `List[V]` | predicate join |
@@ -584,11 +584,21 @@ combinator vocabulary as kernel methods, so a chain reads
 | `xs.foldEff(init: U, step: (U, T) -> Effect[U])` | `Effect[U]` | `fold` with an effectful step |
 | `xs.forEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for each element, in order |
 | `xs.traverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for each element, in order, and collect the results |
-| `xs.parTraverse(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
+| `xs.parForEach(f: T -> Effect[()])` | `Effect[()]` | run `f` for every element concurrently |
+| `xs.parTraverse(f: T -> Effect[U])` | `Effect[List[U]]` | run `f` for every element concurrently; the values come back in input order |
 | `xs.traverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | run `f` for each element in order, keeping every outcome |
 | `xs.parTraverseAll(f: T -> Effect[Result[U, E]])` | `Effect[List[Result[U, E]]]` | the same, concurrently |
 | `xs.traverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | run `f` for each element in order, stopping at the first `Err` |
 | `xs.parTraverseTry(f: T -> Effect[Result[U, E]])` | `Effect[Result[List[U], E]]` | the same, concurrently |
+
+The effect methods form one grid of names:
+
+| | returns `()` | returns values | each step a `Result`, keep all | stop at first `Err` |
+|---|---|---|---|---|
+| in order | `forEach` | `traverse` | `traverseAll` | `traverseTry` |
+| concurrently | `parForEach` | `parTraverse` | `parTraverseAll` | `parTraverseTry` |
+
+Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
 
 The methods returning an `Effect` can only be called where effects are allowed.
 A method not in this table is `bynk.types.method_not_found`. The rest of this
@@ -635,8 +645,9 @@ Ordering keys (`sortBy`/`sortByDescending`/`min`/`max`), on a `List` and on a la
 [`Ord` type](#ordering-your-own-types) (`bynk.types.key_not_orderable` otherwise). `sortByDescending` is `sortBy` largest key first: the exact reverse of the ascending order, so a
 `Float` `NaN` comes **first** (`None` last, a longer list first). It is **stable**: equal keys keep
 their input order, which `reverse(xs.sortBy(k))` does not. It behaves the same for a concrete,
-`derives Ord` or type-parameter key. Numeric keys (`sum`/`average`) are
-`Int`/`Float`/`Duration` (`bynk.query.sum_needs_numeric`), with `average -> Float`.
+`derives Ord` or type-parameter key. Numeric keys: `sum` takes `Int`, `Float`, `Duration` or `Decimal` keys; `average`
+takes `Int`, `Float` or `Duration`, and refuses `Decimal` (`bynk.query.sum_needs_numeric`: sum, then divide with a
+scale and rounding mode). `average -> Float` (`Duration` for a `Duration` key). The same keys apply on a lazy storage `Query`.
 **Empty aggregates are total** — `first`/`min`/`max`/`average` return `Option`,
 `sum` the zero. The keyless `sort()`, `min()` and `max()` order the elements themselves,
 so the element type must be `Ord` (`bynk.types.not_orderable` otherwise). `contains` compares
@@ -1466,7 +1477,7 @@ type that derives `Ord` must be `Ord`, else
 |---|---|
 | `Int`, `Duration`, `Instant` | numeric |
 | `Decimal` | numeric, ignoring scale (`1.2d` and `1.20d` are equal) |
-| `String` | UTF-16 code unit, element by element (not code point, not locale) |
+| `String` | code point, element by element (not locale); agrees with storage key order and SQLite's `BINARY` collation |
 | `Bytes` | unsigned octets, lexicographic |
 | `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |
 | `Option[T]` | `None` first, then `Some` by payload |

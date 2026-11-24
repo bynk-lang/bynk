@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0895](0895-list-traversal-names-line-up.md) | **parForEach and a value-returning parTraverse complete the traversal grid** (v0.646) — Renames List.parTraverse to parForEach and adds a parTraverse that returns the values | Accepted (v0.646) |
 | [0894](0894-named-type-total-of.md) | **Named types: `.of` is total when the type has no predicate, and "alias" is renamed "named type"** (v0.645) — A predicate-free named type's `.of` returns the type; the form is called a named type, not an alias | Accepted (v0.645) |
 | [0893](0893-cron-scheduled-time-is-instant.md) | **The cron scheduled time is an `Instant`** (v0.644) — `at: Int` becomes `bynk.cron.bad_params` now; the schedule test address takes an `Instant` only | Accepted (v0.644) |
 | [0892](0892-list-methods-complete-the-bynk-list-move.md) | **Every bynk.list function has a List method** (v0.643) — Adds the List methods bynk.list still held, plus contains, last and isEmpty, and fully deprecates bynk.list | Accepted (v0.643) |

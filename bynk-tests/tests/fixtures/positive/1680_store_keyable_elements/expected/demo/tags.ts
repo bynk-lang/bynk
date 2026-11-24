@@ -2,6 +2,7 @@
 // context demo.tags
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __StoreMap, __StoreSet, __fillMap, __fillSet, __wireEntries, __wireMap, __wireSet } from "../__bynk_runtime/store.js";
@@ -19,7 +20,7 @@ export type Tag = string & { readonly __brand: "demo.tags.Tag" };
 
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Tag", message: "must be non-empty", value });
     }
     return Ok(value as Tag);

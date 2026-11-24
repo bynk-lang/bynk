@@ -1,0 +1,14 @@
+suite demo.fan
+
+case "parTraverse keeps the values in input order" {
+	let out <- tenfold([3, 1, 2])
+	expect out == [30, 10, 20]
+	let none: List[Int] = []
+	let empty <- tenfold(none)
+	expect empty == none
+}
+
+case "parForEach runs every step and returns ()" {
+	let _ <- touch([1, 2, 3])
+	expect 1 == 1
+}

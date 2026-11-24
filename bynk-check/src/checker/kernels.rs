@@ -543,43 +543,10 @@ pub(crate) fn check_list_kernel_method(
             }
             Some(tys.intern(Ty::Effect(acc)))
         }
-        // v0.146 (ADR 0170): `forEach(f: T -> Effect[()]) -> Effect[()]` runs an
-        // effectful step for each element **in turn**; v0.147 (ADR 0171):
-        // `parTraverse` runs them **concurrently** (the fan-out form) and awaits
-        // them together. Same type — the difference is sequential-vs-parallel
-        // lowering. Both are the `List` analogue of the `Query` terminals; like
-        // `foldEff`, each runs an effectful function value and so is confined to
-        // effectful contexts.
-        Some(ListOp::ForEach | ListOp::ParTraverse) => {
-            if !arity(1, ctx) {
-                return None;
-            }
-            let f = Ty::Fn {
-                params: vec![elem],
-                ret: tys.intern(Ty::Effect(tys.intern(Ty::Unit))),
-            };
-            check_arg(
-                &args[0],
-                tys.intern(f.clone()),
-                &format!("the `List.{}` function", method.name),
-                ctx,
-            );
-            if !ctx.effectful {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.effect.fn_value_in_pure_context",
-                        span,
-                        format!(
-                            "`List.{}` runs an effectful function and cannot be called in a pure context",
-                            method.name
-                        ),
-                    )
-                    .with_note(
-                        "effectful function values may only be called where the enclosing body is effectful (its return type is an Effect)",
-                    ),
-                );
-            }
-            Some(tys.intern(Ty::Effect(tys.intern(Ty::Unit))))
+        // v0.146 (ADR 0170) `forEach`, v0.147 (ADR 0171) `parForEach` (#3967: was
+        // `parTraverse`), and the value-returning `parTraverse` (#3967).
+        Some(o @ (ListOp::ForEach | ListOp::ParForEach | ListOp::ParTraverse)) => {
+            super::list_par::check_effect_iter(method, o, args, elem, span, ctx)
         }
         // v0.148 (ADR 0172): the collect-all effectful iterators.
         // `traverseAll(f: A -> Effect[Result[B, E]]) -> Effect[List[Result[B, E]]]`

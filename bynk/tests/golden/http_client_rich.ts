@@ -310,6 +310,26 @@ export function __bynkDecimalShow(v: unknown): string {
   }
 }
 
+// String measures that the language defines independently of the host's UTF-16
+// representation (#3949).
+
+/** A string's length in code points: what `MinLength`/`MaxLength`/`Length` count (#3949). */
+export function __bynkCodePointLength(s: string): number {
+  let n = s.length;
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    // A high surrogate followed by a low one is one code point, not two units.
+    if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d < 0xe000) {
+        n -= 1;
+        i += 1;
+      }
+    }
+  }
+  return n;
+}
+
 // The browser-safe runtime `bynk client` inlines into the module it generates.
 // No signing, no Web Crypto, no secret and no Workers types: only `fetch`, which
 // the caller may replace. The `Result`/`Option` helpers, the `Bytes` and
@@ -1106,7 +1126,7 @@ export function __deserialise_Note(json: __JsonValue, path: string = "$"): Resul
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length <= 10)) {
+  if (!(__bynkCodePointLength(json) <= 10)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Note", message: "length must be at most 10", value: json } });
   }
   return Ok(json as unknown as __Wire_Note);
@@ -1216,7 +1236,7 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length > 0)) {
+  if (!(__bynkCodePointLength(json) > 0)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must be non-empty", value: json } });
   }
   return Ok(json as unknown as __Wire_Sku);

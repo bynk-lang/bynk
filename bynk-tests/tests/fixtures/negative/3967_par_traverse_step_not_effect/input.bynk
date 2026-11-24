@@ -1,0 +1,5 @@
+commons demo.parstep
+
+fn bad(xs: List[Int]) -> Effect[List[Int]] {
+  xs.parTraverse((x: Int) => x + 1)
+}
