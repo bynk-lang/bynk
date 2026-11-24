@@ -68,8 +68,10 @@ the test follows a change to the schedule. See
 ## Signal success or failure
 
 Return `Ok(())` when the run succeeds. A cron run has no caller to answer and no
-retry, so a failure is returned as `Err(e)` — it is logged and the run
-completes. Map a domain error to `Err` explicitly:
+retry, so a failure is returned as `Err(e)`. The run shows as failed in the Cron
+Trigger's Past Events, and the log names the schedule, the service and the
+error's type and variant (never its payload: log that with `Logger` if you want
+it). Map a domain error to `Err` explicitly:
 
 ```bynk
 type SweepError = enum { StorageUnavailable }

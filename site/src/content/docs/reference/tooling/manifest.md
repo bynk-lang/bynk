@@ -739,6 +739,10 @@ against the project, it also refuses a context the project does not declare
 a key or name that is the Worker of a context in no group
 (`bynk.deploy.group_name_conflict`).
 
+A member's cron run that fails is reported to the platform as in a single-context
+Worker, but Cloudflare's Past Events records only the first failed run of an
+invocation, so the logs are the place to see every failing member.
+
 `bynk build` emits one Worker per group, and `bynk deploy` provisions and
 deploys it as a unit, in dependency order with the other Workers (`--worker
 <key>` deploys one Worker by its key). A call between two members of a group is

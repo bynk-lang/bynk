@@ -511,7 +511,9 @@ suite shop.inventory as system {
   `unit`, when the handler declares it; a handler that doesn't is fired at the
   epoch. The address yields
   the handler's `Result`, which the test build's entry hands back to the harness.
-  A cron handler that faults fails the case, as it does at `unit`.
+  A cron handler that faults fails the case, as it does at `unit`. A handler that
+  returns `Err` is reported to the platform by the entry; the double records that
+  report without counting it, since the case already reads the `Err` as its result.
 - **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
   round trip, and calls `queue` with a one-message batch. A message whose type
   doesn't survive the round trip fails as it would on the platform. The batch

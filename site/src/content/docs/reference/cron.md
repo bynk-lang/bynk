@@ -114,10 +114,23 @@ time.
 
 ## Failure
 
-A cron run has no retry channel. Returning `Ok(())` completes the run silently;
-returning `Err(e)` logs `e` and completes. Map a domain failure to `Err` the
-same way an HTTP handler maps it to an `HttpResult` error variant — the mapping
-stays visible in the handler body.
+A cron run has no retry channel. Returning `Ok(())` completes the run silently.
+Returning `Err(e)` marks the run **failed** in the Cron Trigger's Past Events and
+writes one structured log record naming the schedule, the service, the error's
+type and, for a sum error, its variant. The record never holds the payload, as
+for a detached effect's `Err`; a handler that wants the
+payload logs it with `Logger`. A handler that throws is logged with its stack,
+reported the same way, and rethrown. The run is still not retried by Bynk.
+
+Map a domain failure to `Err` the same way an HTTP handler maps it to an
+`HttpResult` error variant — the mapping stays visible in the handler body.
+
+An expression Cloudflare fires that no handler declares (a trigger edited outside
+`wrangler.toml`) is named in one warning, not dropped silently.
+
+In a [Worker group](/reference/tooling/manifest/#worker-groups) every member
+whose schedule matches runs, and the logs name each failing member, but Past
+Events records only the first failure.
 
 ## Example
 

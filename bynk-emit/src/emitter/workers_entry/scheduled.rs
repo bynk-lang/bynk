@@ -2,8 +2,8 @@
 
 use super::respond::{case_, default_case};
 use crate::ts_build::{
-    await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_, str_lit,
-    strict_eq, strict_neq, switch_stmt,
+    arrow, await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_, str_lit,
+    strict_neq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTypeMember};
@@ -62,9 +62,21 @@ pub(super) fn emit_scheduled_handler(
         } else {
             vec![]
         };
+        // #3872: the run goes through `__bynkCronRun`, which marks an `Err` or a
+        // fault as failed to the platform (`__bynkReportFault`) and logs a
+        // labelled record (type and variant, never the payload).
+        let run = arrow(vec![], call(member(ident("surface"), method_key), args));
         let mut case_body = vec![const_(
             "result",
-            await_expr(call(member(ident("surface"), method_key), args)),
+            await_expr(call(
+                ident("__bynkCronRun"),
+                vec![
+                    ident("ctx"),
+                    str_lit(route.site()),
+                    str_lit(route.err_type.clone()),
+                    run,
+                ],
+            )),
         )];
         if result_hook {
             let store = TsStmt::assign(member(ident("ctx"), "__bynkResult"), ident("result"), None);
@@ -74,23 +86,22 @@ pub(super) fn emit_scheduled_handler(
                 store
             });
         }
-        case_body.extend([
-            if_(
-                strict_eq(member(ident("result"), "tag"), str_lit("Err")),
-                expr_stmt(method_call(
-                    ident("globalThis.console"),
-                    "error",
-                    vec![
-                        str_lit(format!("cron {} failed", route.expr)),
-                        member(ident("result"), "error"),
-                    ],
-                )),
-            ),
-            return_(None),
-        ]);
+        case_body.push(return_(None));
         cases.push(case_(str_lit(route.expr.clone()), case_body));
     }
-    cases.push(default_case(vec![return_(None)]));
+    // #3872: an expression no handler declared (a trigger edited outside
+    // `wrangler.toml`) is named in one warning instead of dropped silently.
+    cases.push(default_case(vec![
+        expr_stmt(method_call(
+            ident("globalThis.console"),
+            "warn",
+            vec![
+                str_lit("cron expression matches no `on schedule` handler in this context:"),
+                member(ident("event"), "cron"),
+            ],
+        )),
+        return_(None),
+    ]));
     body.push(switch_stmt(member(ident("event"), "cron"), cases));
 
     TsObjectEntry::Method {
@@ -118,6 +129,31 @@ pub(super) struct CronRoute {
     pub(super) expr: String,
     /// Whether the handler declares the optional scheduled-time parameter.
     pub(super) has_param: bool,
+    /// #3872: the handler's declared error type, named in the failure record.
+    pub(super) err_type: String,
+}
+
+impl CronRoute {
+    /// The label a failed run carries: its schedule and service.
+    fn site(&self) -> String {
+        format!("cron `{}` ({})", self.expr, self.service)
+    }
+}
+
+/// The error type of a cron handler's `Effect[Result[(), E]]`, by name.
+fn cron_err_type(ret: &bynk_syntax::ast::TypeRef) -> String {
+    use bynk_syntax::ast::TypeRef;
+    if let TypeRef::Effect(inner, _) = ret
+        && let TypeRef::Result(_, err, _) = &**inner
+    {
+        if let TypeRef::Named(name) = &**err {
+            return name.name.clone();
+        }
+        if let TypeRef::Base(base, _) = &**err {
+            return base.name().to_string();
+        }
+    }
+    "Error".to_string()
 }
 
 /// Collect the cron handlers across the services, carrying the per-service
@@ -139,6 +175,7 @@ pub(super) fn collect_cron_routes(table: &UnitTable, service_names: &[&String]) 
                     index: cron_idx,
                     expr,
                     has_param: !h.params.is_empty(),
+                    err_type: cron_err_type(&h.return_type),
                 });
                 cron_idx += 1;
             }
