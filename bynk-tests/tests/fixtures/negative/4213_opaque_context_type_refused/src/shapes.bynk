@@ -1,0 +1,5 @@
+context shapes
+
+exports opaque { Port }
+
+type Port = Int where InRange(1, 65535)

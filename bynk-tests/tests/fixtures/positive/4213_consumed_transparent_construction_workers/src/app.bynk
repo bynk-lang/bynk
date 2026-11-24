@@ -1,0 +1,23 @@
+context app
+
+consumes shapes { Port, Shape, Pt }
+
+fn port(n: Int) -> Result[Port, ValidationError] {
+  Port.of(n)
+}
+
+fn circle(r: Int) -> Shape {
+  Circle(r)
+}
+
+fn qualified(r: Int) -> Shape {
+  Shape.Circle(r)
+}
+
+fn dot() -> Shape {
+  Dot
+}
+
+fn pt(x: Int, y: Int) -> Pt {
+  Pt { x: x, y: y }
+}

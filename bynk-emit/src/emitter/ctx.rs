@@ -82,6 +82,9 @@ pub(crate) struct ModuleCtx<'a> {
 pub(crate) struct UnitFacts<'a> {
     source: Option<&'a crate::emit_model::UnitSource>,
     spellings: &'a HashMap<String, String>,
+    /// #4213: the project facts the unit is emitted under, read for the types it
+    /// imports from a consumed context (see [`EmitProjectCtx::consumed_context_types`]).
+    project: Option<&'a EmitProjectCtx>,
 }
 
 impl<'a> UnitFacts<'a> {
@@ -90,6 +93,7 @@ impl<'a> UnitFacts<'a> {
         Self {
             source: ctx.unit_source.as_ref(),
             spellings: &ctx.type_spellings,
+            project: Some(ctx),
         }
     }
 
@@ -104,6 +108,7 @@ impl<'a> UnitFacts<'a> {
         Self {
             source: None,
             spellings: ts_types::no_spellings(),
+            project: None,
         }
     }
 }
@@ -156,7 +161,13 @@ impl<'a> ModuleCtx<'a> {
             consumed_type_declared: HashMap::new(),
             unit_name: String::new(),
             agent_called_contexts: Vec::new(),
-            consumed_context_types: HashSet::new(),
+            // #4213: a free function or method of a context is lowered through
+            // this context too, and builds a consumed sum's variant inline just as
+            // a handler does.
+            consumed_context_types: unit
+                .project
+                .map(EmitProjectCtx::consumed_context_types)
+                .unwrap_or_default(),
             trace: None,
         }
     }

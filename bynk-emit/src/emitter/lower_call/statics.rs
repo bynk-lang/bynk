@@ -65,6 +65,28 @@ pub(in crate::emitter) fn lower_type_static_call(
         )
     {
         let mut all: Vec<bynk_ts::TsExpr> = args.iter().map(|a| pre.lower_node(a, cx)).collect();
+        // #4213: on `workers` a consumed context's type is another Worker's and is
+        // named in type position only, so this module builds its values itself:
+        // a sum variant as a literal, and `.of` through its own copy of the guards.
+        if cx.is_consumed_context_type(&id.name) {
+            match cx.commons().callees.get(&e.id) {
+                Some(Callee::Ctor { sum, tag }) => {
+                    match crate::emitter::consumed_variant_literal(e, &sum.name.name, tag, all, cx)
+                    {
+                        Ok(built) => return Some(built),
+                        Err(args) => all = args,
+                    }
+                }
+                Some(Callee::Refine(decl)) if all.len() == 1 => {
+                    let decl = decl.clone();
+                    if let Some(built) = lower_consumed_refine(&decl, all.remove(0), cx) {
+                        return Some(built);
+                    }
+                    unreachable!("a refined type's `of` has a body");
+                }
+                _ => {}
+            }
+        }
         // #2719: a static method in the needs-context set takes the context last.
         let mut needs_exec = false;
         if let Some(Callee::Static(decl, witnesses)) = cx.commons().callees.get(&e.id) {
@@ -90,6 +112,36 @@ pub(in crate::emitter) fn lower_type_static_call(
         });
     }
     None
+}
+
+/// #4213: `T.of(x)` for a refined type a consumed context owns: an immediately
+/// invoked copy of the owner's `of`, so the guards run in this Worker and no value
+/// import crosses to the owner's. `None` for a type that is not refined or opaque.
+fn lower_consumed_refine(
+    decl: &bynk_syntax::ast::TypeDecl,
+    arg: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> Option<bynk_ts::TsExpr> {
+    use bynk_syntax::ast::TypeBody;
+    let (base, refinement, is_opaque) = match &decl.body {
+        TypeBody::Refined {
+            base, refinement, ..
+        } => (*base, refinement.as_ref(), false),
+        TypeBody::Opaque {
+            base, refinement, ..
+        } => (*base, refinement.as_ref(), true),
+        TypeBody::Record(_) | TypeBody::Sum(_) => return None,
+    };
+    let body = crate::emitter::refined_of_body(
+        decl,
+        crate::emitter::shape_parts(base, refinement, is_opaque),
+        cx.runtime_use(),
+    );
+    let value_ty = bynk_ts::TsType::named(super::super::ts_types::ts_base(base));
+    Some(call(
+        crate::ts_build::block_arrow(vec![TsParam::new("value", Some(value_ty))], false, body),
+        vec![arg],
+    ))
 }
 
 /// The `[+-]?digits` grammar `Int.parse` accepts (#1657), a fixed literal.

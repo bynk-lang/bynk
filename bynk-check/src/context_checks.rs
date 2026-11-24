@@ -445,15 +445,12 @@ fn walk_expr_for_constraints(
             if let ExprKind::Ident(id) = &receiver.kind
                 && let Some(ct) = consumed.get(&id.name)
             {
-                // #3948: a type an adapter exports `transparent` takes every
+                // #3948, #4213: a type its owner exports `transparent` takes every
                 // ordinary construction form from a consumer: `.of` on a refined
-                // one, a variant of a sum, as a record literal already did. (A
-                // context's own types stay the owner's until the Workers emitter
-                // can export their constructors.) An opaque export, a declared
-                // `opaque` type and `.unsafe` (an unchecked assertion, not a
-                // construction) stay the owner's.
-                let owner_only = !ct.owner_is_adapter
-                    || ct.visibility == Visibility::Opaque
+                // one, a variant of a sum, as a record literal already did. An
+                // opaque export, a declared `opaque` type and `.unsafe` (an
+                // unchecked assertion, not a construction) stay the owner's.
+                let owner_only = ct.visibility == Visibility::Opaque
                     || matches!(
                         typed.types.get(&id.name).map(|d| &d.body),
                         Some(TypeBody::Opaque { .. })

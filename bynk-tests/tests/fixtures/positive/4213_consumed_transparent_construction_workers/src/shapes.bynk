@@ -1,0 +1,12 @@
+// #4213: a context's transparent types are built by a consumer: `.of` on a
+// refined one, a variant of a sum and a record literal. Under Workers the
+// consumer builds them itself, so no value import crosses the Worker boundary.
+context shapes
+
+exports transparent { Port, Shape, Pt }
+
+type Port = Int where InRange(1, 65535)
+
+type Shape = | Dot | Circle(radius: Int)
+
+type Pt = { x: Int, y: Int }
