@@ -1470,6 +1470,8 @@
 /reference/diagnostics/bynk.detach.store_op/
 /reference/diagnostics/bynk.doc.unresolved_link/
 /reference/diagnostics/bynk.duration.literal_overflow/
+/reference/diagnostics/bynk.duration.unit_agreement/
+/reference/diagnostics/bynk.duration.unknown_unit/
 /reference/diagnostics/bynk.effect.bind_in_pure_context/
 /reference/diagnostics/bynk.effect.bind_on_non_effect/
 /reference/diagnostics/bynk.effect.capability_in_pure_context/
