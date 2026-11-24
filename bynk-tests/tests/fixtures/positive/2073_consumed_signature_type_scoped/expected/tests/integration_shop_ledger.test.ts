@@ -15,18 +15,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -109,7 +123,7 @@ async function test_a_borrowed_record_keeps_its_own_context_s_field_types() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -124,14 +138,14 @@ async function test_a_borrowed_record_crosses_inside_a_list_and_an_option() {
     const os = await __callService(deps.env.SHOP_LEDGER, "echo", __ns_shop_ledger.__serialise_List_Order([o, o]), __ns_shop_ledger.__deserialise_List_Order, "integration", "5ec0507cbf4df93c", deps.env, "shop.ledger");
     if (!((os).length === 2)) { throw __bynkExpectFailure("tests/system.bynk:17:12", 622, 638, "expect os.length() == 2\n  expected: os.length() == 2\n  actual:   " + __bynkShow(((os).length)) + " == " + __bynkShow((2))); }
     const f = await __callService(deps.env.SHOP_LEDGER, "first", __ns_shop_ledger.__serialise_List_Order(os), __ns_shop_ledger.__deserialise_Option_Order, "integration", "f3c615f6c053d6dc", deps.env, "shop.ledger");
-    if (!(((__c: boolean) => __c)(f.tag === "Some"))) { throw __bynkExpectFailure("tests/system.bynk:19:12", 685, 697, "expect f is Some(_)"); }
+    if (!(((__c: boolean) => __c)(f.tag === "Some"))) { throw __bynkExpectFailure("tests/system.bynk:19:12", 685, 697, "expect f is Some(_)", "f", () => __bynkShow(f)); }
     const p = await __callService(deps.env.SHOP_POST, "send", "p2" as __JsonValue, __ns_shop_post.__deserialise_Parcel, "integration", "856befaf27902680", deps.env, "shop.post");
     const has = await __callService(deps.env.SHOP_LEDGER, "present", __ns_shop_ledger.__serialise_Option_Parcel(Some(p)), (__j: __JsonValue) => ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "boolean", actual: typeof __v } as __BoundaryError))(__j), "integration", "ee692a633f10b09c", deps.env, "shop.ledger");
     if (!(has)) { throw __bynkExpectFailure("tests/system.bynk:22:12", 787, 790, "expect has"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -149,7 +163,7 @@ async function test_the_target_s_own_same_named_type_is_its_own() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -158,7 +172,7 @@ async function test_the_target_s_own_same_named_type_is_its_own() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

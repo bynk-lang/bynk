@@ -19,6 +19,7 @@ The increments merged since the latest release are under
 
 | Release | Released | Versions | Increments |
 |---|---|---|---|
+| [v0.661.1](/reference/releases/v0-661-1/) | 24 November 2026 | v0.655.1 to v0.661.1 | 10 |
 | [v0.655.0](/reference/releases/v0-655-0/) | 24 November 2026 | v0.639.2 to v0.655.0 | 181 |
 | [v0.639.1](/reference/releases/v0-639-1/) | 17 November 2026 | v0.614.1 to v0.639.1 | 72 |
 | [v0.614.0](/reference/releases/v0-614-0/) | 15 November 2026 | v0.606.1 to v0.614.0 | 10 |

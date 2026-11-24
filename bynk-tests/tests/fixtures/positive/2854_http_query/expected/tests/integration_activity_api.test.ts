@@ -11,18 +11,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -167,11 +181,11 @@ async function test_a_typed_query_round_trips_through_the_router() {
     const { Kind } = __ns_activity_api;
     type Kind = __ns_activity_api.Kind;
     const r = await __sysdrive_api_http_GET_activity({ repo: Some(("bynk-lang/bynk" as any)), since: Some(("2026-11-01" as any)), kind: Some(Kind.Push), tag: ["a", "b"], fresh: true, limit: (100 as any) }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bynk-lang/bynk 2026-11-01 2 true 100"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 998, 1045, "expect r is Ok(\"bynk-lang/bynk 2026-11-01 2 true 100\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bynk-lang/bynk 2026-11-01 2 true 100"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 998, 1045, "expect r is Ok(\"bynk-lang/bynk 2026-11-01 2 true 100\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -183,11 +197,11 @@ async function test_absent_keys_take_None_and_their_defaults() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 50"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1152, 1188, "expect r is Handled(Ok(\"any - 0 false 50\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 50"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1152, 1188, "expect r is Handled(Ok(\"any - 0 false 50\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -199,11 +213,11 @@ async function test_unknown_keys_are_ignored() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?utm_source=x&limit=5", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 5"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1300, 1335, "expect r is Handled(Ok(\"any - 0 false 5\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 0 false 5"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1300, 1335, "expect r is Handled(Ok(\"any - 0 false 5\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -215,11 +229,11 @@ async function test_repeated_keys_fill_a_list() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?tag=a&tag=b&tag=c", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 3 false 50"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1445, 1481, "expect r is Handled(Ok(\"any - 3 false 50\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "any - 3 false 50"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1445, 1481, "expect r is Handled(Ok(\"any - 3 false 50\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -231,11 +245,11 @@ async function test_a_limit_out_of_range_is_refused_before_the_handler() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?limit=0", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1606, 1643, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:46:10", 1606, 1643, "expect r is Rejected(RefinementViolation(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -247,11 +261,11 @@ async function test_a_malformed_day_is_refused_before_the_handler() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?since=yesterday", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:51:10", 1771, 1808, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:51:10", 1771, 1808, "expect r is Rejected(RefinementViolation(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -263,11 +277,11 @@ async function test_a_non_numeric_limit_is_a_structural_mismatch() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?limit=many", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 1930, 1966, "expect r is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 1930, 1966, "expect r is Rejected(StructuralMismatch(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -279,11 +293,11 @@ async function test_a_repeated_key_on_a_single_valued_field_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?limit=1&limit=2", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2099, 2135, "expect r is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2099, 2135, "expect r is Rejected(StructuralMismatch(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -295,11 +309,11 @@ async function test_an_unknown_enum_variant_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity("?kind=Nope", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:66:10", 2246, 2262, "expect r is Rejected(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:66:10", 2246, 2262, "expect r is Rejected(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -311,11 +325,11 @@ async function test_a_path_parameter_meets_the_query() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_activity_Param_owner(String("octo"), "?limit=9", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "octo 9"))) { throw __bynkExpectFailure("tests/api.bynk:71:10", 2384, 2410, "expect r is Handled(Ok(\"octo 9\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "octo 9"))) { throw __bynkExpectFailure("tests/api.bynk:71:10", 2384, 2410, "expect r is Handled(Ok(\"octo 9\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -327,11 +341,11 @@ async function test_the_raw_view_over_the_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_echo(__requestQuery(["q=one", "q=two"]), undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "one 2 1"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2526, 2544, "expect r is Ok(\"one 2 1\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "one 2 1"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2526, 2544, "expect r is Ok(\"one 2 1\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -344,12 +358,12 @@ async function test_a_cached_route_answers_each_query_on_its_path_separately() {
     const deps = __makeHarness();
     const a = await __sysdrive_raw_api_http_GET_cached("?limit=10", undefined, "");
     const b = await __sysdrive_raw_api_http_GET_cached("?limit=20", undefined, "");
-    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "Ok" && a.value.value === "limit 10"))) { throw __bynkExpectFailure("tests/api.bynk:83:10", 2788, 2816, "expect a is Handled(Ok(\"limit 10\"))"); }
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "Ok" && b.value.value === "limit 20"))) { throw __bynkExpectFailure("tests/api.bynk:84:10", 2826, 2854, "expect b is Handled(Ok(\"limit 20\"))"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "Ok" && a.value.value === "limit 10"))) { throw __bynkExpectFailure("tests/api.bynk:83:10", 2788, 2816, "expect a is Handled(Ok(\"limit 10\"))", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "Ok" && b.value.value === "limit 20"))) { throw __bynkExpectFailure("tests/api.bynk:84:10", 2826, 2854, "expect b is Handled(Ok(\"limit 20\"))", "b", () => __bynkShow(b)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -361,11 +375,11 @@ async function test_a_decimal_field_reads_canonical_text() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_priced("?price=12.50", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "12.50"))) { throw __bynkExpectFailure("tests/api.bynk:89:10", 2967, 2992, "expect r is Handled(Ok(\"12.50\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "12.50"))) { throw __bynkExpectFailure("tests/api.bynk:89:10", 2967, 2992, "expect r is Handled(Ok(\"12.50\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -377,11 +391,11 @@ async function test_a_malformed_decimal_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_priced("?price=.5", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 3096, 3112, "expect r is Rejected(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 3096, 3112, "expect r is Rejected(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -393,11 +407,11 @@ async function test_an_optional_enum_is_not_fooled_by_the_name_None() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_priced("?kind=None", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:99:10", 3234, 3250, "expect r is Rejected(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected"))) { throw __bynkExpectFailure("tests/api.bynk:99:10", 3234, 3250, "expect r is Rejected(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -409,11 +423,11 @@ async function test_an_optional_enum_takes_a_variant() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_GET_priced("?kind=Issue", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "-"))) { throw __bynkExpectFailure("tests/api.bynk:104:10", 3358, 3379, "expect r is Handled(Ok(\"-\"))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "-"))) { throw __bynkExpectFailure("tests/api.bynk:104:10", 3358, 3379, "expect r is Handled(Ok(\"-\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -422,7 +436,7 @@ async function test_an_optional_enum_takes_a_variant() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
