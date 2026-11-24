@@ -212,8 +212,8 @@ fn run_driver(fixture_dir: &str, driver: &str) {
     }
 
     // Compile the limits fixture (workers) in-process.
-    let fixture: PathBuf =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/positive/{fixture_dir}/src"));
+    let fixture: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("tests/fixtures/positive/{fixture_dir}/src"));
     let out = bynk_driver::project::compile_project(
         &bynk_testkit::compile_options_single(fixture)
             .target(bynk_driver::project::BuildTarget::Workers),
@@ -221,8 +221,10 @@ fn run_driver(fixture_dir: &str, driver: &str) {
     .map_err(bynk_driver::project::ProjectFailure::flatten)
     .expect("the limits fixture must compile");
 
-    let tmp =
-        std::env::temp_dir().join(format!("bynk-http-limits-{fixture_dir}-{}", std::process::id()));
+    let tmp = std::env::temp_dir().join(format!(
+        "bynk-http-limits-{fixture_dir}-{}",
+        std::process::id()
+    ));
     let _ = fs::remove_dir_all(&tmp);
     fs::create_dir_all(&tmp).unwrap();
     for (path, doc) in &out.artefacts.docs {

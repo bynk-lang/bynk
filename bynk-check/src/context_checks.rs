@@ -3456,8 +3456,8 @@ fn check_service_decls(
         for handler in &service.handlers {
             validate_handler_annotations(handler, service_cap, errors);
         }
-        note_defaulted_body_caps(service, service_cap, errors);
     }
+    note_defaulted_body_caps(table, errors);
     for agent in table.agents.values() {
         for handler in &agent.handlers {
             validate_handler_annotations(handler, None, errors);
@@ -6439,14 +6439,19 @@ const MULTIPART_LARGE_CAP: i64 = 32 * 1024 * 1024;
 /// #3921 (DECISION D): one hint per service listing the body-taking routes that
 /// now rely on the 1 MiB default cap, so a service that took larger bodies finds
 /// out at build, not in production. A route with an explicit cap is not listed.
-fn note_defaulted_body_caps(
-    service: &ServiceDecl,
-    service_cap: Option<i64>,
-    errors: &mut Vec<CompileError>,
-) {
-    if service_cap.is_some() {
-        return;
+fn note_defaulted_body_caps(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    // In a stable order (the table is a hash map), so an incremental re-analysis
+    // reports the same hints in the same order as a cold one.
+    let mut services: Vec<&ServiceDecl> = table.services.values().collect();
+    services.sort_by(|a, b| a.name.name.cmp(&b.name.name));
+    for service in services {
+        if service.limits.as_ref().and_then(|p| p.max_body()).is_none() {
+            note_service_defaulted_body_caps(service, errors);
+        }
     }
+}
+
+fn note_service_defaulted_body_caps(service: &ServiceDecl, errors: &mut Vec<CompileError>) {
     let routes: Vec<String> = service
         .handlers
         .iter()

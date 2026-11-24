@@ -2313,6 +2313,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
     },
     Explain {
+        code: "bynk.http.body_cap_defaulted",
+        blurb: "Every body-taking HTTP route has a request-body cap, 1 MiB (1,048,576 bytes) unless the route's `@limit(maxBody: …)` or the service's `limits { maxBody: … }` says otherwise. This hint lists, once per service, the routes that take the default, so a service that used to accept larger bodies finds out at build and not in production: a larger body is answered `413`, and its `details` say that `@limit(maxBody: …)` raises the cap. It is a hint, not an error: if 1 MiB is what you want, leave it, or state it with `limits { maxBody: 1_048_576 }` to silence the hint. A `@raw` route has no default and must declare its cap (`bynk.http.raw_body_unbounded`).",
+        example: "type Import = { rows: List[String] }\n\nservice api from http {\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }   // hint: takes the default 1 MiB cap\n}\n\nservice api from http {\n    @limit(maxBody: 26_214_400)   // ✓ the cap is stated\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
         code: "bynk.http.body_kind_conflict",
         blurb: "`@raw`, `@form` and `@multipart` each say how a route's one `body` is read off the wire: untouched octets, a urlencoded form or a multipart upload. A body has one wire format, so a handler carries at most one of them, and the second one written is reported. Keep the annotation that matches what the client sends; a JSON body needs none of them.",
         example: "@form\n@raw(contentType: \"image/png\")   // ✗ the body is already a form\n@limit(maxBody: 1_000_000)\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form                           // ✓ one wire format\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }",

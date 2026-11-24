@@ -1555,7 +1555,9 @@ pub(super) fn emit_http_sum_wrapper(
             strict_eq(ident("__bytes"), ident("undefined")),
             return_(Some(call(
                 member(ident("HttpResult"), "PayloadTooLarge"),
-                vec![str_lit(format!("request body exceeds {cap} bytes; `@limit(maxBody: …)` raises it"))],
+                vec![str_lit(format!(
+                    "request body exceeds {cap} bytes; `@limit(maxBody: …)` raises it"
+                ))],
             ))),
         ));
         if !raw {

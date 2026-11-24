@@ -203,7 +203,7 @@ fn shapes_request_body_sum_and_every_predicate() {
         s["Order"]["properties"]["note"]["oneOf"][1]["properties"]["kind"]["const"],
         "None"
     );
-    // The body-walked response set: Created + the constructed 422 + the boundary 400,
+    // The body-walked response set: Created + the constructed 422 + the boundary 400 and the body-cap 413,
     // and no 200 — the handler never returns `Ok`.
     assert_eq!(
         post["responses"]
@@ -211,7 +211,7 @@ fn shapes_request_body_sum_and_every_predicate() {
             .unwrap()
             .keys()
             .collect::<Vec<_>>(),
-        ["201", "400", "422"]
+        ["201", "400", "413", "422"]
     );
 
     // A sum → `oneOf` keyed by `kind`.

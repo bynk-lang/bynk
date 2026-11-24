@@ -521,7 +521,9 @@ pub(super) fn emit_http_route_dispatch(
                     "PayloadTooLarge",
                     vec![(
                         "details".to_string(),
-                        str_lit(format!("request body exceeds {cap} bytes; `@limit(maxBody: …)` raises it")),
+                        str_lit(format!(
+                            "request body exceeds {cap} bytes; `@limit(maxBody: …)` raises it"
+                        )),
                     )],
                 ),
                 413,
