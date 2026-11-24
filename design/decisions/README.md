@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0908](0908-malformed-path-rejection.md) | **A path that cannot be percent-decoded is a 400 MalformedPath, not a fault** (v0.655.1) — The router refuses an undecodable path with a synthesised 400, a new BoundaryRejection variant | Accepted (v0.655.1) |
 | [0907](0907-cron-handler-schedule-parameter.md) | **A cron handler can take the schedule that fired it** (v0.655) — Up to two parameters, told apart by type, in either order: an `Instant` and exactly `CronSchedule` | Accepted (v0.655) |
 | [0906](0906-json-route-media-type.md) | **A JSON body route checks its media type, tolerantly, and @raw takes a list of types** (v0.654) — JSON body routes answer 415 to present non-JSON Content-Types; @raw(contentType:) accepts a non-empty list | Accepted (v0.654) |
 | [0905](0905-cron-schedule-constant.md) | **A constant names a cron schedule** (v0.653) — `schedule(…)` takes a `String` or `CronSchedule` constant; a refined constant is accepted for this position only | Accepted (v0.653) |

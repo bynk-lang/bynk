@@ -54,6 +54,9 @@ export default {
         const __m = __matchPath("/dl/:hex", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /dl/:hex";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_files);
+          }
           const __raw_hex = __m.params["hex"];
           const hex = __raw_hex;
           const result = await surface.http_GET_dl_Param_hex(hex);
@@ -65,6 +68,9 @@ export default {
         const __m = __matchPath("/index/:name", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /index/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_files);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_GET_index_Param_name(name);

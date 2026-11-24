@@ -135,6 +135,9 @@ export default {
         const __m = __matchPath("/api/:org/:package", path);
         if (method === "PUT" && __m) {
           __route = "PUT /api/:org/:package";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
+          }
           if (!__mediaTypeMatches(request, ["application/vnd.bynk.tree-v1"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/vnd.bynk.tree-v1" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
           }
