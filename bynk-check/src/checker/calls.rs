@@ -5039,7 +5039,7 @@ fn check_message_address(
         }
     }
     check_address_args(&id.name, "message", &params, args, method.span, ctx);
-    return handler_outcome(handler, ctx);
+    handler_outcome(handler, ctx)
 }
 
 /// #3874: a cron handler's `CronSchedule` parameter is filled from the address's
