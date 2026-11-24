@@ -205,12 +205,12 @@ async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec) => Pr
 }
 type __BynkQueueMessage = { readonly id: string; readonly timestamp: Date; readonly attempts: number; readonly body: unknown; ack(): void; retry(): void };
 type __BynkQueueBatch = { readonly queue: string; readonly messages: ReadonlyArray<__BynkQueueMessage>; ackAll(): void; retryAll(): void };
-async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
+async function __bynkDeliver<T>(queue: string, body: unknown, delivery: { attempts: number; sentAt: number } | undefined, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
   const wire: unknown = globalThis.JSON.parse(globalThis.JSON.stringify(body ?? null));
   let verdict: { tag: "Ack" } | { tag: "Retry"; reason: string } | undefined;
   let reason = "";
   const message: __BynkQueueMessage = {
-    id: "bynk-test-message-1", timestamp: new globalThis.Date(0), attempts: 1, body: wire,
+    id: "bynk-test-message-1", timestamp: new globalThis.Date(delivery?.sentAt ?? 0), attempts: delivery?.attempts ?? 1, body: wire,
     ack(): void { verdict ??= { tag: "Ack" }; },
     retry(): void { verdict ??= { tag: "Retry", reason }; },
   };
@@ -237,7 +237,7 @@ async function __bynkDeliver<T>(queue: string, body: unknown, run: (batch: __Byn
 }
 async function __sysdrive_message_deliveries(d: any) {
   const __h = __makeHarness();
-  return __bynkDeliver<Awaited<ReturnType<typeof __ns_cr_jobs.deliveries.queue_deliveries_0>>>("deliveries", __ns_cr_jobs.__serialise_Delivery(d), (batch, exec) => worker___ns_cr_jobs.queue(batch, __h.env___ns_cr_jobs));
+  return __bynkDeliver<Awaited<ReturnType<typeof __ns_cr_jobs.deliveries.queue_deliveries_0>>>("deliveries", __ns_cr_jobs.__serialise_Delivery(d), undefined, (batch, exec) => worker___ns_cr_jobs.queue(batch, __h.env___ns_cr_jobs));
 }
 async function __sysdrive_schedule_sweeper_0(at: number) {
   const __h = __makeHarness();

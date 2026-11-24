@@ -1,0 +1,8 @@
+context svc
+
+// #3880: a type of this name that the context declares is not the platform's delivery metadata.
+type QueueDelivery = { attempts: Int }
+
+service jobs from queue("jobs") {
+  on message(job: String, delivery: QueueDelivery) -> Effect[QueueResult] { Ack }
+}
