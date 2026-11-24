@@ -6513,7 +6513,7 @@ mod tests {
         use tower::{Service, ServiceExt};
 
         let service_src =
-            "service api {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n";
+            "service api {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n";
         let s = scratch_project(
             "sibling_label",
             &[
@@ -6624,7 +6624,7 @@ mod tests {
         const SOURCE: &str = "context commerce.order\n\n\
             consumes bynk { Events }\n\n\
             event PaymentConfirmed = {\n  orderId: String,\n  region: String,\n}\n\n\
-            service markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    \
+            service markPaid {\n  on call(orderId: String) -> Effect[()] by Caller given Events {\n    \
             Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: \"US\" })\n  \
             }\n}\n";
 
@@ -6845,7 +6845,7 @@ mod tests {
             consumes bynk { Events }\n\n\
             event PaymentConfirmed = {\n  orderId: String,\n  region: String = \"US\",\n}\n\n\
             event ShipmentSent = {\n  orderId: String,\n}\n\n\
-            service markPaid {\n  on call(orderId: String) -> Effect[()] given Events {\n    \
+            service markPaid {\n  on call(orderId: String) -> Effect[()] by Caller given Events {\n    \
             Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, region: \"US\" })\n  \
             }\n}\n";
         const CART: &str = "context shop\n\nagent Cart {\n  key id: String\n\n  \
@@ -8969,7 +8969,7 @@ mod tests {
     /// `source.fixAll.bynk`), and carries every machine-applicable fix.
     #[tokio::test]
     async fn fix_all_is_offered_only_when_asked_for() {
-        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] given Clock {\n    x\n  }\n}\n";
+        let src = "context app.c\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice one {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n\nservice two {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    x\n  }\n}\n";
         let s = scratch_project(
             "fix_all_only",
             &[
@@ -9254,7 +9254,7 @@ mod tests {
     /// disabled action with its reason, only for a client that shows those.
     #[tokio::test]
     async fn extract_function_lists_then_resolves_or_says_why_not() {
-        let src = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
+        let src = "context app.m\n\ncapability Clock {\n  fn now() -> Effect[Int]\n}\n\nprovides Clock = Sys {\n  fn now() -> Effect[Int] {\n    1\n  }\n}\n\nservice s {\n  on call(x: Int) -> Effect[Int] by Caller given Clock {\n    let n <- Clock.now()\n    let y = x * 2 + 1\n    n + y\n  }\n}\n";
         let s = scratch_project(
             "extract_fn",
             &[
@@ -11325,8 +11325,7 @@ mod analysis_memo_tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("bynk.toml"), "").unwrap();
-        let src =
-            "context demo\n\nservice probe {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
+        let src = "context demo\n\nservice probe {\n  on call(n: Int) -> Effect[Int] by Caller {\n    n\n  }\n}\n";
         std::fs::write(root.join("demo.bynk"), src).unwrap();
         let roots = bynk_ide::AnalysisRoots::SingleTree(root.clone());
         let content = std::collections::HashMap::from([(root.join("demo.bynk"), src.to_string())]);

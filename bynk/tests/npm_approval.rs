@@ -125,7 +125,7 @@ fn publish(root: &Path, reg: &Path, key: &Path, name: &str, version: &str, range
 /// A context consuming `<alias>.tokens`.
 fn sessions(alias: &str) -> String {
     format!(
-        "context sessions\n\nconsumes {alias}.tokens\n\nservice login {{\n  on call(secret: String) -> Effect[String] given {alias}.tokens.Jwt {{\n    let token <- {alias}.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }}\n}}\n"
+        "context sessions\n\nconsumes {alias}.tokens\n\nservice login {{\n  on call(secret: String) -> Effect[String] by Caller given {alias}.tokens.Jwt {{\n    let token <- {alias}.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }}\n}}\n"
     )
 }
 

@@ -3,7 +3,7 @@ context demo.desk
 consumes demo.vault as Vault
 
 service sent {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let e: Envelope[Int] = Envelope { item: n, note: "out" }
     Vault.read(e)
   }

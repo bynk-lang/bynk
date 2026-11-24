@@ -9,7 +9,7 @@ capability Source {
 }
 
 service totalise {
-  on call(id: Int) -> Effect[Result[Int, Failure]] given Source {
+  on call(id: Int) -> Effect[Result[Int, Failure]] by Caller given Source {
     let raw <- Source.fetch(id)
     let n = raw?
     Effect.pure(Ok(n + 1))

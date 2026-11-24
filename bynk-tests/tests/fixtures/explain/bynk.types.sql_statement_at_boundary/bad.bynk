@@ -9,7 +9,7 @@ type Job = {
 }
 
 service exec {
-    on call(id: String) -> Effect[Int] given Orders {
+    on call(id: String) -> Effect[Int] by Caller given Orders {
         let runs <- Orders.batch([])
         Effect.pure(1)
     }

@@ -10,7 +10,7 @@ type Coins = { cents: Int }
 type Parcel = { a: Coins }
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.quotes.quote()
     let echoed <- shop.quotes.echo(Parcel { a: Coins { cents: 2 } })
     Effect.pure(b.a.cents + echoed)

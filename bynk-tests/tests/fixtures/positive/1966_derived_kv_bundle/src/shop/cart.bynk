@@ -33,20 +33,20 @@ agent Cart {
 }
 
 service remember {
-	on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
+	on call(k: String, v: String) -> Effect[Option[String]] by Caller given Sessions {
 		let _ <- Sessions.put(k, v)
 		Sessions.get(k)
 	}
 }
 
 service peek {
-	on call(k: String) -> Effect[Option[String]] given PriceCache { PriceCache.get(k) }
+	on call(k: String) -> Effect[Option[String]] by Caller given PriceCache { PriceCache.get(k) }
 }
 
 service price {
-	on call(sku: String) -> Effect[Option[String]] given Prices { Prices.price(sku) }
+	on call(sku: String) -> Effect[Option[String]] by Caller given Prices { Prices.price(sku) }
 }
 
 service touch {
-	on call(id: String) -> Effect[Option[String]] { Cart(id).touch() }
+	on call(id: String) -> Effect[Option[String]] by Caller { Cart(id).touch() }
 }

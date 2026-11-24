@@ -16,7 +16,7 @@ fn rich(a: Account) -> Bool {
 }
 
 service checkout {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let a <- pay.open()
     Effect.pure(balance(Some(a)))
   }

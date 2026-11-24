@@ -3,7 +3,7 @@ context auth.sessions
 consumes tokens { Jwt }
 
 service login {
-  on call(secret: String) -> Effect[String] given Jwt {
+  on call(secret: String) -> Effect[String] by Caller given Jwt {
     let token <- Jwt.sign("u1", secret)
     token
   }

@@ -12,7 +12,7 @@ capability Orders {
 }
 
 service dash {
-  on call(id: Int) -> Effect[Int] given Users, Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Users, Orders {
     let user <- Users.get(id)
     par {
       let user <- Users.get(id)

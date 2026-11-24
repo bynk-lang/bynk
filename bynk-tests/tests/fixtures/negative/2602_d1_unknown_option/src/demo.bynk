@@ -6,7 +6,7 @@ consumes bynk.cloudflare { D1 }
 capability Orders = D1 @name("orders")
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

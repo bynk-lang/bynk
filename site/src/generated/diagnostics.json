@@ -130,7 +130,17 @@
     "summary": "An actor identity type is not a context-ownable (sealed) value type."
   },
   {
-    "blurb": "An HTTP handler can be reached by anyone, and Bynk has no safe default for who is calling, so each one must say, with a `by` clause, which actor it expects. The compiler then emits the verification before the body runs. A public route writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set it once on the header, `service api from http by Visitor`, and every handler without its own `by` inherits it. A WebSocket `on open` handler needs one too. The internal protocols (`call`, cron, queue) have a default.",
+    "blurb": "An `on call` handler is reachable by every context that consumes this one, and which of them may call it is an access decision, so the handler must say, with a `by` clause. `by Caller` is the explicit \"any consuming context\"; a refinement over `Caller`, a `Foreign` actor or a sum narrows it. The error's fix inserts `by Caller`, which is what the handler did before the clause was required, and `bynk check --fix=bynk.actor.missing_by_on_call` migrates a whole project. A header default, `service pay by Caller`, covers every handler without its own `by`. Agents, cron, queue and `Events` handlers have no caller to name, so they are unchanged.",
+    "category": "Actors",
+    "categoryAnchor": "actors",
+    "code": "bynk.actor.missing_by_on_call",
+    "constructs": [],
+    "example": "context shop\n\nservice authorise {\n  on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n    total\n  }\n}\n\nservice authorise {\n  on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n    total\n  }\n}",
+    "severity": "error",
+    "summary": "An `on call` handler lacks the required `by` actor clause."
+  },
+  {
+    "blurb": "An HTTP handler can be reached by anyone, and Bynk has no safe default for who is calling, so each one must say, with a `by` clause, which actor it expects. The compiler then emits the verification before the body runs. A public route writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set it once on the header, `service api from http by Visitor`, and every handler without its own `by` inherits it. A WebSocket `on open` handler needs one too. `call` handlers need one too (`bynk.actor.missing_by_on_call`); cron and queue have a default.",
     "category": "Actors",
     "categoryAnchor": "actors",
     "code": "bynk.actor.missing_by_on_http",
@@ -571,7 +581,7 @@
     "constructs": [
       "adapter_decl"
     ],
-    "example": "adapter tokens {\n  binding \"./tokens.binding.ts\"\n  provides Jwt = JoseJwt\n  service login {                       // ✗ an adapter may not declare a service\n    on call(x: Int) -> Effect[Int] { … }\n  }\n}\n\nadapter tokens {\n  binding \"./tokens.binding.ts\"\n  provides Jwt = JoseJwt                // ✓ capabilities and providers only\n}",
+    "example": "adapter tokens {\n  binding \"./tokens.binding.ts\"\n  provides Jwt = JoseJwt\n  service login {                       // ✗ an adapter may not declare a service\n    on call(x: Int) -> Effect[Int] by Caller { … }\n  }\n}\n\nadapter tokens {\n  binding \"./tokens.binding.ts\"\n  provides Jwt = JoseJwt                // ✓ capabilities and providers only\n}",
     "severity": "error",
     "summary": "An `adapter` declared a `service`, `agent`, or other item it may not contain."
   },
@@ -1051,7 +1061,7 @@
     "categoryAnchor": "boundaries",
     "code": "bynk.boundary.structural_mismatch",
     "constructs": [],
-    "example": "// shop.bynk\ncontext shop\n\ntype Box = { weight: Int }\n\nservice weigh {\n    on call(b: Box) -> Effect[Int] { … }\n}\n\n// depot.bynk\ncontext depot\n\nconsumes shop\n\ntype Box = { label: String }\n\nshop.weigh(Box { label: \"a\" })        // ✗ a `depot` `Box` is not shaped like `shop`'s\n\ntype Box = { weight: Int }\n\nshop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
+    "example": "// shop.bynk\ncontext shop\n\ntype Box = { weight: Int }\n\nservice weigh {\n    on call(b: Box) -> Effect[Int] by Caller { … }\n}\n\n// depot.bynk\ncontext depot\n\nconsumes shop\n\ntype Box = { label: String }\n\nshop.weigh(Box { label: \"a\" })        // ✗ a `depot` `Box` is not shaped like `shop`'s\n\ntype Box = { weight: Int }\n\nshop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
     "severity": "error",
     "summary": "Data crossing a context boundary did not match the expected shape."
   },
@@ -1063,7 +1073,7 @@
     "constructs": [
       "capability_decl"
     ],
-    "example": "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
+    "example": "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
     "severity": "error",
     "summary": "A derived capability's base is not a platform resource that can be instantiated."
   },
@@ -1087,7 +1097,7 @@
     "constructs": [
       "given_clause"
     ],
-    "example": "on call() -> Effect[()] given D1 {            // ✗ the bare kind names no database\n\ncapability Orders = D1\non call() -> Effect[()] given Orders {        // ✓ a named instance",
+    "example": "on call() -> Effect[()] by Caller given D1 {            // ✗ the bare kind names no database\n\ncapability Orders = D1\non call() -> Effect[()] by Caller given Orders {        // ✓ a named instance",
     "severity": "error",
     "summary": "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1`, `EdgeCache`) was used bare, in a `given` clause."
   },
@@ -1123,7 +1133,7 @@
     "constructs": [
       "given_clause"
     ],
-    "example": "service notify {\n  on call(to: String) -> Effect[()] given Mailer {   // ✗ no `provides Mailer` in this context\n    Mailer.send(to)\n  }\n}\n\nprovides Mailer = Smtp {                              // ✓ a provider, so the Worker can build it\n  fn send(to: String) -> Effect[()] {\n    Effect.pure(())\n  }\n}",
+    "example": "service notify {\n  on call(to: String) -> Effect[()] by Caller given Mailer {   // ✗ no `provides Mailer` in this context\n    Mailer.send(to)\n  }\n}\n\nprovides Mailer = Smtp {                              // ✓ a provider, so the Worker can build it\n  fn send(to: String) -> Effect[()] {\n    Effect.pure(())\n  }\n}",
     "severity": "error",
     "summary": "A capability a context requires has no provider in it, on the Workers target or in a bundle with a composition root."
   },
@@ -1159,7 +1169,7 @@
     "constructs": [
       "given_clause"
     ],
-    "example": "// registry.bynk\nprovides Yanks = AgentYanks {\n  fn set(value: Bool) -> Effect[Bool] {\n    PackageIndex(\"x\").setYanked(value)   // the provider constructs `registry`'s own agent\n  }\n}\n\n// api.bynk\nservice yank {\n  on call() -> Effect[Bool] given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n    registry.Yanks.set(true)\n  }\n}\n\n// api.bynk\nservice yank {\n  on call() -> Effect[Bool] {\n    registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n  }\n}",
+    "example": "// registry.bynk\nprovides Yanks = AgentYanks {\n  fn set(value: Bool) -> Effect[Bool] {\n    PackageIndex(\"x\").setYanked(value)   // the provider constructs `registry`'s own agent\n  }\n}\n\n// api.bynk\nservice yank {\n  on call() -> Effect[Bool] by Caller given registry.Yanks {   // ✗ `api`'s Worker would build that provider\n    registry.Yanks.set(true)\n  }\n}\n\n// api.bynk\nservice yank {\n  on call() -> Effect[Bool] by Caller {\n    registry.yank(true)                              // ✓ a service of `registry`, run in its own Worker\n  }\n}",
     "severity": "error",
     "summary": "On the Workers target, a context requires a capability whose provider, in another context, constructs that context's agents; the consumer's Worker would build the provider without a binding for those agents' Durable Objects."
   },
@@ -1321,7 +1331,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
+    "example": "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
     "severity": "error",
     "summary": "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it."
   },
@@ -1357,7 +1367,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
+    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1, 2)         // ✗ `charge` takes one argument\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ one argument for `amount`\n    }\n}",
     "severity": "error",
     "summary": "A consumed service was called with the wrong number of arguments."
   },
@@ -1369,7 +1379,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
+    "example": "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] by Caller { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
     "severity": "error",
     "summary": "A cross-context call reaches a service whose signature names a type the consumed context itself consumes from a third context, which the caller does not consume."
   },
@@ -1453,7 +1463,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
+    "example": "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
     "severity": "error",
     "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit."
   },
@@ -1477,7 +1487,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
+    "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
     "severity": "error",
     "summary": "Called a service the consumed context does not declare."
   },
@@ -1517,7 +1527,7 @@
     "categoryAnchor": "contexts",
     "code": "bynk.context.consumes_cycle",
     "constructs": [],
-    "example": "// a.bynk\ncontext a\n\nconsumes b                       // ✗ `a` and `b` consume each other (reported on one clause)\n\n// b.bynk\ncontext b\n\nconsumes a                       // ✗\n\nservice quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] {\n        Effect.pure(rate * 2)\n    }\n}",
+    "example": "// a.bynk\ncontext a\n\nconsumes b                       // ✗ `a` and `b` consume each other (reported on one clause)\n\n// b.bynk\ncontext b\n\nconsumes a                       // ✗\n\nservice quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] by Caller {\n        Effect.pure(rate * 2)\n    }\n}",
     "severity": "error",
     "summary": "Contexts form a `consumes` dependency cycle."
   },
@@ -1537,7 +1547,7 @@
     "categoryAnchor": "contexts",
     "code": "bynk.context.external_construction",
     "constructs": [],
-    "example": "// payment.bynk\ncontext payment\n\nexports transparent { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
+    "example": "// payment.bynk\ncontext payment\n\nexports transparent { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] by Caller { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
     "severity": "error",
     "summary": "A context-owned type was constructed from outside that context."
   },
@@ -1569,7 +1579,7 @@
     "categoryAnchor": "contexts",
     "code": "bynk.context.opaque_inspection",
     "constructs": [],
-    "example": "// pay.bynk\ncontext pay\n\nexports opaque { Status }        // the owner hides the shape\n\ntype Status = | Paid | Declined\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Bool] {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n// pay.bynk\nexports transparent { Status }   // ✓ the owner shares the shape",
+    "example": "// pay.bynk\ncontext pay\n\nexports opaque { Status }        // the owner hides the shape\n\ntype Status = | Paid | Declined\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Bool] by Caller {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n// pay.bynk\nexports transparent { Status }   // ✓ the owner shares the shape",
     "severity": "error",
     "summary": "An opaquely-exported type was inspected from outside its context."
   },
@@ -2017,7 +2027,7 @@
     "categoryAnchor": "effects",
     "code": "bynk.effect.cross_context_in_pure_context",
     "constructs": [],
-    "example": "on call() -> Effect[Int] {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
+    "example": "on call() -> Effect[Int] by Caller {\n    let f = (n: Int) => pay.charge(n)   // ✗ a service call in a pure lambda\n    Effect.pure(1)\n}\n\non call() -> Effect[Int] by Caller {\n    let paid <- pay.charge(5)           // ✓ the handler makes the call\n    let f = (n: Int) => n + paid\n    Effect.pure(f(1))\n}",
     "severity": "error",
     "summary": "A cross-context call was made in a pure context."
   },
@@ -2075,7 +2085,7 @@
     "categoryAnchor": "effects",
     "code": "bynk.effect.unbound_effect",
     "constructs": [],
-    "example": "on call() -> Effect[()] {\n    let e = Counter(\"k\").bump()       // ✗ started, never awaited\n    Effect.pure(())\n}\n\non call() -> Effect[()] {\n    do Counter(\"k\").bump()           // ✓ run in order\n    Effect.pure(())\n}",
+    "example": "on call() -> Effect[()] by Caller {\n    let e = Counter(\"k\").bump()       // ✗ started, never awaited\n    Effect.pure(())\n}\n\non call() -> Effect[()] by Caller {\n    do Counter(\"k\").bump()           // ✓ run in order\n    Effect.pure(())\n}",
     "severity": "error",
     "summary": "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658)."
   },
@@ -2419,7 +2429,7 @@
     "categoryAnchor": "other",
     "code": "bynk.exec.unavailable",
     "constructs": [],
-    "example": "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
+    "example": "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] by Caller {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
     "severity": "error",
     "summary": "A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation."
   },
@@ -2861,7 +2871,7 @@
     "categoryAnchor": "generics",
     "code": "bynk.generics.recursive_generic_at_boundary",
     "constructs": [],
-    "example": "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\nservice s {\n    on call(t: Tree[Int]) -> Effect[Int] { … }   // ✗ no codec for a recursive generic\n}\n\ntype IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\nservice s {\n    on call(t: IntTree) -> Effect[Int] { … }     // ✓ a concrete recursive type\n}",
+    "example": "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\nservice s {\n    on call(t: Tree[Int]) -> Effect[Int] by Caller { … }   // ✗ no codec for a recursive generic\n}\n\ntype IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\nservice s {\n    on call(t: IntTree) -> Effect[Int] by Caller { … }     // ✓ a concrete recursive type\n}",
     "severity": "error",
     "summary": "A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197)."
   },
@@ -2981,7 +2991,7 @@
     "constructs": [
       "given_clause"
     ],
-    "example": "fn warn(what: String) -> Effect[()] given Logger { … }\n\non call(sku: String) -> Effect[()] {\n    warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\non call(sku: String) -> Effect[()] given Logger {   // ✓ declared on the caller\n    warn(sku)\n}",
+    "example": "fn warn(what: String) -> Effect[()] given Logger { … }\n\non call(sku: String) -> Effect[()] by Caller {\n    warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\non call(sku: String) -> Effect[()] by Caller given Logger {   // ✓ declared on the caller\n    warn(sku)\n}",
     "severity": "error",
     "summary": "A call to a function that declares `given` from a body that does not declare those capabilities."
   },
@@ -2993,7 +3003,7 @@
     "constructs": [
       "given_clause"
     ],
-    "example": "on call() -> Effect[()] {\n    Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\non call() -> Effect[()] given Logger {   // ✓ declared, then used\n    Logger.log(\"hi\")\n}",
+    "example": "on call() -> Effect[()] by Caller {\n    Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\non call() -> Effect[()] by Caller given Logger {   // ✓ declared, then used\n    Logger.log(\"hi\")\n}",
     "severity": "error",
     "summary": "A handler uses a capability it did not declare with `given`."
   },
@@ -4405,7 +4415,7 @@
     "constructs": [],
     "example": null,
     "severity": "warning",
-    "summary": "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable)."
+    "summary": "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable)."
   },
   {
     "blurb": null,
@@ -4983,7 +4993,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service orders {                   // ✗ no handler\n}\n\nservice orders {\n    on call() -> Effect[Int] {     // ✓\n        Effect.pure(0)\n    }\n}",
+    "example": "service orders {                   // ✗ no handler\n}\n\nservice orders {\n    on call() -> Effect[Int] by Caller {     // ✓\n        Effect.pure(0)\n    }\n}",
     "severity": "error",
     "summary": "A `service` body is empty."
   },
@@ -5993,7 +6003,7 @@
     "constructs": [
       "method_call"
     ],
-    "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
+    "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] by Caller {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
     "severity": "error",
     "summary": "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to."
   },
@@ -6656,7 +6666,7 @@
     "constructs": [
       "consumes_decl"
     ],
-    "example": "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\ncontext app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
+    "example": "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\ncontext app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
     "severity": "error",
     "summary": "A context's service was called, or its capability named in `given`, without a `consumes` declaration."
   },
@@ -6834,7 +6844,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service greet {\n    on call(name: String) -> Effect[String] { … }\n    on call(name: String) -> Effect[String] { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] { … }\n}",
+    "example": "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] by Caller { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] by Caller { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] by Caller { … }\n}",
     "severity": "error",
     "summary": "A service declares more than one `on call` handler; it has exactly one."
   },
@@ -6858,7 +6868,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] { … }\n}",
+    "example": "service worker from queue(\"jobs\") {\n    on call(m: String) -> Effect[Int] { … }   // ✗ `on call` is not a queue handler\n}\n\nservice count {                             // ✓ a service of its own\n    on call(m: String) -> Effect[Int] by Caller { … }\n}",
     "severity": "error",
     "summary": "A service mixes handler forms that do not match its `from <protocol>`."
   },
@@ -6882,7 +6892,7 @@
     "constructs": [
       "service_decl"
     ],
-    "example": "service probe {\n    on call() -> Int { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] { … }    // ✓\n}",
+    "example": "service probe {\n    on call() -> Int by Caller { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] by Caller { … }    // ✓\n}",
     "severity": "error",
     "summary": "A service handler's return type is not an `Effect`."
   },
@@ -9395,7 +9405,7 @@
     "categoryAnchor": "type-checking",
     "code": "bynk.types.stream_at_boundary",
     "constructs": [],
-    "example": "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\nservice s {\n    on call(readings: List[Int]) -> Effect[Int] {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
+    "example": "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] by Caller {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\nservice s {\n    on call(readings: List[Int]) -> Effect[Int] by Caller {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
     "severity": "error",
     "summary": "A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields)."
   },
@@ -9787,7 +9797,7 @@
     "constructs": [
       "method_call"
     ],
-    "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
+    "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
     "severity": "error",
     "summary": "`e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to."
   },

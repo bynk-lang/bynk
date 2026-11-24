@@ -6,9 +6,9 @@ uses shop.values
 // rebrand of them, which the barrel re-exports from one of them: `Money`, a
 // refined type, has a value side; `Note` is a type only.
 service echo {
-  on call(m: Money) -> Effect[Money] { m }
+  on call(m: Money) -> Effect[Money] by Caller { m }
 }
 
 service note {
-  on call(n: Note) -> Effect[Note] { n }
+  on call(n: Note) -> Effect[Note] by Caller { n }
 }

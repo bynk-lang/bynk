@@ -20,7 +20,7 @@ agent Ledger {
 }
 
 service alpha {
-  on call() -> Effect[String] given Idempotency {
+  on call() -> Effect[String] by Caller given Idempotency {
     let cached <- Idempotency.dedup[String]("same-key")
     match cached {
       Some(v) => v,
@@ -33,7 +33,7 @@ service alpha {
 }
 
 service beta {
-  on call() -> Effect[String] given Idempotency {
+  on call() -> Effect[String] by Caller given Idempotency {
     let cached <- Idempotency.dedup[String]("same-key")
     match cached {
       Some(v) => v,

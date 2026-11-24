@@ -193,7 +193,7 @@ fn a_git_adapters_npm_package_needs_approval() {
     consumer(&app, &url, "v0.3.0");
     write(
         &app.join("src/sessions.bynk"),
-        "context sessions\n\nconsumes ledger.tokens\n\nservice login {\n  on call() -> Effect[String] given ledger.tokens.Jwt {\n    let t <- ledger.tokens.Jwt.sign(\"u1\")\n    t\n  }\n}\n",
+        "context sessions\n\nconsumes ledger.tokens\n\nservice login {\n  on call() -> Effect[String] by Caller given ledger.tokens.Jwt {\n    let t <- ledger.tokens.Jwt.sign(\"u1\")\n    t\n  }\n}\n",
     );
     let home = root.join("home");
     let (code, out) = run("bynk", &app, &home, &["check"]);

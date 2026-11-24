@@ -3,7 +3,7 @@ context shop.api
 uses shop.envelope
 
 service users {
-  on call(page: Paginated[User]) -> Effect[Result[Paginated[User], ()]] {
+  on call(page: Paginated[User]) -> Effect[Result[Paginated[User], ()]] by Caller {
     Ok(page)
   }
 }

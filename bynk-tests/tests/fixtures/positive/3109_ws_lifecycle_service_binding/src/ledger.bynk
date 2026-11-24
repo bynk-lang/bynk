@@ -1,7 +1,7 @@
 context ledger
 
 service tally {
-	on call(text: String) -> Effect[Int] {
+	on call(text: String) -> Effect[Int] by Caller {
 		text.length()
 	}
 }

@@ -1,5 +1,4 @@
 commons shop {
-  uses bynk.list
   uses bynk.map
 
   fn tally(names: List[String]) -> Map[String, Int] {

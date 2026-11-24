@@ -103,7 +103,7 @@ agent Roller {
 }
 
 service run {
-	on call(n: Int) -> Effect[Int] given Audit, Quotes {
+	on call(n: Int) -> Effect[Int] by Caller given Audit, Quotes {
 		let a <- outer((x) => Audit.note(x), n)
 		let b <- bounded(Quotes.quote(n))
 		let c <- hedged(Quotes.quote(1), Quotes.quote(2))

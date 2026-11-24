@@ -17,7 +17,7 @@ Run calls `service playground`: `21` passes the check and is doubled, and `500`
 stops at `?` with the `ValidationError`.
 ---
 service playground {
-  on call() -> Effect[List[String]] {
+  on call() -> Effect[List[String]] by Caller {
     [21, 500].map((n) => match doubled(n) {
       Ok(d) => "\(n) doubled is \(d)"
       Err(e) => "\(n): \(e.message)"

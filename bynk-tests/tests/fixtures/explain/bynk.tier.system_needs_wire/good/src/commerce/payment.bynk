@@ -9,7 +9,7 @@ provides Logger = NoOpLogger {
 }
 
 service authorise {
-  on call() -> Effect[Int] given Logger {
+  on call() -> Effect[Int] by Caller given Logger {
     let _ <- Logger.log("authorise")
     Effect.pure(1)
   }

@@ -7,7 +7,7 @@ context ev.relay
 consumes ev.store
 
 service big {
-  on call(b: Batch) -> Effect[Bool] {
+  on call(b: Batch) -> Effect[Bool] by Caller {
     Effect.pure(b.big())
   }
 }

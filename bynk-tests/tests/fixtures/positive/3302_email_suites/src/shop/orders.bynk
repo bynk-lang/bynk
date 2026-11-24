@@ -12,7 +12,7 @@ consumes bynk.cloudflare { Email, EmailError, EmailMessage, EmailAttachment }
 capability Mail = Email @allowedSenders(["orders@shop.example"])
 
 service receipts {
-	on call(to: String) -> Effect[Result[String, EmailError]] given Mail {
+	on call(to: String) -> Effect[Result[String, EmailError]] by Caller given Mail {
 		Mail.send(EmailMessage {
 			from: "orders@shop.example",
 			to: [to],
@@ -68,7 +68,7 @@ fn sixteen() -> List[String] {
 }
 
 service fanout {
-	on call(over: Bool) -> Effect[Result[String, EmailError]] given Mail {
+	on call(over: Bool) -> Effect[Result[String, EmailError]] by Caller given Mail {
 		Mail.send(EmailMessage {
 			from: "orders@shop.example",
 			to: seventeen(),
@@ -81,7 +81,7 @@ service fanout {
 }
 
 service tagged {
-	on call(name: String, value: String) -> Effect[Result[String, EmailError]] given Mail {
+	on call(name: String, value: String) -> Effect[Result[String, EmailError]] by Caller given Mail {
 		let extra: Map[String, String] = Map.empty().insert(name, value)
 		Mail.send(EmailMessage {
 			from: "orders@shop.example",
@@ -94,7 +94,7 @@ service tagged {
 }
 
 service attaching {
-	on call() -> Effect[Result[String, EmailError]] given Mail {
+	on call() -> Effect[Result[String, EmailError]] by Caller given Mail {
 		Mail.send(EmailMessage {
 			from: "orders@shop.example",
 			to: ["a@example.com"],
@@ -106,7 +106,7 @@ service attaching {
 }
 
 service empty {
-	on call() -> Effect[Result[String, EmailError]] given Mail {
+	on call() -> Effect[Result[String, EmailError]] by Caller given Mail {
 		Mail.send(EmailMessage { from: "orders@shop.example", to: ["a@example.com"], subject: "Nothing" })
 	}
 }

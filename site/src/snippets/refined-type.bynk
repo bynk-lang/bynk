@@ -17,7 +17,7 @@ Run calls `service playground`. `Subject.of` checks each raw string, and only th
 one that passes reaches `greeting`.
 ---
 service playground {
-  on call() -> Effect[List[String]] {
+  on call() -> Effect[List[String]] by Caller {
     ["World", ""].map((raw) => match Subject.of(raw) {
       Ok(subject) => greeting(subject)
       Err(e) => "\(e.field): \(e.message)"

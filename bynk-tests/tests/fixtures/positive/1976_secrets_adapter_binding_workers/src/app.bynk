@@ -11,7 +11,7 @@ consumes relay { Relay }
 // (ADR 0196 E: knowing that you don't know is still something to say, so the
 // file is emitted).
 service welcome {
-	on call(name: String) -> Effect[String] given Relay {
+	on call(name: String) -> Effect[String] by Caller given Relay {
 		let s <- Relay.hello(name)
 		s
 	}

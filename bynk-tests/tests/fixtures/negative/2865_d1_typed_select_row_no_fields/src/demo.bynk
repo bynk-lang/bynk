@@ -8,7 +8,7 @@ capability Orders = D1
 type Nothing = {}
 
 service probe {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let a <- Orders.select[Nothing]("FROM orders", [])
     a is Ok(_)
   }

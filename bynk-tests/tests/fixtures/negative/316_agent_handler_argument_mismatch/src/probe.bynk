@@ -15,7 +15,7 @@ agent Counter {
 }
 
 service bump {
-  on call(id: CounterId) -> Effect[Result[Int, String]] {
+  on call(id: CounterId) -> Effect[Result[Int, String]] by Caller {
     let counter = Counter(id)
     let total <- counter.add("nope")
     total

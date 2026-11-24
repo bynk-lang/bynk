@@ -18,14 +18,14 @@ fn logIt(id: Int, f: (Int) -> Effect[()]) -> Effect[Int] {
 }
 
 service audit {
-	on call(id: Int) -> Effect[Int] given Ledger {
+	on call(id: Int) -> Effect[Int] by Caller given Ledger {
 		do Ledger.book(id).detach()
 		Effect.pure(id)
 	}
 }
 
 service relay {
-	on call(id: Int) -> Effect[Int] given Ledger {
+	on call(id: Int) -> Effect[Int] by Caller given Ledger {
 		logIt(id, (n) => Ledger.book(n))
 	}
 }

@@ -59,7 +59,7 @@ fn build() -> Holder {
 }
 
 service probe {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		sum(build().tree)
 	}
 }

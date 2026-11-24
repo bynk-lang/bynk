@@ -5,7 +5,7 @@ uses demo
 fn local() -> Int { missing }
 
 service api {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure("not an int")
   }
 }

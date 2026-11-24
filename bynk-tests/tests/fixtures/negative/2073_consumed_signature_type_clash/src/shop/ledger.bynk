@@ -6,7 +6,7 @@ consumes shop.order
 consumes shop.post
 
 service orderId {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     "x"
   }
 }

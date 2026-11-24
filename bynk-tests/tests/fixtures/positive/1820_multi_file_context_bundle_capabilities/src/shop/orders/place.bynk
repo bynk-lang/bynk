@@ -5,11 +5,11 @@ uses shop.values
 // #1820: `place` names no capability, but the agent it calls is `given`
 // `Stamp`, so its deps carry it.
 service place {
-  on call(m: Money) -> Effect[Int] {
+  on call(m: Money) -> Effect[Int] by Caller {
     Book("o1").add(m)
   }
 }
 
 service length {
-  on call(n: Note) -> Effect[Int] { n.text.length() }
+  on call(n: Note) -> Effect[Int] by Caller { n.text.length() }
 }

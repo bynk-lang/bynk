@@ -33,7 +33,7 @@ provides Orders = FixedOrders {
 }
 
 service summary {
-	on call(id: Int) -> Effect[String] given Users, Orders {
+	on call(id: Int) -> Effect[String] by Caller given Users, Orders {
 		par {
 			let user <- Users.get(id)
 			let orders <- Orders.forUser(id)

@@ -105,9 +105,19 @@ kernel_ops! {
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
         FirstOrElse = "firstOrElse", "firstOrElse(default: T) -> T";
+        // #3962 (with #3828): the rest of `bynk.list`'s vocabulary, and the three
+        // everyday methods that existed nowhere.
+        Reverse = "reverse", "reverse() -> List[T]";
+        Find = "find", "find(p: T -> Bool) -> Option[T]";
+        Contains = "contains", "contains(item: T) -> Bool";
+        Last = "last", "last() -> Option[T]";
+        LastOrElse = "lastOrElse", "lastOrElse(default: T) -> T";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Sort = "sort", "sort() -> List[T]";
+        Traverse = "traverse", "traverse(f: T -> Effect[U]) -> Effect[List[U]]";
         Sum = "sum", "sum(key: T -> K) -> K";
-        Min = "min", "min(key: T -> K) -> Option[K]";
-        Max = "max", "max(key: T -> K) -> Option[K]";
+        Min = "min", "min(key: T -> K) -> Option[K], or min() -> Option[T] for an Ord element";
+        Max = "max", "max(key: T -> K) -> Option[K], or max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
         // v0.94 (ADR 0116/0120): joins & grouping, combiner form (eager — mirrors
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).

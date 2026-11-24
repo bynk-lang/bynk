@@ -3,15 +3,15 @@ context demo
 // #3766: three `on call` handlers in one service; a service has exactly
 // one, and each handler past the first is reported on its own.
 service playground {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     Effect.pure("first")
   }
 
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     Effect.pure("second")
   }
 
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     Effect.pure("third")
   }
 }

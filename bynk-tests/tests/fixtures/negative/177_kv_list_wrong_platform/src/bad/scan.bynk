@@ -3,7 +3,7 @@ context bad.scan
 consumes bynk.cloudflare { Kv }
 
 service scan {
-  on call(prefix: String) -> Effect[Result[List[String], ()]] given Kv {
+  on call(prefix: String) -> Effect[Result[List[String], ()]] by Caller given Kv {
     let keys <- Kv.list(Some(prefix))
     Ok(keys)
   }

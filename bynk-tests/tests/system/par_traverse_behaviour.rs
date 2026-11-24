@@ -36,25 +36,25 @@ capability Notes {
 }
 
 service lst {
-  on call(xs: List[Int]) -> Effect[()] given Notes {
+  on call(xs: List[Int]) -> Effect[()] by Caller given Notes {
     xs.parForEach((n: Int) => Notes.put(n))
   }
 }
 
 service lstVals {
-  on call(xs: List[Int]) -> Effect[List[Int]] given Notes {
+  on call(xs: List[Int]) -> Effect[List[Int]] by Caller given Notes {
     xs.parTraverse((n: Int) => Notes.val(n))
   }
 }
 
 service lstAll {
-  on call(xs: List[Int]) -> Effect[List[Result[Int, String]]] given Notes {
+  on call(xs: List[Int]) -> Effect[List[Result[Int, String]]] by Caller given Notes {
     xs.parTraverseAll((n: Int) => Notes.tryPut(n))
   }
 }
 
 service lstTry {
-  on call(xs: List[Int]) -> Effect[Result[List[Int], String]] given Notes {
+  on call(xs: List[Int]) -> Effect[Result[List[Int], String]] by Caller given Notes {
     xs.parTraverseTry((n: Int) => Notes.tryPut(n))
   }
 }

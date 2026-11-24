@@ -7,5 +7,5 @@ const Limit: Int = 5
 type Color = | Red | Green
 
 service local {
-  on call(n: Int) -> Effect[Int] { n + 1 }
+  on call(n: Int) -> Effect[Int] by Caller { n + 1 }
 }

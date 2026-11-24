@@ -1,6 +1,6 @@
 context demo.board {
   service board {
-    on call(id: Int) -> Effect[Int] {
+    on call(id: Int) -> Effect[Int] by Caller {
       par {
         let n <- unreachable("never")
         let m <- Effect.pure(id)

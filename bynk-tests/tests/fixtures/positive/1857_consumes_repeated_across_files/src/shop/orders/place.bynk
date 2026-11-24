@@ -7,7 +7,7 @@ consumes shop.payment as Payment
 consumes shop.clock { Clock }
 
 service place {
-  on call(qty: Int) -> Effect[Bool] given Clock {
+  on call(qty: Int) -> Effect[Bool] by Caller given Clock {
     let _ <- Clock.now()
     Payment.authorise(qty)
   }

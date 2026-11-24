@@ -8,7 +8,7 @@ type Order = {
 }
 
 service ordering {
-  on call(sku: String) -> Effect[Order] given Clock, Logger {
+  on call(sku: String) -> Effect[Order] by Caller given Clock, Logger {
     let _   <- Logger.info("placing order")
     let now <- Clock.now()
     Order { sku: sku, placedAt: now }

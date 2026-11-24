@@ -6,7 +6,7 @@ consumes bynk.cloudflare { Postgres, PgError }
 capability Main = Postgres
 
 service probe {
-  on call() -> Effect[Result[String, PgError]] given Main {
+  on call() -> Effect[Result[String, PgError]] by Caller given Main {
     Main.all("selec id from orders", [])
   }
 }

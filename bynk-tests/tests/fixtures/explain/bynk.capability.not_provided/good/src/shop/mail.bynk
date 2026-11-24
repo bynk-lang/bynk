@@ -11,7 +11,7 @@ provides Mailer = Smtp {
 }
 
 service notify {
-	on call(to: String) -> Effect[()] given Mailer {
+	on call(to: String) -> Effect[()] by Caller given Mailer {
 		Mailer.send(to)
 	}
 }

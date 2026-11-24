@@ -10,7 +10,7 @@ consumes bynk.cloudflare { Postgres, PgError, PgRun, PgStatement, PgValue }
 capability Main = Postgres
 
 service probe {
-  on call(name: String) -> Effect[Result[String, PgError]] given Main {
+  on call(name: String) -> Effect[Result[String, PgError]] by Caller given Main {
     let a <- Main.all("select id, data->>'name' as name, data->'tags'->0 from events where data @> $1::jsonb", [PgJson("{}")])
     let b <- Main.all("insert into orders (name, qty) values ($1, $2) on conflict (name) do update set qty = orders.qty + excluded.qty returning id, qty", [PgText(name), PgInteger(1)])
     let c <- Main.all("with recent as (select * from orders where placed > $1::timestamptz) select count(*) from recent", [PgNull])
@@ -20,7 +20,7 @@ service probe {
 }
 
 service batch {
-  on call(name: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+  on call(name: String) -> Effect[Result[List[PgRun], PgError]] by Caller given Main {
     Main.transaction([
       PgStatement { sql: "insert into orders (name) values ($1) on conflict do nothing", params: [PgText(name)] },
       PgStatement { sql: "delete from orders where qty::int < $1", params: [PgInteger(0)] },

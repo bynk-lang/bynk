@@ -5,7 +5,7 @@ uses bynk.locale
 uses bynk.locale.types
 
 service greeting {
-  on call() -> Effect[String] given Locale {
+  on call() -> Effect[String] by Caller given Locale {
     let tag <- Locale.current()
     Effect.pure(render(tag, message("hello")))
   }

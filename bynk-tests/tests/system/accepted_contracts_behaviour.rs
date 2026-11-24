@@ -81,7 +81,7 @@ const CALLEE_V1: &str = r#"context app.b
 type Receipt = { id: String }
 
 service issue {
-  on call(n: Int) -> Effect[Receipt] {
+  on call(n: Int) -> Effect[Receipt] by Caller {
     Effect.pure(Receipt { id: "r" })
   }
 }
@@ -94,7 +94,7 @@ const CALLEE_V2: &str = r#"context app.b
 type Receipt = { id: String, note: Option[String] }
 
 service issue {
-  on call(n: Int) -> Effect[Receipt] {
+  on call(n: Int) -> Effect[Receipt] by Caller {
     Effect.pure(Receipt { id: "r", note: None })
   }
 }
@@ -107,7 +107,7 @@ const CALLEE_OTHER: &str = r#"context app.b
 type Receipt = { id: Int }
 
 service issue {
-  on call(n: Int) -> Effect[Receipt] {
+  on call(n: Int) -> Effect[Receipt] by Caller {
     Effect.pure(Receipt { id: 1 })
   }
 }
@@ -312,7 +312,7 @@ const REQ_V1: &str = r#"context app.b
 type Order = { id: Int }
 
 service issue {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     Effect.pure("ok")
   }
 }
@@ -325,7 +325,7 @@ const REQ_V2: &str = r#"context app.b
 type Order = { id: Int, currency: String = "EUR" }
 
 service issue {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     Effect.pure(o.currency)
   }
 }

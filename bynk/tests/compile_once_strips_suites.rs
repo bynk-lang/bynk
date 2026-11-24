@@ -22,7 +22,7 @@ fn the_dev_and_deploy_build_strips_every_suite() {
     // ships; the suite does not.
     std::fs::write(
         root.join("src/shop/one.bynk"),
-        "context shop.one {\n  service ping {\n    on call() -> Effect[Bool] { true }\n  }\n}\n\n\
+        "context shop.one {\n  service ping {\n    on call() -> Effect[Bool] by Caller { true }\n  }\n}\n\n\
          suite shop.one {\n  case \"pings\" {\n    let ok <- ping.call()\n    expect ok\n  }\n}\n",
     )
     .unwrap();

@@ -31,7 +31,7 @@ provides Gamma = GammaImpl {
 }
 
 service handlers {
-  on call(x: Int) -> Effect[Int] given Alpha, Beta, Gamma {
+  on call(x: Int) -> Effect[Int] by Caller given Alpha, Beta, Gamma {
     let a <- Alpha.ping()
     let b <- Beta.ping()
     let g <- Gamma.ping()

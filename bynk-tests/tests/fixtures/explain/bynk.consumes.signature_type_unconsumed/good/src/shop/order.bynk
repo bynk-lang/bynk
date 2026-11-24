@@ -5,7 +5,7 @@ exports transparent { Order }
 type Order = { id: String }
 
 service place {
-    on call(id: String) -> Effect[Order] {
+    on call(id: String) -> Effect[Order] by Caller {
         Effect.pure(Order { id: id })
     }
 }

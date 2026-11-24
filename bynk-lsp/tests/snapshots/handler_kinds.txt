@@ -2,14 +2,67 @@
 {
   "participants": [
     {
+      "id": 1,
+      "kind": "Actor",
+      "name": "Caller",
+      "range": {
+        "start": {
+          "line": 13,
+          "character": 33
+        },
+        "end": {
+          "line": 13,
+          "character": 42
+        }
+      },
+      "key": null
+    },
+    {
       "id": 0,
       "kind": "Entry",
-      "name": "calc call",
+      "name": "calc",
       "range": null,
       "key": null
     }
   ],
-  "messages": [],
+  "messages": [
+    {
+      "from": 1,
+      "to": 0,
+      "kind": "Call",
+      "label": "call",
+      "range": {
+        "start": {
+          "line": 13,
+          "character": 2
+        },
+        "end": {
+          "line": 15,
+          "character": 3
+        }
+      },
+      "block": null,
+      "callee": null
+    },
+    {
+      "from": 0,
+      "to": 1,
+      "kind": "Return",
+      "label": "x",
+      "range": {
+        "start": {
+          "line": 14,
+          "character": 4
+        },
+        "end": {
+          "line": 14,
+          "character": 5
+        }
+      },
+      "block": null,
+      "callee": null
+    }
+  ],
   "blocks": [],
   "trigger": {
     "kind": "Call",
@@ -337,7 +390,7 @@
     {
       "id": 1,
       "kind": "Actor",
-      "name": "Caller",
+      "name": "Member",
       "range": {
         "start": {
           "line": 45,
@@ -466,7 +519,7 @@
     {
       "id": 1,
       "kind": "Actor",
-      "name": "Caller",
+      "name": "Member",
       "range": {
         "start": {
           "line": 50,
@@ -538,7 +591,7 @@
     {
       "id": 1,
       "kind": "Actor",
-      "name": "Caller",
+      "name": "Member",
       "range": {
         "start": {
           "line": 54,
@@ -754,9 +807,9 @@ type Pinged = {
 type UserId = opaque String
 ```
 
---- [actor] Caller
+--- [actor] Member
 ```bynk
-actor Caller { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
+actor Member { auth = Bearer(secret = "AUTH_SECRET"), identity = UserId }
 ```
 
 --- [service] calc

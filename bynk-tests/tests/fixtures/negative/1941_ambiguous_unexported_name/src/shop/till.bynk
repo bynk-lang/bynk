@@ -9,7 +9,7 @@ consumes shop.two
 // from, so passing one back is rejected, with a note saying why.
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.one.quote()
     shop.one.take(b)
   }

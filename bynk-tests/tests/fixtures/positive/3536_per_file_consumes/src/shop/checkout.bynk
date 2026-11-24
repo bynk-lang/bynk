@@ -11,7 +11,7 @@ fn late(t: TimedOut) -> Bool {
 }
 
 service checkout {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let _ <- Clock.now()
     pay.charge(1)
   }

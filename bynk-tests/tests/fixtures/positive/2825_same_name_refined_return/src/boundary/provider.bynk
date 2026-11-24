@@ -11,25 +11,25 @@ type Fault = { code: Int }
 type Handle = opaque String where MaxLength(8)
 
 service reply {
-  on call(n: Int) -> Effect[Result[Reply, Int]] {
+  on call(n: Int) -> Effect[Result[Reply, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }
 
 service replies {
-  on call(n: Int) -> Effect[List[Reply]] {
+  on call(n: Int) -> Effect[List[Reply]] by Caller {
     Effect.pure([])
   }
 }
 
 service mixed {
-  on call(n: Int) -> Effect[Result[Reply, Fault]] {
+  on call(n: Int) -> Effect[Result[Reply, Fault]] by Caller {
     Effect.pure(Err(Fault { code: n }))
   }
 }
 
 service handle {
-  on call(n: Int) -> Effect[Result[Handle, Int]] {
+  on call(n: Int) -> Effect[Result[Handle, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }

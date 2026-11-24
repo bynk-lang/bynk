@@ -4,7 +4,7 @@ consumes app
 consumes lib { Code }
 
 service probe {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		let echoed <- app.echo(Code.Alpha)
 		Effect.pure(1)
 	}

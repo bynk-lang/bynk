@@ -492,7 +492,7 @@ provides Clock = SystemClock {
 consumes platformtime { Clock }
 
 service run {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let now <- Clock.now()
     now
   }

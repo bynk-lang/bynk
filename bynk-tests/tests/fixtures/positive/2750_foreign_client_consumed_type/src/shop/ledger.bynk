@@ -13,7 +13,7 @@ type Code = opaque Int
 actor Legacy { auth = Foreign(secret = "LEGACY_CALL_KEY") }
 
 service orderId {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     o.id
   }
 }
