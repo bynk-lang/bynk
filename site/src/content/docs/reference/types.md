@@ -888,7 +888,7 @@ The effect methods form one grid of names:
 
 Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
 
-**Bounding a fan-out (#3968).** The plain `par…` forms start every step at once. The four `…With` forms take a second argument, `ParOptions`, a record `{ limit: Int }` declared in the first-party `bynk.par` commons (`uses bynk.par`); it has no default, so a call always states its bound. `limit` is a whole number from 1 to 1000, and the steps run on a sliding pool: a new step starts as soon as any in-flight step settles. Results stay in input order and faults follow the plain forms (every started step settles, the first fault in input order is raised). A `limit` that is a literal or constant outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`, since the call is then sequential (use `forEach`, `traverse`, `traverseAll` or `traverseTry`). A limit only known at run time is checked by the runtime, which faults the call. The closure rules, including `bynk.par.store_write_in_closure`, are the plain forms'. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194), which would give the future spelling `limit:`; it is not implemented.
+**Bounding a fan-out (#3968).** The plain `par…` forms start every step at once. The four `…With` forms take a second argument, a [`ParOptions`](#par-options) record `{ limit: Int }` from the first-party `bynk.par` commons (`uses bynk.par`); it has no default, so a call always states its bound. `limit` is a whole number from 1 to 1000, and the steps run on a sliding pool: a new step starts as soon as any in-flight step settles. Results stay in input order and faults follow the plain forms (every started step settles, the first fault in input order is raised). A `limit` that is a literal or constant outside 1 to 1000 is the error `bynk.list.par_limit_range`; a `limit` of 1 is the warning `bynk.list.par_limit_one`, since the call is then sequential (use `forEach`, `traverse`, `traverseAll` or `traverseTry`). A limit only known at run time is checked by the runtime, which faults the call. The closure rules, including `bynk.par.store_write_in_closure`, are the plain forms'. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194), which would give the future spelling `limit:`; it is not implemented.
 
 The methods returning an `Effect` can only be called where effects are allowed.
 A method not in this table is `bynk.types.method_not_found`. The rest of this
@@ -1353,6 +1353,18 @@ order of such a type as meaningful.
 implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
 "add `derives Ord`" suggestion is never applied by `bynk check --fix` or
 **Fix all**, because opting in is a decision about what the order is.
+
+## ParOptions {#par-options}
+
+`ParOptions` (#3968) is the options record taken by the bounded fan-out methods `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` and `parTraverseTryWith` (see [List methods](#list-methods)). It is declared in the first-party `bynk.par` commons, so a project brings it in with `uses bynk.par`; it is not in the prelude.
+
+```bynk,fragment
+type ParOptions = {
+	limit: Int,
+}
+```
+
+`limit` is the most steps in flight at once. It has no default: a call always states it. It must be a whole number from 1 to 1000. A literal or constant outside that range is the error `bynk.list.par_limit_range`, a `limit` of 1 is the warning `bynk.list.par_limit_one` (the call is then sequential), and a limit only known at run time is checked by the runtime, which faults the call. General named arguments are proposal [#4194](https://github.com/bynk-lang/bynk/issues/4194); if accepted they would give the future spelling `limit:`.
 
 ## Query
 
