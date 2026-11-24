@@ -1254,8 +1254,9 @@ export async function callService<R>(
   deserialiseResult: (json: JsonValue, path?: string) => Result<R, BoundaryError>,
   // v0.54: the calling context's qualified name, stamped beside the args so the
   // callee's `by c: Caller` handler can present a live `CallerId` (Q7). A
-  // compile-time constant; the args body itself is unchanged. The `Internal`
-  // channel trusts the binding, so this is identity, not authentication.
+  // compile-time constant; the args body itself is unchanged. The name is only a
+  // claim until the request's per-edge signature (ADR 0485) proves it: the
+  // callee checks the signature, then admits the proven caller.
   callerContext: string = "",
   // v0.177 (#643): this caller's compiled hash of the callee's contract. A
   // compile-time constant, stamped beside the caller identity as metadata — the
