@@ -259,6 +259,34 @@ fn shapes_request_body_sum_and_every_predicate() {
     golden("openapi-shapes.json", &pretty(&d));
 }
 
+/// #3910: a path parameter keeps its type: an `Int` (refined or not) its `type` and bounds, a
+/// `Bool` and a `Decimal` theirs, and an enum a string enumeration of its variant names.
+#[test]
+fn typed_path_parameters_carry_their_schema() {
+    let dir = scratch("typed-path");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"typed\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/typed.bynk"),
+        "context typed\n\ntype OrderNo = Int where InRange(1, 100)\ntype Status = enum { Open, Closed }\n\nservice api from http {\n  on GET(\"/orders/:id/:flag/:s/:p\") (id: OrderNo, flag: Bool, s: Status, p: Decimal) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let ps = d["paths"]["/orders/{id}/{flag}/{s}/{p}"]["get"]["parameters"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let schema = |name: &str| ps.iter().find(|p| p["name"] == name).unwrap()["schema"].clone();
+    assert_eq!(schema("id")["type"], "integer");
+    assert_eq!(schema("id")["maximum"], 100);
+    assert_eq!(schema("flag")["type"], "boolean");
+    assert_eq!(schema("s")["type"], "string");
+    assert_eq!(schema("s")["enum"], serde_json::json!(["Open", "Closed"]));
+    assert_eq!(schema("p")["type"], "string");
+}
+
 /// #3911: a typed `headers` record is described as `in: header` parameters, one per field, under
 /// each field's wire name; the raw `RequestHeaders` view declares none.
 #[test]

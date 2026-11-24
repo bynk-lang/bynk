@@ -5532,8 +5532,9 @@ fn reserved_route_char(
 /// - Every `:name` segment binds to a handler parameter of the same name.
 /// - Every parameter is either a path parameter or named `body`, `headers` or
 ///   `query`.
-/// - Path parameter types are constructible from `String` (`String`, refined
-///   `String`, or opaque `String`).
+/// - Path parameter types are those of a typed `query` field, less `Option` and
+///   `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined
+///   or opaque type over one of those.
 /// - GET / DELETE handlers may not have a `body` parameter.
 /// - The handler return type must be `Effect[HttpResult[T]]`.
 fn validate_http_handler(
@@ -5703,20 +5704,21 @@ fn validate_http_handler(
                 ),
             );
         }
-        // Path params must be constructible from String.
-        if is_path && !is_string_constructible(&p.type_ref, types) {
+        // #3910: a path parameter reads as a typed `query` field does, minus `Option`
+        // and `List` (a segment is always present and single-valued).
+        if is_path && !is_query_leaf(&p.type_ref, types) {
             errors.push(
                 CompileError::new(
                     "bynk.http.path_param_not_stringy",
                     p.type_ref.span(),
                     format!(
-                        "path parameter `{}` must have a type constructible from `String` (got `{}`)",
+                        "path parameter `{}` must be a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one of those (got `{}`)",
                         p.name.name,
                         ts_type_ref_display(&p.type_ref),
                     ),
                 )
                 .with_note(
-                    "use `String`, a refined `String`, or an opaque type whose base is `String`",
+                    "a path segment is one value, so `Option` and `List` are refused; an enum is read by variant name",
                 ),
             );
         }

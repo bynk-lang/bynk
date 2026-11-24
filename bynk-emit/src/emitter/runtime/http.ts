@@ -1457,6 +1457,35 @@ export function formDecode(
   return { tag: "Err", error: { kind: e.kind, path, message } } as Result<JsonValue, DecodeError>;
 }
 
+/** The JSON a text value of `kind` reads as: an `Int` that is plain digits within the safe-integer
+ *  range is a number, a `Bool` is `true`/`false` (a form also takes `on`/`off`), an enum is its
+ *  variant's `{ kind }` envelope, and anything else, or a value that does not read as its kind, is
+ *  passed on as text so the type's own codec reports it. */
+function leafValue(kind: QueryField["kind"], raw: string, form: boolean): JsonValue {
+  switch (kind) {
+    case "int":
+      return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
+    case "bool":
+      if (form) {
+        if (raw === "true" || raw === "on") return true;
+        if (raw === "false" || raw === "off") return false;
+        return raw;
+      }
+      return raw === "true" ? true : raw === "false" ? false : raw;
+    case "enum":
+      return { kind: raw };
+    default:
+      return raw;
+  }
+}
+
+/** #3910: a path parameter's text, read as its type's wire JSON by the same rules as a typed
+ *  `query` field (`Int` digits, `Bool` `true`/`false`, an enum by variant name). The type's codec
+ *  then answers a value that does not read, or breaks a refinement, with a `400` at `path.<name>`. */
+export function pathLeaf(kind: QueryField["kind"], raw: string): JsonValue {
+  return leafValue(kind, raw, false);
+}
+
 function fieldsObject(
   search: URLSearchParams,
   fields: readonly QueryField[],
@@ -1464,23 +1493,7 @@ function fieldsObject(
   form: boolean,
 ): { ok: true; value: JsonValue } | { ok: false; error: BoundaryError } {
   const out: Record<string, JsonValue> = {};
-  const leaf = (kind: QueryField["kind"], raw: string): JsonValue => {
-    switch (kind) {
-      case "int":
-        return /^-?\d+$/.test(raw) && Number.isSafeInteger(Number(raw)) ? Number(raw) : raw;
-      case "bool":
-        if (form) {
-          if (raw === "true" || raw === "on") return true;
-          if (raw === "false" || raw === "off") return false;
-          return raw;
-        }
-        return raw === "true" ? true : raw === "false" ? false : raw;
-      case "enum":
-        return { kind: raw };
-      default:
-        return raw;
-    }
-  };
+  const leaf = (kind: QueryField["kind"], raw: string): JsonValue => leafValue(kind, raw, form);
   for (const f of fields) {
     // A browser sends an unfilled input as `name=`: absent, except for a plain
     // `String`, whose `""` the field's own refinements judge.
@@ -2031,5 +2044,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

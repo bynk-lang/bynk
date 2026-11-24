@@ -46,6 +46,9 @@ pub(super) struct HttpRoute {
     /// dispatch reads the raw body, verifies the HMAC, and parses the body from
     /// those same bytes.
     pub(super) signature: Option<bynk_check::actors::SignatureSeam>,
+    /// #3910: the path parameters that are not text — `(name, wire kind)` for those read as an
+    /// `Int`, `Bool`, `Decimal` or enum, decoded by the type's codec after the route matches.
+    pub(super) path_kinds: Vec<(String, &'static str)>,
     /// #3914: the `WWW-Authenticate` challenges any `401` of this route carries, one per
     /// actor of its `by` clause, in order.
     pub(super) challenges: Vec<String>,
@@ -765,14 +768,24 @@ pub(super) fn emit_http_route_dispatch(
             format!("__raw_{pname}"),
             index(member(ident("__m"), "params"), str_lit(pname.clone())),
         ));
-        guarded.extend(emit_path_param_construction(
-            pname,
-            &p.type_ref,
-            cors_const,
-            security_const,
-            rejected,
-            consumed_types,
-        ));
+        if let Some((_, kind)) = route.path_kinds.iter().find(|(n, _)| n == pname) {
+            guarded.extend(emit_typed_path_param(
+                pname,
+                &p.type_ref,
+                kind,
+                (cors_const, security_const, rejected),
+                ru,
+            ));
+        } else {
+            guarded.extend(emit_path_param_construction(
+                pname,
+                &p.type_ref,
+                cors_const,
+                security_const,
+                rejected,
+                consumed_types,
+            ));
+        }
         call_args.push(ident(jname));
     }
 
@@ -1265,6 +1278,60 @@ pub(super) fn emit_http_route_dispatch(
     block(inner)
 }
 
+/// #3910: the path parameters of `h` that are read as something other than text.
+fn path_param_kinds(
+    h: &Handler,
+    path: &str,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<(String, &'static str)> {
+    h.params
+        .iter()
+        .filter(|p| {
+            path.split('/')
+                .any(|s| s.strip_prefix(':') == Some(&p.name.name))
+        })
+        .filter_map(|p| {
+            let kind = super::field_specs::query_leaf_kind(&p.type_ref, types, false);
+            (kind != "string").then(|| (p.name.name.clone(), kind))
+        })
+        .collect()
+}
+
+/// #3910: decode a path parameter that is an `Int`, `Bool`, `Decimal` or enum (or a refined or
+/// opaque type over one): the segment's text is read as the type's wire JSON by `pathLeaf`, the
+/// rules of a typed `query` field, and the type's own codec checks it, so a segment that does not
+/// read is a `400 StructuralMismatch` and one that breaks a refinement a `400 RefinementViolation`,
+/// both at `path.<name>`.
+fn emit_typed_path_param(
+    pname: &str,
+    t: &TypeRef,
+    kind: &'static str,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    ru: &RuntimeUse,
+) -> Vec<TsStmt> {
+    let result = format!("__r_{pname}");
+    let json = call(
+        ident("__pathLeaf"),
+        vec![str_lit(kind), ident(format!("__raw_{pname}"))],
+    );
+    vec![
+        const_(
+            result.clone(),
+            deserialise_call(t, &json, &format!("path.{pname}"), ru),
+        ),
+        if_(
+            strict_eq(member(ident(result.clone()), "tag"), str_lit("Err")),
+            return_(Some(stamp_rejection(
+                json_response(member(ident(result.clone()), "error"), 400),
+                cors_const,
+                security_const,
+                rejected,
+            ))),
+        ),
+        const_(wire_ident(pname), member(ident(result), "value")),
+    ]
+}
+
 /// #3914: the challenges of a route's `401`s: `Bearer` for a `Bearer` or `Oidc` actor
 /// (RFC 6750), `Bynk-Signature` for a `Signature` actor, `Bynk-Cookie` for a `SignedCookie`
 /// actor, one per member of a sum in the sum's order, and `Bynk` for anything else (a handler
@@ -1481,14 +1548,16 @@ fn emit_path_param_construction(
             // ship a project `tsc --strict` rejects — silently, since this
             // function has no way to surface that. `bynk.http.path_param_not_stringy`
             // (`bynk-check/src/context_checks.rs`) is a total guarantee: a path
-            // parameter's `TypeRef` is checked to be exactly `String` or a
-            // `String`-based `Named` before emission ever runs, so this arm is
-            // unreachable for any program that passed the checker. Fail loudly
+            // parameter's `TypeRef` is checked to be a `String`, `Int`, `Bool` or
+            // `Decimal`, an enum, or a refined or opaque type over one of them
+            // before emission ever runs, and every one of those but a text type
+            // goes through `emit_typed_path_param`, so this arm is unreachable for
+            // any program that passed the checker. Fail loudly
             // if that guarantee is ever wrong, rather than emit TypeScript that
             // cannot compile.
             panic!(
                 "bynk internal error: path parameter `{pname}` reached emission with a \
-                 non-string-constructible type ({t:?}) — `bynk.http.path_param_not_stringy` \
+                 type that is not text ({t:?}) — `bynk.http.path_param_not_stringy` \
                  should have rejected this at check time"
             );
         }
@@ -1521,6 +1590,7 @@ pub(super) fn collect_http_routes(
                 let query_fields = query_field_specs(h, &path, visible_types);
                 let cookies_fields = cookies_field_specs(h, &path, visible_types);
                 let headers_fields = headers_field_specs(h, &path, visible_types);
+                let path_kinds = path_param_kinds(h, &path, visible_types);
                 http_routes.push(HttpRoute {
                     service: (*sname).clone(),
                     method,
@@ -1534,6 +1604,7 @@ pub(super) fn collect_http_routes(
                     signed_cookie: signed_cookie_name(h, &table.actors),
                     hidden_headers: consumed_credential_headers(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
+                    path_kinds,
                     challenges: route_challenges(h, table, context),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so

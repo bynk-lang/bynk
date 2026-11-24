@@ -463,10 +463,19 @@ impl Gen {
                         Some(self.public_type(&ty)?),
                     ));
                     let checked = match &ty {
-                        TypeRef::Base(..) => {
+                        // A `Decimal`'s public value is an object, so it goes through the codec
+                        // like a named type, and the wire text is the segment.
+                        TypeRef::Base(..)
+                            if crate::emitter::workers_entry::query_leaf_kind(
+                                &ty,
+                                &self.sc.types,
+                                false,
+                            ) != "decimal" =>
+                        {
                             call(ident("globalThis.String"), vec![ident(&param_ident)])
                         }
-                        TypeRef::Named(_)
+                        TypeRef::Base(..)
+                        | TypeRef::Named(_)
                         | TypeRef::Result(..)
                         | TypeRef::Option(..)
                         | TypeRef::Effect(..)
@@ -499,10 +508,28 @@ impl Gen {
                             let de = serialisation::deserialise_ref_via(&ty, "", &self.ru);
                             let local = format!("__p_{param_ident}");
                             build.extend(checked_stmts(&local, ser, de, &format!("path.{name}")));
-                            call(
-                                ident("globalThis.String"),
-                                vec![member(ident(&local), "value")],
-                            )
+                            // #3910: an enum's wire form is `{ kind }`; the segment is the name.
+                            let wire = member(ident(&local), "value");
+                            let text = if crate::emitter::workers_entry::query_leaf_kind(
+                                &ty,
+                                &self.sc.types,
+                                false,
+                            ) == "enum"
+                            {
+                                member(
+                                    TsExpr::Paren(Box::new(TsExpr::As {
+                                        expr: Box::new(wire),
+                                        ty: TsType::Object(vec![TsTypeMember::readonly_prop(
+                                            "kind",
+                                            TsType::named("string"),
+                                        )]),
+                                    })),
+                                    "kind",
+                                )
+                            } else {
+                                wire
+                            };
+                            call(ident("globalThis.String"), vec![text])
                         }
                     };
                     params.push(TsObjectEntry::prop(format!("\"{name}\""), checked));
