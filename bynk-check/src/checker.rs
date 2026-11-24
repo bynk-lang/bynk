@@ -6687,6 +6687,9 @@ fn refinements_match(base: BaseType, a: Option<&Refinement>, b: Option<&Refineme
     }
 }
 
+/// #3878: the pattern-only `QueueResult` variant a `system` case sees for a body that did not decode.
+pub const QUEUE_UNDECODABLE: &str = "Undecodable";
+
 /// `pub` since P6.4 (#1157, Decision A) — see [`VariantInfo`]'s own doc
 /// comment for why `bynk-emit` needs this exact function rather than a
 /// re-derived copy (R5.11, for the IR side).
@@ -6853,6 +6856,15 @@ pub fn variants_of(
                         }
                     },
                 })
+                // #3878: a `system` case reads a body that did not decode as
+                // `Undecodable`. It is a pattern of the verdict a test sees, not a
+                // `QueueResult` a handler can build (`QUEUE_VARIANTS` has no entry), so
+                // it is the last variant. A `match` of a `QueueResult` names it or has a
+                // wildcard, since a `system` case's verdict can be it.
+                .chain(std::iter::once(VariantInfo {
+                    name: QUEUE_UNDECODABLE.to_string(),
+                    payload: vec![],
+                }))
                 .collect(),
         ),
         // #1934: the `system`-tier wire outcome. Field names are the runtime

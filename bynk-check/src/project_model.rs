@@ -2580,10 +2580,10 @@ pub fn check_function_type_boundary_items(
                         // parts are received.
                         let multipart_body = p.name.name == "body"
                             && h.annotations.iter().any(|a| a.name.name == "multipart");
-                        // #3343: and the record a request reader fills (`cookies`, `query`,
+                        // #3343: and the record a request reader fills (`cookies`, `headers` (#3911), `query`,
                         // a `@form` body) is where `@name` fields are allowed.
                         let request_record = matches!(h.kind, HandlerKind::Http { .. })
-                            && (matches!(p.name.name.as_str(), "cookies" | "query")
+                            && (matches!(p.name.name.as_str(), "cookies" | "headers" | "query")
                                 || (p.name.name == "body"
                                     && h.annotations.iter().any(|a| a.name.name == "form")));
                         // #3380: a `@raw` handler's `body` may be a `Stream[Bytes]`, the

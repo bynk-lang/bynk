@@ -683,6 +683,14 @@ fn complete_with(
         return CompleteResult { items: Vec::new() };
     }
     let line_prefix = source[..offset].rsplit('\n').next().unwrap_or("");
+    // #3911: inside `@name("…")` on a `headers` record's field, the common header names.
+    if let Some(names) =
+        bynk_ide::header_completion::header_name_candidates_at(source, offset, files)
+    {
+        return CompleteResult {
+            items: names.into_iter().map(to_candidate).collect(),
+        };
+    }
     let mut items: Vec<CompletionCandidate> = completion::complete(line_prefix, source, files)
         .into_iter()
         .map(to_candidate)

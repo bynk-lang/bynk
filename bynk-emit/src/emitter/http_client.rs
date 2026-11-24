@@ -157,6 +157,8 @@ pub enum ParamInput {
     Query { ty: TypeRef },
     /// The typed `cookies` record, whose type is a named record.
     Cookies { ty: TypeRef },
+    /// The typed `headers` record, whose type is a named record.
+    Headers { ty: TypeRef },
 }
 
 /// How a route reads its `body`.
@@ -315,7 +317,8 @@ fn closure_of(input: &HttpClientInput) -> Result<SurfaceClosure, ClientError> {
                     ParamInput::Path { ty, .. }
                     | ParamInput::Body { ty, .. }
                     | ParamInput::Query { ty }
-                    | ParamInput::Cookies { ty } => roots.push(ty.clone()),
+                    | ParamInput::Cookies { ty }
+                    | ParamInput::Headers { ty } => roots.push(ty.clone()),
                 }
             }
             roots.extend(r.success.iter().cloned());
@@ -400,6 +403,8 @@ struct RoutePlan {
     query: Option<String>,
     /// The cookies argument's type name, when the route takes one.
     cookies: Option<String>,
+    /// The headers argument's type name, when the route takes one.
+    headers: Option<String>,
 }
 
 /// One declared boundary type, as the two declarations need it.
@@ -500,11 +505,17 @@ impl Gen {
                     .iter()
                     .any(|p| matches!(p, ParamInput::Cookies { .. }));
                 let cookies = has_cookies.then(|| unique(format!("{stem}Cookies"), &mut taken));
+                let has_headers = r
+                    .params
+                    .iter()
+                    .any(|p| matches!(p, ParamInput::Headers { .. }));
+                let headers = has_headers.then(|| unique(format!("{stem}Headers"), &mut taken));
                 routes.push(RoutePlan {
                     function,
                     response,
                     query,
                     cookies,
+                    headers,
                 });
             }
             services.push(ServicePlan { key, routes });
