@@ -4411,6 +4411,16 @@
     "blurb": null,
     "category": "Other",
     "categoryAnchor": "other",
+    "code": "bynk.list.par_traverse_unit",
+    "constructs": [],
+    "example": null,
+    "severity": "warning",
+    "summary": "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable)."
+  },
+  {
+    "blurb": null,
+    "category": "Other",
+    "categoryAnchor": "other",
     "code": "bynk.locale.multiple_message_bundles",
     "constructs": [],
     "example": null,
@@ -4796,14 +4806,14 @@
     "summary": "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning)."
   },
   {
-    "blurb": "The closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` runs once per element, all at once, so it may not write a `store` field, which is the rule a `par { … }` block already follows. Every `<-` is an await point, so a `get` then a `put` in the closure lets the other branches write in between, and their updates are lost. A single call such as `update` is atomic per key, but it is refused here too, so the two rules stay equal. Run the loop with `forEach` (or `traverseAll` / `traverseTry`), where each element finishes before the next starts, so a single-call `update` stays atomic. A store write reads the entry before it stages the write, so the sequential form reads one entry at a time; per-key atomicity is the reason for the rule. To keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
+    "blurb": "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` runs once per element, all at once, so it may not write a `store` field, which is the rule a `par { … }` block already follows. Every `<-` is an await point, so a `get` then a `put` in the closure lets the other branches write in between, and their updates are lost. A single call such as `update` is atomic per key, but it is refused here too, so the two rules stay equal. Run the loop with `forEach` (or `traverseAll` / `traverseTry`), where each element finishes before the next starts, so a single-call `update` stays atomic. A store write reads the entry before it stages the write, so the sequential form reads one entry at a time; per-key atomicity is the reason for the rule. To keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
     "category": "Other",
     "categoryAnchor": "other",
     "code": "bynk.par.store_write_in_closure",
     "constructs": [],
-    "example": "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\nxs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
+    "example": "xs.parForEach((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\nxs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
     "severity": "error",
-    "summary": "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block."
+    "summary": "A closure passed to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block."
   },
   {
     "blurb": "A block has no expression statements: each statement is a `let`, `do`, `expect`, `:=` and so on, and the last expression is the block's value. An expression written on its own line with more of the block after it would have its value thrown away, so the compiler asks you to say what happens to it. Bind it: `let _ = expr` when you only want to discard a value, or `let _ <- expr` when it is an effect to run and await (a call through a capability or an agent, or a cell's `.update`). The parser cannot see types, so it picks the `<-` form for a call that looks like an effect and the `=` form otherwise, and its note names the other. The fix is machine-applicable, so `bynk check --fix` applies it.",

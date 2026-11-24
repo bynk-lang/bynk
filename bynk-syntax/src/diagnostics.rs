@@ -3102,7 +3102,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
-        blurb: "The closure given to `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
                 once per element, all at once, so it may not write a `store` field, which is \
                 the rule a `par { … }` block already follows. Every `<-` is an await point, \
                 so a `get` then a `put` in the closure lets the other branches write in \
@@ -3113,7 +3113,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 write reads the entry before it stages the write, so the sequential form \
                 reads one entry at a time; per-key atomicity is the reason for the rule. To \
                 keep the concurrent part, collect with `parTraverseAll` and write afterwards.",
-        example: "xs.parTraverse((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
+        example: "xs.parForEach((x: Int) => {\n  let o <- counts.get(\"k\")\n  counts.put(\"k\", o.getOrElse(0) + 1)   // ✗ two increments of three are lost\n})\n\n\
                   xs.forEach((x: Int) => counts.update(\"k\", (v) => v + 1))   // ✓ sequential and atomic per key",
     },
     Explain {
@@ -8467,6 +8467,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.list.deprecated_function",
         "A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
+    warn(d(
+        "bynk.list.par_traverse_unit",
+        "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).",
+    )),
     d(
         "bynk.locale.multiple_message_bundles",
         "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.",
@@ -8625,7 +8629,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     d(
         "bynk.par.store_write_in_closure",
-        "A closure passed to `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
+        "A closure passed to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` writes a `store` field (`put`, `remove`, `update`, `upsert`, `add`, `append` or `:=`). Its branches run concurrently, and a `get` then a `put` across them loses updates, so store writes stay sequential, as they do in a `par { … }` block.",
     ),
     dg(
         "bynk.parse.bare_expression_statement",
