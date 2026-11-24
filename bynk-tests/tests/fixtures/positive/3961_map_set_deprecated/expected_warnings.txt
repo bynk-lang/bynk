@@ -1,0 +1,4 @@
+bynk.map.deprecated_function
+bynk.set.deprecated_function
+`Map` method
+`Set` method

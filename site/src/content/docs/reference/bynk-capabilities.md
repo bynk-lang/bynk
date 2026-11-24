@@ -2501,7 +2501,8 @@ first-party enum, not the name.
 
 Beyond capabilities, the `bynk` namespace also ships pure **commons** you bring
 in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
-(combinators over the `List`/`Map`/`Set` kernels; `bynk.set` has `union`,
+(deprecated: every function is now a `List`, `Map` or `Set` method, and each call warns with a
+fix to it; `bynk.set` has `union`,
 `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`),
 `bynk.string` (string helpers) and `bynk.url` (URLs and query strings, below).
 These are ordinary functions with no effects; see the

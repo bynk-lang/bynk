@@ -3228,8 +3228,13 @@ Bynk in the first-party `bynk.list` / `bynk.map` commons
 ([§8.4](/reference/spec/compilation-model/#84-build-pipeline--conformance-to-typescript)),
 imported with `uses bynk.list` like any commons: `map`, `filter`, `find`,
 `any`, `all`, `reverse`, `traverse`, `sort`, `min`, `max` (all now `List` methods, and deprecated here); `values`, `contains`,
-`getOr`. There is no `Map.fromList` — Bynk has no pair type to spell its
-argument with; maps build via `Map.empty()` + `insert` folds.
+`getOr`. Since #3961 `Map` and `Set` carry the same vocabulary as methods
+(`Map.remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`,
+`mapValues`, `fold` and the static `Map.of(entries)`; `Set.union`, `intersect`,
+`difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`), and the `bynk.map` and
+`bynk.set` functions are deprecated in favour of them, with the warnings
+`bynk.map.deprecated_function` and `bynk.set.deprecated_function`. There is no
+literal for a `MapEntry`, so `Map.of` takes the entries of another map.
 
 > **Deprecated (v0.91, ADR 0116 D6; completed by #3962).** Every free function has a
 > `List` method form, and each emits a non-failing

@@ -5,7 +5,7 @@
 
 use super::keying::{KeySite, check_key};
 use super::*;
-use crate::kernel_methods::{KernelMethod, LIST_METHODS, QUERY_METHODS};
+use crate::kernel_methods::{KernelMethod, LIST_METHODS, MAP_METHODS, QUERY_METHODS, SET_METHODS};
 
 /// Render a kernel's method names for a `method_not_found` message —
 /// `` `map`, `filter`, … `` — generated from a `KernelMethod` table rather
@@ -36,6 +36,10 @@ pub(crate) fn check_collection_static(
     // comes from the list, or from the expected `Set`.
     if type_name.name == SET && method.name == "of" {
         return check_set_of(args, span, expected, ctx);
+    }
+    // #3961: `Map.of(entries)` builds a map from a list of `MapEntry`.
+    if type_name.name == MAP && method.name == "of" {
+        return super::collections::check_map_of(args, span, expected, ctx);
     }
     for a in args {
         let _ = type_of(a, None, ctx);
@@ -139,11 +143,17 @@ pub(crate) fn check_set_kernel_method(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    if let Some(r) =
+        op.and_then(|o| super::collections::check_set_more(method, o, args, elem, span, ctx))
+    {
+        return r;
+    }
     let sig: Option<(Vec<TyId>, Ty)> = match op {
         Some(SetOp::Length) => Some((vec![], Ty::Base(BaseType::Int))),
         Some(SetOp::Contains) => Some((vec![elem], Ty::Base(BaseType::Bool))),
         Some(SetOp::Insert | SetOp::Remove) => Some((vec![elem], Ty::Set(elem))),
         Some(SetOp::ToList) => Some((vec![], Ty::List(elem))),
+        Some(_) => unreachable!("the #3961 methods return before this match"),
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -151,9 +161,10 @@ pub(crate) fn check_set_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Set[{}]` type has no method `{}` — the kernel is `length`, `contains`, `insert`, `remove`, `toList` (and `bynk.set` has `union`, `intersect`, …)",
+                "the built-in `Set[{}]` type has no method `{}` — the kernel is {}",
                 elem.display(tys),
-                method.name
+                method.name,
+                kernel_vocabulary(SET_METHODS)
             ),
         ));
         for a in args {
@@ -4348,6 +4359,11 @@ pub(crate) fn check_map_kernel_method(
         }
         true
     };
+    if let Some(r) =
+        op.and_then(|o| super::collections::check_map_more(method, o, args, key, val, span, ctx))
+    {
+        return r;
+    }
     match op {
         Some(MapOp::Length) => {
             if !arity(0, ctx) {
@@ -4383,15 +4399,17 @@ pub(crate) fn check_map_kernel_method(
             check_arg(&args[1], val, "the `Map.insert` value", ctx);
             Some(tys.intern(Ty::Map(key, val)))
         }
+        Some(_) => unreachable!("the #3961 methods return before this match"),
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
-                    "the built-in `Map[{}, {}]` type has no method `{}` — the kernel is `length`, `keys`, `values`, `get`, `insert`",
+                    "the built-in `Map[{}, {}]` type has no method `{}` — the kernel is {}",
                     key.display(tys),
                     val.display(tys),
-                    method.name
+                    method.name,
+                    kernel_vocabulary(MAP_METHODS)
                 ),
             ));
             for a in args {

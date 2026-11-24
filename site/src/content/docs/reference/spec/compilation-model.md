@@ -139,8 +139,8 @@ build the output as ES modules.
 *library* units inside the reserved `bynk.*` prefix: `bynk.list` and
 `bynk.map`, ordinary commons **written in Bynk** over the collection kernel
 ([§5.10](/reference/spec/static-semantics/#510-collections)). A project that
-`uses bynk.list` (or `bynk.map`, which itself `uses bynk.list`) has the unit
-injected as a synthetic source file ahead of grouping; it then flows through
+`uses bynk.list` (or `bynk.map` or `bynk.set`; all three are deprecated, #3962 and #3961)
+has the unit injected as a synthetic source file ahead of grouping; it then flows through
 the ordinary commons pipeline — tables, `uses` resolution, type-checking,
 and emission to `bynk/list.ts` / `bynk/map.ts` beside the other modules.
 Unconsumed, nothing is injected and the output is unchanged.
