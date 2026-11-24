@@ -319,6 +319,42 @@ fn stamp_rejection(
     }
 }
 
+/// The first statements of a matched route's block: the fault-log route name
+/// (#1825), then, for a route with path parameters, #3908's `400 MalformedPath`:
+/// a path whose percent-encoding does not decode is the client's error and no
+/// fault, answered before the actor, body or handler.
+fn route_prelude(
+    route: &HttpRoute,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+) -> Vec<TsStmt> {
+    // #1825: names the route, by its pattern, for the fault log.
+    let mut out = vec![set_fault_route(format!(
+        "{} {}",
+        route.method.as_str(),
+        route.path
+    ))];
+    if param_count(&route.path) == 0 {
+        return out;
+    }
+    let malformed = stamp_rejection(
+        json_response(
+            json_error_kind(
+                "MalformedPath",
+                vec![("details".to_string(), member(ident("__m"), "malformed"))],
+            ),
+            400,
+        ),
+        cors_const,
+        security_const,
+        rejected,
+    );
+    out.push(if_(
+        member(ident("__m"), "malformed"),
+        block(vec![return_(Some(malformed))]),
+    ));
+    out
+}
+
 /// Generate the per-route dispatch block for one `on http` handler. The
 /// router has already been entered via `try`; this block extracts path
 /// parameters, deserialises the body (when present), invokes the handler,
@@ -368,32 +404,7 @@ pub(super) fn emit_http_route_dispatch(
     };
 
     // #1825: names the route, by its pattern, for the fault log.
-    let mut guarded: Vec<TsStmt> = vec![set_fault_route(format!(
-        "{} {}",
-        route.method.as_str(),
-        route.path
-    ))];
-
-    // #3908: a path whose percent-encoding does not decode is a `400 MalformedPath`,
-    // the client's error and no fault, answered before the actor, body or handler.
-    if has_path_params {
-        let malformed = stamp_rejection(
-            json_response(
-                json_error_kind(
-                    "MalformedPath",
-                    vec![("details".to_string(), member(ident("__m"), "malformed"))],
-                ),
-                400,
-            ),
-            cors_const,
-            security_const,
-            rejected,
-        );
-        guarded.push(if_(
-            member(ident("__m"), "malformed"),
-            block(vec![return_(Some(malformed))]),
-        ));
-    }
+    let mut guarded = route_prelude(route, (cors_const, security_const, rejected));
 
     // v0.142 (ADR 0165): the request-body ceiling. A route with an effective cap
     // rejects an oversized body with a synthesised `413` derived from the declared
