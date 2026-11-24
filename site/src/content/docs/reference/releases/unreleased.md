@@ -7,6 +7,8 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.643.0** | `List` gains `reverse`, `find`, `contains`, `last`, `lastOrElse`, `isEmpty`, `traverse` and keyless `sort()`, `min()` and `max()`, so every `bynk.list` function now has a method and `bynk.list` is fully deprecated |
+| **v0.642.0** | An `on call` handler must state its actor, `by Caller` at least (`bynk.actor.missing_by_on_call`), as an HTTP route must; `bynk check --fix=bynk.actor.missing_by_on_call` inserts it |
 | **v0.641.0** | `bynk test` builds its JavaScript into `<output>/out-js`, inside the output directory, and the emitted `tsconfig.json` follows (`outDir` is `./out-js`, and `out-js` is excluded from the project), so concurrent runs whose `--output`s share a parent no longer overwrite one another's compiled tree |
 | **v0.640.100** | Internal restructuring: the project-mode module builder moves out of `emitter.rs` into `project.rs`, `boundary.rs` and `consumed.rs`; no output changes |
 | **v0.640.99** | Internal restructuring: `emit.rs` is now a thin facade over one file per declaration kind (agent handlers and dispatch, the agent class and the suite declarations move out); no output changes |
