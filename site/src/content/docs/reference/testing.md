@@ -253,6 +253,25 @@ The one exception is a [`SignedCookie`](/reference/actors/#signed-cookies) route
 sets `Sec-Fetch-Site` and `Origin` itself probes the route's CSRF check
 (`RequestHeaders.of(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"])`).
 
+### Sending typed headers
+
+A handler that declares [`headers: T`](/reference/http/#typed-headers), a record, takes a `T` value as
+its argument, in the parameter's position. At `unit` and `integration` the value reaches the handler
+directly. At `system` it is sent as the request's headers, each field under its `@name`, and a `Wire`
+argument sends header text instead, one `name: value` line per header, to probe the router's decoding:
+
+```bynk,fragment
+suite reg.api as system {
+	case "a bad content-length is refused before the handler" {
+		let r <- api.PUT("/archives/:name", "a", Wire("Content-Length: lots"), Wire("zip"))
+		expect r is Rejected(StructuralMismatch(_))
+	}
+}
+```
+
+A route that declares a typed `headers` takes no trailing `RequestHeaders` argument: the record is
+the case's headers.
+
 A route that declares no `headers:` parameter can still be sent headers in a
 `system` case, by a trailing `RequestHeaders` argument after the route's own
 arguments. A route that negotiates `Locale.current()` against `Accept-Language`
@@ -516,7 +535,12 @@ suite shop.inventory as system {
   doesn't survive the round trip fails as it would on the platform. The batch
   records whether the consumer called `ack()` or `retry()`, and the address yields
   `Ack` or `Retry(reason)` with the reason the consumer gave. A consumer that
-  faults is retried, as on the platform, so the address yields `Retry`.
+  faults is retried, as on the platform, so the address yields `Retry`. A body
+  that does not decode as the message type (a refined value built with `unsafe`
+  that its own refinement refuses, say) is dead-lettered or dropped, never
+  retried, so the address yields `Undecodable`: `expect r is Undecodable`. It is a
+  value of the test address only; it is not a `QueueResult` variant, a handler
+  cannot return it, but a case can receive it, so a `match` of a `QueueResult` must name it or have a wildcard arm.
 - **The execution context is settled**: any detached effect the handler hands to
   `waitUntil` finishes before the address returns.
 - **State carries through the case.** Every address in a `system` case reaches

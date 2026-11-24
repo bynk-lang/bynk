@@ -2534,8 +2534,13 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.headers_field_not_stringy",
+        blurb: "A header is a single text value (or a comma-separated list of them), so each field of the `headers` record must be one a header can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` (a header that may be absent) or a `List` (a comma-separated value, split respecting quoted strings). A nested record or any other type is refused. Flatten the record, or keep structured data in a `String` and decode it yourself. `query` and `cookies` records follow the same rule: `bynk.http.query_field_not_stringy`, `bynk.http.cookies_field_not_stringy`.",
+        example: "type Range = { from: Int, to: Int }\n\ntype Upload = { range: Range }   // ✗ a header is one value, not a record\n\ntype Upload = { from: Int, to: Int }   // ✓\n\non PUT(\"/files\") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.headers_wrong_type",
-        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` must be typed `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`.",
+        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` is either a record the router decodes and validates (`headers: UploadHeaders`, one field per header, named by the field or by `@name(\"if-match\")`, answering `400` when the request does not fit), or `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. The record's fields are held to `bynk.http.headers_field_not_stringy`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
@@ -4668,6 +4673,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.store.unknown_op",
         blurb: "A `store` field's methods are its storage operations, which are effectful (await with `<-`), and each kind has a fixed set. `Map` and `Cache` take `put`, `get`, `update`, `upsert`, `remove`, `contains` and `size` (a `Map` also takes query operations); `Set` takes `add`, `remove`, `contains` and `size`; a `Cell` takes only `update`, being read by name and written with `:=`; a `Log` takes `append` and lazy query reads. Any other name is refused, even one the same type has as a plain value. For a read-modify-write use `update`, or `upsert` when the key may be absent. A wrong key query (`.entries`, `.keys`, `.values`) is `bynk.store.unknown_map_accessor`.",
         example: "let _ <- counts.increment(\"k\")   // ✗ a `Map` store has no `increment`\n\nlet _ <- counts.upsert(\"k\", 1, (v) => v + 1)   // ✓ add one, starting from 1",
+    },
+    Explain {
+        code: "bynk.string.empty_pad_fill",
+        blurb: "`padStart` and `padEnd` make a string `width` code points wide by repeating `fill` at the start or the end, so a `fill` with no characters has nothing to repeat. When the `fill` is an empty string literal the call is refused here; a `fill` computed at run time that turns out empty faults the call instead. Pass a non-empty `fill` (`\" \"` to pad with spaces, `\"0\"` for a number). A `fill` longer than one character is cut to fit, and the width counts code points, so an emoji in either string is one position.",
+        example: "fn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"\")    // ✗ nothing to pad with\n}\n\nfn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"0\")   // ✓ 42 is 000042\n}",
     },
     Explain {
         code: "bynk.stub.after_type",
@@ -8299,8 +8309,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
     )),
     dg(
+        "bynk.http.headers_field_not_stringy",
+        "A field of an HTTP handler's `headers` record has a type a header cannot carry.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.headers_wrong_type",
-        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
+        "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.",
         &["http_handler"],
     ),
     dg(
@@ -9734,6 +9749,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.store.unknown_op",
         "A method called on a `store` field (`Map`, `Cache`, `Set`, `Cell` or `Log`) is not one of that kind's storage operations.",
+    ),
+    warn(d(
+        "bynk.string.deprecated_function",
+        "A `bynk.string` free function is deprecated in favour of the `List[String]` method form (warning; auto-fixable).",
+    )),
+    d(
+        "bynk.string.empty_pad_fill",
+        "The `fill` of `String.padStart` or `String.padEnd` is an empty literal, so there is nothing to pad with.",
     ),
     d(
         "bynk.stub.after_type",

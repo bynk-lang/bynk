@@ -1638,6 +1638,7 @@
 /reference/diagnostics/bynk.http.form_on_sum_route/
 /reference/diagnostics/bynk.http.form_unknown_arg/
 /reference/diagnostics/bynk.http.header_question_not_found/
+/reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
 /reference/diagnostics/bynk.http.invalid_path/
 /reference/diagnostics/bynk.http.json_duplicate/
@@ -1966,6 +1967,8 @@
 /reference/diagnostics/bynk.store.unknown_kind/
 /reference/diagnostics/bynk.store.unknown_map_accessor/
 /reference/diagnostics/bynk.store.unknown_op/
+/reference/diagnostics/bynk.string.deprecated_function/
+/reference/diagnostics/bynk.string.empty_pad_fill/
 /reference/diagnostics/bynk.stub.after_type/
 /reference/diagnostics/bynk.stub.at_system/
 /reference/diagnostics/bynk.stub.bad_sequence/

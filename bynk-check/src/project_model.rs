@@ -2580,10 +2580,10 @@ pub fn check_function_type_boundary_items(
                         // parts are received.
                         let multipart_body = p.name.name == "body"
                             && h.annotations.iter().any(|a| a.name.name == "multipart");
-                        // #3343: and the record a request reader fills (`cookies`, `query`,
+                        // #3343: and the record a request reader fills (`cookies`, `headers` (#3911), `query`,
                         // a `@form` body) is where `@name` fields are allowed.
                         let request_record = matches!(h.kind, HandlerKind::Http { .. })
-                            && (matches!(p.name.name.as_str(), "cookies" | "query")
+                            && (matches!(p.name.name.as_str(), "cookies" | "headers" | "query")
                                 || (p.name.name == "body"
                                     && h.annotations.iter().any(|a| a.name.name == "form")));
                         // #3380: a `@raw` handler's `body` may be a `Stream[Bytes]`, the
@@ -6288,6 +6288,29 @@ pub fn collect_unit_methods(
     local_methods_for_type
 }
 
+/// #4270: whether the consumed export `type_name` of `target` takes the place of
+/// a type a braced `consumes` of a first-party unit left out. Only a selected
+/// export of a user unit does, and only from a first-party unit this context
+/// consumes: a local declaration, or a first-party type reached any other way
+/// (`uses`), still wins over (or conflicts with) it.
+fn displaces_unselected_import(
+    table: &crate::symbols::UnitTable,
+    type_name: &str,
+    target: &str,
+    imported_from: &HashMap<String, String>,
+    consumed: &[String],
+    has_local_value: bool,
+) -> bool {
+    !has_local_value
+        && !crate::symbols::is_first_party_name(target)
+        && table.unselected_consumed_types.contains(type_name)
+        && imported_from.get(type_name).is_some_and(|o| {
+            // The occupant is a first-party unit this context consumes (whose
+            // braces left the name out), not one it reaches with `uses`.
+            crate::symbols::is_first_party_name(o) && consumed.contains(o)
+        })
+}
+
 /// #2887: the alias the `name_conflict` note suggests for `target`'s export
 /// `type_name`: the target's last segment, capitalised, then the type
 /// (`bynk.crypto` + `Digest` → `CryptoDigest`).
@@ -6358,7 +6381,21 @@ pub fn merge_consumed_exports(
                 .filter(|kind| !matches!(*kind, "type" | "event"));
             // #3536: a type the braces leave out is not in scope as a name of
             // its own, so a declaration of this unit's wins over it, silently.
-            if unit_info[name]
+            // #4270: not when the occupant is itself an unselected first-party
+            // import (`bynk`'s `Refusal`): this export is selected, so it wins.
+            let displaces_unselected = displaces_unselected_import(
+                &unit_info[name].table,
+                type_name,
+                t,
+                imported_from,
+                &unit_info[name].consumes,
+                local_value.is_some(),
+            );
+            if displaces_unselected {
+                combined_types.remove(type_name);
+                combined_methods.remove(type_name);
+                consumed_types.remove(type_name);
+            } else if unit_info[name]
                 .table
                 .unselected_consumed_types
                 .contains(type_name)
@@ -6373,7 +6410,13 @@ pub fn merge_consumed_exports(
                 let consumes_file = consumes_site.map(|(i, _)| parsed[i].identity_path());
                 let in_scope = match local_value {
                     Some(kind) => format!("this context declares a {kind} of the same name"),
-                    None => "a type of the same name is already in scope".to_string(),
+                    // #4270: name the other source when an import holds the name.
+                    None => match imported_from.get(type_name) {
+                        Some(other) => {
+                            format!("a type of the same name is already in scope from `{other}`")
+                        }
+                        None => "a type of the same name is already in scope".to_string(),
+                    },
                 };
                 // An alias clashing with what is in scope, or a bare export
                 // clashing with one of this unit's aliases: the alias is the
@@ -8157,6 +8200,54 @@ mod shadowed_import_tests {
         );
     }
 
+    /// #4270: a type the file selects from a consumed context keeps its name
+    /// when `bynk` exports one of the same (`Refusal`) that the braces leave out.
+    const ADMISSION: &str = "context registry.admission\n\nexports transparent { Refusal }\n\ntype Refusal = { code: String, message: String }\n";
+    const USE_REFUSAL: &str = "fn describe(r: Refusal) -> String {\n  r.code\n}\n";
+
+    #[test]
+    fn a_selected_consumed_type_wins_over_an_unselected_bynk_export() {
+        for consumes in [
+            "consumes bynk { Clock }\nconsumes registry.admission { Refusal }",
+            "consumes registry.admission { Refusal }\nconsumes bynk { Clock }",
+            "consumes registry.admission { Refusal }",
+        ] {
+            let store = format!("context registry.store\n\n{consumes}\n\n{USE_REFUSAL}");
+            analyse(&[
+                ("registry/admission.bynk", ADMISSION),
+                ("registry/store.bynk", &store),
+            ])
+            .assert_clean();
+        }
+    }
+
+    #[test]
+    fn selecting_a_name_from_bynk_and_a_consumed_context_is_a_name_conflict_naming_both() {
+        let store = format!(
+            "context registry.store\n\nconsumes bynk {{ Refusal }}\nconsumes registry.admission {{ Refusal }}\n\n{USE_REFUSAL}"
+        );
+        let r = analyse(&[
+            ("registry/admission.bynk", ADMISSION),
+            ("registry/store.bynk", &store),
+        ]);
+        let e = r
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.consumes.name_conflict")
+            .expect("both selections claim `Refusal`");
+        assert!(
+            e.error.message.contains("registry.admission"),
+            "{}",
+            e.error.message
+        );
+        assert!(
+            e.error.message.contains("from `bynk`"),
+            "{}",
+            e.error.message
+        );
+    }
+
     /// The note recommends only forms that work.
     #[test]
     fn timed_out_not_in_scope_note_names_the_accepted_form() {
@@ -8460,7 +8551,7 @@ mod firstparty_injection_tests {
         add(cloudflare, "bynk.cloudflare");
         add(map, "bynk.map");
         add(list, "bynk.list");
-        add(locale || string, "bynk.string");
+        add(string, "bynk.string");
         // The `bynk` adapter's own `uses bynk.locale.types`, seen because the
         // adapter was injected before the scan ran.
         add(locale || locale_types || bynk, "bynk.locale.types");

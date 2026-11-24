@@ -747,7 +747,7 @@ pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
     let module = ctx.input.imported_from.get(&name.name).map(String::as_str);
     // #3961: `bynk.map` and `bynk.set` are deprecated the same way.
-    if matches!(module, Some("bynk.map" | "bynk.set")) {
+    if matches!(module, Some("bynk.map" | "bynk.set" | "bynk.string")) {
         return super::collections::warn_deprecated_collection_fn(name, args, call_span, ctx);
     }
     if module != Some("bynk.list") {
@@ -4448,10 +4448,10 @@ fn check_test_service_address(
         // that declares one fills it with the argument already, so a further
         // one is an ordinary arity error (with a note saying why). The
         // trailing argument is typed once, here, and not again below.
-        let declares_headers = params.iter().any(|p| {
-            p.name.name == "headers"
-                && matches!(p.type_ref, bynk_syntax::ast::TypeRef::RequestHeaders(_))
-        });
+        // #3911: a typed `headers` record fills the case's headers as well.
+        let headers_is_path = matches!(&handler.kind, HandlerKind::Http { path, .. }
+            if path.split('/').any(|seg| seg == ":headers"));
+        let declares_headers = !headers_is_path && params.iter().any(|p| p.name.name == "headers");
         let trailing = if positional.len() == params.len() + 1
             && let Some((last, rest)) = positional.split_last()
             && !matches!(last.kind, EK::Wire(_))

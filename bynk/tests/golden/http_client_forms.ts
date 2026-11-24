@@ -197,6 +197,38 @@ export function __bynkRegExp(source: string, flags: string): RegExp {
   return re;
 }
 
+/**
+ * `String.padStart` / `padEnd` (#3978). The width counts code points, not UTF-16 units,
+ * so an astral character is one position; `fill` is cut to fit (by code points too).
+ * An empty `fill` has nothing to repeat and faults.
+ */
+export function __bynkPad(s: string, width: number, fill: string, atStart: boolean): string {
+  const unit = [...fill];
+  if (unit.length === 0) throw new Error("String.padStart/padEnd: `fill` is empty");
+  const need = width - [...s].length;
+  if (need <= 0) return s;
+  let pad = "";
+  for (let i = 0; i < need; i += 1) pad += unit[i % unit.length];
+  return atStart ? pad + s : s + pad;
+}
+
+/** `String.repeat` (#3978): `n` copies; a negative `n` faults. */
+export function __bynkRepeat(s: string, n: number): string {
+  if (n < 0) throw new Error(`String.repeat: a negative count (${n})`);
+  return s.repeat(n);
+}
+
+/**
+ * `String.lines` (#3978): split on `\n` and `\r\n` (not a lone `\r`); a trailing line
+ * break gives no empty last element, and the empty string gives `[]`.
+ */
+export function __bynkLines(s: string): string[] {
+  if (s === "") return [];
+  const parts = s.split(/\r?\n/);
+  if (parts[parts.length - 1] === "") parts.pop();
+  return parts;
+}
+
 // The browser-safe runtime `bynk client` inlines into the module it generates.
 // No signing, no Web Crypto, no secret and no Workers types: only `fetch`, which
 // the caller may replace. The `Result`/`Option` helpers, the `Bytes` and
@@ -345,6 +377,8 @@ export interface __Request {
   readonly multipart?: globalThis.FormData;
   /** The `Cookie` header's value. A browser sets its own and ignores this. */
   readonly cookies?: string;
+  /** The typed `headers` record, as header names and values. */
+  readonly headers?: Readonly<Record<string, string>>;
   /** A `@raw` body: the caller's bytes, sent as given. */
   readonly raw?: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>;
   /** The content type the route declared for its `@raw` body. */
@@ -454,6 +488,31 @@ export function __cookieString(wire: JsonValue, fields: readonly __QueryField[])
   return pairs.join("; ");
 }
 
+/**
+ * A `headers` record's wire form as header names and values (a list's items joined with `, `,
+ * a field left out absent). A value with a control character (a line break would add a header
+ * the caller never declared) is refused.
+ */
+export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  // A field is a list when its wire value is an array.
+  const record = (typeof wire === "object" && wire !== null && !globalThis.Array.isArray(wire) ? wire : {}) as { [k: string]: JsonValue };
+  const lists = new globalThis.Set(
+    fields.filter((f) => globalThis.Array.isArray(record[f.name])).map((f) => f.wire ?? f.name),
+  );
+  new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
+    const bad = (expected: string): never => {
+      throw new __Refusal({ kind: "StructuralMismatch", path: `headers.${name}`, expected, actual: value });
+    };
+    if (/[\x00-\x08\x0A-\x1F\x7F]/.test(value)) bad("header text with no control character");
+    // A list's items are joined with `, ` and split again by the router at commas outside quotes, so an
+    // item holding a comma or a quote would not arrive as one item: it is refused, not sent as two.
+    if (lists.has(name) && /[,"]/.test(value)) bad("a list item with no comma or double quote");
+    out[name] = name in out ? `${out[name]}, ${value}` : value;
+  });
+  return out;
+}
+
 /** The text parts of a `@multipart` body: `a=1&b=x` read back into `form`. */
 export function __appendText(form: globalThis.FormData, text: string): void {
   new globalThis.URLSearchParams(text).forEach((value, name) => form.append(name, value));
@@ -511,6 +570,8 @@ async function __headers(
     const have = headers.get("cookie");
     headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
   }
+  // Typed headers are the call's own: they replace a header of the same name the caller configured.
+  for (const [name, value] of globalThis.Object.entries(request.headers ?? {})) headers.set(name, value);
   if (options.origin !== undefined) headers.set("origin", options.origin);
   if (options.sendContract === true && route.contract !== undefined) headers.set("x-bynk-contract", route.contract);
   return headers;
