@@ -465,6 +465,8 @@ mod system {
     mod observation_behaviour;
     #[path = "oidc_auth.rs"]
     mod oidc_auth;
+    #[path = "ord_order_lock.rs"]
+    mod ord_order_lock;
     #[path = "package_dependencies.rs"]
     mod package_dependencies;
     #[path = "package_exports.rs"]

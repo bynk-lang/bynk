@@ -345,6 +345,34 @@ fn test_binding_modules(
         .collect()
 }
 
+/// Reconcile agent state shapes and `derives Ord` orders against the lock,
+/// attributing a refused change to the declaring file. Returns each live
+/// agent's versions.
+fn reconcile_agents_and_orders(
+    existing: &schema_registry::SchemaRegistry,
+    updated: &mut schema_registry::SchemaRegistry,
+    units: (
+        &HashMap<String, bynk_check::symbols::UnitTable>,
+        &HashMap<String, Vec<String>>,
+    ),
+    parsed: &[ParsedFile],
+    errors: &mut ErrorSink,
+) -> HashMap<String, bynk_check::schema_registry::AgentVersions> {
+    let mut agent_errors: Vec<CompileError> = Vec::new();
+    let versions = bynk_check::schema_registry::reconcile_agents(
+        existing,
+        updated,
+        units.0,
+        units.1,
+        &mut agent_errors,
+    );
+    errors.extend_attributed_by_span(parsed, agent_errors);
+    let mut order_errors: Vec<CompileError> = Vec::new();
+    bynk_check::ord_order::reconcile_orders(existing, updated, parsed, &mut order_errors);
+    errors.extend_attributed_by_span(parsed, order_errors);
+    versions
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -801,18 +829,15 @@ pub(super) fn run_checks(
                     &mut schema_errors,
                 );
                 errors.extend_for(None, schema_errors);
-                // State-migrations S0 (#2204): agent state shapes, in the same
-                // document. Attributed by span, so a refused change lands on
-                // the agent's own file.
-                let mut agent_errors: Vec<CompileError> = Vec::new();
-                schema_effective_versions.agents = bynk_check::schema_registry::reconcile_agents(
+                // State-migrations S0 (#2204) and #3956: agent state shapes and
+                // the order of each `derives Ord` type, in the same document.
+                schema_effective_versions.agents = reconcile_agents_and_orders(
                     &existing_reg,
                     &mut updated,
-                    &unit_tables,
-                    &unit_uses,
-                    &mut agent_errors,
+                    (&unit_tables, &unit_uses),
+                    &parsed,
+                    &mut errors,
                 );
-                errors.extend_attributed_by_span(&parsed, agent_errors);
                 schema_effective_versions.events = effective;
                 schema_registry_doc = Some(updated);
             }
