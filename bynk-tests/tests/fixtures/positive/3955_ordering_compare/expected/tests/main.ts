@@ -3,7 +3,8 @@
 
 declare const process: { exit(code: number): never; env: { [k: string]: string | undefined } };
 
-import * as test_0 from "./demo_order.test.js";
+import * as test_0 from "./demo_consumer.test.js";
+import * as test_1 from "./demo_order.test.js";
 
 type Result = {
   name: string;
@@ -85,7 +86,8 @@ function reportUnmatched(): void {
 
 async function main() {
   const modules = [
-    { name: "demo.order", names: test_0.__bynkCases, run: test_0.run },
+    { name: "demo.consumer", names: test_0.__bynkCases, run: test_0.run },
+    { name: "demo.order", names: test_1.__bynkCases, run: test_1.run },
   ];
   let passed = 0;
   let failed = 0;

@@ -50,6 +50,10 @@ export function byMinorThenLabel(xs: readonly Version[]): readonly Version[] {
   return ((__f, __r: readonly Version[]) => [...__r].sort((__a: Version, __b: Version) => __bynkOrderingSign(__f(__a, __b))))((a: Version, b: Version) => Ordering.then(__bynkOrdering(__bynkCmpInt(a.minor, b.minor)), __bynkOrdering(__bynkCmpString(b.label, a.label))), xs);
 }
 
+export function byMajorOnly(xs: readonly Version[]): readonly Version[] {
+  return ((__f, __r: readonly Version[]) => [...__r].sort((__a: Version, __b: Version) => __bynkOrderingSign(__f(__a, __b))))((a: Version, b: Version) => __bynkOrdering(__bynkCmpInt(a.major, b.major)), xs);
+}
+
 export function isBefore(a: number, b: number): boolean {
   return __bynkEq(__bynkOrdering(__bynkCmpInt(a, b)), Ordering.Less);
 }

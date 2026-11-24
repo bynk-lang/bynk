@@ -29,6 +29,10 @@ fn byMinorThenLabel(xs: List[Version]) -> List[Version] {
   xs.sortWith((a, b) => a.minor.compare(b.minor).then(b.label.compare(a.label)))
 }
 
+fn byMajorOnly(xs: List[Version]) -> List[Version] {
+  xs.sortWith((a, b) => a.major.compare(b.major))
+}
+
 fn isBefore(a: Int, b: Int) -> Bool {
   a.compare(b) == Less
 }

@@ -4554,6 +4554,16 @@ fn check_sort_with(args: &[Expr], elem: TyId, span: Span, ctx: &mut Ctx) -> Opti
         return None;
     }
     let Some(ordering) = super::ordering::ordering_ty(ctx) else {
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.types.method_not_found",
+                span,
+                "`List.sortWith` needs the `Ordering` of `bynk.ordering`, which is not in scope here",
+            )
+            .with_note(
+                "a single-file program cannot reach `bynk.ordering`; put the code in a project. A type of your own named `Ordering` also hides it",
+            ),
+        );
         let _ = type_of(&args[0], None, ctx);
         return None;
     };

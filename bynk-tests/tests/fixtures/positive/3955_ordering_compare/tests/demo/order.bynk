@@ -23,6 +23,8 @@ case "sortWith sorts by the comparator, stably" {
   let c = Version { major: 1, minor: 1, label: "c" }
   expect newestFirst([a, b, c]) == [b, a, c]
   expect byMinorThenLabel([a, b, c]) == [c, b, a]
+  // `a` and `c` tie on `major`, so a stable sort keeps `a` before `c`.
+  expect byMajorOnly([a, b, c]) == [a, c, b]
 }
 
 case "a variant name is an Ordering only where the context says so" {

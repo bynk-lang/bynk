@@ -2150,6 +2150,7 @@ mod tests {
                 ("bynk.crypto", 7),
                 ("bynk.url", 8),
                 ("bynk.set", 9),
+                ("bynk.ordering", 11),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2181,6 +2182,7 @@ mod tests {
                 "bynk.crypto",
                 "bynk.url",
                 "bynk.set",
+                "bynk.ordering",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

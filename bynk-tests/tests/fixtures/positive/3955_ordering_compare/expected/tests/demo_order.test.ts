@@ -66,7 +66,7 @@ function __makeTestDeps() {
 async function test_compare_answers_an_Ordering_on_every_orderable_type() {
   try {
     const deps = {};
-    const { Step, Version, blobs, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
+    const { Step, Version, blobs, byMajorOnly, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
     type Step = __ns_demo_order.Step;
     type Version = __ns_demo_order.Version;
     const { Ordering } = __ns_bynk_ordering;
@@ -88,7 +88,7 @@ async function test_compare_answers_an_Ordering_on_every_orderable_type() {
 async function test_then_breaks_a_tie_and_reverse_flips_an_order() {
   try {
     const deps = {};
-    const { Step, Version, blobs, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
+    const { Step, Version, blobs, byMajorOnly, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
     type Step = __ns_demo_order.Step;
     type Version = __ns_demo_order.Version;
     const { Ordering } = __ns_bynk_ordering;
@@ -113,7 +113,7 @@ async function test_then_breaks_a_tie_and_reverse_flips_an_order() {
 async function test_sortWith_sorts_by_the_comparator__stably() {
   try {
     const deps = {};
-    const { Step, Version, blobs, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
+    const { Step, Version, blobs, byMajorOnly, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
     type Step = __ns_demo_order.Step;
     type Version = __ns_demo_order.Version;
     const { Ordering } = __ns_bynk_ordering;
@@ -123,6 +123,7 @@ async function test_sortWith_sorts_by_the_comparator__stably() {
     const c = { major: 1, minor: 1, label: "c" };
     if (!(__bynkEq(newestFirst([a, b, c]), [b, a, c]))) { throw __bynkExpectFailure("tests/demo/order.bynk:24:10", 1081, 1116, "expect newestFirst([a, b, c]) == [b, a, c]\n  expected: newestFirst([a, b, c]) == [b, a, c]\n  actual:   " + __bynkShow((newestFirst([a, b, c]))) + " == " + __bynkShow(([b, a, c]))); }
     if (!(__bynkEq(byMinorThenLabel([a, b, c]), [c, b, a]))) { throw __bynkExpectFailure("tests/demo/order.bynk:25:10", 1126, 1166, "expect byMinorThenLabel([a, b, c]) == [c, b, a]\n  expected: byMinorThenLabel([a, b, c]) == [c, b, a]\n  actual:   " + __bynkShow((byMinorThenLabel([a, b, c]))) + " == " + __bynkShow(([c, b, a]))); }
+    if (!(__bynkEq(byMajorOnly([a, b, c]), [a, c, b]))) { throw __bynkExpectFailure("tests/demo/order.bynk:27:10", 1248, 1283, "expect byMajorOnly([a, b, c]) == [a, c, b]\n  expected: byMajorOnly([a, b, c]) == [a, c, b]\n  actual:   " + __bynkShow((byMajorOnly([a, b, c]))) + " == " + __bynkShow(([a, c, b]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -136,17 +137,17 @@ async function test_sortWith_sorts_by_the_comparator__stably() {
 async function test_a_variant_name_is_an_Ordering_only_where_the_context_says_so() {
   try {
     const deps = {};
-    const { Step, Version, blobs, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
+    const { Step, Version, blobs, byMajorOnly, byMinorThenLabel, describe, ints, isBefore, newestFirst, ranked, stepOf, versions } = __ns_demo_order;
     type Step = __ns_demo_order.Step;
     type Version = __ns_demo_order.Version;
     const { Ordering } = __ns_bynk_ordering;
     type Ordering = __ns_bynk_ordering.Ordering;
-    if (!(isBefore(1, 2))) { throw __bynkExpectFailure("tests/demo/order.bynk:29:10", 1249, 1263, "expect isBefore(1, 2)"); }
-    if (!(!isBefore(2, 1))) { throw __bynkExpectFailure("tests/demo/order.bynk:30:10", 1273, 1288, "expect !isBefore(2, 1)"); }
-    if (!(__bynkEq(stepOf(1, 2), Step.Less))) { throw __bynkExpectFailure("tests/demo/order.bynk:31:10", 1298, 1318, "expect stepOf(1, 2) == Less\n  expected: stepOf(1, 2) == Less\n  actual:   " + __bynkShow((stepOf(1, 2))) + " == " + __bynkShow((Step.Less))); }
-    if (!(__bynkEq(stepOf(2, 1), Step.More))) { throw __bynkExpectFailure("tests/demo/order.bynk:32:10", 1328, 1348, "expect stepOf(2, 1) == More\n  expected: stepOf(2, 1) == More\n  actual:   " + __bynkShow((stepOf(2, 1))) + " == " + __bynkShow((Step.More))); }
-    if (!(ranked(Ordering.Equal))) { throw __bynkExpectFailure("tests/demo/order.bynk:33:10", 1358, 1371, "expect ranked(Equal)"); }
-    if (!(!ranked(Ordering.Greater))) { throw __bynkExpectFailure("tests/demo/order.bynk:34:10", 1381, 1397, "expect !ranked(Greater)"); }
+    if (!(isBefore(1, 2))) { throw __bynkExpectFailure("tests/demo/order.bynk:31:10", 1366, 1380, "expect isBefore(1, 2)"); }
+    if (!(!isBefore(2, 1))) { throw __bynkExpectFailure("tests/demo/order.bynk:32:10", 1390, 1405, "expect !isBefore(2, 1)"); }
+    if (!(__bynkEq(stepOf(1, 2), Step.Less))) { throw __bynkExpectFailure("tests/demo/order.bynk:33:10", 1415, 1435, "expect stepOf(1, 2) == Less\n  expected: stepOf(1, 2) == Less\n  actual:   " + __bynkShow((stepOf(1, 2))) + " == " + __bynkShow((Step.Less))); }
+    if (!(__bynkEq(stepOf(2, 1), Step.More))) { throw __bynkExpectFailure("tests/demo/order.bynk:34:10", 1445, 1465, "expect stepOf(2, 1) == More\n  expected: stepOf(2, 1) == More\n  actual:   " + __bynkShow((stepOf(2, 1))) + " == " + __bynkShow((Step.More))); }
+    if (!(ranked(Ordering.Equal))) { throw __bynkExpectFailure("tests/demo/order.bynk:35:10", 1475, 1488, "expect ranked(Equal)"); }
+    if (!(!ranked(Ordering.Greater))) { throw __bynkExpectFailure("tests/demo/order.bynk:36:10", 1498, 1514, "expect !ranked(Greater)"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

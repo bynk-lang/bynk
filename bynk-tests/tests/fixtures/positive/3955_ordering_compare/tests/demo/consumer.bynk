@@ -1,0 +1,6 @@
+suite demo.consumer
+
+case "a unit that only receives an Ordering still has its methods" {
+  expect flipped(1, 2) == "greater"
+  expect tieBreak(1, 2) == "less"
+}

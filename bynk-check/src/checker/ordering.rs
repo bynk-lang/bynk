@@ -431,9 +431,17 @@ fn irregular_self_reference(t: &TypeRef, decl: &TypeDecl, params: &[&str]) -> bo
 
 // -- `compare` (#3955) --
 
-/// The `Ordering` type a unit sees, when `bynk.ordering` is in scope.
+/// The `Ordering` of `bynk.ordering`, when it is in scope. A type of the unit's
+/// own that is called `Ordering` is not it: `compare` and `sortWith` produce the
+/// first-party runtime values, so only the declaration from that unit counts.
 pub(crate) fn ordering_ty(ctx: &Ctx) -> Option<TyId> {
     let decl = ctx.input.types.get("Ordering")?;
+    let unit = crate::firstparty::UNITS
+        .iter()
+        .find(|u| u.name == bynk_std::ORDERING_UNIT)?;
+    if decl.span.file != crate::project_model::firstparty_file_id(unit) {
+        return None;
+    }
     Some(super::named_ty(decl, ctx.tys))
 }
 
@@ -450,16 +458,36 @@ pub(crate) fn check_compare_method(
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<Option<TyId>> {
-    let ordering = ordering_ty(ctx)?;
     if let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty)
-        && ctx
-            .input
-            .methods
-            .get(name)
-            .is_some_and(|t| t.instance.contains_key(&method.name))
+        && (ctx.input.agents.contains_key(name)
+            || ctx
+                .input
+                .methods
+                .get(name)
+                .is_some_and(|t| t.instance.contains_key(&method.name)))
     {
         return None;
     }
+    let Some(ordering) = ordering_ty(ctx) else {
+        // No `bynk.ordering` to answer with: a single-file program has no other
+        // unit to reach, and a type of the unit's own named `Ordering` is not it.
+        // Say so for a receiver that would otherwise be orderable.
+        if not_orderable(recv_ty, ctx).is_none() {
+            ctx.errors.push(CompileError::new(
+                "bynk.types.method_not_found",
+                method.span,
+                "`compare` answers an `Ordering` from `bynk.ordering`, which is not in scope here"
+                    .to_string(),
+            ).with_note(
+                "a single-file program cannot reach `bynk.ordering`; put the code in a project. A type of your own named `Ordering` also hides it",
+            ));
+            for a in args {
+                let _ = super::type_of(a, None, ctx);
+            }
+            return Some(None);
+        }
+        return None;
+    };
     if args.len() != 1 {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_arity",
