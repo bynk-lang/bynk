@@ -14,7 +14,7 @@ boot time: `serve_smoke_with_args` chose `base + pid % 10000` for wrangler's por
 concurrent tests could pick the same port. Wrangler then exited at once with `Address already in use`, and the
 boot wait kept polling the dead process until its window ran out.
 
-**Decision.** The harness asks the OS for two free loopback ports and passes them to wrangler. Its boot wait
+**Decision.** The harness takes two free loopback ports from the shared `wrangler::ports` helper (#3526) and passes them to wrangler. Its boot wait
 checks whether wrangler has exited: if so it stops waiting and reports wrangler's own output at once, as a
 failure when that output says a port was in use, and as the existing skip otherwise (no network to provision
 wrangler). The assertions are unchanged and no retry is added.

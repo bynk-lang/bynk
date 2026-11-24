@@ -81,8 +81,8 @@ fn hello_world_serves_on_workerd() {
         "example layout changed — update this test's worker path"
     );
 
-    // #4174: a port the OS has just handed out, as for the other smokes (`free_ports`).
-    let (port, inspector_port) = free_ports();
+    // #4174: a port the OS has just handed out, as for the other smokes (`wrangler::ports`).
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let child = wrangler::Wrangler::spawn(
         wrangler::npx()
             .args([
@@ -117,6 +117,9 @@ fn hello_world_serves_on_workerd() {
         // #4174: a wrangler that has already exited will never serve; say so now (see
         // `serve_smoke_with_args`).
         if let Ok(Some(status)) = child.child().try_wait() {
+            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
+            // descendant may outlive the leader.
+            child.stop();
             let mut logs = String::new();
             if let Some(mut e) = child.child().stderr.take() {
                 let _ = e.read_to_string(&mut logs);
@@ -837,8 +840,9 @@ impl Drop for Served {
 }
 
 /// Compile `source` (a single-file `smoke` context) for Workers, strip it to JS
-/// and serve it with `wrangler dev` on a pid-derived port above `port_base`,
-/// with its own inspector port (wrangler's default 9229 is shared otherwise),
+/// and serve it with `wrangler dev` on ports the OS hands out (`wrangler::ports`; `port_base` is
+/// unused, kept so the callers do not change), with its own inspector port (wrangler's
+/// default 9229 is shared otherwise),
 /// so the tests in this binary can run concurrently. `None` when the test is
 /// skipped: no `npx`/`node`, or wrangler did not boot (`skip` panics instead
 /// when `BYNK_REQUIRE_WORKERD` is set).
@@ -864,17 +868,6 @@ fn serve_smoke_with(
     persist: Option<&Path>,
 ) -> Option<Served> {
     serve_smoke_with_args(files, tag, port_base, lock, persist, &[])
-}
-
-/// Two free loopback ports from the OS: wrangler's server and its inspector.
-fn free_ports() -> (u16, u16) {
-    // Both are held until both are known, so they differ; they are released for wrangler to bind.
-    let a = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
-    let b = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
-    (
-        a.local_addr().expect("a bound address").port(),
-        b.local_addr().expect("a bound address").port(),
-    )
 }
 
 /// [`serve_smoke_with`], passing `extra` to `wrangler dev` (state-migrations
@@ -925,7 +918,7 @@ fn serve_smoke_with_args(
     // #4174: ports the OS has just handed out, not a pid-derived number. A pid-derived `base +
     // pid % 10000` collided with another test's (`Address already in use`), wrangler exited
     // at once, and the wait below polled the dead process for the whole boot window.
-    let (port, inspector_port) = free_ports();
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let mut args: Vec<String> = [
         "dev",
         "--port",
@@ -966,6 +959,9 @@ fn serve_smoke_with_args(
         // A wrangler that has already exited will never serve: say so now, with what it said,
         // instead of waiting out the boot window.
         if let Ok(Some(status)) = child.child().try_wait() {
+            // Stop first: the pipe reaches EOF only once the whole group is gone, and a
+            // descendant may outlive the leader.
+            child.stop();
             let mut logs = String::new();
             if let Some(mut e) = child.child().stderr.take() {
                 let _ = e.read_to_string(&mut logs);
