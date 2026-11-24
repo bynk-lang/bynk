@@ -71,6 +71,48 @@ not standard cron's Friday; write `FRI`) and `bynk.cron.uneven_step` (a `*/n` in
 the minute or hour field where `n` doesn't divide 60 or 24, so the last gap is
 shorter).
 
+## Naming a schedule with a constant
+
+A schedule written once can be shared by a handler and a test, or by two
+contexts through a commons: `schedule(…)` takes a string literal, or the name of
+a constant.
+
+```bynk,ignore
+commons ops.schedules
+
+const Nightly: String = "0 2 * * *"
+```
+
+```bynk,ignore
+context ops.reaper
+uses ops.schedules
+
+service sweeper from cron {
+  on schedule(Nightly) () -> Effect[Result[(), String]] { … }
+}
+```
+
+The name resolves to its literal at compile time, so the `wrangler.toml` trigger
+table and the dispatch key are still the literal text. A constant is accepted
+when it is declared exactly `String`, or exactly `CronSchedule` (the prelude type,
+nameable in a context that `consumes bynk { CronSchedule }`), and is bound to a
+literal or to another such constant, in the same file, a sibling file or a used
+commons. The resolved literal is then checked against `Cron` as a literal
+schedule is, so `const Bad: String = "61 * * * *"` is
+`bynk.cron.invalid_schedule` where it is used.
+
+A constant of any other type, such as `String where MaxLength(20)` or your own
+`type Nightly = String where Cron`, is refused with `bynk.cron.invalid_schedule`
+and a note naming the constant and its declared type. A private constant of a used
+commons is `bynk.visibility.private_item`. Duplicate detection sees through
+constants: `schedule(Nightly)` and `schedule("0 2 * * *")` in one context are
+`bynk.cron.duplicate_schedule`.
+
+A test names the schedule the same way: `sweeper.schedule(Nightly)` is matched to
+the handler by the resolved literal, so it follows a change to the constant.
+
+Constants are fixed at compile time, so a constant does not vary by environment.
+
 The same rule is the [`Cron` refinement predicate](/reference/refined-types/), and
 `CronSchedule` (`String where Cron`, from the `bynk` adapter) is the type of a
 valid schedule: `let s: CronSchedule = "0 2 * * MON-FRI"` is checked at compile

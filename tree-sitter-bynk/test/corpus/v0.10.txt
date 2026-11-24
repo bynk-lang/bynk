@@ -104,3 +104,37 @@ service outbox from queue("outbound-email") {
             (identifier))
           (block
             (identifier)))))))
+
+================================================================================
+cron handler whose schedule is a constant
+================================================================================
+
+context reaper
+
+service sweeper from cron {
+  on schedule(Nightly) () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol)
+      (handler
+        (cron_handler
+          (identifier)
+          (generic_type_ref
+            (builtin_type)
+            (generic_type_ref
+              (builtin_type)
+              (unit_type)
+              (base_type)))
+          (block
+            (ok_expr
+              (unit_literal))))))))

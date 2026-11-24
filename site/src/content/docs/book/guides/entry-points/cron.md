@@ -70,6 +70,26 @@ worker group, two members that share a schedule share one Worker and so one
 idempotency store, and both see the same `schedule` and `at`, so a key built from
 those alone collides and one member would skip its run.
 
+## Share a schedule by name
+
+Write a schedule once with a constant and name it in `schedule(…)`:
+
+```bynk,fragment
+const Nightly: String = "0 2 * * *"
+
+service sweeper from cron {
+	on schedule(Nightly) () -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}
+```
+
+The name resolves to its literal at compile time, so the generated
+`wrangler.toml` still lists the literal text. Put the constant in a commons to
+share it between contexts, and name it in a test (`sweeper.schedule(Nightly)`) so
+the test follows a change to the schedule. See
+[Cron](/reference/cron/#naming-a-schedule-with-a-constant).
+
 ## Signal success or failure
 
 Return `Ok(())` when the run succeeds. A cron run has no caller to answer and no

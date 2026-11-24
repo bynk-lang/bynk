@@ -4508,12 +4508,12 @@ fn check_test_service_address(
                 extra_headers: false,
             },
         );
-        let Some(EK::StrLit(expr)) = args.first().map(|a| &a.kind) else {
+        let Some(expr) = args.first().and_then(|a| schedule_literal_text(a, ctx)) else {
             ctx.errors.push(CompileError::new(
                 "bynk.test.service_bad_address",
                 method.span,
                 format!(
-                    "`{}.schedule` addresses a cron handler, so its first argument must be the schedule string",
+                    "`{}.schedule` addresses a cron handler, so its first argument must be the schedule string, or a `String` or `CronSchedule` constant bound to one",
                     id.name
                 ),
             ));
@@ -4528,14 +4528,14 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: HandlerAddress::schedule(expr),
+                address: HandlerAddress::schedule(&expr),
                 extra_headers: false,
             },
         );
         let matched = sig
             .handlers
             .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if e == expr));
+            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if *e == expr));
         let Some(handler) = matched else {
             ctx.errors.push(CompileError::new(
                 "bynk.test.service_unknown_route",
@@ -4550,7 +4550,7 @@ fn check_test_service_address(
             }
             return None;
         };
-        let params = schedule_address_params(handler, expr, expr_id, &id.name, ctx);
+        let params = schedule_address_params(handler, &expr, expr_id, &id.name, ctx);
         let _ = type_of(&args[0], None, ctx);
         check_address_args(&id.name, "schedule", &params, &args[1..], method.span, ctx);
         return handler_outcome(handler, ctx);
@@ -5043,12 +5043,41 @@ fn schedule_address_params(
         .collect()
 }
 
+/// #3875 [DECISION C]: the schedule a `svc.schedule(…)` address names: a string
+/// literal, or a bare reference to a constant declared `String` or exactly
+/// `CronSchedule` that, following constant-to-constant references, is bound to a
+/// literal. The address is then matched to its handler by the resolved text, so
+/// a test that names the constant follows a schedule change. `None` for
+/// anything else (a local shadows a constant of the same name).
+fn schedule_literal_text(e: &Expr, ctx: &Ctx) -> Option<String> {
+    use bynk_syntax::ast::ExprKind as EK;
+    match &e.kind {
+        EK::StrLit(s) => Some(s.clone()),
+        EK::Ident(id) if ctx.lookup(id.name.as_str()).is_none() => {
+            let start = ctx.input.consts.get(id.name.as_str())?;
+            let lit = crate::consts::chain_literal_with(
+                start,
+                BaseType::String,
+                crate::consts::is_schedule_type,
+                ctx.input.consts.len(),
+                |n| ctx.input.consts.get(n),
+            )?;
+            match &lit.kind {
+                EK::StrLit(s) => Some(s.clone()),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 /// v0.182 (#664): resolve the handler a test-body address invocation targets,
 /// without side effects. Shared by the argument check and the principal check.
 fn resolve_test_address<'a>(
     sig: &'a TestServiceSig,
     method: &str,
     args: &[Expr],
+    ctx: &Ctx,
 ) -> Option<&'a TestHandler> {
     use bynk_syntax::ast::{ExprKind as EK, HandlerKind, HttpMethod};
     if method == "call" {
@@ -5063,13 +5092,11 @@ fn resolve_test_address<'a>(
         });
     }
     if method == "schedule" {
-        let EK::StrLit(expr) = &args.first()?.kind else {
-            return None;
-        };
+        let expr = schedule_literal_text(args.first()?, ctx)?;
         return sig
             .handlers
             .iter()
-            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if e == expr));
+            .find(|h| matches!(&h.kind, HandlerKind::Cron { expr: e } if *e == expr));
     }
     if method == "message" {
         return sig
@@ -5156,7 +5183,7 @@ pub(crate) fn check_effect_let_principal(
         }
         return;
     }
-    let Some(handler) = resolve_test_address(&sig, &method.name, args).cloned() else {
+    let Some(handler) = resolve_test_address(&sig, &method.name, args, ctx).cloned() else {
         if let Some(p) = principal
             && args.first().is_some_and(|a| is_asset_value(a, ctx))
         {
