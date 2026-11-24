@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0925](0925-prelude-types.md) | **Prelude types: one registration point for compiler-known sums** (v0.668) — a table of prelude types (name, declaring first-party unit, trigger spellings) drives implicit reach, bare-variant resolution and the exemption from per-context rebranding; `Ordering` is the first row | Accepted (v0.668) |
 | [0924](0924-adapter-transparent-types-are-constructible.md) | **A type an adapter exports transparent is constructible by its consumers** (v0.667) — `.of`, a variant and a record literal are open to a consumer for an adapter's transparent types; a context's own stay the owner's | Accepted (v0.667) |
 | [0923](0923-duration-whole-unit-conversions-and-predicates.md) | **`Duration` converts to whole units towards zero and takes numeric predicates, and `bynk.cloudflare` types its KV spans** (v0.667) — toSeconds/toMinutes/toHours/toDays, predicates over Duration, AtLeast/AtMost, KvTtl and KvCacheTtl | Accepted (v0.667) |
 | [0922](0922-par-fan-out-options-record.md) | **A bounded fan-out is spelled with a ParOptions record, not a named argument** (v0.666) — Adds the four ...With fan-out forms taking ParOptions { limit } so concurrency can be capped without a grammar change | Accepted (v0.666) |
