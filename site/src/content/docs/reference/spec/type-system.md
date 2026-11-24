@@ -412,13 +412,17 @@ stronger caller.
 
 A context's `exports` clause controls what the boundary reveals: an
 `exports transparent` type shares its structure with consumers — including
-field-level construction — whereas an `exports opaque` type exposes only an
-opaque handle — inspecting it from outside the owning context is rejected
-(`bynk.context.opaque_inspection`), as is building a context-owned type through
-its constructors (`.of`, `.unsafe`, a variant), or an opaque one with record
-syntax, from outside (`bynk.context.external_construction`). The exception is an
-**adapter's** `transparent` types (`bynk.cloudflare`'s `KvTtl`, say): a consumer
-builds one with `.of`, a variant or record syntax, never with `.unsafe`. A context's own `transparent` types follow in #4213. Decoding creates a
+construction — whereas an `exports opaque` type exposes only an opaque handle —
+inspecting it from outside the owning context is rejected
+(`bynk.context.opaque_inspection`), as is building it through its constructors
+(`.of`, a variant) or with record syntax from outside
+(`bynk.context.external_construction`); so is a type declared `opaque`, however
+it is exported. A `transparent` type, whether a
+context's or an adapter's (`bynk.cloudflare`'s `KvTtl`, say), is built by a
+consumer with `.of`, a variant or record syntax; `.unsafe`, an unchecked
+assertion rather than a construction, stays the owner's on every type. Under the
+Workers target a consumer builds a consumed context's `transparent` type itself,
+with its own copy of the guards, so no value import crosses the Worker boundary. Decoding creates a
 value too: a context MUST NOT decode such a type through `Json.decode`,
 `Json.decodeSql` or a `Codable` witness, nor take one in an HTTP or queue
 handler's input (`bynk.context.external_decode`); the value comes from a service

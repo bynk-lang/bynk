@@ -120,4 +120,12 @@ fn a_failed_is_and_a_match_arm_report_the_value_tested() {
         long["actual"].as_str().unwrap().len(),
         r#"{"tag":"Some","value":""#.len() + 2100 + 2
     );
+
+    // #4229: a `Duration` inside the subject prints as a Bynk literal, not as milliseconds.
+    assert!(
+        message("a duration inside the subject")
+            .contains("p was {\"tag\":\"Some\",\"value\":3.seconds}"),
+        "{}",
+        message("a duration inside the subject")
+    );
 }

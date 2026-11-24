@@ -32,4 +32,9 @@ suite demo.pages {
     let l = long()
     expect l is None
   }
+
+  case "a duration inside the subject" {
+    let p = pause()
+    expect p is None
+  }
 }
