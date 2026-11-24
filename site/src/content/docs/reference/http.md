@@ -23,8 +23,10 @@ service <Name> from http {
   segment as a `:name` parameter and check it in the handler.
 - **Parameters:** each parameter is a path parameter (matching a `:name`
   segment), the special `body` parameter, or the special
-  [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type must be
-  constructible from a string (`bynk.http.path_param_not_stringy`); `GET` and
+  [`headers`](#request-headers), [`query`](#query-strings), [`cookies`](#cookies) or [`cf`](#request-cf) parameter. A path parameter's type is one a typed [`query`](#query-strings) field takes, less
+  `Option` and `List` (`bynk.http.path_param_not_stringy`): a `String`, `Int`, `Bool` or
+  `Decimal`, an enum, or a refined or opaque type over one of those; see
+  [Path parameters](#path-parameters). `GET` and
   `DELETE` may not take a `body` (`bynk.http.body_on_get_or_delete`).
 - **Return type:** must be `Effect[HttpResult[T]]`
   (`bynk.http.return_not_effect_http_result`).
@@ -84,6 +86,39 @@ service api from http {
 - **Methods.** A request is matched by method and path. The `Allow` set for a path
   (see [Method semantics](#method-semantics)) is the union over the routes that
   match it, so an overlap can't hide a method.
+
+### Path parameters {#path-parameters}
+
+A `:name` segment binds a handler parameter of the same name, and the parameter takes the
+types a typed [`query`](#typed-query) field takes, less `Option` and `List` (a segment is
+always present and holds one value): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a
+refined or opaque type over one of those. Anything else is
+`bynk.http.path_param_not_stringy`.
+
+```bynk,ignore
+type OrderNo = Int where Positive
+type Status = enum { Open, Closed }
+
+on GET("/orders/:id") (id: OrderNo) -> Effect[HttpResult[Order]] by v: Visitor { … }
+on GET("/orders/status/:s") (s: Status) -> Effect[HttpResult[List[Order]]] by v: Visitor { … }
+```
+
+- **Matching is by shape; decoding follows.** A route matches on its segment count and
+  literals alone, so a parameter's type never changes which route answers (a typed
+  parameter is a `:name` segment for [ordering](#route-order) and for
+  `bynk.http.unreachable_route`, and `/orders/:id` with `Int` beside `/orders/:slug` with
+  `String` leaves the one spelt later unreachable, not two routes). Each parameter is decoded after the
+  route is chosen.
+- **A segment that does not read** is a `400 StructuralMismatch` at `path.<name>`
+  (`/orders/abc` for `id: OrderNo`), not a `404` and not a fall-through to another route:
+  the path's shape named a resource, with an identifier that is not valid. A segment that
+  reads but breaks a refinement (`/orders/0`) is a `400 RefinementViolation`, as for a
+  `String`-based type.
+- **Reading rules are `query`'s.** An `Int` is `-?[0-9]+` within the safe-integer range, a
+  `Decimal` reads its text form, an enum is its variant's name (case-sensitive), and a
+  `Bool` is `true` or `false` only (`on` and `off` are a form's convention).
+- `bynk client` takes the typed value and writes it as the segment (`String(n)`, the
+  variant name), and `bynk openapi` gives the parameter its type, `format` and `enum`.
 
 ## Request headers
 

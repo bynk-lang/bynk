@@ -562,6 +562,46 @@ fn a_plain_json_route_and_a_tagged_one_decode_to_the_same_null() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// #3910: a typed path parameter is written as its text: an `Int` its digits, an enum its
+/// variant's name, and the router decodes it back.
+const PATH_DRIVER: &str = r#"
+import worker from "./out/workers/shop-api/index.js";
+import { createClient } from "./dist/api.js";
+const viaWorker = (url, init) => worker.fetch(new Request(url, init), {});
+const c = createClient({ baseUrl: "http://api.test", fetch: viaWorker });
+console.log("keys", Object.keys(c.api).sort().join(","));
+const show = (label, v) => console.log(label, JSON.stringify(v));
+show("order", await c.api.getOrderById(42));
+show("status", await c.api.getOrdersStatuByS({ tag: "Closed" }));
+"#;
+
+#[test]
+fn a_typed_path_parameter_round_trips_through_the_client() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("typed-path");
+    let proj = dir.join("project");
+    copy_project(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/positive/3910_http_path_param_types"),
+        &proj,
+    );
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the typed path-parameter client");
+    let out = run_driver(&dir, PATH_DRIVER, &[]);
+    assert_eq!(
+        line(&out, "order"),
+        r#"{"status":200,"kind":"Ok","body":"order 42"}"#
+    );
+    assert_eq!(
+        line(&out, "status"),
+        r#"{"status":200,"kind":"Ok","body":"closed"}"#
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// `GET path` on `port`: the response, or why there is none yet.
 fn get(port: u16, path: &str) -> Result<String, String> {
     let addr = format!("127.0.0.1:{port}");

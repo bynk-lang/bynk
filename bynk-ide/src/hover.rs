@@ -200,7 +200,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             if let Some(content) = local {
                 // #2854: an HTTP handler's typed `query` also lists the keys it
                 // reads off the query string, their types and defaults.
-                if let Some(section) = query_param_section(a, text) {
+                if let Some(section) = param_section(a, text) {
                     return Some(format!("{content}\n\n{section}"));
                 }
                 return Some(content);
@@ -771,6 +771,13 @@ fn header_handler_at(text: &str, offset: usize) -> Option<(String, bynk_syntax::
         }
     }
     None
+}
+
+/// The appendix a handler parameter's hover carries: the keys of a typed `query` or `cookies`
+/// (#2854), or, for a path parameter's declaration, how its segment is decoded and the `400`s
+/// that can answer (#3910).
+fn param_section(a: &HoverAnalysis<'_>, text: &str) -> Option<String> {
+    query_param_section(a, text).or_else(|| crate::symbols::describe_path_param_at(text, a.offset))
 }
 
 /// #2854: when the cursor is on the `query` parameter (or a use of it) of an

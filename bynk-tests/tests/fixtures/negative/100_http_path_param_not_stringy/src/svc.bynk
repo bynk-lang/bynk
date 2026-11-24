@@ -1,7 +1,7 @@
 context svc
 
 service api from http {
-  on GET("/orders/:id") (id: Int) -> Effect[HttpResult[String]] by v: Visitor {
+  on GET("/orders/:id") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor {
     Ok("nope")
   }
 }

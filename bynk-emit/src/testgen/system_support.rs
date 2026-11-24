@@ -723,7 +723,7 @@ pub(super) fn emit_system_http_support(
                 (true, None) => vec![header("content-type", str_lit("application/json"))],
                 (false, _) => Vec::new(),
             };
-            let url = request_url(&path, typed_query.clone());
+            let url = typed_request_url(h, &table.types, &path, typed_query.clone());
             let raw_url = request_url(&path, raw_query.clone());
             let (spread_first, spread_last) = spread_order(
                 is_form || (body_arg.is_some() && !is_multipart),
@@ -1890,6 +1890,29 @@ fn spread_order(content_type_overridable: bool, spread: &TsObjectEntry) -> (Entr
     } else {
         (vec![spread.clone()], Vec::new())
     }
+}
+
+/// The request URL of a typed driver: `request_url`, with an enum path parameter (#3910) written
+/// as its variant's name, since in memory it is a `{ tag }`.
+fn typed_request_url(
+    h: &bynk_syntax::ast::Handler,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    path: &str,
+    query: Option<TsExpr>,
+) -> TsExpr {
+    request_url_with(path, query, |name| {
+        let id = ident(crate::emitter::ts_ident(name));
+        let is_enum = h.params.iter().any(|p| {
+            p.name.name == name
+                && crate::emitter::workers_entry::query_leaf_kind(&p.type_ref, types, false)
+                    == "enum"
+        });
+        if is_enum {
+            call(ident("__cookieValue"), vec![str_lit("enum"), id])
+        } else {
+            id
+        }
+    })
 }
 
 #[cfg(test)]

@@ -1848,7 +1848,9 @@ unique, MUST NOT use the reserved `/_bynk/` prefix
 (`bynk.http.invalid_path`, `bynk.http.duplicate_route`, `bynk.http.reserved_prefix`),
 MUST NOT contain `*`, `{` or `}` in any segment, which are reserved for a future
 route form (`bynk.http.reserved_route_syntax`),
-and each `:name` segment MUST bind to a string-constructible parameter
+and each `:name` segment MUST bind to a parameter of a type a typed `query` field takes, less
+`Option` and `List` (#3910): a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or
+opaque type over one of those
 (`bynk.http.unbound_path_param`, `bynk.http.path_param_not_stringy`,
 `bynk.http.extra_param`); `GET` and `DELETE` MUST NOT take a `body`
 (`bynk.http.body_on_get_or_delete`). A parameter named `query` that no `:query`

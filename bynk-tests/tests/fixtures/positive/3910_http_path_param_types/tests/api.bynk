@@ -1,0 +1,45 @@
+suite shop.api {
+	case "a refined Int, an enum, a Bool, a Decimal and an Int bind" {
+		let a <- api.GET("/orders/:id", 42)
+		expect a is Ok("order 42")
+		let b <- api.GET("/orders/status/:s", Closed)
+		expect b is Ok("closed")
+		let c <- api.GET("/flags/:flag", true)
+		expect c is Ok("flag true")
+		let d <- api.GET("/refs/:r", 6)
+		expect d is Ok("ref 7")
+	}
+}
+
+suite shop.api as system {
+	case "a typed segment binds" {
+		let a <- api.GET("/orders/:id", Wire("42"))
+		expect a is Handled(Ok("order 42"))
+		let b <- api.GET("/orders/status/:s", Wire("Open"))
+		expect b is Handled(Ok("open"))
+		let c <- api.GET("/flags/:flag", Wire("false"))
+		expect c is Handled(Ok("flag false"))
+		let d <- api.GET("/prices/:p", Wire("12.50"))
+		expect d is Handled(Ok("price 12.50"))
+		let e <- api.GET("/refs/:r", Wire("-3"))
+		expect e is Handled(Ok("ref -2"))
+	}
+
+	case "a segment that does not read is a structural mismatch" {
+		let a <- api.GET("/orders/:id", Wire("abc"))
+		expect a is Rejected(StructuralMismatch(_))
+		let b <- api.GET("/orders/status/:s", Wire("open"))
+		expect b is Rejected(StructuralMismatch(_))
+		let c <- api.GET("/flags/:flag", Wire("on"))
+		expect c is Rejected(StructuralMismatch(_))
+		let d <- api.GET("/prices/:p", Wire("cheap"))
+		expect d is Rejected(StructuralMismatch(_))
+		let e <- api.GET("/refs/:r", Wire("1.5"))
+		expect e is Rejected(StructuralMismatch(_))
+	}
+
+	case "a segment that breaks the refinement is a violation" {
+		let a <- api.GET("/orders/:id", Wire("0"))
+		expect a is Rejected(RefinementViolation(_))
+	}
+}
