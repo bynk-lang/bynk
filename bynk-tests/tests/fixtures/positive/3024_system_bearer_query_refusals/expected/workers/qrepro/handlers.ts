@@ -2,6 +2,7 @@
 // context qrepro
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -10,7 +11,7 @@ export type ReaderId = string & { readonly __brand: "qrepro.ReaderId" };
 
 export const ReaderId = {
   of(value: string): Result<ReaderId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "ReaderId", message: "must be non-empty", value });
     }
     return Ok(value as ReaderId);
