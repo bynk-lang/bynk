@@ -4506,9 +4506,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 && !cx.types.contains_key(&id.name)
             {
                 let allowed: &[&str] = match id.name.as_str() {
-                    "List" | "Map" => &["empty"],
-                    // K6a (#2596): `Set.empty()` and `Set.of(xs)`.
-                    "Set" => &["empty", "of"],
+                    "List" => &["empty"],
+                    // K6a (#2596): `Set.empty()` and `Set.of(xs)`; #3961: `Map.of(entries)`.
+                    "Map" | "Set" => &["empty", "of"],
                     // P4c (#2628): `decodeSql`, `decode` with SQLite's `0`/`1` flags.
                     "Json" => &["encode", "encodePlain", "decode", "decodeSql"],
                     // #3214: decode only; there is no `Yaml.encode`.

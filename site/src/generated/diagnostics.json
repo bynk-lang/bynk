@@ -4438,6 +4438,16 @@
     "summary": "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against."
   },
   {
+    "blurb": null,
+    "category": "Other",
+    "categoryAnchor": "other",
+    "code": "bynk.map.deprecated_function",
+    "constructs": [],
+    "example": null,
+    "severity": "warning",
+    "summary": "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable)."
+  },
+  {
     "blurb": "A placeholder that appears in the reference locale's template and in another locale's must be formatted the same way in both: plain `{n}`, `plural`, `select`, `number` or `date`. The caller supplies one kind of value for it, and an interface cannot sensibly be plural-aware in one language and plain in another. Use the same kind in every locale. The arms inside a `plural` or `select` may differ. A different placeholder name is `bynk.messages.placeholder_mismatch`.",
     "category": "Message bundles",
     "categoryAnchor": "message-bundles",
@@ -6957,6 +6967,16 @@
     "example": "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId, limit: Int) -> Effect[()] by user: Member { … }   // ✗ a query value is a string\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId, limit: String) -> Effect[()] by user: Member { … }   // ✓ parse the number in the body\n}",
     "severity": "error",
     "summary": "A `from websocket` service's `on open` parameter has a type not constructible from `String`; it arrives as a query-string value (#1657)."
+  },
+  {
+    "blurb": null,
+    "category": "Other",
+    "categoryAnchor": "other",
+    "code": "bynk.set.deprecated_function",
+    "constructs": [],
+    "example": null,
+    "severity": "warning",
+    "summary": "A `bynk.set` free function is deprecated in favour of the `Set` method form (warning; auto-fixable)."
   },
   {
     "blurb": "Some standard-library items are experimental: they may change or disappear in any release, and the compatibility promise does not cover them. Using one is an error until the project opts in, so that relying on it is a choice someone made and can find. Add the item's path, as the error gives it, to `allow` under `[unstable]` in `bynk.toml`, or avoid the item. An entry that names no standard-library item is `bynk.project.unstable_unknown_item`.",

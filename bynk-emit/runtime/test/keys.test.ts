@@ -16,6 +16,19 @@ import {
   __bynkGroupBy,
   __bynkJoinOn,
   __bynkLeftJoin,
+  __bynkMapOf,
+  __bynkMapRemove,
+  __bynkMapEntries,
+  __bynkMapFilter,
+  __bynkMapMapValues,
+  __bynkMapFold,
+  __bynkSetUnion,
+  __bynkSetIntersect,
+  __bynkSetDifference,
+  __bynkSetIsSubsetOf,
+  __bynkSetFilter,
+  __bynkSetMap,
+  __bynkSetFold,
 } from "../src/keys.ts";
 
 test("the encoding ignores field order and quotes nested strings", () => {
@@ -141,4 +154,72 @@ test("distinct, distinctBy, groupBy and joins use the encoding", () => {
     __bynkLeftJoin(l, r, (x) => x.id, (y) => y.id, (x, y) => [x.id.n, y.tag === "Some" ? y.value.w : null]),
     [[1, null], [2, "two"]],
   );
+});
+
+// #3961: the `Map` and `Set` methods, over plain and composite keys, with their order.
+test("Map.of: a later entry replaces the value and keeps the first position", () => {
+  const m = __bynkMapOf([
+    { key: "a", value: 1 },
+    { key: "b", value: 2 },
+    { key: "a", value: 3 },
+  ]);
+  assert.deepEqual([...m], [["a", 3], ["b", 2]]);
+  const km = __bynkMapOf([
+    { key: { r: "eu" }, value: 1 },
+    { key: { r: "us" }, value: 2 },
+    { key: { r: "eu" }, value: 9 },
+  ]);
+  assert.ok(km instanceof __BynkKeyMap);
+  assert.deepEqual([...km.values()], [9, 2]);
+});
+
+test("Map.remove copies, keeps order, and is a no-op when absent", () => {
+  const m = new Map([["a", 1], ["b", 2], ["c", 3]]);
+  const r = __bynkMapRemove(m, "b");
+  assert.deepEqual([...r.keys()], ["a", "c"]);
+  assert.deepEqual([...m.keys()], ["a", "b", "c"]);
+  assert.deepEqual([...__bynkMapRemove(m, "z").keys()], ["a", "b", "c"]);
+  const km = new __BynkKeyMap<{ n: number }, number>([[{ n: 1 }, 1], [{ n: 2 }, 2]]);
+  const kr = __bynkMapRemove(km, { n: 1 });
+  assert.ok(kr instanceof __BynkKeyMap);
+  assert.deepEqual([...kr.values()], [2]);
+  assert.equal(kr.has({ n: 1 }), false);
+});
+
+test("Map.entries, filter, mapValues and fold follow insertion order", () => {
+  const m = new Map([["a", 1], ["b", 2], ["c", 3]]);
+  assert.deepEqual(__bynkMapEntries(m), [
+    { key: "a", value: 1 },
+    { key: "b", value: 2 },
+    { key: "c", value: 3 },
+  ]);
+  assert.deepEqual([...__bynkMapFilter(m, (_k, v) => v !== 2)], [["a", 1], ["c", 3]]);
+  assert.deepEqual([...__bynkMapMapValues(m, (v) => v * 10)], [["a", 10], ["b", 20], ["c", 30]]);
+  assert.equal(__bynkMapFold(m, "", (acc, k, v) => acc + k + v), "a1b2c3");
+  const km = new __BynkKeyMap<{ n: number }, number>([[{ n: 2 }, 2], [{ n: 1 }, 1]]);
+  assert.deepEqual([...__bynkMapFilter(km, (k) => k.n === 1).values()], [1]);
+  assert.deepEqual([...__bynkMapMapValues(km, (v) => v + 1).values()], [3, 2]);
+});
+
+test("Set algebra keeps the stated order, over plain and composite elements", () => {
+  const a = new Set([1, 2, 3]);
+  const b = new Set([3, 4, 1]);
+  assert.deepEqual([...__bynkSetUnion(a, b)], [1, 2, 3, 4]);
+  assert.deepEqual([...__bynkSetIntersect(a, b)], [1, 3]);
+  assert.deepEqual([...__bynkSetDifference(a, b)], [2]);
+  assert.equal(__bynkSetIsSubsetOf(new Set([1, 3]), a), true);
+  assert.equal(__bynkSetIsSubsetOf(b, a), false);
+  const ka = new __BynkKeySet([{ n: 1 }, { n: 2 }]);
+  const kb = new __BynkKeySet([{ n: 2 }, { n: 3 }]);
+  assert.deepEqual([...__bynkSetUnion(ka, kb)], [{ n: 1 }, { n: 2 }, { n: 3 }]);
+  assert.deepEqual([...__bynkSetIntersect(ka, kb)], [{ n: 2 }]);
+  assert.deepEqual([...__bynkSetDifference(ka, kb)], [{ n: 1 }]);
+});
+
+test("Set.filter, map and fold; map merges members at the first position", () => {
+  const s = new Set([1, 2, 3, 4]);
+  assert.deepEqual([...__bynkSetFilter(s, (x) => x % 2 === 0)], [2, 4]);
+  assert.deepEqual([...__bynkSetMap(s, (x) => x % 2)], [1, 0]);
+  assert.equal(__bynkSetFold(s, 0, (acc, x) => acc + x), 10);
+  assert.deepEqual([...__bynkSetMap(s, (x) => ({ p: x % 2 }))], [{ p: 1 }, { p: 0 }]);
 });

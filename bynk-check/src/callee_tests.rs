@@ -48,6 +48,7 @@ commons demo {
 
   fn list() -> List[Int] { List.empty() }
   fn map() -> Map[String, Int] { Map.empty() }
+  fn map_of(m: Map[String, Int]) -> Map[String, Int] { Map.of(m.entries()) }
   fn set() -> Set[Int] { Set.empty() }
   fn set_of() -> Set[Int] { Set.of([1, 2]) }
   fn int_parse() -> Option[Int] { Int.parse("1") }
@@ -74,6 +75,7 @@ commons demo {
     for expected in [
         StaticOp::List(ListStatic::Empty),
         StaticOp::Map(MapStatic::Empty),
+        StaticOp::Map(MapStatic::Of),
         StaticOp::Set(SetStatic::Empty),
         StaticOp::Set(SetStatic::Of),
         StaticOp::Int(IntStatic::Parse),

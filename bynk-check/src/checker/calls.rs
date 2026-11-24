@@ -743,7 +743,12 @@ pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
 /// warning (ADR 0117) with a machine-applicable rewrite to the method form —
 /// `map(xs, f)` → `xs.map(f)`, `reverse(xs)` → `xs.reverse()`.
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
-    if ctx.input.imported_from.get(&name.name).map(String::as_str) != Some("bynk.list") {
+    let module = ctx.input.imported_from.get(&name.name).map(String::as_str);
+    // #3961: `bynk.map` and `bynk.set` are deprecated the same way.
+    if matches!(module, Some("bynk.map" | "bynk.set")) {
+        return super::collections::warn_deprecated_collection_fn(name, args, call_span, ctx);
+    }
+    if module != Some("bynk.list") {
         return;
     }
     // The method-form spelling each free function rewrites to.

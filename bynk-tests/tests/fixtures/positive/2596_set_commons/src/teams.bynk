@@ -1,7 +1,6 @@
 context teams
-  uses bynk.set
 
-// #2596: the `bynk.set` combinators over the `Set` kernel.
+// #2596: the set combinators as `Set` methods.
 
 fn a() -> Set[String] {
 	Set.of(["ada", "bo", "cy"])
@@ -12,25 +11,25 @@ fn b() -> Set[String] {
 }
 
 fn joined() -> List[String] {
-	union(a(), b()).toList()
+	a().union(b()).toList()
 }
 
 fn shared() -> List[String] {
-	intersect(a(), b()).toList()
+	a().intersect(b()).toList()
 }
 
 fn onlyA() -> List[String] {
-	difference(a(), b()).toList()
+	a().difference(b()).toList()
 }
 
 fn lengths() -> List[Int] {
-	mapSet(a(), (s) => s.length()).toList()
+	a().map((s) => s.length()).toList()
 }
 
 fn short() -> List[String] {
-	filterSet(a(), (s) => s.length() < 3).toList()
+	a().filter((s) => s.length() < 3).toList()
 }
 
 fn within() -> Bool {
-	isSubsetOf(Set.of(["ada"]), a()) && !isSubsetOf(b(), a())
+	Set.of(["ada"]).isSubsetOf(a()) && !b().isSubsetOf(a())
 }

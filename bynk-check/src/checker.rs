@@ -51,6 +51,7 @@ pub use bynk_syntax::ast::ExprId;
 
 mod calls;
 pub mod codable;
+mod collections;
 mod cookie_lints;
 mod d1;
 mod events_emit;
@@ -97,6 +98,7 @@ pub use calls::{
     BYNK_LIST_DEPRECATED, FnCaps, check_const_decl, check_context_fn, check_event_field_default,
     check_state_initialiser, check_suite_fn,
 };
+pub use collections::BYNK_COLLECTION_DEPRECATED;
 pub(crate) use d1::{is_sql_statement_type, statement_at_boundary};
 pub use d1::{row_base_fields, row_bool_fields};
 pub use refinements::{ZeroValue, is_zeroable, locale_tag_accepts, locale_tag_pattern, zero_value};

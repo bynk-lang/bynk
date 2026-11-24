@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **900** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **902** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -518,6 +518,7 @@ There are **900** codes in total. Every code is an error unless it is marked **W
 - [`bynk.list.deprecated_function`](/reference/diagnostics/bynk.list.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).
 - [`bynk.list.par_traverse_unit`](/reference/diagnostics/bynk.list.par_traverse_unit/) — <span class="diagnostic-severity">Warning</span> `List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).
 - [`bynk.locale.multiple_message_bundles`](/reference/diagnostics/bynk.locale.multiple_message_bundles/) — A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.
+- [`bynk.map.deprecated_function`](/reference/diagnostics/bynk.map.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).
 - [`bynk.mysql.sql_invalid`](/reference/diagnostics/bynk.mysql.sql_invalid/) — <span class="diagnostic-severity">Warning</span> A literal `MySql` statement does not parse with the MySQL dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not MySQL's own, so it may refuse valid SQL).
 - [`bynk.mysql.sql_param_count`](/reference/diagnostics/bynk.mysql.sql_param_count/) — A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`.
 - [`bynk.par.invalid_statement`](/reference/diagnostics/bynk.par.invalid_statement/) — A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement.
@@ -553,6 +554,7 @@ There are **900** codes in total. Every code is an error unless it is marked **W
 - [`bynk.revert.membership_changed`](/reference/diagnostics/bynk.revert.membership_changed/) — `bynk revert` refused because a `[deploy.workers.<key>]` group's target version held other contexts than the live one (a context moved into or out of the group since, or the version predates groups), so a rollback would take a member's code out of the Worker.
 - [`bynk.revert.secret_changed`](/reference/diagnostics/bynk.revert.secret_changed/) — `bynk revert` refused because a secret changed after the target was live, so the rollback could restore an old secret value that its peers no longer accept.
 - [`bynk.secrets.computed_name`](/reference/diagnostics/bynk.secrets.computed_name/) — <span class="diagnostic-severity">Warning</span> A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning).
+- [`bynk.set.deprecated_function`](/reference/diagnostics/bynk.set.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.set` free function is deprecated in favour of the `Set` method form (warning; auto-fixable).
 - [`bynk.target.browser_bundle_only`](/reference/diagnostics/bynk.target.browser_bundle_only/) — The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build.
 - [`bynk.target.vendor_conflict`](/reference/diagnostics/bynk.target.vendor_conflict/) — One deployment unit's in-process closure uses platform-native capabilities from two mutually-exclusive platforms.
 - [`bynk.target.vendor_required`](/reference/diagnostics/bynk.target.vendor_required/) — A deployment unit uses a platform-native capability but the build selects another `--platform`.
