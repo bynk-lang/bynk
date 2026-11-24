@@ -1697,6 +1697,7 @@
 /reference/diagnostics/bynk.lex.unterminated_interpolation/
 /reference/diagnostics/bynk.lex.unterminated_string/
 /reference/diagnostics/bynk.list.deprecated_function/
+/reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/

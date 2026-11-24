@@ -77,7 +77,9 @@ kernel_ops! {
         // v0.146 (ADR 0170): run an effectful step for each element, in order.
         ForEach = "forEach", "forEach(f: T -> Effect[()]) -> Effect[()]";
         // v0.147 (ADR 0171): run an effectful step for every element concurrently.
-        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[()]) -> Effect[()]";
+        // #3967: named `parForEach`, so `parTraverse` can return the values.
+        ParForEach = "parForEach", "parForEach(f: T -> Effect[()]) -> Effect[()]";
+        ParTraverse = "parTraverse", "parTraverse(f: T -> Effect[U]) -> Effect[List[U]]";
         // v0.148 (ADR 0172): collect every outcome (no short-circuit), sequential
         // and concurrent.
         TraverseAll = "traverseAll", "traverseAll(f: T -> Effect[Result[U, E]]) -> Effect[List[Result[U, E]]]";

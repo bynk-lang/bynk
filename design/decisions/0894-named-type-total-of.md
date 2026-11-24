@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `.of` on a named type with no predicate is total and returns the type; "alias" is renamed "named type"
-breaking: `T.of(x)` on a named type with no predicate (`type Id = Int`) now returns `T`, not `Result[T, ValidationError]`, so `Id.of(n)?` or a `match` on it stops compiling (`bynk.types.question_on_non_result`, with a machine-applicable "drop the `?`" fix-it); the emitted TypeScript `Id.of(n)` returns the branded value, not a result object. Adding a predicate later turns `.of` back into a `Result`. A `Float` named type stays fallible.
----
+# 0894 — Named types: `.of` is total when the type has no predicate, and "alias" is renamed "named type"
 
-## ADR: named-type-total-of
-title: Named types: `.of` is total when the type has no predicate, and "alias" is renamed "named type"
-summary: A predicate-free named type's `.of` returns the type; the form is called a named type, not an alias
+- **Status:** Accepted (v0.645)
 
 **Context.** `type Id = Int` was documented as an "alias", but it is a distinct, branded nominal type whose only run-time constructor, `Id.of`, returned `Result[Id, ValidationError]` although it could never be an `Err`. Call sites handled an impossible failure, and adding a predicate later changed nothing at them.
 

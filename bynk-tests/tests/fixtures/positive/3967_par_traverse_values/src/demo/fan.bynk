@@ -1,0 +1,12 @@
+---
+#3967: `parTraverse` returns the steps' values in input order; `parForEach` discards them.
+---
+commons demo.fan
+
+fn tenfold(ids: List[Int]) -> Effect[List[Int]] {
+	ids.parTraverse((id: Int) => Effect.pure(id * 10))
+}
+
+fn touch(ids: List[Int]) -> Effect[()] {
+	ids.parForEach((id: Int) => Effect.pure(()))
+}
