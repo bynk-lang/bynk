@@ -119,7 +119,7 @@ fn a_dependency_adapter_is_consumed_and_its_binding_vendored() {
     let shop = money_workspace(&root, SHOP);
     write(
         &shop.join("src/auth/sessions.bynk"),
-        "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n",
+        "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] by Caller given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n",
     );
     let (code, out) = short(&shop);
     assert_eq!(code, 0, "{out}");
@@ -277,7 +277,7 @@ fn tokens_requiring(root: &Path, range: &str) {
     );
 }
 
-const SESSIONS: &str = "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n";
+const SESSIONS: &str = "context auth.sessions\n\nconsumes money.tokens\n\nservice login {\n  on call(secret: String) -> Effect[String] by Caller given money.tokens.Jwt {\n    let token <- money.tokens.Jwt.sign(\"u1\", secret)\n    token\n  }\n}\n";
 
 /// `bynk compile .` of `dir` into `out`; the emitted `package.json`.
 fn compiled_package_json(dir: &Path, out: &Path) -> Option<String> {
@@ -357,7 +357,7 @@ fn conflicting_and_unpinned_ranges_across_packages_are_refused() {
     );
     write(
         &shop.join("src/use_sign.bynk"),
-        "context use_sign\n\nconsumes sign\n\nservice s {\n  on call() -> Effect[String] given sign.Signer {\n    let x <- sign.Signer.go()\n    x\n  }\n}\n",
+        "context use_sign\n\nconsumes sign\n\nservice s {\n  on call() -> Effect[String] by Caller given sign.Signer {\n    let x <- sign.Signer.go()\n    x\n  }\n}\n",
     );
     let (code, out) = short(&shop);
     assert_eq!(code, 1, "{out}");

@@ -2533,11 +2533,22 @@ fn member_candidates_from(
                     }
                     bynk_syntax::ast::TypeBody::Refined { .. }
                     | bynk_syntax::ast::TypeBody::Opaque { .. } => {
+                        let of_sig = match &t.body {
+                            // #3946: a named type with no predicate cannot fail.
+                            bynk_syntax::ast::TypeBody::Refined {
+                                base, refinement, ..
+                            } if bynk_syntax::ast::of_is_total(
+                                *base,
+                                refinement.as_ref(),
+                                false,
+                            ) =>
+                            {
+                                format!("of(value) -> {receiver}")
+                            }
+                            _ => format!("of(value) -> Result[{receiver}, ValidationError]"),
+                        };
                         for (label, sig) in [
-                            (
-                                "of",
-                                format!("of(value) -> Result[{receiver}, ValidationError]"),
-                            ),
+                            ("of", of_sig),
                             ("unsafe", format!("unsafe(value) -> {receiver}")),
                         ] {
                             if seen.insert(label.to_string()) {
@@ -2716,9 +2727,12 @@ pub const SNIPPETS: &[(&str, &str)] = &[
     // -- Services & handlers --
     (
         "service",
-        "service ${1:name} {\n\ton call(${2}) -> Effect[${3:Unit}] {\n\t\t$0\n\t}\n}",
+        "service ${1:name} {\n\ton call(${2}) -> Effect[${3:Unit}] by Caller {\n\t\t$0\n\t}\n}",
     ),
-    ("on call", "on call(${1}) -> Effect[${2:Unit}] {\n\t$0\n}"),
+    (
+        "on call",
+        "on call(${1}) -> Effect[${2:Unit}] by Caller {\n\t$0\n}",
+    ),
     (
         "on http",
         "on ${1|GET,POST,PUT,DELETE,PATCH|}(\"${2:/path}\") (${3:body}: ${4:Req}) -> Effect[HttpResult[${5:Res}]] given ${6:Cap} {\n\t$0\n}",
@@ -3908,11 +3922,11 @@ mod tests {
                    consumes bynk { Clock }\n\
                    capability Local { fn f() -> Effect[Int] }\n\
                    service s {\n\
-                   on call() -> Effect[Int] given Clock {\n\
+                   on call() -> Effect[Int] by Caller given Clock {\n\
                    1\n\
                    }\n\
                    }\n";
-        let got = labels("    on call() -> Effect[Int] given ", doc);
+        let got = labels("    on call() -> Effect[Int] by Caller given ", doc);
         assert!(got.contains(&"Clock".to_string()), "flattened: {got:?}");
         assert!(got.contains(&"Local".to_string()), "local: {got:?}");
     }
@@ -5093,7 +5107,7 @@ fn Box.size(self) -> Int { 1 }
     /// `par` snippet appears only where a body is effectful.
     #[test]
     fn par_block_positions_and_candidates() {
-        let inside = "service s {\n  on call() -> Effect[Int] {\n    par {\n      ";
+        let inside = "service s {\n  on call() -> Effect[Int] by Caller {\n    par {\n      ";
         assert!(in_par_block_position(inside, inside.len()));
         let labels: Vec<String> = par_block_candidates()
             .into_iter()
@@ -5101,8 +5115,7 @@ fn Box.size(self) -> Int { 1 }
             .collect();
         assert_eq!(labels, ["let x <-", "do"]);
         // After the closing brace the statement is an ordinary one again.
-        let after =
-            "service s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n    }\n    ";
+        let after = "service s {\n  on call() -> Effect[Int] by Caller {\n    par {\n      let a <- f()\n    }\n    ";
         assert!(!in_par_block_position(after, after.len()));
         assert!(in_effectful_body_position(after, after.len()));
     }

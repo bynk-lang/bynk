@@ -17,38 +17,38 @@ type Outcome[T] =
 type Plain = { n: Int }
 
 service open {
-  on call(n: Int) -> Effect[Envelope[Int]] {
+  on call(n: Int) -> Effect[Envelope[Int]] by Caller {
     Envelope { item: n, note: "sealed" }
   }
 }
 
 service wrapPlain {
-  on call(n: Int) -> Effect[Envelope[Plain]] {
+  on call(n: Int) -> Effect[Envelope[Plain]] by Caller {
     Envelope { item: Plain { n: n }, note: "plain" }
   }
 }
 
 service many {
-  on call(n: Int) -> Effect[List[Envelope[Int]]] {
+  on call(n: Int) -> Effect[List[Envelope[Int]]] by Caller {
     [Envelope { item: n, note: "a" }, Envelope { item: n + 1, note: "b" }]
   }
 }
 
 service settle {
-  on call(n: Int) -> Effect[Outcome[Int]] {
+  on call(n: Int) -> Effect[Outcome[Int]] by Caller {
     let o: Outcome[Int] = if n > 0 { Done(n) } else { Pending("not yet") }
     o
   }
 }
 
 service readBack {
-  on call(e: Envelope[Int]) -> Effect[Int] {
+  on call(e: Envelope[Int]) -> Effect[Int] by Caller {
     e.item
   }
 }
 
 service read {
-  on call(e: Envelope[String]) -> Effect[Int] {
+  on call(e: Envelope[String]) -> Effect[Int] by Caller {
     e.item.length()
   }
 }

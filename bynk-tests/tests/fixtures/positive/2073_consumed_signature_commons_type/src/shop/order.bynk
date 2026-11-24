@@ -9,7 +9,7 @@ exports transparent { Order }
 type Order = { id: String, region: Region }
 
 service place {
-  on call(id: String) -> Effect[Order] {
+  on call(id: String) -> Effect[Order] by Caller {
     Order { id: id, region: international() }
   }
 }

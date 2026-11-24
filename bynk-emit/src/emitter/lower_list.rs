@@ -4,6 +4,8 @@
 //! builder, and the pieces the sibling kernels will want (comparator binding,
 //! keyed-helper choice, key-function types) are plain functions here.
 
+mod basics;
+
 use bynk_check::checker::{Ty, TyId, Types};
 use bynk_check::kernel_op::ListOp;
 use bynk_ts::{TsBinaryOp, TsExpr, TsLit, TsParam, TsStmt, TsType, TsUnaryOp};
@@ -194,7 +196,7 @@ pub(super) fn lower_list_kernel(
         (ListOp::FoldEff, [init, f]) => Some(list_fold_eff(&a, init, f, p, cx)),
         (ListOp::ForEach, [f]) => Some(list_for_each(&a, f, p, cx)),
         (ListOp::ParTraverse, [f]) => Some(list_par_traverse(&a, f, p, cx)),
-        (ListOp::TraverseAll, [f]) => Some(list_traverse_all(&a, f, p, cx)),
+        (ListOp::TraverseAll | ListOp::Traverse, [f]) => Some(list_traverse_all(&a, f, p, cx)),
         (ListOp::ParTraverseAll, [f]) => Some(list_par_traverse_all(&a, f, p, cx)),
         (name @ (ListOp::SequenceAll | ListOp::SequenceTry), []) => {
             Some(list_sequence(&a, name, p, cx))
@@ -232,6 +234,18 @@ pub(super) fn lower_list_kernel(
         (ListOp::DistinctBy, [key]) => Some(list_distinct_by(&a, key, p, cx)),
         (ListOp::Sum, [key]) => Some(list_sum(&a, key, p, cx)),
         (ListOp::Min | ListOp::Max, [key]) => Some(list_min_max(&a, op, key, p, cx)),
+        (
+            ListOp::Reverse
+            | ListOp::Find
+            | ListOp::Contains
+            | ListOp::Last
+            | ListOp::LastOrElse
+            | ListOp::IsEmpty
+            | ListOp::Sort
+            | ListOp::Min
+            | ListOp::Max,
+            _,
+        ) => basics::lower_list_basic(&a, op, elem, p, cx),
         (ListOp::Average, [key]) => Some(list_average(&a, key, p, cx)),
         (ListOp::JoinOn, [other, left, right, into]) => {
             Some(list_join_on(&a, false, other, left, right, into, p, cx))
@@ -1083,6 +1097,18 @@ fn list_min_max(
     let recv = pre.lower_node(a.receiver, cx);
     let key = pre.lower_node(key, cx);
     let [recv, key] = take(vec![recv, key]);
+    min_max_node(a, cmp_op, key_cmp, recv, key)
+}
+
+/// The `min`/`max` scan over lowered operands: `key_cmp` is the key's comparator
+/// when it is not plain, `cmp_op` the operator that prefers the new key.
+fn min_max_node(
+    a: &ListArm,
+    cmp_op: TsBinaryOp,
+    key_cmp: Option<TsExpr>,
+    recv: TsExpr,
+    key: TsExpr,
+) -> TsExpr {
     {
         {
             // The kernel over `__xs`, ordering by `better(__k, __m)`.

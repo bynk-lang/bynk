@@ -8,7 +8,7 @@ capability Main = Postgres
 type Order = { id: Int }
 
 service probe {
-  on call(tail: String) -> Effect[Result[List[Order], PgReadError]] given Main {
+  on call(tail: String) -> Effect[Result[List[Order], PgReadError]] by Caller given Main {
     Main.select[Order](tail, [])
   }
 }

@@ -3,14 +3,14 @@
 // effects are read back over the wire in the same case.
 suite cr.jobs as system {
 	case "the sweeper runs, then the count is read over the wire" {
-		let r <- sweeper.schedule("*/5 * * * *", 960000)
+		let r <- sweeper.schedule("*/5 * * * *", Instant.fromEpochMillis(960000))
 		expect r is Ok(_)
 		let c <- api.GET("/count") by Visitor
 		expect c is Ok(1)
 	}
 
 	case "the sweeper's own Err is what the address yields" {
-		let r <- sweeper.schedule("*/5 * * * *", -1)
+		let r <- sweeper.schedule("*/5 * * * *", Instant.fromEpochMillis(-1))
 		expect r is Err("the scheduled time is before the epoch")
 		let c <- api.GET("/count") by Visitor
 		expect c is Ok(0)
@@ -46,7 +46,7 @@ suite cr.jobs as system {
 	// A cron handler that faults fails the case, as it does at `unit`: the
 	// platform only logs the failure, so there is no `Result` to yield.
 	case "a cron handler that faults fails the case" {
-		let r <- sweeper.schedule("0 * * * *", 0)
+		let r <- sweeper.schedule("0 * * * *", Instant.fromEpochMillis(0))
 		expect r is Ok(_)
 	}
 }

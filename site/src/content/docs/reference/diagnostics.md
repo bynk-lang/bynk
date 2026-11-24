@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **900** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **901** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -27,6 +27,7 @@ There are **900** codes in total. Every code is an error unless it is marked **W
 - [`bynk.actor.foreign_reserved_secret`](/reference/diagnostics/bynk.actor.foreign_reserved_secret/) — A `Foreign` actor's secret uses a `BYNK_CALL_` edge key's name.
 - [`bynk.actor.foreign_secret_not_string`](/reference/diagnostics/bynk.actor.foreign_secret_not_string/) — A `Foreign` actor's secret is not a string.
 - [`bynk.actor.identity_not_sealed`](/reference/diagnostics/bynk.actor.identity_not_sealed/) — An actor identity type is not a context-ownable (sealed) value type.
+- [`bynk.actor.missing_by_on_call`](/reference/diagnostics/bynk.actor.missing_by_on_call/) — An `on call` handler lacks the required `by` actor clause.
 - [`bynk.actor.missing_by_on_http`](/reference/diagnostics/bynk.actor.missing_by_on_http/) — An HTTP handler lacks the required `by` actor clause.
 - [`bynk.actor.oidc_identity_not_string_constructible`](/reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/) — An `Oidc` actor's identity is not a string-constructible type.
 - [`bynk.actor.oidc_missing_audience`](/reference/diagnostics/bynk.actor.oidc_missing_audience/) — An `Oidc` actor does not name its `audience`.
@@ -516,7 +517,7 @@ There are **900** codes in total. Every code is an error unless it is marked **W
 - [`bynk.json.encode_plain_generic`](/reference/diagnostics/bynk.json.encode_plain_generic/) — `Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type.
 - [`bynk.json.nested_option_plain`](/reference/diagnostics/bynk.json.nested_option_plain/) — A plain-JSON route's response type, or the argument of `Json.encodePlain`, contains an `Option[U]` whose payload `U` can itself encode as `null` (`Option[T]` or `()`), so `Some(U)` and `None` would both be written `null`.
 - [`bynk.lambda.unannotated_param`](/reference/diagnostics/bynk.lambda.unannotated_param/) — A lambda parameter has no type annotation in a position where no function type is expected to infer it from.
-- [`bynk.list.deprecated_function`](/reference/diagnostics/bynk.list.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.list` free function (`map`/`filter`/`find`/`any`/`all`) is deprecated in favour of the `List` method form (warning; auto-fixable).
+- [`bynk.list.deprecated_function`](/reference/diagnostics/bynk.list.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).
 - [`bynk.locale.multiple_message_bundles`](/reference/diagnostics/bynk.locale.multiple_message_bundles/) — A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.
 - [`bynk.mysql.sql_invalid`](/reference/diagnostics/bynk.mysql.sql_invalid/) — <span class="diagnostic-severity">Warning</span> A literal `MySql` statement does not parse with the MySQL dialect of a pure-Rust SQL parser, or is more than one command, in a project that has a `schema.sql` (warning: the parser is not MySQL's own, so it may refuse valid SQL).
 - [`bynk.mysql.sql_param_count`](/reference/diagnostics/bynk.mysql.sql_param_count/) — A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`.

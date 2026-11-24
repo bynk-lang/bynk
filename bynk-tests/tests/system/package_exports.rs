@@ -12,7 +12,7 @@ const MANIFEST: &str = "[package]\nname = \"acme/money\"\nversion = \"1.4.0\"\ne
 
 const COMMONS: &str = "commons money {\n\tfn dbl(n: Int) -> Int { n + n }\n}\n";
 const CURRENCY: &str = "commons currency {\n\tfn one() -> Int { 1 }\n}\n";
-const CONTEXT: &str = "context shop.checkout\n\nservice probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
+const CONTEXT: &str = "context shop.checkout\n\nservice probe {\n\ton call() -> Effect[Int] by Caller {\n\t\tEffect.pure(1)\n\t}\n}\n";
 
 /// The `exports` diagnostics, as `(code, entry)`.
 fn exports(found: impl IntoIterator<Item = (String, String)>) -> BTreeSet<(String, String)> {

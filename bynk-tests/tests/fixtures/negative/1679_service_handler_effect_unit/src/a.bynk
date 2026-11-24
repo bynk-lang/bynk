@@ -2,7 +2,7 @@ context a
 
 // #1679: Bynk's unit type is `()`; `Unit` is an unknown name.
 service s {
-  on call(v: Int) -> Effect[Unit] {
+  on call(v: Int) -> Effect[Unit] by Caller {
     Effect.pure(())
   }
 }

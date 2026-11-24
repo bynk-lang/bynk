@@ -4,7 +4,7 @@ uses t.model
 consumes t.vault as Vault
 
 service ping {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- Vault.open()
     Effect.pure(b.n)
   }

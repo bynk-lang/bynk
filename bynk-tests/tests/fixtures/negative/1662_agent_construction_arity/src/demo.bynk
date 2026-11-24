@@ -11,7 +11,7 @@ agent Counter {
 }
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let v <- Counter("a", "b").get()
     v
   }

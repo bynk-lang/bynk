@@ -8,7 +8,7 @@ capability Orders = D1
 type Order = { id: String, qty: Int }
 
 service probe {
-  on call(tail: String) -> Effect[Bool] given Orders {
+  on call(tail: String) -> Effect[Bool] by Caller given Orders {
     let a <- Orders.select[Order](tail, [])
     let b <- Orders.firstAs[Order]("FROM orders \(tail)", [])
     a is Ok(_) && b is Ok(_)

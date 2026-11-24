@@ -15,7 +15,7 @@ fn unitCircle() -> Shape {
 }
 
 service shapes {
-  on call() -> Effect[Shape] {
+  on call() -> Effect[Shape] by Caller {
     Effect.pure(Square(2.0))
   }
 }

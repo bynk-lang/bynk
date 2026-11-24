@@ -6,7 +6,7 @@ status in KV, and serves the latest result over HTTP. It puts **cron**, **`Fetch
 
 What it shows:
 
-- **A cron entry point** — `service checks from cron { on schedule("*/5 * * * *") (at: Int) … }`.
+- **A cron entry point** — `service checks from cron { on schedule("*/5 * * * *") (at: Instant) … }`.
   Cron has no ambient clock, so the schedule-aligned instant arrives as the `at`
   parameter (epoch-ms).
 - **Outbound HTTP** — `Fetch.send(Request { method: Get, … })` returns a

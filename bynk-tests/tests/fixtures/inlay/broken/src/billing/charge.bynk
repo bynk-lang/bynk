@@ -21,7 +21,7 @@ fn good(n: Int) -> Int {
 }
 
 service charge {
-  on call(cents: Int) -> Effect[Result[Int, ()]] given Clock {
+  on call(cents: Int) -> Effect[Result[Int, ()]] by Caller given Clock {
     let stamp <- Clock.now()
     Ok(cents + stamp)
   }

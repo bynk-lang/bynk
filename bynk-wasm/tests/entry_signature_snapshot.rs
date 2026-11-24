@@ -38,25 +38,25 @@ type L6 = { f: L7 }
 type L7 = { g: Int }
 
 service zeta {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     ()
   }
 }
 
 service bases {
-  on call(i: Int, s: String, b: Bool, f: Float, d: Duration, t: Instant, y: Bytes, m: Decimal) -> Effect[Int] {
+  on call(i: Int, s: String, b: Bool, f: Float, d: Duration, t: Instant, y: Bytes, m: Decimal) -> Effect[Int] by Caller {
     i
   }
 }
 
 service named {
-  on call(tag: Slug, tok: Token, p: Point, sh: Shape, node: Node, deep: L1, boxed: Box[Int]) -> Effect[String] {
+  on call(tag: Slug, tok: Token, p: Point, sh: Shape, node: Node, deep: L1, boxed: Box[Int]) -> Effect[String] by Caller {
     "ok"
   }
 }
 
 service collections {
-  on call(l: List[Point], st: Set[Int], o: Option[String], mp: Map[String, Int], r: Result[Int, String], u: ()) -> Effect[Result[(), String]] {
+  on call(l: List[Point], st: Set[Int], o: Option[String], mp: Map[String, Int], r: Result[Int, String], u: ()) -> Effect[Result[(), String]] by Caller {
     Ok(())
   }
 }

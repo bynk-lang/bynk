@@ -3,7 +3,7 @@ context shop
 uses lib.notify
 
 service api {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n)
   }
 }

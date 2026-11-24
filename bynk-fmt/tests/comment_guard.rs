@@ -161,10 +161,10 @@ fn keeps_a_comment_directly_under_a_doc_block() {
 fn keeps_comments_and_an_orphan_at_the_end_of_a_service() {
     expect_kept(
         "end of service",
-        "context c\n\nservice s {\n  on call() -> Effect[()] { Effect.pure(()) }\n\n  // keep me\n  ---\n  keep me too\n  ---\n}\n",
+        "context c\n\nservice s {\n  on call() -> Effect[()] by Caller { Effect.pure(()) }\n\n  // keep me\n  ---\n  keep me too\n  ---\n}\n",
     );
     let out = format_source(
-        "context c\n\nservice s {\n  on call() -> Effect[()] { Effect.pure(()) }\n\n  // keep me\n}\n",
+        "context c\n\nservice s {\n  on call() -> Effect[()] by Caller { Effect.pure(()) }\n\n  // keep me\n}\n",
         &FormatOptions::default(),
     )
     .unwrap();
@@ -321,7 +321,7 @@ fn keeps_a_comment_on_the_line_of_an_opening_brace() {
         ),
         (
             "service",
-            "context c\n\nservice s { // keep me\n  on call() -> Effect[()] { Effect.pure(()) }\n}\n"
+            "context c\n\nservice s { // keep me\n  on call() -> Effect[()] by Caller { Effect.pure(()) }\n}\n"
                 .to_string(),
         ),
         (
@@ -351,7 +351,7 @@ fn keeps_a_comment_on_the_line_of_an_opening_brace() {
         ),
         (
             "doc block after the brace",
-            "context c\n\nservice s { // keep me\n  ---\n  doc\n  ---\n  on call() -> Effect[()] { Effect.pure(()) }\n}\n"
+            "context c\n\nservice s { // keep me\n  ---\n  doc\n  ---\n  on call() -> Effect[()] by Caller { Effect.pure(()) }\n}\n"
                 .to_string(),
         ),
         (

@@ -7,7 +7,7 @@ capability Pricing {
 }
 
 service shop {
-    on call(id: Int) -> Effect[Int] given Pricing {
+    on call(id: Int) -> Effect[Int] by Caller given Pricing {
         let r <- Pricing.quote(id).within(2.seconds)
         Effect.pure(1)
     }

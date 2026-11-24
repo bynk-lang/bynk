@@ -12,7 +12,7 @@ type Order = { id: String, total: Int, note: Option[String] }
 // column, are not.
 // The alias hides `total`: reported, through a `match`.
 service viaMatch {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let rows <- Orders.all("SELECT id, total AS amount FROM orders", [])
     match rows {
       Ok(text) => Json.decodeSql[List[Order]](text) is Ok(_)
@@ -23,7 +23,7 @@ service viaMatch {
 
 // The same through `first` and `Ok(Some(…))`.
 service viaFirst {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let row <- Orders.first("SELECT id, total AS amount FROM orders", [])
     match row {
       Ok(Some(text)) => Json.decodeSql[Order](text) is Ok(_)
@@ -34,7 +34,7 @@ service viaFirst {
 
 // And through `let … else`.
 service viaLetElse {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let Ok(text) <- Orders.all("SELECT id FROM orders", []) else {
       false
     }
@@ -48,7 +48,7 @@ service viaLetElse {
 // Clean: every required field has a column (an extra one and a missing
 // `Option` column are fine), and a name the check can't follow is left alone.
 service clean {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let rows <- Orders.all("SELECT id, total, 1 AS extra FROM orders", [])
     match rows {
       Ok(text) => Json.decodeSql[List[Order]](text) is Ok(_)

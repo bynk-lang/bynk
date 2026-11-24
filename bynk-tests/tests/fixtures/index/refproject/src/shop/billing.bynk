@@ -22,7 +22,7 @@ fn fee(m: Money) -> Int {
 }
 
 service bill {
-  on call(amount: Int) -> Effect[Result[Receipt, ()]] given Pay {
+  on call(amount: Int) -> Effect[Result[Receipt, ()]] by Caller given Pay {
     let c <- Pay.charge(amount)
     Ok(Receipt { total: c })
   }

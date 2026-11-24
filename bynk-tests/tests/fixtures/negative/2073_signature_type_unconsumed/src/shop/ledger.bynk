@@ -5,19 +5,19 @@ context shop.ledger
 consumes shop.order
 
 service domestic {
-  on call(id: String) -> Effect[Order] {
+  on call(id: String) -> Effect[Order] by Caller {
     Order { id: id, region: Region.Domestic }
   }
 }
 
 service isDomestic {
-  on call(o: Order) -> Effect[Bool] {
+  on call(o: Order) -> Effect[Bool] by Caller {
     o.region == Region.Domestic
   }
 }
 
 service isHome {
-  on call(r: Region) -> Effect[Bool] {
+  on call(r: Region) -> Effect[Bool] by Caller {
     r == Region.Domestic
   }
 }

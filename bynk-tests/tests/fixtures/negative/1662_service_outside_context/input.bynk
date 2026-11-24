@@ -2,7 +2,7 @@ commons demo
 
 // #1662: a service in a commons.
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

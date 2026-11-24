@@ -13,8 +13,8 @@ const MANIFEST_ONE_GROUP: &str =
     "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.payment\"]\nname = \"acme-core\"\n";
 
 const COMMONS: &str = "commons money {\n\tfn dbl(n: Int) -> Int { n + n }\n}\n";
-const ORDERS: &str = "context shop.orders\n\nservice orders_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n";
-const PAYMENT: &str = "context shop.payment\n\nservice payment_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(2)\n\t}\n}\n";
+const ORDERS: &str = "context shop.orders\n\nservice orders_probe {\n\ton call() -> Effect[Int] by Caller {\n\t\tEffect.pure(1)\n\t}\n}\n";
+const PAYMENT: &str = "context shop.payment\n\nservice payment_probe {\n\ton call() -> Effect[Int] by Caller {\n\t\tEffect.pure(2)\n\t}\n}\n";
 
 fn check(root: &std::path::Path) -> (bool, String) {
     run(root, &["check", "--format", "short"])
@@ -123,7 +123,7 @@ const WORKERS_TARGET: &str = "[unstable]\nallow = [\"bynk.cloudflare.R2\"]\n\n[b
 fn archive_context(name: &str, options: &str) -> String {
     let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nconsumes bynk.cloudflare {{ R2 }}\n\ncapability Archives = R2{options}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nconsumes bynk.cloudflare {{ R2 }}\n\ncapability Archives = R2{options}\n\nservice {service} {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -173,7 +173,7 @@ fn members_with_different_bindings_under_one_name_collide() {
 fn agent_context(name: &str) -> String {
     let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nagent Cart {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nagent Cart {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice {service} {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -211,7 +211,7 @@ fn members_that_each_declare_an_agent_of_one_name_collide() {
 fn plain_context(name: &str) -> String {
     let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nservice {service} {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -263,7 +263,7 @@ fn members_that_each_declare_a_service_of_one_name_collide() {
     write_project(&root, WORKERS_TARGET);
     let same = |name: &str| {
         format!(
-            "context {name}\n\nservice probe {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+            "context {name}\n\nservice probe {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
         )
     };
     fs::write(root.join("src/shop/orders.bynk"), same("shop.orders")).unwrap();
@@ -286,7 +286,7 @@ fn members_that_each_declare_a_service_of_one_name_collide() {
 fn publisher_context(name: &str, event: &str) -> String {
     let service = format!("probe_{}", name.replace('.', "_"));
     format!(
-        "context {name}\n\nexports transparent {{ {event} }}\nconsumes bynk {{ Events }}\n\nevent {event} = {{\n\ttag: String,\n}}\n\nservice {service} {{\n\ton call() -> Effect[()] given Events {{\n\t\tlet _ <- Events.emit[{event}]({event} {{ tag: \"x\" }})\n\t\tEffect.pure(())\n\t}}\n}}\n"
+        "context {name}\n\nexports transparent {{ {event} }}\nconsumes bynk {{ Events }}\n\nevent {event} = {{\n\ttag: String,\n}}\n\nservice {service} {{\n\ton call() -> Effect[()] by Caller given Events {{\n\t\tlet _ <- Events.emit[{event}]({event} {{ tag: \"x\" }})\n\t\tEffect.pure(())\n\t}}\n}}\n"
     )
 }
 
@@ -458,7 +458,7 @@ fn members_may_share_a_cron_expression() {
     write_project(&root, WORKERS_TARGET);
     let svc = |n: &str| {
         format!(
-            "service {n} from cron {{\n\ton schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {{\n\t\tEffect.pure(Ok(()))\n\t}}\n}}"
+            "service {n} from cron {{\n\ton schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {{\n\t\tEffect.pure(Ok(()))\n\t}}\n}}"
         )
     };
     fs::write(
@@ -569,7 +569,7 @@ fn a_group_with_two_websocket_members_is_refused() {
 
 fn service_context(name: &str, service: &str) -> String {
     format!(
-        "context {name}\n\nservice {service} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+        "context {name}\n\nservice {service} {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
     )
 }
 
@@ -642,7 +642,7 @@ fn asset_context(name: &str, assets: &[(&str, &str, &str)]) -> String {
         .map(|(asset, file, at)| format!("asset {asset} = \"{file}\" at \"{at}\"\n"))
         .collect();
     format!(
-        "context {name}\n\n{declarations}\nservice probe_{} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n",
+        "context {name}\n\n{declarations}\nservice probe_{} {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n",
         name.replace('.', "_")
     )
 }
@@ -789,7 +789,7 @@ fn a_members_fixed_asset_shadows_another_members_literal_route() {
     .unwrap();
     fs::write(
         root.join("src/shop/orders.bynk"),
-        "context shop.orders\n\nuses shop.shared\n\nservice orders_probe {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n",
+        "context shop.orders\n\nuses shop.shared\n\nservice orders_probe {\n\ton call() -> Effect[Int] by Caller {\n\t\tEffect.pure(1)\n\t}\n}\n",
     )
     .unwrap();
     fs::write(
@@ -839,11 +839,11 @@ fn a_members_fixed_asset_shadows_another_members_literal_route() {
 fn calling_context(name: &str, callee: Option<&str>, service: &str) -> String {
     match callee {
         Some(callee) => format!(
-            "context {name}\n\nconsumes {callee}\n\nservice {service} {{\n\ton call(n: Int) -> Effect[Int] {{\n\t\tlet r <- {callee}.to_{}(n)\n\t\tEffect.pure(r)\n\t}}\n}}\n",
+            "context {name}\n\nconsumes {callee}\n\nservice {service} {{\n\ton call(n: Int) -> Effect[Int] by Caller {{\n\t\tlet r <- {callee}.to_{}(n)\n\t\tEffect.pure(r)\n\t}}\n}}\n",
             callee.rsplit('.').next().unwrap()
         ),
         None => format!(
-            "context {name}\n\nservice {service} {{\n\ton call(n: Int) -> Effect[Int] {{\n\t\tEffect.pure(n)\n\t}}\n}}\n"
+            "context {name}\n\nservice {service} {{\n\ton call(n: Int) -> Effect[Int] by Caller {{\n\t\tEffect.pure(n)\n\t}}\n}}\n"
         ),
     }
 }
@@ -941,7 +941,7 @@ fn a_group_has_one_contracts_manifest_for_its_members() {
     // `a1` calls its member `a2` and the outside `b1`; `a2` provides one service.
     fs::write(
         root.join("src/shop/a1.bynk"),
-        "context shop.a1\n\nconsumes shop.a2\nconsumes shop.b1\n\nservice to_a1 {\n\ton call(n: Int) -> Effect[Int] {\n\t\tlet x <- shop.a2.to_a2(n)\n\t\tlet y <- shop.b1.to_b1(x)\n\t\tEffect.pure(y)\n\t}\n}\n",
+        "context shop.a1\n\nconsumes shop.a2\nconsumes shop.b1\n\nservice to_a1 {\n\ton call(n: Int) -> Effect[Int] by Caller {\n\t\tlet x <- shop.a2.to_a2(n)\n\t\tlet y <- shop.b1.to_b1(x)\n\t\tEffect.pure(y)\n\t}\n}\n",
     )
     .unwrap();
     fs::write(
@@ -1000,7 +1000,7 @@ fn deploy_treats_a_group_as_one_worker() {
     // `a1` calls its member `a2` (the group binding to itself) and the outside `pay`.
     fs::write(
         root.join("src/shop/a1.bynk"),
-        "context shop.a1\n\nconsumes shop.a2\nconsumes shop.pay\n\nservice to_a1 {\n\ton call(n: Int) -> Effect[Int] {\n\t\tlet x <- shop.a2.to_a2(n)\n\t\tlet y <- shop.pay.to_pay(x)\n\t\tEffect.pure(y)\n\t}\n}\n",
+        "context shop.a1\n\nconsumes shop.a2\nconsumes shop.pay\n\nservice to_a1 {\n\ton call(n: Int) -> Effect[Int] by Caller {\n\t\tlet x <- shop.a2.to_a2(n)\n\t\tlet y <- shop.pay.to_pay(x)\n\t\tEffect.pure(y)\n\t}\n}\n",
     )
     .unwrap();
     fs::write(

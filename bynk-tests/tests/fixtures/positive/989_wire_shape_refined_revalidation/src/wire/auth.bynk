@@ -31,7 +31,7 @@ service login {
   ---
   Mint a session for a seed. The single cross-context entry point.
   ---
-  on call(seed: String) -> Effect[Result[Session, LoginError]] {
+  on call(seed: String) -> Effect[Result[Session, LoginError]] by Caller {
     match ClientId.of(seed) {
       Ok(c) => Ok(Session { client: c, auth: AuthId.unsafe(seed) })
       Err(_) => Err(Invalid)

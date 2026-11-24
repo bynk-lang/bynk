@@ -1,97 +1,82 @@
 commons bynk.list {
 	---
-	Returns the elements of `xs` in reverse order.
+	Deprecated: use `xs.reverse()`. Returns the elements of `xs` in reverse order.
 	---
 	fn reverse[A](xs: List[A]) -> List[A] {
-		let init: List[A] = List.empty()
-		xs.fold(init, (acc, x) => acc.prepend(x))
+		xs.reverse()
 	}
 
 	---
-	Applies `f` to each element of `xs`, returning the results in the same order.
+	Deprecated: use `xs.map(f)`. Applies `f` to each element of `xs`, returning the
+	results in the same order.
 	---
 	fn map[A, B](xs: List[A], f: A -> B) -> List[B] {
-		let init: List[B] = List.empty()
-		reverse(xs.fold(init, (acc, x) => acc.prepend(f(x))))
+		xs.map(f)
 	}
 
 	---
-	Returns the elements of `xs` that satisfy the predicate `p`, in order.
+	Deprecated: use `xs.filter(p)`. Returns the elements of `xs` that satisfy the
+	predicate `p`, in order.
 	---
 	fn filter[A](xs: List[A], p: A -> Bool) -> List[A] {
-		let init: List[A] = List.empty()
-		reverse(xs.fold(init, (acc, x) => if p(x) { acc.prepend(x) } else { acc }))
+		xs.filter(p)
 	}
 
 	---
-	Returns the first element of `xs` satisfying `p`, or `None` if none does.
+	Deprecated: use `xs.find(p)`. Returns the first element of `xs` satisfying `p`,
+	or `None` if none does.
 	---
 	fn find[A](xs: List[A], p: A -> Bool) -> Option[A] {
-		let init: Option[A] = None
-		xs.fold(init, (acc, x) => match acc {
-			Some(v) => Some(v),
-			None => if p(x) { Some(x) } else { None },
-		})
+		xs.find(p)
 	}
 
 	---
-	True if at least one element of `xs` satisfies `p`; false for an empty list.
+	Deprecated: use `xs.any(p)`. True if at least one element of `xs` satisfies
+	`p`; false for an empty list.
 	---
 	fn any[A](xs: List[A], p: A -> Bool) -> Bool {
-		match find(xs, p) {
-			Some(v) => true,
-			None => false,
-		}
+		xs.any(p)
 	}
 
 	---
-	True if every element of `xs` satisfies `p`; true for an empty list.
+	Deprecated: use `xs.all(p)`. True if every element of `xs` satisfies `p`; true
+	for an empty list.
 	---
 	fn all[A](xs: List[A], p: A -> Bool) -> Bool {
-		let init: Option[A] = None
-		let failed = xs.fold(init, (acc, x) => match acc {
-			Some(v) => Some(v),
-			None => if p(x) { None } else { Some(x) },
-		})
-		match failed {
-			Some(v) => false,
-			None => true,
-		}
+		xs.all(p)
 	}
 
 	---
-	Runs the effectful `f` over each element of `xs` in order, collecting the
-	results into a single `Effect` that yields the list of outputs.
+	Deprecated: use `xs.traverse(f)`. Runs the effectful `f` over each element of
+	`xs` in order, collecting the results into a single `Effect` that yields the
+	list of outputs.
 	---
 	fn traverse[A, B](xs: List[A], f: A -> Effect[B]) -> Effect[List[B]] {
-		let init: List[B] = List.empty()
-		let rev <- xs.foldEff(init, (acc, x) => {
-			let y <- f(x)
-			Effect.pure(acc.prepend(y))
-		})
-		Effect.pure(reverse(rev))
+		xs.traverse(f)
 	}
 
 	---
-	Returns the elements of `xs` in ascending order. The sort is stable, and the
-	order is the type's own: `Float` puts `NaN` last, a type that `derives Ord`
-	orders by declaration order.
+	Deprecated: use `xs.sort()`. Returns the elements of `xs` in ascending order.
+	The sort is stable, and the order is the type's own: `Float` puts `NaN` last, a
+	type that `derives Ord` orders by declaration order.
 	---
 	fn sort[T: Ord](xs: List[T]) -> List[T] {
-		xs.sortBy((x) => x)
+		xs.sort()
 	}
 
 	---
-	Returns the smallest element of `xs`, or `None` for an empty list.
+	Deprecated: use `xs.min()`. Returns the smallest element of `xs`, or `None`
+	for an empty list.
 	---
 	fn min[T: Ord](xs: List[T]) -> Option[T] {
-		xs.min((x) => x)
+		xs.min()
 	}
 
 	---
-	Returns the largest element of `xs`, or `None` for an empty list.
+	Deprecated: use `xs.max()`. Returns the largest element of `xs`, or `None` for
+	an empty list.
 	---
 	fn max[T: Ord](xs: List[T]) -> Option[T] {
-		xs.max((x) => x)
+		xs.max()
 	}
 }

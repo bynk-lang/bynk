@@ -23,7 +23,7 @@ service enter {
   it is reached only inside the generated
   `deserialise_Result_Session_LoginError`.
   ---
-  on call(seed: String) -> Effect[Result[(), GatewayError]] {
+  on call(seed: String) -> Effect[Result[(), GatewayError]] by Caller {
     let s <- Auth.login(seed)
     match s {
       Ok(_) => Ok(())

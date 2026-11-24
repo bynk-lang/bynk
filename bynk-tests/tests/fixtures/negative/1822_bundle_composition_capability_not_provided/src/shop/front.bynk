@@ -1,7 +1,7 @@
 context shop.front
 consumes shop.stock as Stock
 service front {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		Stock.count()
 	}
 }

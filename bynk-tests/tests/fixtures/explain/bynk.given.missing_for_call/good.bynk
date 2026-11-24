@@ -13,7 +13,7 @@ fn warn(what: String) -> Effect[()] given Logger {
 }
 
 service api {
-  on call(sku: String) -> Effect[()] given Logger {
+  on call(sku: String) -> Effect[()] by Caller given Logger {
     warn(sku)
   }
 }

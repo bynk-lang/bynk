@@ -12,7 +12,7 @@ provides Logger = ConsoleLogger {
 }
 
 service hello {
-  on call() -> Effect[()] given Logger {
+  on call() -> Effect[()] by Caller given Logger {
     Effect.pure(())
   }
 }

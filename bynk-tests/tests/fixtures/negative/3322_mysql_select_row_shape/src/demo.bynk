@@ -8,7 +8,7 @@ capability Legacy = MySql
 type Placed = { id: Int, at: Instant }
 
 service probe {
-  on call() -> Effect[Bool] given Legacy {
+  on call() -> Effect[Bool] by Caller given Legacy {
     let d <- Legacy.firstAs[Placed]("FROM orders", [])
     d is Ok(_)
   }

@@ -6,7 +6,7 @@ context shop.claims
 consumes bynk { Logger, Claim }
 
 service probe {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		n
 	}
 }

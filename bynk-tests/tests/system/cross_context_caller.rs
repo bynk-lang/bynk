@@ -94,7 +94,7 @@ const SOURCE_A: &str = r#"context app.a
 consumes app.b as B
 
 service ask {
-  on call(ping: String) -> Effect[Result[String, String]] {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
     let r <- B.whoami(ping)
     r
   }
@@ -109,7 +109,7 @@ const SOURCE_D: &str = r#"context app.d
 consumes app.b as B
 
 service probe {
-  on call(ping: String) -> Effect[Result[String, String]] {
+  on call(ping: String) -> Effect[Result[String, String]] by Caller {
     let r <- B.whoami(ping)
     r
   }
@@ -270,7 +270,7 @@ type Ticket = {
 }
 
 service issue {
-  on call(seat: Int) -> Effect[Result[Ticket, String]] {
+  on call(seat: Int) -> Effect[Result[Ticket, String]] by Caller {
     Ok(Ticket { seat: seat, label: "vip" })
   }
 }
@@ -281,7 +281,7 @@ const SOURCE_CODEC_A: &str = r#"context app.a
 consumes app.b as B
 
 service forward {
-  on call(seat: Int) -> Effect[Result[Int, String]] {
+  on call(seat: Int) -> Effect[Result[Int, String]] by Caller {
     let r <- B.issue(seat)
     match r {
       Ok(t)  => Ok(t.seat)

@@ -16,7 +16,7 @@ provides Directory = RealDirectory {
 }
 
 service lookup {
-  on call(key: String) -> Effect[String] given Directory {
+  on call(key: String) -> Effect[String] by Caller given Directory {
     let t <- Directory.find(key)
     t.label()
   }

@@ -53,10 +53,13 @@ meanings: [§6.3](#63-refinement-predicates)). A refined type is a **distinct
 named type**: it does not interchange with its base or with another refined type
 over the same base. Values enter it by admission ([§6.4](#64-admission--construction)).
 
-A `type` alias with no `where` clause — for example `type Id = Int` — is the
-degenerate refined type: a distinct named type over its base, carrying the same
-`.of` constructor and compile-time literal admission, but admitting every value
-of the base.
+A **named type** — a `type` with no `where` clause, for example `type Id = Int` —
+is the degenerate refined type: a distinct named type over its base (not a
+transparent alias), carrying the same `.of` constructor and compile-time literal
+admission, but admitting every value of the base. With no predicate (annotations
+alone are not predicates) and no implicit base check, `.of` is total and returns
+the type itself, not a `Result`; a `Float` named type is the exception, since
+its finite-number check (ADR 0040) keeps `.of` fallible.
 
 ### §6.1.3 Opaque types
 
@@ -156,7 +159,7 @@ surface.
   new list, none mutates. Kernel operations and the eager method vocabulary
   (`map`/`filter`/`flatMap`/`sortBy`/`sortByDescending`/… builders, `count`/`sum`/`first`/…
   terminals; v0.88, ADR 0116): [§5.10](/reference/spec/static-semantics/#510-collections).
-  The predecessor `bynk.list` free functions whose method forms now exist are
+  The predecessor `bynk.list` free functions (each now has a method form) are
   **deprecated** (`bynk.list.deprecated_function`, v0.91) — they still work.
 - **`Map[K, V]`** (v0.20b) — an **immutable**, insertion-ordered key→value
   map, constructed by `Map.empty()` and grown with `insert`; updating an
@@ -339,7 +342,7 @@ the generic function's own body.
 ## §6.5 Type compatibility & boundaries
 
 **Within a context, type identity is nominal.** Two named types — refined,
-opaque, or alias — are distinct even over the same base; an opaque type is
+opaque, or named type — are distinct even over the same base; an opaque type is
 distinct from and hides its base. A value of one named type is not
 interchangeable with another, nor with the bare base.
 

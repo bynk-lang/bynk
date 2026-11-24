@@ -54,7 +54,7 @@ A handler — a service operation, an agent handler, or another provider — lis
 the capabilities it needs in a **`given`** clause, and may then call them:
 
 ```bynk,fragment
-on call() -> Effect[String] given Logger {
+on call() -> Effect[String] by Caller given Logger {
   let _ <- Logger.info("hi")
   "ok"
 }
@@ -77,7 +77,7 @@ When an effect is run only for its side effect — a log line, a durable write �
 its result is `()`, and binding it to `_` is noise. Write **`do e`** instead:
 
 ```bynk,fragment
-on call() -> Effect[()] given Logger {
+on call() -> Effect[()] by Caller given Logger {
   do Logger.info("hi")
 }
 ```
@@ -128,7 +128,7 @@ provides Logger = ConsoleLogger {
 }
 
 service hello {
-	on call() -> Effect[String] given Logger {
+	on call() -> Effect[String] by Caller given Logger {
 		let _ <- Logger.info("hi")
 		"ok"
 	}

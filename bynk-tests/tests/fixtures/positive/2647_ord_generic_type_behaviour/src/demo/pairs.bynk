@@ -5,7 +5,6 @@ are, and its comparator is built per instantiation: `Entry[Int, String]` and
 ---
 commons demo.pairs
 
-uses bynk.list
 
 type Entry[K, V] = { key: K, value: V } derives Ord
 
@@ -14,12 +13,12 @@ type Maybe[T] =
   | Present(item: T)
   derives Ord
 
-fn entriesByInt(xs: List[Entry[Int, String]]) -> List[Entry[Int, String]] { sort(xs) }
+fn entriesByInt(xs: List[Entry[Int, String]]) -> List[Entry[Int, String]] { xs.sort() }
 
-fn entriesByString(xs: List[Entry[String, Int]]) -> List[Entry[String, Int]] { sort(xs) }
+fn entriesByString(xs: List[Entry[String, Int]]) -> List[Entry[String, Int]] { xs.sort() }
 
-fn firstEntry[K: Ord, V: Ord](xs: List[Entry[K, V]]) -> Option[Entry[K, V]] { min(xs) }
+fn firstEntry[K: Ord, V: Ord](xs: List[Entry[K, V]]) -> Option[Entry[K, V]] { xs.min() }
 
-fn maybes(xs: List[Maybe[Int]]) -> List[Maybe[Int]] { sort(xs) }
+fn maybes(xs: List[Maybe[Int]]) -> List[Maybe[Int]] { xs.sort() }
 
-fn nested(xs: List[Entry[Maybe[Int], List[Int]]]) -> Option[Entry[Maybe[Int], List[Int]]] { max(xs) }
+fn nested(xs: List[Entry[Maybe[Int], List[Int]]]) -> Option[Entry[Maybe[Int], List[Int]]] { xs.max() }

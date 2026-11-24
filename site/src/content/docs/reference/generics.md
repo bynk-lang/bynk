@@ -86,10 +86,8 @@ order each one has, is under
 ```bynk,fragment
 commons demo.ord
 
-uses bynk.list
-
 fn top[T: Ord](xs: List[T]) -> Option[T] {
-	max(xs)
+	xs.max()
 }
 
 fn clamp[T: Ord](x: T, lo: T, hi: T) -> T {
@@ -124,7 +122,8 @@ fn bigger[T](a: T, b: T) -> Bool {
 }
 ```
 
-`bynk.list` ships `sort`, `min` and `max` as `Ord`-bounded generics
+`List` has `sort()`, `min()` and `max()` for an `Ord` element type; they replace
+the deprecated `bynk.list` functions
 ([`bynk.list`](/reference/bynk-capabilities/#related-first-party-modules)).
 
 ### Ord at run time
@@ -281,8 +280,6 @@ type's parameters, then its own, so a bounded type can offer the only way in:
 
 ```bynk
 commons demo.constructors
-
-uses bynk.list
 
 type Box[T] = {
 	value: T,

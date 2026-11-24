@@ -8,7 +8,7 @@ capability Orders = D1
 type Order = { id: String, qty: Int }
 
 service probe {
-  on call() -> Effect[Bool] given Orders {
+  on call() -> Effect[Bool] by Caller given Orders {
     let a <- Orders.select[Order]("SELECT id, qty FROM orders", [])
     let b <- Orders.select[Order]("  select * FROM orders", [])
     let c <- Orders.firstAs[Order]("FROM orders", [])

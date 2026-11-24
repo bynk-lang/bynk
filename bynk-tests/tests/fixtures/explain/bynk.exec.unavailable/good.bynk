@@ -17,7 +17,7 @@ agent Counter {
 }
 
 service api {
-  on call() -> Effect[Bool] {
+  on call() -> Effect[Bool] by Caller {
     bounded(Effect.pure(1))
   }
 }

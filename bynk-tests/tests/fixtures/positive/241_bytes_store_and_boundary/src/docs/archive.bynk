@@ -24,7 +24,7 @@ agent Vault {
 }
 
 service intake {
-  on call(d: Doc) -> Effect[Result[Int, ()]] {
+  on call(d: Doc) -> Effect[Result[Int, ()]] by Caller {
     Ok(d.body.length())
   }
 }

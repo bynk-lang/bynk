@@ -4,7 +4,7 @@ uses demo.types
 consumes bynk { Clock }
 
 service stamp {
-	on call(item: Item) -> Effect[Int] given Clock {
+	on call(item: Item) -> Effect[Int] by Caller given Clock {
 		let now <- Clock.now()
 		item.n
 	}

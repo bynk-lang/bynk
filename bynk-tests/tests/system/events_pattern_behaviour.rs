@@ -123,13 +123,13 @@ event Tick = {
 }
 
 service triggerDomestic {
-  on call(tag: String) -> Effect[()] given Events {
+  on call(tag: String) -> Effect[()] by Caller given Events {
     Events.emit[Tick](Tick { region: Region.Domestic, tag: tag })
   }
 }
 
 service triggerInternational {
-  on call(tag: String) -> Effect[()] given Events {
+  on call(tag: String) -> Effect[()] by Caller given Events {
     Events.emit[Tick](Tick { region: Region.International, tag: tag })
   }
 }

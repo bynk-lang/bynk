@@ -4,13 +4,13 @@ consumes lib { Code as LibCode }
 consumes bynk.crypto { Crypto, Digest as CryptoDigest }
 
 service echo {
-	on call(c: LibCode) -> Effect[LibCode] {
+	on call(c: LibCode) -> Effect[LibCode] by Caller {
 		Effect.pure(c)
 	}
 }
 
 service hashing {
-	on call(token: String) -> Effect[String] given Crypto {
+	on call(token: String) -> Effect[String] by Caller given Crypto {
 		let h <- Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(token))
 		Effect.pure(h.toHex())
 	}

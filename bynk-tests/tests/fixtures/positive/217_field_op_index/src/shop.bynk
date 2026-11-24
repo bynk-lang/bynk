@@ -18,7 +18,7 @@ fn relabel(m: Money) -> Money {
 }
 
 service api {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let t <- Clock.now()
     Effect.pure(t)
   }

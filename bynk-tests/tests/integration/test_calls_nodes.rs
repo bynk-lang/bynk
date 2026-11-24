@@ -465,7 +465,7 @@ fn a_system_cron_or_queue_address_drives_its_driver() {
             "tests/jobs_system.bynk",
             r#"suite cr.jobs as system {
 	case "a" {
-		let r <- sweeper.schedule("*/5 * * * *", 960000)
+		let r <- sweeper.schedule("*/5 * * * *", Instant.fromEpochMillis(960000))
 		let d <- deliveries.message(Delivery { id: "c" })
 	}
 }

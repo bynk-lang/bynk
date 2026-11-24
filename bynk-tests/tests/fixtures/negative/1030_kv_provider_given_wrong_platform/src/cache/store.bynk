@@ -13,7 +13,7 @@ provides Cache = LocalCache given bynk.cloudflare.Kv {
 }
 
 service store {
-  on call(key: String) -> Effect[Option[String]] given Cache {
+  on call(key: String) -> Effect[Option[String]] by Caller given Cache {
     Cache.get(key)
   }
 }

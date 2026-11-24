@@ -241,7 +241,7 @@ const PROVIDER_SRC: &str = r#"context billing
 type Quote = { amount: Int, currency: String }
 
 service Pricing {
-  on call(sku: String, qty: Int) -> Effect[Quote] {
+  on call(sku: String, qty: Int) -> Effect[Quote] by Caller {
     Quote { amount: qty * 100, currency: "USD" }
   }
 }
@@ -251,7 +251,7 @@ const CONSUMER_SRC: &str = r#"context storefront
 consumes billing
 
 service checkout {
-  on call(sku: String, qty: Int) -> Effect[Int] {
+  on call(sku: String, qty: Int) -> Effect[Int] by Caller {
     let q <- billing.Pricing(sku, qty)
     q.amount
   }

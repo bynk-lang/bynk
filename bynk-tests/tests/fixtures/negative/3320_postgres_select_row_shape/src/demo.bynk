@@ -12,7 +12,7 @@ type Placed = { id: Int, at: Instant, maybe: Option[Instant] }
 type Plain = { id: String }
 
 service probe {
-  on call() -> Effect[Bool] given Main {
+  on call() -> Effect[Bool] by Caller given Main {
     let a <- Main.select[Order]("FROM orders", [])
     let b <- Main.select[Timed]("FROM orders", [])
     let c <- Main.select[List[Plain]]("FROM orders", [])

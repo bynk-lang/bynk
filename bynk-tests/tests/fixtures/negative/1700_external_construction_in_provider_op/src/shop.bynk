@@ -15,7 +15,7 @@ provides Pricing = FixedPricing {
 }
 
 service probe {
-  on call() -> Effect[Int] given Pricing {
+  on call() -> Effect[Int] by Caller given Pricing {
     Pricing.floor()
   }
 }

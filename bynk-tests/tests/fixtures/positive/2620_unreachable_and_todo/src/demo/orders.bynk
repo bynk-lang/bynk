@@ -85,13 +85,13 @@ context demo.orders {
   }
 
   service labels {
-    on call(s: Status) -> Effect[String] {
+    on call(s: Status) -> Effect[String] by Caller {
       label(s)
     }
   }
 
   service guards {
-    on call(n: Int) -> Effect[Int] {
+    on call(n: Int) -> Effect[Int] by Caller {
       guard(n)
     }
   }
@@ -100,7 +100,7 @@ context demo.orders {
   The same faulting guard as a statement in an effectful body.
   ---
   service effectGuards {
-    on call(n: Int) -> Effect[Int] {
+    on call(n: Int) -> Effect[Int] by Caller {
       let _ = if n < 0 { unreachable("negative") }
       let doubled <- Effect.pure(n * 2)
       doubled
@@ -108,37 +108,37 @@ context demo.orders {
   }
 
   service picks {
-    on call(n: Int) -> Effect[Int] {
+    on call(n: Int) -> Effect[Int] by Caller {
       pickSecond(n) + pickFirst(n)
     }
   }
 
   service unwraps {
-    on call(o: Option[Int]) -> Effect[Int] {
+    on call(o: Option[Int]) -> Effect[Int] by Caller {
       unwrap(o)
     }
   }
 
   service firsts {
-    on call(s: Status) -> Effect[String] {
+    on call(s: Status) -> Effect[String] by Caller {
       firstArm(s)
     }
   }
 
   service lambdas {
-    on call(n: Int) -> Effect[String] {
+    on call(n: Int) -> Effect[String] by Caller {
       viaLambda(n)
     }
   }
 
   service halves {
-    on call(n: Int) -> Effect[Int] {
+    on call(n: Int) -> Effect[Int] by Caller {
       half(n)
     }
   }
 
   service refunds {
-    on call(s: Status) -> Effect[Result[Int, String]] {
+    on call(s: Status) -> Effect[Result[Int, String]] by Caller {
       refund(s)
     }
   }
@@ -161,7 +161,7 @@ context demo.orders {
   }
 
   service bumps {
-    on call(fail: Bool) -> Effect[Int] {
+    on call(fail: Bool) -> Effect[Int] by Caller {
       let ledger = Ledger("main")
       let n <- ledger.bump(fail)
       n
@@ -169,7 +169,7 @@ context demo.orders {
   }
 
   service reads {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
       let ledger = Ledger("main")
       let n <- ledger.read()
       n
@@ -180,7 +180,7 @@ context demo.orders {
   `<-` on a fault call: the effect position faults when it runs.
   ---
   service awaits {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
       let n: Int <- todo("awaiting")
       n
     }

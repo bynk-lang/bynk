@@ -7,14 +7,14 @@ consumes cyc.graph
 // (`client.rs`), from its own view of the type table; each must carry the
 // same `depth` parameter as the callee's.
 service relayDir {
-  on call(d: Dir) -> Effect[Dir] {
+  on call(d: Dir) -> Effect[Dir] by Caller {
     let r <- cyc.graph.dirs(d)
     Effect.pure(r)
   }
 }
 
 service relayExpr {
-  on call(e: Expr) -> Effect[Expr] {
+  on call(e: Expr) -> Effect[Expr] by Caller {
     let r <- cyc.graph.exprs(e)
     Effect.pure(r)
   }

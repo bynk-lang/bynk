@@ -17,25 +17,25 @@ type Order = {
 }
 
 service add {
-	on call(name: String) -> Effect[Result[PgRun, PgError]] given Main {
+	on call(name: String) -> Effect[Result[PgRun, PgError]] by Caller given Main {
 		Main.run("insert into orders (name) values ($1)", [PgText(name)])
 	}
 }
 
 service list {
-	on call() -> Effect[Result[String, PgError]] given Main {
+	on call() -> Effect[Result[String, PgError]] by Caller given Main {
 		Main.all("select id, name, qty from orders order by id", [])
 	}
 }
 
 service find {
-	on call(id: Int) -> Effect[Result[Option[Order], PgReadError]] given Main {
+	on call(id: Int) -> Effect[Result[Option[Order], PgReadError]] by Caller given Main {
 		Main.firstAs[Order]("FROM orders WHERE id = $1", [PgInteger(id)])
 	}
 }
 
 service rename {
-	on call(old: String, new: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+	on call(old: String, new: String) -> Effect[Result[List[PgRun], PgError]] by Caller given Main {
 		Main.transaction([
 			PgStatement { sql: "update orders set name = $1 where name = $2", params: [PgText(new), PgText(old)] },
 			PgStatement { sql: "insert into orders (name) values ($1)", params: [PgText(old)] },

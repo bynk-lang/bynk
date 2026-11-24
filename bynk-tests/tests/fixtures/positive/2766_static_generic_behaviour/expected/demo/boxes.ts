@@ -6,8 +6,6 @@ import { __bynkMapInsert } from "../__bynk_runtime/keys.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 
-import { sort } from "../bynk/list.js";
-
 /**
  * #2766: static methods on generic types. A static's generic parameters are the type's
  * own, then its own; they come from the arguments, then the expected type, or an
@@ -48,7 +46,7 @@ export const Sorted = {
     return { items: [] };
   },
   fromList<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Sorted<T> {
-    return { items: sort(xs, __cmp_T) };
+    return { items: [...xs].sort((__a: T, __b: T) => __cmp_T(((__v: T) => __v)(__a), ((__v: T) => __v)(__b))) };
   },
   rebuilt<T>(xs: readonly T[], __cmp_T: (a: T, b: T) => number): Sorted<T> {
     return Sorted.fromList(xs, __cmp_T);

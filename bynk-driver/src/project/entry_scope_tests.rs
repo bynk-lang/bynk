@@ -33,7 +33,7 @@ fn a_used_records_field_is_not_shadowed_by_a_local_type() {
         (
             "app/web.bynk",
             "context app.web\n\nuses lib.ids\n\ntype Id = String where NonEmpty\n\n\
-             service s {\n  on call(u: User) -> Effect[Int] { 1 }\n}\n",
+             service s {\n  on call(u: User) -> Effect[Int] by Caller { 1 }\n}\n",
         ),
     ]);
     assert_eq!(es.len(), 1);
@@ -60,7 +60,7 @@ fn a_field_two_uses_hops_away_resolves() {
         ),
         (
             "app/web.bynk",
-            "context app.web\n\nuses lib.b\n\nservice s {\n  on call(r: Rec) -> Effect[Int] { 1 }\n}\n",
+            "context app.web\n\nuses lib.b\n\nservice s {\n  on call(r: Rec) -> Effect[Int] by Caller { 1 }\n}\n",
         ),
     ]);
     assert_eq!(es.len(), 1);
@@ -86,7 +86,7 @@ fn a_sum_payload_from_a_used_unit_resolves() {
         ),
         (
             "app/web.bynk",
-            "context app.web\n\nuses lib.b\n\nservice s {\n  on call(e: Ev) -> Effect[Int] { 1 }\n}\n",
+            "context app.web\n\nuses lib.b\n\nservice s {\n  on call(e: Ev) -> Effect[Int] by Caller { 1 }\n}\n",
         ),
     ]);
     match &es[0].params[0].shape {

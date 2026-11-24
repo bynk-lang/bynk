@@ -13,7 +13,7 @@ fn warn(what: String) -> Effect[()] given Logger {
 }
 
 service local {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		n + 1
 	}
 }

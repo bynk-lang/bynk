@@ -1,7 +1,7 @@
 context shop.billing
 
 service lookup {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n + 1)
   }
 }

@@ -7,7 +7,7 @@ exports transparent { ApiError }
 type ApiError = enum { Failed }
 
 service tick {
-  on call(id: String) -> Effect[Result[Int, ApiError]] {
+  on call(id: String) -> Effect[Result[Int, ApiError]] by Caller {
     let r <- Counters.bump(id)
     match r {
       Ok(n)  => Ok(n)

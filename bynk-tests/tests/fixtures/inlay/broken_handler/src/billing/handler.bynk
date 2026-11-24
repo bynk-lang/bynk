@@ -5,7 +5,7 @@ context billing.handler
 // (handler bodies are typed there, not in `check_record`), exercising ADR 0094's
 // partial-type recording at that exit.
 service charge {
-  on call(cents: Int) -> Effect[Int] {
+  on call(cents: Int) -> Effect[Int] by Caller {
     let oops: Int = cents + true
     cents
   }

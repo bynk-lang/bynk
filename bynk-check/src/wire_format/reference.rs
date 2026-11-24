@@ -54,13 +54,13 @@ type Line = {
 type Price = Decimal where Positive
 
 service cost {
-  on call(unit: Price) -> Effect[Result[Price, String]] {
+  on call(unit: Price) -> Effect[Result[Price, String]] by Caller {
     Ok(unit)
   }
 }
 
 service quote {
-  on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] {
+  on call(line: Line, size: Qty) -> Effect[Result[Shape, String]] by Caller {
     Ok(Dot)
   }
 }
@@ -77,7 +77,7 @@ service who {
 }
 
 service ping {
-  on call() -> Effect[Result[(), String]] {
+  on call() -> Effect[Result[(), String]] by Caller {
     Ok(())
   }
 }
@@ -807,7 +807,7 @@ foreign caller is checked under its own secret and can never pass for a Bynk
 context, nor a context for it.
 
 A verified caller still has to be one the service's handler admits. A Bynk
-context is admitted by `Caller` (the default, with no `by`), a foreign caller
+context is admitted by `Caller` (the explicit "any consuming context"), a foreign caller
 only by its own actor; `by who: Caller | Legacy` admits both and tells them
 apart. Anyone else gets a bare `403`. A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`) narrows which contexts that is: the handler admits the proven caller only if the refinement's predicate holds for it, and a context it does not name gets the same bare `403` even though its signature verifies. The compiler also refuses such a call where it is written, but this check stays, because the keys are per pair of contexts and a caller from before the restriction may still be deployed.
 

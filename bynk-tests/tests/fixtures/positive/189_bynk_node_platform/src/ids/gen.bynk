@@ -3,7 +3,7 @@ context ids.gen
 consumes bynk { Clock, Secrets }
 
 service stamp {
-  on call() -> Effect[Int] given Clock, Secrets {
+  on call() -> Effect[Int] by Caller given Clock, Secrets {
     let salt <- Secrets.get("STAMP_SALT")
     let now <- Clock.now()
     match salt {

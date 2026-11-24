@@ -9,7 +9,7 @@ type Order = { id: String, total: Int }
 // caller-declared type as the argument of a qualified generic call is rejected
 // today as a cross-context structural mismatch, so the arguments here are base types.
 service place {
-  on call(order: Order) -> Effect[()] given audit.Audit {
+  on call(order: Order) -> Effect[()] by Caller given audit.Audit {
     let _ <- audit.Audit.append[Int]("order", order.total)
     let _ <- audit.Audit.appendAll[String]([order.id])
     audit.Audit.note("done")

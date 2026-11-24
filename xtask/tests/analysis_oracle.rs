@@ -243,8 +243,7 @@ fn toggle(text: &str, a: &str, b: &str) -> Option<String> {
     }
 }
 
-const EXTRA_SERVICE: &str =
-    "\n// extra\nservice extra {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n";
+const EXTRA_SERVICE: &str = "\n// extra\nservice extra {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n";
 
 /// Apply one random edit, returning what it did. An edit that finds nothing to
 /// change in its target falls back to a leading-comment edit (which still shifts

@@ -3,7 +3,7 @@ context web
 consumes bynk { Fetch, Request, Method }
 
 service probe {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let r <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
 		match r {
 			Ok(resp) => Effect.pure(resp.status)

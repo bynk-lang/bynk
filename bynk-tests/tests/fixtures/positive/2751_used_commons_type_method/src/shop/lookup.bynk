@@ -24,7 +24,7 @@ fn top(b: Bag[Int]) -> Int {
 }
 
 service lookup {
-  on call(key: String) -> Effect[String] given Directory {
+  on call(key: String) -> Effect[String] by Caller given Directory {
     let t <- Directory.find(key)
     "\(t.label())\(shout(t))\(t.shade.code())\(Tag.named("n").label())\(top(Bag { items: [3, 9, 4] }))"
   }

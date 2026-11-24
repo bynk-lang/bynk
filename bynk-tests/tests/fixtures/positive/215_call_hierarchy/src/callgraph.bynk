@@ -17,7 +17,7 @@ fn Counter.bump(self) -> Int {
 }
 
 service api {
-  on call(c: Counter) -> Effect[Int] {
+  on call(c: Counter) -> Effect[Int] by Caller {
     Effect.pure(caller(c.n))
   }
 }

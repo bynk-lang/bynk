@@ -35,7 +35,7 @@ const PREFIX: &str = "__bynk_trace:";
 const SOURCE_CALLEE: &str = r#"context tr.callee
 
 service square {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Effect.pure(n * n)
   }
 }

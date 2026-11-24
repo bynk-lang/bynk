@@ -7,7 +7,7 @@ consumes shop.quotes
 // exported `Wrap`'s field. Both are typed through the projection.
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.quotes.quote()
     let w <- shop.quotes.wrap()
     Effect.pure(b.a.cents + w.inner.cents)

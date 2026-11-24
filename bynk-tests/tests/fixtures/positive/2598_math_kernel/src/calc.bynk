@@ -20,13 +20,13 @@ fn bucket(n: Int, size: Int) -> Int {
 }
 
 service divide {
-	on call(a: Int, b: Int) -> Effect[Int] {
+	on call(a: Int, b: Int) -> Effect[Int] by Caller {
 		Effect.pure(a.mod(b))
 	}
 }
 
 service power {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		Effect.pure(2.pow(n))
 	}
 }

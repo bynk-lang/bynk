@@ -220,9 +220,15 @@ by <Actor>                      // verify, capture nothing (optional binder)
 by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
 ```
 
-- **HTTP requires a `by` clause** (`bynk.actor.missing_by_on_http`); a public
-  route writes `by v: Visitor`. The internal protocols default: `call` →
-  `Caller`, cron → `Scheduler`, queue → `Producer`, email → `Sender`.
+- **HTTP, WebSocket and `call` require a `by` clause**, because the caller is a
+  party and more than one actor is sensible. A public HTTP route writes
+  `by v: Visitor` (`bynk.actor.missing_by_on_http`). An `on call` handler writes
+  at least `by Caller`, the explicit "any consuming context"
+  (`bynk.actor.missing_by_on_call`); `bynk check --fix=bynk.actor.missing_by_on_call`
+  inserts it, and a service-header `by` covers every handler without its own.
+  The platform-only protocols default: cron → `Scheduler`, queue → `Producer`,
+  email → `Sender`. An agent's `on call` operations are reached only from inside
+  their own context, so they name no caller.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.
   Peers are distinguished by scheme (no duplicates), a `None` catch-all is last,
   `Bearer` refinements are not members, and total failure is `401`. On `call`, a

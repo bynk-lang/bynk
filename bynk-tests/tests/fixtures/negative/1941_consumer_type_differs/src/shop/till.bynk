@@ -8,7 +8,7 @@ consumes shop.quotes
 type Box = { label: String }
 
 service total {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let b <- shop.quotes.quote()
     Effect.pure(b.a)
   }

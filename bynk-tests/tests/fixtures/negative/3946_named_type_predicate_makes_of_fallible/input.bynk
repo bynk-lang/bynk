@@ -1,0 +1,7 @@
+commons demo {
+  type Id = Int where Positive
+
+  fn total(n: Int) -> Id {
+    Id.of(n)
+  }
+}

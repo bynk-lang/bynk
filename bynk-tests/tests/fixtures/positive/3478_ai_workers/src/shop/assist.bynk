@@ -34,7 +34,7 @@ service api from http {
 }
 
 service about {
-	on call(question: String) -> Effect[String] given Answerer {
+	on call(question: String) -> Effect[String] by Caller given Answerer {
 		Answerer.answer(question)
 	}
 }

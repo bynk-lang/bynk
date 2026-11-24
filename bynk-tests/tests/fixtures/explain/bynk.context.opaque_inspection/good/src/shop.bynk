@@ -3,7 +3,7 @@ context shop
 consumes pay
 
 service checkout {
-  on call() -> Effect[Bool] {
+  on call() -> Effect[Bool] by Caller {
     let s <- pay.charge(1)
     match s {
       Paid => Effect.pure(true)

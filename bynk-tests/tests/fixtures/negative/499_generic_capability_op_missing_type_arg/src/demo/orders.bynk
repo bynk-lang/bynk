@@ -4,7 +4,7 @@ context demo.orders {
   }
 
   service reserve {
-    on call() -> Effect[Option[Int]] given Idempotency {
+    on call() -> Effect[Option[Int]] by Caller given Idempotency {
       let cached <- Idempotency.dedup("order-key-1")
       cached
     }

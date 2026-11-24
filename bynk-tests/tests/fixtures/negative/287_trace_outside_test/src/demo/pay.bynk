@@ -6,7 +6,7 @@ context demo.pay {
     fn log(msg: String) -> Effect[()] { () }
   }
   service authorise {
-    on call(amount: Int) -> Effect[Int] given Logger {
+    on call(amount: Int) -> Effect[Int] by Caller given Logger {
       let _ <- Logger.log("x")
       let calls = trace(Logger.log)
       calls.length()
