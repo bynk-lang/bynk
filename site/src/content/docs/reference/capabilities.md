@@ -260,9 +260,10 @@ capability Idempotency {
 }
 ```
 
-`T` is resolved only from an **explicit** call-site type argument — never
-inferred from the arguments or the expected type, the same discipline
-`Json.decode[T](s)` uses:
+`T` is resolved from an **explicit** call-site type argument, or inferred from the
+arguments when they determine it (`Idempotency.remember(key, value, ttl)`, `Events.emit(event)`).
+`dedup` has no argument that mentions `T`, so it is written, as `Json.decode[T](s)` is, and
+`T` is never inferred from the expected type:
 
 ```bynk,fragment
 service reserve {

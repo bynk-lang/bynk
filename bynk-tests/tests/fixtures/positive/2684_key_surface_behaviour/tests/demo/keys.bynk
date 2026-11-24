@@ -11,8 +11,8 @@ case "a record keys a map by value" {
   expect m.get(OrderId { n: 7, region: "eu" }) == Some(3)
   expect m.get(OrderId { region: "eu", n: 8 }) == None
   expect m.length() == 2
-  expect contains(m, OrderId { region: "us", n: 1 })
-  expect !contains(m, OrderId { region: "us", n: 2 })
+  expect m.contains(OrderId { region: "us", n: 1 })
+  expect !m.contains(OrderId { region: "us", n: 2 })
 }
 
 case "inserting an equal key replaces in place" {

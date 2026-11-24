@@ -1,0 +1,83 @@
+suite demo.coll
+
+case "Map.remove drops a key, keeps order, and leaves the original" {
+	let m = base().insert("a", 1).insert("b", 2).insert("c", 3)
+	expect m.remove("b").keys() == ["a", "c"]
+	expect m.keys() == ["a", "b", "c"]
+	expect m.remove("z").keys() == ["a", "b", "c"]
+}
+
+case "Map.contains, getOrElse and isEmpty" {
+	let m = base().insert("a", 1)
+	expect m.contains("a")
+	expect !m.contains("b")
+	expect m.getOrElse("a", 0) == 1
+	expect m.getOrElse("b", 7) == 7
+	expect !m.isEmpty()
+	let none: Map[String, Int] = Map.empty()
+	expect none.isEmpty()
+}
+
+case "Map.entries are in insertion order" {
+	let m = base().insert("b", 2).insert("a", 1)
+	let es = m.entries()
+	expect es.length() == 2
+	expect es.map((e) => e.key) == ["b", "a"]
+	expect es.map((e) => e.value) == [2, 1]
+}
+
+case "Map.of: a later entry replaces the value and keeps the first position" {
+	let first = base().insert("a", 1).insert("b", 2)
+	let m = Map.of(first.entries().concat(base().insert("a", 3).entries()))
+	expect m.keys() == ["a", "b"]
+	expect m.getOrElse("a", 0) == 3
+}
+
+case "Map.filter, mapValues and fold keep insertion order" {
+	let m = base().insert("a", 1).insert("b", 2).insert("c", 3)
+	expect m.filter((k, v) => v != 2).keys() == ["a", "c"]
+	expect m.mapValues((v) => v * 10).values() == [10, 20, 30]
+	expect m.fold("", (acc, k, v) => acc.concat(k).concat(v.toString())) == "a1b2c3"
+	let sessions = base().insert("x", 5).insert("y", 20)
+	expect withoutExpired(sessions, 10).keys() == ["y"]
+}
+
+case "a Map keyed by a record" {
+	let m = regionsByZone()
+	expect m.length() == 2
+	expect m.getOrElse(region("eu", 1), 0) == 30
+	expect m.contains(region("us", 2))
+	expect m.remove(region("eu", 1)).length() == 1
+	expect !m.remove(region("eu", 1)).contains(region("eu", 1))
+	expect m.entries().map((e) => e.value) == [30, 20]
+	expect m.filter((k, v) => k.zone == "us").length() == 1
+}
+
+case "Set algebra keeps the stated order" {
+	let a = Set.of([1, 2, 3])
+	let b = Set.of([3, 4, 1])
+	expect a.union(b).toList() == [1, 2, 3, 4]
+	expect a.intersect(b).toList() == [1, 3]
+	expect a.difference(b).toList() == [2]
+	expect Set.of([1, 3]).isSubsetOf(a)
+	expect !b.isSubsetOf(a)
+}
+
+case "Set.filter, map and fold; map merges members at the first position" {
+	let s = Set.of([1, 2, 3, 4])
+	expect s.filter((x) => x.rem(2) == 0).toList() == [2, 4]
+	expect s.map((x) => x.rem(2)).toList() == [1, 0]
+	expect s.fold(0, (acc, x) => acc + x) == 10
+	expect !s.isEmpty()
+	let none: Set[Int] = Set.empty()
+	expect none.isEmpty()
+}
+
+case "Set over composite elements" {
+	let a = Set.of([region("eu", 1), region("us", 2)])
+	let b = Set.of([region("us", 2), region("ap", 3)])
+	expect a.union(b).length() == 3
+	expect a.intersect(b).toList() == [region("us", 2)]
+	expect a.difference(b).toList() == [region("eu", 1)]
+	expect tagsOf([["a", "b"], ["b", "c"]]).toList() == ["a", "b", "c"]
+}

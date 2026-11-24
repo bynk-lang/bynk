@@ -6,6 +6,7 @@ pub(super) mod agents;
 pub(crate) mod codec_statics;
 pub(super) mod cross_context;
 pub(super) mod kernel;
+pub(super) mod kernel_collections;
 pub(super) mod kernel_container;
 pub(super) mod kernel_scalar;
 pub(super) mod platform;

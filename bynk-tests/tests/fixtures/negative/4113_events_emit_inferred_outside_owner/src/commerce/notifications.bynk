@@ -1,0 +1,10 @@
+context commerce.notifications
+
+consumes commerce.order
+consumes bynk { Events }
+
+service leak {
+  on call() -> Effect[()] by Caller given Events {
+    Events.emit(PaymentConfirmed { orderId: "x" })
+  }
+}

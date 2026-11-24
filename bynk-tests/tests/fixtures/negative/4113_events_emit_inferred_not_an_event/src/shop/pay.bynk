@@ -1,0 +1,12 @@
+context shop.pay
+
+consumes bynk { Events }
+
+// A local record is not an `event`: the inferred type meets the same check as a written one.
+type Receipt = { orderId: String }
+
+service pay {
+  on call() -> Effect[()] by Caller given Events {
+    Events.emit(Receipt { orderId: "x" })
+  }
+}

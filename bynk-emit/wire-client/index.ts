@@ -774,6 +774,98 @@ export function __bynkLeftJoin<T, U, K, V>(
   });
 }
 
+/** #3961: a map of `pairs` in order, keyed by value; a later pair for a key replaces the value and keeps the first position. */
+function mapOfPairs<K, V>(pairs: Iterable<[K, V]>): ReadonlyMap<K, V> {
+  const list = [...pairs];
+  return list.some(([k]) => !plainKey(k)) ? new __BynkKeyMap<K, V>(list) : new Map<K, V>(list);
+}
+
+/** `Map.of`: a map from `{ key, value }` entries. */
+export function __bynkMapOf<K, V>(
+  entries: Iterable<{ readonly key: K; readonly value: V }>,
+): ReadonlyMap<K, V> {
+  return mapOfPairs([...entries].map((e): [K, V] => [e.key, e.value]));
+}
+
+/** `m` without `k`: a copy that keeps `m`'s kind; a no-op when `k` is absent. */
+export function __bynkMapRemove<K, V>(m: ReadonlyMap<K, V>, k: K): ReadonlyMap<K, V> {
+  const out = m instanceof __BynkKeyMap ? new __BynkKeyMap<K, V>(m) : new Map<K, V>(m);
+  out.delete(k);
+  return out;
+}
+
+/** `Map.entries`: the entries as `{ key, value }` records, in insertion order. */
+export function __bynkMapEntries<K, V>(
+  m: ReadonlyMap<K, V>,
+): { readonly key: K; readonly value: V }[] {
+  return [...m].map(([key, value]) => ({ key, value }));
+}
+
+/** `Map.filter`: the entries for which `p(key, value)` holds, in order. */
+export function __bynkMapFilter<K, V>(
+  m: ReadonlyMap<K, V>,
+  p: (k: K, v: V) => boolean,
+): ReadonlyMap<K, V> {
+  return mapOfPairs([...m].filter(([k, v]) => p(k, v)));
+}
+
+/** `Map.mapValues`: each value through `f`, keys and order kept. */
+export function __bynkMapMapValues<K, V, U>(
+  m: ReadonlyMap<K, V>,
+  f: (v: V) => U,
+): ReadonlyMap<K, U> {
+  return mapOfPairs([...m].map(([k, v]): [K, U] => [k, f(v)]));
+}
+
+/** `Map.fold`: `step` applied from `init` across the entries, in insertion order. */
+export function __bynkMapFold<K, V, U>(
+  m: ReadonlyMap<K, V>,
+  init: U,
+  step: (acc: U, k: K, v: V) => U,
+): U {
+  let acc = init;
+  for (const [k, v] of m) acc = step(acc, k, v);
+  return acc;
+}
+
+/** `Set.union`: every element of `a`, then those of `b` not already in it. */
+export function __bynkSetUnion<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
+  return __bynkSetOf([...a, ...b]);
+}
+
+/** `Set.intersect`: the elements of `a` also in `b`, in `a`'s order. */
+export function __bynkSetIntersect<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
+  return __bynkSetOf([...a].filter((x) => b.has(x)));
+}
+
+/** `Set.difference`: the elements of `a` not in `b`, in `a`'s order. */
+export function __bynkSetDifference<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): ReadonlySet<T> {
+  return __bynkSetOf([...a].filter((x) => !b.has(x)));
+}
+
+/** `Set.isSubsetOf`: whether every element of `a` is in `b`. */
+export function __bynkSetIsSubsetOf<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
+
+/** `Set.filter`: the elements for which `p` holds, in order. */
+export function __bynkSetFilter<T>(s: ReadonlySet<T>, p: (x: T) => boolean): ReadonlySet<T> {
+  return __bynkSetOf([...s].filter(p));
+}
+
+/** `Set.map`: each element through `f`; elements that map alike merge at the first position. */
+export function __bynkSetMap<T, U>(s: ReadonlySet<T>, f: (x: T) => U): ReadonlySet<U> {
+  return __bynkSetOf([...s].map((x) => f(x)));
+}
+
+/** `Set.fold`: `step` applied from `init` across the elements, in insertion order. */
+export function __bynkSetFold<T, U>(s: ReadonlySet<T>, init: U, step: (acc: U, x: T) => U): U {
+  let acc = init;
+  for (const x of s) acc = step(acc, x);
+  return acc;
+}
+
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
 export type JsonValue =
