@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0914](0914-route-matching-order.md) | **A defined, positional order for matching routes, and unreachable routes refused** (v0.659) — At the first differing segment a literal beats a parameter; a route no request can reach is an error | Accepted (v0.659) |
 | [0913](0913-cron-failed-run-visible.md) | **A failed cron run is visible to the platform** (v0.658) — An `Err` or a throw marks the run failed through `waitUntil`, with a labelled log that never carries the payload | Accepted (v0.658) |
 | [0912](0912-property-counterexample-show.md) | **Property counterexamples print Decimal and Bytes in Bynk's form** (v0.657.1) — The test runtime's value printer renders a Decimal as its literal and a Bytes as `Bytes.fromHex(…)` | Accepted (v0.657.1) |
 | [0911](0911-comparison-operand-picks-shared-variant.md) | **The other operand of a comparison picks a shared bare variant's sum** (v0.657) — `==`, `!=`, `<`, `<=`, `>` and `>=` type the non-variant side first and use its sum as the bare variant's expected type | Accepted (v0.657) |

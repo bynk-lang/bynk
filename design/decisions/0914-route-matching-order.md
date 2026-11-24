@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: Routes are tried in a defined order (at the first differing segment a literal beats a `:name`), a route no request can reach is `bynk.http.unreachable_route`, and a literal route matches `/items/` and percent-decoded paths
-breaking: Routes that overlap are now tried by position, not by spelling: at the first segment where two routes of a method differ, a literal beats a `:name` (so `GET /a/b/:y` now beats `GET /a/:x/c` for `/a/b/c`, where the alphabetical tie-break picked `/a/:x/c`), and a route that every other route of its method answers first is refused with `bynk.http.unreachable_route`: remove it or make it match a path the others do not. Literal routes also now ignore empty segments (`/items/` reaches `GET /items`) and compare percent-decoded.
----
+# 0914 — A defined, positional order for matching routes, and unreachable routes refused
 
-## ADR: route-matching-order
-title: A defined, positional order for matching routes, and unreachable routes refused
-summary: At the first differing segment a literal beats a parameter; a route no request can reach is an error
+- **Status:** Accepted (v0.659)
 
 **Context.** The router sorted routes by their number of parameter segments, then alphabetically by method and path, so `/a/:x/c` beat `/a/b/:y` for `/a/b/c` only because `':' < 'b'`. The order was undocumented, a worker group merging several contexts' routes made overlaps likelier, a route could be shadowed completely with only an exact duplicate refused, and `matchPath` dropped empty segments for parameterised routes but literal routes compared the raw path.
 
