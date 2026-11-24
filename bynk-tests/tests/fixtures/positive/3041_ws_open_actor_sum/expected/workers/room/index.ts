@@ -2,6 +2,7 @@
 // Worker entry point for context `room`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __applyChallenge } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -40,7 +41,7 @@ export default {
         __route = "ws chat";
         const __ws_room = url.searchParams.get("room");
         if (__ws_room === null) return new globalThis.Response("Missing parameter: room", { status: 400 });
-        return surface.ws_chat_open(request, __ws_room);
+        return __applyChallenge(await surface.ws_chat_open(request, __ws_room), request, ["Bearer realm=\"room\"", "Bynk realm=\"room\""]);
       }
 
       return new globalThis.Response("Not Found", { status: 404 });

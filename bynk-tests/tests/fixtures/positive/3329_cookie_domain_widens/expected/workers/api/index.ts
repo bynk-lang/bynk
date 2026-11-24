@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -38,7 +38,7 @@ export default {
         if (method === "POST" && __matchPath("/login", path) !== null) {
           __route = "POST /login";
           const result = await surface.http_POST_login();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __security_api);
         }
       }
       if (__matchPath("/login", path) !== null) {

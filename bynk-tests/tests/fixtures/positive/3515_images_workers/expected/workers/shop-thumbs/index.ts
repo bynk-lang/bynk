@@ -4,7 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -78,7 +78,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_avatar(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_avatars);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.thumbs\""]), __security_avatars);
         }
       }
       {
@@ -99,7 +99,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_probe(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_probe);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.thumbs\""]), __security_probe);
         }
       }
       {
@@ -120,7 +120,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_resize(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_streams);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"shop.thumbs\""]), __security_streams);
         }
       }
       {
@@ -141,7 +141,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_safe(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_safe);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.thumbs\""]), __security_safe);
         }
       }
       if (__matchPath("/avatar", path) !== null) {

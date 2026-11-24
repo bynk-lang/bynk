@@ -46,6 +46,9 @@ pub(super) struct HttpRoute {
     /// dispatch reads the raw body, verifies the HMAC, and parses the body from
     /// those same bytes.
     pub(super) signature: Option<bynk_check::actors::SignatureSeam>,
+    /// #3914: the `WWW-Authenticate` challenges any `401` of this route carries, one per
+    /// actor of its `by` clause, in order.
+    pub(super) challenges: Vec<String>,
     /// v0.52: the handler's `by` clause names a multi-actor sum — its wrapper
     /// owns the boundary, so the entry passes `request` (+ path params) and does
     /// not read or parse the body itself.
@@ -840,8 +843,14 @@ pub(super) fn emit_http_route_dispatch(
             // v0.51: read the raw body once, verify the HMAC fail-closed (401),
             // then parse the body param from the *same* bytes (not a re-read /
             // re-serialisation — the signature is over these exact bytes).
-            let unauthorized_401 =
-                || stamp_rejection(null_response(401), cors_const, security_const, rejected);
+            let unauthorized_401 = || {
+                stamp_rejection(
+                    challenged(route, null_response(401)),
+                    cors_const,
+                    security_const,
+                    rejected,
+                )
+            };
             // What the HMAC covers: a raw route's octets as received; otherwise
             // the body's text.
             let signed = if raw || multipart.is_some() {
@@ -1200,6 +1209,9 @@ pub(super) fn emit_http_route_dispatch(
             vec![ident("result"), ser_fn],
         )
     };
+    // #3914: a `401` carries the route's `WWW-Authenticate` challenge (inside CORS, so the
+    // header is exposed to a browser client).
+    let response_expr = challenged(route, response_expr);
     // v0.131: a CORS-enabled service stamps the `Access-Control-*` headers onto
     // every real response, uniformly across variant families — including the
     // synthesised `304`, so a cross-origin revalidation stays readable.
@@ -1247,6 +1259,62 @@ pub(super) fn emit_http_route_dispatch(
 
     inner.push(if_(route_cond, block(guarded)));
     block(inner)
+}
+
+/// #3914: the challenges of a route's `401`s: `Bearer` for a `Bearer` or `Oidc` actor
+/// (RFC 6750), `Bynk-Signature` for a `Signature` actor, `Bynk-Cookie` for a `SignedCookie`
+/// actor, one per member of a sum in the sum's order, and `Bynk` for anything else (a handler
+/// of a `Visitor` route returning `Unauthorized` itself). `realm` is the context's name.
+pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) -> Vec<String> {
+    use bynk_check::actors::SumMemberSeam;
+    let realm = crate::emitter::escape_ts_string(context);
+    let bearer = || format!("Bearer realm=\"{realm}\"");
+    let signature = |s: &bynk_check::actors::SignatureSeam| {
+        let header = crate::emitter::escape_ts_string(&s.header);
+        format!("Bynk-Signature realm=\"{realm}\", header=\"{header}\"")
+    };
+    if let Some(members) = bynk_check::actors::sum_members_for(h, &table.actors) {
+        return members
+            .iter()
+            .map(|m| match &m.seam {
+                SumMemberSeam::None => format!("Bynk realm=\"{realm}\""),
+                SumMemberSeam::Bearer { .. } => bearer(),
+                SumMemberSeam::Signature(s) => signature(s),
+            })
+            .collect();
+    }
+    if bynk_check::actors::bearer_seam_for(h, &table.actors).is_some()
+        || bynk_check::actors::oidc_seam_for(h, &table.actors).is_some()
+    {
+        return vec![bearer()];
+    }
+    if let Some(s) = bynk_check::actors::signature_seam_for(h, &table.actors) {
+        return vec![signature(&s)];
+    }
+    if signed_cookie_name(h, &table.actors).is_some() {
+        return vec![format!("Bynk-Cookie realm=\"{realm}\"")];
+    }
+    vec![format!("Bynk realm=\"{realm}\"")]
+}
+
+/// #3914: wrap a route's response so a `401` carries the route's challenge.
+fn challenged(route: &HttpRoute, response: TsExpr) -> TsExpr {
+    let items = route
+        .challenges
+        .iter()
+        .map(|c| str_lit(c.clone()))
+        .collect();
+    call(
+        ident("__applyChallenge"),
+        vec![
+            response,
+            ident("request"),
+            TsExpr::Array {
+                items,
+                multiline: false,
+            },
+        ],
+    )
 }
 
 /// #3380: `const body = requestBodyStream(request, cap)`: the octets as they
@@ -1431,6 +1499,7 @@ pub(super) fn collect_http_routes(
     visible_types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
     edge_cache: bool,
     needs_locale_request: bool,
+    context: &str,
 ) -> Vec<HttpRoute> {
     let mut http_routes: Vec<HttpRoute> = Vec::new();
     for sname in service_names {
@@ -1461,6 +1530,7 @@ pub(super) fn collect_http_routes(
                     signed_cookie: signed_cookie_name(h, &table.actors),
                     hidden_headers: consumed_credential_headers(h, &table.actors),
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
+                    challenges: route_challenges(h, table, context),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so
                     // the entry just passes `request` and skips the body parse.
