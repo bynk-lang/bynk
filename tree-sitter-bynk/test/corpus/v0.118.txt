@@ -184,3 +184,52 @@ suite shop.pricing {
         (binary_expr
           (identifier)
           (string_literal))))))
+
+================================================================================
+stub call outcome — `rejected`, `faulted` and `unreachable` (#3894)
+================================================================================
+
+suite shop.orders {
+  case "a failed payment" {
+    stub Pay.authorise(_) rejected NotAdmitted
+    stub shop.stock.reserve(_) faulted
+    stub shop.ledger.book(_) unreachable
+    let r <- placeOrder.call(1)
+    expect r == "late"
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (stub_clause
+        (identifier)
+        (identifier)
+        (wildcard)
+        (identifier))
+      (stub_clause
+        (identifier)
+        (identifier)
+        (identifier)
+        (wildcard))
+      (stub_clause
+        (identifier)
+        (identifier)
+        (identifier)
+        (wildcard))
+      (effect_let_stmt
+        (identifier)
+        (method_call
+          (identifier)
+          (identifier)
+          (number_literal)))
+      (expect_expr
+        (binary_expr
+          (identifier)
+          (string_literal))))))

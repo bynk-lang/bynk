@@ -1,0 +1,34 @@
+context shop.orders
+
+consumes shop.pay as Pay
+consumes shop.pay { Receipt, PaymentError }
+consumes shop.stock
+consumes bynk { CallOutcome, CallFailure }
+
+type OrderError =
+  | Payment(reason: PaymentError)
+  | Upstream(failure: CallFailure)
+  embeds PaymentError as Payment, CallFailure as Upstream
+
+fn settle(o: CallOutcome[Result[Receipt, PaymentError]]) -> Result[Receipt, OrderError] {
+  let paid = o.handled()?
+  let receipt = paid?
+  Ok(receipt)
+}
+
+service placeOrder {
+  on call(sku: String, total: Int) -> Effect[Result[String, String]] by Caller {
+    let reserved <- shop.stock.reserve(sku)
+    let o <- Pay.authorise.outcome(total)
+    match o {
+      Handled(Ok(receipt)) => Effect.pure(Ok(receipt.id))
+      Handled(Err(_)) => {
+        let _ <- shop.stock.reserve("release")
+        Effect.pure(Err("declined"))
+      }
+      Rejected(_) => Effect.pure(Err("rejected"))
+      Faulted => Effect.pure(Err("faulted"))
+      Unreachable(_) => Effect.pure(Err("unreachable"))
+    }
+  }
+}

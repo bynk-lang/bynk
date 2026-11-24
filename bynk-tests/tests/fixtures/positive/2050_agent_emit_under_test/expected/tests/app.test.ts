@@ -41,8 +41,34 @@ function __bynkViolationOf(e: any): { kind: string, agent: string, name: string,
   const v = e && e.invariantViolation;
   return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
 }
+// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
+// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
+// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
+function __bynkShowLeaf(x: any): unknown {
+  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
+    const neg = x.coefficient < 0n;
+    let digits = (neg ? -x.coefficient : x.coefficient).toString();
+    let text = digits;
+    if (x.scale > 0) {
+      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
+      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
+    }
+    return (neg ? "-" : "") + text + "d";
+  }
+  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
+  return x;
+}
 function __bynkShow(v: unknown): string {
-  try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
+  try {
+    if (typeof v === "bigint") return String(v);
+    const leaf = __bynkShowLeaf(v);
+    if (typeof leaf === "string" && leaf !== v) return leaf;
+    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
+    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
+    }
+    return JSON.stringify(v) ?? String(v);
+  } catch { return String(v); }
 }
 
 function __bynkRecordDeps(deps: any, spec: Record<string, string[]>, obs: { log: Record<string, { args: any[]; order: number }[]>; n: number }): any {
@@ -82,8 +108,10 @@ async function test_the_agent_s_emit_is_observed() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -94,6 +122,7 @@ async function test_the_agent_s_emit_is_observed() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -119,8 +148,10 @@ async function test_two_agents__emits_are_observed() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -131,6 +162,7 @@ async function test_two_agents__emits_are_observed() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -156,8 +188,10 @@ async function test_an_unobserved_agent_call_type_checks() {
     const deps = __makeTestDeps();
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -168,6 +202,7 @@ async function test_an_unobserved_agent_call_type_checks() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -193,8 +228,10 @@ async function test_a_service_handler_s_agent_call_emits() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -205,6 +242,7 @@ async function test_a_service_handler_s_agent_call_emits() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -231,8 +269,10 @@ async function test_a_service_handler_s_own_emit_is_observed() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -243,6 +283,7 @@ async function test_a_service_handler_s_own_emit_is_observed() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -269,8 +310,10 @@ async function test_the_agent_s_emit_is_observed_at_the_integration_tier() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -281,6 +324,7 @@ async function test_the_agent_s_emit_is_observed_at_the_integration_tier() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -306,8 +350,10 @@ async function test_a_faulting_handler_releases_nothing() {
     const deps = __bynkRecordDeps(__makeTestDeps(), { Events: ["emit"] }, __obs);
     const { Bumped, Counter, __makeCounter, api } = __ns_app;
     type Bumped = __ns_app.Bumped;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -318,6 +364,7 @@ async function test_a_faulting_handler_releases_nothing() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;

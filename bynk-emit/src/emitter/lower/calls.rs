@@ -13,7 +13,9 @@ use super::super::internal_fault::unnameable_receiver_type_arg;
 use super::super::lower_call::agents::{
     lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
 };
-use super::super::lower_call::cross_context::lower_cross_context_service_call;
+use super::super::lower_call::cross_context::{
+    cross_context_lowering_prefix, lower_cross_context_service_call,
+};
 use super::super::lower_call::kernel::lower_kernel_method_call;
 use super::super::lower_call::platform::{
     lower_capability_call, lower_cookie_field_call, lower_cross_capability_call,
@@ -184,9 +186,40 @@ fn lower_cross_context_call(
     // lowering it over the wire named a Service Binding the Worker, which
     // binds only what it calls, does not declare.
     if !matches!(cx.commons().callee(e.id), Some(c) if !matches!(c, Callee::Cross { .. })) {
-        return lower_cross_context_service_call(receiver, method, args, cx, pre);
+        // #3894: `<context>.<service>.outcome(args)`.
+        if let Some((prefix, service)) = outcome_service_of(e, receiver, method, cx) {
+            return lower_cross_context_service_call(prefix, service, args, true, cx, pre);
+        }
+        return lower_cross_context_service_call(receiver, method, args, false, cx, pre);
     }
     None
+}
+
+/// #3894: the context prefix and service of `<context>.<service>.outcome(…)`, when the checker
+/// resolved this call to that service (`Callee::Cross`, and `receiver` is not itself a consumed
+/// context, which is a service named `outcome`).
+fn outcome_service_of<'a>(
+    e: &Expr,
+    receiver: &'a Expr,
+    method: &Ident,
+    cx: &LowerCtx,
+) -> Option<(&'a Expr, &'a Ident)> {
+    let ExprKind::FieldAccess {
+        receiver: prefix,
+        field: service,
+    } = &receiver.kind
+    else {
+        return None;
+    };
+    let resolved = matches!(
+        cx.commons().callee(e.id),
+        Some(Callee::Cross { service: s, .. }) if *s == service.name
+    );
+    (method.name == "outcome"
+        && resolved
+        && cross_context_lowering_prefix(receiver, cx).is_none()
+        && cross_context_lowering_prefix(prefix, cx).is_some())
+    .then_some((prefix, service))
 }
 
 /// The instance-call fallback (UFCS lowering, #3167): the receiver becomes the
