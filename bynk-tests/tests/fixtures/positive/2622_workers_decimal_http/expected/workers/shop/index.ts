@@ -56,6 +56,9 @@ export default {
         const __m = __matchPath("/price/:amount", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /price/:amount";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_amount = __m.params["amount"];
           const amount = __raw_amount;
           const result = await surface.http_GET_price_Param_amount(amount);

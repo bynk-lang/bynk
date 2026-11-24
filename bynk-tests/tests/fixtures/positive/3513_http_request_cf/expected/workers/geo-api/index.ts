@@ -61,6 +61,9 @@ export default {
         const __m = __matchPath("/by/:cf", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /by/:cf";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_cf = __m.params["cf"];
           const cf = __raw_cf;
           const result = await surface.http_GET_by_Param_cf(cf);
@@ -72,6 +75,9 @@ export default {
         const __m = __matchPath("/greet/:name", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /greet/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const __r_cf = handlers.__deserialise_RequestCf(__cfObject(request), "cf");

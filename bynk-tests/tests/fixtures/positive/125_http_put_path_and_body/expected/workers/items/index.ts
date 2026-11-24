@@ -39,6 +39,9 @@ export default {
         const __m = __matchPath("/items/:id", path);
         if (method === "PUT" && __m) {
           __route = "PUT /items/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const __r_id = handlers.ItemId.of(__raw_id);
           if (__r_id.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

@@ -74,6 +74,9 @@ export default {
         const __m = __matchPath("/cart/:sku", path);
         if (method === "PUT" && __m) {
           __route = "PUT /cart/:sku";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_sku = __m.params["sku"];
           const __r_sku = handlers.Sku.of(__raw_sku);
           if (__r_sku.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.sku", violation: __r_sku.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

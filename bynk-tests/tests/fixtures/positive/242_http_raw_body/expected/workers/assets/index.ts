@@ -54,6 +54,9 @@ export default {
         const __m = __matchPath("/robots/:mode", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /robots/:mode";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_Assets);
+          }
           const __raw_mode = __m.params["mode"];
           const mode = __raw_mode;
           const result = await surface.http_GET_robots_Param_mode(mode);

@@ -86,6 +86,9 @@ export default {
         const __m = __matchPath("/activity/:owner", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /activity/:owner";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_owner = __m.params["owner"];
           const owner = __raw_owner;
           const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false, option: true }, { name: "since", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }, { name: "tag", kind: "string", list: true, option: false }, { name: "fresh", kind: "bool", list: false, option: false }, { name: "limit", kind: "int", list: false, option: false }]);

@@ -374,6 +374,27 @@ pub(super) fn emit_http_route_dispatch(
         route.path
     ))];
 
+    // #3908: a path whose percent-encoding does not decode is a `400 MalformedPath`,
+    // the client's error and no fault, answered before the actor, body or handler.
+    if has_path_params {
+        let malformed = stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "MalformedPath",
+                    vec![("details".to_string(), member(ident("__m"), "malformed"))],
+                ),
+                400,
+            ),
+            cors_const,
+            security_const,
+            rejected,
+        );
+        guarded.push(if_(
+            member(ident("__m"), "malformed"),
+            block(vec![return_(Some(malformed))]),
+        ));
+    }
+
     // v0.142 (ADR 0165): the request-body ceiling. A route with an effective cap
     // rejects an oversized body with a synthesised `413` derived from the declared
     // `Content-Length`, *before* the body is read — ahead of the `by`/Bearer/sum

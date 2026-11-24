@@ -55,6 +55,9 @@ export default {
         const __m = __matchPath("/packages/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /packages/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           let __body_json: __JsonValue;

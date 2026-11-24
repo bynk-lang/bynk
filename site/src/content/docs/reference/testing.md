@@ -332,7 +332,7 @@ like a form's. A `File` is a record literal (`File { filename: Some("a.png"), co
 is; at `system` the driver sends it as the `FormData` it encodes to, a `Blob` per `File`.
 A `Wire(…)` body is the multipart text itself, framed with the boundary `bynk-boundary`, so
 a case can send what a browser would, and observe the boundary's rejections:
-`Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(PayloadTooLarge(_))`
+`Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(MalformedPath(_))` for a path that does not percent-decode, `Rejected(PayloadTooLarge(_))`
 for a file over `maxFile` or too many parts.
 
 ### Sending a streamed body {#sending-a-streamed-body}
@@ -601,6 +601,7 @@ BoundaryRejection = RefinementViolation(detail: String)
                   | PayloadTooLarge(detail: String)
                   | UnsupportedMediaType(detail: String)
                   | MalformedForm(detail: String)
+                  | MalformedPath(detail: String)
 ```
 
 `Rejected` means the request was refused before the handler ran. `Handled`

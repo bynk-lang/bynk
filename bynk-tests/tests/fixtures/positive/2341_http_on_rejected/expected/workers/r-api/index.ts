@@ -99,6 +99,9 @@ export default {
         const __m = __matchPath("/codes/:code", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /codes/:code";
+          if (__m.malformed) {
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+          }
           const __raw_code = __m.params["code"];
           const __r_code = handlers.Code.of(__raw_code);
           if (__r_code.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -112,6 +115,9 @@ export default {
         const __m = __matchPath("/items/:id", path);
         if (method === "PUT" && __m) {
           __route = "PUT /items/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+          }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);

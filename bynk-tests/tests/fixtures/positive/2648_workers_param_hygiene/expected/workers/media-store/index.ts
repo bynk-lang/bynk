@@ -127,6 +127,9 @@ export default {
         const __m = __matchPath("/at/:url/:path", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /at/:url/:path";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_url = __m.params["url"];
           const __id_url = __raw_url;
           const __raw_path = __m.params["path"];
@@ -140,6 +143,9 @@ export default {
         const __m = __matchPath("/bearer/:request/:result", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /bearer/:request/:result";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_request = __m.params["request"];
           const __id_request = __raw_request;
           const __raw_result = __m.params["result"];
@@ -153,6 +159,9 @@ export default {
         const __m = __matchPath("/sum/:request/:result", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /sum/:request/:result";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_request = __m.params["request"];
           const __id_request = __raw_request;
           const __raw_result = __m.params["result"];
@@ -166,6 +175,9 @@ export default {
         const __m = __matchPath("/by/:request/:result/:surface", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /by/:request/:result/:surface";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_request = __m.params["request"];
           const __id_request = __raw_request;
           const __raw_result = __m.params["result"];

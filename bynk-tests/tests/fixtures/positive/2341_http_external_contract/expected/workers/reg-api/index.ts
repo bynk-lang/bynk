@@ -47,6 +47,9 @@ export default {
         const __m = __matchPath("/packages/:name", path);
         if (method === "DELETE" && __m) {
           __route = "DELETE /packages/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_DELETE_packages_Param_name(name);
@@ -57,6 +60,9 @@ export default {
         const __m = __matchPath("/notes/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /notes/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_notes_Param_id(request, id, __requestHeaders(request, undefined, ["x-sig", "authorization"]));
@@ -67,6 +73,9 @@ export default {
         const __m = __matchPath("/packages/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /packages/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           let __body_json: __JsonValue;
