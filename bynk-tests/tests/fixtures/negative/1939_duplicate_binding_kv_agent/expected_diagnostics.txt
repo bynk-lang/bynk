@@ -1,3 +1,4 @@
 # At the agent, the declaration the author can rename.
 # exact
 bynk.context.duplicate_binding	ops/hub.bynk:10:7
+bynk.queue.no_dead_letter	ops/hub.bynk:20:9

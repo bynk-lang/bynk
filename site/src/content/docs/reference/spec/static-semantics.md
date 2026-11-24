@@ -1863,7 +1863,15 @@ trigger table read it. A cron handler MUST take at most two parameters, at most 
 scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
-codes).
+codes). A `from queue` service MAY carry one `delivery { }` section (#3877), whose keys are the
+closed set `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours),
+`deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole
+seconds, 0 to 60) and `concurrency` (1 to 250), each written once, with a literal or a constant
+of its type (`bynk.queue.delivery_bad_option`); on any other service it is
+`bynk.queue.delivery_not_queue`. A consumer with no `deadLetter` key warns
+(`bynk.queue.no_dead_letter`; `deadLetter: None` silences it). The dead-letter queue MUST NOT be
+the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
+receives from (`bynk.queue.dead_letter_type_mismatch`).
 
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is

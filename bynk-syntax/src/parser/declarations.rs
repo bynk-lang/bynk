@@ -2761,6 +2761,7 @@ impl<'a> Parser<'a> {
         let mut security: Option<SecurityPolicy> = None;
         let mut limits: Option<LimitsPolicy> = None;
         let mut json: Option<JsonPolicy> = None;
+        let mut delivery: Option<DeliveryPolicy> = None;
         // #1756: comments (and an orphaned doc block) before the closing `}`.
         let trailing_comments: Vec<Comment>;
         loop {
@@ -2803,6 +2804,7 @@ impl<'a> Parser<'a> {
                             ("security", security.is_some()),
                             ("limits", limits.is_some()),
                             ("json", json.is_some()),
+                            ("delivery", delivery.is_some()),
                         ],
                         !handlers.is_empty(),
                     )?;
@@ -2829,7 +2831,11 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "security",
                         policy.span,
-                        &[("limits", limits.is_some()), ("json", json.is_some())],
+                        &[
+                            ("limits", limits.is_some()),
+                            ("json", json.is_some()),
+                            ("delivery", delivery.is_some()),
+                        ],
                         !handlers.is_empty(),
                     )?;
                     security = Some(policy);
@@ -2855,7 +2861,7 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "limits",
                         policy.span,
-                        &[("json", json.is_some())],
+                        &[("json", json.is_some()), ("delivery", delivery.is_some())],
                         !handlers.is_empty(),
                     )?;
                     limits = Some(policy);
@@ -2876,8 +2882,32 @@ impl<'a> Parser<'a> {
                             "a service declares at most one `json { }` policy",
                         ));
                     }
-                    self.check_policy_order("json", policy.span, &[], !handlers.is_empty())?;
+                    self.check_policy_order(
+                        "json",
+                        policy.span,
+                        &[("delivery", delivery.is_some())],
+                        !handlers.is_empty(),
+                    )?;
                     json = Some(policy);
+                }
+                // `delivery { … }` is a contextual keyword like `json` (#3877): the
+                // identifier `delivery` in service-body item position introduces
+                // the queue consumer's delivery policy. At most one per service.
+                Some(TokenKind::Ident) if self.peek_is_delivery_kw() => {
+                    if let Some(doc) = item_doc {
+                        self.warn_orphan_before_policy(doc.span);
+                        keep_orphan(&mut leading, doc);
+                    }
+                    let policy = self.parse_delivery_policy(leading)?;
+                    if delivery.is_some() {
+                        return Err(CompileError::new(
+                            "bynk.parse.duplicate_delivery",
+                            policy.span,
+                            "a service declares at most one `delivery { }` policy",
+                        ));
+                    }
+                    self.check_policy_order("delivery", policy.span, &[], !handlers.is_empty())?;
+                    delivery = Some(policy);
                 }
                 // A leading `@name(args)` introduces a handler-position annotation
                 // (v0.140): consume the annotation run, then the `on` handler it
@@ -2940,6 +2970,7 @@ impl<'a> Parser<'a> {
             security,
             limits,
             json,
+            delivery,
             handlers,
             documentation: None,
             span: kw.span.merge(close.span),
@@ -2965,6 +2996,12 @@ impl<'a> Parser<'a> {
     /// section.
     fn peek_is_limits_kw(&self) -> bool {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "limits")
+    }
+
+    /// True when the next token is the contextual keyword `delivery` (#3877),
+    /// introducing a queue consumer's delivery policy section.
+    fn peek_is_delivery_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "delivery")
     }
 
     /// True when the next token is the contextual keyword `json` (#2858),
@@ -3107,6 +3144,35 @@ impl<'a> Parser<'a> {
                 .fields
                 .into_iter()
                 .map(|f| LimitsField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
+    /// Parse a `delivery { name: value, … }` policy (#3877), as
+    /// [`Self::parse_limits_policy`]; the checker validates the closed key set
+    /// and the value shapes.
+    fn parse_delivery_policy(
+        &mut self,
+        leading: Vec<Comment>,
+    ) -> Result<DeliveryPolicy, CompileError> {
+        let kw = self.expect_ident("to start a `delivery` policy")?;
+        let body = self.parse_policy_body("delivery")?;
+        Ok(DeliveryPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| DeliveryField {
                     name: f.name,
                     value: f.value,
                     span: f.span,

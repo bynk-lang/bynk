@@ -104,6 +104,12 @@ work: `wrangler deploy` does **not** create a queue for you — it checks, and
 fails with `Queue "n" does not exist. To create it, run: wrangler queues create n`.
 Creating them is what makes a queue-consuming context deployable in one command.
 
+A consumer's dead-letter queue (`delivery { deadLetter: "n" }`) is created the same
+way, qualified with the environment like the consumer's own queue, and recorded in
+`bynk.deploy.lock` only if Bynk created it. A queue name that is longer than 63
+characters once `-<environment>` is added is refused by the plan, before anything is
+created.
+
 A queue a context sends to (`capability OrderEvents = Queue @name("n")`) is
 created the same way. There is one difference: `bynk deploy` records a queue
 that only producers name in `bynk.deploy.lock` **only if it created it**. A

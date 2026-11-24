@@ -1258,7 +1258,7 @@ pub fn in_http_param_name_position(text: &str, offset: usize) -> bool {
 /// The byte index of the innermost `{` still open at `offset` (a naive scan that,
 /// like [`record_construction_receiver`], does not skip braces inside strings or
 /// comments — acceptable for a completion heuristic).
-fn innermost_open_brace(text: &str, offset: usize) -> Option<usize> {
+pub(crate) fn innermost_open_brace(text: &str, offset: usize) -> Option<usize> {
     let bytes = text.as_bytes();
     let end = offset.min(bytes.len());
     let mut depth = 0i32;
@@ -1279,7 +1279,7 @@ fn innermost_open_brace(text: &str, offset: usize) -> Option<usize> {
 
 /// The bare word immediately before byte index `open` (skipping trailing
 /// whitespace), e.g. the `cors` before a `cors {`.
-fn word_before_brace(text: &str, open: usize) -> &str {
+pub(crate) fn word_before_brace(text: &str, open: usize) -> &str {
     let head = text[..open].trim_end();
     let start = head
         .char_indices()

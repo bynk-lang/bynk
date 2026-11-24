@@ -473,6 +473,8 @@ mod system {
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]
     mod question_in_case_behaviour;
+    #[path = "queue_delivery_workerd.rs"]
+    mod queue_delivery_workerd;
     #[path = "recovery_never_emits.rs"]
     mod recovery_never_emits;
     #[path = "recursive_boundary_behaviour.rs"]

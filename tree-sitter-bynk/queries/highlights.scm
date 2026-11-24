@@ -48,6 +48,7 @@
   "security"
   "limits"
   "json"
+  "delivery"
   "exports"
   "key"
   "suite"

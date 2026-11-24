@@ -1,6 +1,8 @@
 context jobs
 
 service worker from queue("jobs") {
+
+  delivery { deadLetter: None }
   on call(m: String) -> Effect[Int] {
     Effect.pure(1)
   }
