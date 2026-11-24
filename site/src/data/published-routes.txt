@@ -2139,6 +2139,7 @@
 /reference/diagnostics/bynk.types.opaque_unsafe_outside/
 /reference/diagnostics/bynk.types.or_pattern_binding_mismatch/
 /reference/diagnostics/bynk.types.or_pattern_type_mismatch/
+/reference/diagnostics/bynk.types.ord_order_changed/
 /reference/diagnostics/bynk.types.pattern_arity/
 /reference/diagnostics/bynk.types.pattern_type_mismatch/
 /reference/diagnostics/bynk.types.polynomial_regex/
