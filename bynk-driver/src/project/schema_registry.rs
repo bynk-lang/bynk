@@ -12,16 +12,17 @@
 //! all.
 //!
 //! Read/write is opt-in (`CompileOptions::schema_registry`) — see
-//! `project/entry.rs`'s `compile_project` and `project/pipeline.rs`'s `run_checks` for why: fixtures and
-//! in-memory builds must never touch a project tree as a side effect of
-//! compiling.
+//! `project/entry.rs`'s `compile_project` and `project/pipeline.rs`'s
+//! `run_checks` for why: fixtures and in-memory builds must never touch a
+//! project tree as a side effect of compiling.
 //!
 //! P4.0 (#1113, [DECISION A]): the document shape itself — `SchemaRegistry`,
 //! `EventEntry`, `FieldShape`, and their `parse`/`serialize` — moved to
 //! `bynk_project::schema_registry`. `SchemaRegistry`/`serialize` are
 //! re-exported below so every existing `schema_registry::X` call site in
-//! `project/pipeline.rs` and `project/output.rs` keeps working unchanged; `EventEntry`/`FieldShape` had no
-//! remaining call site here once `reconcile` moved (see next) and are not.
+//! `project/pipeline.rs` and `project/output.rs` keeps working unchanged;
+//! `EventEntry`/`FieldShape` had no remaining call site here once `reconcile`
+//! moved (see next) and are not.
 //!
 //! P5.3 (`design/tracks/semantics-in-the-checker.md` §6): `reconcile` and its
 //! helpers (`snapshot`, `canon_type`, `Reconciled`, …) — the

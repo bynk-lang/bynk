@@ -43,7 +43,9 @@ pub fn json_string(s: &str) -> String {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
-            // The rest of C0 has no short escape; `\u00xx` is the only form.
+            // JSON also has short escapes for U+0008 (`\b`) and U+000C (`\f`),
+            // but they are written `\u0008` and `\u000c` here, which decode to the
+            // same value; the rest of C0 has only the `\u00xx` form.
             // `write!` into the buffer rather than `push_str(&format!(…))` (what
             // two of the four copies this replaces did) — no `String` allocated
             // per control character.

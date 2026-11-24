@@ -1006,9 +1006,12 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// Names that need escaping: a quote, a backslash, the short control escapes,
-    /// a control character with only a `\u00xx` form, and non-ASCII (which
-    /// `serde_json` writes as it is).
+    /// Names that need escaping: a quote, a backslash, the three short control
+    /// escapes both writers use (`\t`, `\n`, `\r`), control characters with only a
+    /// `\u00xx` form, and non-ASCII (which `serde_json` writes as it is). U+0008
+    /// and U+000C are left out: `serde_json` writes them `\b` and `\f`, while
+    /// `json_string` writes `\u0008` and `\u000c`, the same value spelt
+    /// differently, so the byte-for-byte comparisons below would not hold.
     const AWKWARD: &[&str] = &[
         "q\"uote",
         "back\\slash",
