@@ -2781,6 +2781,10 @@ pub const SNIPPETS: &[(&str, &str)] = &[
         "agent",
         "agent ${1:Name} {\n\tkey ${2:id}: ${3:String}\n\n\tstore ${4:status}: Cell[${5:Int}] = ${6:0}\n\n\tinvariant ${7:non_negative}: ${8:status >= 0}\n\n\ttransition ${9:monotonic}: ${10:new.status >= old.status}\n\n\ton call ${11:op}(${12}) -> Effect[Result[${13:()}, String]] {\n\t\tOk(${14:()})\n\t}\n}",
     ),
+    (
+        "agent busyAfter",
+        "@busyAfter(${1:5.seconds})\nagent ${2:Name} {\n\tkey ${3:id}: ${4:String}\n\n\tstore ${5:status}: Cell[${6:Int}] = ${7:0}\n\n\ton call ${8:op}(${9}) -> Effect[${10:()}] {\n\t\t$0\n\t}\n}",
+    ),
     // -- Services & handlers --
     (
         "service",

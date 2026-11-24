@@ -48,10 +48,11 @@ you.
 
 Prebuilt binaries (`bynk` and the `bynk-lsp` language server) are
 published with every [release](https://github.com/bynk-lang/bynk/releases) for
-Linux (x86_64, aarch64), macOS (Intel, Apple silicon) and Windows (x86_64). No
-Rust toolchain is needed.
+Linux (x86_64, aarch64) and Windows (x86_64). No Rust toolchain is needed.
+Prebuilt macOS binaries are paused for now; on macOS, install from source with
+`cargo install bynk bynk-lsp`.
 
-macOS and Linux:
+Linux:
 
 ```sh
 curl -fsSL https://github.com/bynk-lang/bynk/releases/latest/download/install.sh | sh

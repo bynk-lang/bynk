@@ -6,7 +6,7 @@
 
 import { makeTestState, type AiSearchInstance, type D1Database, type DurableObjectState, type AnalyticsDataset, type AnalyticsSqlBinding, type D1PreparedStatement, type D1Result, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type R2MultipartUpload, type R2ObjectBody, type R2ObjectMeta, type R2PutOptions, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerImagesTransformer, type WorkerVersionMetadata } from "../storage.ts";
 import { VECTORIZE_LIMITS, type VectorizeIndex } from "../vectorize.ts";
-import { AGENT_QUEUE_WAIT_MS, serialiseAgentClass, type DurableObjectNamespace, type DurableObjectStub } from "../agent.ts";
+import { serialiseAgentClass, type DurableObjectNamespace, type DurableObjectStub } from "../agent.ts";
 
 /**
  * #1959: an in-memory KV namespace for multi-Worker integration tests. The
@@ -968,7 +968,7 @@ export function makeIntegrationDoNamespace(
     fetch(request: Request): Promise<Response>;
   },
   env?: unknown,
-  queueWaitMs: number = AGENT_QUEUE_WAIT_MS,
+  queueWaitMs?: number,
 ): DurableObjectNamespace {
   const instances = new Map<string, { fetch(request: Request): Promise<Response> }>();
   return {

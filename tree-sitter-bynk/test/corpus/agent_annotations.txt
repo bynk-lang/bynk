@@ -1,0 +1,57 @@
+================================================================================
+an agent annotation — `@busyAfter(d)` before `agent` (#3932)
+================================================================================
+
+context shop.basket
+
+type Id = String where MinLength(1)
+
+@busyAfter(5.seconds)
+agent Basket {
+  key id: Id
+
+  store n: Cell[Int]
+
+  on call add() -> Effect[Int] {
+    n
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (type_decl
+      name: (identifier)
+      body: (refined_type
+        base: (base_type)
+        refinement: (refinement
+          (pred_call
+            name: (predicate_name)
+            (number_literal)))))
+    (agent_decl
+      (store_annotation
+        name: (identifier)
+        (annotation_arg
+          value: (field_access
+            receiver: (number_literal)
+            field: (identifier))))
+      name: (identifier)
+      key: (key_decl
+        name: (identifier)
+        type: (identifier))
+      (store_field
+        name: (identifier)
+        kind: (store_kind
+          head: (identifier)
+          (base_type)))
+      (call_handler
+        method: (identifier)
+        return_type: (generic_type_ref
+          name: (builtin_type)
+          arg: (base_type))
+        body: (block
+          tail: (identifier))))))
