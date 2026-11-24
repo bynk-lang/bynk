@@ -1905,6 +1905,14 @@ of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
 receives from (`bynk.queue.dead_letter_type_mismatch`).
 
+A `sendValue`, `sendValueWith` or `sendValueBatch` call on a `Queue` instance whose queue some
+context of the project consumes (`from queue("q")`) MUST send a type, or for a batch an element
+type, that the consumer's `on message` parameter admits under the cross-context boundary
+comparison (ADR 0714), a stronger refinement being admitted where a weaker one is expected;
+otherwise it is `bynk.queue.message_type_mismatch`. The check is skipped where the type is still
+an abstract type parameter. A `send`, `sendWith` or `sendBatch` to such a queue warns
+(`bynk.queue.untyped_send`). A queue no context of the project consumes is not checked.
+
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is
 `bynk.email.invalid_address`. Two services of a context MUST NOT claim the same

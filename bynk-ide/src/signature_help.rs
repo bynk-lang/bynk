@@ -212,6 +212,11 @@ pub fn resolve_label(
         {
             return Some(label);
         }
+        // #3879: `Instance.sendValue*(…)` on a queue the project consumes.
+        if let Some(label) = crate::queue_delivery::send_value_label(recv, member, doc_text, files)
+        {
+            return Some(label);
+        }
         // A refined/opaque type's `of`/`unsafe`, or a capability op.
         return resolve_qualified(recv, member, doc_text, files);
     }

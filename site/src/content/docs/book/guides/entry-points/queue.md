@@ -149,20 +149,27 @@ platform delivers it. A consumer that faults is retried, so the address yields
 ## Send to the queue
 
 A context sends messages with a `bynk.cloudflare` `Queue` instance that names
-the queue, encoding each body with `Json.encode`:
+the queue. `sendValue` encodes the value for you, and when a context in the project
+consumes the queue, the compiler checks that the value is the type the consumer takes:
 
 ```bynk,fragment
 capability Outbound = Queue @name("outbound-email")
 
 service signup from http {
   on POST("/welcome") (to: String) -> Effect[HttpResult[String]] by Visitor given Outbound {
-    let _ <- Outbound.send(Json.encode(EmailJob { to: to, subject: "Welcome" }))
+    let _ <- Outbound.sendValue(EmailJob { to: to, subject: "Welcome" })
     Accepted("queued")
   }
 }
 ```
 
-See [Sending to a queue](/reference/bynk-capabilities/#sending-to-a-queue-queue).
+Sending a type the consumer cannot read is `bynk.queue.message_type_mismatch`, caught
+at compile time rather than as a message that is retried and dead-lettered. `send` takes
+JSON text instead, which the compiler cannot check, so it warns when the project consumes
+the queue.
+
+See [Sending to a queue](/reference/bynk-capabilities/#sending-to-a-queue-queue) and
+[Producers and consumers agree](/reference/queue/#producers-and-consumers-agree).
 
 ## Build and run
 

@@ -579,6 +579,7 @@ fn retain_unit_callees(
             .flat_map(|t| &t.callees)
             .filter(|(_, c)| {
                 project_model::is_events_emit(c)
+                    || crate::queue_producers::is_queue_send(c)
                     || matches!(
                         c,
                         crate::checker::Callee::Cross { .. } | crate::checker::Callee::Agent { .. }
@@ -1144,7 +1145,7 @@ fn analyse_project_inner(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_flattened,
-        &unit_callees,
+        (&unit_callees, &unit_uses, tys),
         &mut errors,
     );
 
@@ -1232,7 +1233,7 @@ fn phase_clean_program_checks(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
-    unit_callees: &project_model::UnitCallees,
+    facts: project_model::CallFacts<'_>,
     errors: &mut ErrorSink,
 ) {
     // On the bundle target, a context's required capability with no provider
@@ -1248,7 +1249,7 @@ fn phase_clean_program_checks(
         unit_consumes,
         unit_consumes_aliases,
         unit_tables,
-        unit_callees,
+        facts,
         unit_flattened,
         errors,
     );

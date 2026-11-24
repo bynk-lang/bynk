@@ -81,6 +81,7 @@ pub mod phase_timing;
 pub mod project_model;
 pub mod queue_consumers;
 pub mod queue_delivery;
+pub mod queue_producers;
 pub mod recovery;
 pub mod requirements;
 pub mod resolver;
@@ -99,6 +100,7 @@ pub mod test_env;
 pub mod test_suites;
 #[cfg(test)]
 pub(crate) mod testkit;
+pub mod ty_ref;
 pub mod unit_signature;
 pub mod websocket;
 pub mod wire;
