@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: a project whose `derives Ord` type is reordered, past what was recorded, fails the build with `bynk.types.ord_order_changed` until `bynk lock accept-order` accepts it; a project that does not reorder is unaffected
-changelog: `bynk.schema.lock` records each `derives Ord` type's field and variant order, and a reorder is an error until `bynk lock accept-order` accepts it
----
+# 0938 — The order of a `derives Ord` type is recorded in `bynk.schema.lock`
 
-## ADR: ord-order-lock
-title: The order of a `derives Ord` type is recorded in `bynk.schema.lock`
-summary: a new `[orders]` section records each project-owned `derives Ord` type's member order; a reorder is `bynk.types.ord_order_changed` until `bynk lock accept-order` rewrites the entry
+- **Status:** Accepted (v0.678)
 
 **Context.** The language made declaration order meaningful by choosing it as the derived `Ord` (fields in order for a record, variants in order for a sum). Moving a field or variant changes how every value sorts, and nothing reports it: the wire contract hash ignores that order. The lock already exists to catch a code edit that looks inert and changes what running programs do, for stored shapes and event versions.
 
