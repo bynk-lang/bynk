@@ -773,6 +773,20 @@ pub(crate) fn emit_agent(
         bynk_ts::TsDecl::Export(Box::new(class)),
         None,
     ));
+    // #3932: `@busyAfter(d)` lowers this class's queue wait; the runtime reads it where the
+    // class is wrapped, on every target and tier.
+    if let Some(ms) = bynk_check::agent_busy::busy_after_ms(a) {
+        stmts.push(bynk_ts::TsStmt::expr_stmt(
+            bynk_ts::TsExpr::Call {
+                callee: Box::new(bynk_ts::TsExpr::Ident("__agentBusyAfter".to_string())),
+                args: vec![
+                    bynk_ts::TsExpr::Ident(a.name.name.clone()),
+                    bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Num(ms.to_string())),
+                ],
+            },
+            None,
+        ));
+    }
     emit_agent_factory(a, ctx, reads_key, &registry, &mut stmts);
     emit_agent_history_driver(
         a,
