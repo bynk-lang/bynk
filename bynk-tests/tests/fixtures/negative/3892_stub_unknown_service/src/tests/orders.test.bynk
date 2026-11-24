@@ -1,0 +1,12 @@
+suite shop.orders {
+  consumes shop.pay { Receipt }
+
+  stub shop.stock.reserve(_) returns Ok(())
+  stub shop.stock.release(_) returns Ok(())
+
+  case "a service the context does not declare" {
+    stub Pay.authorise(_) returns Ok(Receipt { id: "r1" })
+    let r <- placeOrder.call("widget", 100)
+    expect r is Ok("r1")
+  }
+}

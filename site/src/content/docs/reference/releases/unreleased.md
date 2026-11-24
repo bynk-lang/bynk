@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.649.0** | A consumed context's service is a `stub` seam at `unit` and `integration`: `stub Pay.authorise(_) returns Ok(…)` substitutes it, `expect Pay.authorise called once` observes it, and `bynk.tier.cross_context_needs_system` names only the services left unstubbed |
 | **v0.648.1** | A `Bearer`, `Oidc` or `Signature` route's handler no longer sees the credential its seam verified in `RequestHeaders` |
 | **v0.648.0** | `Map` gains `remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`, `mapValues`, `fold` and `Map.of`, `Set` gains `union`, `intersect`, `difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`, and `bynk.map` and `bynk.set` are deprecated in favour of the methods |
 | **v0.647.1** | `Events.emit(e)` infers its event type from the argument, as `Idempotency.remember` infers `T` |

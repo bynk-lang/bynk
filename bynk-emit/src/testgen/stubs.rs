@@ -100,6 +100,7 @@ pub(super) fn emit_stub_class(
     // (`consumes U { T as Alias }`) to keep them off a type of its own: those
     // names are `U`'s whatever else the target binds them to.
     let mut sig_type_ns = type_ns.clone();
+    add_service_sig_types(rp, unit_tables, &mut sig_type_ns);
     if let Some(owner) = unit_tables
         .get(&owning_unit)
         .and_then(|t| t.flattened_caps.get(&rp.cap))
@@ -239,8 +240,8 @@ pub(super) fn emit_stub_class(
             .collect();
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
-        let mut body = emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names);
-        let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
+        let (mut body, mut taken) =
+            method_scope(rp, unit_tables, &scope_ns, &scope_names, &scope_type_names);
         // #2947: a suite helper inlined ahead of a value (#2907) spells its
         // signature's types unqualified, as in a case runner, so a method with
         // one binds the same `uses` commons' names `emit_test_scope_setup`
@@ -362,7 +363,7 @@ pub(super) fn emit_stub_class(
     // The stub's values are scaffolding, not user test logic, so the class maps nothing: the
     // statements the lowering built carry source spans, which are dropped here (v0.70).
     let mut class = TsStmt::decl(
-        TsDecl::class(format!("__Stub_{cap}"), fields, constructor, methods),
+        TsDecl::class(stub_class_name(cap), fields, constructor, methods),
         None,
     );
     class.clear_spans();
@@ -541,6 +542,7 @@ pub(super) fn lower_stub_value_block(
         unit_tables,
         unit_uses,
         unit_consumes,
+        unit_consumes_aliases,
         hidden,
         tys,
         items.types,
@@ -678,11 +680,13 @@ pub(super) fn clause_items(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn synthetic_typed_commons_for_target(
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<checker::Types>,
     // #3536: the declaring suite's own `type`s. One named like a first-party
@@ -724,6 +728,20 @@ pub(super) fn synthetic_typed_commons_for_target(
     }
     for (n, c, _) in platform_seams(target_name, unit_tables) {
         caps.entry(n.clone()).or_insert_with(|| c.clone());
+    }
+    // #3892: a consumed context's services are seams too (`with` and `trace`
+    // read their parameter names).
+    for (n, c) in test_suites::consumed_service_seam_decls(
+        unit_tables,
+        unit_consumes
+            .get(target_name)
+            .map_or(&[][..], Vec::as_slice),
+        &unit_consumes_aliases
+            .get(target_name)
+            .cloned()
+            .unwrap_or_default(),
+    ) {
+        caps.entry(n).or_insert(c);
     }
     let capability_items: Vec<CommonsItem> =
         caps.into_values().map(CommonsItem::Capability).collect();
@@ -909,6 +927,57 @@ pub(super) fn scopes_test(scopes: &[&StubScope]) -> TsExpr {
         .unwrap_or_else(|| bool_lit(false))
 }
 
+/// #3892: a consumed service's signature names the types its own context
+/// declares, qualified by that context's namespace.
+fn add_service_sig_types(
+    rp: &ResolvedStub,
+    unit_tables: &HashMap<String, UnitTable>,
+    sig_type_ns: &mut HashMap<String, String>,
+) {
+    if let Some(ctx) = &rp.service_context
+        && let Some(table) = unit_tables.get(ctx)
+    {
+        for n in public_types(table) {
+            sig_type_ns.insert(n.clone(), test_ns(ctx));
+        }
+    }
+}
+
+/// The names a stub method's body binds before its values: the target's own
+/// types and functions, and (#3892) for a consumed service its own context's
+/// types, whose variants a value may name bare (`Err(Declined)`). Returns the
+/// statements and the names taken.
+fn method_scope(
+    rp: &ResolvedStub,
+    unit_tables: &HashMap<String, UnitTable>,
+    scope_ns: &str,
+    scope_names: &[String],
+    scope_type_names: &[(String, Vec<String>)],
+) -> (Vec<TsStmt>, HashSet<String>) {
+    let mut body = emit_ns_destructure(scope_ns, scope_names, scope_type_names);
+    let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
+    if let Some(ctx) = &rp.service_context
+        && let Some(table) = unit_tables.get(ctx)
+    {
+        let types = aliased_types(table, |n| {
+            is_public_type(table, n)
+                && !taken.contains(n)
+                && !scope_type_names.iter().any(|(t, _)| t == n)
+        });
+        let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
+        taken.extend(names.iter().cloned());
+        body.extend(emit_ns_destructure(&test_ns(ctx), &names, &types));
+    }
+    (body, taken)
+}
+
+/// The name of a seam's stub class: `__Stub_<Cap>`. A consumed service is
+/// stubbed by its context's qualified path (#3892), whose dots are not identifier
+/// characters.
+pub(super) fn stub_class_name(cap: &str) -> String {
+    format!("__Stub_{}", cap.replace('.', "_"))
+}
+
 /// #291: a stubbed capability's `__makeTestDeps` entry — its `__Stub_<Cap>`
 /// layered over `base`, the tier default (the context's own provider, a
 /// platform capability's test double, or nothing). A stubbed operation answers
@@ -932,7 +1001,7 @@ pub(super) fn stub_overlay(rp: &ResolvedStub, ty: &str, base: Option<TsExpr>) ->
             vec![
                 base.unwrap_or_else(absent),
                 TsExpr::New {
-                    callee: Box::new(ident(format!("__Stub_{cap}"))),
+                    callee: Box::new(ident(stub_class_name(cap))),
                     args,
                 },
                 str_lit(cap.as_str()),

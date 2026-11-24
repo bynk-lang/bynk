@@ -139,6 +139,7 @@
   - Testing
     - [Write tests and mock collaborators](guides/testing/write-tests.md)
     - [Test a flow across Workers](guides/testing/integration.md)
+    - [Test a handler that calls another context](guides/testing/test-a-handler-that-calls-another-context.md)
     - [Run your tests](guides/testing/run-tests.md)
     - [Check what a request stored](guides/testing/check-what-the-app-stored.md)
     - [Try an expression against your project](guides/testing/try-an-expression.md)

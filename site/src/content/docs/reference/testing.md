@@ -1021,12 +1021,13 @@ A case's effective tier is `case.tier ?? suite.tier ?? unit`. Between `unit` and
   Workers and addresses a service by its context path (`shop.orders.place(…)`),
   not `place.call(…)`, so a `system` suite holds `system` cases only. Mixing
   tiers in one suite is `bynk.tier.mixed_system_suite`.
-- **Crossing a context needs `system`.** Below `system` a case runs in-process:
-  no consumed context is stood up, and `stub` doubles capabilities, not a
-  context's services. A `unit` or `integration` case, or a `property` (always
-  in-process), that reaches another context's service, directly or through a
-  service or agent handler that calls one, is
-  `bynk.tier.cross_context_needs_system`.
+- **Crossing a context needs `system`, or a stub.** Below `system` a case runs
+  in-process: no consumed context is stood up. A `unit` or `integration` case, or
+  a `property` (always in-process), that reaches another context's service,
+  directly or through a service or agent handler that calls one, is
+  `bynk.tier.cross_context_needs_system` for each such service it does not
+  [`stub`](#stub-services); a stubbed service is answered by its double, so the
+  case compiles and runs in-process.
 - **Participants are inferred**, not listed: `system` derives its wired
   collaborator set from the unit under test's transitive `consumes` graph. There
   is no `wires` clause.
@@ -1083,12 +1084,13 @@ production `provides`).
   provider's failure would, and the fault propagates out of the handler and out of
   the case unless the case [claims it with `faults`](#faults). It is never a
   block: a double that needs logic is the signal to promote the tier.
-- **`stub` is capability-only.** An agent's realness is the tier's job, not a
-  provider's, so `stub` targets a *capability* seam only. Overriding a
-  capability the unit does not `consumes` is `bynk.stub.not_a_seam`; naming an
-  operation the capability does not declare is `bynk.stub.unknown_op`; a
+- **`stub` targets a capability or a consumed context's service.** An agent's
+  realness is the tier's job, not a provider's, so an agent is never stubbed.
+  Overriding a capability the unit does not `consumes` is
+  `bynk.stub.not_a_seam`; naming an operation the capability does not declare
+  (or a service the context does not declare) is `bynk.stub.unknown_op`; a
   `returns` value whose type disagrees with the operation's result type is
-  `bynk.stub.rhs_type`.
+  `bynk.stub.rhs_type`. A service is stubbed in the next section.
 - **`stub` is in-process only.** A `stub` overrides a seam at `unit` and
   `integration`. At `system` each context runs as the Worker it deploys as and
   builds its own providers, so a `stub` there is `bynk.stub.at_system`.
@@ -1100,6 +1102,45 @@ production `provides`).
 Bare [observation](#observation) needs **no `stub`** — the recording proxy
 records calls at the seam regardless. You reach for `stub` only when the case
 depends on a collaborator's *return*.
+
+### Stubbing a consumed service {#stub-services}
+
+A context the unit `consumes` is a seam for its **services**. `stub` substitutes a
+service at `unit` and `integration`, so a handler that calls another context can
+be tested without deploying it:
+
+```bynk,fragment
+suite shop.orders {
+	consumes shop.pay { Receipt }
+
+	case "an order is placed when payment succeeds" {
+		stub Stock.reserve(_) returns Ok(())
+		stub Pay.authorise(_) returns Ok(Receipt { id: "r1" })
+		let r <- placeOrder.call("widget", 100)
+		expect r is Ok(_)
+		expect Pay.authorise called once
+	}
+}
+```
+
+- **The left names the service through the consuming file's name for the
+  context:** `Pay.authorise(<pattern>, …)` when it is consumed `as Pay`,
+  `shop.pay.authorise(…)` otherwise. The argument patterns are a capability's, and
+  the right side is typed against the service's declared return type, so a
+  contract change breaks the stub at compile time.
+- **`returns`, `returns each`, `fails`, `after` and `never` mean what they mean for
+  a capability.** `fails` is a fault in the call, and `returns Err(…)` is the
+  service's in-band failure.
+- **A stub makes the call legal; an unstubbed one is still refused.**
+  `bynk.tier.cross_context_needs_system` is reported only for the services a case
+  reaches without a stub, naming each, so a case cannot run a real cross-context
+  call in-process by accident.
+- **Observation works on services:** `expect Pay.authorise called once`, `never
+  called`, `called 2 times`, `with …` and `before …` read the double's recorded
+  calls as they read a capability's. The subject is the context's alias (or, with
+  none, the last segment of its path).
+- A service stub still ends at `system` as a capability's does:
+  `bynk.stub.at_system`.
 
 ### Sequenced `stub` — `returns each`
 
@@ -1834,6 +1875,9 @@ Full reference: [Agent invariants → Step invariants](/reference/agent-invarian
 See [`bynk.transition.*` errors](/reference/diagnostics/#transitions-step-invariants).
 
 ## Observation — `expect Cap.op called …` {#observation}
+
+An observation's subject is a capability operation, or a [stubbed consumed
+service](#stub-services) (`expect Pay.authorise called once`).
 
 Where the rungs above assert over *values* and *state*, observation asserts over
 *interaction*: that the unit under test called a capability, with what arguments,
