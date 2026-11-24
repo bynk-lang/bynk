@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A queue message whose body cannot be decoded is no longer retried: it is sent unchanged to the consumer's dead-letter queue and acked, or, with none, acked and reported as a fault, with one log line naming the queue, type and decode error but never the body; a `system` case reads it as `Undecodable`
-breaking: A queue message that does not decode is no longer retried (and eventually deleted); it is dead-lettered or dropped visibly, a `system` case that expected `Retry` for one now sees `Undecodable`, and a `match` of a queue verdict in a case must now name `Undecodable` or have a wildcard
----
+# 0933 — A queue message that cannot be decoded is dead-lettered or dropped visibly, never retried
 
-## ADR: queue-undecodable-message
-title: A queue message that cannot be decoded is dead-lettered or dropped visibly, never retried
-summary: The generated queue entry settles an undecodable body at once, to the dead-letter queue or as a reported fault, instead of retrying bytes that can never decode
+- **Status:** Accepted (v0.675)
 
 **Context.** The generated `queue` entry decoded each body and, on failure, called `msg.retry()`. The same bytes never decode, so the message was redelivered up to `max_retries` times and then deleted, unless a dead-letter queue was set, and the guide claimed a malformed message is retried. Only the entry decodes the body, so the handler cannot decide anything about it.
 
