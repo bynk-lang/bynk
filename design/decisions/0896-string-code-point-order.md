@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `String` orders and its length predicates count by code point, agreeing with storage, SQL and OpenAPI
-breaking: `String` `<`, `sortBy`, `min`, `max` and `Ord` now order by code point, not UTF-16 code unit, so text mixing a character above U+FFFF with one in U+E000..U+FFFF sorts differently; `MinLength`, `MaxLength` and `Length` now count code points at run time too (an emoji counts once). No diagnostic; no fix-it is needed for BMP-only text.
----
+# 0896 — String orders and measures by code point everywhere
 
-## ADR: string-code-point-order
-title: String orders and measures by code point everywhere
-summary: One comparator, code point order, shared by operators, kernels, Ord witnesses and the storage overlay; predicates count code points
+- **Status:** Accepted (v0.647)
 
 **Context.** `String` ordered by UTF-16 code unit (JavaScript `<`) while storage, D1/SQLite and the length predicates' compile-time check used code points or UTF-8 bytes. Run-time length predicates counted code units, so an astral literal was admitted at compile time and rejected by `.of` (#3949).
 
