@@ -128,7 +128,18 @@ fn emit_queue_handler(
                             "error",
                             vec![
                                 str_lit(format!("queue {} retry", route.name)),
-                                member(ident("result"), "reason"),
+                                // Past the `Ack` test the verdict is a `Retry`: a handler
+                                // cannot return `Undecodable` (#3878).
+                                member(
+                                    as_expr(
+                                        ident("result"),
+                                        TsType::Object(vec![TsTypeMember::readonly_prop(
+                                            "reason",
+                                            TsType::named("string"),
+                                        )]),
+                                    ),
+                                    "reason",
+                                ),
                             ],
                         )),
                         expr_stmt(method_call(ident("msg"), "retry", vec![])),

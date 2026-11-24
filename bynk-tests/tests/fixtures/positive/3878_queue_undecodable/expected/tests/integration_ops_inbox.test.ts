@@ -11,18 +11,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -173,11 +187,11 @@ async function test_a_decodable_message_is_acked() {
     const { Code, badCode, goodCode } = __ns_ops_codes;
     type Code = __ns_ops_codes.Code;
     const r = await __sysdrive_message_inbox({ id: "j1", code: goodCode() });
-    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:8:12", 316, 324, "expect r is Ack"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:8:12", 316, 324, "expect r is Ack", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -191,11 +205,11 @@ async function test_an_undecodable_message_is_neither_acked_nor_retried() {
     const { Code, badCode, goodCode } = __ns_ops_codes;
     type Code = __ns_ops_codes.Code;
     const r = await __sysdrive_message_inbox({ id: "j2", code: badCode() });
-    if (!(((__c: boolean) => __c)(r.tag === "Undecodable"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:13:12", 466, 482, "expect r is Undecodable"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Undecodable"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:13:12", 466, 482, "expect r is Undecodable", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -209,11 +223,11 @@ async function test_a_consumer_with_a_dead_letter_queue_reads_Undecodable_too() 
     const { Code, badCode, goodCode } = __ns_ops_codes;
     type Code = __ns_ops_codes.Code;
     const r = await __sysdrive_message_kept({ id: "j3", code: badCode() });
-    if (!(((__c: boolean) => __c)(r.tag === "Undecodable"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:18:12", 629, 645, "expect r is Undecodable"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Undecodable"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:18:12", 629, 645, "expect r is Undecodable", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -227,11 +241,11 @@ async function test_a_handler_s_own_verdict_is_unchanged() {
     const { Code, badCode, goodCode } = __ns_ops_codes;
     type Code = __ns_ops_codes.Code;
     const r = await __sysdrive_message_kept({ id: "retry", code: goodCode() });
-    if (!(((__c: boolean) => __c)(r.tag === "Retry" && r.reason === "asked to"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:23:12", 775, 797, "expect r is Retry(\"asked to\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Retry" && r.reason === "asked to"))) { throw __bynkExpectFailure("ops/tests/inbox.test.bynk:23:12", 775, 797, "expect r is Retry(\"asked to\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -240,7 +254,7 @@ async function test_a_handler_s_own_verdict_is_unchanged() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

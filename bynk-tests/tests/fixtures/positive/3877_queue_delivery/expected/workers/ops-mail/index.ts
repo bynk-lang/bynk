@@ -17,6 +17,11 @@ async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<un
   const path = typeof cause === "object" && cause !== null && typeof cause.path === "string" ? cause.path : "$";
   const kind = typeof cause === "object" && cause !== null && typeof cause.kind === "string" ? cause.kind : "";
   const dlq = binding === undefined ? undefined : (env as globalThis.Record<string, { send(body: unknown, options?: { contentType?: string }): globalThis.Promise<void> } | undefined>)[binding];
+  if (binding !== undefined && dlq === undefined) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, `the producer binding ${binding} is missing from env`);
+    msg.retry();
+    return;
+  }
   if (dlq === undefined) {
     globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: "dropped" });
     __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} received a message that is not a ${type} (${kind} at ${path})`));
@@ -24,7 +29,8 @@ async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<un
     return;
   }
   try {
-    await dlq.send(msg.body, { contentType: "json" });
+    const raw = msg.body instanceof globalThis.ArrayBuffer || globalThis.ArrayBuffer.isView(msg.body);
+    await dlq.send(msg.body, { contentType: raw ? "bytes" : "json" });
   } catch (thrown) {
     globalThis.console.error(`queue ${queue} dead-letter failed`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
     msg.retry();
@@ -72,7 +78,7 @@ export default {
             if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "digest-email", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_digest_0(__r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue digest-email retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue digest-email retry", (result as { readonly reason: string }).reason); msg.retry(); }
           } catch (e) {
             globalThis.console.error("queue digest-email threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }
@@ -86,7 +92,7 @@ export default {
             if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, "__BYNK_DLQ_OUTBOUND_EMAIL", "outbound-email", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_outbox_0(__r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue outbound-email retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue outbound-email retry", (result as { readonly reason: string }).reason); msg.retry(); }
           } catch (e) {
             globalThis.console.error("queue outbound-email threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }
@@ -100,7 +106,7 @@ export default {
             if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "outbound-email-dlq", "EmailJob", __r.error, msg); continue; }
             const result = await surface.queue_review_0(__r.value);
             if (result.tag === "Ack") msg.ack();
-            else { globalThis.console.error("queue outbound-email-dlq retry", result.reason); msg.retry(); }
+            else { globalThis.console.error("queue outbound-email-dlq retry", (result as { readonly reason: string }).reason); msg.retry(); }
           } catch (e) {
             globalThis.console.error("queue outbound-email-dlq threw", e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e); __bynkReportFault(ctx, e); msg.retry();
           }

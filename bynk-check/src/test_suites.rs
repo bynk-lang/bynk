@@ -6473,7 +6473,7 @@ service intake from queue(\"orders\") {
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack")
             .assert_clean();
-        case("    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Retry(why) => expect why.length() > 0\n      Ack => expect true\n    }")
+        case("    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Retry(why) => expect why.length() > 0\n      Ack => expect true\n      Undecodable => expect false\n    }")
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ok(_)")
             .assert_reports("bynk.types.is_unknown_variant");
