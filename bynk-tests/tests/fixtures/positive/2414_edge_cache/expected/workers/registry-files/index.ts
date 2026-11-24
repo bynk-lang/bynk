@@ -4,6 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __applyEdgeCache, __noStore, __edgeCacheGuard, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
 async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<globalThis.Response> {
@@ -112,6 +113,8 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
     }
     return new globalThis.Response("Not Found", { status: 404 });
   } catch (e) {
+    const __busy = __agentBusyResponse(e, __route);
+    if (__busy !== null) return __busy;
     globalThis.console.error(`registry.files ${__route} faulted`, e instanceof globalThis.Error ? (e.stack || globalThis.String(e)) : e);
     __bynkReportFault(ctx, e);
     return __faultResponse("registry.files", __route);

@@ -546,6 +546,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "adapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt {          // ✗ the binding supplies it\n        fn sign(secret: String) -> Effect[String] { secret }\n    }\n}\n\nadapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt            // ✓ no body\n}",
     },
     Explain {
+        code: "bynk.agent.bad_annotation",
+        blurb: "An agent has one annotation, `@busyAfter(<Duration>)`, written once, immediately before `agent`, taking a single `Duration` literal such as `5.seconds`. Another name, a second `@busyAfter`, or an argument that is not one `Duration` literal (a label, a second argument, a number, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)`, or drop the annotation.",
+        example: "@cache(maxAge: 5.minutes)   // ✗ not an agent annotation\nagent Basket { … }\n\n@busyAfter(5.seconds)       // ✓\nagent Basket { … }",
+    },
+    Explain {
+        code: "bynk.agent.busy_after_out_of_range",
+        blurb: "An agent instance runs one handler at a time, so a call to a busy one waits in a queue, and gives up after 30 seconds with `AgentBusy`. `@busyAfter(d)` lowers that wait for one agent class, so a latency-sensitive route fails fast. It cannot raise it: a longer wait only holds callers longer, and the runtime's limit is 30 seconds. Use a `Duration` from 1 second to 30 seconds.",
+        example: "@busyAfter(60.seconds)   // ✗ longer than the 30-second limit\nagent Basket { … }\n\n@busyAfter(5.seconds)    // ✓ lowers the wait\nagent Basket { … }",
+    },
+    Explain {
         code: "bynk.agent.class_conflict",
         blurb: "An agent class that bynk.schema.lock records can't just disappear from source: it \
                 must be given one fate, either `agent New replaces Old` (its data moves) or \
@@ -2524,8 +2534,13 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.headers_field_not_stringy",
+        blurb: "A header is a single text value (or a comma-separated list of them), so each field of the `headers` record must be one a header can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` (a header that may be absent) or a `List` (a comma-separated value, split respecting quoted strings). A nested record or any other type is refused. Flatten the record, or keep structured data in a `String` and decode it yourself. `query` and `cookies` records follow the same rule: `bynk.http.query_field_not_stringy`, `bynk.http.cookies_field_not_stringy`.",
+        example: "type Range = { from: Int, to: Int }\n\ntype Upload = { range: Range }   // ✗ a header is one value, not a record\n\ntype Upload = { from: Int, to: Int }   // ✓\n\non PUT(\"/files\") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.headers_wrong_type",
-        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` must be typed `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`.",
+        blurb: "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` is either a record the router decodes and validates (`headers: UploadHeaders`, one field per header, named by the field or by `@name(\"if-match\")`, answering `400` when the request does not fit), or `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. The record's fields are held to `bynk.http.headers_field_not_stringy`.",
         example: "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
@@ -7041,6 +7056,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["provider_decl"],
     ),
     d(
+        "bynk.agent.bad_annotation",
+        "An agent carries an annotation other than a single `@busyAfter(<Duration literal>)`, or `@busyAfter` is written twice or with the wrong argument.",
+    ),
+    d(
+        "bynk.agent.busy_after_out_of_range",
+        "An agent's `@busyAfter(d)` is outside the 1 to 30 seconds it may lower the queue wait to.",
+    ),
+    d(
         "bynk.agent.class_conflict",
         "An agent class has more than one fate: it is renamed twice, both renamed and removed, or renamed onto a class that already has its own recorded history in `bynk.schema.lock`.",
     ),
@@ -8281,8 +8304,13 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
     )),
     dg(
+        "bynk.http.headers_field_not_stringy",
+        "A field of an HTTP handler's `headers` record has a type a header cannot carry.",
+        &["http_handler"],
+    ),
+    dg(
         "bynk.http.headers_wrong_type",
-        "An HTTP handler's `headers` parameter is not typed `RequestHeaders`.",
+        "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`.",
         &["http_handler"],
     ),
     dg(

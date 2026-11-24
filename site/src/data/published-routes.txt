@@ -233,6 +233,8 @@
 /book/reference/diagnostics/bynk.adapter.include_outside/
 /book/reference/diagnostics/bynk.adapter.no_binding/
 /book/reference/diagnostics/bynk.adapter.provider_has_body/
+/book/reference/diagnostics/bynk.agent.bad_annotation/
+/book/reference/diagnostics/bynk.agent.busy_after_out_of_range/
 /book/reference/diagnostics/bynk.agent.class_conflict/
 /book/reference/diagnostics/bynk.agent.class_removed/
 /book/reference/diagnostics/bynk.agent.construction_arity/
@@ -1356,6 +1358,8 @@
 /reference/diagnostics/bynk.adapter.include_outside/
 /reference/diagnostics/bynk.adapter.no_binding/
 /reference/diagnostics/bynk.adapter.provider_has_body/
+/reference/diagnostics/bynk.agent.bad_annotation/
+/reference/diagnostics/bynk.agent.busy_after_out_of_range/
 /reference/diagnostics/bynk.agent.class_conflict/
 /reference/diagnostics/bynk.agent.class_removed/
 /reference/diagnostics/bynk.agent.construction_arity/
@@ -1634,6 +1638,7 @@
 /reference/diagnostics/bynk.http.form_on_sum_route/
 /reference/diagnostics/bynk.http.form_unknown_arg/
 /reference/diagnostics/bynk.http.header_question_not_found/
+/reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
 /reference/diagnostics/bynk.http.invalid_path/
 /reference/diagnostics/bynk.http.json_duplicate/

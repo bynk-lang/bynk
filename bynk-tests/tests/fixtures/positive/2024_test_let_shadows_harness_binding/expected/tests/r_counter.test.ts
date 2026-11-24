@@ -187,7 +187,7 @@ async function __prop_test_a_let_rebinding_a_for_all_binder() {
   const { badge } = __ns_r_other;
   const other = (deps as any).surface?.other;
   const __gens = [
-    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+    { name: "n", boundaries: [0n, 9007199254740991n, -9007199254740991n, 1n, -1n], gen: (rng: any) => rng.intWide(-9007199254740991n, 9007199254740991n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

@@ -15,7 +15,7 @@ async function __prop_test_inline_field_refinements_hold_for_every_drawn_item() 
   const { Item } = __ns_demo_gen;
   type Item = __ns_demo_gen.Item;
   const __gens = [
-    { name: "i", boundaries: [{ qty: globalThis.Number(1n), pct: globalThis.Number(0n), ratio: 0.5, code: "xxx" }], gen: (rng: any) => ({ qty: globalThis.Number(rng.int(1n, 1000n)), pct: globalThis.Number(rng.int(0n, 100n)), ratio: rng.float(0.5, 2.5), code: rng.str(3, 11) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "i", boundaries: [{ qty: globalThis.Number(1n), pct: globalThis.Number(0n), ratio: 0.5, code: "xxx" }], gen: (rng: any) => ({ qty: globalThis.Number(rng.intWide(1n, 9007199254740991n)), pct: globalThis.Number(rng.intWide(0n, 100n)), ratio: rng.floatWide(0.5, 2.5, false), code: rng.strWide(3, 67) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

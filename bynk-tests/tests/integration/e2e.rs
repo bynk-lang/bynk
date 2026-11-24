@@ -705,7 +705,18 @@ fn every_worker_entry_fault_handler_logs_the_stack() {
                 // The log and the report sit on the catch's own line (the
                 // queue consumer's compact form) or on the two lines after it
                 // (`fetch`).
-                let body = lines[i..lines.len().min(i + 3)].join("\n");
+                //
+                // #3932: a `fetch` catch opens with the two lines that answer a busy agent
+                // (`__agentBusyResponse`) before it logs; they are skipped here.
+                let start = if lines
+                    .get(i + 1)
+                    .is_some_and(|l| l.contains("__agentBusyResponse("))
+                {
+                    i + 3
+                } else {
+                    i
+                };
+                let body = lines[start..lines.len().min(start + 3)].join("\n");
                 if !(body.contains("globalThis.console.error(")
                     && body.contains(STACK)
                     && body.contains(REPORT))
@@ -713,7 +724,7 @@ fn every_worker_entry_fault_handler_logs_the_stack() {
                     offenders.push(format!("{}:{}", path.display(), i + 1));
                 }
                 let fetch_catch = body.contains(" faulted`");
-                let answer = lines[i..lines.len().min(i + 4)].join("\n");
+                let answer = lines[start..lines.len().min(start + 4)].join("\n");
                 if fetch_catch && !answer.contains("return __faultResponse(") {
                     offenders.push(format!("{}:{} (no __faultResponse)", path.display(), i + 1));
                 }

@@ -15,7 +15,7 @@ async function __prop_test_for_all_body_matches_a_locally_constructed_sum() {
   const { Outcome } = __ns_demo_gen;
   type Outcome = __ns_demo_gen.Outcome;
   const __gens = [
-    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+    { name: "n", boundaries: [0n, 9007199254740991n, -9007199254740991n, 1n, -1n], gen: (rng: any) => rng.intWide(-9007199254740991n, 9007199254740991n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

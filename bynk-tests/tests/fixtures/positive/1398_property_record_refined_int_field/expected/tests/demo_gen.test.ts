@@ -16,7 +16,7 @@ async function __prop_test_record_refined_int_field_participates_in_arithmetic()
   type Pct = __ns_demo_gen.Pct;
   type Point = __ns_demo_gen.Point;
   const __gens = [
-    { name: "p", boundaries: [{ x: globalThis.Number((0n as any)), y: globalThis.Number((0n as any)) }], gen: (rng: any) => ({ x: globalThis.Number((rng.int(0n, 100n) as any)), y: globalThis.Number((rng.int(0n, 100n) as any)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "p", boundaries: [{ x: globalThis.Number((0n as any)), y: globalThis.Number((0n as any)) }], gen: (rng: any) => ({ x: globalThis.Number((rng.intWide(0n, 100n) as any)), y: globalThis.Number((rng.intWide(0n, 100n) as any)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

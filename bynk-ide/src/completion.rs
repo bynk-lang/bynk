@@ -1202,7 +1202,7 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
     (
         "headers",
         "RequestHeaders",
-        "the request's headers, read-only",
+        "the request's headers: a record `T` decoded from them and validated before the handler runs (`400` on a violation), or a raw, read-only `RequestHeaders` view",
     ),
     (
         "cookies",
@@ -2004,6 +2004,15 @@ pub fn variants_for_ty(
         Ty::Named { name, .. } => sum_type_variants(name, doc_text, files),
         Ty::Result(..) => built_in_variants(&["Ok", "Err"], "Result"),
         Ty::Option(..) => built_in_variants(&["Some", "None"], "Option"),
+        // #3878: a case's view of a queue verdict also has `Undecodable`, a body that did not decode.
+        Ty::QueueResult => {
+            let mut names: Vec<&str> = bynk_syntax::ast::QUEUE_VARIANTS
+                .iter()
+                .map(|v| v.name)
+                .collect();
+            names.push(bynk_check::checker::QUEUE_UNDECODABLE);
+            built_in_variants(&names, "QueueResult")
+        }
         _ => Vec::new(),
     }
 }
@@ -2771,6 +2780,10 @@ pub const SNIPPETS: &[(&str, &str)] = &[
     (
         "agent",
         "agent ${1:Name} {\n\tkey ${2:id}: ${3:String}\n\n\tstore ${4:status}: Cell[${5:Int}] = ${6:0}\n\n\tinvariant ${7:non_negative}: ${8:status >= 0}\n\n\ttransition ${9:monotonic}: ${10:new.status >= old.status}\n\n\ton call ${11:op}(${12}) -> Effect[Result[${13:()}, String]] {\n\t\tOk(${14:()})\n\t}\n}",
+    ),
+    (
+        "agent busyAfter",
+        "@busyAfter(${1:5.seconds})\nagent ${2:Name} {\n\tkey ${3:id}: ${4:String}\n\n\tstore ${5:status}: Cell[${6:Int}] = ${7:0}\n\n\ton call ${8:op}(${9}) -> Effect[${10:()}] {\n\t\t$0\n\t}\n}",
     ),
     // -- Services & handlers --
     (
@@ -5633,6 +5646,17 @@ fn Box.size(self) -> Int { 1 }
             .map(|c| c.label)
             .collect();
         assert_eq!(got, vec!["Some".to_string(), "None".to_string()]);
+    }
+
+    #[test]
+    fn a_queue_verdict_offers_undecodable_after_its_own_variants() {
+        // #3878: a `system` case's `expect r is ` on a queue address.
+        let verdict = TYS.intern(Ty::QueueResult);
+        let got: Vec<String> = variants_for_ty(verdict, &TYS, "", None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(got, ["Ack", "Retry", "Undecodable"]);
     }
 
     #[test]

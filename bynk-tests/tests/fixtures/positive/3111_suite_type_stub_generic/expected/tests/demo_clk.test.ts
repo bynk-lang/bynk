@@ -1716,7 +1716,7 @@ async function __prop_test_a_suite_type_round_trips_through_Result_in_a_property
   const deps = __makeTestDeps();
   const { ping, tag } = __ns_demo_clk;
   const __gens = [
-    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+    { name: "n", boundaries: [0n, 9007199254740991n, -9007199254740991n, 1n, -1n], gen: (rng: any) => rng.intWide(-9007199254740991n, 9007199254740991n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
   ];
   interface Pair {
     readonly a: number;

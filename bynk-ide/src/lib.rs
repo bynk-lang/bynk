@@ -51,6 +51,7 @@ pub use bynk_project::SchemaLock;
 /// language server never analyses it as a project.
 pub use bynk_project::is_workspace_root;
 
+pub mod agent_busy;
 pub mod agent_effects;
 /// #2220: the agent state model lives in `bynk-check`, shared with the
 /// checker; re-exported here so existing paths keep working.
@@ -63,6 +64,7 @@ pub mod doc_link_urls;
 pub mod documentation;
 mod duration_completion;
 pub mod first_party_docs;
+pub mod header_completion;
 pub mod hover;
 pub mod index_queries;
 pub mod locals_nav;

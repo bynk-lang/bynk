@@ -134,6 +134,9 @@ async function test_a_queue_verdict_binds_its_reason() {
         case "Ack": {
           return __bynkExpect((false), "tests/app/web.bynk:35:21", 1123, 1128, "expect false (in the `Ack` arm of `match r`)", "r", () => __bynkShow(__d));
         }
+        case "Undecodable": {
+          return __bynkExpect((false), "tests/app/web.bynk:36:29", 1157, 1162, "expect false (in the `Undecodable` arm of `match r`)", "r", () => __bynkShow(__d));
+        }
       }
       throw new globalThis.Error("non-exhaustive match");
     })(r));

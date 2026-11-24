@@ -18,7 +18,7 @@ async function __prop_test_generated_bindings_satisfy_their_own_trivial_shape() 
   const __gens = [
     { name: "o", boundaries: [Outcome.Hit(true)], gen: (rng: any) => rng.pick([() => Outcome.Hit(rng.bool()), () => Outcome.Miss]), shrink: (v: any) => [Outcome.Hit(true)], show: (v: any) => __bynkShow(v) },
     { name: "flag", boundaries: [true, false], gen: (rng: any) => rng.bool(), shrink: (v: any) => (v ? [false] : []), show: (v: any) => __bynkShow(v) },
-    { name: "label", boundaries: [("x" as any)], gen: (rng: any) => (rng.str(1, 9) as any), shrink: (v: any) => __bynkShrinkString(v, 1).map((__s: string) => (__s as any)), show: (v: any) => __bynkShow(v) },
+    { name: "label", boundaries: [("x" as any)], gen: (rng: any) => (rng.strWide(1, 65) as any), shrink: (v: any) => __bynkShrinkString(v, 1).map((__s: string) => (__s as any)), show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

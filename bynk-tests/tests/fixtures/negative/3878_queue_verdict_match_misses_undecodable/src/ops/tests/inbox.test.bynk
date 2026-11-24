@@ -1,0 +1,11 @@
+// #3878: a `system` case's verdict can be `Undecodable`, so a `match` that names only the
+// handler's own verdicts is not exhaustive.
+suite ops.inbox as system {
+  case "a match of the verdict names Undecodable or has a wildcard" {
+    let r <- inbox.message(Job { id: "j1" })
+    match r {
+      Ack => expect true
+      Retry(why) => expect why.length() == 0
+    }
+  }
+}

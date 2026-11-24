@@ -534,8 +534,8 @@ async function __prop_test_addition_is_exact_and_commutative() {
   type Receipt = __ns_money.Receipt;
   type Wide = __ns_money.Wide;
   const __gens = [
-    { name: "a", boundaries: [], gen: (rng: any) => ({ coefficient: 0n, scale: 0 }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
-    { name: "b", boundaries: [], gen: (rng: any) => ({ coefficient: 0n, scale: 0 }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "a", boundaries: [{ coefficient: 0n, scale: 0 }, { coefficient: 1n, scale: 0 }, { coefficient: -1n, scale: 0 }, { coefficient: 5n, scale: 2 }, { coefficient: -5n, scale: 2 }, { coefficient: 12345n, scale: 3 }], gen: (rng: any) => rng.decimalWide(), shrink: (v: any) => __bynkShrinkDecimal(v), show: (v: any) => __bynkShow(v) },
+    { name: "b", boundaries: [{ coefficient: 0n, scale: 0 }, { coefficient: 1n, scale: 0 }, { coefficient: -1n, scale: 0 }, { coefficient: 5n, scale: 2 }, { coefficient: -5n, scale: 2 }, { coefficient: 12345n, scale: 3 }], gen: (rng: any) => rng.decimalWide(), shrink: (v: any) => __bynkShrinkDecimal(v), show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {
@@ -558,7 +558,7 @@ async function __prop_test_a_positive_price_survives_the_wire() {
   type Receipt = __ns_money.Receipt;
   type Wide = __ns_money.Wide;
   const __gens = [
-    { name: "p", boundaries: [({ coefficient: 1n, scale: 2 } as any)], gen: (rng: any) => ({ coefficient: rng.int(1n, 100000n), scale: 2 } as any), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "p", boundaries: [({ coefficient: 1n, scale: 2 } as any)], gen: (rng: any) => ({ coefficient: rng.intWide(1n, 100000n), scale: 2 } as any), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

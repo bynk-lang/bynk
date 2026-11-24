@@ -228,7 +228,7 @@ async function __prop_test_an_is_binding_in_a_property_does_not_shadow_across_cl
   type Positive = __ns_demo_greet.Positive;
   type Shape = __ns_demo_greet.Shape;
   const __gens = [
-    { name: "n", boundaries: [0n, 1000n, -1000n], gen: (rng: any) => rng.int(-1000n, 1000n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
+    { name: "n", boundaries: [0n, 9007199254740991n, -9007199254740991n, 1n, -1n], gen: (rng: any) => rng.intWide(-9007199254740991n, 9007199254740991n), shrink: (v: any) => __bynkShrinkInt(v, 0n), show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {

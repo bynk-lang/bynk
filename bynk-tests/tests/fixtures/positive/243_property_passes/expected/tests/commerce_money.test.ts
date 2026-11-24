@@ -15,8 +15,8 @@ async function __prop_test_a_sorted_pair_stays_sorted() {
   const { Percent } = __ns_commerce_money;
   type Percent = __ns_commerce_money.Percent;
   const __gens = [
-    { name: "a", boundaries: [(0n as any), (100n as any)], gen: (rng: any) => (rng.int(0n, 100n) as any), shrink: (v: any) => __bynkShrinkInt(v, 0n).map((__n: bigint) => (__n as any)), show: (v: any) => __bynkShow(v) },
-    { name: "b", boundaries: [(0n as any), (100n as any)], gen: (rng: any) => (rng.int(0n, 100n) as any), shrink: (v: any) => __bynkShrinkInt(v, 0n).map((__n: bigint) => (__n as any)), show: (v: any) => __bynkShow(v) },
+    { name: "a", boundaries: [(0n as any), (100n as any)], gen: (rng: any) => (rng.intWide(0n, 100n) as any), shrink: (v: any) => __bynkShrinkInt(v, 0n).map((__n: bigint) => (__n as any)), show: (v: any) => __bynkShow(v) },
+    { name: "b", boundaries: [(0n as any), (100n as any)], gen: (rng: any) => (rng.intWide(0n, 100n) as any), shrink: (v: any) => __bynkShrinkInt(v, 0n).map((__n: bigint) => (__n as any)), show: (v: any) => __bynkShow(v) },
   ];
   const __where = (__vals: any[]) => {
     const a = globalThis.Number(__vals[0]) as any;

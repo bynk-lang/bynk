@@ -17,6 +17,14 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.675.0
+
+A queue message that does not decode is no longer retried (and eventually deleted); it is dead-lettered or dropped visibly, a `system` case that expected `Retry` for one now sees `Undecodable`, and a `match` of a queue verdict in a case must now name `Undecodable` or have a wildcard
+
+## v0.672.0
+
+An HTTP route whose agent call hits `AgentBusy` now answers `503` with `Retry-After: 1` instead of `500`, and is no longer reported to the platform as a fault, so a client or alert that matched the `500` must match the `503`; a cross-context call that does so is `503` too, unmarked, so its caller reads it as unreachable rather than `CalleeFaulted`.
+
 ## v0.667.0
 
 `Kv.putTtl` takes a `KvTtl` (a `Duration` of at least 60 seconds) instead of `Int` seconds, `KvExpiration.After` takes a `KvTtl` and `KvGet.cacheTtl` an `Option[KvCacheTtl]`, so `Kv.putTtl(k, v, 86400)` is a type error: write `1.day`, or `KvTtl.of(d)` for a computed span; a TTL under 60 seconds (30 for `cacheTtl`) is now a compile error or a `ValidationError` instead of a run-time fault, and a part second rounds towards zero rather than up

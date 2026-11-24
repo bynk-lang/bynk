@@ -2,8 +2,8 @@
 //! helpers `fetch` catches into, and the member guard that marks the router's own answers.
 
 use crate::ts_build::{
-    and_expr, binary, block, call, cond_expr, expr_stmt, ident, member, method_call, new, null_lit,
-    num_lit, paren, str_lit,
+    and_expr, binary, block, call, cond_expr, const_, expr_stmt, ident, if_, member, method_call,
+    new, null_lit, num_lit, paren, return_, str_lit,
 };
 use bynk_check::wire_format::CallCheck;
 use bynk_ts::{TsExpr, TsStmt, TsSwitchCase};
@@ -86,14 +86,53 @@ pub(super) const CRON_RUN_HELPER: &str = "async function __bynkCronRun<T extends
 }
 ";
 
-/// The fault helpers a Worker entry carries: `__bynkReportFault`, and with cron handlers (#3872)
-/// `__bynkCronRun`, which reports through it. One raw snippet, so the entry's text writes do not grow.
-pub(super) fn fault_helpers(has_cron: bool) -> String {
-    let all: &[&str] = if has_cron {
-        &[REPORT_FAULT_HELPER, CRON_RUN_HELPER]
-    } else {
-        &[REPORT_FAULT_HELPER]
-    };
+/// #3878: settles one queue message whose body does not decode as the consumer's message type.
+/// No retry can change the bytes, so it is never retried. With a dead-letter queue (`binding`
+/// names its producer binding on `env`) the body is sent there unchanged and the message acked;
+/// a failed send, or a configured binding missing from `env`, retries it, so nothing is lost while
+/// the dead-letter queue is unavailable. A body a non-Bynk producer sent as raw bytes keeps its content type.
+/// Without one it is acked and reported as a fault. One log record names the queue, the message
+/// type and the decode error's path and kind, never the body (#3437: it can hold user data).
+pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, env: unknown, binding: string | undefined, queue: string, type: string, error: unknown, msg: { readonly body: unknown; ack(): void; retry(): void }): globalThis.Promise<void> {
+  const cause = error as { readonly kind?: unknown; readonly path?: unknown } | null;
+  const path = typeof cause === \"object\" && cause !== null && typeof cause.path === \"string\" ? cause.path : \"$\";
+  const kind = typeof cause === \"object\" && cause !== null && typeof cause.kind === \"string\" ? cause.kind : \"\";
+  const dlq = binding === undefined ? undefined : (env as globalThis.Record<string, { send(body: unknown, options?: { contentType?: string }): globalThis.Promise<void> } | undefined>)[binding];
+  if (binding !== undefined && dlq === undefined) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, `the producer binding ${binding} is missing from env`);
+    msg.retry();
+    return;
+  }
+  if (dlq === undefined) {
+    globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: \"dropped\" });
+    __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} received a message that is not a ${type} (${kind} at ${path})`));
+    msg.ack();
+    return;
+  }
+  try {
+    const raw = msg.body instanceof globalThis.ArrayBuffer || globalThis.ArrayBuffer.isView(msg.body);
+    await dlq.send(msg.body, { contentType: raw ? \"bytes\" : \"json\" });
+  } catch (thrown) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    msg.retry();
+    return;
+  }
+  globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: \"dead-lettered\" });
+  msg.ack();
+}
+";
+
+/// The fault helpers a Worker entry carries: `__bynkReportFault`, with cron handlers (#3872)
+/// `__bynkCronRun`, which reports through it, and with queue consumers (#3878) `__bynkUndecodable`.
+/// One raw snippet, so the entry's text writes do not grow.
+pub(super) fn fault_helpers(has_cron: bool, has_queue: bool) -> String {
+    let mut all: Vec<&str> = vec![REPORT_FAULT_HELPER];
+    if has_cron {
+        all.push(CRON_RUN_HELPER);
+    }
+    if has_queue {
+        all.push(UNDECODABLE_HELPER);
+    }
     all.join("\n")
 }
 
@@ -153,6 +192,29 @@ pub(super) fn own_path_guard(member_mode: bool, prefix: &str, names: &[String]) 
         starts,
         method_call(str_array(names), "includes", vec![rest]),
     )
+}
+
+/// #3932: the head of `fetch`'s fault handler, `const __busy = __agentBusyResponse(e, __route);
+/// if (__busy !== null) return __busy;`: a caught `AgentBusy` answers `503` with `Retry-After`
+/// and goes no further, so it is not logged or reported as a fault.
+pub(super) fn agent_busy_answer() -> Vec<TsStmt> {
+    vec![
+        const_(
+            "__busy",
+            call(
+                ident("__agentBusyResponse"),
+                vec![ident("e"), ident("__route")],
+            ),
+        ),
+        if_(
+            binary(
+                bynk_ts::TsBinaryOp::StrictNotEq,
+                ident("__busy"),
+                null_lit(),
+            ),
+            return_(Some(ident("__busy"))),
+        ),
+    ]
 }
 
 /// #2192: `__bynkReportFault(ctx, e);`, in an entry-point catch clause.

@@ -7,6 +7,12 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.675.0** | A queue message whose body cannot be decoded is no longer retried: it is sent unchanged to the consumer's dead-letter queue and acked, or, with none, acked and reported as a fault, with one log line naming the queue, type and decode error but never the body; a `system` case reads it as `Undecodable` |
+| **v0.674.0** | An HTTP handler's `headers` parameter may be a record, decoded and validated at the boundary as `query` and `cookies` are (`@name("if-match")` names a header, names match without case, a `List` field splits a comma-separated value), and `RequestHeaders` remains the raw view |
+| **v0.673.0** | A `for all` draws each plain type across its realistic domain (a wide `Int`, a `String` with whitespace and astral characters, and `Decimal`, `Instant`, `Duration`, `Bytes` and `Float` with boundaries), so a seed recorded earlier may now find a different counterexample |
+| **v0.672.0** | An agent call that waits past its queue limit (`AgentBusy`) now answers `503` with `Retry-After: 1` at an HTTP route, logged as busy rather than reported as a fault; `@busyAfter(d)` before `agent` lowers the 30-second wait |
+| **v0.671.2** | Releases no longer publish prebuilt macOS binaries for now (GitHub's macOS runners were holding releases back); on macOS, `install.sh` says so and points to `cargo install bynk bynk-lsp` |
+| **v0.671.1** | A failing `for all` over a `Duration` or `Instant`, and a failed `expect … is …` whose subject holds one, print it in Bynk's form (`3.seconds`, `Instant.fromEpochMillis(0)`) instead of as bare milliseconds |
 | **v0.671.0** | A context's `transparent` types are constructible from a consumer on every target; under Workers the consumer builds them with its own copy of the guards |
 | **v0.670.0** | A path parameter takes the types a typed `query` field does (`Int`, `Bool`, `Decimal`, enums, and refined or opaque types over them), decoded after the route matches with a `400` at `path.<name>` |
 | **v0.669.0** | A queue consumer's `on message` handler can take its delivery metadata as a second parameter, `QueueDelivery { attempts, sentAt }`, in either order; `q.message(m)` in a test takes an optional delivery |

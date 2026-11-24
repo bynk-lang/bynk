@@ -121,8 +121,9 @@ variants are grouped by whether the callee's handler ran:
 | no response (the `fetch` threw) | `Unreachable(None)` | unknown |
 
 A `200` the caller cannot decode stays a fault: the contract hash makes it a
-toolchain bug rather than an outcome. A failure turned into a value is still
-logged once, as it would have been as a fault. On the `bundle` target
+toolchain bug rather than an outcome. A callee whose handler found an agent busy
+(`AgentBusy`) answers `503`, unmarked, so it reads as `Unreachable(Some(503))`. A
+failure turned into a value is still logged once, as it would have been as a fault. On the `bundle` target
 there is no wire: only `Handled` and `Faulted` occur.
 
 ### Error bodies
