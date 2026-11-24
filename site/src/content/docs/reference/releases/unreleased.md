@@ -7,3 +7,4 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.655.1** | A path with malformed percent-encoding is a `400 MalformedPath` rejection, no longer a `500` fault |
