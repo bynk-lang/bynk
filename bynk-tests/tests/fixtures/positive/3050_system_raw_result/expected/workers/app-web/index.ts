@@ -2,7 +2,7 @@
 // Worker entry point for context `app.web`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -38,7 +38,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/", path) !== null) {
           __route = "GET /";
           const result = await surface.http_GET();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_web);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"app.web\""]), __security_web);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -46,7 +46,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/utf8", path) !== null) {
           __route = "GET /utf8";
           const result = await surface.http_GET_utf8();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_web);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"app.web\""]), __security_web);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

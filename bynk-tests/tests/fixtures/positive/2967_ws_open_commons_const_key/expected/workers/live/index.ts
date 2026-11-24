@@ -2,6 +2,7 @@
 // Worker entry point for context `live`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __applyChallenge } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -38,7 +39,7 @@ export default {
 
       if (request.headers.get("Upgrade") === "websocket") {
         __route = "ws feed";
-        return surface.ws_feed_open(request);
+        return __applyChallenge(await surface.ws_feed_open(request), request, ["Bynk realm=\"live\""]);
       }
 
       return new globalThis.Response("Not Found", { status: 404 });
