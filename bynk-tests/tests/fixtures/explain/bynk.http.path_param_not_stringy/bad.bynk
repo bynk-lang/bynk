@@ -1,7 +1,7 @@
 context api
 
 service api from http {
-    on GET("/items/:id") (id: Int) -> Effect[HttpResult[String]] by v: Visitor {
+    on GET("/items/:id") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor {
         Ok("x")
     }
 }
