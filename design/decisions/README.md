@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0936](0936-selected-consumed-type-beats-unselected-adapter-export.md) | **A selected consumed type wins over an unselected standard-library export of the same name** (v0.677.1) — Name precedence between a file's own, selected consumed, and unselected `bynk` types | Accepted (v0.677.1) |
+| [0935](0935-list-combinators-without-tuples.md) | **filterMap, zipWith, takeWhile, skipWhile and count(p) on List** (v0.677) — Adds the five list combinators a language without tuples needs, with zipWith stopping at the shorter list | Accepted (v0.677) |
 | [0934](0934-string-methods-and-list-join.md) | **String method completion, List[String].join, and bynk.string deprecated** (v0.676) — Adds nine String kernel methods and join on a List[String], and deprecates the one-function bynk.string commons | Accepted (v0.676) |
 | [0933](0933-queue-undecodable-message.md) | **A queue message that cannot be decoded is dead-lettered or dropped visibly, never retried** (v0.675) — The generated queue entry settles an undecodable body at once, to the dead-letter queue or as a reported fault, instead of retrying bytes that can never decode | Accepted (v0.675) |
 | [0932](0932-typed-headers-record.md) | **A typed headers record, decoded and validated at the boundary** (v0.674) — headers: T takes the query and cookies field rules, with case-insensitive names and comma-list splitting, through one reusable decoder | Accepted (v0.674) |
