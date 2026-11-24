@@ -467,6 +467,8 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         })
         .collect();
     main_body.push(const_("modules", TsExpr::multiline_array(modules_items)));
+    let shared_variant = runner_shared_variant(tests, pg);
+    main_body.extend(shared_variant.as_deref().map(shared_begin));
     main_body.push(TsStmt::let_stmt(
         TsBindingName::Ident("passed".to_string()),
         None,
@@ -841,6 +843,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         expr_stmt(call(member(ident("process"), "exit"), vec![num_lit("1")])),
     ));
 
+    main_body.extend(shared_variant.map(|_| shared_end()));
     program.push(TestRuntimeModule::TestFilter.splice());
     program.push(TsStmt::decl(
         TsDecl::Function {
@@ -856,6 +859,44 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     ));
     program.push(expr_stmt(call(ident("main"), vec![])));
     program
+}
+
+/// #4268: the begin and end comments around the fixed part of `main()`, so the snapshot harness
+/// can find it (`bynk-tests/tests/support/shared_snapshots.rs` matches these two strings). The
+/// variant names which optional parts the runner carries. Inert comments: the program is otherwise
+/// unchanged.
+const SHARED_BEGIN: &str = "bynk:shared-begin test-runner#";
+const SHARED_END: &str = "bynk:shared-end";
+
+fn shared_begin(variant: &str) -> TsStmt {
+    TsStmt::comment(format!("{SHARED_BEGIN}{variant}"), None)
+}
+
+fn shared_end() -> TsStmt {
+    TsStmt::comment(SHARED_END, None)
+}
+
+/// The variant of the fixed part of `main()` this build emits: the sorted optional parts it
+/// carries, or `base`. `None` when the part holds something particular to this build (the
+/// snapshot report lists the modules that take a snapshot), so it is not delimited.
+fn runner_shared_variant(tests: &[RunnableTest], pg: bool) -> Option<String> {
+    if tests.iter().any(|t| !t.snapshot_files.is_empty()) {
+        return None;
+    }
+    let parts: Vec<&str> = [
+        (tests.iter().any(|t| t.detach_reports), "detach"),
+        (tests.iter().any(|t| t.generative), "generative"),
+        (pg, "pg"),
+        (tests.iter().any(|t| t.remote), "remote"),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    Some(if parts.is_empty() {
+        "base".to_string()
+    } else {
+        parts.join("+")
+    })
 }
 
 /// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
@@ -1105,6 +1146,10 @@ mod tests {
         .replace(
             "<<bynk-shared: testing/test_filter>>\n",
             include_str!("../../../bynk-tests/tests/fixtures/shared/testing/test_filter.ts"),
+        )
+        .replace(
+            "<<bynk-shared: test-runner#base>>\n",
+            include_str!("../../../bynk-tests/tests/fixtures/shared/test-runner@base.ts"),
         );
         let tests = vec![RunnableTest {
             snapshot_files: Vec::new(),
