@@ -243,7 +243,7 @@ service api from http {
 
 #[test]
 fn agent_state_round_trips_on_workerd() {
-    let Some(served) = serve_smoke(AGENT_STATE_SOURCE, "state", 30000) else {
+    let Some(served) = serve_smoke(AGENT_STATE_SOURCE, "state") else {
         return;
     };
     let url = &served.url;
@@ -339,7 +339,6 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
         let Some(served) = serve_smoke_with(
             &[("smoke.bynk", MIGRATE_SMOKE_V1)],
             "migrate-v1",
-            31000,
             None,
             Some(&store),
         ) else {
@@ -352,7 +351,6 @@ fn a_migrate_step_carries_state_written_by_an_earlier_build_on_workerd() {
     let Some(served) = serve_smoke_with(
         &[("smoke.bynk", MIGRATE_SMOKE_V2)],
         "migrate-v2",
-        31100,
         lock,
         Some(&store),
     ) else {
@@ -398,7 +396,6 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
         let Some(served) = serve_smoke_with(
             &[("smoke.bynk", MIGRATE_SMOKE_V1)],
             "sweep-v1",
-            31200,
             None,
             Some(&store),
         ) else {
@@ -415,7 +412,6 @@ fn the_migrate_route_wakes_a_stored_instance_on_workerd() {
     let Some(served) = serve_smoke_with_args(
         &[("smoke.bynk", MIGRATE_SMOKE_V2)],
         "sweep-v2",
-        31300,
         lock,
         Some(&store),
         &["--var".to_string(), format!("{}:{key}", wf::MIGRATE_KEY)],
@@ -604,7 +600,7 @@ service api from http {
 
 #[test]
 fn agent_calls_use_the_boundary_codec_on_workerd() {
-    let Some(served) = serve_smoke(AGENT_CODEC_SOURCE, "codec", 40000) else {
+    let Some(served) = serve_smoke(AGENT_CODEC_SOURCE, "codec") else {
         return;
     };
     let body = fetch(&served.url, "/rt").expect("GET /rt round-trips values through an agent");
@@ -645,7 +641,7 @@ service api from http {
 
 #[test]
 fn bytes_operations_run_on_workerd() {
-    let Some(served) = serve_smoke(BYTES_OPS_SOURCE, "bytes", 10000) else {
+    let Some(served) = serve_smoke(BYTES_OPS_SOURCE, "bytes") else {
         return;
     };
     let body = fetch(&served.url, "/bytes").expect("GET /bytes runs the Bytes operations");
@@ -711,7 +707,7 @@ service api from http {
 
 #[test]
 fn a_provider_calls_an_agent_on_workerd() {
-    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent", 55000) else {
+    let Some(served) = serve_smoke(PROVIDER_AGENT_SOURCE, "provider-agent") else {
         return;
     };
     let body = fetch(&served.url, "/yank").expect("GET /yank calls the agent through providers");
@@ -801,7 +797,7 @@ service api from http {
 
 #[test]
 fn a_context_split_across_files_serves_on_workerd() {
-    let Some(served) = serve_smoke_files(SPLIT_CONTEXT_FILES, "split", 50000) else {
+    let Some(served) = serve_smoke_files(SPLIT_CONTEXT_FILES, "split") else {
         return;
     };
     let first = fetch(&served.url, "/add").expect("GET /add reaches the sibling file's agent");
@@ -840,20 +836,19 @@ impl Drop for Served {
 }
 
 /// Compile `source` (a single-file `smoke` context) for Workers, strip it to JS
-/// and serve it with `wrangler dev` on ports the OS hands out (`wrangler::ports`; `port_base` is
-/// unused, kept so the callers do not change), with its own inspector port (wrangler's
-/// default 9229 is shared otherwise),
-/// so the tests in this binary can run concurrently. `None` when the test is
+/// and serve it with `wrangler dev` on ports the OS hands out (`wrangler::ports`), with its
+/// own inspector port (wrangler's default 9229 is shared otherwise), so the tests in this
+/// binary can run concurrently. `None` when the test is
 /// skipped: no `npx`/`node`, or wrangler did not boot (`skip` panics instead
 /// when `BYNK_REQUIRE_WORKERD` is set).
-fn serve_smoke(source: &str, tag: &str, port_base: u16) -> Option<Served> {
-    serve_smoke_files(&[("smoke.bynk", source)], tag, port_base)
+fn serve_smoke(source: &str, tag: &str) -> Option<Served> {
+    serve_smoke_files(&[("smoke.bynk", source)], tag)
 }
 
 /// [`serve_smoke`] over several source files, each `(path under src/,
 /// source)`, which together declare the `smoke` context (#1820).
-fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Option<Served> {
-    serve_smoke_with(files, tag, port_base, None, None)
+fn serve_smoke_files(files: &[(&str, &str)], tag: &str) -> Option<Served> {
+    serve_smoke_with(files, tag, None, None)
 }
 
 /// [`serve_smoke_files`] against a committed schema lock (`lock`, `None` for a
@@ -863,11 +858,10 @@ fn serve_smoke_files(files: &[(&str, &str)], tag: &str, port_base: u16) -> Optio
 fn serve_smoke_with(
     files: &[(&str, &str)],
     tag: &str,
-    port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
 ) -> Option<Served> {
-    serve_smoke_with_args(files, tag, port_base, lock, persist, &[])
+    serve_smoke_with_args(files, tag, lock, persist, &[])
 }
 
 /// [`serve_smoke_with`], passing `extra` to `wrangler dev` (state-migrations
@@ -875,7 +869,6 @@ fn serve_smoke_with(
 fn serve_smoke_with_args(
     files: &[(&str, &str)],
     tag: &str,
-    _port_base: u16,
     lock: Option<String>,
     persist: Option<&Path>,
     extra: &[String],
@@ -1172,14 +1165,8 @@ const open = (query) => within(new Promise((resolve, reject) => {
 /// Serve `source`, run the clients (`queries`; the first `expected` share the
 /// broadcast's instance), and assert the frames each received: the one
 /// `hello` frame for those, none for the rest.
-fn broadcast_reaches_clients(
-    source: &str,
-    tag: &str,
-    port_base: u16,
-    expected: usize,
-    queries: &[&str],
-) {
-    let Some(served) = serve_smoke(source, tag, port_base) else {
+fn broadcast_reaches_clients(source: &str, tag: &str, expected: usize, queries: &[&str]) {
+    let Some(served) = serve_smoke(source, tag) else {
         return;
     };
     let port = served
@@ -1234,7 +1221,6 @@ fn a_broadcast_reaches_websockets_opened_through_a_literal_keyed_upgrade_on_work
     broadcast_reaches_clients(
         WS_LITERAL_KEY_SOURCE,
         "ws-literal",
-        15000,
         2,
         &["user=alice", "user=bob"],
     );
@@ -1247,7 +1233,6 @@ fn a_broadcast_reaches_websockets_opened_through_a_route_keyed_upgrade_on_worker
     broadcast_reaches_clients(
         WS_ROUTE_KEY_SOURCE,
         "ws-route",
-        25000,
         2,
         &[
             "room=r1&user=alice",
@@ -1304,7 +1289,7 @@ service api from http {
 
 #[test]
 fn concurrent_handlers_on_one_agent_instance_all_count_on_workerd() {
-    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise", 45000) else {
+    let Some(served) = serve_smoke(SERIALISE_SOURCE, "serialise") else {
         return;
     };
     let url = served.url.clone();
