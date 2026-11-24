@@ -370,6 +370,13 @@ body.
 | `ServiceUnavailable(message)` | 503 | message |
 | `GatewayTimeout(message)` | 504 | message |
 
+A handler that faults answers `500` and is logged and reported as a fault. One fault is
+answered differently (#3932): an agent call that waited past its queue limit
+(`AgentBusy`, see [one handler at a time](/reference/agents/#one-handler-at-a-time)) is
+load, not a bug, so the route answers `503 Service Unavailable` with `Retry-After: 1`,
+logs it as busy with the queue depth, and does not report it as a fault. A
+`ReentrantAgentCall` is a bug and stays a `500`.
+
 > [!TIP]
 > A bare `Ok(…)` builds whatever the expected type says (a `let` annotation, a
 > match arm, an argument) and otherwise follows the handler's return type. So in a

@@ -4531,6 +4531,13 @@
       "type": "SEQ",
       "members": [
         {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "store_annotation"
+          }
+        },
+        {
           "type": "STRING",
           "value": "agent"
         },
@@ -11141,6 +11148,15 @@
     }
   ],
   "conflicts": [
+    [
+      "capability_decl"
+    ],
+    [
+      "opaque_type"
+    ],
+    [
+      "refined_type"
+    ],
     [
       "_pattern",
       "_let_paren_record_pattern"
