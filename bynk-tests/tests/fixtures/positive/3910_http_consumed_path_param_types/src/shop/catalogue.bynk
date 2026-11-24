@@ -1,0 +1,13 @@
+context shop.catalogue
+
+exports transparent { OrderNo, Mode, Price }
+
+type OrderNo = Int where Positive
+type Mode = enum { Fast, Slow }
+type Price = Decimal
+
+service lookup {
+  on call(id: OrderNo) -> Effect[Bool] by Caller {
+    Effect.pure(true)
+  }
+}

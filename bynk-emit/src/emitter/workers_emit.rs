@@ -242,7 +242,12 @@ impl WorkersEmit<'_> {
             consumed_types,
             &migratable,
             ctx_uses_exec,
-            &bynk_check::symbols::combined_types_for(ctx_name, unit_tables, unit_uses),
+            &bynk_check::symbols::entry_types_for(
+                ctx_name,
+                unit_tables,
+                unit_uses,
+                (unit_consumes, consumed_types),
+            ),
             trace_requests,
             (&inspect_classes, inspect_lists),
         );

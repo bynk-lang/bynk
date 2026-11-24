@@ -1,0 +1,26 @@
+suite shop.storefront as system {
+	case "typed arguments of consumed types are written as their segments" {
+		let a <- api.GET("/orders/:id", 42) by Visitor
+		expect a is Ok("order 42")
+		let b <- api.GET("/modes/:m", Slow) by Visitor
+		expect b is Ok("slow")
+		let c <- api.GET("/prices/:p", 12.50d) by Visitor
+		expect c is Ok("price 12.50")
+	}
+
+	case "a consumed Int, enum and Decimal decode from their segments" {
+		let a <- api.GET("/orders/:id", Wire("7")) by Visitor
+		expect a is Handled(Ok("order 7"))
+		let b <- api.GET("/modes/:m", Wire("Fast")) by Visitor
+		expect b is Handled(Ok("fast"))
+		let c <- api.GET("/prices/:p", Wire("0.5")) by Visitor
+		expect c is Handled(Ok("price 0.5"))
+	}
+
+	case "a segment that does not read, or breaks the refinement, is refused" {
+		let a <- api.GET("/orders/:id", Wire("abc")) by Visitor
+		expect a is Rejected(StructuralMismatch(_))
+		let b <- api.GET("/orders/:id", Wire("0")) by Visitor
+		expect b is Rejected(RefinementViolation(_))
+	}
+}

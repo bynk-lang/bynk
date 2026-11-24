@@ -3920,16 +3920,16 @@
     "summary": "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning)."
   },
   {
-    "blurb": "A path parameter is read from a segment of the URL, which is text, so its type must be one the router can build from a string: `String`, a refined `String`, or an opaque type over `String`. An `Int`, an enum or a record is refused here, though a `query` field may be one. Take the segment as a refined `String` that states its shape.",
+    "blurb": "A path parameter is read from one segment of the URL, which is text, so its type must be one the router can read from a single value: a `String`, `Int`, `Bool` or `Decimal`, an enum (by variant name), or a refined or opaque type over one of those, the set a typed `query` field takes. A segment is always present and holds one value, so `Option` and `List` make no sense here, and a record or any other type is refused. The router decodes the segment after matching the route and answers `400` when it does not read as the type or breaks a refinement. Take the segment as a type that states its shape.",
     "category": "HTTP",
     "categoryAnchor": "http",
     "code": "bynk.http.path_param_not_stringy",
     "constructs": [
       "http_handler"
     ],
-    "example": "on GET(\"/items/:id\") (id: Int) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a path segment is a string\n\ntype ItemId = String where Matches(\"^[0-9]+$\")\non GET(\"/items/:id\") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    "example": "on GET(\"/items/:id\") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a segment is always present\n\ntype ItemNo = Int where Positive\non GET(\"/items/:id\") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     "severity": "error",
-    "summary": "A path parameter's type is not constructible from a string."
+    "summary": "A path parameter's type is not one a single path segment can carry."
   },
   {
     "blurb": "A typed `query` record is filled from a query string, a set of keys with text values, so each field must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key). A nested record or any other type is refused. Flatten the record, or take `query: RequestQuery` and read the keys yourself. A `@form` body has the same rule: `bynk.http.form_field_not_stringy`.",

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "lookup": "d70601bdc1102042"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "lookup": "Svc(\"lookup\",P(\"id\",Rf(\"OrderNo\",\"Int\",\"Positive\")),Ret(B(\"Bool\")))"
+  }
+}
