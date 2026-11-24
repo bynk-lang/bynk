@@ -10,7 +10,10 @@
 //
 // The orders (track Q5):
 // - `Int`, `Duration`, `Instant` are numbers of the same scale: numeric order.
-// - `String` is UTF-16 code-unit order, which is what JS `<` does on strings.
+// - `String` is code-point order (#3954), which is also UTF-8 byte order: it
+//   agrees with the storage key order and SQLite's `BINARY` collation. It is not
+//   JS `<`, which orders by UTF-16 code unit and puts a character above U+FFFF
+//   before one in U+E000..U+FFFF.
 // - `Float` is a total order that agrees with `==` except at `NaN`: `-0` and `0`
 //   compare equal, and `NaN` compares equal to itself and greater than every
 //   other value. The comparison operators keep their IEEE meaning (`NaN < x` is
@@ -32,9 +35,25 @@ export function __bynkCmpInt(a: number, b: number): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** `String`, in UTF-16 code-unit order. */
+/**
+ * `String`, in code-point order. Compares code units, and only at the first
+ * difference, when both units are surrogates or above U+E000, shifts a surrogate
+ * above the U+E000..U+FFFF range, so BMP-only text costs no extra work.
+ */
 export function __bynkCmpString(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
+  if (a === b) return 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i += 1) {
+    let x = a.charCodeAt(i);
+    let y = b.charCodeAt(i);
+    if (x === y) continue;
+    if (x >= 0xd800 && y >= 0xd800) {
+      x += x >= 0xe000 ? -0x800 : 0x2000;
+      y += y >= 0xe000 ? -0x800 : 0x2000;
+    }
+    return x < y ? -1 : 1;
+  }
+  return a.length < b.length ? -1 : 1;
 }
 
 /** `Float`: the total order, with `NaN` last and equal to itself. */

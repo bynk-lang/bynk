@@ -1,0 +1,6 @@
+[project]
+name = "string-code-point-order"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

@@ -40,6 +40,7 @@ const MODULES = [
   "equality",
   "keys",
   "compare",
+  "text",
   "int",
   "errors",
   "storage",

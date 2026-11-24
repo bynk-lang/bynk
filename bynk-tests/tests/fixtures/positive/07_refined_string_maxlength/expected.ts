@@ -2,13 +2,14 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Tweet = string & { readonly __brand: "Tweet" };
 
 export const Tweet = {
   of(value: string): Result<Tweet, ValidationError> {
-    if (!(value.length <= 280)) {
+    if (!(__bynkCodePointLength(value) <= 280)) {
       return Err({ field: "Tweet", message: "length must be at most 280", value });
     }
     return Ok(value as Tweet);
