@@ -3500,7 +3500,7 @@ fn check_service_decls(
             if !matches!(handler.kind, HandlerKind::Message) {
                 continue;
             }
-            validate_queue_handler(handler, name, errors);
+            validate_queue_handler(handler, name, table, errors);
             if let Some(prev) = consumer_first_span.get(name).copied() {
                 errors.push(
                     CompileError::new(
@@ -7058,7 +7058,12 @@ fn validate_cron_handler(
 /// wire-deserialisable type), and the `Effect[QueueResult]` return — the verdict
 /// sum, where `Ack` acknowledges the message and `Retry(...)` has it redelivered. The service-only rule is
 /// enforced earlier, in the parser (`bynk.parse.handler_in_agent`).
-fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<CompileError>) {
+fn validate_queue_handler(
+    handler: &Handler,
+    name: &str,
+    table: &UnitTable,
+    errors: &mut Vec<CompileError>,
+) {
     if name.is_empty() {
         errors.push(CompileError::new(
             "bynk.queue.invalid_name",
@@ -7074,6 +7079,26 @@ fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<Compil
             )
             .with_note(
                 "a queue name is 1 to 63 lowercase letters, digits or `-`, and starts and ends with a letter or digit",
+            ),
+        );
+    }
+    // #3880: the delivery parameter is the `QueueDelivery` of `bynk.cloudflare`. A type of the
+    // same name that this context declares is the author's own, not the platform's, and is
+    // refused rather than taken for it, since later stages recognise the parameter by its name.
+    if table.types.contains_key("QueueDelivery")
+        && let Some(p) = handler
+            .params
+            .iter()
+            .find(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+    {
+        errors.push(
+            CompileError::new(
+                "bynk.queue.bad_params",
+                p.type_ref.span(),
+                "this context declares its own `QueueDelivery`, which is not the delivery metadata of `bynk.cloudflare`",
+            )
+            .with_note(
+                "rename your type, or `consumes bynk.cloudflare { QueueDelivery }` and use that one; the delivery parameter of an `on message` handler is the platform's",
             ),
         );
     }

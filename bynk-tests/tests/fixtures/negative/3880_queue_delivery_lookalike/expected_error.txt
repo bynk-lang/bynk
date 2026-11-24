@@ -1,0 +1,2 @@
+declares its own `QueueDelivery`
+# exact
