@@ -1,0 +1,10 @@
+{
+  "blurb": "A route has one request-body ceiling, so a handler carries one `@limit`. Two would set two ceilings for the same body with nothing to say which applies, and the second is refused. Keep the one you want. To set a default for every body-taking route of a service, write a `limits { }` section: a route's `@limit` overrides it. A handler may likewise carry only one `@cache` (`bynk.http.cache_duplicate`), `@raw` or `@json`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.limit_duplicate",
+  "constructs": [],
+  "example": "type Note = { text: String }\n\n@limit(maxBody: 1_000_000)\n@limit(maxBody: 5_000_000)    // ✗ a second `@limit`\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 5_000_000)    // ✓ one ceiling\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries more than one `@limit` annotation."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`trace(Cap.op)` reads the calls a test has recorded through a capability. Only a test records them, so it is allowed only in a `case` body, never in a service, an agent or a function. Remove it from the code under test and read the trace in the test, or observe the call with `expect Cap.op called`.",
+  "category": "Observation",
+  "categoryAnchor": "observation",
+  "code": "bynk.observe.trace_outside_test",
+  "constructs": [],
+  "example": "// demo/pay.bynk\nlet calls = trace(Logger.log)               // ✗ in the service\n\n// tests/t.test.bynk\nexpect trace(Logger.log).length() == 1      // ✓ in a case",
+  "severity": "error",
+  "summary": "`trace(Cap.op)` appears outside a `case` body."
+}

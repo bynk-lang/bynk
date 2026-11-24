@@ -1,0 +1,10 @@
+{
+  "blurb": "An invariant is a claim that is true or false of every committed state, so its predicate must be a `Bool`. A bare field such as `count` is a value, not a claim, and nothing says what is being asserted about it. Compare or test it: `count >= 0`. A `transition` is held to the same rule (`bynk.transition.not_bool`).",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.invariant.not_bool",
+  "constructs": [],
+  "example": "invariant positive: count        // ✗ an `Int`, not a `Bool`\n\ninvariant positive: count >= 0   // ✓ a claim about `count`",
+  "severity": "error",
+  "summary": "An invariant predicate does not have type `Bool`."
+}

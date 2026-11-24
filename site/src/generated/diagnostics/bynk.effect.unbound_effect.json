@@ -1,0 +1,10 @@
+{
+  "blurb": "Bynk starts an effectful call as soon as it is built, so an `Effect[T]` that is built and then dropped still runs, unawaited, racing every statement after it, and nothing in the program shows it. Effects are meant to happen in the order you wrote them, so in an effectful body an `Effect` value must be bound with `let x <- …`, run with `do …` (for an `Effect[()]`), or returned as the body's value. The error fires where an `Effect` is built in a value position that cannot await it: the right-hand side of a plain `let` (including `let _ = …`), a list element, and the payload of `Some`, `Ok`, `Err`, a variant or a record field. An argument to another call is left alone, because the parameter decides what happens to it. If you want the result, use `<-`; if only the effect, use `do`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.unbound_effect",
+  "constructs": [],
+  "example": "on call() -> Effect[()] by Caller {\n    let e = Counter(\"k\").bump()       // ✗ started, never awaited\n    Effect.pure(())\n}\n\non call() -> Effect[()] by Caller {\n    do Counter(\"k\").bump()           // ✓ run in order\n    Effect.pure(())\n}",
+  "severity": "error",
+  "summary": "An `Effect` value in an effectful body was built but not bound with `<-`, sequenced with `do` or returned — in a plain `let`, a list element or a constructor payload — so it runs eagerly and unawaited (#1658)."
+}

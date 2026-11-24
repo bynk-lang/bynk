@@ -309,6 +309,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
         with:
           node-version: "24"
+      # The diagnostic index is assembled from the per-code files, not committed
+      # (#4286); the bundle inlines it.
+      - name: Assemble the diagnostic index
+        run: node site/scripts/build-diagnostics-index.mjs
       - name: Generate the Book bundle `bynk book` embeds
         run: node site/scripts/build-llms-full.mjs
       - name: Build bynk + bynk-lsp

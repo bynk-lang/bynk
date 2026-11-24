@@ -1,0 +1,10 @@
+{
+  "blurb": "A refinement over `Caller`, such as `actor Admin = Caller where IsContext(shop.admin)`, names the contexts that may call a service. The compiler sees every call in the project, so a call from any other context is refused here, at the call, before anything is deployed. The wire format still checks the caller at run time (a `403`), because signing keys are per pair of contexts and a caller from before the restriction may still be deployed. In a test, a call-site `by Admin(\"shop.web\")` is checked the same way. Call a service the context may call, or add the context to the actor's `IsContext(…)`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.caller_not_admitted",
+  "constructs": [],
+  "example": "// shop/billing.bynk\ncontext shop.billing\n\nactor Admin = Caller where IsContext(shop.admin)\n\nservice refunds {\n  on call(id: String) -> Effect[Int] by Admin {\n    Effect.pure(1)\n  }\n}\n\nservice quote {\n  on call(id: String) -> Effect[Int] by Caller {\n    Effect.pure(2)\n  }\n}\n\n// shop/orders.bynk\ncontext shop.orders\n\nconsumes shop.billing\n\nservice place {\n  on call(id: String) -> Effect[Int] by Caller {\n    shop.billing.refunds(id)   // ✗ `shop.orders` is not `shop.admin`\n    shop.billing.quote(id)   // ✓ `quote` admits any consuming context\n  }\n}",
+  "severity": "error",
+  "summary": "A call is made from a context the callee's `Caller` refinement does not admit."
+}

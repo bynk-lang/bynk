@@ -1,0 +1,12 @@
+{
+  "blurb": "`sequenceAll` and `sequenceTry` fold a `List[Result[T, E]]` into one `Result`, so every element must already be a `Result`. A list of plain values has no failures to collect. Map each element through a function that returns a `Result` first, as in `xs.map(check).sequenceAll()`. `sequenceAll` gathers every error, and `sequenceTry` stops at the first.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.sequence_needs_result",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn check(n: Int) -> Result[Int, String] { … }\n\nfn all(xs: List[Int]) -> Result[List[Int], List[String]] {\n    xs.sequenceAll()                // ✗ the elements are `Int`s, not `Result`s\n}\n\nfn all(xs: List[Int]) -> Result[List[Int], List[String]] {\n    xs.map(check).sequenceAll()     // ✓\n}",
+  "severity": "error",
+  "summary": "`sequenceAll`/`sequenceTry` was called on a list whose elements are not `Result`s. They collect a `List[Result[T, E]]`."
+}

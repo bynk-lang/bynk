@@ -1,0 +1,10 @@
+{
+  "blurb": "A source file's path is its unit's identity: `context commerce.orders` lives at `commerce/orders.bynk`, or in a file under `commerce/orders/`, relative to an include root. A reader can then find a unit from its name alone. Rename the file or directory to match the declared name, or change the name. Test suites are exempt.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.inconsistent_commons_name",
+  "constructs": [],
+  "example": "// pricing.bynk\ncommons tax     // ✗ the path says `pricing`\n\n// tax.bynk\ncommons tax     // ✓",
+  "severity": "error",
+  "summary": "A source file's path does not match its declared name."
+}

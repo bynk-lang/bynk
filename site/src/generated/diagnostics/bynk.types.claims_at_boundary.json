@@ -1,0 +1,10 @@
+{
+  "blurb": "An `Oidc` actor's binder carries the verified token's claims (`who.claims`) for the handler that received the token. They are read there and never kept: a `TokenClaims` can't be a field, or cross a call, a message or an agent. Read the claim you need and keep that `String`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.claims_at_boundary",
+  "constructs": [],
+  "example": "type Seen = { claims: TokenClaims }                 // ✗\n\nlet repo = w.claims.get(\"repository\")            // ✓ keep the String",
+  "severity": "error",
+  "summary": "`TokenClaims` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent."
+}

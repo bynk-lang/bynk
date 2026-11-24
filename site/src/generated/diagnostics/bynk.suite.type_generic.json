@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite's `type` is a plain shape that only its tests care about, such as a row to read back with `select[T]`, so it takes no type parameters. If you need a generic type, declare it in the target or in a commons, where the suite can use it. Otherwise write the concrete type.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.type_generic",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "// tests/desk.test.bynk\ntype Box[T] = { v: T }       // ✗ a suite type is not generic\ntype IntBox = { v: Int }     // ✓",
+  "severity": "error",
+  "summary": "A suite declares a generic `type`; a suite type is a plain, non-generic shape."
+}

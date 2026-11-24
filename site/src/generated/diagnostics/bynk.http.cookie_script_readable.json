@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_script_readable",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A cookie literal sets `httpOnly: false`, so page scripts can read it (warning)."
+}

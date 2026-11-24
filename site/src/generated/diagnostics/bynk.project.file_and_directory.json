@@ -1,0 +1,10 @@
+{
+  "blurb": "A unit's name comes from its path: `commons money` lives in `money.bynk`, or in the files of a directory `money/`. With both, the path no longer says where `money` lives, or which unit the directory's files belong to, so the project is refused. Keep one: move the file into the directory, or fold the directory into the file.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.file_and_directory",
+  "constructs": [],
+  "example": "src/money.bynk           // ✗ `money/` is a directory too\nsrc/money/rates.bynk\n\nsrc/money/core.bynk      // ✓ one directory, both files `commons money`\nsrc/money/rates.bynk",
+  "severity": "error",
+  "summary": "A unit exists as both a file and a directory."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`immutable` on `@cache` promises that the response at this URL never changes, so a cache may reuse it for the whole `maxAge` without asking again. A promise is either made or not, so the value must be the literal `true` or `false`; a bare word, a string or an expression is refused. Write `immutable: true` for a content-addressed path, or leave the argument out. The other arguments are `bynk.http.cache_bad_max_age` and `bynk.http.cache_bad_scope`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_bad_immutable",
+  "constructs": [],
+  "example": "@cache(maxAge: 365.days, immutable: yes)    // ✗ `true` or `false`\non GET(\"/dl/:hex\") (hex: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 365.days, immutable: true)   // ✓\non GET(\"/dl/:hex\") (hex: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@cache` annotation's `immutable` is not a `Bool` literal."
+}

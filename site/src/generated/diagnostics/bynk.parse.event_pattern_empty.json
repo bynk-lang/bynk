@@ -1,0 +1,10 @@
+{
+  "blurb": "A pattern in `from Events(E { … })` narrows delivery to events whose fields match, so it must name at least one field to match on. An empty `E {}` filters nothing and only looks as if it does. For every event of the type, drop the braces: `from Events(E)`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.event_pattern_empty",
+  "constructs": [],
+  "example": "service OnPaid from Events(Paid {}) {         // ✗ a pattern with no fields\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice OnPaid from Events(Paid) {            // ✓ every `Paid`\n    on event(e: Paid) -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "A `from Events(E { ... })` subscription pattern listed no fields — use `from Events(E)` (no braces) for an unfiltered subscription."
+}

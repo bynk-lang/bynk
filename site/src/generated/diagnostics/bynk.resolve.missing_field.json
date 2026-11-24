@@ -1,0 +1,12 @@
+{
+  "blurb": "A record must be constructed with every field that has no default. There is no partial construction: a value of a record type is only valid once all its fields are present, so a downstream reader never has to wonder whether a field was set. Omitting a required field is therefore an error, not a fill-in-later. A field may be left out only when its declaration gives it a default, `field: T = expr`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.missing_field",
+  "constructs": [
+    "record_construction"
+  ],
+  "example": "type User = { name: String, age: Int }\n\nUser { name: \"Ada\" }            // ✗ missing `age`\nUser { name: \"Ada\", age: 36 }   // ✓ every field present",
+  "severity": "error",
+  "summary": "A record construction omits a required field."
+}

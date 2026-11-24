@@ -1,0 +1,10 @@
+{
+  "blurb": "`agent New replaces Old` renames a class: `Old`'s stored data moves to `New`. While `Old` is still declared, both would claim that data, so it is refused. To rename, delete the `Old` declaration. If the two are separate classes, drop `replaces`. Each old name has one fate, as `bynk.agent.class_conflict` says.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.replaces_live",
+  "constructs": [],
+  "example": "agent Cart { … }\nagent Basket replaces Cart { … }    // ✗ `Cart` is still declared\nagent Basket { … }                  // ✓ a separate class; delete `Cart` to rename it",
+  "severity": "error",
+  "summary": "`agent New replaces Old` names an `Old` that is still declared; a rename moves the old class's data to the new one."
+}

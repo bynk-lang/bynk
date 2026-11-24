@@ -1,0 +1,10 @@
+{
+  "blurb": "On the Workers target, a `from websocket` service's `on open` is hosted inside the Durable Object of the agent it hands the connection to, and that method is emitted from the file the service and the agent share. When a context is split over several files, each is emitted on its own, so a service in one file that transfers to an agent in another would be routed to the agent's Durable Object and never handled there: the upgrade would answer `404`. The compiler refuses the layout. Put the service in the agent's file, or build for `--target bundle`, where the open is an ordinary method and the layout works.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.open_transfer_cross_file",
+  "constructs": [],
+  "example": "// chat/gateway.bynk\nservice ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {\n  on open (roomId: RoomId) -> Effect[()] by v: Visitor {   // ✗ `Room` is declared in another file\n    let _ <- Room(roomId).join(connection)\n    ()\n  }\n}\n\n// chat/room.bynk\nagent Room {\n  key id: RoomId\n}\n\n// chat/room.bynk\nservice ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {   // ✓ in the agent's file\n  on open (roomId: RoomId) -> Effect[()] by v: Visitor {\n    let _ <- Room(roomId).join(connection)\n    ()\n  }\n}",
+  "severity": "error",
+  "summary": "On the Workers target, a WebSocket `on open` handler transfers its `connection` to an agent declared in a different file of the same context — the open is hosted in the agent's Durable Object, which is emitted from the agent's own file, so the upgrade would never be handled; the service and the agent must share a file."
+}

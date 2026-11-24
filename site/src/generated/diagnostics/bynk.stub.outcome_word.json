@@ -1,0 +1,12 @@
+{
+  "blurb": "`rejected <Refusal>`, `faulted` and `unreachable` stand in for the outcome of a call to a consumed context's service, which `<context>.<service>.outcome(args)` hands back as a `CallOutcome`. They belong to a consumed service's `stub` alone: a capability's `stub` is a provider, and a provider faults with `fails`. And `rejected` names one of `bynk`'s `Refusal` cases (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`, `StaleContract`, `Undecodable`). `returns <value>` stubs a call the handler answered.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.outcome_word",
+  "constructs": [
+    "stub_clause"
+  ],
+  "example": "// tests/meter.test.bynk\nstub Meter.read() faulted   // ✗ `Meter` is a capability, not a consumed service\n\nstub Meter.read() fails     // ✓ a provider faults with `fails`",
+  "severity": "error",
+  "summary": "A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`."
+}

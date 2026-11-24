@@ -1,0 +1,10 @@
+{
+  "blurb": "An `actor` says who may call a handler and what the compiler then knows about them. Only a context has handlers, and an actor's identity is sealed to the context that declares it, so only a context may declare one. A `commons` is shared code that other units `uses`. Move the `actor` into the context whose services take it.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.outside_context",
+  "constructs": [],
+  "example": "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
+  "severity": "error",
+  "summary": "An `actor` was declared outside a context (e.g. in a commons)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A unit declares two types, or a type and an event, with the same name. A unit's top-level declarations share one scope in the emitted module, so a name can mean only one thing, and a type name appears in signatures and constructors with no way to say which declaration is meant. Rename one of them, or remove the repeated declaration. The check spans all of the unit's files, so the second declaration can be in a different file.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_type",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type Money = Int\ntype Money = String          // ✗ `Money` is already declared\n\ntype Money = Int\ntype Label = String          // ✓ distinct names",
+  "severity": "error",
+  "summary": "Two types share a name."
+}

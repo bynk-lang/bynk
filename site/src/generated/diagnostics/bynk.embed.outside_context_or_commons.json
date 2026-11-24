@@ -1,0 +1,10 @@
+{
+  "blurb": "An `embed` is compiled into the Worker of each context that declares it, or that `uses` a commons that does. An adapter is the host boundary, not a Worker, so it has nowhere to carry the text, and an `embed` there is refused. Declare it in a context or a commons, and have the context use that. For a file the platform serves rather than compiles in, see `bynk.asset.outside_context_or_commons`.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.outside_context_or_commons",
+  "constructs": [],
+  "example": "// app/host.bynk\nadapter app.host\n\nbinding \"./host.binding.ts\"\n\nembed shell = \"embeds/page.html\"        // ✗ an adapter cannot embed\n\n// app/page.bynk\ncommons app.page\n\nembed shell = \"embeds/page.html\"        // ✓ in a commons",
+  "severity": "error",
+  "summary": "An `embed` declaration appears outside a context or commons."
+}

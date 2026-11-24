@@ -1,0 +1,10 @@
+{
+  "blurb": "`bynk revert` reads the deploy facts that every `bynk deploy` records on the Worker version it pushes. Without them on both the live version and the target it cannot tell what changed in between, and every unknown is a refusal. A version deployed before facts were recorded, or one pushed outside Bynk, has none. Redeploy the version you want from its tag with `git checkout <tag> && bynk deploy`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.facts_missing",
+  "constructs": [],
+  "example": "bynk revert --dry-run\n  facts     shop-orders  refused: the target version records no deploy facts\n\ngit checkout v1.4.0 && bynk deploy   # redeploy the previous tag instead",
+  "severity": "error",
+  "summary": "`bynk revert` refused because the live version or the target version carries no deploy facts (`BYNK_DEPLOY_FACTS`), or the facts could not be read, so nothing can be checked against them."
+}

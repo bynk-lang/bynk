@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Cookie { name: \"__Host-session\", … }` literal named like a `SignedCookie` actor's session cookie would write or clear the credential by hand, without the actor's signing key, expiry or CSRF seam, so it is refused. Write it with `Actor.issue(identity)` and remove it with `Actor.expire()`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_write_literal",
+  "constructs": [],
+  "example": "Ok(\"x\").withCookie(Cookie { name: \"__Host-session\", value: \"forged\" })   // ✗ the actor's cookie\n\nOk(\"x\").withCookie(Cookie { name: \"theme\", value: \"dark\" })            // ✓ another cookie",
+  "severity": "error",
+  "summary": "An untyped `Cookie` literal is named like a `SignedCookie` actor's session cookie."
+}

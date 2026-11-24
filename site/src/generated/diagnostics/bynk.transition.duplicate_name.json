@@ -1,0 +1,10 @@
+{
+  "blurb": "Transitions are named so that a violation can say which step rule was broken. Two with the same name in one agent would make that report ambiguous. Rename one, or merge the two predicates if they are one claim. The same rule for states is `bynk.invariant.duplicate_name`.",
+  "category": "Transitions (step invariants)",
+  "categoryAnchor": "transitions-step-invariants",
+  "code": "bynk.transition.duplicate_name",
+  "constructs": [],
+  "example": "transition grows: new.count >= old.count\ntransition grows: new.count < 100    // ✗ `grows` is already declared\n\ntransition capped: new.count < 100   // ✓ a distinct name",
+  "severity": "error",
+  "summary": "An agent declares two transitions with the same name."
+}

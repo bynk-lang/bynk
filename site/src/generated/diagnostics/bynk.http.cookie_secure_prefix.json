@@ -1,0 +1,12 @@
+{
+  "blurb": "A cookie named `__Secure-…` asks the browser to accept it only over HTTPS, and a browser drops one that is not `Secure`, so a literal with `secure: false` would never arrive. It is refused instead. Remove `secure: false`; the default is `secure: true`. A `__Host-` name is stricter: `bynk.http.cookie_host_prefix`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_secure_prefix",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Created(\"ok\").withCookie(Cookie { name: \"__Secure-sid\", value: \"a\", secure: false })   // ✗\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Secure-sid\", value: \"a\" })                  // ✓",
+  "severity": "error",
+  "summary": "A `__Secure-` cookie literal is not `secure`."
+}

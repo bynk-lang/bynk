@@ -1,0 +1,12 @@
+{
+  "blurb": "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.bind_in_pure_context",
+  "constructs": [
+    "effect_let_stmt"
+  ],
+  "example": "fn next(n: Int) -> Int {\n    let x <- Effect.pure(n)      // ✗ `<-` in a function that returns a plain `Int`\n    x\n}\n\nfn next(n: Int) -> Effect[Int] {   // ✓ effectful, so it may bind with `<-`\n    let x <- Effect.pure(n)\n    Effect.pure(x)\n}",
+  "severity": "error",
+  "summary": "An `<-` bind was used in a pure (non-effectful) context."
+}

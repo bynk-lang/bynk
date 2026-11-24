@@ -1,0 +1,12 @@
+{
+  "blurb": "`@example` is the value `Val` uses for a type it cannot fabricate, so it must be a valid one. The compiler checks it where the type is declared, against every predicate of the refinement, whether or not a test uses it; an example that fails one would give tests a value the type refuses. Write an example that satisfies the whole refinement.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.example_violates",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = String where Matches(\"[A-Z]{3}\") @example(\"abc\")    // ✗ lower case\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")    // ✓",
+  "severity": "error",
+  "summary": "An `@example` does not satisfy its refinement's predicates."
+}

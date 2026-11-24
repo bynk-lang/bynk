@@ -1,0 +1,10 @@
+{
+  "blurb": "Closing, storing or passing on a held value such as a `Connection[F]` hands its single ownership away, and after that the name no longer refers to anything you may use. A later `send`, a second `close`, or any other mention of the binding is an error, reported on that later use, because the connection may already be closed or owned by someone else. Only `send` leaves a connection owned, so do every `send` first and dispose of the connection last. `bynk.held.leak` is the other end of the same rule (never disposed), and `bynk.held.consume_on_borrow` is the case where the code never owned the connection to begin with.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.held.use_after_consume",
+  "constructs": [],
+  "example": "let _ <- c.close()\nlet _ <- c.send(ServerFrame { text: \"bye\" })   // ✗ `c` was closed on the line above\n\nlet _ <- c.send(ServerFrame { text: \"bye\" })   // ✓ send first\nlet _ <- c.close()",
+  "severity": "error",
+  "summary": "A held value (`Connection[F]`) is used after a consuming operation (`close`/`put`/`take`) ended its lifetime (§2.9.2, real-time track slice 2)."
+}

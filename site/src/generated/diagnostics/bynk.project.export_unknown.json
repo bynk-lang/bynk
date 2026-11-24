@@ -1,0 +1,10 @@
+{
+  "blurb": "A package's `[package] exports` lists the units it shares, by their qualified names, and each must be a `commons` or an adapter the package declares. A name that matches none is usually a typo, or a unit that has since been renamed or moved, and a consumer's `uses` of it would fail far from the cause. Correct the name, or remove the entry. Listing a context is `bynk.project.export_context`.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.export_unknown",
+  "constructs": [],
+  "example": "[package]\nname = \"acme/shop\"\nexports = [\"mony\"]    // ✗ no unit `mony`\n\nexports = [\"money\"]   // ✓ the package's `commons money`",
+  "severity": "error",
+  "summary": "`bynk.toml`'s `[package] exports` lists a name that isn't a commons or adapter the project declares."
+}

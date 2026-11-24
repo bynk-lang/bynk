@@ -1,0 +1,12 @@
+{
+  "blurb": "A public declaration may not mention a `private` type of its own unit in its signature: a public function's parameters and return, a public type's fields and variant payloads, a public constant's type, or a context's `exports` list. A unit that `uses` the commons could neither name that type nor build a value of it, so the function would be half-usable. Make the type public, or make the declaration `private` too. Services, agents and capabilities are not checked here; a context's `exports` governs them.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.visibility.private_in_public",
+  "constructs": [
+    "visibility_modifier"
+  ],
+  "example": "private type Tally = { lines: Int, sum: Int }\n\nfn tally(n: Int) -> Tally { … }            // ✗ public, but returns a private type\nprivate fn tally(n: Int) -> Tally { … }    // ✓ private too",
+  "severity": "error",
+  "summary": "A public declaration's signature names a `private` type of its own unit, which an importer could neither name nor build."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.no_dead_letter",
+  "constructs": [
+    "delivery_policy"
+  ],
+  "example": "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+  "severity": "warning",
+  "summary": "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning)."
+}

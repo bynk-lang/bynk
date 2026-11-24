@@ -1,0 +1,12 @@
+{
+  "blurb": "A pinned `Val[T](…)` is checked against the refinement of `T` at compile time, and this literal breaks it, so the test would build a value the type does not allow. Pin a value that satisfies the refinement, or drop the pin and let `Val[T]` choose one. To test that an invalid value is refused, call `T.of(…)` and expect an `Err`.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.literal_violates",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// demo/ages.bynk\ntype Age = Int where InRange(0, 150)\n\n// tests/ages.test.bynk\nlet a = Val[Age](200)  // ✗ 200 is outside InRange(0, 150)\nlet a = Val[Age](20)   // ✓ inside it",
+  "severity": "error",
+  "summary": "A pinned `Val[T]` value violates the type's refinement."
+}

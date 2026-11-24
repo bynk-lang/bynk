@@ -1,0 +1,12 @@
+{
+  "blurb": "`Result` takes two type arguments, the success type and the error type: `Result[T, E]`. `Map` takes two as well, `Map[K, V]`, and a type applied to an empty `[]` needs at least one. A `Result[Int]` leaves out the error a caller has to handle, so it is refused rather than guessed. Give every argument.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.generic_arg_count",
+  "constructs": [
+    "generic_type_ref"
+  ],
+  "example": "fn parse(s: String) -> Result[Int] {            // ✗ the error type is missing\n    Ok(1)\n}\n\nfn parse(s: String) -> Result[Int, String] {    // ✓\n    Ok(1)\n}",
+  "severity": "error",
+  "summary": "Wrong number of generic type arguments."
+}

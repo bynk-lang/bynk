@@ -1,0 +1,12 @@
+{
+  "blurb": "A refined type is a base type plus a rule from a fixed set of built-in predicates: `Matches`, `InRange`, `MinLength`, `MaxLength`, `Length`, `NonNegative`, `Positive`, `NonEmpty` and `IsoDate`. There are no user-defined predicates. Use one of these; for a numeric range that is `InRange(lo, hi)`, inclusive at both ends.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unknown_predicate",
+  "constructs": [
+    "predicate_name"
+  ],
+  "example": "type Age = Int where Between(0, 150)    // ✗ not a predicate\ntype Age = Int where InRange(0, 150)    // ✓",
+  "severity": "error",
+  "summary": "An unknown refinement predicate."
+}

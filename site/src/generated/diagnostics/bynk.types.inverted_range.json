@@ -1,0 +1,12 @@
+{
+  "blurb": "`InRange(lo, hi)` is inclusive at both ends, so it needs `lo <= hi`. With the bounds the wrong way round the refinement admits no value, which is almost certainly a slip, so the compiler refuses it. Swap them; the diagnostic offers that fix. On an `Int` or `Float` the empty range is also reported as `bynk.types.empty_refinement`, which is what contradictory predicates give too. An inverted range in a `match` arm is `bynk.types.empty_range_pattern`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.inverted_range",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Price = Decimal where InRange(100.00d, 0.00d)    // ✗ the minimum is above the maximum\n\ntype Price = Decimal where InRange(0.00d, 100.00d)    // ✓",
+  "severity": "error",
+  "summary": "An `InRange` predicate has its bounds inverted."
+}

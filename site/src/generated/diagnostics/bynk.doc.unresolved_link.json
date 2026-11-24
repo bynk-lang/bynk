@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Doc comments",
+  "categoryAnchor": "doc-comments",
+  "code": "bynk.doc.unresolved_link",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `[Name]` doc link resolves to nothing in the unit's scope (editor hint only)."
+}

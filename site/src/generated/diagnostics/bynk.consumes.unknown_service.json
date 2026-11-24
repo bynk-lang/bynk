@@ -1,0 +1,12 @@
+{
+  "blurb": "A call such as `pay.charge(…)` reaches a service of the consumed context, and `pay` has none by that name. Only a service's `on call` handler can be called across contexts, so check the spelling against the consumed context and that the service has an `on call` handler. A call with the wrong number of arguments is `bynk.consumes.service_arity`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.unknown_service",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// pay.bynk\ncontext pay\n\nservice charge {\n    on call(amount: Int) -> Effect[Int] by Caller {\n        Effect.pure(amount)\n    }\n}\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charg(1)             // ✗ `pay` has no service `charg`\n    }\n}\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)            // ✓ the declared name\n    }\n}",
+  "severity": "error",
+  "summary": "Called a service the consumed context does not declare."
+}

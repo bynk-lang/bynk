@@ -1,0 +1,12 @@
+{
+  "blurb": "`Json.encode` and `Json.decode` work on values that have a wire form, and a function does not: a value that can run has no JSON text to stand for it. The codec covers the base types, named types and the built-in containers over them. It does not cover functions, effects, streams or a type that carries one, `bynk.crypto` keys or the error builtins. Encode the data the function produces, or the record that describes it, not the function itself.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.json_uncodable",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn dump(f: Int -> Int) -> String {\n    Json.encode(f)       // ✗ a function has no JSON form\n}\n\nfn dump(f: Int -> Int) -> String {\n    Json.encode(f(1))    // ✓ encode a value it produces\n}",
+  "severity": "error",
+  "summary": "A `Json.encode`/`Json.decode` target type cannot pass through the typed JSON codec (functions, effects, streams or a type that carries one, `bynk.crypto` keys, error builtins)."
+}
