@@ -31,6 +31,8 @@ const SOURCE: &str = r#"context cronfail
 
 type Refused = | Overdue(note: String) | Stale
 
+type Detail = { tag: String }
+
 service sweeper from cron {
   on schedule("*/5 * * * *") (at: Instant) -> Effect[Result[(), Refused]] {
     Err(Overdue("https://x/?key=hunter2"))
@@ -42,6 +44,13 @@ service sweeper from cron {
 
   on schedule("30 * * * *") (at: Instant) -> Effect[Result[(), Refused]] {
     unreachable("sweep boom")
+  }
+}
+
+// A record error with a field called `tag` is user data, not a variant.
+service audit from cron {
+  on schedule("15 * * * *") () -> Effect[Result[(), Detail]] {
+    Err(Detail { tag: "hunter3" })
   }
 }
 "#;
@@ -191,6 +200,12 @@ fn a_failed_cron_run_is_reported_on_workerd() {
         "a throwing run is recorded as failed: {threw:?}\n{}",
         log()
     );
+    let record = trigger("15+*+*+*+*").expect("the record-error run answers");
+    assert!(
+        record.0 == 500 && record.1 == "exception",
+        "{record:?}\n{}",
+        log()
+    );
     let _ = trigger("1+1+1+1+1");
 
     let end = Instant::now() + Duration::from_secs(20);
@@ -215,6 +230,10 @@ fn a_failed_cron_run_is_reported_on_workerd() {
     assert!(
         !log.contains("hunter2"),
         "the payload must not be logged:\n{log}"
+    );
+    assert!(
+        log.contains("Detail") && !log.contains("hunter3"),
+        "a record error's own `tag` field is not a variant:\n{log}"
     );
     assert!(
         log.contains("cron `30 * * * *` (sweeper) faulted") && log.contains("sweep boom"),

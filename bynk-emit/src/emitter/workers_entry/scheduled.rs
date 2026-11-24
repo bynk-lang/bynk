@@ -83,6 +83,7 @@ pub(super) fn emit_scheduled_handler(
                     ident("ctx"),
                     str_lit(route.site()),
                     str_lit(route.err_type.clone()),
+                    TsExpr::array(route.variants.iter().map(str_lit).collect()),
                     run,
                 ],
             )),
@@ -142,6 +143,9 @@ pub(super) struct CronRoute {
     pub(super) params: Vec<bynk_syntax::cron::CronParam>,
     /// #3872: the handler's declared error type, named in the failure record.
     pub(super) err_type: String,
+    /// #3872: the variant names of that error when it is a sum declared here; the
+    /// only `tag` the record may name, so a record's own `tag` field never reaches it.
+    pub(super) variants: Vec<String>,
 }
 
 impl CronRoute {
@@ -175,6 +179,10 @@ pub(super) fn collect_cron_routes(table: &UnitTable, service_names: &[&String]) 
                         .filter_map(|p| bynk_syntax::cron::cron_param(&p.type_ref))
                         .collect(),
                     err_type: bynk_syntax::cron::cron_error_type(&h.return_type),
+                    variants: bynk_check::symbols::sum_variant_names(
+                        table,
+                        &bynk_syntax::cron::cron_error_type(&h.return_type),
+                    ),
                 });
                 cron_idx += 1;
             }

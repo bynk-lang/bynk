@@ -16,12 +16,12 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   ctx.waitUntil(fault);
 }
 
-async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, run: () => globalThis.Promise<T>): globalThis.Promise<T> {
+async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, variants: readonly string[], run: () => globalThis.Promise<T>): globalThis.Promise<T> {
   try {
     const result = await run();
     if (result.tag === "Err") {
       const error = result.error as { readonly tag?: unknown } | null;
-      const variant = typeof error === "object" && error !== null && typeof error.tag === "string" ? error.tag : "";
+      const variant = typeof error === "object" && error !== null && typeof error.tag === "string" && variants.includes(error.tag) ? error.tag : "";
       globalThis.console.error({ message: "a cron run returned Err", level: "error", fields: { site, type: errType, variant } });
       __bynkReportFault(ctx, new globalThis.Error(`${site} returned ${errType}${variant === "" ? "" : `.${variant}`}`));
     }
@@ -79,15 +79,15 @@ export default {
     const surface = compose(env);
     switch (event.cron) {
       case "0 * * * *": {
-        const result = await __bynkCronRun(ctx, "cron `0 * * * *` (sweeper)", "String", () => surface.cron_sweeper_1());
+        const result = await __bynkCronRun(ctx, "cron `0 * * * *` (sweeper)", "String", [], () => surface.cron_sweeper_1());
         return;
       }
       case "0 2 * * *": {
-        const result = await __bynkCronRun(ctx, "cron `0 2 * * *` (sweeper)", "String", () => surface.cron_sweeper_0());
+        const result = await __bynkCronRun(ctx, "cron `0 2 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_0());
         return;
       }
       case "30 4 * * *": {
-        const result = await __bynkCronRun(ctx, "cron `30 4 * * *` (sweeper)", "String", () => surface.cron_sweeper_2());
+        const result = await __bynkCronRun(ctx, "cron `30 4 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_2());
         return;
       }
       default:

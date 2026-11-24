@@ -63,16 +63,17 @@ pub(super) const REPORT_FAULT_HELPER: &str = "function __bynkReportFault(ctx: { 
 /// #3872: runs one cron handler and makes a failed run visible to the platform.
 /// An `Err` is one structured `console.error` record (the site, the error's type
 /// and, for a sum error, its variant tag, never the payload, which can hold user
-/// data: #3437, Decision D) and is reported as a fault, so Cloudflare's Cron
+/// data: #3437, Decision D; only a tag in `variants`, the sum's declared variant names,
+/// is taken, so a record error's own `tag` field never reaches the log) and is reported as a fault, so Cloudflare's Cron
 /// Past Events shows the run as failed. A throw is logged with its stack,
 /// reported and rethrown, so it still fails as an uncaught exception does. The
 /// result is returned either way for the test build's `__bynkResult` store.
-pub(super) const CRON_RUN_HELPER: &str = "async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, run: () => globalThis.Promise<T>): globalThis.Promise<T> {
+pub(super) const CRON_RUN_HELPER: &str = "async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, variants: readonly string[], run: () => globalThis.Promise<T>): globalThis.Promise<T> {
   try {
     const result = await run();
     if (result.tag === \"Err\") {
       const error = result.error as { readonly tag?: unknown } | null;
-      const variant = typeof error === \"object\" && error !== null && typeof error.tag === \"string\" ? error.tag : \"\";
+      const variant = typeof error === \"object\" && error !== null && typeof error.tag === \"string\" && variants.includes(error.tag) ? error.tag : \"\";
       globalThis.console.error({ message: \"a cron run returned Err\", level: \"error\", fields: { site, type: errType, variant } });
       __bynkReportFault(ctx, new globalThis.Error(`${site} returned ${errType}${variant === \"\" ? \"\" : `.${variant}`}`));
     }
