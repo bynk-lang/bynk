@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: "`List.parTraverse` now returns `Effect[List[U]]`, the steps' values in input order; the old behaviour (steps returning `Effect[()]`, result `Effect[()]`) is `parForEach`. A call whose step returns `()` still type-checks but is the warning `bynk.list.par_traverse_unit`, and where its result is used as `Effect[()]` it is also a type error; `bynk check --fix` renames the call to `parForEach` in both cases. `parTraverse` on a `store` query or a held `Map` is unchanged."
-changelog: `List.parTraverse` now returns the steps' values in input order and the old unit-returning form is `parForEach`, completing the grid `forEach`/`traverse`/`traverseAll`/`traverseTry` and `parForEach`/`parTraverse`/`parTraverseAll`/`parTraverseTry`
----
+# 0895 — parForEach and a value-returning parTraverse complete the traversal grid
 
-## ADR: list-traversal-names-line-up
-title: parForEach and a value-returning parTraverse complete the traversal grid
-summary: Renames List.parTraverse to parForEach and adds a parTraverse that returns the values
+- **Status:** Accepted (v0.646)
 
 **Context.** With `traverse` (#3962) the sequential side had `forEach` (returns
 `()`) and `traverse` (returns values), but concurrently `parTraverse` returned
