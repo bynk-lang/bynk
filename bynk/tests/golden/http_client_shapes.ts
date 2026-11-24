@@ -164,6 +164,26 @@ export function __bynkPgRow(row: unknown, instants: readonly string[], ints: rea
   }
 }
 
+// String measures that the language defines independently of the host's UTF-16
+// representation (#3949).
+
+/** A string's length in code points: what `MinLength`/`MaxLength`/`Length` count (#3949). */
+export function __bynkCodePointLength(s: string): number {
+  let n = s.length;
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    // A high surrogate followed by a low one is one code point, not two units.
+    if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) {
+      const d = s.charCodeAt(i + 1);
+      if (d >= 0xdc00 && d < 0xe000) {
+        n -= 1;
+        i += 1;
+      }
+    }
+  }
+  return n;
+}
+
 // The browser-safe runtime `bynk client` inlines into the module it generates.
 // No signing, no Web Crypto, no secret and no Workers types: only `fetch`, which
 // the caller may replace. The `Result`/`Option` helpers, the `Bytes` and
@@ -819,10 +839,10 @@ export function __deserialise_Handle(json: __JsonValue, path: string = "$"): Res
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length >= 2)) {
+  if (!(__bynkCodePointLength(json) >= 2)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at least 2", value: json } });
   }
-  if (!(json.length <= 32)) {
+  if (!(__bynkCodePointLength(json) <= 32)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at most 32", value: json } });
   }
   return Ok(json as unknown as __Wire_Handle);
@@ -953,7 +973,7 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length === 5)) {
+  if (!(__bynkCodePointLength(json) === 5)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "length must be exactly 5", value: json } });
   }
   if (!(new globalThis.RegExp("^(?:" + "[A-Z]{3}[0-9]{2}" + ")$").test(json))) {
