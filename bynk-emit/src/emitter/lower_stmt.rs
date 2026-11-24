@@ -1087,6 +1087,14 @@ fn statement(body: &mut Body, stmt: &Statement, cx: &mut LowerCtx) {
                     (span_start, span_end),
                 )),
             }
+            // #3981: the names a statement-form `is` binds stay in scope to the end of the block.
+            if cx.expect_is_bindings {
+                body.extend(
+                    super::lower::expect_bindings::declarations(&a.value, cx)
+                        .into_iter()
+                        .map(stmt_item),
+                );
+            }
         }
         Statement::Advance(a) => {
             // #2137: move the case's harness clock (`testgen/test_runtime/clock.ts`),

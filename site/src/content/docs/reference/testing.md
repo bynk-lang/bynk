@@ -63,10 +63,8 @@ under the case and counts them as `detached_failures` in `--format json`.
 suite app.web {
 	case "the greeting names the visitor" {
 		let r <- api.GET("/hello") by Visitor
-		match r {
-			Ok(greeting) => expect greeting.startsWith("Hello"),
-			_ => expect false,
-		}
+		expect r is Ok(greeting)
+		expect greeting.startsWith("Hello")
 	}
 }
 ```
@@ -186,10 +184,8 @@ services by passing the asset instead of a route:
 suite t.web {
 	case "the stylesheet is served" {
 		let r <- api.GET(style)
-		match r {
-			Raw(body, ct) => expect ct == "text/css; charset=utf-8",
-			_ => expect false,
-		}
+		expect r is Raw(body, ct)
+		expect ct == "text/css; charset=utf-8"
 	}
 }
 ```
@@ -514,7 +510,8 @@ suite shop.inventory as system {
   A cron handler that faults fails the case, as it does at `unit`. A handler that
   returns `Err` is reported to the platform by the entry; the double records that
   report without counting it, since the case already reads the `Err` as its result.
-- **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
+- **`q.message(m)`** (or `q.message(m, QueueDelivery { attempts: 4, sentAt: t })` when the
+  handler declares a `QueueDelivery`) serialises `m` as the producer does, sends it through a JSON
   round trip, and calls `queue` with a one-message batch. A message whose type
   doesn't survive the round trip fails as it would on the platform. The batch
   records whether the consumer called `ack()` or `retry()`, and the address yields
@@ -881,6 +878,36 @@ is refused even if nothing applies it (`[() => Logger.log("x")].length() == 1`).
 `expect`'s own forms are the exceptions: a [fault claim](#faults) runs its call,
 and an [observation](#observation) or `trace(Cap.op)` reads the calls already
 recorded.
+
+### Names an `is` binds stay bound {#expect-is-bindings}
+
+A statement-form `expect … is P(x)` keeps the names `P` binds for the rest of the
+enclosing block (the case body, or the `if` or `match` arm body the statement sits
+in). A failed `expect` ends the case, so nothing after it runs unless the predicate
+held:
+
+```bynk,fragment
+let r <- api.GET("/hello") by Visitor
+expect r is Ok(greeting)
+expect greeting.startsWith("Hello")
+```
+
+The older staircase, `match r { Ok(greeting) => …, _ => expect false }`, still works,
+and a failed `_ => expect false` arm [reports the value it matched](#expect).
+
+- The whole predicate holding is what binds: `expect r is Ok(a) && o is Some(b)`
+  binds `a` and `b`. An or-pattern, `expect s is Circle(k) | Square(k)`, binds what
+  every alternative binds. A predicate that does not prove the test (`||`, `!`)
+  binds nothing, as in an `if`.
+- Only names directly inside the pattern bind (`Ok(code)`, `Some(n)`, a record's
+  fields, an or-pattern's shared names), as in an `if`. A nested sub-pattern's names
+  (`Rejected(RefinementViolation(d))`) do not: use a `match` for that shape.
+- A bound name that shadows an existing one is renamed in the output the way a
+  re-`let` is, and reads as the new binding afterwards.
+- An `expect` used as an expression (inside a `match` arm's expression, a lambda)
+  binds nothing beyond itself.
+- A `property` body binds nothing across its claims: it evaluates them once per
+  input, and a binding that carried on would complicate the shrunk report.
 
 ### `?` in a case {#question-in-case}
 
@@ -1492,7 +1519,7 @@ fresh for each case:
 | `Logger` | records every level (`log` too), prints nothing |
 | `Events` | records, delivers nothing |
 | `Idempotency` | in memory; `remember`'s and `claim`'s `expiresAfter` are honoured on the harness clock at `unit` (the real clock at `integration`), so `advance Clock` lapses a window; `dedup` and `remember` store the JSON the call encodes, so a value written as one type and read as another is a miss |
-| `Kv` | in memory, values kept as bytes with their metadata; `putTtl`'s TTL and `putWith`'s expiry are kept and listed but not enforced; the new operations check the platform's limits, and `listPage` pages in key order |
+| `Kv` | in memory, values kept as bytes with their metadata; `putTtl`'s TTL and `putWith`'s expiry are kept and listed but not enforced; the new operations check the platform's limits that a type does not (an `At` expiry, a key, metadata, a page `limit`; `KvTtl` and `KvCacheTtl` carry the TTL floors), and `listPage` pages in key order |
 | `R2` | each instance an in-memory bucket, honouring `putWith`'s conditions, metadata and `list`'s paging |
 | `RateLimit` | each instance counts calls per key over windows of its `@period`, allowing `@limit` per window — on the harness clock at `unit`, the real clock at `integration` |
 | `Queue` | each instance accepts every send, checking each body is JSON and a delay is in range; nothing is delivered — at `integration` and `system` each Worker binds a recorder |

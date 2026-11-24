@@ -631,7 +631,11 @@ service api from http {
       None => false
     }
     let parsed = match Bytes.fromHex("807f") {
-      Some(x) => x.slice(0, 1).compare(x.slice(1, 2))
+      Some(x) => match x.slice(0, 1).compare(x.slice(1, 2)) {
+        Less => -1
+        Equal => 0
+        Greater => 1
+      }
       None => 0
     }
     Ok("hex=\(hex) url=\(url) back=\(back) order=\(parsed)")

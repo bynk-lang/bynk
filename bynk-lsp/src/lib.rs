@@ -3880,6 +3880,8 @@ impl LanguageServer for Backend {
         // #2854: in an `on http` handler's parameter list, offer the special
         // parameter names (`query`, `headers`, `body`).
         items.extend(http_param_completions(&text, offset));
+        // #3880: `delivery: QueueDelivery` at a parameter of an `on message` handler.
+        items.extend(message_param_completions(&text, offset));
         // #2640: at statement position in an effectful body, the `par` block.
         if completion::is_keyword_position(&line_prefix)
             && completion::in_effectful_body_position(&text, offset)
@@ -5625,6 +5627,25 @@ fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
             ..Default::default()
         })
         .collect()
+}
+
+/// #3880: the `QueueDelivery` parameter of a queue consumer's `on message`, at a
+/// parameter-name position in its header. Lexical, like the HTTP parameter cells.
+fn message_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
+    if !bynk_ide::queue_delivery::in_message_param_name_position(text, offset) {
+        return Vec::new();
+    }
+    vec![CompletionItem {
+        label: "delivery".to_string(),
+        kind: Some(CompletionItemKind::VARIABLE),
+        detail: Some(
+            "the message's delivery metadata: `attempts` and `sentAt` (`consumes bynk.cloudflare { QueueDelivery }`)"
+                .to_string(),
+        ),
+        insert_text: Some("delivery: ${1:QueueDelivery}".to_string()),
+        insert_text_format: Some(InsertTextFormat::SNIPPET),
+        ..Default::default()
+    }]
 }
 
 /// The `@raw` completion cells, mirroring `limit_completions`: inside `@raw( … )` at

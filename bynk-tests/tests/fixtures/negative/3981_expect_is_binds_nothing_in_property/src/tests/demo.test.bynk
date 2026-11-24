@@ -1,0 +1,9 @@
+// #3981: a `property` evaluates its claims once per input; an `is` binding does not carry on.
+suite demo {
+  property "no binding across claims" {
+    for all n: Int {
+      expect find(n) is Some(m)
+      expect m == m
+    }
+  }
+}

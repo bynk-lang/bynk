@@ -682,6 +682,8 @@ pub fn phase_parse(
         return Err(());
     }
 
+    // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
+    crate::implicit_uses::add_implicit_uses(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }
@@ -6423,6 +6425,7 @@ pub fn merge_consumed_exports(
                 ConsumedType {
                     owning_context: t.clone(),
                     visibility: *vis,
+                    owner_is_adapter: unit_info[t].kind == UnitKind::Adapter,
                 },
             );
             // Methods on transparently-exported types: they're emitted in

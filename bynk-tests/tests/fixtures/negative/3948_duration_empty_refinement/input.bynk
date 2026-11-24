@@ -1,0 +1,3 @@
+commons demo {
+  type Span = Duration where AtLeast(2.hours) && AtMost(1.hour)
+}

@@ -1,0 +1,45 @@
+suite demo.span
+
+case "conversions truncate a part unit" {
+  expect seconds(1500.milliseconds) == 1
+  expect minutes(90.seconds) == 1
+  expect hours(150.minutes) == 2
+  expect days(36.hours) == 1
+  expect seconds(5.minutes) == 300
+}
+
+case "conversions round a negative span towards zero" {
+  let back = 0.seconds - 90.seconds
+  expect minutes(back) == -1
+  expect seconds(0.seconds - 1500.milliseconds) == -1
+  expect seconds(0.seconds - 500.milliseconds) == 0
+}
+
+case "a constant is admitted and converts" {
+  expect retentionDays() == 30
+}
+
+case "Ttl.of refuses a span under a minute and admits a minute" {
+  expect ttl(59.seconds) is Err(_)
+  expect ttl(1.minute) is Ok(_)
+  expect ttl(2.hours) is Ok(_)
+}
+
+case "InRange over Duration bounds both ends" {
+  expect window(500.milliseconds) is Err(_)
+  expect window(1.second) is Ok(_)
+  expect window(1.day) is Ok(_)
+  expect window(25.hours) is Err(_)
+}
+
+case "AtLeast and AtMost over Int, Float and Decimal" {
+  expect percent(-1) is Err(_)
+  expect percent(0) is Ok(_)
+  expect percent(100) is Ok(_)
+  expect percent(101) is Err(_)
+  expect ratio(0.0 - 0.5) is Err(_)
+  expect ratio(1.5) is Ok(_)
+  expect ratio(1.6) is Err(_)
+  expect price(0.49d) is Err(_)
+  expect price(0.50d) is Ok(_)
+}

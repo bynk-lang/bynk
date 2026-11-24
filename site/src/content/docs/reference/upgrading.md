@@ -17,6 +17,14 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.667.0
+
+`Kv.putTtl` takes a `KvTtl` (a `Duration` of at least 60 seconds) instead of `Int` seconds, `KvExpiration.After` takes a `KvTtl` and `KvGet.cacheTtl` an `Option[KvCacheTtl]`, so `Kv.putTtl(k, v, 86400)` is a type error: write `1.day`, or `KvTtl.of(d)` for a computed span; a TTL under 60 seconds (30 for `cacheTtl`) is now a compile error or a `ValidationError` instead of a run-time fault, and a part second rounds towards zero rather than up
+
+## v0.664.0
+
+`Bytes.compare` returns an `Ordering` (`Less`, `Equal` or `Greater`) instead of `-1`, `0` or `1`; a program that compares the result with an `Int` must match on the `Ordering`
+
 ## v0.660.0
 
 a `Matches` or regex-method pattern that is valid without the `u` flag but not with it (an identity escape such as `\-` outside a class, a `[\w-.]` range) is `bynk.types.invalid_regex`, with a note naming Unicode mode; drop the needless backslash

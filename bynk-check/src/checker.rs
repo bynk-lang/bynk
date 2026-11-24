@@ -67,6 +67,7 @@ mod kernels;
 mod linearity;
 mod list_basics;
 mod list_par;
+mod list_par_with;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
@@ -1033,8 +1034,10 @@ pub enum HandlerAddress {
         expr: Option<String>,
         param: Option<usize>,
     },
-    /// `svc.message(msg)`: the queue `on message` handler.
-    Message,
+    /// `svc.message(msg)`: the queue `on message` handler. #3880: `delivery` is the position
+    /// among the handler's parameters of its `QueueDelivery` one, which the address fills from
+    /// its optional second argument, or from the default delivery.
+    Message { delivery: Option<usize> },
     /// `svc.event(payload, …)`: the `on event` handler.
     Event,
     /// A WebSocket lifecycle address on a `TestConnection`.
@@ -1097,7 +1100,7 @@ impl HandlerAddress {
             HandlerAddress::Schedule {
                 expr: Some(expr), ..
             } => format!("schedule {expr}"),
-            HandlerAddress::Message => "message".to_string(),
+            HandlerAddress::Message { .. } => "message".to_string(),
             HandlerAddress::Event => "event".to_string(),
             HandlerAddress::Ws(WsAddress::Open) => "ws open".to_string(),
             HandlerAddress::Ws(WsAddress::Message { .. }) => "ws message".to_string(),
@@ -2152,6 +2155,7 @@ pub fn check_handler_body(
         effectful,
         agent_state_ty,
         commit_seen: false,
+        fold_init_expected: None,
         caps: CapabilityCtx {
             capabilities,
             declared_capabilities,
@@ -2333,6 +2337,7 @@ pub fn check_body(
         effectful: return_ty.is_effect(tys),
         agent_state_ty: None,
         commit_seen: false,
+        fold_init_expected: None,
         caps,
         in_test_body: true,
         oidc_binder: None,
@@ -2496,6 +2501,7 @@ pub fn check_invariants(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2653,6 +2659,7 @@ pub(crate) fn check_contracts(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -2890,6 +2897,7 @@ pub fn check_transitions(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -3084,6 +3092,7 @@ pub fn check_migrations(
             effectful: false,
             agent_state_ty: None,
             commit_seen: false,
+            fold_init_expected: None,
             caps: CapabilityCtx {
                 capabilities: HashMap::new(),
                 declared_capabilities: HashMap::new(),
@@ -3308,6 +3317,8 @@ enum ConstLit {
     Float(f64),
     /// #2622: a decimal literal's coefficient (with any `-`) and scale.
     Decimal(String, u32),
+    /// #3948: a `Duration` literal, in milliseconds.
+    Duration(i64),
     Str(String),
     Bool(bool),
     Unit,
@@ -3319,6 +3330,16 @@ impl ConstLit {
             ConstLit::Int(n) => n.to_string(),
             ConstLit::Float(v) => v.to_string(),
             ConstLit::Decimal(coef, scale) => bynk_syntax::decimal::render(coef, *scale),
+            ConstLit::Duration(ms) => {
+                // The largest unit that divides it exactly: `30000` is `30.seconds`.
+                let unit = bynk_syntax::ast::DurationUnit::ALL
+                    .into_iter()
+                    .rev()
+                    .find(|u| *ms != 0 && ms % u.millis() == 0)
+                    .unwrap_or(bynk_syntax::ast::DurationUnit::Milliseconds);
+                let n = ms / unit.millis();
+                format!("{n}.{}", unit.name_for(n))
+            }
             ConstLit::Str(s) => format!("{s:?}"),
             ConstLit::Bool(b) => b.to_string(),
             ConstLit::Unit => "()".to_string(),
@@ -3332,6 +3353,10 @@ impl ConstLit {
 /// (v0.29.10). Empty (`Default`) for pure functions / non-context code.
 #[derive(Default)]
 pub struct CapabilityCtx {
+    /// #3981: whether a statement-form `expect … is P(x)` keeps `x` bound for the rest of its
+    /// block. True for a case body; false (the default) for a `property`, which evaluates its
+    /// claims once per input, and for production code.
+    pub expect_is_bindings: bool,
     /// Capabilities in scope for the current handler, as a name → CapabilityInfo
     /// map. Empty for pure functions and non-context code.
     pub capabilities: HashMap<String, CapabilityInfo>,
@@ -3514,6 +3539,11 @@ pub(crate) struct Ctx<'a> {
     /// True if the enclosing function/handler returns `Effect[T]` (v0.5).
     /// Determines whether `<-` and capability calls are permitted.
     pub effectful: bool,
+    /// #4193: the expected result type of the `fold` call whose `init` is being
+    /// typed, so an empty collection there (`Set.empty()`) can take its element type
+    /// from the accumulator the call is expected to produce. Set by the call site just
+    /// before dispatch and taken by the fold arms; `None` everywhere else.
+    pub fold_init_expected: Option<TyId>,
     /// If inside an agent handler, the agent's state type and the agent's
     /// name. Used to validate `commit` statements.
     pub agent_state_ty: Option<TyId>,
@@ -5080,6 +5110,15 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                         ),
                     ));
                 }
+                // #3981: a statement-form `expect … is P(x)` ends the case when it fails, so the
+                // names the predicate binds stay bound to the end of the block.
+                if ctx.caps.expect_is_bindings {
+                    let scope = Span::new(a.span.end, block.span.end);
+                    record_is_locals(&a.value, true, scope, ctx);
+                    for (name, ty) in collect_is_bindings(&a.value, ctx) {
+                        ctx.bind(name, ty);
+                    }
+                }
             }
             Statement::Advance(a) => check_advance(a, ctx),
             Statement::Par(p) => par::check_par(p, block.span.end, ctx),
@@ -5236,9 +5275,11 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
         // like any other literal.
         ExprKind::DecimalLit { .. } => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::Decimal)))),
-        // v0.86 (ADR 0112): a `Duration` literal always takes the base
-        // `Duration` (no refined `Duration` types exist).
-        ExprKind::DurationLit { .. } => Some(tys.intern(Ty::Base(BaseType::Duration))),
+        // v0.86 (ADR 0112): a `Duration` literal takes the base `Duration`;
+        // #3948: in a refined-`Duration` position it is admitted like any
+        // other literal, checked against the predicates now.
+        ExprKind::DurationLit { .. } => admit_refined_literal(expr, expected, ctx)
+            .or(Some(tys.intern(Ty::Base(BaseType::Duration)))),
         ExprKind::StrLit(_) => admit_refined_literal(expr, expected, ctx)
             .or(Some(tys.intern(Ty::Base(BaseType::String)))),
         // An interpolated string (v0.43, ADR 0075). Each hole must type to a

@@ -181,9 +181,12 @@ struct Consumer<'a> {
 
 /// The message parameter's type of a consumer's `on message` handler, as written.
 fn message_type(handler: &Handler) -> Option<String> {
+    // The message is the parameter that is not the `QueueDelivery` (#3880), so
+    // a handler that takes the delivery first still has its message type read.
     handler
         .params
-        .first()
+        .iter()
+        .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
         .map(|p| ts_type_ref_display(&p.type_ref))
 }
 

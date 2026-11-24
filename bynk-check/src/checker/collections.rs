@@ -86,7 +86,7 @@ pub(super) fn check_map_more(
                 Some(tys.intern(Ty::Map(key, u)))
             }
             MapOp::Fold => {
-                let acc = type_of(&args[0], None, ctx)?;
+                let acc = type_of(&args[0], fold_seed_expected(&args[0], ctx), ctx)?;
                 let step = Ty::Fn {
                     params: vec![acc, key, val],
                     ret: acc,
@@ -103,6 +103,24 @@ pub(super) fn check_map_more(
         }
     };
     Some(typed(ctx))
+}
+
+/// #4193: the expected type for a `fold`'s seed. Only an empty collection
+/// (`List.empty()`, `Set.empty()`, `Map.empty()`) gains from it, so any other seed is
+/// typed exactly as before, and a type that still holds a type variable (the fold is
+/// an argument to a generic function) is no expectation yet: the seed is left to
+/// report `bynk.types.uninferable_element_type` with its note.
+pub(super) fn fold_seed_expected(init: &Expr, ctx: &mut Ctx) -> Option<TyId> {
+    let expected = ctx.fold_init_expected.take()?;
+    let ExprKind::MethodCall {
+        receiver, method, ..
+    } = &init.kind
+    else {
+        return None;
+    };
+    let empty_static = method.name == "empty"
+        && matches!(&receiver.kind, ExprKind::Ident(id) if id.name == LIST || id.name == MAP || id.name == SET);
+    (empty_static && !contains_var(expected, ctx.tys)).then_some(expected)
 }
 
 /// The `Set` methods #3961 adds; `None` for one it does not own.
@@ -159,7 +177,7 @@ pub(super) fn check_set_more(
                 Some(tys.intern(Ty::Set(u)))
             }
             SetOp::Fold => {
-                let acc = type_of(&args[0], None, ctx)?;
+                let acc = type_of(&args[0], fold_seed_expected(&args[0], ctx), ctx)?;
                 let step = Ty::Fn {
                     params: vec![acc, elem],
                     ret: acc,

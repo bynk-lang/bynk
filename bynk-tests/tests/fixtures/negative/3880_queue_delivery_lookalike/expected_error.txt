@@ -1,0 +1,3 @@
+declares its own `QueueDelivery`
+# exact
+has no dead-letter queue

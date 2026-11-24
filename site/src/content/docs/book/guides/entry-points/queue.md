@@ -90,6 +90,32 @@ A consumer with no `deadLetter` draws a warning, because the platform default
 deletes the message. Write `deadLetter: None` when that is what you want. See the
 [delivery policy](/reference/queue/#delivery-policy) for every key.
 
+## Handle a redelivered message
+
+Delivery is at least once, so a handler can see a message again, after a `Retry` or in
+rare cases without one. Take the delivery metadata as a second parameter to back off by
+attempt or to notice a message that keeps failing:
+
+```bynk,fragment
+consumes bynk.cloudflare { QueueDelivery }
+
+service outbox from queue("outbound-email") {
+  on message(message: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] given Logger {
+    if delivery.attempts > 3 {
+      let _ <- Logger.warn("giving up on \(message.id) after \(delivery.attempts) attempts")
+      Ack
+    } else {
+      Retry("attempt \(delivery.attempts)")
+    }
+  }
+}
+```
+
+`attempts` counts the times this consumer has been given the message, starting at 1, and
+`sentAt` is when it was sent. Neither deduplicates: to do that, put a key in the message
+when you send it, and claim it with `Idempotency.claim` before doing the work, so a
+second delivery with the same key does nothing.
+
 ## Use a capability
 
 A queue handler reaches the outside world through `given`, like any handler:

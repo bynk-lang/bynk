@@ -1,0 +1,1 @@
+bynk.list.par_limit_range

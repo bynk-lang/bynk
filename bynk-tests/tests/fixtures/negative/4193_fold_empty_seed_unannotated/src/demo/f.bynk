@@ -1,0 +1,9 @@
+commons demo.f
+
+type Post = { id: Int, tags: Set[String] }
+
+// No expected type for the fold: the seed has nothing to take its type from.
+fn tagCount(posts: List[Post]) -> Int {
+	let tags = posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))
+	tags.length()
+}

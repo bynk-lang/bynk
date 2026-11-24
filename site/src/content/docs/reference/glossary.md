@@ -161,6 +161,13 @@ else `old`/`new` are ordinary identifiers.
 A type whose representation is hidden outside its defining module; constructed and
 inspected only through its API. See [Type system](/reference/types/).
 
+### Ordering {#term-ordering}
+
+The enum `Less | Equal | Greater`: how one value compares with another. It is
+what `a.compare(b)` returns and what a `sortWith` comparator returns, and it has
+`then` and `reverse` to combine orderings. See
+[Ordering](/reference/types/#ordering).
+
 ### package {#term-package}
 
 A project with a `[package]` identity, `organisation/package` (`acme/money`),
@@ -169,6 +176,13 @@ adapters, never a context. Another project depends on it under
 `[dependencies]` and reaches its units through an alias. See
 [`[package]`](/reference/tooling/manifest/#package) and
 [Share code between projects](/book/guides/projects-build-and-deployment/share-code-between-projects/).
+
+### prelude type {#term-prelude-type}
+
+A compiler-known type a unit can name with no import, as `Option` can. A prelude
+type's declaring unit is reached as if the unit had written `uses` for it
+whenever the unit names the type or writes a method that yields one. `Ordering`
+is the first. See [Ordering](/reference/types/#ordering).
 
 ### project vs legacy mode {#term-project-vs-legacy-mode}
 

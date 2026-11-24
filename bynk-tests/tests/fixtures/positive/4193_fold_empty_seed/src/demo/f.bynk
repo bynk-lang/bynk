@@ -1,0 +1,44 @@
+---
+#4193: a `fold` whose seed is an empty collection takes the accumulator type from what the fold is expected to produce.
+---
+commons demo.f
+
+type Post = { id: Int, tags: Set[String] }
+
+fn tagsOf(posts: List[Post]) -> Set[String] {
+	posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))
+}
+
+fn tagCount(posts: List[Post]) -> Int {
+	let tags: Set[String] = posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))
+	tags.length()
+}
+
+fn copy(xs: List[Int]) -> List[Int] {
+	xs.fold(List.empty(), (acc, x) => acc.append(x))
+}
+
+fn index(xs: List[Int]) -> Map[Int, Int] {
+	xs.fold(Map.empty(), (acc, x) => acc.insert(x, x * 10))
+}
+
+fn viaSet(xs: Set[Int]) -> List[Int] {
+	xs.fold(List.empty(), (acc, x) => acc.append(x))
+}
+
+fn viaMap(m: Map[String, Int]) -> List[String] {
+	m.fold(List.empty(), (acc, k, v) => acc.append(k))
+}
+
+fn sizeOf(s: Set[String]) -> Int {
+	s.length()
+}
+
+fn viaArg(posts: List[Post]) -> Int {
+	sizeOf(posts.fold(Set.empty(), (acc, p) => acc.union(p.tags)))
+}
+
+// A non-empty seed is typed exactly as before.
+fn total(xs: List[Int]) -> Int {
+	xs.fold(0, (acc, x) => acc + x)
+}

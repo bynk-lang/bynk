@@ -107,11 +107,15 @@ t("WorkersKv.put: stores the value with no expiry option", async () => {
   assert.equal(kv.puts[1].options, undefined);
 });
 
-t("WorkersKv.putTtl: passes the TTL through as expirationTtl seconds", async () => {
+t("WorkersKv.putTtl: passes the TTL, a Duration, as expirationTtl whole seconds rounding towards zero", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
-  await store.putTtl("k", "v", 120);
-  assert.deepEqual(kv.puts, [{ key: "k", value: "v", options: { expirationTtl: 120 } }]);
+  await store.putTtl("k", "v", 120_000);
+  await store.putTtl("k2", "v", 120_900);
+  assert.deepEqual(kv.puts, [
+    { key: "k", value: "v", options: { expirationTtl: 120 } },
+    { key: "k2", value: "v", options: { expirationTtl: 120 } },
+  ]);
   assert.deepEqual(await store.get("k"), Some("v"));
 });
 
@@ -1245,7 +1249,7 @@ t("WorkersAnalytics.dataset: a missing or empty var names it", async () => {
 const never = { tag: "Never" };
 const putOpts = (o = {}) => ({ expiration: never, metadata: new Map(), ...o });
 
-t("WorkersKv.putWith: passes a relative or absolute expiry in seconds, and the metadata", async () => {
+t("WorkersKv.putWith: passes a relative expiry in whole seconds rounding towards zero, an absolute one, and the metadata", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
   await store.putWith("a", "1", putOpts({ expiration: { tag: "After", ttl: 90_500 }, metadata: new Map([["k", "v"]]) }));
@@ -1253,16 +1257,16 @@ t("WorkersKv.putWith: passes a relative or absolute expiry in seconds, and the m
   await store.putWith("b", "2", putOpts({ expiration: { tag: "At", instant: at } }));
   await store.putWith("c", "3", putOpts());
   assert.deepEqual(kv.puts.map((p) => p.options), [
-    { expirationTtl: 91, metadata: { k: "v" } },
+    { expirationTtl: 90, metadata: { k: "v" } },
     { expiration: Math.ceil(at / 1000), metadata: {} },
     { metadata: {} },
   ]);
 });
 
-t("WorkersKv.putWith: a near expiry, oversized metadata or a long key faults, and nothing is written", async () => {
+// The 60-second floor of `After` is `KvTtl`'s, checked by the compiler (#3948); `At` is checked here.
+t("WorkersKv.putWith: a near absolute expiry, oversized metadata or a long key faults, and nothing is written", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
-  await assert.rejects(store.putWith("a", "1", putOpts({ expiration: { tag: "After", ttl: 59_000 } })), /at least 60 seconds/);
   await assert.rejects(store.putWith("a", "1", putOpts({ expiration: { tag: "At", instant: Date.now() + 10_000 } })), /at least 60 seconds/);
   await assert.rejects(store.putWith("a", "1", putOpts({ metadata: new Map([["k", "x".repeat(1100)]]) })), /at most 1024 bytes as JSON/);
   await assert.rejects(store.putWith("é".repeat(257), "1", putOpts()), /at most 512 bytes, not 514/);
@@ -1291,7 +1295,9 @@ t("WorkersKv.getWith: a value with its metadata, edge-cached for cacheTtl", asyn
     { type: "text", cacheTtl: 45 },
     { type: "text" },
   ]);
-  await assert.rejects(store.getWith("a", { cacheTtl: Some(29_000) }), /at least 30 seconds/);
+  // Whole seconds round towards zero; the 30-second floor is `KvCacheTtl`'s (#3948).
+  await store.getWith("a", { cacheTtl: Some(45_900) });
+  assert.deepEqual(kv.reads.filter((r) => r.options).map((r) => r.options).at(-1), { type: "text", cacheTtl: 45 });
 });
 
 t("WorkersKv.getBytes: a binary value as bytes, and a text value as its UTF-8", async () => {

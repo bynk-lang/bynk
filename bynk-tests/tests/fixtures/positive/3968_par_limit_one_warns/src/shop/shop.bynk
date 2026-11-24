@@ -1,0 +1,19 @@
+context shop
+
+consumes bynk { ParOptions }
+
+fn notify(id: Int) -> Effect[()] {
+  Effect.pure(())
+}
+
+service warm {
+  on call(ids: List[Int]) -> Effect[()] by Caller {
+    ids.parForEachWith((id: Int) => notify(id), ParOptions { limit: 1 })
+  }
+}
+
+service collect {
+  on call(ids: List[Int]) -> Effect[List[()]] by Caller {
+    ids.parTraverseWith((id: Int) => notify(id), ParOptions { limit: 4 })
+  }
+}

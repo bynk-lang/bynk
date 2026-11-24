@@ -109,7 +109,7 @@ class __Stub_Renderer {
   }
 
   async send(instance: string, req: __ns_bynk.Request): globalThis.Promise<Result<__ns_bynk.Response, __ns_bynk_cloudflare.ContainerError>> {
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -122,6 +122,7 @@ class __Stub_Renderer {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -130,7 +131,7 @@ class __Stub_Renderer {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -158,6 +159,7 @@ class __Stub_Renderer {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -165,6 +167,7 @@ class __Stub_Renderer {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -181,6 +184,7 @@ class __Stub_Renderer {
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
     type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -279,7 +283,7 @@ async function test_an_unstubbed_send_faults() {
   try {
     const deps = __makeTestDeps();
     const { api } = __ns_shop_render;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -292,6 +296,7 @@ async function test_an_unstubbed_send_faults() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -300,7 +305,7 @@ async function test_an_unstubbed_send_faults() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -328,6 +333,7 @@ async function test_an_unstubbed_send_faults() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -335,6 +341,7 @@ async function test_an_unstubbed_send_faults() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -351,6 +358,7 @@ async function test_an_unstubbed_send_faults() {
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
     type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -405,7 +413,7 @@ async function test_a_stubbed_send_returns_its_response() {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
     const deps = __bynkRecordDeps(__makeTestDeps("a stubbed send returns its response"), { Container: ["receiveBytes", "send", "sendBytes"], Renderer: ["receiveBytes", "send", "sendBytes"] }, __obs);
     const { api } = __ns_shop_render;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -418,6 +426,7 @@ async function test_a_stubbed_send_returns_its_response() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -426,7 +435,7 @@ async function test_a_stubbed_send_returns_its_response() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -454,6 +463,7 @@ async function test_a_stubbed_send_returns_its_response() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -461,6 +471,7 @@ async function test_a_stubbed_send_returns_its_response() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -477,6 +488,7 @@ async function test_a_stubbed_send_returns_its_response() {
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
     type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -522,7 +534,7 @@ async function test_an_unavailable_container_is_matched() {
   try {
     const deps = __makeTestDeps("an unavailable container is matched");
     const { api } = __ns_shop_render;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -535,6 +547,7 @@ async function test_an_unavailable_container_is_matched() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -543,7 +556,7 @@ async function test_an_unavailable_container_is_matched() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -571,6 +584,7 @@ async function test_an_unavailable_container_is_matched() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -578,6 +592,7 @@ async function test_an_unavailable_container_is_matched() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -594,6 +609,7 @@ async function test_an_unavailable_container_is_matched() {
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
     type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
@@ -638,7 +654,7 @@ async function test_a_failed_start_carries_its_message() {
   try {
     const deps = __makeTestDeps("a failed start carries its message");
     const { api } = __ns_shop_render;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -651,6 +667,7 @@ async function test_a_failed_start_carries_its_message() {
     type File = __ns_bynk.File;
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
     type Redirect = __ns_bynk.Redirect;
     type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
@@ -659,7 +676,7 @@ async function test_a_failed_start_carries_its_message() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -687,6 +704,7 @@ async function test_a_failed_start_carries_its_message() {
     type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
     type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
     type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
     type KvEntry = __ns_bynk_cloudflare.KvEntry;
     type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
     type KvGet = __ns_bynk_cloudflare.KvGet;
@@ -694,6 +712,7 @@ async function test_a_failed_start_carries_its_message() {
     type KvList = __ns_bynk_cloudflare.KvList;
     type KvListing = __ns_bynk_cloudflare.KvListing;
     type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
     type MetaValue = __ns_bynk_cloudflare.MetaValue;
     type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
     type Mutation = __ns_bynk_cloudflare.Mutation;
@@ -710,6 +729,7 @@ async function test_a_failed_start_carries_its_message() {
     type PgStatement = __ns_bynk_cloudflare.PgStatement;
     type PgValue = __ns_bynk_cloudflare.PgValue;
     type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
