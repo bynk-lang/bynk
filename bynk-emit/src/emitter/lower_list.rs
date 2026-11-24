@@ -250,10 +250,9 @@ pub(super) fn lower_list_kernel(
             _,
         ) => basics::lower_list_basic(&a, op, elem, p, cx),
         (ListOp::Count, [_])
-        | (
-            ListOp::FilterMap | ListOp::ZipWith | ListOp::TakeWhile | ListOp::SkipWhile,
-            _,
-        ) => Some(more::lower_list_more(&a, op, p, cx)),
+        | (ListOp::FilterMap | ListOp::ZipWith | ListOp::TakeWhile | ListOp::SkipWhile, _) => {
+            Some(more::lower_list_more(&a, op, p, cx))
+        }
         (ListOp::Average, [key]) => Some(list_average(&a, key, p, cx)),
         (ListOp::JoinOn, [other, left, right, into]) => {
             Some(list_join_on(&a, false, other, left, right, into, p, cx))

@@ -34,12 +34,7 @@ fn end_or_length() -> TsExpr {
     )
 }
 
-pub(super) fn lower_list_more(
-    a: &ListArm,
-    op: ListOp,
-    pre: &mut Pre,
-    cx: &mut LowerCtx,
-) -> TsExpr {
+pub(super) fn lower_list_more(a: &ListArm, op: ListOp, pre: &mut Pre, cx: &mut LowerCtx) -> TsExpr {
     let recv = pre.lower_node(a.receiver, cx);
     match (op, a.args) {
         (ListOp::TakeWhile | ListOp::SkipWhile, [p]) => {

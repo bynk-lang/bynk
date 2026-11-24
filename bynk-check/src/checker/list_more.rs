@@ -52,12 +52,8 @@ pub(super) fn check_list_more(
             Some(tys.intern(Ty::Base(BaseType::Int)))
         }
         ListOp::FilterMap => {
-            let ret = check_kernel_fn_arg(
-                &args[0],
-                vec![elem],
-                "the `List.filterMap` function",
-                ctx,
-            )?;
+            let ret =
+                check_kernel_fn_arg(&args[0], vec![elem], "the `List.filterMap` function", ctx)?;
             let Ty::Option(inner) = &*tys.get(ret) else {
                 ctx.errors.push(
                     CompileError::new(
