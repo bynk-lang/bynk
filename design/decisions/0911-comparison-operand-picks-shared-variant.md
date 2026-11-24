@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `==`, `!=` and the ordering operators give a bare variant name that two sums share the other operand's sum as its expected type, so `e == Failed("down")` and `o == Some(Failed("x"))` resolve
----
+# 0911 — The other operand of a comparison picks a shared bare variant's sum
 
-## ADR: comparison-operand-picks-shared-variant
-title: The other operand of a comparison picks a shared bare variant's sum
-summary: `==`, `!=`, `<`, `<=`, `>` and `>=` type the non-variant side first and use its sum as the bare variant's expected type
+- **Status:** Accepted (v0.657)
 
 **Context.** A bare variant two sums share resolves by its expected type (#3344), but `==` and `!=` gave it none, so `e == Failed("down")` with `e: MailError` was `bynk.resolve.ambiguous_variant`. The forms #3955 (`a.compare(b) == Less`) and #3976 rely on need it, under the context-only resolution decided for compiler-known sums.
 
