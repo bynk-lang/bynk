@@ -14,7 +14,6 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
-use super::cross_context::type_ref_named_root;
 use crate::ts_build::{
     arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, num_lit, paren,
     ret, str_lit,
@@ -525,7 +524,7 @@ fn typed_cookie_node(name: &str, value: TsExpr, max_age: TsExpr, expires: TsExpr
 pub(in crate::emitter) fn lower_events_emit_call(
     e: &Expr,
     receiver: &Expr,
-    type_args: &[TypeRef],
+    _type_args: &[TypeRef],
     args: &[Expr],
     cx: &mut LowerCtx,
     pre: &mut Pre,
@@ -555,16 +554,18 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 if op == "emit"
         )
     {
-        let event_name = type_args
-            .first()
-            .and_then(type_ref_named_root)
-            .map(str::to_string)
-            .unwrap_or_else(|| {
-                // `Events.emit[E]` names an event the checker resolved: absent, a missing
-                // fact (1A.34). The name is only a placeholder then.
+        // #4113: the checker records the event the call emits (written or inferred) on the callee.
+        let event_name = match cx.commons().callee(e.id) {
+            Some(Callee::Capability {
+                event: Some(name), ..
+            }) => name.clone(),
+            // `Events.emit` names an event the checker resolved: absent, a missing fact (1A.34).
+            // The name is only a placeholder then.
+            _ => {
                 cx.missing_fact(e.span, "event type argument of `Events.emit`");
                 String::new()
-            });
+            }
+        };
         let payload = pre.lower_node(&args[0], cx);
         // Events track, slice 2 (spine #936): the envelope is minted here,
         // once, before fan-out duplicates this single `__events` entry to

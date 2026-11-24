@@ -65,10 +65,10 @@ on reserve(orderId: OrderId) -> ReserveOutcome given Idempotency {
 }
 ```
 
-Both operations take their type argument explicitly (`dedup[ReserveOutcome]`,
-`remember[ReserveOutcome]`) — always, even where an argument's type would otherwise make
-it obvious, since a capability operation's own type parameter is never inferred (see
-[Capabilities & providers](/reference/capabilities/#generic-operations)). Calling
+Both operations are written with their type argument here (`dedup[ReserveOutcome]`,
+`remember[ReserveOutcome]`). `dedup` has no argument that mentions `T`, so it is always written;
+`remember` takes `T` from its `value` argument, so `Idempotency.remember(key, outcome, 1.hours)`
+infers it (see [Capabilities & providers](/reference/capabilities/#generic-operations)). Calling
 `dedup` alone does **not** cache anything — `remember` is what writes the entry, so
 forgetting to call it after a cache miss means that key is recomputed every time, not an
 error.
@@ -131,7 +131,8 @@ handler's after its state commit and events flush, so a failure of either releas
 work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
 returning an `Err` is still committed, and a retry repeats that write.
 
-The key is scoped to the calling handler as for `dedup`.
+The key is scoped to the calling handler as for `dedup`. The in-memory provider makes the
+claim atomic within one process; it is no more durable than `dedup`.
 
 `claim` is atomic on Cloudflare: the claim is one `INSERT … ON CONFLICT` in the Worker's D1
 database, so two deliveries of one key, on
@@ -141,48 +142,6 @@ stays small. It costs one database round trip per `claim`. On Node and in the br
 `claim` is atomic within one process and lost on restart, as `dedup` is. This is the
 Cloudflare platform's binding of the portable `Idempotency` capability, chosen by the
 build's platform, not by the author.
-
-#### `claim`: first delivery wins
-
-`dedup` then `remember` is check-then-act: two deliveries of one key that arrive together
-can both miss and both run. `claim` is the race-free form. The first call for a key
-returns `Claimed`, and every later call within `expiresAfter` returns `AlreadyClaimed`:
-
-```bynk,ignore
-consumes bynk { Idempotency, Claim }
-
-on POST("/hooks/:id") (id: String) -> Effect[HttpResult[String]] by Visitor given Idempotency {
-  let Claim.Claimed <- Idempotency.claim(id, 7.days) else { Ok("duplicate") }
-  Ok("processed")
-}
-```
-
-`claim` records no outcome, so there is nothing to replay: use it when the work should run
-at most once. It is separate from `dedup`/`remember`, which never see a claim.
-
-In a service handler or an agent handler, the compiler settles the claims the handler made when it exits:
-
-- **A failure releases the claim**, so a retry can claim again. A failure is a fault, a
-  returned `Err`, or an `HttpResult` that is a 5xx (`ServerError`, `ServiceUnavailable`
-  and the rest). A 4xx, or any other result, is a completed outcome, and the claim is held
-  for the full `expiresAfter`.
-- **A claim is a lease until it is settled.** It holds for at most 30 seconds, matching
-  the `waitUntil` limit, and only then for `expiresAfter`. If the instance dies before the
-  handler settles, the claim lapses and a retry can claim again. A handler that runs
-  longer than 30 seconds can be re-claimed by a concurrent retry while it is still running;
-  when it settles it leaves the retry's claim alone, releasing or confirming only a claim
-  that is still its own.
-
-The guarantee is **at-most-once completion, not exactly-once side effects**: work done
-before a failure, such as a call to another service, can repeat on the retry. Make those
-calls idempotent too. A `claim` in a service handler or an agent handler is settled, an agent
-handler's after its state commit and events flush, so a failure of either releases it. A
-`claim` anywhere else is not settled: it is held for `expiresAfter` whether or not the
-work succeeds. Settling an agent's claim releases only the claim: state the handler wrote before
-returning an `Err` is still committed, and a retry repeats that write.
-
-The key is scoped to the calling handler as for `dedup`. The in-memory provider makes the
-claim atomic within one process; it is no more durable than `dedup`.
 
 The `key` you pass is automatically scoped to the calling handler's own qualified name
 before it reaches the provider — `Idempotency.dedup[T]("order-1")` (and `remember`, `claim`) inside `on call` of
@@ -217,8 +176,9 @@ service markPaid {
 }
 ```
 
-`emit`'s type argument is explicit, like `Idempotency`'s operations above —
-never inferred from the value's type. Only the context that declares an event
+`emit`'s type argument is inferred from the value, as for `Idempotency.remember` above:
+`Events.emit(PaymentConfirmed { orderId: orderId })`. Writing it (`Events.emit[PaymentConfirmed](…)`)
+is allowed and means the same. Only the context that declares an event
 may emit it, even though the type is visible cross-context for subscription
 (`bynk.event.emit_outside_owner` otherwise); emission is released only if the
 emitting handler itself commits, so an aborted handler emits nothing. See
