@@ -2,6 +2,7 @@
 // system test: shop.api
 
 import { Ok, Err } from "../__bynk_runtime/result.js";
+import { __bynkDecimalToString } from "../__bynk_runtime/decimal.js";
 import type { __JsonValue, __BoundaryError, __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { __responseToHttpResult, __responseToHttpOutcome, __requestHeaderPairs, __cookieValue } from "../__bynk_runtime/http.js";
 import * as __ns_shop_api from "../workers/shop-api/handlers.js";
@@ -130,7 +131,7 @@ async function __sysdrive_raw_api_http_GET_flags_Param_flag(flag: string, __extr
 }
 async function __sysdrive_api_http_GET_prices_Param_p(p: { readonly coefficient: bigint; readonly scale: number }, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/prices/${p}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __req = new globalThis.Request(`https://test/prices/${__bynkDecimalToString(p)}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -159,21 +160,45 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
 
+async function test_typed_arguments_are_written_as_their_segments() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const { Status } = __ns_shop_api;
+    type Status = __ns_shop_api.Status;
+    const a = await __sysdrive_api_http_GET_orders_Param_id((42 as any), undefined, "");
+    if (!(((__c: boolean) => __c)(a.tag === "Ok" && a.value === "order 42"))) { throw __bynkExpectFailure("tests/api.bynk:17:10", 494, 513, "expect a is Ok(\"order 42\")"); }
+    const b = await __sysdrive_api_http_GET_orders_status_Param_s(Status.Closed, undefined, "");
+    if (!(((__c: boolean) => __c)(b.tag === "Ok" && b.value === "closed"))) { throw __bynkExpectFailure("tests/api.bynk:19:10", 571, 588, "expect b is Ok(\"closed\")"); }
+    const c = await __sysdrive_api_http_GET_prices_Param_p({ coefficient: 1250n, scale: 2 }, undefined, "");
+    if (!(((__c: boolean) => __c)(c.tag === "Ok" && c.value === "price 12.50"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 639, 661, "expect c is Ok(\"price 12.50\")"); }
+    const d = await __sysdrive_api_http_GET_flags_Param_flag(true, undefined, "");
+    if (!(((__c: boolean) => __c)(d.tag === "Ok" && d.value === "flag true"))) { throw __bynkExpectFailure("tests/api.bynk:23:10", 712, 732, "expect d is Ok(\"flag true\")"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 async function test_a_typed_segment_binds() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __sysdrive_raw_api_http_GET_orders_Param_id("42", undefined, "");
-    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "Ok" && a.value.value === "order 42"))) { throw __bynkExpectFailure("tests/api.bynk:17:10", 478, 506, "expect a is Handled(Ok(\"order 42\"))"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "Ok" && a.value.value === "order 42"))) { throw __bynkExpectFailure("tests/api.bynk:28:10", 824, 852, "expect a is Handled(Ok(\"order 42\"))"); }
     const b = await __sysdrive_raw_api_http_GET_orders_status_Param_s("Open", undefined, "");
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "Ok" && b.value.value === "open"))) { throw __bynkExpectFailure("tests/api.bynk:19:10", 570, 594, "expect b is Handled(Ok(\"open\"))"); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "Ok" && b.value.value === "open"))) { throw __bynkExpectFailure("tests/api.bynk:30:10", 916, 940, "expect b is Handled(Ok(\"open\"))"); }
     const c = await __sysdrive_raw_api_http_GET_flags_Param_flag("false", undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Handled" && c.value.tag === "Ok" && c.value.value === "flag false"))) { throw __bynkExpectFailure("tests/api.bynk:21:10", 654, 684, "expect c is Handled(Ok(\"flag false\"))"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Handled" && c.value.tag === "Ok" && c.value.value === "flag false"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1000, 1030, "expect c is Handled(Ok(\"flag false\"))"); }
     const d = await __sysdrive_raw_api_http_GET_prices_Param_p("12.50", undefined, "");
-    if (!(((__c: boolean) => __c)(d.tag === "Handled" && d.value.tag === "Ok" && d.value.value === "price 12.50"))) { throw __bynkExpectFailure("tests/api.bynk:23:10", 742, 773, "expect d is Handled(Ok(\"price 12.50\"))"); }
+    if (!(((__c: boolean) => __c)(d.tag === "Handled" && d.value.tag === "Ok" && d.value.value === "price 12.50"))) { throw __bynkExpectFailure("tests/api.bynk:34:10", 1088, 1119, "expect d is Handled(Ok(\"price 12.50\"))"); }
     const e = await __sysdrive_raw_api_http_GET_refs_Param_r("-3", undefined, "");
-    if (!(((__c: boolean) => __c)(e.tag === "Handled" && e.value.tag === "Ok" && e.value.value === "ref -2"))) { throw __bynkExpectFailure("tests/api.bynk:25:10", 826, 852, "expect e is Handled(Ok(\"ref -2\"))"); }
+    if (!(((__c: boolean) => __c)(e.tag === "Handled" && e.value.tag === "Ok" && e.value.value === "ref -2"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1172, 1198, "expect e is Handled(Ok(\"ref -2\"))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -189,15 +214,15 @@ async function test_a_segment_that_does_not_read_is_a_structural_mismatch() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __sysdrive_raw_api_http_GET_orders_Param_id("abc", undefined, "");
-    if (!(((__c: boolean) => __c)(a.tag === "Rejected" && a.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:30:10", 977, 1013, "expect a is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Rejected" && a.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 1323, 1359, "expect a is Rejected(StructuralMismatch(_))"); }
     const b = await __sysdrive_raw_api_http_GET_orders_status_Param_s("open", undefined, "");
-    if (!(((__c: boolean) => __c)(b.tag === "Rejected" && b.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1077, 1113, "expect b is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(b.tag === "Rejected" && b.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:43:10", 1423, 1459, "expect b is Rejected(StructuralMismatch(_))"); }
     const c = await __sysdrive_raw_api_http_GET_flags_Param_flag("on", undefined, "");
-    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:34:10", 1170, 1206, "expect c is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:45:10", 1516, 1552, "expect c is Rejected(StructuralMismatch(_))"); }
     const d = await __sysdrive_raw_api_http_GET_prices_Param_p("cheap", undefined, "");
-    if (!(((__c: boolean) => __c)(d.tag === "Rejected" && d.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1264, 1300, "expect d is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(d.tag === "Rejected" && d.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:47:10", 1610, 1646, "expect d is Rejected(StructuralMismatch(_))"); }
     const e = await __sysdrive_raw_api_http_GET_refs_Param_r("1.5", undefined, "");
-    if (!(((__c: boolean) => __c)(e.tag === "Rejected" && e.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:38:10", 1354, 1390, "expect e is Rejected(StructuralMismatch(_))"); }
+    if (!(((__c: boolean) => __c)(e.tag === "Rejected" && e.value.tag === "StructuralMismatch"))) { throw __bynkExpectFailure("tests/api.bynk:49:10", 1700, 1736, "expect e is Rejected(StructuralMismatch(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -213,7 +238,7 @@ async function test_a_segment_that_breaks_the_refinement_is_a_violation() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const a = await __sysdrive_raw_api_http_GET_orders_Param_id("0", undefined, "");
-    if (!(((__c: boolean) => __c)(a.tag === "Rejected" && a.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:43:10", 1511, 1548, "expect a is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Rejected" && a.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:54:10", 1857, 1894, "expect a is Rejected(RefinementViolation(_))"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -237,11 +262,17 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a typed segment binds", "a segment that does not read is a structural mismatch", "a segment that breaks the refinement is a violation"];
+export const __bynkCases: readonly string[] = ["typed arguments are written as their segments", "a typed segment binds", "a segment that does not read is a structural mismatch", "a segment that breaks the refinement is a violation"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
   const want = (n: string): boolean => only === undefined || only === n;
+  if (want("typed arguments are written as their segments")) {
+    const started = __bynkCaseNow();
+    const r = { name: "typed arguments are written as their segments", ...(await test_typed_arguments_are_written_as_their_segments()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
   if (want("a typed segment binds")) {
     const started = __bynkCaseNow();
     const r = { name: "a typed segment binds", ...(await test_a_typed_segment_binds()), durationMs: __bynkCaseSince(started) };

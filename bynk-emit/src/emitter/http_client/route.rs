@@ -459,8 +459,12 @@ impl Gen {
                     let checked = match &ty {
                         // A `Decimal`'s public value is an object, so it goes through the codec
                         // like a named type, and the wire text is the segment.
-                        TypeRef::Base(b, _)
-                            if !matches!(b, bynk_syntax::ast::BaseType::Decimal) =>
+                        TypeRef::Base(..)
+                            if crate::emitter::workers_entry::query_leaf_kind(
+                                &ty,
+                                &self.sc.types,
+                                false,
+                            ) != "decimal" =>
                         {
                             call(ident("globalThis.String"), vec![ident(&param_ident)])
                         }
