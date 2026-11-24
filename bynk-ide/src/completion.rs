@@ -1202,7 +1202,7 @@ pub const HTTP_PARAMS: &[(&str, &str, &str)] = &[
     (
         "headers",
         "RequestHeaders",
-        "the request's headers, read-only",
+        "the request's headers: a record `T` decoded from them and validated before the handler runs (`400` on a violation), or a raw, read-only `RequestHeaders` view",
     ),
     (
         "cookies",

@@ -376,6 +376,12 @@ impl Gen {
                     ty: Some(ty.clone()),
                     detail: None,
                 },
+                ParamInput::Headers { ty } => contract::HttpRouteParam {
+                    kind: "headers".to_string(),
+                    name: "headers".to_string(),
+                    ty: Some(ty.clone()),
+                    detail: None,
+                },
                 ParamInput::Body { ty, kind } => {
                     let (kind, ty, detail) = match kind {
                         BodyKind::Json => ("body-json", Some(ty.clone()), None),
@@ -616,6 +622,24 @@ impl Gen {
                     signature.push(arg.parameter("cookies", &name));
                     arg_types.extend(arg.decl);
                 }
+                ParamInput::Headers { ty } => {
+                    let ty = self.renamed(ty);
+                    let name = rp
+                        .headers
+                        .clone()
+                        .expect("a headers route has a headers type");
+                    let arg = self.record_arg(&ty, "headers", "headers", Some(&name))?;
+                    build.extend(arg.stmts.iter().cloned());
+                    entries.push(TsObjectEntry::prop(
+                        "headers",
+                        call(
+                            ident("__headerRecord"),
+                            vec![ident("__w_headers"), TsExpr::array(arg.specs.clone())],
+                        ),
+                    ));
+                    signature.push(arg.parameter("headers", &name));
+                    arg_types.extend(arg.decl);
+                }
             }
         }
         entries.insert(
@@ -842,6 +866,8 @@ impl Gen {
                     if arg == "query" {
                         "The `query` of the call: a field left out is absent from the query string."
                             .to_string()
+                    } else if arg == "headers" {
+                        "The `headers` of the call, sent as request headers: a field left out is absent. A\nbrowser sets some headers itself (`Content-Length`, `Host`, …) and drops one a\nscript writes, so a route that reads one of those is for a server-side call.".to_string()
                     } else {
                         "The `cookies` of the call, sent as its `Cookie` header: a field left out is\nabsent. **For a server-side call** (a framework's server, a Worker, Node). A\nbrowser sets its own `Cookie` header and drops one a script writes, so a call\nmade where `document` exists with cookies given returns `CallFailure` `Invalid`\nrather than lose them; a page uses `credentials: \"include\"` instead.".to_string()
                     },
