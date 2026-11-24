@@ -1,0 +1,12 @@
+context demo.orders
+
+consumes idempotency { Idempotency }
+
+type ReserveOutcome = { orderId: String }
+
+// #4113: `T` is inferred from `value`, for an external provider's generic operation.
+service reserve {
+  on call() -> Effect[()] given Idempotency {
+    Idempotency.keep("order-key-1", ReserveOutcome { orderId: "o1" })
+  }
+}

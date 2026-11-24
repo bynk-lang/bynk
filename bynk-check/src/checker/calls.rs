@@ -1762,6 +1762,7 @@ pub(crate) fn check_static_call(
                 op: method.name.clone(),
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
+                event: None,
             },
         );
         let mut err = CompileError::new(
@@ -1830,6 +1831,7 @@ pub(crate) fn check_static_call(
                 op: method.name.clone(),
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
+                event: None,
             },
         );
         if !ctx.effectful {
@@ -1954,7 +1956,7 @@ pub(crate) fn check_static_call(
         // call-site type argument, or (#4113) from the arguments when they
         // determine every one.
         let mut subst: HashMap<String, TyId> = HashMap::new();
-        // Slice 3: an operation with `Codable` parameters infers its type
+        // Slice 3, widened by #4113: an operation with type parameters infers its type
         // arguments from the arguments, when they determine every one.
         let mut arg_tys: Option<Vec<Option<TyId>>> = None;
         if type_args.is_empty()
@@ -2012,8 +2014,7 @@ pub(crate) fn check_static_call(
                     super::events_emit::check_emit_owner(
                         local_first_party(&type_name.name, ctx),
                         &method.name,
-                        *ty,
-                        span,
+                        (*ty, span, expr_id),
                         ctx,
                     );
                 }
@@ -2023,8 +2024,7 @@ pub(crate) fn check_static_call(
                 super::events_emit::check_emit_owner(
                     local_first_party(&type_name.name, ctx),
                     &method.name,
-                    ty,
-                    ta.span(),
+                    (ty, ta.span(), expr_id),
                     ctx,
                 );
                 subst.insert(tp.clone(), ty);
@@ -6856,6 +6856,7 @@ fn record_capability_wire(
             op: name.to_string(),
             wire: Some(wire),
             first_party: local_first_party(cap, ctx),
+            event: None,
         },
     );
     true

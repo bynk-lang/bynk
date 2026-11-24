@@ -373,9 +373,10 @@ adapter bynk {
 	when `E` is otherwise visible via `consumes`. Fire-and-forget: releases at
 	handler commit, so an aborted handler emits nothing — a `dedup`/`remember`-
 	style write-then-flush the provider itself is responsible for, not a
-	distinct control-flow form here. `E` is inferred from the argument,
-	as `Idempotency.remember`'s `T` is, or written `emit[E]`; the owner check
-	runs on it either way.
+	distinct control-flow form here. The explicit `[E]` type argument follows
+	the `Idempotency.remember[T]` precedent: a generic capability operation's
+	type parameter is never inferred, even where an argument's type would
+	determine it.
 	---
 	capability Events {
 		fn emit[E](event: E) -> Effect[()]

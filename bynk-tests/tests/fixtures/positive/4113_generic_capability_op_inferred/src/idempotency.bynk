@@ -1,0 +1,11 @@
+adapter idempotency {
+  binding "./idempotency.binding.ts"
+
+  exports capability { Idempotency }
+
+  capability Idempotency {
+    fn keep[T](key: String, value: T) -> Effect[()]
+  }
+
+  provides Idempotency = MemoIdempotency
+}

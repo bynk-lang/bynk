@@ -1,0 +1,10 @@
+context shop.pay
+
+consumes bynk { Events }
+
+// A base type is never an event, however it is reached.
+service pay {
+  on call() -> Effect[()] given Events {
+    Events.emit(42)
+  }
+}

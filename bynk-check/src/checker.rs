@@ -860,6 +860,10 @@ pub enum Callee {
         /// bynk's own ([`crate::firstparty::resolve`]); `None` for any other
         /// capability, including a same-named one from another unit (#934).
         first_party: Option<crate::firstparty::FirstPartyCap>,
+        /// #4113: for bynk's own `Events.emit`, the event the call emits: its type argument,
+        /// written or inferred from the argument, once the owner check has accepted it. The one
+        /// place the emitter and the architecture model read the emitted event from.
+        event: Option<String>,
     },
     /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     /// a derived `D1` instance. Not a declared operation: the compiler writes
