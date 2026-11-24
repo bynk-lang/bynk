@@ -57,6 +57,9 @@ export default {
         const __m = __matchPath("/admin/item/:code", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /admin/item/:code";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_admin);
+          }
           const __raw_code = __m.params["code"];
           const __r_code = handlers.ShortCode.of(__raw_code);
           if (__r_code.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_admin);
@@ -70,6 +73,9 @@ export default {
         const __m = __matchPath("/products/:id", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /products/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_store);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_products_Param_id(id);
@@ -81,6 +87,9 @@ export default {
         const __m = __matchPath("/store/:code", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /store/:code";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_store);
+          }
           const __raw_code = __m.params["code"];
           const __r_code = handlers.ShortCode.of(__raw_code);
           if (__r_code.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_store);

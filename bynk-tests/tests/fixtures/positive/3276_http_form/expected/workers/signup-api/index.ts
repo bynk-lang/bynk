@@ -155,6 +155,9 @@ export default {
         const __m = __matchPath("/profile/:owner", path);
         if (method === "PUT" && __m) {
           __route = "PUT /profile/:owner";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }

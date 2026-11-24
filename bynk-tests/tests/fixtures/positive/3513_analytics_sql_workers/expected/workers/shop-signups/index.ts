@@ -38,6 +38,9 @@ export default {
         const __m = __matchPath("/signups/:country", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /signups/:country";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_report);
+          }
           const __raw_country = __m.params["country"];
           const country = __raw_country;
           const result = await surface.http_GET_signups_Param_country(country);

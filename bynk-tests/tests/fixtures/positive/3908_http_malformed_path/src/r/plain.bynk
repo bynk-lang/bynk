@@ -1,0 +1,9 @@
+context r.plain
+
+// A path parameter route with no `on rejected`: a path that does not decode is
+// the router's own `400 MalformedPath`, never the handler's and never a fault.
+service plain from http {
+	on GET("/orders/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok(id)
+	}
+}

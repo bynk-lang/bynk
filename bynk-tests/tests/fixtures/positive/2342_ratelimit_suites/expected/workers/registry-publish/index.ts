@@ -79,6 +79,9 @@ export default {
         const __m = __matchPath("/read/:key", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /read/:key";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_key = __m.params["key"];
           const key = __raw_key;
           const result = await surface.http_GET_read_Param_key(key);

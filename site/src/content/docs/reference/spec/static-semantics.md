@@ -2725,7 +2725,7 @@ Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
 PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
-MalformedForm(detail: String)`. Neither
+MalformedForm(detail: String) | MalformedPath(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

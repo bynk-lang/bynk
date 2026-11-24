@@ -59,6 +59,9 @@ export default {
         const __m = __matchPath("/api/:token", path);
         if (method === "PUT" && __m) {
           __route = "PUT /api/:token";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_token = __m.params["token"];
           const token = __raw_token;
           const result = await surface.http_PUT_api_Param_token(token);

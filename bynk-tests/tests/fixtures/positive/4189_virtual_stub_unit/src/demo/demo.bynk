@@ -1,0 +1,11 @@
+context demo
+
+capability Meter {
+  fn read() -> Effect[Int]
+}
+
+service go {
+  on call() -> Effect[Int] by Caller given Meter {
+    Meter.read()
+  }
+}

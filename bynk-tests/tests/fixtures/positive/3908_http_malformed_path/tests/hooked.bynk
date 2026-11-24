@@ -1,0 +1,6 @@
+suite r.hooked as system {
+	case "on rejected renders a malformed path" {
+		let r <- hooked.GET("/parcels/:id", Wire("%E0%A4%A")) by Visitor
+		expect r is Handled(BadRequest("bad_path"))
+	}
+}

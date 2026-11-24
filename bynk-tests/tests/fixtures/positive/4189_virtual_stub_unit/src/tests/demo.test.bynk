@@ -1,0 +1,7 @@
+suite demo {
+  case "a stub answers after a virtual delay" {
+    stub Meter.read() returns 5 after 3.seconds
+    let r <- go.call()
+    expect r == 5
+  }
+}
