@@ -35,3 +35,15 @@ fn flipped(e: MailError) -> Bool {
 fn dbFailed(e: DbError) -> Bool {
   e == Failed("down")
 }
+
+fn inList(errs: List[MailError]) -> Bool {
+  errs == [Failed("x")]
+}
+
+fn someOnLeft(o: Option[MailError]) -> Bool {
+  Some(Failed("x")) == o
+}
+
+fn bracketed(e: MailError) -> Bool {
+  e == (Failed("x"))
+}

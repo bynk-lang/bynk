@@ -2340,14 +2340,10 @@ fn keeps_flexible_context(e: &Expr) -> bool {
     }
 }
 
-/// #1659: an expression whose type comes only from its context: a bare
-/// `None`, an `Ok(…)`/`Err(…)` (the other type parameter is unknown), an
-/// empty list literal, or a `Some(…)`/list whose payload/first element is one
-/// of these. `Some(1)` and `[1]` type themselves (review of #1696), so
-/// `None == Some(1)` and `[] == [1]` take their type from that side.
 /// #3987: [`needs_expected_type`], also true for a bare variant name that
 /// several sums in scope declare (`Failed`, `Failed("down")`), alone or inside
-/// a `Some(…)` or bracket: only the other operand's type can pick its owner.
+/// a `Some(…)`, a parenthesis or the first element of a list literal: only the
+/// other operand's type can pick its owner.
 fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
     let shared = |name: &str| {
         crate::resolver::bare_variant_owners(name, &ctx.input.types, &ctx.input.unselected_types)
@@ -2358,10 +2354,18 @@ fn needs_expected_type_in(e: &Expr, ctx: &Ctx) -> bool {
         ExprKind::Ident(id) => shared(&id.name) || needs_expected_type(e),
         ExprKind::Call { name, .. } => shared(&name.name) || needs_expected_type(e),
         ExprKind::Some(inner) | ExprKind::Paren(inner) => needs_expected_type_in(inner, ctx),
+        ExprKind::ListLit(items, ..) => items
+            .first()
+            .is_none_or(|first| needs_expected_type_in(first, ctx)),
         _ => needs_expected_type(e),
     }
 }
 
+/// #1659: an expression whose type comes only from its context: a bare
+/// `None`, an `Ok(…)`/`Err(…)` (the other type parameter is unknown), an
+/// empty list literal, or a `Some(…)`/list whose payload/first element is one
+/// of these. `Some(1)` and `[1]` type themselves (review of #1696), so
+/// `None == Some(1)` and `[] == [1]` take their type from that side.
 pub(crate) fn needs_expected_type(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::None | ExprKind::Ok(_) | ExprKind::Err(_) => true,

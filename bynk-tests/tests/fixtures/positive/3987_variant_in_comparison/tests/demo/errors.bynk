@@ -21,3 +21,11 @@ case "an ordering operator on a shared enum variant" {
   expect !above(Medium)
   expect !above(Low)
 }
+
+case "through a list, a bracket and the left of Some" {
+  expect inList([Failed("x")])
+  expect !inList([Failed("y")])
+  expect someOnLeft(Some(Failed("x")))
+  expect !someOnLeft(None)
+  expect bracketed(Failed("x"))
+}

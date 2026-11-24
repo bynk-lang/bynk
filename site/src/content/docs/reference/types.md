@@ -1758,7 +1758,7 @@ fn send() -> Result[Int, MailError] {
 
 In a comparison the operand that is not a bare variant is typed first, and its
 sum is the bare variant's expected type, so `e == Failed("down")`,
-`e != RateLimited`, `o == Some(Failed("x"))` (through `Option` and `Result`) and,
+`e != RateLimited`, `o == Some(Failed("x"))` (through `Option`, `Result`, brackets and a list literal's first element) and,
 for a `derives Ord` sum, `p > Medium` resolve when `e: MailError`,
 `o: Option[MailError]` and `p` is a sum that declares `Medium`. When both sides are bare
 variants (`Failed("a") == Failed("b")`) nothing decides, so the name stays ambiguous.
