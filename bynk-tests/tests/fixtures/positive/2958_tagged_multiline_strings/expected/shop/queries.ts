@@ -18,7 +18,7 @@ export function datePattern(): string {
 }
 
 export function isDate(text: string): boolean {
-  return new globalThis.RegExp("(?<![\\s\\S])(?:^\\d{4}-\\d{2}-\\d{2}$)(?![\\s\\S])", "").test(text);
+  return new globalThis.RegExp("(?<![\\s\\S])(?:^\\d{4}-\\d{2}-\\d{2}$)(?![\\s\\S])", "u").test(text);
 }
 
 export function notes(): string {

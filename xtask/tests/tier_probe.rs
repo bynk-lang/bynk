@@ -1,7 +1,7 @@
 //! C4b (#2940): the tier partition's checks, and the committed tier profiles.
 //!
 //! The live probe (`cargo xtask tier-probe`) needs nextest and built test
-//! binaries, so CI runs it in the `test` job. What runs here, with no build, is
+//! binaries, so CI runs it in the `test-system` job. What runs here, with no build, is
 //! the checking logic on small lists (each way it can fail, including the
 //! vacuous ones) and the static shape of `.config/nextest.toml`.
 

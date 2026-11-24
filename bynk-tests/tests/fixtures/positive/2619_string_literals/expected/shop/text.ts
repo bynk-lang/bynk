@@ -50,11 +50,11 @@ export function pattern(): string {
 }
 
 export function isVersion(text: string): boolean {
-  return new globalThis.RegExp("(?<![\\s\\S])(?:\\d+\\.\\d+)(?![\\s\\S])", "").test(text);
+  return new globalThis.RegExp("(?<![\\s\\S])(?:\\d+\\.\\d+)(?![\\s\\S])", "u").test(text);
 }
 
 export function isVersionEscaped(text: string): boolean {
-  return new globalThis.RegExp("(?<![\\s\\S])(?:\\d+\\.\\d+)(?![\\s\\S])", "").test(text);
+  return new globalThis.RegExp("(?<![\\s\\S])(?:\\d+\\.\\d+)(?![\\s\\S])", "u").test(text);
 }
 
 export function splitLines(text: string): readonly string[] {
@@ -80,5 +80,5 @@ export function splitLines(text: string): readonly string[] {
     }
     __out.push(__s.slice(__p));
     return __out;
-  })(text, new globalThis.RegExp("\\r?\\n", "y"));
+  })(text, new globalThis.RegExp("\\r?\\n", "yu"));
 }

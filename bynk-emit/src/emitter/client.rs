@@ -94,6 +94,7 @@ const PACKAGE_NAMES: &[(&str, &str)] = &[
     ("__bynkBytesToBase64", "__bynkBytesToBase64"),
     ("__bynkDecimalParseWire", "__bynkDecimalParseWire"),
     ("__bynkDecimalToString", "__bynkDecimalToString"),
+    ("__bynkRegExp", "__bynkRegExp"),
     ("__callService", "__callService"),
 ];
 
