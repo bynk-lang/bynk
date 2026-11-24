@@ -1,0 +1,5 @@
+commons demo.zw
+
+fn bad(xs: List[Int]) -> List[Int] {
+  xs.zipWith(4, (a: Int, b: Int) => a + b)
+}
