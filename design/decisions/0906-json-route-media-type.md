@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A JSON body route answers `415` to non-JSON media types, and `@raw(contentType:)` accepts a list of types
-breaking: A JSON `body` route now answers `415 UnsupportedMediaType` to a request whose `Content-Type` is present and is neither `application/json` nor a `+json` type, where it tried to parse the body (a form post got a `400 MalformedJson`). A client that posts JSON labelled as a form, such as `curl -d '{…}'` without a header, must send `Content-Type: application/json`; a request with no `Content-Type` is still accepted.
----
+# 0906 — A JSON body route checks its media type, tolerantly, and @raw takes a list of types
 
-## ADR: json-route-media-type
-title: A JSON body route checks its media type, tolerantly, and @raw takes a list of types
-summary: JSON body routes answer 415 to present non-JSON Content-Types; @raw(contentType:) accepts a non-empty list
+- **Status:** Accepted (v0.654)
 
 **Context.** `@raw`, `@form` and `@multipart` routes answer a synthesised `415` to the wrong `Content-Type`, before the auth seam and the body read. A plain JSON `body` route accepted any, so a browser form post or an upload sent to a JSON route got a confusing `400 MalformedJson`. `@raw` took one media type or `"*/*"`, so a route accepting PNG or JPEG gave up the router's `415` by using `"*/*"`.
 
