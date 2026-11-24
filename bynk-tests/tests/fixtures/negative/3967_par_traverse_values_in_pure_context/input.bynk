@@ -1,0 +1,10 @@
+commons demo.parvalues
+
+fn one(x: Int) -> Effect[Int] {
+  Effect.pure(x)
+}
+
+fn bad(xs: List[Int]) -> Int {
+  let n = xs.parTraverse((x: Int) => one(x))
+  5
+}
