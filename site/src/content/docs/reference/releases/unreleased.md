@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.648.1** | A `Bearer`, `Oidc` or `Signature` route's handler no longer sees the credential its seam verified in `RequestHeaders` |
 | **v0.648.0** | `Map` gains `remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`, `mapValues`, `fold` and `Map.of`, `Set` gains `union`, `intersect`, `difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`, and `bynk.map` and `bynk.set` are deprecated in favour of the methods |
 | **v0.647.1** | `Events.emit(e)` infers its event type from the argument, as `Idempotency.remember` infers `T` |
 | **v0.647.0** | `String` orders and its length predicates count by code point, agreeing with storage, SQL and OpenAPI |

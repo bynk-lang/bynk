@@ -1,12 +1,6 @@
----
-level: patch
-changelog: A `Bearer`, `Oidc` or `Signature` route's handler no longer sees the credential its seam verified in `RequestHeaders`
-breaking: A handler on a `by` route that reads `headers.bearer()` or `headers.get("authorization")` (or the `Signature` header) now gets `None`, because the seam consumed it; take the identity from the `by` binding instead.
----
+# 0899 — A seam's consumed credential header is omitted from the handler's `RequestHeaders`
 
-## ADR: seam-consumed-credential-hidden-from-request-headers
-title: A seam's consumed credential header is omitted from the handler's `RequestHeaders`
-summary: Bearer, Oidc and Signature routes hide their credential header, as SignedCookie hides its cookie
+- **Status:** Accepted (v0.648.1)
 
 **Context.** A `SignedCookie` actor's credential is consumed at the seam and the handler's `cookies` and
 `headers` views omit it (#3386). A `Bearer` or `Oidc` route's handler could still read the verified JWT
