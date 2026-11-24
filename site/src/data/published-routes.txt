@@ -1759,6 +1759,7 @@
 /reference/diagnostics/bynk.parse.dangling_handler_annotation/
 /reference/diagnostics/bynk.parse.doc_block_contains_code/
 /reference/diagnostics/bynk.parse.duplicate_cors/
+/reference/diagnostics/bynk.parse.duplicate_delivery/
 /reference/diagnostics/bynk.parse.duplicate_json/
 /reference/diagnostics/bynk.parse.duplicate_limits/
 /reference/diagnostics/bynk.parse.duplicate_security/
@@ -1854,8 +1855,12 @@
 /reference/diagnostics/bynk.query.join_key_mismatch/
 /reference/diagnostics/bynk.query.sum_needs_numeric/
 /reference/diagnostics/bynk.queue.bad_params/
+/reference/diagnostics/bynk.queue.dead_letter_type_mismatch/
+/reference/diagnostics/bynk.queue.delivery_bad_option/
+/reference/diagnostics/bynk.queue.delivery_not_queue/
 /reference/diagnostics/bynk.queue.duplicate_consumer/
 /reference/diagnostics/bynk.queue.invalid_name/
+/reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/
@@ -2302,6 +2307,7 @@
 /reference/releases/v0-639-1/
 /reference/releases/v0-655-0/
 /reference/releases/v0-66-0/
+/reference/releases/v0-661-1/
 /reference/releases/v0-77-0/
 /reference/releases/v0-78-0/
 /reference/releases/v0-79-0/

@@ -1,6 +1,8 @@
 context svc
 
 service worker from queue("jobs") {
+
+  delivery { deadLetter: None }
   on message(message: String) -> Effect[Result[Int, String]] {
     Ok(5)
   }

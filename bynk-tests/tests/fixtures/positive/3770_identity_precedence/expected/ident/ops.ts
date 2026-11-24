@@ -54,5 +54,5 @@ export function textOperand(p: string): number {
     }
     __out.push(__s.slice(__p));
     return __out;
-  })(p, new globalThis.RegExp(",", "y"))).length + 1) * 2;
+  })(p, new globalThis.RegExp(",", "yu"))).length + 1) * 2;
 }

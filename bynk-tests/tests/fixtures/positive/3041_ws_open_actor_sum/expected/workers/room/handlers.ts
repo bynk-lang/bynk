@@ -3,7 +3,7 @@
 
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import { __bynkSettleAll } from "../../__bynk_runtime/settle.js";
-import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
+import { __bynkCodePointLength, __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
@@ -27,7 +27,7 @@ export type RoomKey = string & { readonly __brand: "room.RoomKey" };
 
 export const RoomKey = {
   of(value: string): Result<RoomKey, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "^[a-z]+$" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "^[a-z]+$" + ")$", "u").test(value))) {
       return Err({ field: "RoomKey", message: "must match /^[a-z]+$/", value });
     }
     return Ok(value as RoomKey);

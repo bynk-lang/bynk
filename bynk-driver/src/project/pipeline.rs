@@ -1153,7 +1153,7 @@ pub(super) fn run_checks(
     // #696/#1659: test-suite diagnostics are attributed to their owning file by
     // each error's span (`ErrorSink::extend_attributed_by_span`), so they render
     // with a file, line and span like every other diagnostic.
-    errors.extend_attributed_by_span(&parsed, test_errors);
+    extend_with_test_errors(&mut errors, &parsed, test_errors);
 
     compiled.extend(test_outputs);
 
@@ -1338,4 +1338,27 @@ fn debug_assert_plan_covers_groups(
             .filter(|n| kinds.get(*n) == Some(&UnitKind::Context))),
         "the compose plan's contexts are the grouped contexts"
     );
+}
+
+/// #4233: `process_tests` reports an internal fault (a checker fact a suite's
+/// lowering needed and did not find) only when *its* error list is otherwise
+/// clean, but that list is fresh. A program that already failed checking lacks
+/// facts by construction (a unit with a broken file records no subscriber
+/// shapes), so such a fault is noise on top of the user's own error: drop it
+/// when the project or the test errors already hold an error.
+fn extend_with_test_errors(
+    errors: &mut ErrorSink,
+    parsed: &[ParsedFile],
+    mut test_errors: Vec<CompileError>,
+) {
+    let fault = bynk_emit::emitter::MISSING_CHECKER_FACT;
+    let failed = !errors.is_empty()
+        || test_errors.iter().any(|e| {
+            e.category != fault
+                && bynk_syntax::Severity::for_error(e) == bynk_syntax::Severity::Error
+        });
+    if failed {
+        test_errors.retain(|e| e.category != fault);
+    }
+    errors.extend_attributed_by_span(parsed, test_errors);
 }

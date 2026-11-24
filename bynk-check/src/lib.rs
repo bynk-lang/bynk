@@ -78,6 +78,7 @@ pub mod pg_sql;
 pub mod phase_timing;
 pub mod project_model;
 pub mod queue_consumers;
+pub mod queue_delivery;
 pub mod recovery;
 pub mod requirements;
 pub mod resolver;

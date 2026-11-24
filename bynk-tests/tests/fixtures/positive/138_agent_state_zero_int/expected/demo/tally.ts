@@ -2,6 +2,7 @@
 // context demo.tally
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../__bynk_runtime/entries.js";
@@ -16,7 +17,7 @@ export type TallyId = string & { readonly __brand: "demo.tally.TallyId" };
 
 export const TallyId = {
   of(value: string): Result<TallyId, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{1,16}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
       return Err({ field: "TallyId", message: "must match /[a-z0-9]{1,16}/", value });
     }
     return Ok(value as TallyId);
