@@ -1630,6 +1630,10 @@
   ],
   "refined_type": [
     {
+      "code": "bynk.refine.bound_not_literal",
+      "summary": "A constant in a refinement predicate's argument is not a literal of the argument's type."
+    },
+    {
       "code": "bynk.refine.literal_violates",
       "summary": "A literal does not satisfy the refined type's predicate."
     }

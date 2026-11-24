@@ -31,6 +31,7 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::CompileError;
 
 use crate::index::{RefSink, SymbolKind};
+use crate::refinement_consts::resolve_refinement;
 use crate::symbols::{UnitTable, build_unit_table};
 use bynk_project::{ParsedFile, UnitKind};
 
@@ -77,17 +78,17 @@ const HANDLER_RULES: &[ArgRule] = &[
 ];
 
 /// What the pass reads of the unit it is resolving in.
-struct Scope<'a> {
-    unit: &'a str,
-    tables: &'a HashMap<String, UnitTable>,
-    uses: &'a HashMap<String, Vec<String>>,
+pub(crate) struct Scope<'a> {
+    pub(crate) unit: &'a str,
+    pub(crate) tables: &'a HashMap<String, UnitTable>,
+    pub(crate) uses: &'a HashMap<String, Vec<String>>,
     /// The constants declared in the file being rewritten, so a related span at
     /// one is only offered where it indexes the same source.
-    file_consts: HashSet<String>,
+    pub(crate) file_consts: HashSet<String>,
 }
 
 impl<'a> Scope<'a> {
-    fn lookup(&self, u: &str) -> Option<(&'a UnitTable, &'a [String])> {
+    pub(crate) fn lookup(&self, u: &str) -> Option<(&'a UnitTable, &'a [String])> {
         let table = self.tables.get(u)?;
         let uses = self.uses.get(u).map(Vec::as_slice).unwrap_or(&[]);
         Some((table, uses))
@@ -266,11 +267,15 @@ fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool 
         }
         | TypeBody::Opaque {
             base, refinement, ..
-        } => changed |= rewrite_example(refinement, *base, scope, refs),
+        } => {
+            changed |= resolve_refinement(refinement, *base, Some(&decl.name.name), scope, refs);
+            changed |= rewrite_example(refinement, *base, scope, refs);
+        }
         TypeBody::Record(rec) => {
             for field in &mut rec.fields {
                 changed |= rewrite_annotations(&mut field.annotations, FIELD_RULES, scope, refs);
                 if let Some(base) = field_base(field, scope) {
+                    changed |= resolve_refinement(&mut field.refinement, base, None, scope, refs);
                     changed |= rewrite_example(&mut field.refinement, base, scope, refs);
                 }
             }

@@ -1,0 +1,12 @@
+---
+#3951: the limits a refinement is written with, declared once. A bound names
+one of these exactly as it would write the literal it is bound to (ADR 0826).
+---
+commons shop.limits
+
+const MaxQty: Int = 100
+const MaxNote: Int = 280
+const MinNote: Int = MaxNote
+const SlugPattern: String = "^[a-z]+$"
+const Ceiling: Float = 2.5
+const Window: Duration = 5.minutes

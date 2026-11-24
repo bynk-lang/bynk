@@ -178,6 +178,11 @@ pub fn complete_in(
     if in_schedule_argument(line_prefix) {
         return schedule_constant_candidates(doc_text, files);
     }
+    // 0a'. #3951: inside a refinement predicate's argument list — the in-scope
+    //      constants of the type that argument takes.
+    if let Some(types) = predicate_argument_types(line_prefix) {
+        return constants_of_types(doc_text, files, types);
+    }
     // 0b. #2686: `@<cursor>` after a `Matches(…)` / `IsoDate` refinement — the
     //     `@example` annotation, the only one valid there.
     if in_refinement_annotation_position(line_prefix) {
@@ -1121,6 +1126,55 @@ fn schedule_constant_candidates(
                     .and_then(|r| r.split_once(": "))
                     .map(|(_, t)| t.split(" — ").next().unwrap_or(t));
                 matches!(ty, Some("String" | "CronSchedule"))
+            })
+        })
+        .collect()
+}
+
+/// #3951: when the cursor is inside the argument list of a refinement predicate
+/// on a `where` line (`InRange(1, <cursor>`), the types a constant there may be
+/// declared: a string for `Matches`, an integer for a length, and any ordered
+/// numeric type for a range bound (the base is not known from the line).
+fn predicate_argument_types(line_prefix: &str) -> Option<&'static [&'static str]> {
+    let (_, after_where) = line_prefix.rsplit_once(" where ")?;
+    let open = after_where.rfind('(')?;
+    if after_where[open..].contains(')') {
+        return None;
+    }
+    let partial_ok = after_where[open + 1..]
+        .rsplit(|c: char| c == ',' || c == ' ')
+        .next()
+        .is_some_and(|w| w.chars().all(|c| c.is_alphanumeric() || c == '_'));
+    if !partial_ok {
+        return None;
+    }
+    let name = after_where[..open]
+        .rsplit(|c: char| !c.is_alphanumeric())
+        .next()?;
+    match name {
+        "Matches" => Some(&["String"]),
+        "MinLength" | "MaxLength" | "Length" => Some(&["Int"]),
+        "InRange" | "AtLeast" | "AtMost" => Some(&["Int", "Float", "Decimal", "Duration"]),
+        _ => None,
+    }
+}
+
+/// #3951: the constants whose declared type is one of `types` (the detail line
+/// of a constant candidate reads `const Name: Type`).
+fn constants_of_types(
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+    types: &[&str],
+) -> Vec<Completion> {
+    free_function_candidates(doc_text, files)
+        .into_iter()
+        .filter(|c| {
+            c.detail.as_deref().is_some_and(|d| {
+                let ty = d
+                    .strip_prefix("const ")
+                    .and_then(|r| r.split_once(": "))
+                    .map(|(_, t)| t.split(" — ").next().unwrap_or(t));
+                ty.is_some_and(|t| types.contains(&t))
             })
         })
         .collect()
@@ -3831,6 +3885,29 @@ mod tests {
         let got = complete("  on schedule(", doc, None);
         let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
         assert_eq!(labels, ["Nightly"], "{labels:?}");
+    }
+
+    /// #3951: inside a refinement predicate's argument list the constants of the
+    /// type that argument takes are offered, and no other.
+    #[test]
+    fn predicate_argument_offers_constants_of_its_type() {
+        let doc = "commons shop\n\nconst MaxQty: Int = 100\nconst Ceiling: Float = 2.5\nconst Pattern: String = \"a\"\n\nfn helper() -> Int { 1 }\n";
+        let at = |line: &str| {
+            let mut got: Vec<String> = complete(line, doc, None)
+                .into_iter()
+                .map(|c| c.label)
+                .collect();
+            got.sort();
+            got
+        };
+        assert_eq!(at("type Qty = Int where InRange(1, "), ["Ceiling", "MaxQty"]);
+        assert_eq!(at("type N = String where MaxLength("), ["MaxQty"]);
+        assert_eq!(at("type S = String where Matches("), ["Pattern"]);
+        assert_eq!(predicate_argument_types("type Q = Int where Positive"), None);
+        assert_eq!(
+            predicate_argument_types("type Q = Int where InRange(1, 2) && AtMost("),
+            Some(&["Int", "Float", "Decimal", "Duration"][..])
+        );
     }
 
     /// S3 (#1963): an experimental first-party item is marked in its completion

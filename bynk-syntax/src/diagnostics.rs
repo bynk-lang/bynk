@@ -4141,6 +4141,24 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
     },
     Explain {
+        code: "bynk.refine.bound_not_literal",
+        blurb: "An argument of a refinement predicate (`InRange`, `AtLeast`, `AtMost`, \
+                `MinLength`, `MaxLength`, `Length`, `Matches`) can be a constant, and \
+                the compiler replaces it with the literal it is bound to before the \
+                refinement is read, so `InRange(1, MaxQty)` means what `InRange(1, 100)` \
+                means. This one cannot be replaced: the constant is declared a type \
+                other than exactly the argument's (a refined constant is not a plain \
+                `Int`), is not bound to a literal or to another such constant, or is not \
+                a constant in scope. Declare it with the argument's own type and bind it \
+                to a literal, or write the literal in the predicate. A constant declared \
+                the refined type whose bound it is reports `bynk.resolve.const_cycle`.",
+        example: "type Count = Int where Positive\n\
+                  const MaxQty: Count = 100\n\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✗ `MaxQty` is a `Count`, not an `Int`\n\n\
+                  const MaxQty: Int = 100\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✓ declared exactly `Int`",
+    },
+    Explain {
         code: "bynk.refine.literal_violates",
         blurb: "A literal written where a refined type is expected is checked at compile \
                 time, and this one does not satisfy the type's predicate. A refined \
@@ -9304,6 +9322,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.record_spread.unknown_field",
         "A record spread overrides a field the record does not have.",
         &["record_spread"],
+    ),
+    dg(
+        "bynk.refine.bound_not_literal",
+        "A constant in a refinement predicate's argument is not a literal of the argument's type.",
+        &["refined_type"],
     ),
     dg(
         "bynk.refine.literal_violates",

@@ -670,6 +670,9 @@ impl<'a> Parser<'a> {
         let name = self.slice(t.span);
         let start = t.span;
         let mut arg_text = None;
+        if let Some(pred) = self.try_parse_pending_pred(name, start)? {
+            return Ok(pred);
+        }
         let (kind, end_span) = match name {
             "Matches" => {
                 self.expect(TokenKind::LParen, "after `Matches`")?;
@@ -762,8 +765,83 @@ impl<'a> Parser<'a> {
         Ok(RefinementPred {
             kind,
             arg_text,
+            pending: None,
+            from_const: Vec::new(),
             span: start.merge(end_span),
         })
+    }
+
+    /// #3951: whether the argument list opening at the next token names a
+    /// constant: an identifier that is not the unit of a `60.seconds` bound.
+    fn pred_args_name_a_const(&self) -> bool {
+        let mut i = self.pos + 1;
+        while let Some(t) = self.tokens.get(i) {
+            match t.kind {
+                TokenKind::RParen => return false,
+                TokenKind::Ident if self.tokens[i - 1].kind != TokenKind::Dot => return true,
+                _ => i += 1,
+            }
+        }
+        false
+    }
+
+    /// #3951: a predicate with a constant in an argument (`InRange(1, MaxQty)`).
+    /// The constant stays a name here: a later pass swaps in the literal it is
+    /// bound to, which the parser, with no constant table, cannot do. A predicate
+    /// whose arguments are all literals returns `None` and takes the ordinary
+    /// path, so existing programs parse exactly as before.
+    fn try_parse_pending_pred(
+        &mut self,
+        name: &str,
+        start: Span,
+    ) -> Result<Option<RefinementPred>, CompileError> {
+        let takes_args = matches!(
+            name,
+            "Matches" | "InRange" | "AtLeast" | "AtMost" | "MinLength" | "MaxLength" | "Length"
+        );
+        if !takes_args
+            || self.peek_kind() != Some(TokenKind::LParen)
+            || !self.pred_args_name_a_const()
+        {
+            return Ok(None);
+        }
+        self.bump();
+        let mut args = Vec::new();
+        loop {
+            let ctx = format!("as an argument to `{name}`");
+            let arg = match self.peek() {
+                Some(t) if t.kind == TokenKind::Ident => {
+                    self.bump();
+                    PendingArg::Const(Ident {
+                        name: self.slice(t.span).to_string(),
+                        span: t.span,
+                    })
+                }
+                Some(t) if t.kind == TokenKind::StrLit => {
+                    self.bump();
+                    PendingArg::Str(parse_string_literal(self.slice(t.span), t.span)?)
+                }
+                _ => PendingArg::Num(self.parse_signed_num_literal(&ctx)?.into_pred_bound()),
+            };
+            args.push(arg);
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        let close = self.expect(TokenKind::RParen, &format!("after the `{name}` arguments"))?;
+        Ok(Some(RefinementPred {
+            // A placeholder the resolution pass replaces; nothing reads it while
+            // `pending` is set.
+            kind: PredKind::NonEmpty,
+            arg_text: None,
+            pending: Some(Box::new(PendingPred {
+                name: name.to_string(),
+                args,
+                unresolved: Vec::new(),
+            })),
+            from_const: Vec::new(),
+            span: start.merge(close.span),
+        }))
     }
 
     /// The value and the literal as written (`-1_000`, from its tokens), so the
