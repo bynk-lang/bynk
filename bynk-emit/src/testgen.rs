@@ -71,6 +71,7 @@ mod names;
 mod property_generators;
 mod property_tests;
 mod runtime_splice;
+pub(crate) mod show_shape;
 mod stubs;
 mod system_jobs;
 mod system_request;

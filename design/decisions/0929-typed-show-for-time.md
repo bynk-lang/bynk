@@ -1,0 +1,9 @@
+# 0929 — The test printer is told where a Duration or Instant sits in a value's type
+
+- **Status:** Accepted (v0.671.1)
+
+**Context.** At run time a `Duration` and an `Instant` are plain numbers, so the test runtime's value printer showed a failing `for all d: Duration` counterexample, and a failed `expect … is …` value, as a bare millisecond count (#4229, a follow-up to #4198).
+
+**Decision.** The emitter computes a shape for each generated binding's type and each `is` subject's type (`testgen/show_shape.rs`): `"D"` for a `Duration`, `"I"` for an `Instant`, and nested forms for a list, `Option`, `Result`, record or sum that holds one. The descriptor's `show` and the failure thunk call `__bynkShowTyped(value, shape)`, which prints a Duration as the largest unit literal that holds it exactly (`3.seconds`, `1.hour`, `1500.milliseconds`) and an Instant as `Instant.fromEpochMillis(n)`. A type that holds neither keeps the type-blind `__bynkShow`, so every other golden is unchanged.
+
+**Consequences.** The printer stays type-blind except where a shape is passed. A type nested deeper than six named levels, and a `Map` or `Set` holding a time value, print the number.

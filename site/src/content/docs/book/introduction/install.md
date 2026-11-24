@@ -16,9 +16,12 @@ the same build:
 |-----------------------|-------------------------------------------------|
 | Linux x86_64          | `bynk-<tag>-x86_64-unknown-linux-gnu.tar.gz`    |
 | Linux arm64           | `bynk-<tag>-aarch64-unknown-linux-gnu.tar.gz`   |
-| macOS Intel           | `bynk-<tag>-x86_64-apple-darwin.tar.gz`         |
-| macOS Apple silicon   | `bynk-<tag>-aarch64-apple-darwin.tar.gz`        |
 | Windows x86_64        | `bynk-<tag>-x86_64-pc-windows-msvc.zip`         |
+
+Prebuilt macOS binaries are paused for now, because GitHub's macOS runners were
+holding releases back. On macOS, [build from source](#build-from-source)
+(`cargo install bynk bynk-lsp`) until they return. The VS Code extension can't
+download them either, so on macOS put `bynk` and `bynk-lsp` on your `PATH` first.
 
 `<tag>` is the release tag, such as `v0.330.4`. The Linux binaries are built on
 Ubuntu 24.04 and need a glibc at least that new. Each release also has a
@@ -35,13 +38,13 @@ sha256sum --check --ignore-missing SHA256SUMS   # must print "OK"
 tar -xzf "bynk-$tag-$target.tar.gz"
 ```
 
-On macOS use `shasum -a 256 --check --ignore-missing SHA256SUMS`. On Windows,
+On Windows,
 compare `(Get-FileHash bynk-<tag>-x86_64-pc-windows-msvc.zip).Hash` with the
 archive's line in `SHA256SUMS`, then extract the `.zip`. Releases also carry
 signed build provenance, which `gh attestation verify <archive> --repo
 bynk-lang/bynk` checks.
 
-Put the two binaries on your `PATH`. On Linux and macOS, for example:
+Put the two binaries on your `PATH`. On Linux, for example:
 
 ```sh
 install -m 0755 "bynk-$tag-$target"/bynk "bynk-$tag-$target"/bynk-lsp \
@@ -101,9 +104,10 @@ See the [CLI reference](/reference/tooling/bynk-cli/) for every flag and exit co
 through the VS Code extension rather than directly. Install it from the
 [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=bynk-lang.bynk-vscode) (`bynk-lang.bynk-vscode`). It uses the
 `bynk-lsp` on your `PATH`, or downloads the matching release if there isn't
-one. It does the same for `bynk`, so with the extension you need no
+one. It does the same for `bynk`, so on Linux and Windows the extension needs no
 separate install or `cargo`: the downloaded tools go on the `PATH` of its
-integrated terminals. See [Set up editor support](/reference/tooling/editor-and-tooling/editor-support/).
+integrated terminals. On macOS, where prebuilt binaries are paused, install
+both with `cargo install bynk bynk-lsp` first. See [Set up editor support](/reference/tooling/editor-and-tooling/editor-support/).
 
 ## Build from source
 

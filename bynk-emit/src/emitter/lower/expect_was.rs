@@ -151,6 +151,13 @@ fn was_of(ty: TyId, value: &bynk_ts::TsExpr, cx: &mut LowerCtx) -> Was {
     // Plain data at run time, an `HttpResult` or `QueueResult` included: the runtime's own value
     // printer (`__bynkShow`) shows it, with no codec for the test module to generate or import.
     if is_tagged_outcome(ty, cx) || is_plain_data(ty, cx) {
+        // #4229: a `Duration` or `Instant` inside the value prints in Bynk's form.
+        let shape =
+            crate::testgen::show_shape::show_shape(ty, &cx.commons().types, cx.commons().tys());
+        let (printer, args) = match shape {
+            Some(shape) => ("__bynkShowTyped", vec![value.clone(), shape]),
+            None => ("__bynkShow", vec![value.clone()]),
+        };
         return Was::Encoded {
             thunk: bynk_ts::TsExpr::Arrow {
                 params: Vec::new(),
@@ -159,8 +166,8 @@ fn was_of(ty: TyId, value: &bynk_ts::TsExpr, cx: &mut LowerCtx) -> Was {
                 return_type: None,
                 body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(
                     bynk_ts::TsExpr::Call {
-                        callee: Box::new(ident("__bynkShow")),
-                        args: vec![value.clone()],
+                        callee: Box::new(ident(printer)),
+                        args,
                     },
                 ))),
             },
