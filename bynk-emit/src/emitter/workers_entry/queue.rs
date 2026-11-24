@@ -63,7 +63,7 @@ fn emit_queue_handler(
                     vec![TsType::Object(vec![
                         TsTypeMember::readonly_prop("body", TsType::named("unknown")),
                         TsTypeMember::readonly_prop("attempts", TsType::named("number")),
-                        TsTypeMember::readonly_prop("timestamp", TsType::named("Date")),
+                        TsTypeMember::readonly_prop("timestamp", TsType::named("globalThis.Date")),
                         TsTypeMember::method("ack", vec![], TsType::named("void")),
                         TsTypeMember::method("retry", vec![], TsType::named("void")),
                     ])],

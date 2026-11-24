@@ -59,7 +59,7 @@ export default {
         return;
     }
   },
-  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; readonly attempts: number; readonly timestamp: Date; ack(): void; retry(): void }> }, env: Env, ctx: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
+  async queue(batch: { readonly queue: string; readonly messages: ReadonlyArray<{ readonly body: unknown; readonly attempts: number; readonly timestamp: globalThis.Date; ack(): void; retry(): void }> }, env: Env, ctx: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
     const surface = compose(env, ctx);
     switch (batch.queue) {
       case "deliveries": {
