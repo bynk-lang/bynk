@@ -3483,29 +3483,7 @@ fn check_service_decls(
                 continue;
             };
             validate_cron_handler(handler, expr, errors);
-            // #3875: a schedule constant that was refused has no expression to
-            // compare; it is already reported.
-            if handler
-                .schedule_const
-                .as_ref()
-                .is_some_and(|s| s.refusal.is_some())
-            {
-                continue;
-            }
-            if let Some(prev) = schedule_first_span.get(expr).copied() {
-                errors.push(
-                    CompileError::new(
-                        "bynk.cron.duplicate_schedule",
-                        handler.span,
-                        format!(
-                            "duplicate cron schedule: another handler already declares `{expr}`",
-                        ),
-                    )
-                    .with_label(prev, "previously declared here"),
-                );
-            } else {
-                schedule_first_span.insert(expr.clone(), handler.span);
-            }
+            check_duplicate_schedule(handler, expr, &mut schedule_first_span, errors);
         }
     }
 
@@ -6836,6 +6814,37 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
                 .with_note("use `\"*/*\"` to accept any content type"),
             );
         }
+    }
+}
+
+/// Two cron handlers of a context may not declare the same schedule: the
+/// generated `scheduled` dispatcher routes on `event.cron`. #3875: a schedule
+/// constant that was refused has no expression to compare, and is already
+/// reported.
+fn check_duplicate_schedule(
+    handler: &Handler,
+    expr: &str,
+    seen: &mut HashMap<String, Span>,
+    errors: &mut Vec<CompileError>,
+) {
+    if handler
+        .schedule_const
+        .as_ref()
+        .is_some_and(|s| s.refusal.is_some())
+    {
+        return;
+    }
+    if let Some(prev) = seen.get(expr).copied() {
+        errors.push(
+            CompileError::new(
+                "bynk.cron.duplicate_schedule",
+                handler.span,
+                format!("duplicate cron schedule: another handler already declares `{expr}`"),
+            )
+            .with_label(prev, "previously declared here"),
+        );
+    } else {
+        seen.insert(expr.to_string(), handler.span);
     }
 }
 
