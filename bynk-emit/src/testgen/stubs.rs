@@ -389,6 +389,34 @@ pub(super) fn stub_fault_stmt() -> TsStmt {
     )
 }
 
+/// #3894: a consumed service's stub that is `rejected` or `unreachable` throws an error marked
+/// with the outcome it stands for (`bynkCallStub`), which `.outcome(…)` reads back as that
+/// `CallOutcome` (`callOutcome` in the runtime). A plain call to it faults, as a real refused
+/// call does.
+fn stub_call_outcome_stmt(tag: &str, reason: Option<&str>) -> TsStmt {
+    let mut marker = vec![bynk_ts::TsObjectEntry::prop("tag", str_lit(tag))];
+    if let Some(reason) = reason {
+        marker.push(bynk_ts::TsObjectEntry::prop("reason", str_lit(reason)));
+    }
+    let error = TsExpr::New {
+        callee: Box::new(ident("globalThis.Error")),
+        args: vec![str_lit("bynk: stubbed call outcome")],
+    };
+    TsStmt::throw_stmt(
+        call(
+            member(ident("globalThis.Object"), "assign"),
+            vec![
+                error,
+                TsExpr::object_entries(vec![bynk_ts::TsObjectEntry::prop(
+                    "bynkCallStub",
+                    TsExpr::object_entries(marker),
+                )]),
+            ],
+        ),
+        None,
+    )
+}
+
 /// v0.118: render the body of one matched `stub` clause — a `returns` value,
 /// a `fails` fault, or a `returns each` per-call sequence (last outcome repeats).
 #[allow(clippy::too_many_arguments)]
@@ -456,7 +484,11 @@ pub(super) fn emit_stub_rhs(
         },
         // #2683: `never` — the call stays in flight for ever.
         StubRhs::Never(_) => vec![ret(await_expr(call(ident("__bynkNever"), Vec::new())))],
-        StubRhs::Fails(_) => vec![stub_fault_stmt()],
+        StubRhs::Fails(_) | StubRhs::Faulted(_) => vec![stub_fault_stmt()],
+        StubRhs::Rejected(refusal, _) => {
+            vec![stub_call_outcome_stmt("Rejected", Some(&refusal.name))]
+        }
+        StubRhs::Unreachable(_) => vec![stub_call_outcome_stmt("Unreachable", None)],
         StubRhs::ReturnsEach(outcomes, _) => {
             let n = outcomes.len();
             let mut stmts = vec![TsStmt::const_stmt(

@@ -175,6 +175,93 @@ export const TimedOut = {
 };
 
 /**
+ * What a cross-context service call came to, as `<context>.<service>.outcome(args)`
+ * yields it. The variants are grouped by whether the callee's handler ran:
+ * `Handled` it ran and answered with `result`; `Rejected` it was refused before it
+ * ran, for the `reason`; `Faulted` it ran and faulted (a faulting handler commits
+ * nothing); `Unreachable` it is not known whether it ran, with the HTTP `status`
+ * when there was a response. Only `.outcome(…)` and a test `stub` make one.
+ */
+export type CallOutcome<R> =
+    { readonly tag: "Handled"; readonly result: R }
+  | { readonly tag: "Rejected"; readonly reason: Refusal }
+  | { readonly tag: "Faulted" }
+  | { readonly tag: "Unreachable"; readonly status: Option<number> };
+
+export const CallOutcome = {
+  Handled: <R>(result: R): CallOutcome<R> => ({ tag: "Handled", result }),
+  Rejected: <R>(reason: Refusal): CallOutcome<R> => ({ tag: "Rejected", reason }),
+  Faulted: { tag: "Faulted" } as CallOutcome<never>,
+  Unreachable: <R>(status: Option<number>): CallOutcome<R> => ({ tag: "Unreachable", status }),
+  /**
+   * `Handled(r)` becomes `Ok(r)`; any other case becomes `Err` of the matching
+   * `CallFailure`, so `outcome(…).handled()?` propagates a failed call with `?`
+   * and `embeds`.
+   */
+  handled<R>(self: CallOutcome<R>): Result<R, CallFailure> {
+    switch (self.tag) {
+      case "Handled": {
+        const r = self.result;
+        return Ok(r);
+      }
+      case "Rejected": {
+        const reason = self.reason;
+        return Err(CallFailure.Rejected(reason));
+      }
+      case "Faulted": {
+        return Err(CallFailure.Faulted);
+      }
+      case "Unreachable": {
+        const status = self.status;
+        return Err(CallFailure.Unreachable(status));
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
+/**
+ * Why a call did not come to `Handled`: `CallOutcome[R]` without its `Handled`
+ * case, as `outcome(…).handled()` yields it in the `Err` of a `Result`. An
+ * ordinary sum, so `embeds` can wrap it into a caller's own error type.
+ */
+export type CallFailure =
+    { readonly tag: "Rejected"; readonly reason: Refusal }
+  | { readonly tag: "Faulted" }
+  | { readonly tag: "Unreachable"; readonly status: Option<number> };
+
+export const CallFailure = {
+  Rejected: (reason: Refusal): CallFailure => ({ tag: "Rejected", reason }),
+  Faulted: { tag: "Faulted" } as CallFailure,
+  Unreachable: (status: Option<number>): CallFailure => ({ tag: "Unreachable", status }),
+};
+
+/**
+ * Why the callee refused a call before its handler ran, one case per check the
+ * wire makes: `TooLarge` (413), `NotAuthenticated` (401), `UnsupportedWire`
+ * (400), `NoSuchService` (404), `NotAdmitted` (403), `StaleContract` (409) and
+ * `Undecodable` (400, a body that is not the service's arguments).
+ */
+export type Refusal =
+    { readonly tag: "TooLarge" }
+  | { readonly tag: "NotAuthenticated" }
+  | { readonly tag: "UnsupportedWire" }
+  | { readonly tag: "NoSuchService" }
+  | { readonly tag: "NotAdmitted" }
+  | { readonly tag: "StaleContract" }
+  | { readonly tag: "Undecodable" };
+
+export const Refusal = {
+  TooLarge: { tag: "TooLarge" } as Refusal,
+  NotAuthenticated: { tag: "NotAuthenticated" } as Refusal,
+  UnsupportedWire: { tag: "UnsupportedWire" } as Refusal,
+  NoSuchService: { tag: "NoSuchService" } as Refusal,
+  NotAdmitted: { tag: "NotAdmitted" } as Refusal,
+  StaleContract: { tag: "StaleContract" } as Refusal,
+  Undecodable: { tag: "Undecodable" } as Refusal,
+};
+
+/**
  * The level of a `Logger.log` record.
  */
 export type LogLevel =
@@ -532,6 +619,45 @@ export function __deserialise_BytesResponse(json: __JsonValue, path: string = "$
   }
   const __body = __b_body.value;
   return Ok({ status: __status, headers: __headers, body: __body } as BytesResponse);
+}
+
+export function __serialise_CallFailure(value: CallFailure): __JsonValue {
+  switch (value.tag) {
+    case "Rejected": {
+      return { kind: "Rejected", reason: __serialise_Refusal(value.reason) };
+    }
+    case "Faulted":
+      return { kind: "Faulted" };
+    case "Unreachable": {
+      return { kind: "Unreachable", status: __serialise_Option_Int(value.status) };
+    }
+  }
+}
+
+export function __deserialise_CallFailure(json: __JsonValue, path: string = "$"): Result<CallFailure, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Rejected": {
+      const __r_reason = __deserialise_Refusal(obj["reason"], `${path}.reason`);
+      if (__r_reason.tag === "Err") return __r_reason;
+      const __reason = __r_reason.value;
+      return Ok({ tag: "Rejected", reason: __reason } as CallFailure);
+    }
+    case "Faulted":
+      return Ok({ tag: "Faulted" } as CallFailure);
+    case "Unreachable": {
+      const __r_status = __deserialise_Option_Int(obj["status"], `${path}.status`);
+      if (__r_status.tag === "Err") return __r_status;
+      const __status = __r_status.value;
+      return Ok({ tag: "Unreachable", status: __status } as CallFailure);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_Claim(value: Claim): __JsonValue {
@@ -893,6 +1019,51 @@ export function __deserialise_Redirect(json: __JsonValue, path: string = "$"): R
   }
 }
 
+export function __serialise_Refusal(value: Refusal): __JsonValue {
+  switch (value.tag) {
+    case "TooLarge":
+      return { kind: "TooLarge" };
+    case "NotAuthenticated":
+      return { kind: "NotAuthenticated" };
+    case "UnsupportedWire":
+      return { kind: "UnsupportedWire" };
+    case "NoSuchService":
+      return { kind: "NoSuchService" };
+    case "NotAdmitted":
+      return { kind: "NotAdmitted" };
+    case "StaleContract":
+      return { kind: "StaleContract" };
+    case "Undecodable":
+      return { kind: "Undecodable" };
+  }
+}
+
+export function __deserialise_Refusal(json: __JsonValue, path: string = "$"): Result<Refusal, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "TooLarge":
+      return Ok({ tag: "TooLarge" } as Refusal);
+    case "NotAuthenticated":
+      return Ok({ tag: "NotAuthenticated" } as Refusal);
+    case "UnsupportedWire":
+      return Ok({ tag: "UnsupportedWire" } as Refusal);
+    case "NoSuchService":
+      return Ok({ tag: "NoSuchService" } as Refusal);
+    case "NotAdmitted":
+      return Ok({ tag: "NotAdmitted" } as Refusal);
+    case "StaleContract":
+      return Ok({ tag: "StaleContract" } as Refusal);
+    case "Undecodable":
+      return Ok({ tag: "Undecodable" } as Refusal);
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
 export function __serialise_Request(value: Request): __JsonValue {
   return {
     method: __serialise_Method(value.method),
@@ -1063,6 +1234,50 @@ export function __deserialise_Map_String_String(json: __JsonValue, path: string 
     out.set(__k as string, __v as string);
   }
   return Ok(out);
+}
+
+export function __serialise_Option_Int(value: Option<number>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Int(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "number") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
+  }
+  if (!globalThis.Number.isSafeInteger(raw)) {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Int(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<number>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<number>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Int(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as number) as Option<number>);
+    }
+  }
+  const __b = __option_value_Int(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as number) as Option<number>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
 }
 
 export function __serialise_Option_Duration(value: Option<number>): __JsonValue {

@@ -1,12 +1,6 @@
----
-level: patch
-changelog: A path with malformed percent-encoding is a `400 MalformedPath` rejection, no longer a `500` fault
-breaking: `BoundaryRejection` gains `MalformedPath(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `MalformedPath(_)`, or a `_` arm. A request whose path cannot be decoded now answers `400`, where it answered `500` and was reported as a fault.
----
+# 0908 — A path that cannot be percent-decoded is a 400 MalformedPath, not a fault
 
-## ADR: malformed-path-rejection
-title: A path that cannot be percent-decoded is a 400 MalformedPath, not a fault
-summary: The router refuses an undecodable path with a synthesised 400, a new BoundaryRejection variant
+- **Status:** Accepted (v0.655.1)
 
 **Context.** `matchPath` decoded each path-parameter segment with `decodeURIComponent`, which throws on malformed percent-encoding. The throw reached the Worker entry's `catch`, which answered `500`, logged a fault and reported it, so any client could raise server-fault alerts with `GET /orders/%E0%A4%A`.
 

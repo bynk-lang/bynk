@@ -65,6 +65,7 @@ use crate::index::{RefSink, SymbolKind};
 use crate::locals::LocalsSink;
 use crate::requirements::RequirementSink;
 use crate::resolver::{self, MethodTable as ResolverMethodTable, ResolvedCommons};
+use crate::stub_outcome::stub_outcome_word_errors;
 use crate::symbols::{UnitTable, build_cross_context_info};
 use bynk_project::ParsedFile;
 use bynk_project::UnitKind;
@@ -2008,7 +2009,7 @@ fn check_test_bodies(
                             }
                         }
                     }
-                    StubRhs::Fails(_) | StubRhs::Never(_) => {}
+                    _ => errors.extend(stub_outcome_word_errors(clause, rp)),
                 }
                 // #2683: `after <d>` is a Duration.
                 if let Some(after) = &clause.after

@@ -17,6 +17,9 @@ adapter bynk {
 		ParOptions,
 		Redirect,
 		TimedOut,
+		CallOutcome,
+		CallFailure,
+		Refusal,
 		LogLevel,
 		Claim,
 		EventEnvelope,
@@ -120,6 +123,60 @@ adapter bynk {
 	---
 	type TimedOut = {
 		after: Duration,
+	}
+
+	---
+	What a cross-context service call came to, as `<context>.<service>.outcome(args)`
+	yields it. The variants are grouped by whether the callee's handler ran:
+	`Handled` it ran and answered with `result`; `Rejected` it was refused before it
+	ran, for the `reason`; `Faulted` it ran and faulted (a faulting handler commits
+	nothing); `Unreachable` it is not known whether it ran, with the HTTP `status`
+	when there was a response. Only `.outcome(…)` and a test `stub` make one.
+	---
+	type CallOutcome[R] =
+		| Handled(result: R)
+		| Rejected(reason: Refusal)
+		| Faulted
+		| Unreachable(status: Option[Int])
+
+	---
+	`Handled(r)` becomes `Ok(r)`; any other case becomes `Err` of the matching
+	`CallFailure`, so `outcome(…).handled()?` propagates a failed call with `?`
+	and `embeds`.
+	---
+	fn CallOutcome.handled(self) -> Result[R, CallFailure] {
+		match self {
+			Handled(r) => Ok(r),
+			Rejected(reason) => Err(Rejected(reason)),
+			Faulted => Err(Faulted),
+			Unreachable(status) => Err(Unreachable(status)),
+		}
+	}
+
+	---
+	Why a call did not come to `Handled`: `CallOutcome[R]` without its `Handled`
+	case, as `outcome(…).handled()` yields it in the `Err` of a `Result`. An
+	ordinary sum, so `embeds` can wrap it into a caller's own error type.
+	---
+	type CallFailure =
+		| Rejected(reason: Refusal)
+		| Faulted
+		| Unreachable(status: Option[Int])
+
+	---
+	Why the callee refused a call before its handler ran, one case per check the
+	wire makes: `TooLarge` (413), `NotAuthenticated` (401), `UnsupportedWire`
+	(400), `NoSuchService` (404), `NotAdmitted` (403), `StaleContract` (409) and
+	`Undecodable` (400, a body that is not the service's arguments).
+	---
+	type Refusal = enum {
+		TooLarge,
+		NotAuthenticated,
+		UnsupportedWire,
+		NoSuchService,
+		NotAdmitted,
+		StaleContract,
+		Undecodable,
 	}
 
 	---

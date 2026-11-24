@@ -24,10 +24,15 @@ use crate::ts_build::{call, ident, member, paren};
 /// Returns `None` when the receiver is not a consumed-context prefix.
 ///
 /// 1A.25 (#3726): a node.
+///
+/// #3894: `outcome` lowers `<context>.<service>.outcome(args)`: the same call, whose failure is a
+/// `CallOutcome` value rather than a thrown fault (`__callServiceOutcome` on Workers, and
+/// `__callOutcome` around the in-process call on `bundle`).
 pub(in crate::emitter) fn lower_cross_context_service_call(
     receiver: &Expr,
     method: &Ident,
     args: &[Expr],
+    outcome: bool,
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
@@ -60,7 +65,7 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
             let service = call(member(surface, &method.name), args_lowered);
             // #2825: the result takes the caller's declaration of a
             // same-named refined or opaque type, whose brand differs.
-            return_cast(
+            let cast = return_cast(
                 &consumed,
                 cx.cross_context(),
                 &cx.commons().types,
@@ -68,11 +73,22 @@ pub(in crate::emitter) fn lower_cross_context_service_call(
                 method,
                 service,
                 cx.in_test_scaffold(),
-            )
+            );
+            if outcome {
+                call(ident("__callOutcome"), vec![cast])
+            } else {
+                cast
+            }
         }
-        BuildTarget::Workers => {
-            lower_workers_cross_context_call(&consumed, method, args, receiver.span.start, cx, pre)
-        }
+        BuildTarget::Workers => lower_workers_cross_context_call(
+            &consumed,
+            method,
+            args,
+            outcome,
+            receiver.span.start,
+            cx,
+            pre,
+        ),
     })
 }
 
@@ -159,6 +175,8 @@ pub(crate) fn lower_workers_cross_context_call(
     consumed: &str,
     method: &Ident,
     args: &[Expr],
+    // #3894: a `.outcome(…)` call, reported as a `CallOutcome` rather than thrown.
+    outcome: bool,
     // #3580: where the call starts in the source, for a traced build's span.
     call_start: usize,
     cx: &mut LowerCtx<'_>,
@@ -375,7 +393,14 @@ pub(crate) fn lower_workers_cross_context_call(
     };
 
     let call_expr = bynk_ts::TsExpr::Call {
-        callee: Box::new(bynk_ts::TsExpr::Ident("__callService".to_string())),
+        callee: Box::new(bynk_ts::TsExpr::Ident(
+            if outcome {
+                "__callServiceOutcome"
+            } else {
+                "__callService"
+            }
+            .to_string(),
+        )),
         args: vec![
             cx.trace_binding(bynk_ts::TsExpr::Member {
                 object: Box::new(bynk_ts::TsExpr::Member {
@@ -822,6 +847,7 @@ mod tests {
             "shop.pay",
             &ident("charge"),
             args,
+            false,
             0,
             &mut cx,
             &mut pre,

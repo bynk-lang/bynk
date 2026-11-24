@@ -1,0 +1,49 @@
+---
+#3987: `==`, `!=` and the ordering operators give a bare variant name that two
+sums share the other operand's sum as its expected type.
+---
+commons demo.errors
+
+type DbError = | Constraint(message: String) | Failed(message: String)
+
+type MailError = | RateLimited | Failed(message: String)
+
+type Level = enum { Low, Medium, High } derives Ord
+
+type Grade = enum { Medium, Rare }
+
+fn failedDown(e: MailError) -> Bool {
+  e == Failed("down")
+}
+
+fn notLimited(e: MailError) -> Bool {
+  e != RateLimited
+}
+
+fn wrapped(o: Option[MailError]) -> Bool {
+  o == Some(Failed("x"))
+}
+
+fn above(p: Level) -> Bool {
+  p > Medium
+}
+
+fn flipped(e: MailError) -> Bool {
+  Failed("down") == e
+}
+
+fn dbFailed(e: DbError) -> Bool {
+  e == Failed("down")
+}
+
+fn inList(errs: List[MailError]) -> Bool {
+  errs == [Failed("x")]
+}
+
+fn someOnLeft(o: Option[MailError]) -> Bool {
+  Some(Failed("x")) == o
+}
+
+fn bracketed(e: MailError) -> Bool {
+  e == (Failed("x"))
+}
