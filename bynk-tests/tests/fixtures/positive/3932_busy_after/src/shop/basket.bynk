@@ -1,0 +1,34 @@
+context shop.basket
+
+// #3932: `@busyAfter(d)` lowers how long a call waits behind the handlers ahead of it on one
+// instance before it answers `AgentBusy`: a `503` with `Retry-After` at an HTTP route.
+@busyAfter(5.seconds)
+agent Basket {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+
+// An agent with no annotation keeps the 30-second default.
+agent Ledger {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+
+service api from http {
+	on POST("/basket/:id") (id: String) -> Effect[HttpResult[Int]] by v: Visitor {
+		let t <- Basket(id).add(1)
+		Ok(t)
+	}
+}

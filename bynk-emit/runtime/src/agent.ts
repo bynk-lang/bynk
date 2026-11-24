@@ -164,7 +164,12 @@ export async function callDurableObjectMethod(
     // #1818: the key rides along only for an agent that reads it.
     body: JSON.stringify(key === undefined ? { args, deps: wireDeps } : { args, deps: wireDeps, key }),
   });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) {
+    const message = await response.text();
+    // #3932: an instance whose queue gave up on this call.
+    const busy = response.status === 503 ? response.headers.get(AGENT_BUSY_HEADER) : null;
+    throw busy === null ? new Error(message) : agentBusyError(busy, message);
+  }
   return (await response.json()) as JsonValue;
 }
 
@@ -428,9 +433,57 @@ export interface AgentContentionFault {
   readonly agent: string;
 }
 
-function contentionFault(kind: AgentContentionFault["kind"], agent: string, message: string): Error {
-  // Logged by kind and agent only, never an id or an argument (ADR 0107).
-  globalThis.console.error(`${kind} ${agent}`, { agent, kind });
+// #3932: `@busyAfter(d)` lowers an agent class's queue wait. The emitted module records it on
+// the class right after its declaration, and the queue reads it where the class is wrapped
+// (`serialiseAgentClass`, `serialiseBundleAgent`), so every tier and target sees the same wait.
+const busyAfterByClass = new globalThis.WeakMap<object, number>();
+
+export function agentBusyAfter(cls: object, ms: number): void {
+  busyAfterByClass.set(cls, ms);
+}
+
+function busyAfterOf(cls: unknown): number | undefined {
+  return typeof cls === "function" ? busyAfterByClass.get(cls) : undefined;
+}
+
+/// #3932: the header a Durable Object's `503` carries when its queue gave up on a call, naming
+/// the agent: the calling Worker reads it back as an `AgentBusy` fault, not a bare failure.
+export const AGENT_BUSY_HEADER = "x-bynk-agent-busy";
+
+/// #3932: `AgentBusy` as the calling Worker sees it, rebuilt from the Durable Object's `503`.
+/// Not logged: the instance logged it where it was raised.
+function agentBusyError(agent: string, message: string): Error {
+  const e = new Error(message);
+  globalThis.Object.defineProperty(e, "agentFault", {
+    value: { kind: "AgentBusy", agent } satisfies AgentContentionFault,
+    enumerable: false,
+  });
+  return e;
+}
+
+/// #3932: what a Worker entry answers for a caught fault that is `AgentBusy`: `503 Service
+/// Unavailable` with `Retry-After: 1`, a transient condition the client may retry, not a fault
+/// (so it is not reported as one). `null` for any other fault, and for an event delivery
+/// (`event <service>`), where a busy subscriber stays a fault. A `ReentrantAgentCall` is a bug
+/// and stays a `500`. The body is plain text until the service error format (#3916) lands.
+export function agentBusyResponse(e: unknown, route: string): Response | null {
+  const fault = (e as { agentFault?: AgentContentionFault } | null)?.agentFault;
+  if (fault?.kind !== "AgentBusy" || route.startsWith("event ")) return null;
+  return new globalThis.Response("Service Unavailable", {
+    status: 503,
+    headers: { "retry-after": "1" },
+  });
+}
+
+function contentionFault(
+  kind: AgentContentionFault["kind"],
+  agent: string,
+  message: string,
+  queued?: number,
+): Error {
+  // Logged by kind and agent only, never an id or an argument (ADR 0107); #3932: and, for a
+  // busy instance, how many calls were queued ahead, so the load is visible in the log.
+  globalThis.console.error(`${kind} ${agent}`, queued === undefined ? { agent, kind } : { agent, kind, queued });
   const e = new Error(`${kind}: ${message}`);
   globalThis.Object.defineProperty(e, "agentFault", {
     value: { kind, agent } satisfies AgentContentionFault,
@@ -488,6 +541,7 @@ export function agentBusy(agent: string, waitMs: number, queued: number): Error 
     "AgentBusy",
     agent,
     `agent ${agent} busy: waited ${waitMs / 1000} s behind ${queued} queued call${queued === 1 ? "" : "s"}`,
+    queued,
   );
 }
 
@@ -554,7 +608,7 @@ const bundleQueues = new globalThis.WeakMap<object, AgentQueue>();
 export function serialiseBundleAgent<C>(
   state: DurableObjectState,
   instance: C,
-  waitMs: number = AGENT_QUEUE_WAIT_MS,
+  waitMsOverride?: number,
 ): C {
   let queue = bundleQueues.get(state);
   if (queue === undefined) {
@@ -563,6 +617,8 @@ export function serialiseBundleAgent<C>(
   }
   const q = queue;
   const agent = (instance as { constructor: { name: string } }).constructor.name;
+  const waitMs =
+    waitMsOverride ?? busyAfterOf((instance as { constructor: unknown }).constructor) ?? AGENT_QUEUE_WAIT_MS;
   return new Proxy(instance as object, {
     get(target, prop, receiver) {
       const v = Reflect.get(target, prop, receiver) as unknown;
@@ -677,7 +733,7 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
         id: `${Base.name}:${stateIdOf(state)}`,
         agent: Base.name,
         queue: new AgentQueue(),
-        waitMs: options.waitMs ?? AGENT_QUEUE_WAIT_MS,
+        waitMs: options.waitMs ?? busyAfterOf(Base) ?? AGENT_QUEUE_WAIT_MS,
         chain: [],
       };
       super(state, chainEnv(args[1], gate), ...args.slice(2));
@@ -730,7 +786,16 @@ export function serialiseAgentClass<C extends new (...args: never[]) => object>(
       // fault, so the caller's `callDurableObjectMethod` throws its message.
       if (name !== "fetch") return run;
       return run.catch((e: unknown) => {
-        if ((e as { agentFault?: unknown }).agentFault === undefined) throw e;
+        const fault = (e as { agentFault?: AgentContentionFault }).agentFault;
+        if (fault === undefined) throw e;
+        // #3932: a busy instance answers `503`, naming itself, so the caller reads `AgentBusy`;
+        // a re-entrant call stays a `500`.
+        if (fault.kind === "AgentBusy") {
+          return new globalThis.Response((e as Error).message, {
+            status: 503,
+            headers: { [AGENT_BUSY_HEADER]: fault.agent },
+          });
+        }
         return new globalThis.Response((e as Error).message, { status: 500 });
       });
     };

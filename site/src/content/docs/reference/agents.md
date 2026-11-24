@@ -569,8 +569,43 @@ Two faults keep the queue from hanging, and they are different faults:
 - **`AgentBusy`**: a call waited 30 seconds behind the handlers ahead of it and gave up
   (`agent X busy: waited 30 s behind N queued calls`). The wait is the only thing timed;
   a handler may run for as long as the platform lets it. A hot instance can reach this with
-  no cycle at all, which is why it is not reported as re-entrancy. The limit is not
-  configurable yet.
+  no cycle at all, which is why it is not reported as re-entrancy. It is transient load, so
+  it is not answered as a bug: see below.
+
+An agent can lower the 30-second wait with `@busyAfter(d)` before `agent` (#3932):
+
+```bynk,fragment
+@busyAfter(5.seconds)
+agent Basket {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+```
+
+`d` is a `Duration` literal from 1 second to 30 seconds (`bynk.agent.busy_after_out_of_range`
+for any other; a constant naming one is allowed). It only lowers, never raises: a longer
+wait only holds callers longer. It is per agent class, not per call, and any other
+annotation on an agent is `bynk.agent.bad_annotation`.
+
+What `AgentBusy` becomes depends on who made the call:
+
+- **An HTTP route** answers `503 Service Unavailable` with `Retry-After: 1` instead of
+  `500`. The hint is short and fixed: a queue wait is seconds, and clients should back off
+  themselves. The fault is logged once, as `AgentBusy <Agent>` with the queue depth, and is
+  not reported as a fault, so load does not raise a fault alert. The body is plain text
+  until the service error format lands (#3916).
+- **A cross-context call** reaches its caller as `503` with no fault marker, which
+  `<context>.<service>.outcome(…)` reads as `Unreachable(Some(503))`: the call may not
+  have run.
+- **A queue consumer** faults, which retries the message; a **cron** run faults; an
+  **event subscriber** faults (unchanged).
+- A `ReentrantAgentCall` stays a fault and a `500` everywhere: a call cycle is a bug.
 
 Two agents that call each other from separate roots (`A`'s handler calls `B` while `B`'s
 handler calls `A`) wait on each other until both fault `AgentBusy`; the chain only sees a

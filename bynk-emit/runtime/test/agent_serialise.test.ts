@@ -4,7 +4,10 @@ import {
   AGENT_CHAIN_HEADER,
   AGENT_CHAIN_MAX,
   AGENT_QUEUE_WAIT_MS,
+  AGENT_BUSY_HEADER,
   AgentQueue,
+  agentBusyAfter,
+  agentBusyResponse,
   callAgentOutcome,
   callDurableObjectMethod,
   reentrantAgentCall,
@@ -458,6 +461,98 @@ test("serialiseAgentClass passes extra constructor arguments and keeps the class
   const inst = new S(makeTestState("k"), { A: 1 }, "x");
   assert.equal(inst.extra, "x");
   assert.deepEqual({ ...(inst.env as object) }, { A: 1 });
+});
+
+// #3932: `@busyAfter(d)` lowers a class's queue wait, and a busy instance is load, not a fault.
+class SlowOp {
+  state: DurableObjectState;
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+  async hold(): Promise<string> {
+    await sleep(200);
+    return "done";
+  }
+  async fetch(): Promise<Response> {
+    return new Response(JSON.stringify(await this.hold()));
+  }
+}
+
+test("@busyAfter lowers a class's wait, where the class is wrapped", async () => {
+  class Hurried extends SlowOp {}
+  agentBusyAfter(Hurried, 30);
+  const ns = makeIntegrationDoNamespace(Hurried as never);
+  const first = call(ns, "k", "m");
+  const second = await quiet(() => call(ns, "k", "m"));
+  assert.match(await second.text(), /AgentBusy: agent Hurried busy: waited 0\.03 s/);
+  assert.equal(await text(first), '"done"');
+  // A class with no `@busyAfter` keeps the default, and an explicit wait still overrides.
+  class Patient extends SlowOp {}
+  const patient = makeIntegrationDoNamespace(Patient as never);
+  const a = call(patient, "k", "m");
+  assert.equal(await text(call(patient, "k", "m")), '"done"');
+  assert.equal(await text(a), '"done"');
+  const state = makeTestState("k");
+  const make = (): Hurried => serialiseBundleAgent(state, new Hurried(state));
+  const held = make().hold();
+  await quiet(async () => {
+    await assert.rejects(() => make().hold(), /AgentBusy: agent Hurried busy/);
+  });
+  assert.equal(await held, "done");
+});
+
+test("a busy instance answers 503 naming itself; a re-entrant call stays 500", async () => {
+  class Busy extends SlowOp {}
+  const ns = makeIntegrationDoNamespace(Busy as never, undefined, 20);
+  const first = call(ns, "k", "m");
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...args: unknown[]) => {
+    logged.push(args);
+  };
+  let busy: Response;
+  try {
+    busy = await call(ns, "k", "m");
+  } finally {
+    globalThis.console.error = log;
+  }
+  // Logged once, as busy, with the queue depth.
+  assert.deepEqual(logged, [["AgentBusy Busy", { agent: "Busy", kind: "AgentBusy", queued: 1 }]]);
+  assert.equal(busy.status, 503);
+  assert.equal(busy.headers.get(AGENT_BUSY_HEADER), "Busy");
+  await first;
+  const id = "Busy:k";
+  const loop = await ns
+    .get(ns.idFromName("k"))
+    .fetch("https://_bynk/_bynk/agent/m", { headers: { [AGENT_CHAIN_HEADER]: id } });
+  assert.equal(loop.status, 500);
+  assert.equal(loop.headers.get(AGENT_BUSY_HEADER), null);
+});
+
+test("the caller reads a busy instance back as AgentBusy, which an entry answers 503 with Retry-After", async () => {
+  class Busy extends SlowOp {}
+  const ns = makeIntegrationDoNamespace(Busy as never, undefined, 20);
+  const stub = ns.get(ns.idFromName("k"));
+  const first = call(ns, "k", "m");
+  const err = await quiet(() =>
+    callDurableObjectMethod(stub, "m", [], {}).then(
+      () => null,
+      (e: unknown) => e,
+    ),
+  );
+  await first;
+  assert.deepEqual((err as { agentFault?: unknown }).agentFault, { kind: "AgentBusy", agent: "Busy" });
+  const answer = agentBusyResponse(err, "POST /add/:id");
+  assert.equal(answer?.status, 503);
+  assert.equal(answer?.headers.get("retry-after"), "1");
+  // A cross-context call's `503` carries no `X-Bynk-Fault`, so its caller reads it as unreachable.
+  assert.equal(agentBusyResponse(err, "call quote")?.status, 503);
+  assert.equal(agentBusyResponse(err, "call quote")?.headers.get("x-bynk-fault"), null);
+  // An event delivery, a plain fault and a re-entrant call are not mapped.
+  assert.equal(agentBusyResponse(err, "event audit"), null);
+  assert.equal(agentBusyResponse(new Error("boom"), "POST /x"), null);
+  const reentrant = Object.assign(new Error("r"), { agentFault: { kind: "ReentrantAgentCall", agent: "A" } });
+  assert.equal(agentBusyResponse(reentrant, "POST /x"), null);
 });
 
 // #3933: `Agent(key).op.outcome(args)` reports an agent call's failure as a `CallOutcome`.
