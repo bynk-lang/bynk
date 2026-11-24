@@ -20,5 +20,7 @@ failure when that output says a port was in use, and as the existing skip otherw
 wrangler). The assertions are unchanged and no retry is added.
 
 **Consequences.** The same contention gives twenty passes in twenty. A deliberate break (the migrate wake
-not committing) still fails the test on its second-wake assertion. The hello-world smoke in the same file keeps
-its own pid-derived port and boot loop; it is outside this issue.
+not committing) still fails the test on its second-wake assertion. The hello-world smoke in the same file had the
+same two defects (a pid-derived port, and a boot loop that ignored an exited wrangler) and a third: it passed no
+`--inspector-port`, so concurrent copies shared wrangler's default and eight of ten failed with `Address already in
+use`. It now takes both ports from the OS and fails fast too, with twenty passes in twenty under the same contention.

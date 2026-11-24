@@ -81,17 +81,24 @@ fn hello_world_serves_on_workerd() {
         "example layout changed — update this test's worker path"
     );
 
-    // A pid-derived port keeps parallel test binaries off each other.
-    let port = 20000 + (std::process::id() % 10000) as u16;
+    // #4174: a port the OS has just handed out, as for the other smokes (`free_ports`).
+    let (port, inspector_port) = free_ports();
     let child = wrangler::Wrangler::spawn(
         wrangler::npx()
-            .args(["dev", "--port", &port.to_string()])
+            .args([
+                "dev",
+                "--port",
+                &port.to_string(),
+                // wrangler's default inspector port is shared by every `wrangler dev` otherwise.
+                "--inspector-port",
+                &inspector_port.to_string(),
+            ])
             .current_dir(&worker_dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped()),
         &tmp.join("registry"),
     );
-    let child = match child {
+    let mut child = match child {
         Ok(c) => c,
         Err(e) => {
             if skip(&format!("could not launch npx: {e}")) {
@@ -107,6 +114,25 @@ fn hello_world_serves_on_workerd() {
     let url = format!("http://127.0.0.1:{port}/");
     let mut last_err = String::new();
     loop {
+        // #4174: a wrangler that has already exited will never serve; say so now (see
+        // `serve_smoke_with_args`).
+        if let Ok(Some(status)) = child.child().try_wait() {
+            let mut logs = String::new();
+            if let Some(mut e) = child.child().stderr.take() {
+                let _ = e.read_to_string(&mut logs);
+            }
+            assert!(
+                !logs.contains("Address already in use"),
+                "wrangler dev could not bind its port ({status}): {logs}"
+            );
+            if skip(&format!(
+                "wrangler dev exited ({status}) before serving (likely no network to \
+                 provision {WRANGLER}); last error: {last_err}\n{logs}"
+            )) {
+                return;
+            }
+            unreachable!()
+        }
         if Instant::now() > deadline {
             let mut child = child;
             // Stop first: the pipe reaches EOF only once the whole group is gone.
