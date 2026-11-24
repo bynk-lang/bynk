@@ -215,6 +215,10 @@ pub(super) fn check_agent_outcome_call(
             ));
         }
     }
-    let call = resolve_type_ref(&handler.return_type, &ctx.input.types, tys)?;
+    // This call is claimed from here on: an unresolved return type is already reported, and
+    // must not send the call back through the general path to be checked a second time.
+    let Some(call) = resolve_type_ref(&handler.return_type, &ctx.input.types, tys) else {
+        return Some(None);
+    };
     Some(wrap_in_call_outcome(call, method, ctx))
 }

@@ -6,6 +6,7 @@ import {
   AGENT_QUEUE_WAIT_MS,
   AGENT_BUSY_HEADER,
   AgentQueue,
+  agentBusy,
   agentBusyAfter,
   agentBusyResponse,
   callAgentOutcome,
@@ -17,8 +18,7 @@ import {
 } from "../src/agent.ts";
 import { makeTestState, type DurableObjectState } from "../src/storage.ts";
 import { makeIntegrationDoNamespace } from "../src/testing/bindings.ts";
-import { boundaryError } from "../src/boundary.ts";
-import { rehydrationViolation } from "../src/boundary.ts";
+import { boundaryError, rehydrationViolation } from "../src/boundary.ts";
 
 // #3202: an agent instance runs one handler at a time.
 
@@ -598,6 +598,27 @@ test("callAgentOutcome: AgentBusy is Unreachable(None), a handler fault is Fault
     globalThis.console.error = log;
   }
   assert.ok(logged.some((l) => l[0] === "AgentFaulted Basket.add"));
+});
+
+test("callAgentOutcome: only the called agent's own busy queue is Unreachable, a nested agent's is Faulted", async () => {
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    // `A.op` was busy itself: it never started.
+    assert.deepEqual(await callAgentOutcome(Promise.reject(agentBusy("A", 30_000, 1)), "A.op"), {
+      tag: "Unreachable",
+      status: { tag: "None" },
+    });
+    // `A.op` ran and called a busy `B`: the handler started, so a retry could repeat its effects.
+    assert.deepEqual(await callAgentOutcome(Promise.reject(agentBusy("B", 30_000, 1)), "A.op"), { tag: "Faulted" });
+  } finally {
+    globalThis.console.error = log;
+  }
+  // The fault is logged with its error, so a handler fault stays diagnosable (#3933).
+  const faulted = logged.find((l) => l[0] === "AgentFaulted A.op");
+  assert.ok(faulted !== undefined);
+  assert.match(String(faulted[1]), /AgentBusy: agent B busy/);
 });
 
 test("callAgentOutcome: ReentrantAgentCall and a codec failure stay faults", async () => {

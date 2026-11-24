@@ -531,7 +531,7 @@ match o {
 `Basket(id).add.outcome(item)` is `Effect[CallOutcome[R]]` for the handler's `R`, with the same
 `o.handled()` for `?` and `embeds`. It is grammar on the operation reference, not a method of
 `Effect`, so it is legal wherever the plain call is, an agent handler calling *another* agent
-included. A call to the handler's own instance through `this` is part of the same handler and
+included. A call to the handler's own instance through `self` is part of the same handler and
 stays a plain call.
 
 | What happened to the agent call | The outcome |
@@ -555,7 +555,7 @@ An agent instance runs one handler at a time: every handler that reaches an inst
 read-only ones included, waits for the handlers ahead of it, so a handler's load, body
 and commit are never interleaved with another's on the same instance. Instances with
 different keys run independently, and a handler that calls another handler on its own
-agent through `this` is part of the same handler, not a second call. This is what makes
+agent through `self` is part of the same handler, not a second call. This is what makes
 "persisted atomically when the handler returns" true when a handler awaits another
 agent or a capability partway through.
 
