@@ -1593,6 +1593,7 @@
 /reference/diagnostics/bynk.history.not_generable/
 /reference/diagnostics/bynk.history.outside_property/
 /reference/diagnostics/bynk.history.restates_invariant/
+/reference/diagnostics/bynk.http.body_cap_defaulted/
 /reference/diagnostics/bynk.http.body_kind_conflict/
 /reference/diagnostics/bynk.http.body_on_get_or_delete/
 /reference/diagnostics/bynk.http.cache_bad_immutable/
