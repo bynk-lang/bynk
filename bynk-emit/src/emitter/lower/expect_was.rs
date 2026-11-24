@@ -227,6 +227,9 @@ fn is_tagged_outcome(ty: TyId, cx: &LowerCtx) -> bool {
 
 /// A value of a type the runtime refuses to log: a `SigningKey`, a `VerifyKey` or token claims,
 /// alone or inside a container.
+/// The type walk need not enter record fields or sum payloads: the checker refuses a key or
+/// token claims there (`bynk.types.key_at_boundary`, `bynk.types.claims_at_boundary`; fixtures
+/// `2327_key_at_boundary_record` and `2380_claims_at_boundary`), so a user type never holds one.
 fn is_redacted(ty: TyId, cx: &LowerCtx) -> bool {
     let tys = cx.commons().tys();
     match &*tys.get(ty) {
