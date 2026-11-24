@@ -128,7 +128,9 @@ async function main(): Promise<void> {
   assert(r.status === 400, "a too-short path param is a 400");
   const rejBody = await r.text();
   assert(rejBody.includes("RefinementViolation"), "the 400 body is the RefinementViolation");
-  assert(rejBody.includes("xy"), "the 400 reflects the offending input (the vector #659 is about)");
+  // #4278: the offending input is no longer echoed into the body: the rejection names the
+  // field and the message, never the value, so a rejected secret is not reflected back.
+  assert(!rejBody.includes("xy"), "the 400 does not reflect the offending input");
   assert(
     r.headers.get("x-content-type-options") === "nosniff",
     "the reflected-input 400 is now nosniff-stamped (the #659 fix)",

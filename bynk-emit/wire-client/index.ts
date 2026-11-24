@@ -929,6 +929,16 @@ export type BoundaryError =
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
+// #4278: a refinement violation as it goes on the wire in a `400`: the field and the message,
+// never the offending value. A rejected password failing `MinLength` must not be echoed back, so
+// `value` stays runtime-only. Applied to the body of every JSON `400` the generated handlers
+// answer; any body that is not a `RefinementViolation` passes through untouched.
+export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
+  const violation = body.violation as ValidationError | undefined;
+  if (body.kind !== "RefinementViolation" || violation === undefined) return body;
+  return { ...body, violation: { field: violation.field, message: violation.message } };
+}
+
 // v0.177 (#643): the deployed callee's compiled contract is not the one this
 // caller was compiled against — a deploy skew, not a bad payload. The callee
 // reports it as a 409 *before* reading the body, since once the contracts

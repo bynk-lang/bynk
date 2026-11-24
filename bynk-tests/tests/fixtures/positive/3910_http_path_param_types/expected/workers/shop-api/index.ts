@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire } from "../../__bynk_runtime/decimal.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __pathLeaf } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
@@ -30,7 +30,7 @@ export default {
         const __body = await __verifyCall(request, env, "shop.api");
         if (typeof __body !== "string") return __body;
         const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
+        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
           default:
@@ -43,11 +43,11 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /flags/:flag";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_flag = __m.params["flag"];
           const __r_flag = ((__v) => typeof __v === "boolean" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "path.flag", expected: "boolean", actual: typeof __v } as __BoundaryError))(__pathLeaf("bool", __raw_flag));
-          if (__r_flag.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_flag.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          if (__r_flag.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_flag.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const flag = __r_flag.value;
           const result = await surface.http_GET_flags_Param_flag(flag);
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.api\""]), __security_api);
@@ -59,11 +59,11 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /orders/:id";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_id = __m.params["id"];
           const __r_id = handlers.__deserialise_OrderNo(__pathLeaf("int", __raw_id), "path.id");
-          if (__r_id.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_id.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          if (__r_id.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_id.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const id = __r_id.value;
           const result = await surface.http_GET_orders_Param_id(id);
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.api\""]), __security_api);
@@ -75,11 +75,11 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /orders/status/:s";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_s = __m.params["s"];
           const __r_s = handlers.__deserialise_Status(__pathLeaf("enum", __raw_s), "path.s");
-          if (__r_s.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_s.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          if (__r_s.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_s.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const s = __r_s.value;
           const result = await surface.http_GET_orders_status_Param_s(s);
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.api\""]), __security_api);
@@ -91,11 +91,11 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /prices/:p";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_p = __m.params["p"];
           const __r_p = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "path.p", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "path.p", expected: "decimal string", actual: typeof __v } as __BoundaryError))(__pathLeaf("decimal", __raw_p));
-          if (__r_p.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_p.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          if (__r_p.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_p.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const p = __r_p.value;
           const result = await surface.http_GET_prices_Param_p(p);
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.api\""]), __security_api);
@@ -107,11 +107,11 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /refs/:r";
           if (__m.malformed) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw_r = __m.params["r"];
           const __r_r = ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "path.r", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "path.r", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__pathLeaf("int", __raw_r));
-          if (__r_r.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_r.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          if (__r_r.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_r.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const r = __r_r.value;
           const result = await surface.http_GET_refs_Param_r(r);
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop.api\""]), __security_api);
