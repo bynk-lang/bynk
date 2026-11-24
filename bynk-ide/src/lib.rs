@@ -56,6 +56,7 @@ pub mod agent_effects;
 /// checker; re-exported here so existing paths keep working.
 pub use bynk_check::agent_state;
 pub mod architecture;
+pub mod call_outcome;
 pub mod capability_path;
 pub mod completion;
 pub mod doc_link_urls;

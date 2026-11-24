@@ -1415,8 +1415,9 @@ module.exports = grammar({
     // operation — `stub Cap.op(<arg pattern>, …) <rhs>`. Only admitted inside a
     // suite/case body. An arg pattern is `_` (any) or a value expression; the
     // right-hand side is `returns <expr> [after <expr>]`, `returns each [ <outcome>, … ]`
-    // (a scripted sequence, where an outcome is `fails` or an expr), `fails`, or
-    // `never`.
+    // (a scripted sequence, where an outcome is `fails` or an expr), `fails`,
+    // `never`, or (#3894, a consumed service's) `rejected <Refusal>`, `faulted`
+    // or `unreachable`.
     // `returns`/`each`/`fails` are contextual words. Keyword `stub` since the
     // keyword-hygiene batch (#548); formerly a pun on `provides`.
     stub_clause: ($) =>
@@ -1460,6 +1461,11 @@ module.exports = grammar({
           ),
           "fails",
           "never",
+          // #3894: a consumed service's call that was refused, whose handler
+          // faulted, or whose outcome is unknown. Contextual words.
+          seq("rejected", field("refusal", $.identifier)),
+          "faulted",
+          "unreachable",
         ),
       ),
     // #2134: a suite- or case-scoped `env { NAME = "value" … }` clause — the

@@ -1274,6 +1274,10 @@
   ],
   "method_call": [
     {
+      "code": "bynk.call.outcome_not_in_scope",
+      "summary": "`<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope."
+    },
+    {
       "code": "bynk.detach.in_agent_handler",
       "summary": "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive."
     },
@@ -1832,6 +1836,10 @@
     {
       "code": "bynk.stub.at_system",
       "summary": "A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override."
+    },
+    {
+      "code": "bynk.stub.outcome_word",
+      "summary": "A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`."
     }
   ],
   "suite_decl": [

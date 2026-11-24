@@ -1,0 +1,16 @@
+context shop.orders
+
+consumes shop.pay as Pay
+consumes bynk { CallOutcome, CallFailure }
+
+fn passed(o: CallOutcome[Int]) -> Result[Int, CallFailure] {
+	let paid = o.handled()?
+	Ok(paid)
+}
+
+service place {
+	on call(total: Int) -> Effect[Int] by Caller {
+		let o <- Pay.authorise.outcome(total)
+		Effect.pure(1)
+	}
+}

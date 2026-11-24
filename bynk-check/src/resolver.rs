@@ -3128,7 +3128,11 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
                     }
                 }
             }
-            StubRhs::Fails(_) | StubRhs::Never(_) => {}
+            StubRhs::Fails(_)
+            | StubRhs::Never(_)
+            | StubRhs::Rejected(..)
+            | StubRhs::Faulted(_)
+            | StubRhs::Unreachable(_) => {}
         }
         if let Some(a) = &s.after {
             g.expr(a);
