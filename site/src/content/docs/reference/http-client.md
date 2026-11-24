@@ -234,6 +234,18 @@ would lose them; a page sends its cookies with `credentials: "include"` and call
 the route without the argument it cannot set. The check is `typeof document`, so a
 test run under a DOM emulation such as jsdom sees a browser too.
 
+## Headers, typed
+
+A route that takes a typed `headers` record gets a `headers` argument of its own type: a field
+that is an `Option`, or has a default, may be omitted, a `List` is sent as one comma-separated
+value, and a field renamed with `@name` is written under that name (`if-match`). The fields are
+written as request headers, and replace a header of the same name set in the client's `headers`
+option. A value with a line break or another control character is refused as `Invalid` (path
+`headers.<field>`) before any request is made.
+
+**A browser sets some headers itself** (`Content-Length`, `Host`, `Cookie`, …) and drops one a
+script writes, so a route that reads one of those is for a server-side call.
+
 ## Refinements
 
 The client runs the server's own predicates, from the same generator:
@@ -419,7 +431,7 @@ export const API_CONTRACTS = {
 ```
 
 A route's hash is FNV-1a over the facts a client acts on: its method and path, what it takes
-(each path, `query`, `cookies` and `body` parameter, with its type as it is on the wire, so
+(each path, `query`, `cookies`, `headers` and `body` parameter, with its type as it is on the wire, so
 refinements, opaque types and `@name` keys count), and what it can answer (each status, variant
 and kind of body). It moves when that does and **not** for a handler's body, a doc comment, the
 order of a record's fields or a CORS change. A service's hash is the hash of its routes' hashes,
@@ -457,7 +469,7 @@ after the spread). The server ignores the header on a `from http` route.
 ## Routes left out
 
 A route the client cannot yet represent faithfully is named on stderr and left out,
-never generated wrong: a raw `query: RequestQuery` or `cookies: RequestCookies` view,
+never generated wrong: a raw `query: RequestQuery`, `cookies: RequestCookies` or `headers: RequestHeaders` view,
 a route guarded by a request signature (the client holds no secret), and a route whose types hold an `Option`
 inside a `Map`, a `Set` or a `Result`. If every selected route is left out the
 command fails.

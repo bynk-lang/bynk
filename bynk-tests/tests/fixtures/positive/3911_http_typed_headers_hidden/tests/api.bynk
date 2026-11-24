@@ -1,0 +1,15 @@
+suite shop.api as system {
+	env {
+		READER_SECRET = "test-reader-secret"
+	}
+
+	case "the consumed credential reads as absent, another header reads" {
+		let r <- api.GET("/probe", Probe { authorization: Some("Bearer smuggled"), trace: Some("t-1") }) by Reader("someone")
+		expect r is Ok("absent t-1 someone")
+	}
+
+	case "without the credential the seam refuses" {
+		let r <- api.GET("/probe", Probe { authorization: None, trace: None }) by Nobody
+		expect r is Rejected(Unauthorized)
+	}
+}
