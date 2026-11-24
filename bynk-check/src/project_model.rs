@@ -6422,6 +6422,7 @@ pub fn merge_consumed_exports(
                 ConsumedType {
                     owning_context: t.clone(),
                     visibility: *vis,
+                    owner_is_adapter: unit_info[t].kind == UnitKind::Adapter,
                 },
             );
             // Methods on transparently-exported types: they're emitted in

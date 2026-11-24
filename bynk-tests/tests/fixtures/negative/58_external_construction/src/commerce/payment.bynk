@@ -1,5 +1,5 @@
 context commerce.payment {
-  exports opaque { AuthId }
+  exports transparent { AuthId }
 
   type AuthId = String where Matches("AUTH-[0-9]+")
 }

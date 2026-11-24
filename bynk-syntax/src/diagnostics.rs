@@ -1331,19 +1331,19 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.context.external_construction",
-        blurb: "A context that `consumes` another may hold and pass on the other's types, and build \
-                the ones it exports `transparent`, but may not build one it exports `opaque`. An \
-                opaque type can promise an invariant, a `Matches` pattern or a smart constructor, \
-                and that holds only if every value is made by the owner; `.of`, a variant \
-                constructor and the record syntax of an opaque type are refused from outside. \
-                `.unsafe`, an unchecked assertion, is refused for every owned type. Ask the owner \
+        blurb: "A context that `consumes` another may hold and pass on the other's types, but may not \
+                build one. (An adapter's `transparent` types, such as `bynk.cloudflare`'s `KvTtl`, \
+                are the exception: `.of`, a variant and a record literal are open to a consumer.) A \
+                refined or opaque type can promise an invariant, a `Matches` pattern or a smart constructor, \
+                and that holds only if every value is made by the owner; `.of`, `.unsafe` and a variant \
+                constructor are refused from outside, as is the record syntax of an opaque type. Ask the owner \
                 for the value instead: a service that returns it, or takes the plain input and \
                 does the check. `bynk.context.opaque_inspection` is the other side, looking \
                 inside such a value.",
         example: "// payment.bynk\n\
                   context payment\n\
                   \n\
-                  exports opaque { AuthId }\n\
+                  exports transparent { AuthId }\n\
                   \n\
                   type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
                   \n\
@@ -7345,7 +7345,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.context.external_construction",
-        "A type a context exports opaque was constructed from outside that context, or `.unsafe` was applied to a context-owned type.",
+        "A context-owned type was constructed from outside that context.",
     ),
     d(
         "bynk.context.external_decode",

@@ -2501,17 +2501,18 @@ never a context (`bynk.adapter.consumes_context`).
 or with conflicting visibility, and an exported capability MUST have a provider
 (the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
 compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
-`bynk.boundary.structural_mismatch`); outside its owning context, a type the
-context exports `opaque` MUST NOT be built through its constructors (`.of`, a
-variant) or with record syntax, nor inspected
-(`bynk.context.external_construction`, `bynk.context.opaque_inspection`), and
-nothing a context owns MAY be built with `.unsafe`, an unchecked assertion
-rather than a construction (`bynk.context.external_construction`); an opaque
-export MUST NOT be decoded from JSON (`bynk.context.external_decode`); a
-field read on a value of an opaque export is an inspection, however the value
-was bound. A type the context exports `transparent` is constructible by a
-consumer in every ordinary form: `.of` on a refined type, a variant of a sum,
-or record syntax. A consumer MAY read the fields of a value whose type the
+`bynk.boundary.structural_mismatch`); outside its owning context, a
+context-owned type MUST NOT be built through its constructors (`.of`,
+`.unsafe`, a variant) and an opaque export MUST NOT be built with record syntax
+or inspected (`bynk.context.external_construction`,
+`bynk.context.opaque_inspection`), nor decoded from JSON
+(`bynk.context.external_decode`); a field read on a value of an opaque export is
+an inspection, however the value was bound. A transparent record's fields are
+shared, so a consumer MAY build one with record syntax. A type an **adapter**
+exports `transparent` is constructible by a consumer in every ordinary form —
+`.of` on a refined type, a variant of a sum, record syntax — because an adapter's
+values are linked into each consumer (`.unsafe` and an opaque export stay the
+owner's). A consumer MAY read the fields of a value whose type the
 providing context declares but does not export; the read is checked against
 that declaration ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries)). These rules hold in every body — functions, service and agent handlers,
 and provider operations.

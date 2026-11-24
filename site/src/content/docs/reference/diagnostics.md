@@ -178,7 +178,7 @@ There are **908** codes in total. Every code is an error unless it is marked **W
 
 - [`bynk.context.consumes_cycle`](/reference/diagnostics/bynk.context.consumes_cycle/) — Contexts form a `consumes` dependency cycle.
 - [`bynk.context.duplicate_binding`](/reference/diagnostics/bynk.context.duplicate_binding/) — A Worker would declare two bindings with the same name, such as an agent `Kv` and the `bynk.cloudflare` KV namespace (both `KV`).
-- [`bynk.context.external_construction`](/reference/diagnostics/bynk.context.external_construction/) — A type a context exports opaque was constructed from outside that context, or `.unsafe` was applied to a context-owned type.
+- [`bynk.context.external_construction`](/reference/diagnostics/bynk.context.external_construction/) — A context-owned type was constructed from outside that context.
 - [`bynk.context.external_decode`](/reference/diagnostics/bynk.context.external_decode/) — A context decoded a type another context owns and exports opaque: through `Json.decode`, `Json.decodeSql` or a `Codable` witness, or as the input of an HTTP, queue, event or WebSocket handler. Decoding creates a value, which only the owning context may do; its codec would check no more than the base type.
 - [`bynk.context.external_provider`](/reference/diagnostics/bynk.context.external_provider/) — A bodiless (external) provider was declared outside an `adapter`.
 - [`bynk.context.opaque_inspection`](/reference/diagnostics/bynk.context.opaque_inspection/) — An opaquely-exported type was inspected from outside its context.
