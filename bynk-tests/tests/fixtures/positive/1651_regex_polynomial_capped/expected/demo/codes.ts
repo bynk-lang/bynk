@@ -2,6 +2,7 @@
 // commons demo.codes
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 /**
@@ -17,7 +18,7 @@ export type Code = string & { readonly __brand: "Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(value.length <= 16)) {
+    if (!(__bynkCodePointLength(value) <= 16)) {
       return Err({ field: "Code", message: "length must be at most 16", value });
     }
     if (!(new globalThis.RegExp("^(?:" + "\\d*-?\\d*" + ")$").test(value))) {
@@ -42,5 +43,5 @@ export function accepts(s: string): boolean {
 
 export function admits(s: string): boolean {
   const __r0 = s;
-  return (__r0.length <= 16 && new globalThis.RegExp("^(?:" + "\\d*-?\\d*" + ")$").test(__r0));
+  return (__bynkCodePointLength(__r0) <= 16 && new globalThis.RegExp("^(?:" + "\\d*-?\\d*" + ")$").test(__r0));
 }

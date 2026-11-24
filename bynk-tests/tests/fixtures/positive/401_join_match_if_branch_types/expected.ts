@@ -2,13 +2,14 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Email = string & { readonly __brand: "Email" };
 
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Email", message: "must be non-empty", value });
     }
     return Ok(value as Email);

@@ -6,6 +6,7 @@ import { __bynkBytesToBase64, __bynkBytesFromBase64 } from "../__bynk_runtime/by
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __BynkKeyMap, __BynkKeySet, __bynkMapInsert, __bynkSetOf } from "../__bynk_runtime/keys.js";
 import { __bynkCmpInt, __bynkCmpString } from "../__bynk_runtime/compare.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_gen from "./../demo/gen.js";
@@ -629,7 +630,7 @@ export function __deserialise_Email(json: __JsonValue, path: string = "$"): Resu
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length >= 3)) {
+  if (!(__bynkCodePointLength(json) >= 3)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Email", message: "length must be at least 3", value: json } });
   }
   return Ok(json as unknown as __ns_demo_gen.Email);

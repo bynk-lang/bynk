@@ -2,16 +2,17 @@
 // commons greet.text
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Subject = string & { readonly __brand: "Subject" };
 
 export const Subject = {
   of(value: string): Result<Subject, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Subject", message: "must be non-empty", value });
     }
-    if (!(value.length <= 40)) {
+    if (!(__bynkCodePointLength(value) <= 40)) {
       return Err({ field: "Subject", message: "length must be at most 40", value });
     }
     return Ok(value as Subject);

@@ -2,6 +2,7 @@
 // commons demo.separators
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Score = number & { readonly __brand: "Score" };
@@ -36,10 +37,10 @@ export type Label = string & { readonly __brand: "Label" };
 
 export const Label = {
   of(value: string): Result<Label, ValidationError> {
-    if (!(value.length >= 1)) {
+    if (!(__bynkCodePointLength(value) >= 1)) {
       return Err({ field: "Label", message: "length must be at least 1", value });
     }
-    if (!(value.length <= 1024)) {
+    if (!(__bynkCodePointLength(value) <= 1024)) {
       return Err({ field: "Label", message: "length must be at most 1024", value });
     }
     return Ok(value as Label);
