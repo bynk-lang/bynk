@@ -418,7 +418,7 @@ Imports a `commons` so its public names are in scope.
 Declares that a context depends on another context's (or adapter's) services or
 capabilities — whole and qualified, aliased (`as`), or with selected
 capabilities flattened to bare names (`{ Cap, … }`). The braces may also name a
-type the unit exports, and rename it for this context with `T as Alias`
+type the unit exports, and rename it for this file with `T as Alias`
 (`consumes bynk.crypto { Crypto, Digest as CryptoDigest }`): the type is then in
 scope only under the alias, so it no longer clashes with a local or `uses` type
 of the same name. Only a type can be aliased, not a capability, and a type takes one alias. In a context split across files an alias is in scope
