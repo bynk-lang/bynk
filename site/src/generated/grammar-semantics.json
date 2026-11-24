@@ -573,7 +573,7 @@
   "cron_handler": [
     {
       "code": "bynk.cron.bad_params",
-      "summary": "A cron handler declares more than one parameter, or a non-`Instant` one."
+      "summary": "A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two."
     },
     {
       "code": "bynk.cron.duplicate_schedule",

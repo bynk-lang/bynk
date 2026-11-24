@@ -194,7 +194,7 @@ There are **908** codes in total. Every code is an error unless it is marked **W
 
 ## Cron
 
-- [`bynk.cron.bad_params`](/reference/diagnostics/bynk.cron.bad_params/) — A cron handler declares more than one parameter, or a non-`Instant` one.
+- [`bynk.cron.bad_params`](/reference/diagnostics/bynk.cron.bad_params/) — A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two.
 - [`bynk.cron.duplicate_schedule`](/reference/diagnostics/bynk.cron.duplicate_schedule/) — Two cron handlers declare the same schedule.
 - [`bynk.cron.invalid_schedule`](/reference/diagnostics/bynk.cron.invalid_schedule/) — A cron schedule is not valid Cloudflare cron syntax: a field is out of range or malformed, or the fields are not separated by exactly one space.
 - [`bynk.cron.numeric_weekday`](/reference/diagnostics/bynk.cron.numeric_weekday/) — <span class="diagnostic-severity">Warning</span> A cron schedule names a day of the week by number, where Cloudflare's `1` is Sunday, not standard cron's `0`/`7` (warning).
