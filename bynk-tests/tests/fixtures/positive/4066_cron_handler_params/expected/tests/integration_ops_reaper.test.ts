@@ -12,18 +12,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -183,13 +197,13 @@ async function test_at_system__none() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_0();
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:4:10", 105, 115, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:4:10", 105, 115, "expect r is Ok(_)", "r", () => __bynkShow(r)); }
     const s = await __sysdrive_api_http_GET_seen(undefined, "");
-    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "none"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:6:10", 164, 179, "expect s is Ok(\"none\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "none"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:6:10", 164, 179, "expect s is Ok(\"none\")", "s", () => __bynkShow(s)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -201,13 +215,13 @@ async function test_at_system__the_time_alone() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_1(7200000);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:11:10", 304, 314, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:11:10", 304, 314, "expect r is Ok(_)", "r", () => __bynkShow(r)); }
     const s = await __sysdrive_api_http_GET_seen(undefined, "");
-    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "at=7200000"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:13:10", 363, 384, "expect s is Ok(\"at=7200000\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "at=7200000"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:13:10", 363, 384, "expect s is Ok(\"at=7200000\")", "s", () => __bynkShow(s)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -219,13 +233,13 @@ async function test_at_system__the_schedule_alone() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_2();
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:18:10", 479, 489, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:18:10", 479, 489, "expect r is Ok(_)", "r", () => __bynkShow(r)); }
     const s = await __sysdrive_api_http_GET_seen(undefined, "");
-    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "schedule=0 3 * * *"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:20:10", 538, 567, "expect s is Ok(\"schedule=0 3 * * *\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "schedule=0 3 * * *"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:20:10", 538, 567, "expect s is Ok(\"schedule=0 3 * * *\")", "s", () => __bynkShow(s)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -237,13 +251,13 @@ async function test_at_system__the_schedule__then_the_time() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_3(14400000);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:25:10", 706, 716, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:25:10", 706, 716, "expect r is Ok(_)", "r", () => __bynkShow(r)); }
     const s = await __sysdrive_api_http_GET_seen(undefined, "");
-    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "0 4 * * *@14400000"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:27:10", 765, 794, "expect s is Ok(\"0 4 * * *@14400000\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "0 4 * * *@14400000"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:27:10", 765, 794, "expect s is Ok(\"0 4 * * *@14400000\")", "s", () => __bynkShow(s)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -255,13 +269,13 @@ async function test_at_system__the_time__then_the_schedule() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_schedule_sweeper_4(18000000);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:32:10", 933, 943, "expect r is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:32:10", 933, 943, "expect r is Ok(_)", "r", () => __bynkShow(r)); }
     const s = await __sysdrive_api_http_GET_seen(undefined, "");
-    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "18000000@0 5 * * *"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:34:10", 992, 1021, "expect s is Ok(\"18000000@0 5 * * *\")"); }
+    if (!(((__c: boolean) => __c)(s.tag === "Ok" && s.value === "18000000@0 5 * * *"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:34:10", 992, 1021, "expect s is Ok(\"18000000@0 5 * * *\")", "s", () => __bynkShow(s)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -274,14 +288,14 @@ async function test_at_system__a_run_key_sweeps_once_at_the_same_time() {
     const deps = __makeHarness();
     const a = await __sysdrive_schedule_sweeper_5(21600000);
     const b = await __sysdrive_schedule_sweeper_5(21600000);
-    if (!(((__c: boolean) => __c)(a.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:40:10", 1247, 1257, "expect a is Ok(_)"); }
-    if (!(((__c: boolean) => __c)(b.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:41:10", 1267, 1277, "expect b is Ok(_)"); }
+    if (!(((__c: boolean) => __c)(a.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:40:10", 1247, 1257, "expect a is Ok(_)", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Ok"))) { throw __bynkExpectFailure("tests/reaper_system.bynk:41:10", 1267, 1277, "expect b is Ok(_)", "b", () => __bynkShow(b)); }
     const n = await __sysdrive_api_http_GET_swept(undefined, "");
-    if (!(((__c: boolean) => __c)(n.tag === "Ok" && n.value === 1))) { throw __bynkExpectFailure("tests/reaper_system.bynk:43:10", 1327, 1337, "expect n is Ok(1)"); }
+    if (!(((__c: boolean) => __c)(n.tag === "Ok" && n.value === 1))) { throw __bynkExpectFailure("tests/reaper_system.bynk:43:10", 1327, 1337, "expect n is Ok(1)", "n", () => __bynkShow(n)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -290,7 +304,7 @@ async function test_at_system__a_run_key_sweeps_once_at_the_same_time() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
