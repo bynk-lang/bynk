@@ -567,7 +567,11 @@ test("responseToHttpOutcome classifies the router's 413 and 415 by their kind", 
   assert.equal(handled.tag, "Handled");
 });
 
+const reqOf = (ct: string | null) =>
+  new Request("https://x.test/", { method: "POST", headers: ct === null ? {} : { "content-type": ct } });
+
 test("mediaTypeMatches takes a list of types (#3912)", () => {
+  const req = reqOf;
   const png = ["image/png", "image/jpeg"];
   assert.equal(mediaTypeMatches(req("image/png"), png), true);
   assert.equal(mediaTypeMatches(req("IMAGE/JPEG; q=1"), png), true);
@@ -576,6 +580,7 @@ test("mediaTypeMatches takes a list of types (#3912)", () => {
 });
 
 test("jsonMediaTypeMatches accepts json, +json and a missing type, refuses the rest (#3912)", () => {
+  const req = reqOf;
   const none = new Request("https://x/", { method: "POST" });
   assert.equal(jsonMediaTypeMatches(none), true);
   assert.equal(jsonMediaTypeMatches(req("application/json")), true);
