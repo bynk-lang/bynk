@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A consumed context's service is a `stub` seam at `unit` and `integration`: `stub Pay.authorise(_) returns Ok(…)` substitutes it, `expect Pay.authorise called once` observes it, and `bynk.tier.cross_context_needs_system` names only the services left unstubbed
----
+# 0900 — A consumed context's service is a `stub` seam below `system`
 
-## ADR: stub-consumed-services
-title: A consumed context's service is a `stub` seam below `system`
-summary: `stub` substitutes a consumed service, so a handler that calls another context is testable in-process
+- **Status:** Accepted (v0.649)
 
 **Context.** Below `system`, no consumed context is stood up, and `stub` doubled
 capabilities, not a context's services. A case that reached another context's
