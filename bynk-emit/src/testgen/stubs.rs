@@ -1114,9 +1114,8 @@ pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; m
   };
   const expiryOf = (e: Expiration): number | undefined => {
     if (e.tag === "After") {
-      const ttl = e.ttl ?? 0;
-      if (globalThis.Math.ceil(ttl / 1000) < 60) fault(`an expiry is at least 60 seconds away, not ${ttl} ms`);
-      return __NOW__ + globalThis.Math.ceil(ttl / 1000) * 1000;
+      // `KvTtl` carries the 60-second floor; whole seconds round towards zero.
+      return __NOW__ + globalThis.Math.trunc((e.ttl ?? 0) / 1000) * 1000;
     }
     if (e.tag === "At") {
       const instant = e.instant ?? 0;
@@ -1141,10 +1140,10 @@ pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; m
     async put(key, value) {
       store.set(key, plain(enc.encode(value)));
     },
-    // Unchecked, as `putTtl` always was; its expiry is kept and listed, as
-    // the platform and the integration tier do.
-    async putTtl(key, value, ttlSeconds) {
-      store.set(key, { ...plain(enc.encode(value)), expiration: __NOW__ + ttlSeconds * 1000 });
+    // Unchecked, as `putTtl` always was (its `KvTtl` carries the floor); its
+    // expiry is kept and listed, as the platform and the integration tier do.
+    async putTtl(key, value, ttl) {
+      store.set(key, { ...plain(enc.encode(value)), expiration: __NOW__ + globalThis.Math.trunc(ttl / 1000) * 1000 });
     },
     async delete(key) {
       store.delete(key);
@@ -1154,9 +1153,6 @@ pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; m
     },
     async getWith(key, options) {
       checkKey(key);
-      if (options.cacheTtl.tag === "Some" && globalThis.Math.ceil(options.cacheTtl.value / 1000) < 30) {
-        fault(`a cacheTtl is at least 30 seconds, not ${options.cacheTtl.value} ms`);
-      }
       const e = store.get(key);
       return e === undefined ? None : Some({ value: dec.decode(e.bytes), metadata: new globalThis.Map(e.metadata) });
     },

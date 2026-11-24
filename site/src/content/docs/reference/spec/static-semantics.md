@@ -902,11 +902,15 @@ lookarounds as matching anything (analysing each lookaround body as a pattern of
 its own), and a backreference as an optional copy of its group. So it can reject
 a pattern that is in fact safe, never accept one that is not.
 
-`InRange` bounds MUST match the numeric base (v0.21): integer bounds on
-`Int`, float bounds on `Float`. A bound of the other numeric type, or a
-mixed pair, is `bynk.types.no_numeric_coercion`.
+`InRange`, `AtLeast` and `AtMost` bounds MUST match the numeric base (v0.21,
+#3948): integer bounds on `Int`, float bounds on `Float`, decimal bounds on
+`Decimal`, `Duration` literals on `Duration`. A bound of the other type, or a
+mixed pair, is `bynk.types.no_numeric_coercion`. `NonNegative`, `Positive`,
+`InRange`, `AtLeast` and `AtMost` all apply to a `Duration`, compared in
+milliseconds; no predicate applies to an `Instant` or `Bytes`.
 
-A **literal** written where a refined type is expected is admitted at compile
+A **literal** — an integer, float, decimal, string or `Duration` literal —
+written where a refined type is expected is admitted at compile
 time ([§6.4](/reference/spec/type-system/#64-admission--construction)) in these positions:
 return (block tail), a `let` with a type annotation, an `Ok`/`Some`/`Err`
 payload, and a refined-typed call argument — including a cross-context call's
@@ -2534,14 +2538,18 @@ never a context (`bynk.adapter.consumes_context`).
 or with conflicting visibility, and an exported capability MUST have a provider
 (the `bynk.exports.*` codes). A value crossing a boundary MUST be structurally
 compatible with the receiving side ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries),
-`bynk.boundary.structural_mismatch`); outside its owning context, a context-owned
-type MUST NOT be built through its constructors (`.of`, `.unsafe`, a variant) and
-an opaque export MUST NOT be built with record syntax or inspected
-(`bynk.context.external_construction`, `bynk.context.opaque_inspection`), nor
-decoded from JSON (`bynk.context.external_decode`); a
-field read on a value of an opaque export is an inspection, however the value
-was bound. A transparent record's fields are shared, so a consumer MAY build
-one with record syntax. A consumer MAY read the fields of a value whose type the
+`bynk.boundary.structural_mismatch`); outside its owning context, a
+context-owned type MUST NOT be built through its constructors (`.of`,
+`.unsafe`, a variant) and an opaque export MUST NOT be built with record syntax
+or inspected (`bynk.context.external_construction`,
+`bynk.context.opaque_inspection`), nor decoded from JSON
+(`bynk.context.external_decode`); a field read on a value of an opaque export is
+an inspection, however the value was bound. A transparent record's fields are
+shared, so a consumer MAY build one with record syntax. A type an **adapter**
+exports `transparent` is constructible by a consumer in every ordinary form —
+`.of` on a refined type, a variant of a sum, record syntax — because an adapter's
+values are linked into each consumer (`.unsafe` and an opaque export stay the
+owner's). A consumer MAY read the fields of a value whose type the
 providing context declares but does not export; the read is checked against
 that declaration ([§6.5](/reference/spec/type-system/#65-type-compatibility--boundaries)). These rules hold in every body — functions, service and agent handlers,
 and provider operations.

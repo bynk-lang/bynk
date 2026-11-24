@@ -4,7 +4,7 @@
 import { Ok, Err, Some, None, type Result, type Option } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { KvExpiration, KvKey, KvListing } from "../../bynk/cloudflare.js";
+import { KvExpiration, KvKey, KvListing, KvTtl } from "../../bynk/cloudflare.js";
 
 import * as bynk from "../../bynk.js";
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
@@ -16,8 +16,8 @@ export const __BlobsToken: symbol = globalThis.Symbol("Blobs");
 
 export const store = {
   async call(id: string, who: string, deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<string> {
-    const __r0 = await deps.Kv.putWith(id, "body", { expiration: KvExpiration.After(1800000), metadata: new globalThis.Map(new globalThis.Map<string, string>()).set("user", who) });
-    const found = await deps.Kv.getWith(id, { cacheTtl: Some(45000) });
+    const __r0 = await deps.Kv.putWith(id, "body", { expiration: KvExpiration.After((1800000 as bynk_cloudflare.KvTtl)), metadata: new globalThis.Map(new globalThis.Map<string, string>()).set("user", who) });
+    const found = await deps.Kv.getWith(id, { cacheTtl: Some((45000 as bynk_cloudflare.KvCacheTtl)) });
     switch (found.tag) {
       case "Some": {
         const e = found.value;
@@ -32,8 +32,19 @@ export const store = {
 };
 
 export const expireSoon = {
-  async call(id: string, deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<void> {
-    return deps.Kv.putWith(id, "body", { expiration: KvExpiration.After(10000), metadata: new globalThis.Map<string, string>() });
+  async call(id: string, seconds: number, deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<boolean> {
+    const __r0 = KvTtl.of(seconds * 1000);
+    switch (__r0.tag) {
+      case "Ok": {
+        const ttl = __r0.value;
+        const __r1 = await deps.Kv.putWith(id, "body", { expiration: KvExpiration.After(ttl), metadata: new globalThis.Map<string, string>() });
+        return true;
+      }
+      case "Err": {
+        return false;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
   },
 };
 
@@ -46,7 +57,7 @@ export const expireAt = {
 
 export const ttlListed = {
   async call(deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<boolean> {
-    const __r0 = await deps.Kv.putTtl("t:1", "v", 120);
+    const __r0 = await deps.Kv.putTtl("t:1", "v", (120000 as bynk_cloudflare.KvTtl));
     const page = await deps.Kv.listPage({ prefix: Some("t:"), cursor: None, limit: None });
     return (page.keys).length === 1 && (page.keys).every((__x: KvKey) => ((k: KvKey) => (k.expiration.tag === "Some"))(__x));
   },
