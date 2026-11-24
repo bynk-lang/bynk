@@ -328,10 +328,6 @@ pub(in crate::emitter) fn lower_bytes_kernel(
             let kids = operands(&mut pre, cx, &[receiver, other]);
             Some(plain_call("__bynkBytesConcat", kids))
         }
-        (BytesOp::Compare, [other]) => {
-            let kids = operands(&mut pre, cx, &[receiver, other]);
-            Some(plain_call("__bynkBytesCompare", kids))
-        }
         (BytesOp::ToHex, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("__bynkBytesToHex", kids))
@@ -1050,12 +1046,6 @@ mod tests {
                 "Bytes { b.concat(c) }",
                 "__bynkBytesConcat(b, c)",
                 "__bynkBytesConcat",
-            ),
-            (
-                "b: Bytes, c: Bytes",
-                "Int { b.compare(c) }",
-                "__bynkBytesCompare(b, c)",
-                "__bynkBytesCompare",
             ),
             (
                 "b: Bytes",

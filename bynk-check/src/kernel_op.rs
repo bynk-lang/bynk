@@ -96,6 +96,7 @@ kernel_ops! {
         FlatMap = "flatMap", "flatMap(f: T -> List[U]) -> List[U]";
         SortBy = "sortBy", "sortBy(key: T -> K) -> List[T]";
         SortByDescending = "sortByDescending", "sortByDescending(key: T -> K) -> List[T]";
+        SortWith = "sortWith", "sortWith(compare: (T, T) -> Ordering) -> List[T]";
         Take = "take", "take(n: Int) -> List[T]";
         Skip = "skip", "skip(n: Int) -> List[T]";
         Distinct = "distinct", "distinct() -> List[T]";
@@ -316,6 +317,11 @@ kernel_ops! {
         // K3 (#2592): RFC 3339 in UTC, `YYYY-MM-DDTHH:mm:ss.sssZ`.
         ToIso = "toIso", "toIso() -> String";
     }
+/// #3955: the universal order, on every `Ord` receiver: `a.compare(b)` answers an
+/// `Ordering`. It is not a per-type kernel, so it has its own receiver kind.
+    OrdOp {
+        Compare = "compare", "compare(other: T) -> Ordering";
+    }
 /// The `Bytes` kernel (v0.110, ADR 0142). Equality is an operator (D4, content
 /// compare); the kernel is length plus the String-interop bridge (D3). #2016
 /// (standard-library K1) adds `concat`, `slice`, `compare` (a method: `Bytes`
@@ -324,7 +330,6 @@ kernel_ops! {
         Length = "length", "length() -> Int";
         Concat = "concat", "concat(other: Bytes) -> Bytes";
         Slice = "slice", "slice(start: Int, end: Int) -> Bytes";
-        Compare = "compare", "compare(other: Bytes) -> Int";
         ToHex = "toHex", "toHex() -> String";
         ToBase64 = "toBase64", "toBase64() -> String";
         ToBase64Url = "toBase64Url", "toBase64Url() -> String";
@@ -443,6 +448,8 @@ pub enum KernelOp {
     RequestCookies(RequestCookiesOp),
     TokenClaims(TokenClaimsOp),
     Bytes(BytesOp),
+    /// #3955: `compare` on any `Ord` value.
+    Ord(OrdOp),
     Decimal(DecimalOp),
     String(StringOp),
     Option(OptionOp),
@@ -474,6 +481,7 @@ impl KernelOp {
             KernelOp::RequestCookies(o) => o.name(),
             KernelOp::TokenClaims(o) => o.name(),
             KernelOp::Bytes(o) => o.name(),
+            KernelOp::Ord(o) => o.name(),
             KernelOp::Decimal(o) => o.name(),
             KernelOp::String(o) => o.name(),
             KernelOp::Option(o) => o.name(),
@@ -930,6 +938,7 @@ mod tests {
             RequestCookiesOp,
             TokenClaimsOp,
             BytesOp,
+            OrdOp,
             DecimalOp,
             StringOp,
             OptionOp,

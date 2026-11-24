@@ -1,0 +1,35 @@
+suite demo.order
+
+case "compare answers an Ordering on every orderable type" {
+  expect describe(ints(1, 2)) == "less"
+  expect describe(ints(2, 2)) == "equal"
+  expect describe(ints(3, 2)) == "greater"
+  expect describe(blobs(Bytes.fromUtf8("a"), Bytes.fromUtf8("b"))) == "less"
+}
+
+case "then breaks a tie and reverse flips an order" {
+  expect describe(versions(Version { major: 1, minor: 2, label: "a" }, Version { major: 1, minor: 3, label: "a" })) == "less"
+  expect describe(versions(Version { major: 2, minor: 0, label: "a" }, Version { major: 1, minor: 9, label: "z" })) == "greater"
+  expect describe(versions(Version { major: 1, minor: 1, label: "b" }, Version { major: 1, minor: 1, label: "a" })) == "greater"
+  let lt = Ordering.Less
+  let eq = Ordering.Equal
+  expect describe(lt.reverse()) == "greater"
+  expect describe(eq.reverse()) == "equal"
+}
+
+case "sortWith sorts by the comparator, stably" {
+  let a = Version { major: 1, minor: 2, label: "a" }
+  let b = Version { major: 2, minor: 1, label: "b" }
+  let c = Version { major: 1, minor: 1, label: "c" }
+  expect newestFirst([a, b, c]) == [b, a, c]
+  expect byMinorThenLabel([a, b, c]) == [c, b, a]
+}
+
+case "a variant name is an Ordering only where the context says so" {
+  expect isBefore(1, 2)
+  expect !isBefore(2, 1)
+  expect stepOf(1, 2) == Less
+  expect stepOf(2, 1) == More
+  expect ranked(Equal)
+  expect !ranked(Greater)
+}

@@ -25,7 +25,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use bynk_syntax::ast::{BaseType, FnDecl, FnName, Ident, TypeBody, TypeDecl, TypeRef};
+use bynk_syntax::ast::{BaseType, Expr, FnDecl, FnName, Ident, TypeBody, TypeDecl, TypeRef};
 use bynk_syntax::error::{Applicability, CompileError};
 use bynk_syntax::span::Span;
 
@@ -94,6 +94,8 @@ pub(crate) enum OrdSite<'a> {
     /// #3962: a keyless `List` ordering kernel (`sort()`, `min()`, `max()`), which
     /// orders the element itself.
     Element(&'a str),
+    /// #3955: the receiver of `a.compare(b)`.
+    Receiver(&'a str),
     /// A call to an `Ord`-bounded callee: `callee` requires `param: Ord`.
     Call { callee: &'a str, param: &'a str },
 }
@@ -110,6 +112,7 @@ pub(crate) fn check_ord(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite) -> 
         OrdSite::Operator(op) => format!("operator `{op}` orders values of this type"),
         OrdSite::Key(method) => format!("`{method}` orders by this key"),
         OrdSite::Element(method) => format!("`{method}` orders the elements"),
+        OrdSite::Receiver(method) => format!("`{method}` orders its receiver"),
         OrdSite::Call { callee, param } => format!("`{callee}` requires `{param}: Ord`"),
     };
     require_ord_vars(ctx, ty, span, &clause)
@@ -130,6 +133,10 @@ fn report_not_orderable(ctx: &mut Ctx, ty: TyId, span: Span, site: &OrdSite, blo
         OrdSite::Element(method) => (
             "bynk.types.not_orderable",
             format!("`{method}` needs an orderable element type, but `{shown}` is not"),
+        ),
+        OrdSite::Receiver(method) => (
+            "bynk.types.not_orderable",
+            format!("`{method}` needs an orderable receiver, but `{shown}` is not"),
         ),
         OrdSite::Call { callee, param } => (
             "bynk.types.not_orderable",
@@ -420,4 +427,53 @@ fn irregular_self_reference(t: &TypeRef, decl: &TypeDecl, params: &[&str]) -> bo
         }
         _ => false,
     }
+}
+
+// -- `compare` (#3955) --
+
+/// The `Ordering` type a unit sees, when `bynk.ordering` is in scope.
+pub(crate) fn ordering_ty(ctx: &Ctx) -> Option<TyId> {
+    let decl = ctx.input.types.get("Ordering")?;
+    Some(super::named_ty(decl, ctx.tys))
+}
+
+/// #3955: `a.compare(b)`, on every `Ord` receiver, answers an `Ordering`.
+///
+/// `None` means the call is not this method (a type that declares its own
+/// `compare`, or no `Ordering` in scope) and ordinary dispatch carries on;
+/// `Some(result)` is the checked call, recorded as a [`KernelOp::Ord`] by the
+/// caller.
+pub(crate) fn check_compare_method(
+    recv_ty: TyId,
+    method: &Ident,
+    args: &[Expr],
+    span: Span,
+    ctx: &mut Ctx,
+) -> Option<Option<TyId>> {
+    let ordering = ordering_ty(ctx)?;
+    if let Ty::Named { name, .. } = &*ctx.tys.get(recv_ty)
+        && ctx
+            .input
+            .methods
+            .get(name)
+            .is_some_and(|t| t.instance.contains_key(&method.name))
+    {
+        return None;
+    }
+    if args.len() != 1 {
+        ctx.errors.push(CompileError::new(
+            "bynk.types.method_arity",
+            span,
+            format!("`compare` takes 1 argument, got {}", args.len()),
+        ));
+        for a in args {
+            let _ = super::type_of(a, None, ctx);
+        }
+        return Some(None);
+    }
+    super::calls::check_arg(&args[0], recv_ty, "the `compare` argument", ctx);
+    if !check_ord(ctx, recv_ty, span, &OrdSite::Receiver("compare")) {
+        return Some(None);
+    }
+    Some(Some(ordering))
 }

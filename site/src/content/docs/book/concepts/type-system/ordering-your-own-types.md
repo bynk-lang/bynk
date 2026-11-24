@@ -99,6 +99,32 @@ input order (unlike `reverse(xs.sortBy(k))`, which reverses them):
 fn leaders(ts: List[Task]) -> List[Task] { ts.sortByDescending((t) => t.priority) }
 ```
 
+## Your own order: `compare` and `sortWith`
+
+When a type's declaration order is not the order you want, sort with a comparator
+of your own. `a.compare(b)` answers an `Ordering` (`Less`, `Equal` or `Greater`)
+on any orderable value, `then` breaks a tie and `reverse` flips an order, and
+`sortWith` takes a function that returns one:
+
+```bynk,fragment
+commons guide.comparator
+
+type Task = {
+	priority: Int,
+	title: String,
+}
+
+fn urgentFirst(ts: List[Task]) -> List[Task] {
+	ts.sortWith((a, b) => b.priority.compare(a.priority).then(a.title.compare(b.title)))
+}
+```
+
+Here the highest priority comes first and equal priorities sort by title. The
+sort is stable, like `sortBy`. `Ordering` needs no `uses`: a unit that calls
+`compare` or `sortWith` has it in scope. Its variants are an `Ordering` only where
+the context says so (a `match` on one, or `a.compare(b) == Less`), so a type of
+your own with a `Less` variant is unaffected; `Ordering.Less` always works.
+
 ## Generic code: `T: Ord`
 
 A generic function that orders its parameter says so, the same way `Eq` is

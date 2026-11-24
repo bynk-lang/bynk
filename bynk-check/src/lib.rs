@@ -65,6 +65,7 @@ pub mod fixtures;
 pub mod group_triggers;
 pub mod hints;
 pub mod icu;
+mod implicit_uses;
 pub mod index;
 pub mod kernel_methods;
 pub mod kernel_op;
