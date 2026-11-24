@@ -20,16 +20,16 @@ export const Frame = {
 export type RoomId = string & { readonly __brand: "shop.RoomId" };
 
 export const RoomId = {
-  of(value: string): Result<RoomId, ValidationError> {
-    return Ok(value as RoomId);
+  of(value: string): RoomId {
+    return value as RoomId;
   },
 };
 
 export type UserId = string & { readonly __brand: "shop.UserId" };
 
 export const UserId = {
-  of(value: string): Result<UserId, ValidationError> {
-    return Ok(value as UserId);
+  of(value: string): UserId {
+    return value as UserId;
   },
 };
 

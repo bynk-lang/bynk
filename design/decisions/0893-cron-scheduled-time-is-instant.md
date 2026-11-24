@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A cron handler's scheduled time is an `Instant`, not an `Int`; `svc.schedule(expr, at)` takes an `Instant`
-breaking: A cron handler declared `(at: Int)` is now `bynk.cron.bad_params`, and a test's `svc.schedule("…", 3600000)` address needs an `Instant`; write `(at: Instant)`, `Instant.fromEpochMillis(3600000)`, and `at.toEpochMillis()` where the body needs the number.
----
+# 0893 — The cron scheduled time is an `Instant`
 
-## ADR: cron-scheduled-time-is-instant
-title: The cron scheduled time is an `Instant`
-summary: `at: Int` becomes `bynk.cron.bad_params` now; the schedule test address takes an `Instant` only
+- **Status:** Accepted (v0.644)
 
 **Context.** Cron (v0.10) predates `Instant` (v0.90, ADR 0114), so the scheduled
 time was still handed to a handler as a bare epoch-millisecond `Int`, the last
