@@ -442,9 +442,11 @@ fn for_all_draws_across_the_realistic_domain_of_each_plain_type() {
         .expect("a float");
     assert!((1001.0..1_000_000.0).contains(&x), "{x}");
     // A duration beyond a day.
-    assert_eq!(shown("durations stay under a day"), "d = 86400000");
+    assert_eq!(shown("durations stay under a day"), "d = 1.day");
     // These claims fail only inside a band no boundary value reaches, so they are found false
     // through the random draw alone. The first number in a counterexample is the value.
+    // The counterexample prints in Bynk form: a decimal literal, `<n>.<unit>` for a duration, or
+    // `Instant.fromEpochMillis(n)`; read each back as a number (milliseconds for the times).
     let number = |name: &str| -> f64 {
         let text = shown(name);
         let start = text.find(|c: char| c.is_ascii_digit()).expect("a number");
@@ -452,7 +454,26 @@ fn for_all_draws_across_the_realistic_domain_of_each_plain_type() {
             .chars()
             .take_while(|c| c.is_ascii_digit() || *c == '.')
             .collect();
-        digits.parse().expect("a number")
+        let digits = digits.trim_end_matches('.');
+        let n: f64 = digits.parse().expect("a number");
+        let unit = &text[start + digits.len()..];
+        let unit = unit.trim_start_matches('.');
+        let per = [
+            ("milliseconds", 1.0),
+            ("millisecond", 1.0),
+            ("seconds", 1_000.0),
+            ("second", 1_000.0),
+            ("minutes", 60_000.0),
+            ("minute", 60_000.0),
+            ("hours", 3_600_000.0),
+            ("hour", 3_600_000.0),
+            ("days", 86_400_000.0),
+            ("day", 86_400_000.0),
+        ];
+        match per.iter().find(|(u, _)| unit.starts_with(u)) {
+            Some((_, ms)) if name.contains("duration") => n * ms,
+            _ => n,
+        }
     };
     let d = number("decimals stay out of the thousands");
     assert!((1000.0..100_000_000.0).contains(&d), "{d}");
