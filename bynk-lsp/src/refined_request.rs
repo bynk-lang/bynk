@@ -87,7 +87,7 @@ pub struct Clause {
 /// holding exactly when the emitter's `check` for it does. Serialised with its
 /// variant in `kind` (`{ "kind": "range", "min": 1, "max": 100 }`).
 ///
-/// Lengths are JavaScript `.length`, in UTF-16 code units. A `matches` holds
+/// Lengths are counted in code points (#3949), as `Array.from(value).length` does. A `matches` holds
 /// when `new RegExp("^(?:" + pattern + ")$")` (no flags) tests true on the
 /// value: `pattern` is as written, neither escaped nor anchored.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -274,7 +274,10 @@ fn clause(kind: &PredKind) -> Clause {
         }),
         description,
         predicate: Predicate::of(kind),
-        check: bynk_ts::print_expr(&cond),
+        // The emitted check calls the runtime's `__bynkCodePointLength`; the
+        // client has no runtime, so spell the same code-point count inline (#3949).
+        check: bynk_ts::print_expr(&cond)
+            .replace("__bynkCodePointLength(value)", "Array.from(value).length"),
         message,
     }
 }
@@ -661,21 +664,21 @@ mod tests {
     fn every_string_predicate_form() {
         let src = "commons demo\n\ntype E = String where NonEmpty\ntype Lo = String where MinLength(3)\ntype Hi = String where MaxLength(2)\ntype Ex = String where Length(4)\ntype Both = String where MinLength(3) && MaxLength(5)\n";
         let e = model(src, "E");
-        assert_eq!(checks(&e), ["value.length > 0"]);
+        assert_eq!(checks(&e), ["Array.from(value).length > 0"]);
         assert_eq!(e.clauses[0].description, "length ≥ 1");
         assert!(e.examples.iter().all(|s| !s.is_empty()));
         let lo = model(src, "Lo");
-        assert_eq!(checks(&lo), ["value.length >= 3"]);
+        assert_eq!(checks(&lo), ["Array.from(value).length >= 3"]);
         assert!(lo.examples.iter().all(|s| s.len() >= 3));
         let hi = model(src, "Hi");
-        assert_eq!(checks(&hi), ["value.length <= 2"]);
+        assert_eq!(checks(&hi), ["Array.from(value).length <= 2"]);
         assert!(hi.examples.iter().all(|s| s.len() <= 2));
         assert!(
             hi.examples.contains(&String::new()),
             "the empty string is in MaxLength's domain"
         );
         let ex = model(src, "Ex");
-        assert_eq!(checks(&ex), ["value.length === 4"]);
+        assert_eq!(checks(&ex), ["Array.from(value).length === 4"]);
         assert_eq!(ex.clauses[0].message, "length must be exactly 4");
         assert!(ex.examples.iter().all(|s| s.len() == 4));
         let both = model(src, "Both");

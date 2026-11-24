@@ -218,8 +218,8 @@ pub(crate) fn const_literal(e: &Expr) -> Option<ConstLit> {
 /// expected base type doesn't match the literal (e.g. a length predicate on an
 /// int) returns `true` here — the base/predicate mismatch is a declaration-time
 /// error reported by `check_refinement`, not a construction concern. String
-/// length is measured in Unicode scalar values, which agrees with JS `.length`
-/// for the BMP (the range fixtures use ASCII).
+/// length is measured in code points (#3949), the unit the emitted run-time
+/// check (`__bynkCodePointLength`), `chars()` and OpenAPI's `maxLength` use too.
 pub(crate) fn eval_predicate(pred: &PredKind, lit: &ConstLit) -> bool {
     match (pred, lit) {
         (PredKind::NonNegative, ConstLit::Int(n)) => *n >= 0,

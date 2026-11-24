@@ -2,16 +2,17 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Username = string & { readonly __brand: "Username" };
 
 export const Username = {
   of(value: string): Result<Username, ValidationError> {
-    if (!(value.length >= 3)) {
+    if (!(__bynkCodePointLength(value) >= 3)) {
       return Err({ field: "Username", message: "length must be at least 3", value });
     }
-    if (!(value.length <= 20)) {
+    if (!(__bynkCodePointLength(value) <= 20)) {
       return Err({ field: "Username", message: "length must be at most 20", value });
     }
     if (!(new globalThis.RegExp("^(?:" + "[a-z0-9_]+" + ")$").test(value))) {

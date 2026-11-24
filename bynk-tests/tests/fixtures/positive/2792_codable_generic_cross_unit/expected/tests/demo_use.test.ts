@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 import * as __ns_demo_use from "./../demo/use.js";
@@ -181,7 +182,7 @@ export function __deserialise_Code(json: __JsonValue, path: string = "$"): Resul
   if (typeof json !== "string") {
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
-  if (!(json.length >= 3)) {
+  if (!(__bynkCodePointLength(json) >= 3)) {
     return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "length must be at least 3", value: json } });
   }
   return Ok(json as unknown as __ns_demo_shapes.Code);

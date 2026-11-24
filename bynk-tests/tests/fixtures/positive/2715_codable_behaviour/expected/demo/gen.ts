@@ -2,6 +2,7 @@
 // commons demo.gen
 
 import { Ok, Err, type Result, type Option } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError, DecodeError } from "../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { __bynkCodecList, __bynkCodecMap, __bynkCodecOption, __bynkCodecResult, __bynkCodecSet } from "../__bynk_runtime/codec.js";
@@ -33,7 +34,7 @@ export type Email = string & { readonly __brand: "Email" };
 
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
-    if (!(value.length >= 3)) {
+    if (!(__bynkCodePointLength(value) >= 3)) {
       return Err({ field: "Email", message: "length must be at least 3", value });
     }
     return Ok(value as Email);

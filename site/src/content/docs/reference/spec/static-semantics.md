@@ -340,8 +340,11 @@ follows:
 - `Int`, `Duration` and `Instant` order numerically; a refined type orders as
   its base.
 - `Decimal` orders numerically, ignoring scale: `1.2d` and `1.20d` are equal.
-- `String` orders by **UTF-16 code unit**, element by element, a proper prefix
-  first. This is not Unicode code-point or locale order.
+- `String` orders by **code point**, element by element, a proper prefix first.
+  This is also UTF-8 byte order, so it agrees with storage key order and
+  SQLite's `BINARY` collation. It is not locale order, and it is not UTF-16
+  code-unit order, which differs for a character above U+FFFF against one in
+  U+E000..U+FFFF.
 - `Bytes` orders **lexicographically over unsigned octets**, a proper prefix
   first.
 - `Float` orders as a **total order**: `NaN` sorts after every other value and

@@ -2,6 +2,7 @@
 // context shop.orders
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import { type __JsonValue, type __BoundaryError, type __ServiceBinding, __callService } from "../../__bynk_runtime/boundary.js";
 
@@ -9,7 +10,7 @@ export type OrderId = string & { readonly __brand: "shop.orders.OrderId" };
 
 export const OrderId = {
   of(value: string): Result<OrderId, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "OrderId", message: "must be non-empty", value });
     }
     return Ok(value as OrderId);

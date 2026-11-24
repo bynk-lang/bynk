@@ -2,13 +2,14 @@
 // commons t.core
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Repo = string & { readonly __brand: "Repo" };
 
 export const Repo = {
   of(value: string): Result<Repo, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Repo", message: "must be non-empty", value });
     }
     return Ok(value as Repo);

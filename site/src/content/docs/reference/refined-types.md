@@ -31,12 +31,16 @@ the base's own type: `0`, `0.0` or `0.00d`.
 | Predicate | Holds when |
 |---|---|
 | `NonEmpty` | length ≥ 1 |
-| `MinLength(n)` | length ≥ n |
-| `MaxLength(n)` | length ≤ n |
-| `Length(n)` | length = n |
+| `MinLength(n)` | length ≥ n, counted in code points |
+| `MaxLength(n)` | length ≤ n, counted in code points |
+| `Length(n)` | length = n, counted in code points |
 | `Matches(regex)` | the whole string matches `regex` (anchored) |
 | `IsoDate` | a calendar date, exactly `YYYY-MM-DD` (years 0000-9999), and a date that exists |
 | `Cron` | a valid Cloudflare cron schedule: five fields separated by exactly one space ([cron](/reference/cron/)) |
+
+A `String`'s predicate length is in **code points**, so an emoji counts once; it agrees with
+`chars()` and with the `maxLength` of the published OpenAPI. `s.length()` is different: it counts
+UTF-16 code units, so `"🙂".length()` is `2`.
 
 `IsoDate` is the date half of RFC 3339 and the date rule `Instant.fromIso`
 applies: months and days must exist (`2028-02-29` and `2000-02-29` do,

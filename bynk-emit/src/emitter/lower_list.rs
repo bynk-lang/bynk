@@ -1488,7 +1488,7 @@ pub(super) fn kernel_key_comparator(key: &Expr, cx: &LowerCtx) -> Option<TsExpr>
     };
     let plain = matches!(
         ret.base(tys.types()),
-        Some(BaseType::Int | BaseType::String | BaseType::Duration | BaseType::Instant)
+        Some(BaseType::Int | BaseType::Duration | BaseType::Instant)
     );
     (!plain).then(|| cx.comparator(*ret))
 }

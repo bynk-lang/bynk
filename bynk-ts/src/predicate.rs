@@ -215,9 +215,11 @@ pub fn pred_condition_and_message_over(
     }
 
     let recv = || receiver.clone();
-    let recv_length = || TsExpr::Member {
-        object: Box::new(recv()),
-        property: "length".to_string(),
+    // #3949: a `String` predicate counts code points, as the compile-time check
+    // and OpenAPI's `maxLength` do, not UTF-16 code units (`.length`).
+    let recv_length = || TsExpr::Call {
+        callee: Box::new(TsExpr::Ident("__bynkCodePointLength".to_string())),
+        args: vec![recv()],
     };
     let num = |n: String| TsExpr::Lit(TsLit::Num(n));
     let cmp = |op, left, right| TsExpr::Binary {

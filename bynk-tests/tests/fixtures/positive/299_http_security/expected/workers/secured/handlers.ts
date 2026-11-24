@@ -2,6 +2,7 @@
 // context secured
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
@@ -10,7 +11,7 @@ export type ShortCode = string & { readonly __brand: "secured.ShortCode" };
 
 export const ShortCode = {
   of(value: string): Result<ShortCode, ValidationError> {
-    if (!(value.length >= 3)) {
+    if (!(__bynkCodePointLength(value) >= 3)) {
       return Err({ field: "ShortCode", message: "length must be at least 3", value });
     }
     return Ok(value as ShortCode);
