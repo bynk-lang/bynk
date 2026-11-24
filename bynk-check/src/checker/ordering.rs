@@ -435,13 +435,11 @@ fn irregular_self_reference(t: &TypeRef, decl: &TypeDecl, params: &[&str]) -> bo
 /// own that is called `Ordering` is not it: `compare` and `sortWith` produce the
 /// first-party runtime values, so only the declaration from that unit counts.
 pub(crate) fn ordering_ty(ctx: &Ctx) -> Option<TyId> {
-    let decl = ctx.input.types.get("Ordering")?;
-    let unit = crate::firstparty::UNITS
-        .iter()
-        .find(|u| u.name == bynk_std::ORDERING_UNIT)?;
-    if decl.span.file != crate::project_model::firstparty_file_id(unit) {
-        return None;
-    }
+    let decl = ctx
+        .input
+        .types
+        .get("Ordering")
+        .filter(|d| crate::resolver::is_prelude_type(d))?;
     Some(super::named_ty(decl, ctx.tys))
 }
 

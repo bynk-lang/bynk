@@ -751,6 +751,12 @@ for any capability. `Queue` is experimental: list `"bynk.cloudflare.Queue"`
 under `[unstable] allow`. `bynk deploy` creates the queue when it is missing;
 see [Deploy to Cloudflare](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#queues).
 
+A consumer reads what the platform knows about a delivery by taking a `QueueDelivery` as a
+second `on message` parameter: `attempts: Int`, the times the consumer has been given the
+message starting at 1, and `sentAt: Instant`, when it was sent. It is a plain record of
+`bynk.cloudflare` (`consumes bynk.cloudflare { QueueDelivery }`), not experimental. See
+[Queue](/reference/queue/#delivery-metadata).
+
 ### Writing events: `Analytics`
 
 `Analytics` writes events to a Workers Analytics Engine dataset. Each dataset is

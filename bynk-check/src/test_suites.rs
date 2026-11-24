@@ -3310,7 +3310,7 @@ pub fn remote_unsupported(
             } if address == "schedule" => Some(service.clone()),
             Callee::TestService {
                 service,
-                address: checker::HandlerAddress::Message,
+                address: checker::HandlerAddress::Message { .. },
                 ..
             } if address == "message" => Some(service.clone()),
             _ => None,

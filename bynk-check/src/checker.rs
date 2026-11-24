@@ -1035,8 +1035,10 @@ pub enum HandlerAddress {
         expr: Option<String>,
         param: Option<usize>,
     },
-    /// `svc.message(msg)`: the queue `on message` handler.
-    Message,
+    /// `svc.message(msg)`: the queue `on message` handler. #3880: `delivery` is the position
+    /// among the handler's parameters of its `QueueDelivery` one, which the address fills from
+    /// its optional second argument, or from the default delivery.
+    Message { delivery: Option<usize> },
     /// `svc.event(payload, …)`: the `on event` handler.
     Event,
     /// A WebSocket lifecycle address on a `TestConnection`.
@@ -1099,7 +1101,7 @@ impl HandlerAddress {
             HandlerAddress::Schedule {
                 expr: Some(expr), ..
             } => format!("schedule {expr}"),
-            HandlerAddress::Message => "message".to_string(),
+            HandlerAddress::Message { .. } => "message".to_string(),
             HandlerAddress::Event => "event".to_string(),
             HandlerAddress::Ws(WsAddress::Open) => "ws open".to_string(),
             HandlerAddress::Ws(WsAddress::Message { .. }) => "ws message".to_string(),

@@ -1343,10 +1343,15 @@ order. A receiver that is not `Ord` is `bynk.types.not_orderable`. A type of
 your own that declares a method named `compare` keeps it: the built-in does not
 apply to that receiver.
 
-`Ordering` needs no `uses`: a unit that calls `.compare` or `.sortWith`, or
-names `Ordering`, has the `bynk.ordering` commons in scope as if it had written
-`uses bynk.ordering`. `compare` is not available in a single-file program
-(`bynk check page.bynk`), which has no other units to reach.
+`Ordering` is a **prelude type**: it can be named with no import in every
+commons and context, as `Option` can. A unit that names `Ordering` or calls
+`.compare` or `.sortWith` has the `bynk.ordering` commons in scope as if it had
+written `uses bynk.ordering`; a unit that never mentions them is unchanged, and
+nothing is emitted for it. A type of your own named `Ordering` takes precedence
+in your unit. Building `Ordering.Less` inside a context is not a rebrand
+construction: the type is shared by every context as it is. `compare` is not
+available in a single-file program (`bynk check page.bynk`), which has no other
+units to reach.
 
 Its variants name an `Ordering` only where the context says so: an expected type
 (`-> Ordering { Less }`), the other operand of `==`, `!=` or an ordering
