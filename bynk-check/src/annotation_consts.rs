@@ -63,6 +63,9 @@ const STORE_RULES: &[ArgRule] = &[
 /// An event's annotation: `@schema(n)`.
 const EVENT_RULES: &[ArgRule] = &[rule("schema", None, BaseType::Int)];
 
+/// An agent's annotation: `@busyAfter(d)`.
+const AGENT_RULES: &[ArgRule] = &[rule("busyAfter", None, BaseType::Duration)];
+
 /// A handler's annotations: `@cache(maxAge:, immutable:)`, `@limit(…)` and
 /// `@raw(contentType:)`. The keyword arguments (`@cache(scope: public)`,
 /// `@json(options: plain)`) and `@indexed(by:)` name words or fields, not
@@ -294,6 +297,7 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
                 changed |= rewrite_handlers(&mut svc.handlers, scope, refs)
             }
             CommonsItem::Agent(agent) => {
+                changed |= rewrite_annotations(&mut agent.annotations, AGENT_RULES, scope, refs);
                 for f in &mut agent.store_fields {
                     changed |= rewrite_annotations(&mut f.annotations, STORE_RULES, scope, refs);
                 }

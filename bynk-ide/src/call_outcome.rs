@@ -109,8 +109,8 @@ pub fn outcome_signature(
     label
 }
 
-/// Hover on a built-in member of an effect: the `within`, `race` or `detach` of an `Effect`, or
-/// the `outcome` of a service call.
+/// Hover on a built-in member: the `within`, `race` or `detach` of an `Effect`, the `outcome` of a
+/// service call, or (#3932) the `@busyAfter` of an agent.
 pub fn describe_member_at(
     text: &str,
     offset: usize,
@@ -119,6 +119,7 @@ pub fn describe_member_at(
 ) -> Option<String> {
     crate::symbols::describe_effect_method_at(text, offset, expr_types, tys)
         .or_else(|| describe_outcome_at(text, offset, expr_types, tys))
+        .or_else(|| crate::agent_busy::describe_busy_after_at(text, offset))
 }
 
 /// Hover on the `outcome` of `<context>.<service>.outcome(args)` or `Agent(key).op.outcome(args)`:
