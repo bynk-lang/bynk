@@ -3032,6 +3032,15 @@ pub struct Refinement {
     pub span: Span,
 }
 
+/// #3946: whether `T.of(value)` is total, returning `T` rather than
+/// `Result[T, ValidationError]`. True for a named type (`type Id = Int`): not
+/// opaque, and a refinement with no predicates (annotations alone are not a
+/// predicate). `Float` is the exception: its finite-number check is part of
+/// the type (ADR 0040), so a `Float` named type stays fallible.
+pub fn of_is_total(base: BaseType, refinement: Option<&Refinement>, opaque: bool) -> bool {
+    !opaque && base != BaseType::Float && refinement.is_none_or(|r| r.predicates.is_empty())
+}
+
 #[derive(Debug, Clone)]
 pub struct RefinementPred {
     pub kind: PredKind,

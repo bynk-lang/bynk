@@ -977,15 +977,21 @@ no general `panic` — use `Result` for any failure a caller could handle. `Neve
 cannot be written in source, and a lambda whose body is only a fault call gets its
 type from the expected function type.
 
-## Type aliases
+## Named types
 
 ```bynk
 type Id = Int
 ```
 
-An alias introduces a distinct named type. Even a plain alias is branded in the
-emitted TypeScript and carries a `.of` constructor (like any refined type, it has
-no `.unsafe` — that is opaque-only; ADR 0182).
+A named type is a **distinct nominal type**, not a transparent synonym: an `Id`
+is not an `Int`, and it is branded in the emitted TypeScript. It carries a `.of`
+constructor (like any refined type, it has no `.unsafe` — that is opaque-only;
+ADR 0182). While the type has no predicate, `Id.of(n)` cannot fail and returns
+`Id` directly; adding a `where` clause turns it into
+`Result[Id, ValidationError]`, so every call site that can now fail becomes a type
+error until it handles the failure. (The rule is "no predicate and no implicit base
+check": a `Float` named type stays fallible, since `.of` also rejects `NaN` and
+infinities.)
 
 ## Record types
 

@@ -41,6 +41,12 @@ A compiled type carrying a unique tag so values of distinct Bynk types cannot be
 interchanged in the emitted TypeScript; how opaque types stay distinct. See
 [Emission](/reference/tooling/emission/).
 
+### named type {#term-named-type}
+
+A `type` over a base with no `where` clause, e.g. `type Id = Int`: a distinct
+nominal type, not a transparent alias. Its `.of` cannot fail, so it returns the
+type itself. See [Type system](/reference/types/#named-types).
+
 ### opaque type {#term-opaque-type}
 
 A type whose representation is hidden outside its defining module; constructed and
@@ -79,7 +85,8 @@ predicate is accepted directly (lowering to an inline brand cast), with no
 ### `.of` / `.unsafe` {#term-of-unsafe}
 
 `.of` validates at run time and returns a `Result` — the constructor for both
-refined and opaque types. `.unsafe` constructs without a check and is
+refined and opaque types. On a named type with no predicate nothing can fail, so
+`.of` returns the type directly. `.unsafe` constructs without a check and is
 **opaque-only**, usable within the opaque type's defining `commons`; a refined
 type has no `.unsafe` (ADR 0182). See
 [Refined-type API](/reference/refined-types/).
