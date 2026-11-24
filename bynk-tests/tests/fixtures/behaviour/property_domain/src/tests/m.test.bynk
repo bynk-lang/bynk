@@ -31,4 +31,42 @@ suite demo.m {
       expect p >= 0 && p <= 100
     }
   }
+
+  // Each claim below fails only inside a band no boundary value reaches, so it is found false
+  // through the random draw alone.
+  property "decimals stay out of the thousands" {
+    for all d: Decimal {
+      expect d < 1000d || d > 100000000d
+    }
+  }
+
+  property "byte strings stay short" {
+    for all b: Bytes {
+      expect b.length() < 5
+    }
+  }
+
+  property "durations avoid two days to a year" {
+    for all d: Duration {
+      expect d < 2.days || d > 365.days
+    }
+  }
+
+  property "instants avoid a band of epoch milliseconds" {
+    for all t: Instant {
+      expect t.toEpochMillis() < 200000000 || t.toEpochMillis() > 30000000000
+    }
+  }
+
+  property "floats stay below a trillion" {
+    for all x: Float {
+      expect x < 1000000000000.0
+    }
+  }
+
+  property "a length-bounded string stays within its limit" {
+    for all t: Tag {
+      expect t.chars().length() <= 3
+    }
+  }
 }

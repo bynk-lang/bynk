@@ -1787,17 +1787,19 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | plain `Bool` | `true` and `false` |
 | plain `Bytes` | 0 to 64 octets, with `0` and `255` over-represented, led by empty, `[0]`, `[255]` and `[0, 255]`; shrinks toward empty, then to shorter and all-zero |
 | plain `Decimal` | any sign, scale 0 to 8 and coefficients up to ±10¹⁸, led by `0`, `±1`, `±0.05` and `12.345`; shrinks toward `0` at scale 0 |
-| plain `Duration` | any sign, up to about ±8.64 × 10¹⁵ ms (a JavaScript `Date`'s reach), led by `0`, `±1` ms and a day; shrinks toward `0` |
+| plain `Duration` | any sign, in whole milliseconds across a day, a month, a present-day epoch and up to ±8.64 × 10¹⁵ (a JavaScript `Date`'s reach), led by `0`, `±1` ms, a day and the limits; shrinks toward `0` through whole values |
 | plain `Float` | finite values only: mostly `-1000` to `1000`, plus `0`, `-0` and magnitudes from about `1e-300` to `1e300`, led by `0`, `-0`, `±1`, `±1e300` and `5e-324`; shrinks toward `0`. Never `NaN` or `±Infinity`: the [wire](/reference/wire-format/) encoding and `==` for the non-finite values are not settled |
-| plain `Instant` | as a plain `Duration`, as milliseconds from the epoch; shrinks toward the epoch |
+| plain `Instant` | as a plain `Duration`, as milliseconds from the epoch (so present-day timestamps appear); shrinks toward the epoch |
 | plain `Int` | mostly small, with magnitudes up to about 2³¹ and the boundaries `0`, `±1` and the safe-integer limits `±(2⁵³ − 1)`; shrinks toward `0` |
 | plain `String` | 0 to 64 characters: letters of either case, digits, whitespace, punctuation, accented, CJK and astral characters, led by `""`, `" "`, `"A"`, a newline, `"é"` and `"😀"`; shrinks toward shorter strings, a code point at a time |
 
 A **refinement narrows the draw**: `Int where InRange(a, b)` stays in `[a, b]`, `Float
 where InRange(…)` in its range, `String where MaxLength(k)` within `k` characters, and
 so on. A plain `Int`'s draw reaches the safe-integer limits only through its boundary
-values, so a property that adds or multiplies two generated `Int`s can overflow at the
-limit: that is a finding about the claim, not about the generator.
+values, so a property that adds or multiplies two generated `Int`s can lose precision at the
+limit (property bodies use plain `number` arithmetic, so `n + 2 - 2 == n` fails at `2⁵³ − 1`
+by rounding, silently, not by a fault): that is a finding about the claim, not about the
+generator.
 
 
 The plain rows are what a bare `for all x: T` draws. A record field of that type

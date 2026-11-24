@@ -434,9 +434,34 @@ fn for_all_draws_across_the_realistic_domain_of_each_plain_type() {
     assert!((1001.0..1_000_000.0).contains(&x), "{x}");
     // A duration beyond a day.
     assert_eq!(shown("durations stay under a day"), "d = 86400000");
-    // A refinement narrows the draw: the claim over `Percent` holds.
-    assert_eq!(
-        case_named(&doc, "a refined int stays inside its range")["outcome"],
-        "pass"
+    // These claims fail only inside a band no boundary value reaches, so they are found false
+    // through the random draw alone. The first number in a counterexample is the value.
+    let number = |name: &str| -> f64 {
+        let text = shown(name);
+        let start = text.find(|c: char| c.is_ascii_digit()).expect("a number");
+        let digits: String = text[start..]
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        digits.parse().expect("a number")
+    };
+    let d = number("decimals stay out of the thousands");
+    assert!((1000.0..100_000_000.0).contains(&d), "{d}");
+    let hex = shown("byte strings stay short");
+    assert!(
+        hex.matches("00").count() + hex.matches("ff").count() >= 5 || hex.len() > 24,
+        "{hex}"
     );
+    let d = number("durations avoid two days to a year");
+    assert!((172_800_000.0..31_536_000_000.0).contains(&d), "{d}");
+    let t = number("instants avoid a band of epoch milliseconds");
+    assert!((200_000_000.0..30_000_000_000.0).contains(&t), "{t}");
+    assert!(number("floats stay below a trillion") >= 1e12);
+    // A refinement narrows the draw: the claim over `Percent` holds.
+    for name in [
+        "a refined int stays inside its range",
+        "a length-bounded string stays within its limit",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
 }

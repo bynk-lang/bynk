@@ -115,9 +115,9 @@ function __bynkRng(seed: number) {
     // #4199: draws across a plain type's realistic domain. `intWide` picks a magnitude tier
     // (small, 32-bit, safe-integer) so small values stay common and the extremes still appear,
     // always inside `[lo, hi]`.
-    intWide(lo: bigint, hi: bigint): bigint {
+    intWide(lo: bigint, hi: bigint, extra: bigint[] = []): bigint {
       if (hi <= lo) return lo;
-      const tiers = [10n, 1000n, 2147483647n];
+      const tiers = [10n, 1000n, 2147483647n, ...extra];
       const span = tiers[Math.floor(next() * tiers.length)];
       let a = lo > -span ? lo : -span;
       let b = hi < span ? hi : span;
@@ -152,10 +152,13 @@ function __bynkRng(seed: number) {
       }
       return out;
     },
-    numWide(lo: number, hi: number): number { return Number(this.intWide(BigInt(lo), BigInt(hi))); },
+    // Whole milliseconds across a day, a month, a present-day epoch and a `Date`'s whole reach.
+    numWide(lo: number, hi: number): number {
+      return Number(this.intWide(BigInt(lo), BigInt(hi), [86400000n, 2592000000n, 1700000000000n, BigInt(hi)]));
+    },
     decimalWide(): { coefficient: bigint, scale: number } {
       const scale = Math.floor(next() * 9);
-      return { coefficient: this.intWide(-1000000000000000000n, 1000000000000000000n), scale };
+      return { coefficient: this.intWide(-1000000000000000000n, 1000000000000000000n, [1000000000000n, 1000000000000000000n]), scale };
     },
     bytes(min: number, max: number): Uint8Array {
       const tiers = [4, 16, 64];
@@ -198,7 +201,7 @@ function __bynkShrinkNum(v: number, floor: number): number[] {
   if (Object.is(v, floor)) return out;
   out.push(floor);
   const whole = Math.trunc(v);
-  if (whole !== v && whole >= floor) out.push(whole);
+  if (whole !== v && Math.abs(whole - floor) < Math.abs(v - floor)) out.push(whole);
   // A huge magnitude first drops by orders of magnitude, so it reaches an ordinary size within
   // the shrink budget.
   for (const f of [1e100, 1e50, 1e10, 1e3]) {
@@ -213,6 +216,10 @@ function __bynkShrinkNum(v: number, floor: number): number[] {
     cur = mid;
   }
   return out;
+}
+// A `Duration` or `Instant` is whole milliseconds, so it shrinks through the integer shrinker.
+function __bynkShrinkMillis(v: number): number[] {
+  return __bynkShrinkInt(BigInt(v), 0n).map(Number);
 }
 function __bynkShrinkDecimal(v: { coefficient: bigint, scale: number }): Array<{ coefficient: bigint, scale: number }> {
   const out: Array<{ coefficient: bigint, scale: number }> = [];

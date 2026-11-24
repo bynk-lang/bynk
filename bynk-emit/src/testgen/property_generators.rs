@@ -1002,7 +1002,7 @@ pub(super) fn binding_gen(
                 .into_iter()
                 .map(num_lit)
                 .collect(),
-            call(ident("__bynkShrinkNum"), vec![ident("v"), num_lit("0")]),
+            call(ident("__bynkShrinkMillis"), vec![ident("v")]),
         ),
         checker::Ty::Base(BaseType::Decimal) => (
             [(0i64, 0u32), (1, 0), (-1, 0), (5, 2), (-5, 2), (12345, 3)]
