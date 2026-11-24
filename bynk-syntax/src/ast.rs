@@ -5876,7 +5876,7 @@ capability Clock {
 }
 
 service greeter {
-  on call(name: String) -> Effect[String] {
+  on call(name: String) -> Effect[String] by Caller {
     Effect.pure(name)
   }
 }

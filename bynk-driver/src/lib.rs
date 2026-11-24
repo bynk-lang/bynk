@@ -1825,7 +1825,7 @@ mod tests {
         fs::create_dir_all(dir.0.join("src")).unwrap();
         fs::write(
             dir.0.join("src/greet.bynk"),
-            "context greet\n\nservice hello {\n  on call(name: String) -> Effect[Result[String, ()]] {\n    Ok(name)\n  }\n}\n",
+            "context greet\n\nservice hello {\n  on call(name: String) -> Effect[Result[String, ()]] by Caller {\n    Ok(name)\n  }\n}\n",
         )
         .unwrap();
         dir

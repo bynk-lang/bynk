@@ -6,7 +6,7 @@ capability Orders = D1
 
 // #2628: a `SqlStatement` is no `Json` codec target, in either direction.
 service fromText {
-  on call(text: String) -> Effect[Bool] given Orders {
+  on call(text: String) -> Effect[Bool] by Caller given Orders {
     match Json.decode[List[SqlStatement]](text) {
       Ok(_) => true
       Err(_) => false
@@ -15,7 +15,7 @@ service fromText {
 }
 
 service toText {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     Json.encode(SqlStatement { sql: "SELECT 1", params: [] })
   }
 }

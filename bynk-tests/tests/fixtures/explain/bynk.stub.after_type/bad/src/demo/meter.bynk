@@ -11,7 +11,7 @@ provides Meter = ZeroMeter {
 }
 
 service probe {
-  on call() -> Effect[Int] given Meter {
+  on call() -> Effect[Int] by Caller given Meter {
     Meter.read()
   }
 }

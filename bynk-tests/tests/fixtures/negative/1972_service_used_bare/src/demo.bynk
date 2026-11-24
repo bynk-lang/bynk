@@ -5,7 +5,7 @@ consumes bynk.cloudflare { Service }
 
 // #1972: a bare `Service` names no Worker.
 service probe {
-  on call() -> Effect[Int] given Service {
+  on call() -> Effect[Int] by Caller given Service {
     let req = Request {
       method: Get,
       url: "https://legacy-billing/",

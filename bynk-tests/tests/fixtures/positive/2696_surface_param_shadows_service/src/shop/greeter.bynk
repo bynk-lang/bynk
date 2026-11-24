@@ -5,13 +5,13 @@ context shop.greeter
 // parameters.
 
 service greet {
-	on call(greet: String) -> Effect[String] {
+	on call(greet: String) -> Effect[String] by Caller {
 		greet
 	}
 }
 
 service tally {
-	on call(deps: Int) -> Effect[Int] {
+	on call(deps: Int) -> Effect[Int] by Caller {
 		deps + 1
 	}
 }

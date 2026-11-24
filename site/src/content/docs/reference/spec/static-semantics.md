@@ -2292,10 +2292,14 @@ and `call` admits `Foreign` too (`bynk.actor.scheme_not_admissible`). In a sum,
 apart by name. A `Signature` handler MUST take a `body`
 parameter — the signature is computed over the request body, so a bodyless signed
 request is meaningless (`bynk.actor.signature_requires_body`). A handler that
-omits `by` inherits its protocol's default actor; an **HTTP handler has no safe
-default and MUST declare `by`** (`bynk.actor.missing_by_on_http`).
+omits `by` inherits its service header's default, else its protocol's default
+actor (cron `Scheduler`, queue `Producer`, email `Sender`); an **HTTP handler has
+no safe default and MUST declare `by`** (`bynk.actor.missing_by_on_http`), as MUST
+a WebSocket `on open` and a service's **`on call`** handler
+(`bynk.actor.missing_by_on_call`, which supersedes the earlier silent `Caller`
+default). An agent's `on call` operations are unaffected.
 
-The `Caller` prelude actor (the `on call` default) yields a **live `CallerId`**
+The `Caller` prelude actor (the explicit "any consuming context" for `on call`) yields a **live `CallerId`**
 (v0.54): a cross-context `on call … by c: Caller (…)` handler binds `c.identity`
 to the **calling context's qualified name**, established at the boundary over the
 internal Service Binding before the body runs. The name is proved by the call's
@@ -3249,7 +3253,7 @@ provides Clock = FixedClock {
 }
 
 service stamps {
-	on call(names: List[String]) -> Effect[Result[List[Int], ()]] given Clock {
+	on call(names: List[String]) -> Effect[Result[List[Int], ()]] by Caller given Clock {
 		let stamped <- traverse(names, (name) => Clock.now())
 		Ok(stamped)
 	}

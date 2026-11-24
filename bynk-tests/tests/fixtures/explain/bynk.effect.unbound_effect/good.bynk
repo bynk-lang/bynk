@@ -7,7 +7,7 @@ agent Counter {
 }
 
 service s {
-  on call() -> Effect[()] {
+  on call() -> Effect[()] by Caller {
     do Counter("k").bump()
     Effect.pure(())
   }

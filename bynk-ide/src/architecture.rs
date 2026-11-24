@@ -773,7 +773,7 @@ provides Clock = SystemClock {
 consumes platformtime { Clock }
 
 service run {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let now <- Clock.now()
     now
   }
@@ -864,7 +864,7 @@ provides Ping = SystemPing {
 consumes platformtime { Clock }
 
 service run {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let now <- Clock.now()
     now
   }
@@ -919,7 +919,7 @@ consumes platformtime { Ping }
         const PLATFORM_SRC: &str = r#"context platform
 
 service Pinger {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n
   }
 }
@@ -929,7 +929,7 @@ service Pinger {
 consumes platform
 
 service api {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let v <- platform.Pinger(n)
     v
   }
@@ -967,7 +967,7 @@ actor Admin {
 }
 
 service internal {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n
   }
 }
@@ -994,7 +994,7 @@ service staff from http by Visitor {
 type Quote = { amount: Int, currency: String }
 
 service Pricing {
-  on call(sku: String, qty: Int) -> Effect[Quote] {
+  on call(sku: String, qty: Int) -> Effect[Quote] by Caller {
     Quote { amount: qty * 100, currency: "USD" }
   }
 }
@@ -1017,7 +1017,7 @@ agent Cart {
 }
 
 service checkout {
-  on call(sku: String, qty: Int) -> Effect[Int] {
+  on call(sku: String, qty: Int) -> Effect[Int] by Caller {
     let q <- billing.Pricing(sku, qty)
     let again <- billing.Pricing(sku, 1)
     let n <- Cart(sku).add(qty)
@@ -1102,7 +1102,7 @@ provides Audit = Notes {
 }
 
 service checkout {
-  on call(sku: String, qty: Int) -> Effect[Int] {
+  on call(sku: String, qty: Int) -> Effect[Int] by Caller {
     if qty > 1 {
       let q <- b.Pricing(sku, qty)
       q.amount
@@ -1167,7 +1167,8 @@ service checkout {
                 .expect("service")
         };
         assert_eq!(svc("internal").protocol, "call");
-        assert!(svc("internal").actors.is_empty());
+        // #3891: an `on call` handler states its actor, so the service names one.
+        assert_eq!(svc("internal").actors, vec!["Caller".to_string()]);
         assert_eq!(svc("web").protocol, "http");
         assert_eq!(
             svc("web").actors,

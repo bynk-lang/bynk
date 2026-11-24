@@ -3,13 +3,13 @@ context a
 consumes b
 
 service base {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		Effect.pure(2)
 	}
 }
 
 service total {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		b.quote(2)
 	}
 }

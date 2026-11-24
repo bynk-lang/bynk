@@ -5,7 +5,7 @@ consumes tokens
 type Token = { id: Int }
 
 service check {
-  on call() -> Effect[Bool] given tokens.Jwt {
+  on call() -> Effect[Bool] by Caller given tokens.Jwt {
     let ok <- tokens.Jwt.verify(Token { id: 1 })
     ok
   }

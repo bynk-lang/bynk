@@ -9,7 +9,7 @@ fn balances(accounts: List[Account]) -> List[Int] {
 }
 
 service checkout {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     let a <- pay.open()
     Effect.pure(balances([a]).length())
   }

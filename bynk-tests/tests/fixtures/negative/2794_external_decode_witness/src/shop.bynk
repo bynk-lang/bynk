@@ -5,7 +5,7 @@ consumes pay
 fn parse[T: Codable](s: String) -> Result[T, DecodeError] { Json.decode[T](s) }
 
 service check {
-  on call(raw: String) -> Effect[Bool] {
+  on call(raw: String) -> Effect[Bool] by Caller {
     Effect.pure(parse[Token](raw).isOk())
   }
 }

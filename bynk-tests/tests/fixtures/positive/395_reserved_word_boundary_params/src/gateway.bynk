@@ -20,7 +20,7 @@ actor Oauth { auth = Oidc(issuer = "https://issuer.example.com", audience = "api
 
 // Single-param on-call dispatch: const __id_void = __r_void.value.
 service echo {
-  on call(void: String) -> Effect[Result[String, ()]] {
+  on call(void: String) -> Effect[Result[String, ()]] by Caller {
     Ok(void)
   }
 }
@@ -28,7 +28,7 @@ service echo {
 // Multi-param on-call dispatch: the argsObj["class"] key stays verbatim, but the
 // binding is const __id_class.
 service registry {
-  on call(class: String, static: String) -> Effect[Result[String, ()]] {
+  on call(class: String, static: String) -> Effect[Result[String, ()]] by Caller {
     Ok(class)
   }
 }

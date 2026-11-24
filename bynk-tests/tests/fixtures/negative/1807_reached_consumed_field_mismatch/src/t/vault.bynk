@@ -7,7 +7,7 @@ exports transparent { Ticket }
 type Ticket = { repo: Repo }
 
 service fetch {
-  on call() -> Effect[Ticket] {
+  on call() -> Effect[Ticket] by Caller {
     Effect.pure(Ticket { repo: "vault" })
   }
 }

@@ -17,7 +17,7 @@ agent Counter {
 }
 
 service bump {
-  on call(id: String) -> Effect[Result[Int, CounterError]] {
+  on call(id: String) -> Effect[Result[Int, CounterError]] by Caller {
     let c = Counter(id)
     let t <- c.increment()
     t

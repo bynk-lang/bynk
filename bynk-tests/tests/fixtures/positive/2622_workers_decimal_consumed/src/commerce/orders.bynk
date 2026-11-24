@@ -6,13 +6,13 @@ uses commerce.money
 consumes commerce.payment
 
 service placeOrder {
-  on call(total: Money) -> Effect[Result[Decimal, Int]] {
+  on call(total: Money) -> Effect[Result[Decimal, Int]] by Caller {
     commerce.payment.authorise(total)
   }
 }
 
 service quick {
-  on call() -> Effect[Result[Decimal, Int]] {
+  on call() -> Effect[Result[Decimal, Int]] by Caller {
     commerce.payment.authorise(Money { amount: 5.00d, fee: 1.00d })
   }
 }

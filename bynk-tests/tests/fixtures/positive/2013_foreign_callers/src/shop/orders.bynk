@@ -28,7 +28,7 @@ service ping {
 
 // The default `Caller`: a foreign caller is refused.
 service total {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let t <- Clock.now(n)
     t
   }

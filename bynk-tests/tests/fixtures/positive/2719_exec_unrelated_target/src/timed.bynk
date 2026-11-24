@@ -9,7 +9,7 @@ fn tick(n: Int) -> Effect[()] {
 }
 
 service ticks {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		let _ <- tick(n)
 		Effect.pure(n)
 	}

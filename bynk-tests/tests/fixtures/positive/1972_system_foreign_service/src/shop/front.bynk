@@ -3,9 +3,9 @@ context shop.front
 consumes shop.billing
 
 service close {
-	on call(id: String) -> Effect[Int] { shop.billing.settle(id) }
+	on call(id: String) -> Effect[Int] by Caller { shop.billing.settle(id) }
 }
 
 service checkout {
-	on call(id: String) -> Effect[Int] { shop.billing.charge(id) }
+	on call(id: String) -> Effect[Int] by Caller { shop.billing.charge(id) }
 }

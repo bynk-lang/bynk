@@ -17,7 +17,7 @@ agent ServiceBilling {
 }
 
 service probe {
-  on call() -> Effect[Int] given Billing {
+  on call() -> Effect[Int] by Caller given Billing {
     let req = Request {
       method: Get,
       url: "https://legacy-billing/",

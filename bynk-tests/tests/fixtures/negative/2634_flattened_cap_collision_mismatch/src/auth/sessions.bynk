@@ -5,7 +5,7 @@ consumes tokens { Jwt }
 type Token = { id: Int }
 
 service login {
-  on call(secret: String) -> Effect[Int] given Jwt {
+  on call(secret: String) -> Effect[Int] by Caller given Jwt {
     let token <- Jwt.sign("u1", secret)
     token.id
   }

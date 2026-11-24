@@ -2,7 +2,7 @@ context a
 
 // #1679: a service handler parameter type resolves, as in a `fn`.
 service s {
-  on call(v: Bogus) -> Effect[Int] {
+  on call(v: Bogus) -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

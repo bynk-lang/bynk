@@ -4,7 +4,7 @@ consumes bynk.cloudflare { Kv }
 consumes counter
 
 service intake {
-  on call(message: String) -> Effect[Int] given Kv {
+  on call(message: String) -> Effect[Int] by Caller given Kv {
     let _ <- Kv.put(message, message)
     counter.store(1)
   }

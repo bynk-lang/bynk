@@ -30,7 +30,7 @@ service api from http {
 }
 
 service upload {
-	on call(target: String) -> Effect[Int] given Fetch {
+	on call(target: String) -> Effect[Int] by Caller given Fetch {
 		let put = Request { method: Put, url: target, contentType: Some("text/plain"), authorization: None, headers: Map.empty(), body: None }
 		let parts = Stream.of([Bytes.fromUtf8("a"), Bytes.fromUtf8("b"), Bytes.fromUtf8("c")])
 		let sent <- Fetch.sendStream(put, parts, FetchOptions { timeout: None, redirect: Manual })
@@ -44,7 +44,7 @@ service upload {
 // Each call's body is its own stream: reading both is two reads of two
 // streams, not two of one.
 service both {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let options = FetchOptions { timeout: None, redirect: Follow }
 		let first <- Fetch.receiveStream(fetchFrom(url), options)
 		let second <- Fetch.receiveStream(fetchFrom(url), options)
@@ -65,7 +65,7 @@ service both {
 }
 
 service twice {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let got <- Fetch.receiveStream(fetchFrom(url), FetchOptions { timeout: None, redirect: Follow })
 		match got {
 			Ok(r) => {

@@ -4,7 +4,7 @@ context demo
 // declared in the sibling file.
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

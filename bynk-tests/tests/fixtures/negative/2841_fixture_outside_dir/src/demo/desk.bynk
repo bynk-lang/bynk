@@ -3,5 +3,5 @@ context demo.desk
 fn double(n: Int) -> Int { n * 2 }
 
 service local {
-  on call(n: Int) -> Effect[Int] { n + 1 }
+  on call(n: Int) -> Effect[Int] by Caller { n + 1 }
 }

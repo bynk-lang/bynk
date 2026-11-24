@@ -504,7 +504,7 @@ mod tests {
         let src = "context demo.app {\n\
                    capability Clock { fn now() -> Int }\n\
                    service Api {\n\
-                   on call(amount: Int) -> Int given Clock { amount }\n\
+                   on call(amount: Int) -> Int by Caller given Clock { amount }\n\
                    }\n\
                    agent Counter {\n\
                    key id: Int\n\

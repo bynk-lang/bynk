@@ -3,19 +3,19 @@ context shop.front
 consumes shop.greeter as Greeter
 
 service front {
-	on call(name: String) -> Effect[String] {
+	on call(name: String) -> Effect[String] by Caller {
 		Greeter.greet(name)
 	}
 }
 
 service count {
-	on call(n: Int) -> Effect[Int] {
+	on call(n: Int) -> Effect[Int] by Caller {
 		Greeter.tally(n)
 	}
 }
 
 service note {
-	on call(s: String) -> Effect[String] {
+	on call(s: String) -> Effect[String] by Caller {
 		Greeter.audit(s)
 	}
 }

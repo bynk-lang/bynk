@@ -3,7 +3,7 @@ context orders
 consumes payment
 
 service checkout {
-	on call() -> Effect[AuthId] {
+	on call() -> Effect[AuthId] by Caller {
 		payment.issue()
 	}
 }

@@ -134,7 +134,7 @@ event PaymentConfirmed{schema_annotation} = {{
 }}
 
 service markPaid {{
-  on call(orderId: String) -> Effect[()] given Events {{
+  on call(orderId: String) -> Effect[()] by Caller given Events {{
     Events.emit[PaymentConfirmed](PaymentConfirmed {{ orderId: orderId }})
   }}
 }}

@@ -7642,7 +7642,7 @@ mod view_closure_tests {
         let a = table(
             "t.a",
             UnitKind::Context,
-            "context t.a\n\nuses t.lib\n\nservice s {\n  on call() -> Effect[Wrap] { Effect.pure(Wrap { x: X.unsafe(\"x\") }) }\n}\n",
+            "context t.a\n\nuses t.lib\n\nservice s {\n  on call() -> Effect[Wrap] by Caller { Effect.pure(Wrap { x: X.unsafe(\"x\") }) }\n}\n",
         );
         let b = table(
             "t.b",
@@ -7830,7 +7830,7 @@ mod shadowed_import_tests {
         ("event", "event thing = { n: Int }\n"),
         (
             "service",
-            "service thing {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n",
+            "service thing {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n",
         ),
         (
             "agent",
@@ -7858,7 +7858,7 @@ mod shadowed_import_tests {
                         Use::None => String::new(),
                         Use::FnBody => format!("fn useIt() -> {ty} {{\n  {expr}\n}}\n"),
                         Use::HandlerBody => format!(
-                            "service user {{\n  on call() -> Effect[{ty}] {{\n    Effect.pure({expr})\n  }}\n}}\n"
+                            "service user {{\n  on call() -> Effect[{ty}] by Caller {{\n    Effect.pure({expr})\n  }}\n}}\n"
                         ),
                     };
                     let lib = format!("commons lib.util\n\n{idecl}");
@@ -7909,7 +7909,7 @@ mod shadowed_import_tests {
             ),
             (
                 "app/main.bynk",
-                "context app\n\nuses lib.util\n\nagent thing {\n  key id: String\n\n  store hits: Cell[Int]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n\nservice web {\n  on call() -> Effect[Int] {\n    let n <- thing(\"k\").ping()\n    Effect.pure(n)\n  }\n}\n",
+                "context app\n\nuses lib.util\n\nagent thing {\n  key id: String\n\n  store hits: Cell[Int]\n\n  on call ping() -> Effect[Int] {\n    1\n  }\n}\n\nservice web {\n  on call() -> Effect[Int] by Caller {\n    let n <- thing(\"k\").ping()\n    Effect.pure(n)\n  }\n}\n",
             ),
         ]);
         r.assert_clean();
@@ -7931,7 +7931,7 @@ mod shadowed_import_tests {
             ),
             (
                 "app/main.bynk",
-                "context app\n\nuses lib.a\nuses lib.b\n\nservice thing {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n",
+                "context app\n\nuses lib.a\nuses lib.b\n\nservice thing {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
         r.assert_clean();
@@ -8030,7 +8030,7 @@ mod shadowed_import_tests {
         );
         for (first, second) in [("lib.a", "lib.b"), ("lib.b", "lib.a")] {
             let app = format!(
-                "context app\n\nuses {first}\nuses {second}\n\nservice Status {{\n  on call() -> Effect[Int] {{\n    Effect.pure(1)\n  }}\n}}\n\nfn f(s: Status) -> Int {{\n  s.n\n}}\n"
+                "context app\n\nuses {first}\nuses {second}\n\nservice Status {{\n  on call() -> Effect[Int] by Caller {{\n    Effect.pure(1)\n  }}\n}}\n\nfn f(s: Status) -> Int {{\n  s.n\n}}\n"
             );
             let r = analyse(&[a, b, ("app/main.bynk", &app)]);
             assert_eq!(
@@ -8069,7 +8069,7 @@ mod shadowed_import_tests {
             ),
             (
                 "app.bynk",
-                "context app\n\nconsumes shop\n\nservice Order {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n",
+                "context app\n\nconsumes shop\n\nservice Order {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n",
             ),
         ]);
         assert_eq!(r.error_categories(), vec!["bynk.consumes.name_conflict"]);
@@ -8100,7 +8100,7 @@ mod shadowed_import_tests {
         );
     }
 
-    const WITHIN_SVC: &str = "\nservice s {\n  on call() -> Effect[String] {\n    let r <- Effect.pure(1).within(2.seconds)\n    Effect.pure(\"x\")\n  }\n}\n";
+    const WITHIN_SVC: &str = "\nservice s {\n  on call() -> Effect[String] by Caller {\n    let r <- Effect.pure(1).within(2.seconds)\n    Effect.pure(\"x\")\n  }\n}\n";
 
     /// #2765: the braces may name a type the target exports, so the form the
     /// `timed_out_not_in_scope` note recommends is accepted.
@@ -8186,7 +8186,7 @@ mod consumes_alias_tests {
 
     const USES_BOTH: &str = "fn empty() -> Digest { Digest { total: 0 } }\n\
         fn name(d: CryptoDigest) -> String {\n  match d {\n    Sha256 => \"a\"\n    Sha384 => \"b\"\n    Sha512 => \"c\"\n  }\n}\n\
-        service hashing {\n  on call() -> Effect[Bytes] given Crypto {\n    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(\"x\"))\n  }\n}";
+        service hashing {\n  on call() -> Effect[Bytes] by Caller given Crypto {\n    Crypto.digest(CryptoDigest.Sha256, Bytes.fromUtf8(\"x\"))\n  }\n}";
 
     #[test]
     fn an_aliased_export_clears_the_clash_and_works_everywhere() {
@@ -8324,7 +8324,7 @@ mod consumes_alias_tests {
         a.assert_clean();
         let bad = app(
             "consumes bynk.crypto { Crypto, Digest as CryptoDigest }",
-            "service s {\n  on call() -> Effect[Bytes] given Crypto {\n    Crypto.digest(Digest { total: 1 }, Bytes.fromUtf8(\"x\"))\n  }\n}",
+            "service s {\n  on call() -> Effect[Bytes] by Caller given Crypto {\n    Crypto.digest(Digest { total: 1 }, Bytes.fromUtf8(\"x\"))\n  }\n}",
         );
         let a = run(&[REPORT, ("app.bynk", &bad)]);
         assert!(

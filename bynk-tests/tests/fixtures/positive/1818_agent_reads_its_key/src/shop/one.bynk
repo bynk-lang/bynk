@@ -50,25 +50,25 @@ agent Grid {
 }
 
 service sum {
-  on call(x: Int, y: Int) -> Effect[Int] {
+  on call(x: Int, y: Int) -> Effect[Int] by Caller {
     Grid(Coord { x: x, y: y }).sum()
   }
 }
 
 service name {
-  on call(id: OrderId) -> Effect[OrderId] {
+  on call(id: OrderId) -> Effect[OrderId] by Caller {
     Order(id).name()
   }
 }
 
 service label {
-  on call(id: String) -> Effect[String] {
+  on call(id: String) -> Effect[String] by Caller {
     Label(id).text()
   }
 }
 
 service doubled {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Tally(n).doubled()
   }
 }

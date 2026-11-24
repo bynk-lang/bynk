@@ -315,12 +315,12 @@ fn system_suite_case_maps_to_its_own_bynk_source() {
     std::fs::write(dir.join("bynk.toml"), "[project]\nname = \"sys\"\n").unwrap();
     std::fs::write(
         dir.join("src").join("shop").join("orders.bynk"),
-        "context shop.orders\n\nconsumes shop.payment as Pay\n\nexports transparent { OrderError }\n\ntype OrderError = enum { Rejected }\n\nservice place {\n  on call(cents: Int) -> Effect[Result[Int, OrderError]] {\n    let a <- Pay.authorise(cents)\n    match a {\n      Ok(n)  => Ok(n)\n      Err(_) => Err(Rejected)\n    }\n  }\n}\n",
+        "context shop.orders\n\nconsumes shop.payment as Pay\n\nexports transparent { OrderError }\n\ntype OrderError = enum { Rejected }\n\nservice place {\n  on call(cents: Int) -> Effect[Result[Int, OrderError]] by Caller {\n    let a <- Pay.authorise(cents)\n    match a {\n      Ok(n)  => Ok(n)\n      Err(_) => Err(Rejected)\n    }\n  }\n}\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("src").join("shop").join("payment.bynk"),
-        "context shop.payment\n\nexports transparent { PayError }\n\ntype PayError = enum { Declined }\n\ncapability Bank {\n  fn charge(cents: Int) -> Effect[Result[Int, PayError]]\n}\n\nprovides Bank = StubBank {\n  fn charge(cents: Int) -> Effect[Result[Int, PayError]] {\n    if cents > 10000 { Err(Declined) } else { Ok(cents) }\n  }\n}\n\nservice authorise {\n  on call(cents: Int) -> Effect[Result[Int, PayError]] given Bank {\n    let r <- Bank.charge(cents)\n    r\n  }\n}\n",
+        "context shop.payment\n\nexports transparent { PayError }\n\ntype PayError = enum { Declined }\n\ncapability Bank {\n  fn charge(cents: Int) -> Effect[Result[Int, PayError]]\n}\n\nprovides Bank = StubBank {\n  fn charge(cents: Int) -> Effect[Result[Int, PayError]] {\n    if cents > 10000 { Err(Declined) } else { Ok(cents) }\n  }\n}\n\nservice authorise {\n  on call(cents: Int) -> Effect[Result[Int, PayError]] by Caller given Bank {\n    let r <- Bank.charge(cents)\n    r\n  }\n}\n",
     )
     .unwrap();
     // Each case's own `let r <- ...` is .bynk line 3 (0-based 2), `expect` is

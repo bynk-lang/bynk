@@ -13,13 +13,13 @@ type Line = {
 }
 
 service lines {
-  on call(sku: String, unit: Price, qty: Int) -> Effect[Result[Line, ()]] {
+  on call(sku: String, unit: Price, qty: Int) -> Effect[Result[Line, ()]] by Caller {
     Ok(Line { sku: sku, unit: unit, discount: 0.00d, qty: qty })
   }
 }
 
 service totals {
-  on call(unit: Price, qty: Int) -> Effect[Result[Decimal, ()]] {
+  on call(unit: Price, qty: Int) -> Effect[Result[Decimal, ()]] by Caller {
     Ok(unit * Decimal.fromInt(qty))
   }
 }

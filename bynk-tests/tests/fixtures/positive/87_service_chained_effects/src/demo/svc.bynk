@@ -5,7 +5,7 @@ capability Counter {
 }
 
 service compute {
-  on call(start: Int) -> Effect[Int] given Counter {
+  on call(start: Int) -> Effect[Int] by Caller given Counter {
     let a <- Counter.next(start)
     let b <- Counter.next(a)
     Effect.pure(b)

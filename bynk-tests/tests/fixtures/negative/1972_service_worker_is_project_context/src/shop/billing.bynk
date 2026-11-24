@@ -8,7 +8,7 @@ consumes bynk.cloudflare { Service }
 capability Billing = Service @worker("shop-billing")
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

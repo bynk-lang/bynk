@@ -119,10 +119,12 @@ fn clock() -> String {
 }
 
 fn prov() -> String {
-    canon("context svc.prov\n\nservice thing {\n  on call() -> Effect[Int] {\n    1\n  }\n}\n")
+    canon(
+        "context svc.prov\n\nservice thing {\n  on call() -> Effect[Int] by Caller {\n    1\n  }\n}\n",
+    )
 }
 
-const BODY: &str = "service s {\n  on call(w: Widget) -> Effect[Int] given Clock {\n    let n <- Clock.now()\n    n + grow(w)\n  }\n}\n";
+const BODY: &str = "service s {\n  on call(w: Widget) -> Effect[Int] by Caller given Clock {\n    let n <- Clock.now()\n    n + grow(w)\n  }\n}\n";
 
 fn app(header: &str) -> String {
     canon(&format!("context app.a\n\n{header}\n\n{BODY}"))
@@ -240,7 +242,7 @@ fn a_first_party_selection_is_pruned_but_a_first_party_unit_is_kept() {
     // first-party capability references, and the whole-unit `uses bynk.list`
     // (nothing in the index can show it unused) stays.
     let src = canon(
-        "context app.relay\n\nuses bynk.list\nconsumes bynk { Logger, Fetch }\n\nservice relay {\n  on call() -> Effect[Int] given Logger {\n    let _ <- Logger.info(\"hi\")\n    1\n  }\n}\n",
+        "context app.relay\n\nuses bynk.list\nconsumes bynk { Logger, Fetch }\n\nservice relay {\n  on call() -> Effect[Int] by Caller given Logger {\n    let _ <- Logger.info(\"hi\")\n    1\n  }\n}\n",
     );
     let run = Run::new("firstparty", &[("app/relay.bynk", src.as_str())]);
     let organised = run.organise("app/relay.bynk", Mode::Full).expect("an edit");

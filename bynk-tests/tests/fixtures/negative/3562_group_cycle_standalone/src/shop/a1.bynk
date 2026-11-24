@@ -3,7 +3,7 @@ context shop.a1
 consumes shop.c
 
 service from_a1 {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     let r <- shop.c.to_c(n)
     Effect.pure(r)
   }

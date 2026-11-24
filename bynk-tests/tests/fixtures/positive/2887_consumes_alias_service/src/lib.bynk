@@ -7,7 +7,7 @@ type Code = enum { Alpha, Beta }
 type Level = Int where NonNegative
 
 service flip {
-	on call(c: Code) -> Effect[Code] {
+	on call(c: Code) -> Effect[Code] by Caller {
 		match c {
 			Alpha => Effect.pure(Beta)
 			Beta => Effect.pure(Alpha)
@@ -16,7 +16,7 @@ service flip {
 }
 
 service ping {
-	on call(l: Level) -> Effect[Level] {
+	on call(l: Level) -> Effect[Level] by Caller {
 		Effect.pure(l)
 	}
 }

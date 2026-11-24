@@ -55,7 +55,7 @@ fn total(o: Order, off: Percent) -> Int {
 }
 
 service notify {
-  on call(url: String) -> Effect[Int] given Fetch {
+  on call(url: String) -> Effect[Int] by Caller given Fetch {
     let res <- Fetch.send(Request {
       method: Post,
       url: url,

@@ -8,7 +8,7 @@ consumes bynk
 consumes demo.payment
 
 service ping {
-  on call(id: String) -> Effect[Int] given bynk.Clock {
+  on call(id: String) -> Effect[Int] by Caller given bynk.Clock {
     let _ <- demo.payment.authorise(id)
     let _ <- bynk.Clock.now()
     Effect.pure(1)

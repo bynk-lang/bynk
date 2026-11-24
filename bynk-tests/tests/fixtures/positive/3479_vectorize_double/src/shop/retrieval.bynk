@@ -11,43 +11,43 @@ capability Docs = Vectorize @dimensions(32) @metric("euclidean") @indexed(["cate
 type Meta = { category: String, year: Int }
 
 service typed {
-	on call(vectors: List[VectorOf[Meta]]) -> Effect[Result[Mutation, VectorError]] given Docs {
+	on call(vectors: List[VectorOf[Meta]]) -> Effect[Result[Mutation, VectorError]] by Caller given Docs {
 		Docs.upsertValue(vectors)
 	}
 }
 
 service writer {
-	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] given Docs {
+	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] by Caller given Docs {
 		Docs.upsert(vectors)
 	}
 }
 
 service inserter {
-	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] given Docs {
+	on call(vectors: List[Vector]) -> Effect[Result[Mutation, VectorError]] by Caller given Docs {
 		Docs.insert(vectors)
 	}
 }
 
 service reader {
-	on call(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]] given Docs {
+	on call(vector: List[Float], options: QueryOptions) -> Effect[Result[List[VectorMatch], VectorError]] by Caller given Docs {
 		Docs.query(vector, options)
 	}
 }
 
 service fetcher {
-	on call(ids: List[String]) -> Effect[Result[List[Vector], VectorError]] given Docs {
+	on call(ids: List[String]) -> Effect[Result[List[Vector], VectorError]] by Caller given Docs {
 		Docs.getByIds(ids)
 	}
 }
 
 service remover {
-	on call(ids: List[String]) -> Effect[Result[Mutation, VectorError]] given Docs {
+	on call(ids: List[String]) -> Effect[Result[Mutation, VectorError]] by Caller given Docs {
 		Docs.deleteByIds(ids)
 	}
 }
 
 service describer {
-	on call() -> Effect[Result[IndexInfo, VectorError]] given Docs {
+	on call() -> Effect[Result[IndexInfo, VectorError]] by Caller given Docs {
 		Docs.describe()
 	}
 }

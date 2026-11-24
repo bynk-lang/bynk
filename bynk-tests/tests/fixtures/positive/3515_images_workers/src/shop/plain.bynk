@@ -4,7 +4,7 @@ context shop.plain
 // though its project consumes it elsewhere.
 
 service ping {
-	on call() -> Effect[String] {
+	on call() -> Effect[String] by Caller {
 		Effect.pure("pong")
 	}
 }

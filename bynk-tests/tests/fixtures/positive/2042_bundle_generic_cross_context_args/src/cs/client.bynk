@@ -8,7 +8,7 @@ consumes cs.store
 // generic parameters, whose `Line` carries `cs.store`'s brand. `counts`
 // names no user type and is the control.
 service go {
-  on call(l: Line, ls: List[Line]) -> Effect[Int] {
+  on call(l: Line, ls: List[Line]) -> Effect[Int] by Caller {
     let byKey: Map[String, Line] = Map.empty()
     let none: Option[Line] = None
     let empty: List[Line] = List.empty()

@@ -4,19 +4,19 @@ context shop.front
 consumes shop.one as One
 
 service label {
-  on call(id: String) -> Effect[String] {
+  on call(id: String) -> Effect[String] by Caller {
     One.label(id)
   }
 }
 
 service sum {
-  on call(x: Int, y: Int) -> Effect[Int] {
+  on call(x: Int, y: Int) -> Effect[Int] by Caller {
     One.sum(x, y)
   }
 }
 
 service doubled {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     One.doubled(n)
   }
 }

@@ -7,7 +7,7 @@ capability Edge = EdgeCache
 capability Cdn = EdgeCache
 
 service probe {
-    on call() -> Effect[Bool] given Edge {
+    on call() -> Effect[Bool] by Caller given Edge {
         Edge.purge(["/a"])
     }
 }

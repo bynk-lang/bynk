@@ -29,7 +29,7 @@ fn rate(cents: Int) -> Int
 }
 
 service authorise {
-  on call(cents: Int) -> Effect[Result[Int, PayError]] given Bank {
+  on call(cents: Int) -> Effect[Result[Int, PayError]] by Caller given Bank {
     let r <- Bank.charge(cents)
     r
   }

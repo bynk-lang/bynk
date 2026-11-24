@@ -86,7 +86,7 @@ fn every_contextual_keyword_has_a_hover_path() {
         assert!(symbols::describe_by_at(name, name.rfind("by").unwrap()).is_none());
     }
     // #2640: `par` is a keyword only before `{` of a `par { … }` block.
-    let block = "context Scaffold\n\nservice s {\n  on call() -> Effect[Int] {\n    par {\n      let a <- f()\n      let b <- g()\n    }\n    Effect.pure(a + b)\n  }\n}\n";
+    let block = "context Scaffold\n\nservice s {\n  on call() -> Effect[Int] by Caller {\n    par {\n      let a <- f()\n      let b <- g()\n    }\n    Effect.pure(a + b)\n  }\n}\n";
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "par") {
         let offset = block.find(kw.word).expect("`par` is in the fixture");
         assert!(

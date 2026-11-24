@@ -25,7 +25,7 @@ provides A = AImpl given B {
 }
 
 service run {
-  on call() -> Effect[()] given A {
+  on call() -> Effect[()] by Caller given A {
     let _ <- A.a()
     Effect.pure(())
   }

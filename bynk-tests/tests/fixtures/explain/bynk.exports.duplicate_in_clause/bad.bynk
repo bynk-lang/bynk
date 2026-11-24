@@ -5,7 +5,7 @@ exports transparent { Order, Order }
 type Order = { total: Int }
 
 service probe {
-    on call() -> Effect[Int] {
+    on call() -> Effect[Int] by Caller {
         Effect.pure(1)
     }
 }

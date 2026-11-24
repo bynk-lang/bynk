@@ -29,7 +29,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] given Events {
+  on call(orderId: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
   }
 }
@@ -48,7 +48,7 @@ agent Ledger {
 }
 
 service bumpLedger {
-  on call(id: String, amount: Int) -> Effect[()] {
+  on call(id: String, amount: Int) -> Effect[()] by Caller {
     let ledger = Ledger(id)
     let _ <- ledger.bump(amount)
   }
@@ -572,7 +572,7 @@ event PaymentConfirmed = {
 }
 
 service markPaid {
-  on call(orderId: String, region: String) -> Effect[()] given Events {
+  on call(orderId: String, region: String) -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId, meta: Meta { region: region } })
   }
 }

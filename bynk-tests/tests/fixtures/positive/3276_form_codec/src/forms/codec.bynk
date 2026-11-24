@@ -21,7 +21,7 @@ fn describe(s: Signup) -> String {
 }
 
 service readForm {
-	on call(text: String) -> Effect[String] {
+	on call(text: String) -> Effect[String] by Caller {
 		match Form.decode[Signup](text) {
 			Ok(s) => Effect.pure(describe(s))
 			Err(e) => Effect.pure("\(e.path)")
@@ -30,13 +30,13 @@ service readForm {
 }
 
 service writeForm {
-	on call(email: Email, tags: List[String]) -> Effect[String] {
+	on call(email: Email, tags: List[String]) -> Effect[String] by Caller {
 		Effect.pure(Form.encode(Signup { email: email, age: Some(41), plan: Pro, tags: tags, remember: true }))
 	}
 }
 
 service roundTrip {
-	on call(text: String) -> Effect[Bool] {
+	on call(text: String) -> Effect[Bool] by Caller {
 		match Form.decode[Signup](text) {
 			Ok(s) => match Form.decode[Signup](Form.encode(s)) {
 				Ok(again) => Effect.pure(again == s)

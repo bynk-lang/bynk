@@ -43,7 +43,7 @@ fn edited(s: String) -> String {
 }
 
 service search {
-	on call(term: String) -> Effect[Int] given Fetch {
+	on call(term: String) -> Effect[Int] by Caller given Fetch {
 		let q = formatQuery([QueryParam { name: "q", value: term }, QueryParam { name: "limit", value: "10" }])
 		let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".concat(q), contentType: None, authorization: None, headers: Map.empty(), body: None })
 		match res {

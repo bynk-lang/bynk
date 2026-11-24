@@ -16,7 +16,7 @@ fn parse(raw: String) -> Result[Int, String] {
 }
 
 service dash {
-    on call(raw: String) -> Effect[Result[Int, String]] given Users, Orders {
+    on call(raw: String) -> Effect[Result[Int, String]] by Caller given Users, Orders {
         par {
             let a <- Users.find(1)
             let b <- Orders.forUser(parse(raw)?)

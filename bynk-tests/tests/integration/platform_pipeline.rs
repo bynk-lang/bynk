@@ -139,13 +139,13 @@ capability Stock = D1
 type Item = { id: String, qty: Int, note: Option[String] }
 
 service listing {
-	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] given Stock {
+	on call(min: Int) -> Effect[Result[List[Item], SqlReadError]] by Caller given Stock {
 		Stock.select[Item](\"FROM items WHERE note = 'caf\\u{e9} \\\"q\\\"' AND qty >= ?1 ORDER BY id\", [Integer(min)])
 	}
 }
 
 service lookup {
-	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] given Stock {
+	on call(id: String) -> Effect[Result[Option[Item], SqlReadError]] by Caller given Stock {
 		Stock.firstAs[Item](\"FROM items WHERE id = ?1\", [Text(id)])
 	}
 }
