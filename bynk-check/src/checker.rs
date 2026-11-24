@@ -6818,7 +6818,8 @@ pub fn variants_of(
                 // #3878: a `system` case reads a body that did not decode as
                 // `Undecodable`. It is a pattern of the verdict a test sees, not a
                 // `QueueResult` a handler can build (`QUEUE_VARIANTS` has no entry), so
-                // it is the last variant and an exhaustive `match` need not name it.
+                // it is the last variant. A `match` of a `QueueResult` names it or has a
+                // wildcard, since a `system` case's verdict can be it.
                 .chain(std::iter::once(VariantInfo {
                     name: QUEUE_UNDECODABLE.to_string(),
                     payload: vec![],

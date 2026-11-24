@@ -524,7 +524,7 @@ suite shop.inventory as system {
   that its own refinement refuses, say) is dead-lettered or dropped, never
   retried, so the address yields `Undecodable`: `expect r is Undecodable`. It is a
   value of the test address only; it is not a `QueueResult` variant, a handler
-  cannot return it, and an exhaustive `match` of a `QueueResult` need not name it.
+  cannot return it, but a case can receive it, so a `match` of a `QueueResult` must name it or have a wildcard arm.
 - **The execution context is settled**: any detached effect the handler hands to
   `waitUntil` finishes before the address returns.
 - **State carries through the case.** Every address in a `system` case reaches

@@ -142,7 +142,7 @@ the consumer's `delivery { }`:
 - The dead-letter send goes through a `[[queues.producers]]` binding the generated
   `wrangler.toml` adds for the consumer, named `__BYNK_DLQ_<QUEUE>` (the consumer's queue
   name in upper case, `-` as `_`). It is the consumer's own, so a Worker group's members and
-  a context with several consumers never share one. If the send fails the message is retried
+  a context with several consumers never share one. If the send fails, or the binding is missing from `env`, the message is retried
   as any other fault is, so nothing is lost while the dead-letter queue is unavailable.
 - The log line names the queue, the message type and the decode error's path and kind (for
   example `StructuralMismatch` at `$.id`), never the body, which can hold user data and is

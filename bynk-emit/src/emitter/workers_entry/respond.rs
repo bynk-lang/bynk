@@ -89,7 +89,8 @@ pub(super) const CRON_RUN_HELPER: &str = "async function __bynkCronRun<T extends
 /// #3878: settles one queue message whose body does not decode as the consumer's message type.
 /// No retry can change the bytes, so it is never retried. With a dead-letter queue (`binding`
 /// names its producer binding on `env`) the body is sent there unchanged and the message acked;
-/// a failed send retries it, so nothing is lost while the dead-letter queue is unavailable.
+/// a failed send, or a configured binding missing from `env`, retries it, so nothing is lost while
+/// the dead-letter queue is unavailable. A body a non-Bynk producer sent as raw bytes keeps its content type.
 /// Without one it is acked and reported as a fault. One log record names the queue, the message
 /// type and the decode error's path and kind, never the body (#3437: it can hold user data).
 pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, env: unknown, binding: string | undefined, queue: string, type: string, error: unknown, msg: { readonly body: unknown; ack(): void; retry(): void }): globalThis.Promise<void> {
@@ -97,6 +98,11 @@ pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ct
   const path = typeof cause === \"object\" && cause !== null && typeof cause.path === \"string\" ? cause.path : \"$\";
   const kind = typeof cause === \"object\" && cause !== null && typeof cause.kind === \"string\" ? cause.kind : \"\";
   const dlq = binding === undefined ? undefined : (env as globalThis.Record<string, { send(body: unknown, options?: { contentType?: string }): globalThis.Promise<void> } | undefined>)[binding];
+  if (binding !== undefined && dlq === undefined) {
+    globalThis.console.error(`queue ${queue} dead-letter failed`, `the producer binding ${binding} is missing from env`);
+    msg.retry();
+    return;
+  }
   if (dlq === undefined) {
     globalThis.console.error(`queue ${queue} undecodable`, { type, path, kind, outcome: \"dropped\" });
     __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} received a message that is not a ${type} (${kind} at ${path})`));
@@ -104,7 +110,8 @@ pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ct
     return;
   }
   try {
-    await dlq.send(msg.body, { contentType: \"json\" });
+    const raw = msg.body instanceof globalThis.ArrayBuffer || globalThis.ArrayBuffer.isView(msg.body);
+    await dlq.send(msg.body, { contentType: raw ? \"bytes\" : \"json\" });
   } catch (thrown) {
     globalThis.console.error(`queue ${queue} dead-letter failed`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
     msg.retry();
