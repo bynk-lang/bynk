@@ -117,9 +117,18 @@ pub(super) fn emit_system_job_support(
                 else {
                     continue;
                 };
-                let Some(p) = h.params.first() else {
+                // #3880: the message is the parameter that is not the delivery metadata.
+                let Some(p) = h
+                    .params
+                    .iter()
+                    .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+                else {
                     continue;
                 };
+                let has_delivery = h
+                    .params
+                    .iter()
+                    .any(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref));
                 let key = crate::emitter::queue_handler_method_name(sname, 0);
                 let param_name = crate::emitter::ts_ident(&p.name.name);
                 let body = crate::emitter::serialisation::serialise_expr_via(
@@ -140,18 +149,27 @@ pub(super) fn emit_system_job_support(
                     vec![
                         str_lit(name.clone()),
                         body,
+                        if has_delivery {
+                            ident("delivery")
+                        } else {
+                            ident("undefined")
+                        },
                         arrow(
                             vec![TsParam::new("batch", None), TsParam::new("exec", None)],
                             method_call(ident(worker.clone()), "queue", forward_args),
                         ),
                     ],
                 );
+                let mut driver_params = vec![TsParam::new(
+                    param_name,
+                    Some(driver_param_type(&p.type_ref)),
+                )];
+                if has_delivery {
+                    driver_params.push(TsParam::optional("delivery", Some(any_type())));
+                }
                 drivers.push(async_driver(
                     format!("__sysdrive_message_{sname}"),
-                    vec![TsParam::new(
-                        param_name,
-                        Some(driver_param_type(&p.type_ref)),
-                    )],
+                    driver_params,
                     vec![harness_const(), ret(delivered)],
                 ));
                 services.queue.insert(sname.clone());

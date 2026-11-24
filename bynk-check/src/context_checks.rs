@@ -7077,18 +7077,30 @@ fn validate_queue_handler(handler: &Handler, name: &str, errors: &mut Vec<Compil
             ),
         );
     }
-    // Exactly one parameter — the message. (Conventionally named `message`.)
-    if handler.params.len() != 1 {
-        errors.push(
-            CompileError::new(
-                "bynk.queue.bad_params",
-                handler.span,
-                format!(
-                    "`on message` handlers take exactly one parameter (the message), got {}",
-                    handler.params.len(),
-                ),
+    // The message, and optionally the delivery metadata (#3880): at most two
+    // parameters, the second being exactly one `QueueDelivery`, in either order.
+    let deliveries =
+        bynk_syntax::queue::delivery_positions(handler.params.iter().map(|p| &p.type_ref));
+    let messages = handler.params.len() - deliveries.len();
+    if messages != 1 || deliveries.len() > 1 {
+        let why = if deliveries.len() > 1 {
+            format!(
+                "`on message` handlers take one `QueueDelivery` at most, got {}",
+                deliveries.len()
             )
-            .with_note("a queue consumer processes one message per invocation"),
+        } else if messages == 0 {
+            "`on message` handlers take the message as a parameter, and a `QueueDelivery` is not a message"
+                .to_string()
+        } else {
+            format!(
+                "`on message` handlers take the message and optionally a `QueueDelivery`, got {} parameters besides it",
+                messages - 1
+            )
+        };
+        errors.push(
+            CompileError::new("bynk.queue.bad_params", handler.span, why).with_note(
+                "a queue consumer processes one message per invocation; add `delivery: QueueDelivery` (`consumes bynk.cloudflare { QueueDelivery }`) to read its attempt count and send time",
+            ),
         );
     }
     // v0.44: the return type must be `Effect[QueueResult]` (the verdict sum).

@@ -1,0 +1,5 @@
+# One refusal per handler, at its `on message`.
+# exact
+bynk.queue.bad_params	svc.bynk:7:3
+bynk.queue.bad_params	svc.bynk:11:3
+bynk.queue.bad_params	svc.bynk:15:3

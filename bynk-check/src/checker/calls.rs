@@ -4556,20 +4556,27 @@ fn check_test_service_address(
         return handler_outcome(handler, ctx);
     }
 
-    // `svc.message(msg)` — the queue message handler.
+    // `svc.message(msg)` / `svc.message(msg, delivery)` — the queue message handler.
     if method.name == "message" {
-        ctx.callees.insert(
-            expr_id,
-            Callee::TestService {
-                service: id.name.clone(),
-                address: HandlerAddress::Message,
-                extra_headers: false,
-            },
-        );
         let matched = sig
             .handlers
             .iter()
             .find(|h| matches!(&h.kind, HandlerKind::Message));
+        // #3880: a handler's `QueueDelivery` parameter is filled by the address, from its
+        // optional second argument, so the message is the address's first parameter.
+        let delivery = matched.and_then(|h| {
+            h.params
+                .iter()
+                .position(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+        });
+        ctx.callees.insert(
+            expr_id,
+            Callee::TestService {
+                service: id.name.clone(),
+                address: HandlerAddress::Message { delivery },
+                extra_headers: false,
+            },
+        );
         let Some(handler) = matched else {
             ctx.errors.push(CompileError::new(
                 "bynk.test.service_unknown_route",
@@ -4581,7 +4588,18 @@ fn check_test_service_address(
             }
             return None;
         };
-        let params = handler.params.clone();
+        let mut params: Vec<bynk_syntax::ast::Param> = handler
+            .params
+            .iter()
+            .filter(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+            .cloned()
+            .collect();
+        if let Some(at) = delivery {
+            // The optional delivery follows the message.
+            if args.len() > 1 {
+                params.push(handler.params[at].clone());
+            }
+        }
         check_address_args(&id.name, "message", &params, args, method.span, ctx);
         return handler_outcome(handler, ctx);
     }

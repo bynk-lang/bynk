@@ -62,6 +62,8 @@ fn emit_queue_handler(
                     "ReadonlyArray",
                     vec![TsType::Object(vec![
                         TsTypeMember::readonly_prop("body", TsType::named("unknown")),
+                        TsTypeMember::readonly_prop("attempts", TsType::named("number")),
+                        TsTypeMember::readonly_prop("timestamp", TsType::named("Date")),
                         TsTypeMember::method("ack", vec![], TsType::named("void")),
                         TsTypeMember::method("retry", vec![], TsType::named("void")),
                     ])],
@@ -124,7 +126,7 @@ fn emit_queue_handler(
                 "result",
                 await_expr(call(
                     member(ident("surface"), method_key),
-                    vec![member(ident("__r"), "value")],
+                    handler_args(route),
                 )),
             ),
             TsStmt::if_else_stmt(
@@ -211,6 +213,28 @@ fn emit_queue_handler(
     }
 }
 
+/// The arguments of the handler call: the decoded message, and (#3880) the
+/// delivery metadata, each in the position the handler declared it. Cloudflare's
+/// `attempts` starts at 1 and `timestamp` is when the message was sent.
+fn handler_args(route: &QueueRoute) -> Vec<TsExpr> {
+    let message = member(ident("__r"), "value");
+    let Some(at) = route.delivery_at else {
+        return vec![message];
+    };
+    let delivery = TsExpr::object(vec![
+        ("attempts".to_string(), member(ident("msg"), "attempts")),
+        (
+            "sentAt".to_string(),
+            method_call(member(ident("msg"), "timestamp"), "getTime", vec![]),
+        ),
+    ]);
+    if at == 0 {
+        vec![delivery, message]
+    } else {
+        vec![message, delivery]
+    }
+}
+
 /// One `on queue` consumer, identified by its service and per-service
 /// declaration index (its `queue_<service>_<index>` method key), plus the
 /// message parameter's type for wire-format deserialisation.
@@ -220,6 +244,8 @@ pub(super) struct QueueRoute {
     pub(super) index: usize,
     pub(super) name: String,
     pub(super) msg_type: Option<TypeRef>,
+    /// #3880: the position of the handler's `QueueDelivery` parameter, if it has one.
+    pub(super) delivery_at: Option<usize>,
 }
 
 /// Collect the queue consumers across the services, carrying the per-service
@@ -246,12 +272,21 @@ pub(super) fn collect_queue_routes(
                 let ServiceProtocol::Queue { name } = &service.protocol else {
                     continue;
                 };
-                let msg_type = h.params.first().map(|p| p.type_ref.clone());
+                let delivery_at = h
+                    .params
+                    .iter()
+                    .position(|p| bynk_syntax::queue::is_queue_delivery(&p.type_ref));
+                let msg_type = h
+                    .params
+                    .iter()
+                    .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+                    .map(|p| p.type_ref.clone());
                 queue_routes.push(QueueRoute {
                     service: (*sname).clone(),
                     index: queue_idx,
                     name: name.clone(),
                     msg_type,
+                    delivery_at,
                 });
                 queue_idx += 1;
             }

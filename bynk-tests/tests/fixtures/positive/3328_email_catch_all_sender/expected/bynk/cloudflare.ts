@@ -217,6 +217,23 @@ export const R2Part = {
 };
 
 /**
+ * What Cloudflare knows about the delivery of a message to a queue consumer,
+ * as an `on message` handler's optional second parameter. `attempts` counts
+ * the times the consumer has been given the message, starting at 1, so a
+ * handler can back off or notice a message that keeps failing. `sentAt` is
+ * when the message was sent, so a message that was sent with a delay waited
+ * at least that long. Neither is a deduplication key: delivery is at least
+ * once, and only a key the producer writes into the message deduplicates.
+ */
+export interface QueueDelivery {
+  readonly attempts: number;
+  readonly sentAt: number;
+}
+
+export const QueueDelivery = {
+};
+
+/**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
  * it can be delivered: whole seconds (a part second rounds up), at most 12
  * hours; `None`, the default, delivers as soon as the queue can.

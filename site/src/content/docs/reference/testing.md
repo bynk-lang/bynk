@@ -512,7 +512,8 @@ suite shop.inventory as system {
   epoch. The address yields
   the handler's `Result`, which the test build's entry hands back to the harness.
   A cron handler that faults fails the case, as it does at `unit`.
-- **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
+- **`q.message(m)`** (or `q.message(m, QueueDelivery { attempts: 4, sentAt: t })` when the
+  handler declares a `QueueDelivery`) serialises `m` as the producer does, sends it through a JSON
   round trip, and calls `queue` with a one-message batch. A message whose type
   doesn't survive the round trip fails as it would on the platform. The batch
   records whether the consumer called `ack()` or `retry()`, and the address yields

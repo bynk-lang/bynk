@@ -191,6 +191,12 @@ pub fn resolve_label(
         {
             return Some((*sig).to_string());
         }
+        // #3880: a queue service's `svc.message(…)` test address.
+        if member == "message"
+            && let Some(label) = crate::queue_delivery::message_address_label(recv, doc_text, files)
+        {
+            return Some(label);
+        }
         // A refined/opaque type's `of`/`unsafe`, or a capability op.
         return resolve_qualified(recv, member, doc_text, files);
     }

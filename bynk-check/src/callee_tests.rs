@@ -638,7 +638,7 @@ fn each_test_service_address_records_its_typed_form() {
         );
     };
     has("call", HandlerAddress::Call);
-    has("message", HandlerAddress::Message);
+    has("message", HandlerAddress::Message { delivery: None });
     has(
         "schedule */5 * * * *",
         HandlerAddress::Schedule {
