@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A virtual-time stub (`returns … after <d>`) at the `unit` tier no longer fails `tsc` with TS2559
----
+# 0909 — The virtual-time settle helper accepts any deps object
 
-## ADR: virtual-settle-deps-type
-title: The virtual-time settle helper accepts any deps object
-summary: `__bynkSettleVirtual`'s deps parameter is `object & { __exec?: … }`, not a weak type
+- **Status:** Accepted (v0.655.2)
 
 **Context.** `__bynkSettleVirtual` typed its deps as `{ __exec?: … }`, a weak type, so a deps object without `__exec` (a unit-tier case stubbing only a capability) failed `tsc --strict` with TS2559 (#4189).
 

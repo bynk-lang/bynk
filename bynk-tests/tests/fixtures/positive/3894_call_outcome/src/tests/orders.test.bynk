@@ -1,0 +1,35 @@
+suite shop.orders {
+  consumes shop.pay { Receipt, PaymentError }
+
+  stub shop.stock.reserve(_) returns Ok(())
+
+  case "an answered call is Handled" {
+    stub Pay.authorise(_) returns Ok(Receipt { id: "r1" })
+    let r <- placeOrder.call("widget", 100)
+    expect r is Ok("r1")
+  }
+
+  case "the handler's own Err is Handled too" {
+    stub Pay.authorise(_) returns Err(Declined)
+    let r <- placeOrder.call("widget", 100)
+    expect r is Err("declined")
+  }
+
+  case "a refused call is Rejected, compensating" {
+    stub Pay.authorise(_) rejected NotAdmitted
+    let r <- placeOrder.call("widget", 100)
+    expect r is Err("rejected")
+  }
+
+  case "a faulted handler is Faulted" {
+    stub Pay.authorise(_) faulted
+    let r <- placeOrder.call("widget", 100)
+    expect r is Err("faulted")
+  }
+
+  case "an unknown outcome is Unreachable" {
+    stub Pay.authorise(_) unreachable
+    let r <- placeOrder.call("widget", 100)
+    expect r is Err("unreachable")
+  }
+}

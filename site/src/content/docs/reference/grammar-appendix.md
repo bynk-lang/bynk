@@ -116,7 +116,7 @@ scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_duration ::= number_literal "." identifier
 scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier)
 by_clause ::= "by" (identifier ":")? identifier ("|" identifier)*
-stub_clause ::= "stub" identifier "." (identifier ".")* identifier "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never")
+stub_clause ::= "stub" identifier "." (identifier ".")* identifier "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never" | "rejected" identifier | "faulted" | "unreachable")
 env_clause ::= "env" "{" (env_entry ","?)* "}"
 env_entry ::= identifier "=" expression
 case ::= "case" string_literal ("as" ("unit" | "integration" | "system"))? "{" (stub_clause | env_clause)* statement* expression? "}"

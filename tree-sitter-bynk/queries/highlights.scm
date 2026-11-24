@@ -110,6 +110,9 @@
   "fails"
   "after"
   "never"
+  "rejected"
+  "faulted"
+  "unreachable"
 ] @keyword.operator
 
 ; #2134: the contextual `env` word heading a suite/case `env { … }` clause.

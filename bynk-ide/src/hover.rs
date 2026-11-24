@@ -207,11 +207,11 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             }
         }
         // 3a. #2683, #2711: the `within` of `e.within(d)` or the `race` of
-        //     `a.race(b)` on an `Effect`.
+        //     `a.race(b)` on an `Effect`; #3894: the `outcome` of a service call.
         if let Some(text) = a.snapshots.get(a.rel)
             && let Some(entries) = a.expr_types.get(a.rel)
             && let Some(content) =
-                crate::symbols::describe_effect_method_at(text, a.offset, entries, tys)
+                crate::call_outcome::describe_member_at(text, a.offset, entries, tys)
         {
             return Some(content);
         }

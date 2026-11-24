@@ -1343,6 +1343,22 @@ too, so a join adds no interleaving a sequence of `<-`s does not already allow â
 the one thing it removes is the synchronous gap between two adjacent lines, which
 nothing inside the block can rely on, because no binding can read another's result.
 
+A **call outcome** (`<context>.<service>.outcome(args)`; #3894) is a cross-context
+service call whose failure is a value. It is a member of the service reference, not a
+method of `Effect`: the receiver MUST be a consumed context's service (by alias or qualified
+name), the arguments are checked as for `<context>.<service>(args)`, and the call has type
+`Effect[CallOutcome[R]]`, where `R` is the handler's declared result and `CallOutcome` is
+`bynk`'s. A unit that writes it MUST have `CallOutcome` in scope, as `consumes bynk { CallOutcome }`
+or an entry in its existing `consumes bynk { â€¦ }` (`bynk.call.outcome_not_in_scope`). A service named
+`outcome` keeps its plain call. The call is legal wherever the plain call is, an agent
+handler included, and `.within(d)` composes with it. `CallOutcome[R]` is
+`Handled(result: R) | Rejected(reason: Refusal) | Faulted | Unreachable(status: Option[Int])`;
+`CallFailure` is the same without `Handled`, and `Refusal` is an enum of the callee's wire
+refusals (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`,
+`StaleContract`, `Undecodable`). `o.handled()` has type `Result[R, CallFailure]`, so `?` and
+`embeds` propagate a failed call. A value of `CallOutcome` or `CallFailure` MUST NOT be
+constructed in a context (`bynk.call.outcome_construction`); matching one is unaffected.
+
 A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
 method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
 `Effect[Result[T, TimedOut]]`, where `TimedOut { after: Duration }` is `bynk`'s (a

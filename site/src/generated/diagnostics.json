@@ -1086,6 +1086,28 @@
     "summary": "Data crossing a context boundary did not match the expected shape."
   },
   {
+    "blurb": "A `CallOutcome` or `CallFailure` says what a call came to, and only the compiled call knows that: whether the callee's handler ran, was refused, faulted, or could not be reached. So a program matches on one, and `.outcome(…)` and a test `stub` make them. Writing `Handled(…)`, `Faulted` or `CallFailure.Unreachable(…)` as a value would invent an outcome no call produced. To test a caller of a failing service, `stub` the service (`rejected NotAdmitted`, `faulted`, `unreachable`); to pass a failure along, use `handled()` and `?`.",
+    "category": "Other",
+    "categoryAnchor": "other",
+    "code": "bynk.call.outcome_construction",
+    "constructs": [],
+    "example": "// shop/orders.bynk\nlet o: CallOutcome[Int] = Faulted   // ✗ no call produced this\n\nlet paid = o.handled()?               // ✓ its failure, as a `Result`",
+    "severity": "error",
+    "summary": "A `CallOutcome` or `CallFailure` variant was written as a value in a context; only `.outcome(…)` and a test `stub` make them."
+  },
+  {
+    "blurb": "`<context>.<service>.outcome(args)` returns `CallOutcome[_]`, and `CallOutcome` is declared in `bynk`, so a unit that wants `outcome` has to consume it. Without that the result type names a type the unit cannot see, and its `Handled`, `Rejected`, `Faulted` and `Unreachable` cases could not be matched. Add `consumes bynk { CallOutcome }` to the unit, or add `CallOutcome` to its existing `consumes bynk { … }` list.",
+    "category": "Other",
+    "categoryAnchor": "other",
+    "code": "bynk.call.outcome_not_in_scope",
+    "constructs": [
+      "method_call"
+    ],
+    "example": "// shop/orders.bynk\nlet o <- Pay.authorise.outcome(total)   // ✗ `CallOutcome` is not in scope\n\nconsumes bynk { CallOutcome }            // ✓ in the unit's header\nlet o <- Pay.authorise.outcome(total)",
+    "severity": "error",
+    "summary": "`<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope."
+  },
+  {
     "blurb": "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
     "category": "Capabilities",
     "categoryAnchor": "capabilities",
@@ -7283,6 +7305,18 @@
     "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Gauge.read() returns 7   // ✗ the context has no `Gauge`\nstub Meter.read() returns 7   // ✓",
     "severity": "error",
     "summary": "A test `stub` overrides a capability the unit under test does not consume."
+  },
+  {
+    "blurb": "`rejected <Refusal>`, `faulted` and `unreachable` stand in for the outcome of a call to a consumed context's service, which `<context>.<service>.outcome(args)` hands back as a `CallOutcome`. They belong to a consumed service's `stub` alone: a capability's `stub` is a provider, and a provider faults with `fails`. And `rejected` names one of `bynk`'s `Refusal` cases (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`, `StaleContract`, `Undecodable`). `returns <value>` stubs a call the handler answered.",
+    "category": "Stubs",
+    "categoryAnchor": "stubs",
+    "code": "bynk.stub.outcome_word",
+    "constructs": [
+      "stub_clause"
+    ],
+    "example": "// tests/meter.test.bynk\nstub Meter.read() faulted   // ✗ `Meter` is a capability, not a consumed service\n\nstub Meter.read() fails     // ✓ a provider faults with `fails`",
+    "severity": "error",
+    "summary": "A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`."
   },
   {
     "blurb": "A `stub … returns <value>` stands in for a real provider, so the value must have the type the operation declares, as the real result would. `Meter.read` yields an `Int`, so it returns `7`, not a string; the `Effect` is supplied for you. Change the value, or stub the operation you meant. To inject a failure, write `fails` instead of a value.",
