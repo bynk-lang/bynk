@@ -71,6 +71,16 @@ fn static_limit(e: &Expr, ctx: &Ctx) -> Option<i64> {
     }
 }
 
+/// Whether the record `name` has a field `limit: Int`.
+fn declares_int_limit(name: &str, ctx: &Ctx) -> bool {
+    matches!(
+        ctx.input.types.get(name).map(|t| &t.body),
+        Some(TypeBody::Record(r)) if r.fields.iter().any(|f| {
+            f.name.name == "limit" && matches!(f.type_ref, TypeRef::Base(BaseType::Int, _))
+        })
+    )
+}
+
 /// Type one `…With` call: the function argument as its plain form, the options
 /// argument as a `ParOptions`, and a `limit` fixed at compile time against
 /// `1..=1000` (`bynk.list.par_limit_range`; `1` is `bynk.list.par_limit_one`).
@@ -99,15 +109,13 @@ pub(super) fn check_par_with(
     let result =
         super::kernels::check_list_kernel_method(method, Some(plain), &args[..1], elem, span, ctx);
     let options = type_of(&args[1], None, ctx)?;
-    // The record the `bynk.par` commons declares, not a look-alike of the same
-    // name: only that one is guaranteed an `Int` `limit`, which the emitted call
-    // reads without a check.
+    // The emitted call reads `(options).limit` without a check, so the record must
+    // be one with an `Int` `limit`: the `bynk.par` `ParOptions`, and not a
+    // look-alike of the same name with other fields.
     let is_options = matches!(
         &*tys.get(options),
         Ty::Named { name, kind: NamedKind::Record, .. }
-            if name == "ParOptions"
-                && ctx.input.imported_from.get(name.as_str()).map(String::as_str)
-                    == Some("bynk.par")
+            if name == "ParOptions" && declares_int_limit(name, ctx)
     );
     if !is_options {
         ctx.errors.push(
@@ -120,7 +128,7 @@ pub(super) fn check_par_with(
                 ),
             )
             .with_note(
-                "pass a `ParOptions { limit: 10 }`, the record from `uses bynk.par` (a record of the same name declared elsewhere does not count)",
+                "pass a `ParOptions { limit: 10 }`, the record from `uses bynk.par` (a record of the same name needs a `limit: Int` field)",
             ),
         );
         return result;
