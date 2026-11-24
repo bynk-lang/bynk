@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.664.0
+
+`Bytes.compare` returns an `Ordering` (`Less`, `Equal` or `Greater`) instead of `-1`, `0` or `1`; a program that compares the result with an `Int` must match on the `Ordering`
+
 ## v0.660.0
 
 a `Matches` or regex-method pattern that is valid without the `u` flag but not with it (an identity escape such as `\-` outside a class, a `[\w-.]` range) is `bynk.types.invalid_regex`, with a note naming Unicode mode; drop the needless backslash

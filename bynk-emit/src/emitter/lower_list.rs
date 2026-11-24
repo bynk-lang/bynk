@@ -218,6 +218,7 @@ pub(super) fn lower_list_kernel(
         (ListOp::FirstOrElse, [default]) => Some(list_first_or_else(&a, default, p, cx)),
         (ListOp::SortBy, [key]) => Some(list_sort_by(&a, key, false, p, cx)),
         (ListOp::SortByDescending, [key]) => Some(list_sort_by(&a, key, true, p, cx)),
+        (ListOp::SortWith, [cmp]) => Some(list_sort_with(&a, cmp, p, cx)),
         (ListOp::Distinct, []) if !key_is_plain(elem, tys.types()) => {
             Some(list_keyed(&a, "__bynkDistinct", p, cx))
         }
@@ -928,6 +929,26 @@ fn list_sort_by(
         let [recv, key] = take(n);
         sort_node(a, descending, &cmp, recv, key)
     }
+}
+
+/// #3955: `sortWith`: a stable sort by the author's comparator, whose
+/// `Ordering` answer is read back as a sign.
+fn list_sort_with(a: &ListArm, cmp: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
+    cx.runtime_use().note_cmp("__bynkOrderingSign");
+    let recv = pre.lower_node(a.receiver, cx);
+    let cmp = pre.lower_node(cmp, cx);
+    let body = call(
+        ident("__bynkOrderingSign"),
+        vec![call(ident("__f"), vec![ident("__a"), ident("__b")])],
+    );
+    iife(
+        vec![
+            TsParam::new("__f", None),
+            TsParam::new("__r", Some(xs_ty(&a.elem))),
+        ],
+        sorted_copy(ident("__r"), &a.elem, body),
+        vec![cmp, recv],
+    )
 }
 
 /// The argument order of the key comparison: swapped for `sortByDescending`.

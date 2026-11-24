@@ -4747,11 +4747,27 @@ pub(crate) fn bare_variant_owners<'a>(
             }
         }
     }
+    // #3955: the implicit `Ordering` names its variants only where the context
+    // says so, so a sum of the author's own that shares `Less`/`Equal`/`Greater`
+    // is never ambiguous with it.
+    if in_scope.len() > 1 {
+        in_scope.retain(|t| !is_prelude_ordering(t));
+    }
     if in_scope.is_empty() {
         left_out
     } else {
         in_scope
     }
+}
+
+/// #3955: whether `t` is the `Ordering` of `bynk.ordering`, which a unit reaches
+/// without writing `uses`. Its variants resolve only from context (an expected
+/// type, the other operand of a comparison, a `match`), unless nothing else in
+/// scope declares the name.
+pub(crate) fn is_prelude_ordering(t: &TypeDecl) -> bool {
+    t.name.name == "Ordering"
+        && matches!(&t.body, TypeBody::Sum(s)
+            if s.variants.iter().map(|v| v.name.name.as_str()).eq(["Less", "Equal", "Greater"]))
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its

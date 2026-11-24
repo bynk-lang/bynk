@@ -5,7 +5,9 @@
 //! kernels stay in `lower.rs`.
 
 use bynk_check::checker::{Callee, Ty, TyId};
-use bynk_check::kernel_op::{EffectOp, EffectResultOp, HttpResultOp, KernelOp, TestConnectionOp};
+use bynk_check::kernel_op::{
+    EffectOp, EffectResultOp, HttpResultOp, KernelOp, OrdOp, TestConnectionOp,
+};
 use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsLit, TsObjectEntry, TsType};
 
 use super::super::lower::{Pre, expect_location};
@@ -309,6 +311,14 @@ pub(in crate::emitter) fn lower_kernel_method_call(
                     return Some(built);
                 }
             }
+            // #3955: `compare` on any `Ord` value, as the type's own comparator
+            // read as an `Ordering`.
+            KernelOp::Ord(OrdOp::Compare) => {
+                if let [other] = args {
+                    return Some(lower_ord_compare(kernel_recv, receiver, other, cx, pre));
+                }
+                return mismatch(kop);
+            }
             // #2622: the `Decimal` kernel.
             KernelOp::Decimal(op) => {
                 if let Some(built) = pre.absorb_built(lower_decimal_kernel(receiver, op, args, cx))
@@ -368,6 +378,28 @@ pub(in crate::emitter) fn lower_kernel_method_call(
         }
     }
     None
+}
+
+/// #3955: `a.compare(b)`: the receiver type's comparator applied to both
+/// operands, its sign read as an `Ordering`.
+fn lower_ord_compare(
+    recv_ty: TyId,
+    receiver: &Expr,
+    other: &Expr,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> bynk_ts::TsExpr {
+    // The comparator is built before the operands lower: `note_cmp` fires first.
+    let cmp = cx.comparator(recv_ty);
+    cx.runtime_use().note_cmp("__bynkOrdering");
+    let a = pre.lower_node(receiver, cx);
+    let b = pre.lower_node(other, cx);
+    let cmp = if matches!(cmp, bynk_ts::TsExpr::Ident(_)) {
+        cmp
+    } else {
+        paren(cmp)
+    };
+    call(ident("__bynkOrdering"), vec![call(cmp, vec![a, b])])
 }
 
 /// §2.8.3: lower an `Effect[Result[T, E]]` combinator. `Effect[T]` is

@@ -1,0 +1,54 @@
+---
+#3955: `compare` answers an `Ordering` on every `Ord` value, `then` and `reverse`
+combine orderings, and `sortWith` sorts by a comparator that returns one. A sum
+of the unit's own that shares `Less` keeps its variants.
+---
+commons demo.order
+
+type Version = { major: Int, minor: Int, label: String } derives Ord
+
+type Step = enum { Less, More }
+
+fn ints(a: Int, b: Int) -> Ordering {
+  a.compare(b)
+}
+
+fn blobs(a: Bytes, b: Bytes) -> Ordering {
+  a.compare(b)
+}
+
+fn versions(a: Version, b: Version) -> Ordering {
+  a.major.compare(b.major).then(a.minor.compare(b.minor)).then(a.label.compare(b.label))
+}
+
+fn newestFirst(xs: List[Version]) -> List[Version] {
+  xs.sortWith((a, b) => a.compare(b).reverse())
+}
+
+fn byMinorThenLabel(xs: List[Version]) -> List[Version] {
+  xs.sortWith((a, b) => a.minor.compare(b.minor).then(b.label.compare(a.label)))
+}
+
+fn byMajorOnly(xs: List[Version]) -> List[Version] {
+  xs.sortWith((a, b) => a.major.compare(b.major))
+}
+
+fn isBefore(a: Int, b: Int) -> Bool {
+  a.compare(b) == Less
+}
+
+fn describe(o: Ordering) -> String {
+  match o {
+    Less => "less"
+    Equal => "equal"
+    Greater => "greater"
+  }
+}
+
+fn stepOf(a: Int, b: Int) -> Step {
+  if a.compare(b) == Ordering.Less { Less } else { More }
+}
+
+fn ranked(o: Ordering) -> Bool {
+  o < Greater
+}

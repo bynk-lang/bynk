@@ -317,6 +317,40 @@ impl ParsedFile {
             .any(|it| matches!(it, CommonsItem::Service(_)))
     }
 
+    /// #3955: add `uses <target>` that the source did not write, for a unit
+    /// reached implicitly (`bynk.ordering`, by any unit that mentions
+    /// `compare`, `sortWith` or `Ordering`). A no-op when the unit already
+    /// uses it. The declaration carries no source span, so nothing reports it.
+    pub fn add_implicit_uses(&mut self, target: &str) {
+        use bynk_syntax::ast::{Ident, QualifiedName, Trivia, UsesDecl};
+        use bynk_syntax::span::Span;
+        let uses = match &mut self.unit {
+            SourceUnit::Commons(c) => &mut c.uses,
+            SourceUnit::Context(c) => &mut c.uses,
+            SourceUnit::Adapter(a) => &mut a.uses,
+            SourceUnit::Suite(t) => &mut t.uses,
+        };
+        if uses.iter().any(|u| u.target.joined() == target) {
+            return;
+        }
+        let span = Span::default();
+        uses.push(UsesDecl {
+            target: QualifiedName {
+                parts: target
+                    .split('.')
+                    .map(|name| Ident {
+                        name: name.to_string(),
+                        span,
+                    })
+                    .collect(),
+                span,
+            },
+            span,
+            trivia: Trivia::default(),
+            blank_before: false,
+        });
+    }
+
     pub fn uses(&self) -> &Vec<UsesDecl> {
         match &self.unit {
             SourceUnit::Commons(c) => &c.uses,
