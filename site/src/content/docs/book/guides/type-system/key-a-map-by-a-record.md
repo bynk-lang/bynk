@@ -24,10 +24,15 @@ fn remember(m: Map[OrderId, Int], id: OrderId, qty: Int) -> Map[OrderId, Int] {
 }
 
 fn known(m: Map[OrderId, Int], id: OrderId) -> Bool {
-	match m.get(id) {
-		Some(_) => true,
-		None => false,
-	}
+	m.contains(id)
+}
+
+fn forget(m: Map[OrderId, Int], id: OrderId) -> Map[OrderId, Int] {
+	m.remove(id)
+}
+
+fn quantities(m: Map[OrderId, Int]) -> List[Int] {
+	m.entries().map((e) => e.value)
 }
 
 fn openOnly(xs: List[Status]) -> Set[Status] {
@@ -36,7 +41,8 @@ fn openOnly(xs: List[Status]) -> Set[Status] {
 ```
 
 Two `OrderId`s with the same fields are the same key, however they were built.
-`m.keys()` gives back real `OrderId`s, in the order they were first inserted.
+`m.keys()` and `m.entries()` give back real `OrderId`s, in the order they were first inserted,
+and `m.remove(id)` drops one without disturbing the rest.
 
 ## What cannot be a key
 

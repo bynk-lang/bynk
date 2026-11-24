@@ -673,8 +673,24 @@ insertion order. `Map.empty()` takes its types from context.
 | `m.insert(key: K, value: V)` | `Map[K, V]` | a new map with `key` set to `value`; `m` is unchanged |
 | `m.keys()` | `List[K]` | the keys |
 | `m.values()` | `List[V]` | the values |
+| `m.remove(key: K)` | `Map[K, V]` | without `key`; `m` is unchanged; a no-op when `key` is absent |
+| `m.contains(key: K)` | `Bool` | whether `key` has an entry |
+| `m.getOrElse(key: K, default: V)` | `V` | the value at `key`, or `default` when absent |
+| `m.isEmpty()` | `Bool` | whether there are no entries |
+| `m.entries()` | `List[MapEntry[K, V]]` | the entries, in insertion order |
+| `Map.of(entries: List[MapEntry[K, V]])` | `Map[K, V]` | a later entry for a key replaces the value and keeps the first position |
+| `m.filter(p: (K, V) -> Bool)` | `Map[K, V]` | the entries for which `p` holds; order kept |
+| `m.mapValues(f: V -> U)` | `Map[K, U]` | each value through `f`; keys and order kept |
+| `m.fold(init: U, step: (U, K, V) -> U)` | `U` | `step` applied from `init` across the entries, in insertion order |
 
-More combinators are in the `bynk.map` commons (`uses bynk.map`). A
+Every method that returns a map keeps insertion order, over plain and composite
+keys alike. `entries()` yields the same compiler-known `MapEntry` as a
+`store Map`'s `.entries`, which is not a boundary type, so a handler projects entries into a
+named type before returning them. A `MapEntry` has no literal form, so `Map.of`
+takes the entries of another map, for example `Map.of(m.entries().filter(…))`. The
+`bynk.map` commons is deprecated: `values`, `contains` and `getOr` are the methods
+`m.values()`, `m.contains(key)` and `m.getOrElse(key, default)`, and each call warns
+with `bynk.map.deprecated_function` and a fix. A
 `store … : Map[K, V]` field is a different thing: an agent's storage map, read
 through [Query](#query) and the [map key accessors](#map-key-accessors).
 
@@ -699,8 +715,18 @@ let none: Set[Int] = Set.empty()
   element's first position.
 - **Kernel:** `length()`, `contains(x)`, `insert(x)`, `remove(x)` and
   `toList()`. `insert` and `remove` return a new set.
-- **Combinators** are the `bynk.set` commons (`uses bynk.set`): `union`,
-  `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`.
+- **Combinators** are methods, all in insertion order:
+  - `union(other: Set[T])`: `a`'s elements, then `other`'s new members.
+  - `intersect(other: Set[T])` and `difference(other: Set[T])`: in `a`'s order.
+  - `isSubsetOf(other: Set[T])`: whether every element is in `other`.
+  - `isEmpty()`: whether there are no elements.
+  - `filter(p: T -> Bool)`: the elements for which `p` holds.
+  - `map(f: T -> U)`: each element through `f`; `U` must be a `Key`, and elements that map to
+    one value merge at the first position.
+  - `fold(init: U, step: (U, T) -> U)`: `step` applied from `init` across the elements.
+
+  The `bynk.set` commons is deprecated: its functions are these methods, and each call warns
+  with `bynk.set.deprecated_function` and a fix.
 - **Equality** is membership: `Set.of([1, 2]) == Set.of([2, 1])`.
 - **On the wire** a set is a JSON array in insertion order. Decoding one with a
   repeated element fails, since a Bynk sender never writes one.

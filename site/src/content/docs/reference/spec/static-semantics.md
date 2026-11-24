@@ -1588,10 +1588,10 @@ the same dependency-cycle check.
 {{#grammar-semantics given_clause}}
 
 **A capability operation's own type parameter (v0.235, ADR 0281).** A
-`capability_op`'s optional `[T, …]` is resolved only from an explicit type
-argument at the call site (`Cap.op[SomeType](…)`) — never inferred from the
-arguments or the expected type. Omitting it where no parameter's type mentions
-`T` is rejected (`bynk.generics.uninferable_type_arg`); the wrong number of
+`capability_op`'s optional `[T, …]` is resolved from an explicit type
+argument at the call site (`Cap.op[SomeType](…)`), or inferred from the arguments
+when they determine every parameter (#4113); it is never inferred from the
+expected type. Omitting it where the arguments do not determine `T` is rejected (`bynk.generics.uninferable_type_arg`); the wrong number of
 type arguments is `bynk.generics.type_arg_mismatch`. A capability with a
 generic operation MUST be implemented by an **external** provider
 (`bynk.provider.generic_op_requires_external`) — a Bynk-bodied provider's `T`
@@ -2370,7 +2370,7 @@ schema registry counts a field added with a default as an additive change.
 
 **Emission.** `Events` is a first-party capability of the `bynk` adapter,
 `emit[E](event: E) -> Effect[()]`, consumed with `consumes bynk { Events }` and
-required by `given Events`; its type argument is always written, never inferred.
+required by `given Events`; its type argument is inferred from `event`, or written (`Events.emit[E](event)`); either way the owner check below applies to `E`.
 `E` MUST be an `event` (`bynk.event.emit_not_an_event`) declared in the emitting
 context itself (`bynk.event.emit_outside_owner`): a context that can name a
 foreign event, to subscribe to it, still cannot emit it. An emission is released
@@ -3233,8 +3233,13 @@ Bynk in the first-party `bynk.list` / `bynk.map` commons
 ([§8.4](/reference/spec/compilation-model/#84-build-pipeline--conformance-to-typescript)),
 imported with `uses bynk.list` like any commons: `map`, `filter`, `find`,
 `any`, `all`, `reverse`, `traverse`, `sort`, `min`, `max` (all now `List` methods, and deprecated here); `values`, `contains`,
-`getOr`. There is no `Map.fromList` — Bynk has no pair type to spell its
-argument with; maps build via `Map.empty()` + `insert` folds.
+`getOr`. Since #3961 `Map` and `Set` carry the same vocabulary as methods
+(`Map.remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`,
+`mapValues`, `fold` and the static `Map.of(entries)`; `Set.union`, `intersect`,
+`difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`), and the `bynk.map` and
+`bynk.set` functions are deprecated in favour of them, with the warnings
+`bynk.map.deprecated_function` and `bynk.set.deprecated_function`. There is no
+literal for a `MapEntry`, so `Map.of` takes the entries of another map.
 
 > **Deprecated (v0.91, ADR 0116 D6; completed by #3962).** Every free function has a
 > `List` method form, and each emits a non-failing

@@ -1,0 +1,5 @@
+commons demo.mapremove
+
+fn bad(m: Map[String, Int]) -> Map[String, Int] {
+  m.remove(3)
+}

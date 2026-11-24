@@ -421,6 +421,9 @@ pub(in crate::emitter) fn lower_set_kernel(
     elem: TyId,
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
+    if let Some(l) = super::kernel_collections::lower_set_more(receiver, op, args, cx) {
+        return Some(l);
+    }
     let tys = cx.ty_render();
     let mut pre = Pre::new();
     let elem_t = ts_ty_to_ts_type(elem, tys);
@@ -509,6 +512,9 @@ pub(in crate::emitter) fn lower_map_kernel(
     val: TyId,
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
+    if let Some(l) = super::kernel_collections::lower_map_more(receiver, op, args, key, val, cx) {
+        return Some(l);
+    }
     let tys = cx.ty_render();
     let mut pre = Pre::new();
     let key_t = ts_ty_to_ts_type(key, tys);

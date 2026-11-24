@@ -69,6 +69,12 @@ This is how a service implements an existing API's authentication scheme, one an
 [actor](/reference/actors/) does not describe. Where an actor fits, prefer
 it: the seam verifies the credential before the handler runs.
 
+A route whose `by` actor's seam consumed a credential does not show it in this view. On a `Bearer` or `Oidc`
+route the `Authorization` header is omitted, so `get("authorization")` and `bearer()` are `None`; on a
+`Signature` route the signature header is omitted (the body stays readable). A `SignedCookie` route omits its
+session cookie, and on an actor sum every member's credential is omitted. A handler that must forward a token
+downstream can't take it from here. A `by v: Visitor` route consumed nothing, so the example above works.
+
 The view is read while the request is handled, never kept: `RequestHeaders` can't
 be a field of a type or cross a boundary (a call, a message, an agent), though a
 plain function may take it to share a check between handlers

@@ -138,6 +138,15 @@ kernel_ops! {
         Insert = "insert", "insert(item: T) -> Set[T]";
         Remove = "remove", "remove(item: T) -> Set[T]";
         ToList = "toList", "toList() -> List[T]";
+        // #3961: the set algebra and the `List`-shaped vocabulary, as methods.
+        Union = "union", "union(other: Set[T]) -> Set[T]";
+        Intersect = "intersect", "intersect(other: Set[T]) -> Set[T]";
+        Difference = "difference", "difference(other: Set[T]) -> Set[T]";
+        IsSubsetOf = "isSubsetOf", "isSubsetOf(other: Set[T]) -> Bool";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Filter = "filter", "filter(p: T -> Bool) -> Set[T]";
+        Map = "map", "map(f: T -> U) -> Set[U]";
+        Fold = "fold", "fold(init: U, step: (U, T) -> U) -> U";
     }
 /// `Map[K, V]` (v0.20b).
     MapOp {
@@ -146,6 +155,15 @@ kernel_ops! {
         Values = "values", "values() -> List[V]";
         Get = "get", "get(key: K) -> Option[V]";
         Insert = "insert", "insert(key: K, value: V) -> Map[K, V]";
+        // #3961: removal, membership, entry access and the `List`-shaped vocabulary.
+        Remove = "remove", "remove(key: K) -> Map[K, V]";
+        Contains = "contains", "contains(key: K) -> Bool";
+        GetOrElse = "getOrElse", "getOrElse(key: K, default: V) -> V";
+        IsEmpty = "isEmpty", "isEmpty() -> Bool";
+        Entries = "entries", "entries() -> List[MapEntry[K, V]]";
+        Filter = "filter", "filter(p: (K, V) -> Bool) -> Map[K, V]";
+        MapValues = "mapValues", "mapValues(f: V -> U) -> Map[K, U]";
+        Fold = "fold", "fold(init: U, step: (U, K, V) -> U) -> U";
     }
 /// `Query[T]` (v0.91, ADR 0115; joins/grouping v0.94, ADR 0116/0120) — the lazy
 /// storage-query vocabulary a `store` collection lifts into (a `store Map`'s
@@ -497,6 +515,7 @@ kernel_ops! {
 /// `Map.empty()`.
     MapStatic {
         Empty = "empty", "Map.empty() -> Map[K, V]";
+        Of = "of", "Map.of(entries: List[MapEntry[K, V]]) -> Map[K, V]";
     }
 /// `Set.empty()` / `Set.of(xs)` (K6a, #2596).
     SetStatic {
