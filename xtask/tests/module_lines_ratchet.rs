@@ -1,7 +1,7 @@
 //! The ratcheted module size (#4085): no back-half source file may grow past its committed
 //! ceiling in `xtask/module-line-ceilings.txt`, none may newly reach the threshold, a ceiling
-//! must be removed when its file drops below it, and a new entry may not reach the track's
-//! exit cap. `cargo xtask module-lines` prints the measurement; `--apply` rewrites the file.
+//! must be removed when its file drops below it, and no entry may reach the track's exit cap.
+//! `cargo xtask module-lines` prints the measurement; `--apply` rewrites the file.
 
 use std::path::PathBuf;
 
@@ -15,7 +15,6 @@ fn no_module_grows_past_its_ceiling() {
     let measured = xtask::module_lines::measure(&root);
     let ceilings = xtask::module_lines::read_ceilings(&root);
     let mut problems = xtask::module_lines::violations(&measured, &ceilings);
-    problems.extend(xtask::module_lines::stale_grandfathered(&ceilings));
     problems.extend(xtask::module_lines::malformed_ceiling_lines(&root));
     assert!(
         problems.is_empty(),
