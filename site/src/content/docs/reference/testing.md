@@ -849,7 +849,11 @@ The value is shown in the runtime's own tagged form (`{"tag":"Err","error":"…"
 the same printer a comparison failure uses, and only when the claim fails. A subject
 that is not plain data (a function, a stream, a held connection)
 shows its type instead (`r was an Option[Stream[Int]]`). A value of a redacted type
-(`SigningKey`, `VerifyKey`, `TokenClaims`) shows `<redacted>`. The message cuts a long
+(`SigningKey`, `VerifyKey`, `TokenClaims`) shows `<redacted>`. A `Duration` or `Instant` inside the
+value prints as a Bynk value (`3.seconds`, `Instant.fromEpochMillis(0)`), as does a
+counterexample of a failing `for all` over one, whether it sits directly in the type or in a
+list, `Option`, `Result`, record or sum; inside a `Map` or `Set`, or deeper than six named
+levels, it prints as its millisecond count. The message cuts a long
 value at 2,000 characters and says so; `--format json` carries the whole value as
 `actual` ([Machine-readable output](#machine-readable-output---format-json)). A subject that is a
 call, or any other expression, reports no value: bind it first (`let r = f(x)`), then
