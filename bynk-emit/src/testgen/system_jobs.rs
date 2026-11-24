@@ -65,7 +65,11 @@ pub(super) fn emit_system_job_support(
                     };
                     let idx = exprs.len();
                     let key = crate::emitter::cron_handler_method_name(sname, idx);
-                    let (params, at) = match h.params.first() {
+                    let time_param = h.params.iter().find(|p| {
+                        bynk_syntax::cron::cron_param(&p.type_ref)
+                            == Some(bynk_syntax::cron::CronParam::Time)
+                    });
+                    let (params, at) = match time_param {
                         Some(p) => (
                             vec![TsParam::new("at", Some(driver_param_type(&p.type_ref)))],
                             ident("at"),

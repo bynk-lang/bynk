@@ -19,11 +19,17 @@ service <Name> from cron {
   exactly Cloudflare's syntax (see [Schedule syntax](#schedule-syntax)). An
   invalid one is `bynk.cron.invalid_schedule`, and the message names the failing
   field. Schedules run in **UTC**.
-- **Parameter:** *optional*, at most one. If present it must be `Instant` and
-  receives the scheduled fire time; otherwise `bynk.cron.bad_params`. An `Int`
-  parameter, the spelling before v0.90's `Instant` reached cron, is that error
-  too: write `at: Instant`, and `at.toEpochMillis()` where the body needs the
-  number. For "now", use `Clock.now()`; the parameter is the exact,
+- **Parameters:** *optional*, at most two, told apart by type and in either
+  order: an `Instant` (the scheduled fire time) and exactly `CronSchedule` (the
+  schedule expression that fired this run, `event.cron`; nameable in a context that
+  `consumes bynk { CronSchedule }`). A second parameter of the same type, a third,
+  or any other type is `bynk.cron.bad_params`, as is a `CronSchedule` that the
+  context declares itself rather than takes from `bynk`. `schedule` is the expression
+  that fired this run, not "the next run"; it equals the expression as written,
+  since a schedule is single-spaced. For the `Instant`, an `Int` parameter (the
+  spelling before v0.90's `Instant` reached cron) is that error too: write
+  `at: Instant`, and `at.toEpochMillis()` where the body needs the number. For
+  "now", use `Clock.now()`; the parameter is the exact,
   schedule-aligned instant, which stays the same when a run starts late (useful
   for bucketing and idempotency). It works directly with `Duration` arithmetic
   (`at - 1.hour`) and `Instant` comparison.
@@ -135,7 +141,8 @@ service sweeper from cron {
 
 cron handlers compile to the Worker's `scheduled` entry point on the
 `--target workers` target (dispatching on `event.cron`, passing
-`event.scheduledTime` to handlers that declare the parameter), and every
+`event.scheduledTime` and `event.cron` to handlers that declare those parameters, in
+the order they declare them), and every
 schedule is aggregated into the `[triggers]` table of the generated
 `wrangler.toml`. See [emission](/reference/tooling/emission/) and
 [Target Cloudflare Workers](/book/guides/projects-build-and-deployment/cloudflare-workers/).

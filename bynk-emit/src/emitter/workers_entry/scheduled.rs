@@ -2,8 +2,8 @@
 
 use super::respond::{case_, default_case};
 use crate::ts_build::{
-    await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_, str_lit,
-    strict_eq, strict_neq, switch_stmt,
+    as_expr, await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_,
+    str_lit, strict_eq, strict_neq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTypeMember};
@@ -56,12 +56,21 @@ pub(super) fn emit_scheduled_handler(
     let mut cases: Vec<TsSwitchCase> = Vec::new();
     for route in cron_routes {
         let method_key = crate::emitter::cron_handler_method_name(&route.service, route.index);
-        // Pass the scheduled fire time (epoch ms) when the handler asked for it.
-        let args: Vec<TsExpr> = if route.has_param {
-            vec![member(ident("event"), "scheduledTime")]
-        } else {
-            vec![]
-        };
+        // Pass what each declared parameter asks for, in declaration order: the
+        // scheduled fire time (epoch ms) and/or the schedule that fired.
+        let args: Vec<TsExpr> = route
+            .params
+            .iter()
+            .map(|p| match p {
+                bynk_syntax::cron::CronParam::Time => member(ident("event"), "scheduledTime"),
+                // `event.cron` is the schedule this case matched on, which the
+                // checker proved is a valid `CronSchedule`; the brand is a type, so
+                // the plain string is cast to it.
+                bynk_syntax::cron::CronParam::Schedule => {
+                    as_expr(member(ident("event"), "cron"), TsType::named("never"))
+                }
+            })
+            .collect();
         let mut case_body = vec![const_(
             "result",
             await_expr(call(member(ident("surface"), method_key), args)),
@@ -116,8 +125,10 @@ pub(super) struct CronRoute {
     pub(super) service: String,
     pub(super) index: usize,
     pub(super) expr: String,
-    /// Whether the handler declares the optional scheduled-time parameter.
-    pub(super) has_param: bool,
+    /// What each declared parameter receives, in declaration order (#3874): the
+    /// scheduled time (`event.scheduledTime`) and/or the schedule that fired
+    /// (`event.cron`).
+    pub(super) params: Vec<bynk_syntax::cron::CronParam>,
 }
 
 /// Collect the cron handlers across the services, carrying the per-service
@@ -138,7 +149,11 @@ pub(super) fn collect_cron_routes(table: &UnitTable, service_names: &[&String]) 
                     service: (*sname).clone(),
                     index: cron_idx,
                     expr,
-                    has_param: !h.params.is_empty(),
+                    params: h
+                        .params
+                        .iter()
+                        .filter_map(|p| bynk_syntax::cron::cron_param(&p.type_ref))
+                        .collect(),
                 });
                 cron_idx += 1;
             }
