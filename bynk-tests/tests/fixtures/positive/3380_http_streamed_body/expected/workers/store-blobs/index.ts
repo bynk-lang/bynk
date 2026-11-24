@@ -59,7 +59,7 @@ export default {
         const __m = __matchPath("/blobs/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /blobs/:name";
-          if (!__mediaTypeMatches(request, "application/octet-stream")) {
+          if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           const __contentLength = request.headers.get("content-length");

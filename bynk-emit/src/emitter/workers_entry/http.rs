@@ -74,7 +74,7 @@ pub(super) struct HttpRoute {
     /// request's octets as read, undecoded, and the router answers `415` to any
     /// other `Content-Type` (`"*/*"` accepts all). A raw route always has a cap
     /// (`bynk.http.raw_body_unbounded`), so it always takes the counted read.
-    pub(super) raw: Option<String>,
+    pub(super) raw: Option<Vec<String>>,
     /// #2858: the route writes `Option` as plain JSON (`v` / `null`) in its
     /// response body — its `@json(options:)`, else the service's `json { }`.
     pub(super) json_plain: bool,
@@ -319,6 +319,63 @@ fn stamp_rejection(
     }
 }
 
+/// The `415` a `@raw` route answers to a `Content-Type` outside the declared
+/// media type or list of them (#3912), or a JSON `body` route answers to a
+/// `Content-Type` that is present and neither `application/json` nor a `+json`
+/// type (a missing one is accepted). A router decision like the `413`, ahead of
+/// the auth seam and the body read, so it costs nothing and reveals nothing.
+/// `@form` and `@multipart` routes have their own checks.
+fn raw_json_media_guard(
+    route: &HttpRoute,
+    has_body: bool,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+) -> Option<TsStmt> {
+    if !has_body {
+        return None;
+    }
+    let (matcher, args, expected) = match route.raw.as_deref() {
+        Some([only]) if only == "*/*" => return None,
+        Some(types) => {
+            let list = TsExpr::array(types.iter().map(|t| str_lit(t.clone())).collect());
+            (
+                "__mediaTypeMatches",
+                vec![ident("request"), list],
+                types.join(", "),
+            )
+        }
+        None if route.form_fields.is_none() && route.multipart.is_none() => (
+            "__jsonMediaTypeMatches",
+            vec![ident("request")],
+            "application/json".to_string(),
+        ),
+        None => return None,
+    };
+    let details = if route.raw.is_some() {
+        format!("expected Content-Type {expected}")
+    } else {
+        "expected Content-Type application/json".to_string()
+    };
+    let unsupported = stamp_rejection(
+        json_response(
+            json_error_kind(
+                "UnsupportedMediaType",
+                vec![("details".to_string(), str_lit(details))],
+            ),
+            415,
+        ),
+        cors_const,
+        security_const,
+        rejected,
+    );
+    Some(if_(
+        TsExpr::Unary {
+            op: bynk_ts::TsUnaryOp::Not,
+            expr: Box::new(call(ident(matcher), args)),
+        },
+        block(vec![return_(Some(unsupported))]),
+    ))
+}
+
 /// Generate the per-route dispatch block for one `on http` handler. The
 /// router has already been entered via `try`; this block extracts path
 /// parameters, deserialises the body (when present), invokes the handler,
@@ -404,36 +461,11 @@ pub(super) fn emit_http_route_dispatch(
             rejected,
         )
     };
-    // A `@raw` route answers `415` to a `Content-Type` other than the declared
-    // media type — a router decision like the `413`, ahead of the auth seam and
-    // the body read, so it costs nothing and reveals nothing.
-    if let Some(ct) = route.raw.as_deref().filter(|ct| has_body && *ct != "*/*") {
-        let unsupported = stamp_rejection(
-            json_response(
-                json_error_kind(
-                    "UnsupportedMediaType",
-                    vec![(
-                        "details".to_string(),
-                        str_lit(format!("expected Content-Type {ct}")),
-                    )],
-                ),
-                415,
-            ),
-            cors_const,
-            security_const,
-            rejected,
-        );
-        guarded.push(if_(
-            TsExpr::Unary {
-                op: bynk_ts::TsUnaryOp::Not,
-                expr: Box::new(call(
-                    ident("__mediaTypeMatches"),
-                    vec![ident("request"), str_lit(ct.to_string())],
-                )),
-            },
-            block(vec![return_(Some(unsupported))]),
-        ));
-    }
+    guarded.extend(raw_json_media_guard(
+        route,
+        has_body,
+        (cors_const, security_const, rejected),
+    ));
     // #3276: a `@form` route answers `415` to any `Content-Type` but a UTF-8
     // `application/x-www-form-urlencoded`, at the same point as a `@raw` route.
     if has_body && route.form_fields.is_some() {
@@ -1315,7 +1347,9 @@ pub(super) fn collect_http_routes(
                     // `limits { }`, else none. `Some` drives the synthesised `413`
                     // `Content-Length` guard before the body is read.
                     max_body: effective_max_body(service.limits.as_ref(), h),
-                    raw: h.raw_content_type().map(str::to_string),
+                    raw: Some(h.raw_content_types())
+                        .filter(|v| !v.is_empty())
+                        .map(|v| v.into_iter().map(str::to_string).collect()),
                     json_plain: bynk_syntax::ast::effective_json_options(service.json.as_ref(), h)
                         == bynk_syntax::ast::JsonOptions::Plain,
                     rejected: rejected_surface(service, sname),

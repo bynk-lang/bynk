@@ -2129,7 +2129,7 @@ decoder rejects (an enum other than a variant's exact name, an `Int` that is not
 digits, a `Bool` other than `true` or `false`) is refused (`bynk.http.cookie_value_undecodable`).
 
 **`@raw`.** A third handler annotation, `@raw(contentType: "<type>/<subtype>")` (or
-`"*/*"`), marks a handler's `body: Bytes` as the raw request body. It is legal only
+`"*/*"`, or a non-empty list of `"<type>/<subtype>"` literals, `"*/*"` excluded), marks a handler's `body: Bytes` as the raw request body. It is legal only
 on a `POST`/`PUT`/`PATCH` handler with a `body` (`bynk.http.raw_on_bodyless`), at
 most once (`bynk.http.raw_duplicate`), with the one argument `contentType`
 (`bynk.http.raw_unknown_arg`) a media type (`bynk.http.raw_bad_content_type`). The

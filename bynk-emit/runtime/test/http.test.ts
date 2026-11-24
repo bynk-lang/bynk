@@ -26,6 +26,7 @@ import {
   RAW_WEAK_ETAG_MAX_BYTES,
   responseToHttpOutcome,
   responseToUnauthOutcome,
+  jsonMediaTypeMatches,
   mediaTypeMatches,
   requestHeaders,
   requestCookies,
@@ -564,6 +565,31 @@ test("responseToHttpOutcome classifies the router's 413 and 415 by their kind", 
   // A handler's own `PayloadTooLarge` has no `kind`: it ran, so it is `Handled`.
   const handled = await responseToHttpOutcome(httpResultToResponse(HttpResult.PayloadTooLarge("too big"), (v) => v), deser);
   assert.equal(handled.tag, "Handled");
+});
+
+const reqOf = (ct: string | null) =>
+  new Request("https://x.test/", { method: "POST", headers: ct === null ? {} : { "content-type": ct } });
+
+test("mediaTypeMatches takes a list of types (#3912)", () => {
+  const req = reqOf;
+  const png = ["image/png", "image/jpeg"];
+  assert.equal(mediaTypeMatches(req("image/png"), png), true);
+  assert.equal(mediaTypeMatches(req("IMAGE/JPEG; q=1"), png), true);
+  assert.equal(mediaTypeMatches(req("image/gif"), png), false);
+  assert.equal(mediaTypeMatches(new Request("https://x/", { method: "POST", body: "x" }), png), false);
+});
+
+test("jsonMediaTypeMatches accepts json, +json and a missing type, refuses the rest (#3912)", () => {
+  const req = reqOf;
+  const none = new Request("https://x/", { method: "POST" });
+  assert.equal(jsonMediaTypeMatches(none), true);
+  assert.equal(jsonMediaTypeMatches(req("application/json")), true);
+  assert.equal(jsonMediaTypeMatches(req("Application/JSON; charset=utf-8")), true);
+  assert.equal(jsonMediaTypeMatches(req("application/problem+json")), true);
+  assert.equal(jsonMediaTypeMatches(req("application/vnd.x+json")), true);
+  assert.equal(jsonMediaTypeMatches(req("application/x-www-form-urlencoded")), false);
+  assert.equal(jsonMediaTypeMatches(req("multipart/form-data; boundary=x")), false);
+  assert.equal(jsonMediaTypeMatches(req("text/plain")), false);
 });
 
 test("mediaTypeMatches ignores parameters and case, and `*/*` takes anything", () => {

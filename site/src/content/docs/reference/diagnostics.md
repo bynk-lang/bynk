@@ -390,7 +390,7 @@ There are **908** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.query_field_not_stringy`](/reference/diagnostics/bynk.http.query_field_not_stringy/) — A field of an HTTP handler's `query` record has a type a query string cannot carry.
 - [`bynk.http.query_not_http`](/reference/diagnostics/bynk.http.query_not_http/) — A `RequestQuery` appears on a handler that is not an HTTP route.
 - [`bynk.http.query_wrong_type`](/reference/diagnostics/bynk.http.query_wrong_type/) — An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`.
-- [`bynk.http.raw_bad_content_type`](/reference/diagnostics/bynk.http.raw_bad_content_type/) — A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `"*/*"`) string literal.
+- [`bynk.http.raw_bad_content_type`](/reference/diagnostics/bynk.http.raw_bad_content_type/) — A `@raw` annotation's `contentType` is missing, or not a `type/subtype` (or `"*/*"`) string literal or a list of `type/subtype` literals.
 - [`bynk.http.raw_body_not_bytes`](/reference/diagnostics/bynk.http.raw_body_not_bytes/) — The `body` of a `@raw` handler is not typed `Bytes` or `Stream[Bytes]`.
 - [`bynk.http.raw_body_unbounded`](/reference/diagnostics/bynk.http.raw_body_unbounded/) — A `@raw` route has no request-body cap (no `@limit` and no service `limits`).
 - [`bynk.http.raw_duplicate`](/reference/diagnostics/bynk.http.raw_duplicate/) — A handler carries more than one `@raw` annotation.
