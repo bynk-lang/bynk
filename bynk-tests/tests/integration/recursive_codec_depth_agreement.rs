@@ -33,6 +33,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "../support/shared_snapshots.rs"]
+mod shared_snapshots;
+
 /// One emitted codec function.
 struct Def {
     takes_depth: bool,
@@ -111,7 +114,7 @@ fn load(root: &Path) -> Tree {
             if path.is_dir() {
                 walk(&path, root, out);
             } else if path.extension().is_some_and(|e| e == "ts") {
-                let text = fs::read_to_string(&path).unwrap();
+                let text = shared_snapshots::read_expanded(&path);
                 out.insert(path.strip_prefix(root).unwrap().to_path_buf(), parse(&text));
             }
         }
