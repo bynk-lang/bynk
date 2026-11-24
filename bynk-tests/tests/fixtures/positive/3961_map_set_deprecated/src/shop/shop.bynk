@@ -1,0 +1,16 @@
+commons shop {
+  uses bynk.map
+  uses bynk.set
+
+  fn has(m: Map[String, Int], k: String) -> Bool {
+    contains(m, k)
+  }
+
+  fn fallback(m: Map[String, Int], k: String) -> Int {
+    getOr(m, k, 0)
+  }
+
+  fn merged(a: Set[Int], b: Set[Int]) -> Set[Int] {
+    union(a, b)
+  }
+}

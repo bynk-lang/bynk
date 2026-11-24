@@ -743,7 +743,12 @@ pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
 /// warning (ADR 0117) with a machine-applicable rewrite to the method form —
 /// `map(xs, f)` → `xs.map(f)`, `reverse(xs)` → `xs.reverse()`.
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
-    if ctx.input.imported_from.get(&name.name).map(String::as_str) != Some("bynk.list") {
+    let module = ctx.input.imported_from.get(&name.name).map(String::as_str);
+    // #3961: `bynk.map` and `bynk.set` are deprecated the same way.
+    if matches!(module, Some("bynk.map" | "bynk.set")) {
+        return super::collections::warn_deprecated_collection_fn(name, args, call_span, ctx);
+    }
+    if module != Some("bynk.list") {
         return;
     }
     // The method-form spelling each free function rewrites to.
@@ -1789,6 +1794,7 @@ pub(crate) fn check_static_call(
                 op: method.name.clone(),
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
+                event: None,
             },
         );
         let mut err = CompileError::new(
@@ -1857,6 +1863,7 @@ pub(crate) fn check_static_call(
                 op: method.name.clone(),
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
+                event: None,
             },
         );
         if !ctx.effectful {
@@ -1978,16 +1985,15 @@ pub(crate) fn check_static_call(
         }
         let op_clone = op.clone();
         // #926: resolve the op's own type parameter(s) from an explicit
-        // call-site type argument — explicit only, never inferred (mirrors
-        // `Json.decode[T]`, not `#594`'s inference). `check_generic_call`
-        // (this file) is the model; only its arity-check + substitution-build
-        // half applies here, since a capability op has no argument-driven
-        // inference pass.
+        // call-site type argument, or (#4113) from the arguments when they
+        // determine every one.
         let mut subst: HashMap<String, TyId> = HashMap::new();
-        // Slice 3: an operation with `Codable` parameters infers its type
+        // Slice 3, widened by #4113: an operation with type parameters infers its type
         // arguments from the arguments, when they determine every one.
         let mut arg_tys: Option<Vec<Option<TyId>>> = None;
-        if type_args.is_empty() && !op_clone.codable_params.is_empty() {
+        if type_args.is_empty()
+            && (!op_clone.codable_params.is_empty() || !op_clone.type_params.is_empty())
+        {
             let (inferred, typed) = infer_op_type_args(&op_clone, args, ctx);
             arg_tys = Some(typed);
             if let Some(found) = inferred {
@@ -2034,68 +2040,25 @@ pub(crate) fn check_static_call(
                 }
                 return None;
             }
+            // #4113: an inferred type argument meets the same owner-only check as a written one.
+            if type_args.is_empty() {
+                for ty in op_clone.type_params.iter().filter_map(|tp| subst.get(tp)) {
+                    super::events_emit::check_emit_owner(
+                        local_first_party(&type_name.name, ctx),
+                        &method.name,
+                        (*ty, span, expr_id),
+                        ctx,
+                    );
+                }
+            }
             for (tp, ta) in op_clone.type_params.iter().zip(type_args) {
                 let ty = resolve_expr_type_ref(ta, ctx)?;
-                // Events track, slice 0 (spine #936): owner-only emission —
-                // `Events.emit[E]` may only name an event `E` declared in
-                // *this* context, even though a `consumes`-visible foreign
-                // event resolves here just as validly for every other
-                // purpose. `is_local_type` already distinguishes "declared
-                // here" from "visible via uses/consumes" (the same table
-                // ADR 0256's locale-types-split gap analysis used), so this
-                // is a check over existing data, not new provenance
-                // plumbing — the primary boundary guarantee the threat
-                // model (the retired events track's §6, `design/archive/retired-tracks.md`) names.
-                //
-                // First-party-gated like every other Events-special-cased
-                // site (mirrors #934's Idempotency precedent): a bare
-                // `type_name.name == "Events"` string match would also fire
-                // for a third-party capability that happens to declare its
-                // own `Events` with an `emit` method — only bynk's own
-                // capability (declared here, in `bynk` itself, or flattened
-                // in via `consumes bynk { Events }`) gets this check.
-                let is_first_party_events = method.name == "emit"
-                    && local_first_party(&type_name.name, ctx)
-                        == Some(crate::firstparty::FirstPartyCap::Events);
-                if is_first_party_events && let Ty::Named { name: ename, .. } = &*tys.get(ty) {
-                    if ctx.input.is_local_event(ename) {
-                        // Locally-declared event — the owner. Fine.
-                    } else if ctx.input.is_local_type(ename) {
-                        // Events track, slice 0: `UnitTable`/`ResolvedCommons`
-                        // record which local names are specifically events
-                        // (as opposed to any other locally-declared type) —
-                        // `Events.emit[SomeLocalRecord]` compiled clean before
-                        // this check existed, silently buffering an emission
-                        // no `from Events(...)` subscriber could ever match
-                        // (`discover_event_subscribers` finds no owner for a
-                        // non-event name and just drops it).
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.event.emit_not_an_event",
-                                ta.span(),
-                                format!(
-                                    "`{ename}` is not a declared `event` — `Events.emit` may only name an event type"
-                                ),
-                            )
-                            .with_note(
-                                "declare it with `event Name = { ... }`, or check that the type argument names the event you meant",
-                            ),
-                        );
-                    } else {
-                        ctx.errors.push(
-                            CompileError::new(
-                                "bynk.event.emit_outside_owner",
-                                ta.span(),
-                                format!(
-                                    "`{ename}` is not declared in this context — only the context that declares an event may emit it"
-                                ),
-                            )
-                            .with_note(
-                                "a foreign event is visible via `consumes` for subscription (`from Events(...)`), but only its owning context may `Events.emit` it",
-                            ),
-                        );
-                    }
-                }
+                super::events_emit::check_emit_owner(
+                    local_first_party(&type_name.name, ctx),
+                    &method.name,
+                    (ty, ta.span(), expr_id),
+                    ctx,
+                );
                 subst.insert(tp.clone(), ty);
             }
         }
@@ -6917,6 +6880,7 @@ fn record_capability_wire(
             op: name.to_string(),
             wire: Some(wire),
             first_party: local_first_party(cap, ctx),
+            event: None,
         },
     );
     true

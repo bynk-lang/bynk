@@ -1,0 +1,5 @@
+commons demo.setmapfn
+
+fn bad(s: Set[Int]) -> Set[Int] {
+  s.map(nope)
+}

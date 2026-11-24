@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0899](0899-seam-consumed-credential-hidden-from-request-headers.md) | **A seam's consumed credential header is omitted from the handler's `RequestHeaders`** (v0.648.1) — Bearer, Oidc and Signature routes hide their credential header, as SignedCookie hides its cookie | Accepted (v0.648.1) |
+| [0898](0898-map-and-set-get-the-list-treatment.md) | **Map and Set are as complete as methods as List became under ADR 0116** (v0.648) — Adds the missing Map and Set methods, with insertion order specified, and deprecates bynk.map and bynk.set | Accepted (v0.648) |
+| [0897](0897-events-emit-infers-its-type-argument.md) | **A capability operation's type parameter is inferred from its arguments, `Events.emit` included** (v0.647.1) — Inference covers every generic capability op whose arguments determine it; the owner-only check runs on the inferred type | Accepted (v0.647.1) |
 | [0896](0896-string-code-point-order.md) | **String orders and measures by code point everywhere** (v0.647) — One comparator, code point order, shared by operators, kernels, Ord witnesses and the storage overlay; predicates count code points | Accepted (v0.647) |
 | [0895](0895-list-traversal-names-line-up.md) | **parForEach and a value-returning parTraverse complete the traversal grid** (v0.646) — Renames List.parTraverse to parForEach and adds a parTraverse that returns the values | Accepted (v0.646) |
 | [0894](0894-named-type-total-of.md) | **Named types: `.of` is total when the type has no predicate, and "alias" is renamed "named type"** (v0.645) — A predicate-free named type's `.of` returns the type; the form is called a named type, not an alias | Accepted (v0.645) |

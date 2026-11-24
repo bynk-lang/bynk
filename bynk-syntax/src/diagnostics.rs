@@ -8504,6 +8504,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.locale.multiple_message_bundles",
         "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against.",
     ),
+    warn(d(
+        "bynk.map.deprecated_function",
+        "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
+    )),
     d(
         "bynk.messages.format_mismatch",
         "A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales.",
@@ -9516,6 +9520,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.service.websocket_param_not_stringy",
         "A `from websocket` service's `on open` parameter has a type not constructible from `String`; it arrives as a query-string value (#1657).",
     ),
+    warn(d(
+        "bynk.set.deprecated_function",
+        "A `bynk.set` free function is deprecated in favour of the `Set` method form (warning; auto-fixable).",
+    )),
     d(
         "bynk.stability.experimental",
         "An experimental standard-library item is used without an `[unstable] allow` entry in `bynk.toml` covering it.",

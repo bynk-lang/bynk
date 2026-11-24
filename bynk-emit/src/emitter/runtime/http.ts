@@ -736,7 +736,11 @@ export interface RequestHeaders {
 
 /** #2341 (L4): the request's headers, or — in a test — `"name: value"` lines
  *  (`RequestHeaders.of`); a line without a colon is ignored. */
-export function requestHeaders(source: Request | readonly string[], hideCookie?: string): RequestHeaders {
+export function requestHeaders(
+  source: Request | readonly string[],
+  hideCookie?: string,
+  hideHeaders?: readonly string[],
+): RequestHeaders {
   let headers: Headers;
   if (source instanceof Request) {
     headers = source.headers;
@@ -747,6 +751,12 @@ export function requestHeaders(source: Request | readonly string[], hideCookie?:
       const rest = cookiePairs(headers.get("cookie")).filter(([n]) => n !== hideCookie);
       if (rest.length === 0) headers.delete("cookie");
       else headers.set("cookie", rest.map(([n, v]) => `${n}=${v}`).join("; "));
+    }
+    // #3994: a `Bearer`, `Oidc` or `Signature` actor's credential header is consumed at the seam
+    // as well (`Authorization`, or the signature header); the handler's view omits it.
+    if (hideHeaders !== undefined && hideHeaders.some((n) => headers.has(n))) {
+      headers = new Headers(headers);
+      for (const n of hideHeaders) headers.delete(n);
     }
   } else {
     headers = new Headers();

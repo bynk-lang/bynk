@@ -80,7 +80,7 @@ export default {
           const __ok = await __verifySignatureHmacSha256(__bytes, __secret, request.headers.get("X-Hub-Signature-256"), null, null);
           if (!__ok) return __applySecurityHeaders(new globalThis.Response(null, { status: 401 }), __security_github);
           const body = __bytes;
-          const result = await surface.http_POST_github(__requestHeaders(request), body);
+          const result = await surface.http_POST_github(__requestHeaders(request, undefined, ["x-hub-signature-256"]), body);
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_github);
         }
       }
