@@ -1,0 +1,7 @@
+context svc
+
+service outbox from queue("outbound-email") {
+  delivery { retries: 5 }
+  delivery { deadLetter: "outbound-email-dlq" }
+  on message(message: String) -> Effect[QueueResult] { Ack }
+}

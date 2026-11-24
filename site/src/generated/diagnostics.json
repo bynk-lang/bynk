@@ -4168,6 +4168,16 @@
     "summary": "A handler carries an annotation outside the closed set (`@cache`/`@limit`)."
   },
   {
+    "blurb": "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+    "category": "HTTP",
+    "categoryAnchor": "http",
+    "code": "bynk.http.unreachable_route",
+    "constructs": [],
+    "example": "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
+    "severity": "error",
+    "summary": "A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group)."
+  },
+  {
     "blurb": "`@indexed` says which field of the map's value type to maintain a secondary index on, and the only form it takes is `by: <field>`. A bare name, another label or an expression leaves the compiler without a field to index. Write `by:` followed by the field's name. A name that is not a field of the value type is `bynk.index.unknown_key`.",
     "category": "Other",
     "categoryAnchor": "other",
@@ -4998,6 +5008,18 @@
     "example": "service api from http {\n    cors { origins: [\"https://a.example\"] }\n    cors { origins: [\"https://b.example\"] }          // ✗ a second `cors`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://a.example\", \"https://b.example\"] }   // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
     "severity": "error",
     "summary": "A service declares more than one `cors { }` policy."
+  },
+  {
+    "blurb": "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
+    "category": "Parser",
+    "categoryAnchor": "parser",
+    "code": "bynk.parse.duplicate_delivery",
+    "constructs": [
+      "service_decl"
+    ],
+    "example": "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    "severity": "error",
+    "summary": "A service declares more than one `delivery { }` policy."
   },
   {
     "blurb": "A service's `json` policy sets whether its response bodies use plain or tagged JSON, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@json` on its handler. The same rule holds for `cors`, `security` and `limits`, as `bynk.parse.duplicate_cors` shows.",
@@ -6056,6 +6078,42 @@
     "summary": "An `on message` handler does not take exactly one `message` parameter."
   },
   {
+    "blurb": "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+    "category": "Queue",
+    "categoryAnchor": "queue",
+    "code": "bynk.queue.dead_letter_type_mismatch",
+    "constructs": [
+      "delivery_policy"
+    ],
+    "example": "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
+    "severity": "error",
+    "summary": "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from."
+  },
+  {
+    "blurb": "A `delivery { }` section sets the consumer's `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours), `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole seconds, 0 to 60) and `concurrency` (1 to 250). Those are Cloudflare's limits, so a value outside its range, a key that is not one of these, or one written twice is refused here rather than failing at deploy. The dead-letter queue also cannot be the consumer's own queue, which would redeliver a failed message to the consumer that failed it. A literal, or a constant of the key's type, is accepted.",
+    "category": "Queue",
+    "categoryAnchor": "queue",
+    "code": "bynk.queue.delivery_bad_option",
+    "constructs": [
+      "delivery_policy"
+    ],
+    "example": "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 500, deadLetter: None }   // ✗ at most 100\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, retryDelay: 30.seconds, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    "severity": "error",
+    "summary": "A `delivery { }` key is unknown, repeated, out of range or of the wrong type, or the dead-letter queue is the consumer's own."
+  },
+  {
+    "blurb": "A `delivery { }` section sets how a queue consumer's messages are retried, delayed, dead-lettered and batched. Only a `from queue` service consumes a queue, so on any other service the section has nothing to govern. Move it to the `from queue` service it was meant for, or delete it.",
+    "category": "Queue",
+    "categoryAnchor": "queue",
+    "code": "bynk.queue.delivery_not_queue",
+    "constructs": [
+      "delivery_policy"
+    ],
+    "example": "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    "severity": "error",
+    "summary": "A `delivery { }` policy on a service that is not `from queue`."
+  },
+  {
     "blurb": "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue. The rule holds across the project too: Cloudflare accepts one consumer Worker per queue, so two contexts consuming one queue, in a `[deploy.workers]` group or not, could never both deploy. Move the queue to one context; any number of contexts may still send to it.",
     "category": "Queue",
     "categoryAnchor": "queue",
@@ -6078,6 +6136,18 @@
     "example": "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
     "severity": "error",
     "summary": "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses."
+  },
+  {
+    "blurb": "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
+    "category": "Queue",
+    "categoryAnchor": "queue",
+    "code": "bynk.queue.no_dead_letter",
+    "constructs": [
+      "delivery_policy"
+    ],
+    "example": "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    "severity": "warning",
+    "summary": "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning)."
   },
   {
     "blurb": "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled) and `Retry(reason)` (deliver it again). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",

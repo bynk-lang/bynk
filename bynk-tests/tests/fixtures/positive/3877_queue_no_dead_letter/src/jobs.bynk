@@ -1,0 +1,40 @@
+context jobs
+
+// ⚠ no `delivery { deadLetter }`: a message that exhausts its retries is deleted.
+service plain from queue("plain-jobs") {
+  on message(message: String) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+// ⚠ a `delivery` block that sets no dead-letter queue says nothing about it.
+service tuned from queue("tuned-jobs") {
+  delivery {
+    retries: 1,
+  }
+
+  on message(message: String) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+// No warning: `deadLetter: None` says deleting is intended, and a name keeps them.
+service throwaway from queue("throwaway-jobs") {
+  delivery {
+    deadLetter: None,
+  }
+
+  on message(message: String) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+service kept from queue("kept-jobs") {
+  delivery {
+    deadLetter: "kept-jobs-dlq",
+  }
+
+  on message(message: String) -> Effect[QueueResult] {
+    Ack
+  }
+}

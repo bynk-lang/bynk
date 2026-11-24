@@ -1,0 +1,25 @@
+---
+#3950: `Matches` runs in Unicode mode and takes the regex literal's leading flag
+group.
+---
+commons demo.names
+
+type DisplayName = String where MinLength(1) && MaxLength(40) && Matches(r"[\p{L}\p{M}' -]+")
+
+type OneChar = String where Matches(".")
+
+type Code = String where Matches(r"(?i)[a-z]{3}-\d{4}")
+
+const Zoe: DisplayName = "Zoë"
+
+fn name(s: String) -> Result[DisplayName, ValidationError] {
+  DisplayName.of(s)
+}
+
+fn one(s: String) -> Result[OneChar, ValidationError] {
+  OneChar.of(s)
+}
+
+fn code(s: String) -> Result[Code, ValidationError] {
+  Code.of(s)
+}

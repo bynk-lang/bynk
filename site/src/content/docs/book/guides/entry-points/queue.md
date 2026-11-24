@@ -43,8 +43,49 @@ service outbox from queue("outbound-email") {
 }
 ```
 
-A message that keeps retrying eventually hits the queue's dead-letter policy
-(configured outside Bynk).
+A message that keeps retrying eventually reaches the retry limit (3 redeliveries by
+default). Cloudflare then deletes it, unless you keep it, which is the next section.
+
+## Keep failed messages
+
+Name a dead-letter queue in a `delivery { }` section, and a message that reaches
+the retry limit is written there instead of deleted. `bynk deploy` creates the
+queue, so there is nothing to set up in the dashboard, which a deploy would
+overwrite anyway:
+
+```bynk,fragment
+service outbox from queue("outbound-email") {
+  delivery {
+    retries: 5,
+    retryDelay: 30.seconds,
+    deadLetter: "outbound-email-dlq",
+  }
+
+  on message(message: EmailJob) -> Effect[QueueResult] {
+    Retry("smtp unavailable")
+  }
+}
+```
+
+The dead-letter queue is an ordinary queue, so a consumer of its own can inspect or
+replay what failed. It takes the same message type:
+
+```bynk,fragment
+service review from queue("outbound-email-dlq") {
+  delivery {
+    deadLetter: None,
+  }
+
+  on message(message: EmailJob) -> Effect[QueueResult] given Logger {
+    let _ <- Logger.warn("gave up on an email to \(message.to)")
+    Ack
+  }
+}
+```
+
+A consumer with no `deadLetter` draws a warning, because the platform default
+deletes the message. Write `deadLetter: None` when that is what you want. See the
+[delivery policy](/reference/queue/#delivery-policy) for every key.
 
 ## Handle a redelivered message
 

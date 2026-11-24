@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A cron run that returns `Err` or throws is marked failed in Cron Past Events and logs a labelled record naming the schedule, service, error type and variant (no payload); an unmatched `event.cron` warns
-breaking: A cron `Err` is no longer logged as `cron <expr> failed <payload>`; the log is now a structured record with the error's type and variant only, so an alert keyed on the old line stops matching, and the payload no longer reaches the log
----
+# 0913 — A failed cron run is visible to the platform
 
-## ADR: cron-failed-run-visible
-title: A failed cron run is visible to the platform
-summary: An `Err` or a throw marks the run failed through `waitUntil`, with a labelled log that never carries the payload
+- **Status:** Accepted (v0.658)
 
 **Context.** The generated `scheduled` entry logged an `Err` with its whole payload and returned, so Cloudflare's Cron Past Events recorded a success. A throw escaped unlabelled, and an unmatched `event.cron` was dropped silently.
 

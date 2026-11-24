@@ -164,6 +164,10 @@ fn apply(
                     };
                     for entry in entries.iter_mut() {
                         qualify_field(entry, "queue", |name| env_qualify(environment, name));
+                        // #3877: the dead-letter queue is qualified as the consumer's is.
+                        qualify_field(entry, "dead_letter_queue", |name| {
+                            env_qualify(environment, name)
+                        });
                     }
                 }
             }

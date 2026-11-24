@@ -38,7 +38,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/signed") {
+        if (method === "POST" && __matchPath("/signed", path) !== null) {
           __route = "POST /signed";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -75,7 +75,7 @@ export default {
         }
       }
       {
-        if (method === "PUT" && path === "/blobs") {
+        if (method === "PUT" && __matchPath("/blobs", path) !== null) {
           __route = "PUT /blobs";
           if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -152,7 +152,7 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/blobs") {
+      if (__matchPath("/blobs", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } }), (why) => surface.rejected_api(why));
         return __applySecurityHeaders(__res, __security_api);
@@ -167,7 +167,7 @@ export default {
         const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } }), (why) => surface.rejected_api(why));
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/signed") {
+      if (__matchPath("/signed", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } }), (why) => surface.rejected_api(why));
         return __applySecurityHeaders(__res, __security_api);

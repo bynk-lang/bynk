@@ -3338,6 +3338,46 @@ fn check_actor_contracts(
     }
 }
 
+/// #3909 (decision B): a route no request can reach is an error. Within a context,
+/// every path the route matches is matched first by other routes of its method
+/// (see [`crate::route_order`]); overlap alone is not an error.
+fn check_unreachable_routes(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    let mut routes: Vec<(HttpMethod, &str, Span)> = Vec::new();
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            if let HandlerKind::Http { method, path } = &handler.kind {
+                routes.push((*method, path.as_str(), handler.span));
+            }
+        }
+    }
+    let keys: Vec<(&str, &str)> = routes.iter().map(|(m, p, _)| (m.as_str(), *p)).collect();
+    for (r, covering) in crate::route_order::shadowed(&keys) {
+        let (method, path, span) = routes[r];
+        let mut err = CompileError::new(
+            "bynk.http.unreachable_route",
+            span,
+            format!(
+                "route `{} {path}` can never be reached: every path it matches is answered first by another route",
+                method.as_str()
+            ),
+        )
+        .with_note(
+            "at the first segment where two routes differ, a literal segment beats a `:name` one; remove this route, or make it match a path the others do not",
+        );
+        for c in covering {
+            err = err.with_label(
+                routes[c].2,
+                format!(
+                    "`{} {}` answers it first",
+                    routes[c].0.as_str(),
+                    routes[c].1
+                ),
+            );
+        }
+        errors.push(err);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_service_decls(
     typed: &mut checker::TypedCommons,
@@ -3395,6 +3435,8 @@ fn check_service_decls(
         }
     }
 
+    check_unreachable_routes(table, errors);
+
     // v0.140 (ADR 0163): validate handler-position annotations (`@cache`) across
     // every handler — services and agents — so a misplaced annotation is caught
     // wherever it is written, not only on well-formed HTTP routes.
@@ -3431,6 +3473,12 @@ fn check_service_decls(
         if let Some(policy) = &service.limits {
             validate_limits_policy(service, policy, errors);
         }
+    }
+
+    // #3877: validate each service's `delivery { }` policy, and warn of a queue
+    // consumer with no dead-letter queue.
+    for service in table.services.values() {
+        crate::queue_delivery::validate_delivery(service, errors);
     }
 
     // #2858: validate each service's `json { }` policy, then refuse the one
@@ -7068,7 +7116,7 @@ fn validate_queue_handler(
         errors.push(CompileError::new(
             "bynk.queue.invalid_name",
             handler.span,
-            "`on queue` requires a non-empty queue name",
+            "`from queue` requires a non-empty queue name",
         ));
     } else if !crate::project_model::is_queue_name(name) {
         errors.push(

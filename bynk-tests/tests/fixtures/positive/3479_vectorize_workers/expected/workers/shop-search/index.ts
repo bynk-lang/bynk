@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -36,14 +36,14 @@ export default {
       }
 
       {
-        if (method === "DELETE" && path === "/scratch") {
+        if (method === "DELETE" && __matchPath("/scratch", path) !== null) {
           __route = "DELETE /scratch";
           const result = await surface.http_DELETE_scratch();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/search") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/search", path) !== null) {
           __route = "GET /search";
           const result = await surface.http_GET_search();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -51,7 +51,7 @@ export default {
         }
       }
       {
-        if (method === "PUT" && path === "/doc") {
+        if (method === "PUT" && __matchPath("/doc", path) !== null) {
           __route = "PUT /doc";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -70,7 +70,7 @@ export default {
         }
       }
       {
-        if (method === "PUT" && path === "/typed") {
+        if (method === "PUT" && __matchPath("/typed", path) !== null) {
           __route = "PUT /typed";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -88,22 +88,22 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/doc") {
+      if (__matchPath("/doc", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/scratch") {
+      if (__matchPath("/scratch", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/search") {
+      if (__matchPath("/search", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/typed") {
+      if (__matchPath("/typed", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);

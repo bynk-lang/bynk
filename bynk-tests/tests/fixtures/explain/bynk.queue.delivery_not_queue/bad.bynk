@@ -1,0 +1,6 @@
+context svc
+
+service sweeper from cron {
+  delivery { retries: 5 }
+  on schedule("0 * * * *") () -> Effect[Result[(), String]] { Ok(()) }
+}

@@ -2,3 +2,6 @@ a `QueueDelivery` is not a message
 one `QueueDelivery` at most, got 2
 parameters besides it
 # exact
+has no dead-letter queue
+has no dead-letter queue
+has no dead-letter queue

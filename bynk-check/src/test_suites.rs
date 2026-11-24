@@ -6402,6 +6402,7 @@ service sweeper from cron {
 }
 
 service intake from queue(\"orders\") {
+  delivery { deadLetter: None }
   on message(item: Item) -> Effect[QueueResult] {
     Ack
   }

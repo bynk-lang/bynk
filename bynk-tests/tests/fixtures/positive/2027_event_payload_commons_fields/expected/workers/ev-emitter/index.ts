@@ -2,7 +2,7 @@
 // Worker entry point for context `ev.emitter`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 export { __EventsFanout } from "./events_fanout.js";
@@ -37,13 +37,13 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/ping") {
+        if (method === "POST" && __matchPath("/ping", path) !== null) {
           __route = "POST /ping";
           const result = await surface.http_POST_ping();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/ping") {
+      if (__matchPath("/ping", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

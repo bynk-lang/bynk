@@ -618,6 +618,70 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
             }
         }
     }
+    // #3909: otherwise a route string that overlaps another route of its method.
+    describe_route_at(source, offset)
+}
+
+/// #3909: hover for the route string of an `on GET("/path")` handler: the routes of
+/// the same method in this file that match a path it also matches, and which of the
+/// two a router tries first (a literal segment beats a `:name` one at the first
+/// segment where they differ). `None` when the cursor is not on a route string, and
+/// for a route that overlaps nothing, whose hover stays silent about order.
+pub fn describe_route_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let unit = unit?;
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    for item in items {
+        let CommonsItem::Service(service) = item else {
+            continue;
+        };
+        let routes: Vec<(&str, &str, Span)> = service
+            .handlers
+            .iter()
+            .filter_map(|h| match &h.kind {
+                HandlerKind::Http { method, path } => {
+                    Some((method.as_str(), path.as_str(), h.span))
+                }
+                _ => None,
+            })
+            .collect();
+        for &(method, path, span) in &routes {
+            let quoted = format!("\"{path}\"");
+            let head = source.get(span.start..span.end)?;
+            let at = span.start + head.find(&quoted)?;
+            if offset < at || offset >= at + quoted.len() {
+                continue;
+            }
+            let mut lines = Vec::new();
+            for &(m2, p2, _) in &routes {
+                if m2 != method || p2 == path || !bynk_check::route_order::overlap(path, p2) {
+                    continue;
+                }
+                let verdict = match bynk_check::route_order::compare(path, p2) {
+                    std::cmp::Ordering::Less => "this route is tried first",
+                    std::cmp::Ordering::Greater => "`{p2}` is tried first",
+                    std::cmp::Ordering::Equal => "the two have the same shape",
+                };
+                lines.push(format!(
+                    "- `{m2} {p2}` matches some of the same paths: {}.",
+                    verdict.replace("{p2}", p2)
+                ));
+            }
+            if lines.is_empty() {
+                return None;
+            }
+            return Some(format!(
+                "**`{method} {path}`** — routes of one method are tried segment by segment, left to right; at the first segment where two differ, a literal beats a `:name`.\n\n{}",
+                lines.join("\n")
+            ));
+        }
+    }
     None
 }
 
@@ -689,6 +753,13 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
         "```bynk\nadvance Clock by <Duration>\n```\n\nMoves the test harness's clock forward. Each case's clock starts at the epoch; at `unit` and `integration` the `Clock` double reads it, and at `system` every participant's first-party `Clock` does. It governs `Clock` only: JWT expiry, the `Signature` tolerance and Durable Object alarms keep wall-clock time."
             .to_string(),
     )
+}
+
+/// The hover of a contextual word that only means something in its own shape: `advance`
+/// (#2137) and the `delivery` section of a queue consumer with its keys (#3877).
+pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String> {
+    describe_advance_at(source, offset)
+        .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
 }
 
 /// #3191 (ADR 0161): hover for the contextual `by` where it is a clause word —
@@ -5042,6 +5113,19 @@ mod tests {
             .expect("hovers @raw");
         assert!(second.contains("any"), "wildcard: {second}");
         assert!(second.contains("50 bytes"), "the route's own cap: {second}");
+    }
+
+    #[test]
+    fn hover_on_a_route_string_names_the_overlapping_routes_and_which_wins() {
+        let svc = "context api\nservice api from http {\n  on GET(\"/users/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(id)\n  }\n  on GET(\"/users/me\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"me\")\n  }\n  on GET(\"/solo\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"s\")\n  }\n}\n";
+        let param = describe_route_at(svc, svc.find("/users/:id").unwrap() + 2).expect("hovers");
+        assert!(
+            param.contains("`GET /users/me`") && param.contains("is tried first"),
+            "{param}"
+        );
+        let lit = describe_route_at(svc, svc.find("/users/me").unwrap() + 2).expect("hovers");
+        assert!(lit.contains("this route is tried first"), "{lit}");
+        assert!(describe_route_at(svc, svc.find("/solo").unwrap() + 2).is_none());
     }
 
     #[test]

@@ -276,8 +276,10 @@ fn clause(kind: &PredKind) -> Clause {
         predicate: Predicate::of(kind),
         // The emitted check calls the runtime's `__bynkCodePointLength`; the
         // client has no runtime, so spell the same code-point count inline (#3949).
+        // Likewise `__bynkRegExp(source, flags)`, the runtime's shared `RegExp` (#3950).
         check: bynk_ts::print_expr(&cond)
-            .replace("__bynkCodePointLength(value)", "Array.from(value).length"),
+            .replace("__bynkCodePointLength(value)", "Array.from(value).length")
+            .replace("__bynkRegExp(", "new globalThis.RegExp("),
         message,
     }
 }
@@ -458,7 +460,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                         PredKind::Matches(p) => Some(p),
                         _ => None,
                     })
-                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                    .and_then(|p| {
+                        let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                        regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+                    });
                 for d in ["2026-11-03", "2028-02-29", "2000-02-29"] {
                     if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
                         push(d.to_string(), &mut out);
@@ -477,7 +482,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                         PredKind::Matches(p) => Some(p),
                         _ => None,
                     })
-                    .and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+                    .and_then(|p| {
+                        let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                        regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+                    });
                 for d in ["0 2 * * MON-FRI", "*/15 * * * *", "0 0 1 JAN *"] {
                     if re.as_ref().is_none_or(|re| re.find(d).is_some()) {
                         push(d.to_string(), &mut out);
@@ -513,7 +521,10 @@ fn examples(base: BaseType, r: &Refinement) -> (Vec<String>, Option<String>) {
                     )),
                 );
             }
-            let re = pattern.and_then(|p| regress::Regex::new(&format!("^(?:{p})$")).ok());
+            let re = pattern.and_then(|p| {
+                let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(p);
+                regress::Regex::with_flags(&format!("^(?:{pat})$"), flags.as_str()).ok()
+            });
             let ok = |s: &str| re.as_ref().is_none_or(|re| re.find(s).is_some());
             let mut try_push = |len: i64, out: &mut Vec<String>, rng: &mut Rng| {
                 let s = rng.string(len as usize);

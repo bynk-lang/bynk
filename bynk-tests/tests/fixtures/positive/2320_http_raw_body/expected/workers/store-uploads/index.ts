@@ -38,7 +38,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/blob") {
+        if (method === "POST" && __matchPath("/blob", path) !== null) {
           __route = "POST /blob";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 8) {
@@ -59,7 +59,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/either") {
+        if (method === "POST" && __matchPath("/either", path) !== null) {
           __route = "POST /either";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
@@ -70,7 +70,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/json") {
+        if (method === "POST" && __matchPath("/json", path) !== null) {
           __route = "POST /json";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
@@ -102,7 +102,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/signed") {
+        if (method === "POST" && __matchPath("/signed", path) !== null) {
           __route = "POST /signed";
           if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
@@ -168,22 +168,22 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_uploads);
       }
-      if (path === "/blob") {
+      if (__matchPath("/blob", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_uploads);
       }
-      if (path === "/either") {
+      if (__matchPath("/either", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_uploads);
       }
-      if (path === "/json") {
+      if (__matchPath("/json", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_uploads);
       }
-      if (path === "/signed") {
+      if (__matchPath("/signed", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_uploads);

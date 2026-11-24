@@ -10,7 +10,7 @@
 //!
 //! [`probe`] gets the lists from `cargo nextest list`, so the filtersets are
 //! evaluated by nextest itself, not re-implemented here. It needs `cargo-nextest`
-//! and built test binaries, so CI runs it in the `test` job, where both exist.
+//! and built test binaries, so CI runs it in the `test-system` job, where both exist.
 //! [`check_profiles`] is the static half (no build, no nextest): the three tier
 //! profiles exist, inherit `ci`, and carry a filter.
 

@@ -355,6 +355,30 @@ fn route_prelude(
     out
 }
 
+/// The order the router tries its routes in (#3909): by fewest parameter segments,
+/// then method and path, so the output is stable; then, where two routes of a
+/// method match a common path, the one with the literal at the first segment where
+/// they differ goes first (`bynk_check::route_order`), so the answer never depends
+/// on how a route is spelt.
+fn sort_routes(mut routes: Vec<HttpRoute>) -> Vec<HttpRoute> {
+    routes.sort_by(|a, b| {
+        param_count(&a.path)
+            .cmp(&param_count(&b.path))
+            .then_with(|| a.method.as_str().cmp(b.method.as_str()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    let keys: Vec<(&str, &str)> = routes
+        .iter()
+        .map(|r| (r.method.as_str(), r.path.as_str()))
+        .collect();
+    let order = bynk_check::route_order::order(&keys);
+    let mut slots: Vec<Option<HttpRoute>> = routes.into_iter().map(Some).collect();
+    order
+        .into_iter()
+        .map(|i| slots[i].take().expect("each route is placed once"))
+        .collect()
+}
+
 /// The `415` a `@raw` route answers to a `Content-Type` outside the declared
 /// media type or list of them (#3912), or a JSON `body` route answers to a
 /// `Content-Type` that is present and neither `application/json` nor a `+json`
@@ -454,9 +478,17 @@ pub(super) fn emit_http_route_dispatch(
     let route_cond = if has_path_params {
         and_expr(method_guard, ident("__m"))
     } else {
+        // #3909: a literal route is matched the same way, so an empty segment is
+        // insignificant and a literal is compared percent-decoded.
         and_expr(
             method_guard,
-            strict_eq(ident("path"), str_lit(route.path.clone())),
+            strict_neq(
+                call(
+                    ident("__matchPath"),
+                    vec![str_lit(route.path.clone()), ident("path")],
+                ),
+                null_lit(),
+            ),
         )
     };
 
@@ -1393,14 +1425,5 @@ pub(super) fn collect_http_routes(
             }
         }
     }
-    http_routes.sort_by(|a, b| {
-        // Sort by literal-specificity: a path with fewer parameter segments
-        // (more literals) wins. Stable secondary sort by method + path keeps
-        // the diff deterministic.
-        param_count(&a.path)
-            .cmp(&param_count(&b.path))
-            .then_with(|| a.method.as_str().cmp(b.method.as_str()))
-            .then_with(|| a.path.cmp(&b.path))
-    });
-    http_routes
+    sort_routes(http_routes)
 }

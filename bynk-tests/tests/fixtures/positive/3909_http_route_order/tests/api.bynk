@@ -1,0 +1,21 @@
+suite r.api as system {
+	case "a literal at the first differing segment wins: /a/b/c reaches the y route" {
+		let r <- api.GET("/a/:x/c", "b") by Visitor
+		expect r is Ok("y-route c")
+	}
+
+	case "the x route still answers the paths the y route does not" {
+		let r <- api.GET("/a/:x/c", "z") by Visitor
+		expect r is Ok("x-route z")
+	}
+
+	case "/users/me reaches the literal route" {
+		let r <- api.GET("/users/me") by Visitor
+		expect r is Ok("me")
+	}
+
+	case "/users/42 reaches the parameter route" {
+		let r <- api.GET("/users/:id", "42") by Visitor
+		expect r is Ok("user 42")
+	}
+}

@@ -158,6 +158,7 @@ commons demo {
         r#"context demo.inbox
 
 service intake from queue("orders") {
+  delivery { deadLetter: None }
   on message(item: String) -> Effect[QueueResult] {
     if item == "" { Retry("empty") } else { Ack }
   }
@@ -585,6 +586,7 @@ service worker from cron {
 }
 
 service deliveries from queue("deliveries") {
+  delivery { deadLetter: None }
   on message(d: Delivery) -> Effect[QueueResult] {
     Ack
   }

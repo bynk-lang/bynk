@@ -2452,6 +2452,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #3877: each `delivery` section keyword of a queue consumer, as `keyword`.
+        dt.extend(
+            bynk_ide::queue_delivery::delivery_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
         // #2842: the contextual `matches` and `snapshot` of a snapshot claim.
         dt.extend(
             crate::symbols::snapshot_keyword_spans(text)
@@ -3859,6 +3865,9 @@ impl LanguageServer for Backend {
         // v0.142 (ADR 0165): inside a `limits { }` block, offer the policy field
         // names; at a service-body item start, offer the `limits` section keyword.
         items.extend(limits_completions(&text, offset, &line_prefix));
+        // #3877: inside a `delivery { }` block, the keys not yet written; at a
+        // service-body item start, the `delivery` section keyword.
+        items.extend(delivery_completions(&text, offset, &line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
@@ -5476,6 +5485,35 @@ fn limits_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionIt
             kind: Some(CompletionItemKind::KEYWORD),
             detail: Some("request limits for this HTTP service".to_string()),
             insert_text: Some("limits {\n\tmaxBody: $0,\n}".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
+}
+
+/// #3877: the queue delivery completion cells. Inside a `delivery { }` block at a
+/// key-name position, the keys not yet written; at a service-body item start, the
+/// `delivery` section keyword. Lexical (offset-based), as `limits_completions`.
+fn delivery_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if bynk_ide::queue_delivery::in_delivery_field_position(text, offset) {
+        return bynk_ide::queue_delivery::unwritten_keys(text, offset)
+            .into_iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some(doc.to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "delivery".to_string(),
+            kind: Some(CompletionItemKind::KEYWORD),
+            detail: Some("delivery policy for this queue consumer".to_string()),
+            insert_text: Some("delivery {\n\tdeadLetter: $0,\n}".to_string()),
             insert_text_format: Some(InsertTextFormat::SNIPPET),
             ..Default::default()
         }];

@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
 import { __bynkIsIsoDate } from "./__bynk_runtime/time.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Stamp = string & { readonly __brand: "Stamp" };
@@ -12,7 +13,7 @@ export const Stamp = {
     if (!(__bynkIsIsoDate(value))) {
       return Err({ field: "Stamp", message: "must be a calendar date (YYYY-MM-DD)", value });
     }
-    if (!(new globalThis.RegExp("^(?:" + "\\d*\\d*-.*" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "\\d*\\d*-.*" + ")$", "u").test(value))) {
       return Err({ field: "Stamp", message: "must match /\\d*\\d*-.*/", value });
     }
     return Ok(value as Stamp);
