@@ -1,0 +1,11 @@
+suite r.plain as system {
+	case "a well-formed encoded segment still binds" {
+		let r <- plain.GET("/orders/:id", Wire("a%20b")) by Visitor
+		expect r is Handled(Ok("a b"))
+	}
+
+	case "a malformed percent-encoding is a MalformedPath rejection" {
+		let r <- plain.GET("/orders/:id", Wire("%E0%A4%A")) by Visitor
+		expect r is Rejected(MalformedPath(_))
+	}
+}
