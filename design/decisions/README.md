@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0927](0927-typed-path-parameters.md) | **Path parameters take the typed-query scalar set, decoded after matching** (v0.670) — A path parameter is a String, Int, Bool, Decimal, enum, or a refinement or opaque type over one; matching stays structural and decoding follows | Accepted (v0.670) |
 | [0926](0926-queue-delivery-metadata.md) | **A queue handler can take its delivery metadata** (v0.669) — An optional `QueueDelivery` parameter carries the platform's attempt count and send time | Accepted (v0.669) |
 | [0925](0925-prelude-types.md) | **Prelude types: one registration point for compiler-known sums** (v0.668) — a table of prelude types (name, declaring first-party unit, trigger spellings) drives implicit reach, bare-variant resolution and the exemption from per-context rebranding; `Ordering` is the first row | Accepted (v0.668) |
 | [0924](0924-adapter-transparent-types-are-constructible.md) | **A type an adapter exports transparent is constructible by its consumers** (v0.667) — `.of`, a variant and a record literal are open to a consumer for an adapter's transparent types; a context's own stay the owner's | Accepted (v0.667) |
