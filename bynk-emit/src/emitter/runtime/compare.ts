@@ -144,3 +144,26 @@ export function __bynkCmpFix<T>(build: (self: __BynkCmp<T>) => __BynkCmp<T>): __
   return built;
 }
 
+/** The shape of `bynk.ordering`'s `Ordering`: what `compare` answers. */
+export type __BynkOrdering =
+  | { readonly tag: "Less" }
+  | { readonly tag: "Equal" }
+  | { readonly tag: "Greater" };
+
+const __ORDERING_LESS: __BynkOrdering = { tag: "Less" };
+const __ORDERING_EQUAL: __BynkOrdering = { tag: "Equal" };
+const __ORDERING_GREATER: __BynkOrdering = { tag: "Greater" };
+
+/**
+ * #3955: the `Ordering` a comparator's answer names, so `a.compare(b)` is the
+ * type's own comparator read as `Less`, `Equal` or `Greater`.
+ */
+export function __bynkOrdering(n: number): __BynkOrdering {
+  return n < 0 ? __ORDERING_LESS : n > 0 ? __ORDERING_GREATER : __ORDERING_EQUAL;
+}
+
+/** The inverse, for `sortWith`: an `Ordering` as a comparator's sign. */
+export function __bynkOrderingSign(o: __BynkOrdering): number {
+  return o.tag === "Less" ? -1 : o.tag === "Greater" ? 1 : 0;
+}
+

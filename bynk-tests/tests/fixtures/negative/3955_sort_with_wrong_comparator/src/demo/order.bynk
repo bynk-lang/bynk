@@ -1,0 +1,5 @@
+commons demo.order
+
+fn sorted(xs: List[Int]) -> List[Int] {
+  xs.sortWith((a, b) => a - b)
+}

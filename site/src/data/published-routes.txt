@@ -509,7 +509,8 @@
 /book/reference/diagnostics/bynk.http.form_on_sum_route/
 /book/reference/diagnostics/bynk.http.form_unknown_arg/
 /book/reference/diagnostics/bynk.http.header_question_not_found/
-/book/reference/diagnostics/bynk.http.headers_wrong_type/
+/book/reference/diagnostics/bynk.http.headers_field_not_stringy/
+/reference/diagnostics/bynk.http.headers_wrong_type/
 /book/reference/diagnostics/bynk.http.invalid_path/
 /book/reference/diagnostics/bynk.http.json_duplicate/
 /book/reference/diagnostics/bynk.http.json_invalid_arg/
@@ -1709,6 +1710,8 @@
 /reference/diagnostics/bynk.lex.unterminated_interpolation/
 /reference/diagnostics/bynk.lex.unterminated_string/
 /reference/diagnostics/bynk.list.deprecated_function/
+/reference/diagnostics/bynk.list.par_limit_one/
+/reference/diagnostics/bynk.list.par_limit_range/
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
 /reference/diagnostics/bynk.map.deprecated_function/

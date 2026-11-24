@@ -682,6 +682,8 @@ pub fn phase_parse(
         return Err(());
     }
 
+    // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
+    crate::implicit_uses::add_implicit_uses(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }

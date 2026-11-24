@@ -1,0 +1,5 @@
+commons demo.opt {
+  fn bad(xs: List[Int]) -> Effect[()] {
+    xs.parForEachWith((x: Int) => Effect.pure(()), 4)
+  }
+}

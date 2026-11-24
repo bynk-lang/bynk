@@ -25,9 +25,9 @@ fn urlRoundTrips(b: Bytes) -> Bool {
 }
 
 // 0x80 sorts after 0x7f: octets compare unsigned.
-fn unsignedOrder() -> Int {
+fn unsignedOrder() -> Ordering {
   match Bytes.fromHex("807f") {
     Some(b) => b.slice(0, 1).compare(b.slice(1, 2))
-    None => 0
+    None => Equal
   }
 }

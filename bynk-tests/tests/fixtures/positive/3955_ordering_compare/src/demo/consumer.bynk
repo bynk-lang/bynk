@@ -1,0 +1,13 @@
+commons demo.consumer
+
+uses demo.order
+
+// Mentions none of the trigger words: `Ordering` and its methods reach this unit
+// through `demo.order`'s own `uses`.
+fn flipped(a: Int, b: Int) -> String {
+  describe(ints(a, b).reverse())
+}
+
+fn tieBreak(a: Int, b: Int) -> String {
+  describe(ints(a, a).then(ints(a, b)))
+}

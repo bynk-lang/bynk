@@ -3636,6 +3636,33 @@ pub fn value_member_candidates(
             )
         })
         .collect();
+    // #3955: `compare` on every orderable receiver. A named type is orderable
+    // when its declaration says `derives Ord`.
+    let mut ord_names: BTreeSet<String> = BTreeSet::new();
+    for_each_unit(doc_text, files, |unit| {
+        let items = match unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            SourceUnit::Adapter(a) => &a.items,
+            _ => return,
+        };
+        for item in items {
+            if let CommonsItem::Type(t) = item
+                && t.derives.iter().any(|d| d.name == "Ord")
+            {
+                ord_names.insert(t.name.name.clone());
+            }
+        }
+    });
+    if kernel_methods::is_ord_receiver(ty, tys, &|n| ord_names.contains(n)) {
+        out.extend(kernel_methods::ORD_RECEIVER_TABLE.iter().map(|km| {
+            Completion::item(
+                km.name,
+                CompletionKind::Member,
+                Some(km.signature.to_string()),
+            )
+        }));
+    }
     // An asset's one field (#1883).
     if matches!(&*tys.get(ty), Ty::Asset) {
         out.push(Completion::item(
@@ -4857,6 +4884,38 @@ fn Box.size(self) -> Int { 1 }
         assert!(!is_expression_position("  let y: ")); // type annotation
         assert!(!is_expression_position("  on call() -> ")); // return type
         assert!(!is_expression_position("  tot")); // bare line start (keyword position covers it)
+    }
+
+    /// #3955: `compare` is offered on every orderable receiver: a `Bytes`, and a
+    /// record that `derives Ord`; not on one that does not.
+    #[test]
+    fn value_member_candidates_offers_compare_on_orderable_receivers() {
+        use bynk_check::checker::NamedKind;
+        use bynk_syntax::ast::BaseType;
+        let bytes = TYS.intern(Ty::Base(BaseType::Bytes));
+        let items = value_member_candidates(bytes, &TYS, "context a.b\n", None);
+        let compare = find(&items, "compare", CompletionKind::Member).expect("compare on Bytes");
+        assert_eq!(
+            compare.detail.as_deref(),
+            Some("compare(other: T) -> Ordering")
+        );
+
+        let version = TYS.intern(Ty::Named {
+            name: "Version".to_string(),
+            kind: NamedKind::Record,
+            args: Vec::new(),
+        });
+        let doc = "commons m {\n  type Version = { major: Int } derives Ord\n}\n";
+        let items = value_member_candidates(version, &TYS, doc, None);
+        assert!(find(&items, "compare", CompletionKind::Member).is_some());
+
+        let doc = "commons m {\n  type Version = { major: Int }\n}\n";
+        let items = value_member_candidates(version, &TYS, doc, None);
+        assert!(find(&items, "compare", CompletionKind::Member).is_none());
+
+        let flag = TYS.intern(Ty::Base(BaseType::Bool));
+        let items = value_member_candidates(flag, &TYS, "context a.b\n", None);
+        assert!(find(&items, "compare", CompletionKind::Member).is_none());
     }
 
     #[test]
