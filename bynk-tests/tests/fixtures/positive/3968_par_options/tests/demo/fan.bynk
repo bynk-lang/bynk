@@ -1,0 +1,30 @@
+suite demo.fan
+
+case "parTraverseWith keeps input order" {
+	let out <- tenfold.call([3, 1, 2])
+	expect out == [30, 10, 20]
+	let wide <- tenfoldConst.call([1, 2, 3, 4, 5])
+	expect wide == [10, 20, 30, 40, 50]
+}
+
+case "parForEachWith runs every step" {
+	let _ <- touch.call([1, 2, 3])
+	expect 1 == 1
+}
+
+case "parTraverseAllWith collects every result" {
+	let rs <- collect.call([1, 2, 3], 2)
+	expect rs.length() == 3
+}
+
+case "parTraverseTryWith returns every value in input order when all succeed" {
+	let r <- tryAll.call([1, 2], 2)
+	expect r == Ok([1, 2])
+}
+
+case "parTraverseTryWith returns the first Err in input order, and an early Err stops the rest" {
+	let wide <- tryAll.call([1, 3, 4], 3)
+	expect wide == Err("big")
+	let narrow <- tryAll.call([3, 1, 2], 1)
+	expect narrow == Err("big")
+}

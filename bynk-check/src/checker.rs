@@ -68,6 +68,7 @@ mod linearity;
 mod list_basics;
 mod list_more;
 mod list_par;
+mod list_par_with;
 mod par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
@@ -3339,6 +3340,10 @@ impl ConstLit {
 /// (v0.29.10). Empty (`Default`) for pure functions / non-context code.
 #[derive(Default)]
 pub struct CapabilityCtx {
+    /// #3981: whether a statement-form `expect … is P(x)` keeps `x` bound for the rest of its
+    /// block. True for a case body; false (the default) for a `property`, which evaluates its
+    /// claims once per input, and for production code.
+    pub expect_is_bindings: bool,
     /// Capabilities in scope for the current handler, as a name → CapabilityInfo
     /// map. Empty for pure functions and non-context code.
     pub capabilities: HashMap<String, CapabilityInfo>,
@@ -5091,6 +5096,15 @@ pub(crate) fn type_of_block(block: &Block, expected: Option<TyId>, ctx: &mut Ctx
                             actual.display(tys),
                         ),
                     ));
+                }
+                // #3981: a statement-form `expect … is P(x)` ends the case when it fails, so the
+                // names the predicate binds stay bound to the end of the block.
+                if ctx.caps.expect_is_bindings {
+                    let scope = Span::new(a.span.end, block.span.end);
+                    record_is_locals(&a.value, true, scope, ctx);
+                    for (name, ty) in collect_is_bindings(&a.value, ctx) {
+                        ctx.bind(name, ty);
+                    }
                 }
             }
             Statement::Advance(a) => check_advance(a, ctx),
