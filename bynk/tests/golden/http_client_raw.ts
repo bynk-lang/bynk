@@ -164,8 +164,6 @@ export interface __Request {
   readonly multipart?: globalThis.FormData;
   /** The `Cookie` header's value. A browser sets its own and ignores this. */
   readonly cookies?: string;
-  /** The typed `headers` record, as header names and values. */
-  readonly headers?: Readonly<Record<string, string>>;
   /** A `@raw` body: the caller's bytes, sent as given. */
   readonly raw?: globalThis.Uint8Array | globalThis.ArrayBuffer | globalThis.Blob | globalThis.ReadableStream<globalThis.Uint8Array>;
   /** The content type the route declared for its `@raw` body. */
@@ -275,27 +273,6 @@ export function __cookieString(wire: JsonValue, fields: readonly __QueryField[])
   return pairs.join("; ");
 }
 
-/**
- * A `headers` record's wire form as header names and values (a list's items joined with `, `,
- * a field left out absent). A value with a control character (a line break would add a header
- * the caller never declared) is refused.
- */
-export function __headerRecord(wire: JsonValue, fields: readonly __QueryField[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  new globalThis.URLSearchParams(__queryString(wire, fields).slice(1)).forEach((value, name) => {
-    if (/[\x00-\x08\x0A-\x1F\x7F]/.test(value)) {
-      throw new __Refusal({
-        kind: "StructuralMismatch",
-        path: `headers.${name}`,
-        expected: "header text with no control character",
-        actual: value,
-      });
-    }
-    out[name] = name in out ? `${out[name]}, ${value}` : value;
-  });
-  return out;
-}
-
 /** The text parts of a `@multipart` body: `a=1&b=x` read back into `form`. */
 export function __appendText(form: globalThis.FormData, text: string): void {
   new globalThis.URLSearchParams(text).forEach((value, name) => form.append(name, value));
@@ -353,8 +330,6 @@ async function __headers(
     const have = headers.get("cookie");
     headers.set("cookie", have === null || have === "" ? request.cookies : `${have}; ${request.cookies}`);
   }
-  // Typed headers are the call's own: they replace a header of the same name the caller configured.
-  for (const [name, value] of globalThis.Object.entries(request.headers ?? {})) headers.set(name, value);
   if (options.origin !== undefined) headers.set("origin", options.origin);
   if (options.sendContract === true && route.contract !== undefined) headers.set("x-bynk-contract", route.contract);
   return headers;
