@@ -4,7 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 
@@ -72,6 +72,9 @@ export default {
       {
         if (method === "POST" && path === "/json") {
           __route = "POST /json";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
+          }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
@@ -101,7 +104,7 @@ export default {
       {
         if (method === "POST" && path === "/signed") {
           __route = "POST /signed";
-          if (!__mediaTypeMatches(request, "application/octet-stream")) {
+          if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
           }
           const __contentLength = request.headers.get("content-length");
@@ -135,7 +138,7 @@ export default {
           if (__m.malformed) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_uploads);
           }
-          if (!__mediaTypeMatches(request, "application/vnd.bynk.tree-v1")) {
+          if (!__mediaTypeMatches(request, ["application/vnd.bynk.tree-v1"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/vnd.bynk.tree-v1" }), { status: 415, headers: { "content-type": "application/json" } }), __security_uploads);
           }
           const __contentLength = request.headers.get("content-length");

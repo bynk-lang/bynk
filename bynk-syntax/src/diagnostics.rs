@@ -2628,8 +2628,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.raw_bad_content_type",
-        blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`. Write `\"image/png\"`, or `\"*/*\"` to accept any type.",
-        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`, or a non-empty list of them. Write `\"image/png\"`, `[\"image/png\", \"image/jpeg\"]` to accept either, or `\"*/*\"` alone to accept any type; the wildcard cannot be one of several, since it would make the others pointless.",
+        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: [\"image/png\", \"*/*\"])   // ✗ `\"*/*\"` is only valid alone\n\n@raw(contentType: \"image/png\")   // ✓\n\n@raw(contentType: [\"image/png\", \"image/jpeg\"])   // ✓ either type\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.raw_body_not_bytes",
@@ -8320,7 +8320,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.raw_bad_content_type",
-        "A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `\"*/*\"`) string literal.",
+        "A `@raw` annotation's `contentType` is missing, or not a `type/subtype` (or `\"*/*\"`) string literal or a list of `type/subtype` literals.",
     ),
     d(
         "bynk.http.raw_body_not_bytes",

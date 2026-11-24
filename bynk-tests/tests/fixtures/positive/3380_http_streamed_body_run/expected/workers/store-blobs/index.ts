@@ -86,7 +86,7 @@ export default {
           if (__m.malformed) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_blobs);
           }
-          if (!__mediaTypeMatches(request, "application/zip")) {
+          if (!__mediaTypeMatches(request, ["application/zip"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/zip" }), { status: 415, headers: { "content-type": "application/json" } }), __security_blobs);
           }
           const __contentLength = request.headers.get("content-length");

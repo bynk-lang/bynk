@@ -312,7 +312,7 @@ pub(super) fn emit_consumed_context_helpers(
 /// `c` declares but does not export renamed `<ns>__<Name>` (`t_vault__Code`),
 /// wherever it is declared or named; and those types, renamed to original.
 /// A type that isn't `c`'s own (a commons type it `uses`, whose codecs the
-/// caller imports, [`commons_codec_imports`]) keeps its name: it is the
+/// caller imports, `boundary::commons_codec_imports`) keeps its name: it is the
 /// caller's same declaration, under a codec owner.
 fn rename_unexported_types(
     c: &str,

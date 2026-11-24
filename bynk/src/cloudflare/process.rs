@@ -142,6 +142,7 @@ impl<'a> Wrangler<'a> {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| WranglerError::new(op, Failure::Start(e)))?;
+        let mut unread: Option<std::io::Error> = None;
         {
             // Taken and dropped inside the block: wrangler reads to EOF, so the pipe must close
             // before `wait_with_output`, or both ends block.
@@ -149,14 +150,22 @@ impl<'a> Wrangler<'a> {
                 .stdin
                 .take()
                 .ok_or_else(|| WranglerError::new(op, Failure::Pipe(no_pipe)))?;
-            pipe.write_all(stdin.as_bytes())
-                .map_err(|e| WranglerError::new(op, Failure::Io(e)))?;
+            // #4103: wrangler may exit without reading stdin (it fails early on auth, config or a
+            // bad Worker name), which closes the pipe under the write. That is wrangler's
+            // failure to report, not an I/O error of ours: carry on to its exit and streams.
+            if let Err(e) = pipe.write_all(stdin.as_bytes()) {
+                if e.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(WranglerError::new(op, Failure::Io(e)));
+                }
+                unread = Some(e);
+            }
         }
         let output = child
             .wait_with_output()
             .map_err(|e| WranglerError::new(op, Failure::Wait(e)))?;
         if output.status.success() {
-            return Ok(());
+            // Exited 0 without reading the whole value: it may not have been set.
+            return unread.map_or(Ok(()), |e| Err(WranglerError::new(op, Failure::Io(e))));
         }
         Err(WranglerError::exited(
             op,
@@ -594,6 +603,31 @@ mod tests {
              secret put TOKEN stdin:s3cret\n\
              secret put K --name shop-api stdin:k3y\n"
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// #4103: a wrangler that exits without reading stdin is reported as wrangler's own failure,
+    /// not as the broken pipe under the write. The value is larger than any pipe buffer, so the
+    /// write cannot finish before wrangler exits, whatever the timing. Unix: it runs `sh`.
+    #[cfg(unix)]
+    #[test]
+    fn a_wrangler_that_never_reads_stdin_reports_its_own_failure() {
+        let root = scratch("unread");
+        let big = "x".repeat(1 << 20);
+        let failing = Wrangler::scripted("echo 'it went wrong on stderr' >&2; exit 1", &root);
+        let put = failing.secret_put(&root, "TOKEN", &big, "default");
+        assert_eq!(put.unwrap_err().said(), "it went wrong on stderr");
+        let named = failing.named_secret(&root.join("sweep"), "put", "shop-api", "K", &big);
+        assert_eq!(named.unwrap_err().said(), "it went wrong on stderr");
+        let silent = Wrangler::scripted("exit 3", &root)
+            .secret_put(&root, "TOKEN", &big, "default")
+            .unwrap_err();
+        assert_eq!(silent.said(), "wrangler exited 3");
+        // Exiting 0 without reading the value may mean it was not set: still an error.
+        let unread = Wrangler::scripted("exit 0", &root)
+            .secret_put(&root, "TOKEN", &big, "default")
+            .unwrap_err();
+        assert!(unread.said().contains("Broken pipe"), "{}", unread.said());
         let _ = std::fs::remove_dir_all(&root);
     }
 

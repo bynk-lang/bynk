@@ -751,15 +751,29 @@ export async function renderRejection(
 // the router's rejection bodies in `workers_entry.rs`.
 const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "MalformedPath", "StructuralMismatch"]);
 
-// Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
-// parameters (`; charset=…`) are not part of the match, the comparison is
-// case-insensitive, `"*/*"` accepts anything, and a missing header matches only
-// that wildcard.
-export function mediaTypeMatches(request: Request, declared: string): boolean {
-  if (declared === "*/*") return true;
+// Whether `request`'s `Content-Type` is a media type a `@raw` route declares (#3912:
+// one, or any of a list): parameters (`; charset=…`) are not part of the match,
+// the comparison is case-insensitive, `"*/*"` accepts anything, and a missing
+// header matches only that wildcard.
+export function mediaTypeMatches(request: Request, declared: string | readonly string[]): boolean {
+  const types = typeof declared === "string" ? [declared] : declared;
+  if (types.includes("*/*")) return true;
   const given = request.headers.get("content-type");
   if (given === null) return false;
-  return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return types.some((t) => mediaType === t.toLowerCase());
+}
+
+// #3912: whether `request`'s `Content-Type` is one a JSON `body` route can mean:
+// absent (a client that sends no type, such as a bare `curl --data-binary`),
+// `application/json`, or a `+json` type (`application/problem+json`). A form,
+// multipart or any other type is refused with `415`. Parameters are ignored and
+// the comparison is case-insensitive.
+export function jsonMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  if (given === null || given.trim() === "") return true;
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return mediaType === "application/json" || mediaType.endsWith("+json");
 }
 
 // #2341 (decision A): an HTTP handler's `headers: RequestHeaders` — a read-only

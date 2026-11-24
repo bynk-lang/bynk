@@ -71,13 +71,13 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
 async function __sysdrive_avatars_http_POST_avatar(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/avatar`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream" }, body: __body as BufferSource });
+  const __req = new globalThis.Request(`https://test/avatar`, { method: "POST", headers: { "content-type": "application/octet-stream", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body as BufferSource });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_avatars_http_POST_avatar(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/avatar`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8" }, body: body });
+  const __req = new globalThis.Request(`https://test/avatar`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -90,13 +90,13 @@ async function __sysdrive_wrongmethod_avatars(method: string, path: string) {
 async function __sysdrive_probe_http_POST_probe(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/probe`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream" }, body: __body as BufferSource });
+  const __req = new globalThis.Request(`https://test/probe`, { method: "POST", headers: { "content-type": "application/octet-stream", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body as BufferSource });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_probe_http_POST_probe(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/probe`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8" }, body: body });
+  const __req = new globalThis.Request(`https://test/probe`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -109,13 +109,13 @@ async function __sysdrive_wrongmethod_probe(method: string, path: string) {
 async function __sysdrive_safe_http_POST_safe(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/safe`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream" }, body: __body as BufferSource });
+  const __req = new globalThis.Request(`https://test/safe`, { method: "POST", headers: { "content-type": "application/octet-stream", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body as BufferSource });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_safe_http_POST_safe(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/safe`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8" }, body: body });
+  const __req = new globalThis.Request(`https://test/safe`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -128,13 +128,13 @@ async function __sysdrive_wrongmethod_safe(method: string, path: string) {
 async function __sysdrive_streams_http_POST_resize(body: globalThis.Uint8Array, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __body = body;
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/resize`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "application/octet-stream" }, body: __body as BufferSource });
+  const __req = new globalThis.Request(`https://test/resize`, { method: "POST", headers: { "content-type": "application/octet-stream", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: __body as BufferSource });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
 async function __sysdrive_raw_streams_http_POST_resize(body: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/resize`, { method: "POST", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "content-type": "text/plain; charset=utf-8" }, body: body });
+  const __req = new globalThis.Request(`https://test/resize`, { method: "POST", headers: { "content-type": "text/plain; charset=utf-8", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) }, body: body });
   const __res = await __h.env.SHOP_THUMBS.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }

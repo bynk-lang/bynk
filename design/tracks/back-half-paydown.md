@@ -3,7 +3,9 @@
 - **Status:** Settled. The §9 questions were closed with the maintainer on 17 November 2026.
   Phase 0 is complete (P0.1–P0.5; P0.6 was retired into 1B.3). **Phase 1 is complete (23 November 2026):**
   1A, 1B, 1C and 1D have all merged, every §8 Phase 1 row reads met, and **the freeze is lifted** (§2).
-  Phase 2 (§6) is proposed and accepted as slices 1B.4b and 2.0–2.9 (#4085–#4091, #4108–#4110).
+  **Phase 2 is complete (24 November 2026):** slices 1B.4b and 2.0–2.9 (#4085–#4091,
+  #4108–#4110) have all merged, and no back-half file is now over 2,000 production lines (§6).
+  Phase 3 (§7) is next.
   Spine bynk-lang/bynk#3676.
 - **The freeze:** the maintainer paused new feature development on `bynk` from v0.639.1. §2 sets
   out its terms, as settled by Q1, and the freeze ADR added with this settling records them and
@@ -319,27 +321,34 @@ production lines without saying why; from 2.0 the gate is mechanical. Settled by
   ceiling, and an entry whose file is under 2,000 (or gone) must be deleted. `cargo xtask
   module-lines [--apply]` prints and rewrites it; `xtask/tests/module_lines_ratchet.rs` is the
   gate;
-- the scope is the six back-half crates (10 ceilings today); the trend probe stays workspace-wide;
-- the track-exit target is that no back-half file exceeds **3,000** lines. It binds a *new*
-  entry now; the eight files already over it are in `GRANDFATHERED` in `xtask/src/module_lines.rs`
-  until exit, when the constant is deleted;
+- the scope is the six back-half crates (10 ceilings at 2.0; none after Phase 2, when every
+  file is under 2,000); the trend probe stays workspace-wide;
+- the track-exit target is that no back-half file exceeds **3,000** lines. It bound a *new*
+  entry from 2.0; the eight files already over it were exempt (`GRANDFATHERED`) until the splits
+  took each under, and the exemption was retired, with the maintainer's approval, in the
+  end-of-Phase-2 PR. The cap now binds every entry;
 - a split adds each new `bynk-emit` file to `AST_IMPORTER_ORIGINS` in `greenfield_status.rs`
   (the origin table is empty until the first split), so `ast_importers` counts each origin once.
 
 | Slice | Target | Production lines | Waits for |
 |---|---|---:|---|
-| **2.0** | the ratchet. **Done in #4085.** | — | — |
-| **2.1** | `bynk-emit/src/emitter/emit.rs`, in seven PRs (2.1a to 2.1g, #4086). **2.1a done:** `emit/types.rs` (1,036 lines with its tests) and `emit/functions.rs` (823); `emit.rs` is 9,295 production lines after it. | 10,717 | 1B.4b (done) |
-| **2.2** | `bynk-emit/src/emitter/lower.rs`, in five PRs (#4087). **2.2a done:** `lower/pattern.rs` and `lower/is.rs` (now 3,752); 2.2b to 2.2e remain | 3,752 | 1B.4b; 2.2c to 2.2e also 1B.5e (merged) |
-| **2.3** | `bynk-emit/src/emitter/serialisation.rs` | 4,232 | — |
-| **2.4** | `bynk-emit/src/emitter/workers_entry.rs` | 4,215 | — |
-| **2.5** | `bynk-emit/src/emitter.rs` | 3,215 | — |
-| **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs`. **Done in 2.6a and 2.6b:** `program.rs` is a 441-line parent over `program/{stmt,expr,types,decl,verbatim,spans}.rs`, and `printer.rs` a 454-line parent over `printer/{stmt,compact,expr,precedence,multiline,types,decl,fragment}.rs` (largest 713) with its tests in `printer/tests.rs`. 2.6c (splitting `printer/tests.rs` by concern) is deferred to Phase 3, where test files are rebalanced. | 3,629; 3,682 → 454; 441 | — |
-| **2.7** | `bynk-driver/src/project.rs`, in two PRs. **Done: 2.7a (#4136) moved `options`, `entry`, `in_memory`, `agent_deps` and the tests out (`module_lines` 4,312 to 2,875); 2.7b (closes #4108) moved `pipeline`, `unit` and `output` out, leaving a 92-line facade; no `project/` file is over 1,350 production lines, and `run_checks` and `build_output` keep their `fn-length-ceilings.txt` values under their new keys.** | 4,312 | — |
-| **2.8** | `bynk/src/deploy/plan.rs` (optional: under 3,000 already) | 2,271 | — |
-| **2.9** | `bynk/src/dev.rs` (optional) | 2,292 | — |
+| **2.0** | the ratchet. **Done in #4085 (PR #4130).** | — | — |
+| **2.1** | `bynk-emit/src/emitter/emit.rs`, in seven PRs (2.1a to 2.1g, #4086). **Done:** a 57-line facade over 14 files in `emit/` (types, functions, service, websocket, agent store, migrate, state, history, dispatch, agent, suite and others); the largest is `agent_state.rs` at 1,391. | 10,717 → 57 | 1B.4b (done) |
+| **2.2** | `bynk-emit/src/emitter/lower.rs`, in five PRs (#4087). **Done:** a 482-line core over ten family files in `lower/` (pattern, is, mock, expect, claims, control, operator, literal, ident, calls), each under 600; `list_kernel_tests` moved to `lower_list.rs`. | 4,884 → 482 | 1B.4b, 1B.5e (done) |
+| **2.3** | `bynk-emit/src/emitter/serialisation.rs`, in two PRs (#4088). **Done:** a 348-line parent over seven codec files in `serialisation/` (support, field, expr, refined, record_sum, generics, factory); the largest is `generics.rs` at 1,053. Its children stay `AST_IMPORTER_EXCEPTIONS` through the origin table (2.3a ruling). | 4,232 → 348 | — |
+| **2.4** | `bynk-emit/src/emitter/workers_entry.rs`, in three PRs (#4089), by route family. **Done:** a 738-line parent over twelve files in `workers_entry/`, with `workers_email.rs` moved in as `email.rs`; 2.4c extracted `emit_worker_entry`'s inline blocks (WebSocket, events, CORS, fall-through, route collection), taking it from 1,109 to 488 lines. The largest child is `http.rs` at 1,340. | 4,215 → 738 | — |
+| **2.5** | `bynk-emit/src/emitter.rs`, in two PRs (#4090). **Done:** `imports.rs`, `boundary.rs`, `consumed.rs` and `project.rs` split out, the header functions joined `runtime_header.rs`, and 19 tests moved beside their code; `emitter.rs` is 446. | 3,215 → 446 | 1B.5e (done) |
+| **2.6** | `bynk-ts/src/printer.rs`, `bynk-ts/src/program.rs`. **Done in 2.6a and 2.6b:** `program.rs` is a parent over `program/{stmt,expr,types,decl,verbatim,spans}.rs`, and `printer.rs` a 454-line parent over `printer/{stmt,compact,expr,precedence,multiline,types,decl,fragment}.rs` (largest 713) with its tests in `printer/tests.rs`. 2.6c (splitting `printer/tests.rs` by concern) is deferred to Phase 3, where test files are rebalanced. | 3,629; 3,682 → 454; 230 | — |
+| **2.7** | `bynk-driver/src/project.rs`, in two PRs. **Done: 2.7a (#4136) moved `options`, `entry`, `in_memory`, `agent_deps` and the tests out (`module_lines` 4,312 to 2,875); 2.7b (closes #4108) moved `pipeline`, `unit` and `output` out, leaving a facade; no `project/` file is over 1,350 production lines, and `run_checks` and `build_output` keep their `fn-length-ceilings.txt` values under their new keys.** | 4,312 → 100 | — |
+| **2.8** | `bynk/src/deploy/plan.rs` (#4109). **Done:** a 51-line facade over five files in `plan/`; the largest is `model.rs` at 975. | 2,271 → 51 | — |
+| **2.9** | `bynk/src/dev.rs` (#4110). **Done:** a 64-line facade over seven files in `dev/`; the largest is `run.rs` at 685. 2.9 also made the probes that skip test files skip modules declared `#[cfg(test)] mod x;` (`module_lines::is_test_only_file`). | 2,292 → 64 | — |
 
-Each split lowers or deletes its target's ceiling with `cargo xtask module-lines --apply`.
+Each split was a pure move with byte-identical output, checked by a moved-lines comparison. A
+split deleted its target's ceiling entry only when the file fell under 2,000 lines; it did not
+lower ceilings or edit this document (both caused merge-queue conflicts between parallel
+streams), and the coordinator tidied both once at the end of the phase. After Phase 2 the
+largest back-half file is `bynk-emit/src/emitter/wrangler.rs` at 1,990 production lines, and
+`xtask/module-line-ceilings.txt` holds no entries.
 
 `bynk-ts/src/printer.rs` is in scope: it is large, but it is the best-tested file in the back
 half, so splitting it is low-risk.
@@ -379,7 +388,7 @@ out carries its unit tests with it.
 | Deploy: Cloudflare client layers | 2, untyped | one module: one operation trait and one REST client, typed errors (**met by 1D.3c**: `cloudflare_client_sites` reads 0) | 1 |
 | `bynk-emit` dev-dependency on `bynk-driver` | yes | no (**met by 1B.2b**) | no |
 | Crates denying wildcard arms | 2 (bynk-ts, bynk-model) | bynk-ts, bynk-model, bynk-emit (**met by 1A.37b**) | + bynk-driver, bynk |
-| Back-half files ≥ 3,000 lines (production) | 8 (read by `module_lines`) | 8 | 0 (Q5) |
+| Back-half files ≥ 3,000 lines (production) | 8 (read by `module_lines`) | 8 | 0 (Q5) (**met in Phase 2**: none is over 2,000) |
 | Files newly crossing 2,000 production lines | — | 0, by ratchet (**2.0**) | 0, by ratchet (Q5) |
 | bynk-emit unit tests per 1k production lines | 7.1 | — | per 3.4's floor |
 

@@ -1,0 +1,2 @@
+bynk.cron.invalid_schedule `Every` is not a cron schedule: it is declared `Short20`
+# exact

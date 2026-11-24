@@ -14,19 +14,6 @@ use super::super::{RAW, map_query, ts_ident};
 use super::{Lowered, Pre, consumed_variant_literal, member_node, one};
 use crate::ts_build::ident;
 
-#[cfg(test)]
-use super::super::RuntimeUse;
-#[cfg(test)]
-use bynk_check::checker::Types;
-#[cfg(test)]
-use std::sync::Arc;
-
-/// Slice 1A.4 (#3701): the identifier lowering, as a [`bynk_ts::TsExpr`] (a node, or the
-/// text of a branch that still builds a closure or thunk). The branch order is
-/// deliberate and unchanged: constants, `Ord`/needs closures, transition
-/// records, invariant fields, store cells, the held/store-`Map` and `Log`
-/// thunks, `HttpResult`/`QueueResult` constructors, sum variants, the actor-sum
-/// binder, then a plain local.
 /// `(() => values)`: a store read used as a value, the deferred `Query` thunk (1A.23, #3724).
 fn store_thunk(values: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::Paren(Box::new(bynk_ts::TsExpr::Arrow {
@@ -38,6 +25,12 @@ fn store_thunk(values: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     }))
 }
 
+/// Slice 1A.4 (#3701): the identifier lowering, as a [`bynk_ts::TsExpr`] (a node, or the
+/// text of a branch that still builds a closure or thunk). The branch order is
+/// deliberate and unchanged: constants, `Ord`/needs closures, transition
+/// records, invariant fields, store cells, the held/store-`Map` and `Log`
+/// thunks, `HttpResult`/`QueueResult` constructors, sum variants, the actor-sum
+/// binder, then a plain local.
 pub(super) fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     // #2617: a constant is a hoisted, cached function (`emit_consts`), so a
     // name the checker resolved to one reads it with a call. First, since the
@@ -511,8 +504,11 @@ fn decode_map_key(
 
 #[cfg(test)]
 mod decode_map_key_tests {
+    use super::super::super::RuntimeUse;
     use super::*;
     use crate::emitter::ts_types::no_spellings;
+    use bynk_check::checker::Types;
+    use std::sync::Arc;
 
     /// One table for this module's fixtures — `Types` is `Send + Sync`
     /// (T3.6b), so a `LazyLock` static serves every test without threading.

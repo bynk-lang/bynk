@@ -2,7 +2,7 @@
 // Worker entry point for context `signup.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __formMediaTypeMatches, __formObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __formMediaTypeMatches, __formObject } from "../../__bynk_runtime/http.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -64,6 +64,9 @@ export default {
       {
         if (method === "POST" && path === "/json") {
           __route = "POST /json";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
+          }
           let __body_json: __JsonValue;
           try {
             __body_json = (await request.json()) as __JsonValue;
