@@ -467,20 +467,20 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         })
         .collect();
     main_body.push(const_("modules", TsExpr::multiline_array(modules_items)));
-    let shared_variant = runner_shared_variant(tests, pg);
-    main_body.extend(shared_variant.as_deref().map(shared_begin));
-    main_body.push(TsStmt::let_stmt(
-        TsBindingName::Ident("passed".to_string()),
-        None,
-        Some(num_lit("0")),
-        None,
-    ));
-    main_body.push(TsStmt::let_stmt(
-        TsBindingName::Ident("failed".to_string()),
-        None,
-        Some(num_lit("0")),
-        None,
-    ));
+    let shared = runner_shared_comments(tests, pg);
+    main_body.extend(
+        shared
+            .as_ref()
+            .map(|(b, _)| TsStmt::comment(b.as_str(), None)),
+    );
+    for counter in ["passed", "failed"] {
+        main_body.push(TsStmt::let_stmt(
+            TsBindingName::Ident(counter.to_string()),
+            None,
+            Some(num_lit("0")),
+            None,
+        ));
+    }
     // v0.59: `--format json` sets BYNK_TEST_FORMAT=ndjson and captures stdout;
     // the runner then emits one JSON event per line (an internal protocol the
     // driver re-renders into the pinned document). Otherwise the human ✓ / ✗
@@ -843,7 +843,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         expr_stmt(call(member(ident("process"), "exit"), vec![num_lit("1")])),
     ));
 
-    main_body.extend(shared_variant.map(|_| shared_end()));
+    main_body.extend(shared.map(|(_, end)| TsStmt::comment(end, None)));
     program.push(TestRuntimeModule::TestFilter.splice());
     program.push(TsStmt::decl(
         TsDecl::Function {
@@ -868,18 +868,11 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
 const SHARED_BEGIN: &str = "bynk:shared-begin test-runner#";
 const SHARED_END: &str = "bynk:shared-end";
 
-fn shared_begin(variant: &str) -> TsStmt {
-    TsStmt::comment(format!("{SHARED_BEGIN}{variant}"), None)
-}
-
-fn shared_end() -> TsStmt {
-    TsStmt::comment(SHARED_END, None)
-}
-
-/// The variant of the fixed part of `main()` this build emits: the sorted optional parts it
-/// carries, or `base`. `None` when the part holds something particular to this build (the
-/// snapshot report lists the modules that take a snapshot), so it is not delimited.
-fn runner_shared_variant(tests: &[RunnableTest], pg: bool) -> Option<String> {
+/// The begin and end comment text for the fixed part of `main()` this build emits. The begin
+/// comment names the variant: the optional parts it carries, or `base`. `None` when the part
+/// holds something particular to this build (the snapshot report lists the modules that take a
+/// snapshot), so it is not delimited.
+fn runner_shared_comments(tests: &[RunnableTest], pg: bool) -> Option<(String, &'static str)> {
     if tests.iter().any(|t| !t.snapshot_files.is_empty()) {
         return None;
     }
@@ -892,11 +885,12 @@ fn runner_shared_variant(tests: &[RunnableTest], pg: bool) -> Option<String> {
     .into_iter()
     .filter_map(|(on, name)| on.then_some(name))
     .collect();
-    Some(if parts.is_empty() {
+    let variant = if parts.is_empty() {
         "base".to_string()
     } else {
         parts.join("+")
-    })
+    };
+    Some(([SHARED_BEGIN, variant.as_str()].concat(), SHARED_END))
 }
 
 /// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
