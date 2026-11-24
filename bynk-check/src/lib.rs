@@ -82,6 +82,7 @@ pub mod queue_delivery;
 pub mod recovery;
 pub mod requirements;
 pub mod resolver;
+pub mod route_order;
 pub mod schema_registry;
 #[cfg(test)]
 mod scope_tests;

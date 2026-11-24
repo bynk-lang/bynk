@@ -2,7 +2,7 @@
 // Worker entry point for context `ops.reaper`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -14,6 +14,23 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   const fault = globalThis.Promise.reject(e);
   fault.catch(() => {});
   ctx.waitUntil(fault);
+}
+
+async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, variants: readonly string[], run: () => globalThis.Promise<T>): globalThis.Promise<T> {
+  try {
+    const result = await run();
+    if (result.tag === "Err") {
+      const error = result.error as { readonly tag?: unknown } | null;
+      const variant = typeof error === "object" && error !== null && typeof error.tag === "string" && variants.includes(error.tag) ? error.tag : "";
+      globalThis.console.error({ message: "a cron run returned Err", level: "error", fields: { site, type: errType, variant } });
+      __bynkReportFault(ctx, new globalThis.Error(`${site} returned ${errType}${variant === "" ? "" : `.${variant}`}`));
+    }
+    return result;
+  } catch (thrown) {
+    globalThis.console.error(`${site} faulted`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    __bynkReportFault(ctx, thrown);
+    throw thrown;
+  }
 }
 
 export default {
@@ -39,7 +56,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/seen") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/seen", path) !== null) {
           __route = "GET /seen";
           const result = await surface.http_GET_seen();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -47,19 +64,19 @@ export default {
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/swept") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/swept", path) !== null) {
           __route = "GET /swept";
           const result = await surface.http_GET_swept();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/seen") {
+      if (__matchPath("/seen", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/swept") {
+      if (__matchPath("/swept", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -71,46 +88,41 @@ export default {
       return __faultResponse("ops.reaper", __route);
     }
   },
-  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { __bynkResult?: unknown }): globalThis.Promise<void> {
+  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void; __bynkResult?: unknown }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (event.cron) {
       case "0 1 * * *": {
-        const result = await surface.cron_sweeper_0();
+        const result = await __bynkCronRun(ctx, "cron `0 1 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_0());
         if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 1 * * * failed", result.error);
         return;
       }
       case "0 2 * * *": {
-        const result = await surface.cron_sweeper_1(event.scheduledTime);
+        const result = await __bynkCronRun(ctx, "cron `0 2 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_1(event.scheduledTime));
         if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 2 * * * failed", result.error);
         return;
       }
       case "0 3 * * *": {
-        const result = await surface.cron_sweeper_2(event.cron as never);
+        const result = await __bynkCronRun(ctx, "cron `0 3 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_2(event.cron as never));
         if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 3 * * * failed", result.error);
         return;
       }
       case "0 4 * * *": {
-        const result = await surface.cron_sweeper_3(event.cron as never, event.scheduledTime);
+        const result = await __bynkCronRun(ctx, "cron `0 4 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_3(event.cron as never, event.scheduledTime));
         if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 4 * * * failed", result.error);
         return;
       }
       case "0 5 * * *": {
-        const result = await surface.cron_sweeper_4(event.scheduledTime, event.cron as never);
+        const result = await __bynkCronRun(ctx, "cron `0 5 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_4(event.scheduledTime, event.cron as never));
         if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 5 * * * failed", result.error);
         return;
       }
       case "0 6 * * *": {
-        const result = await surface.cron_sweeper_5(event.cron as never, event.scheduledTime);
+        const result = await __bynkCronRun(ctx, "cron `0 6 * * *` (sweeper)", "String", [], () => surface.cron_sweeper_5(event.cron as never, event.scheduledTime));
         if (ctx !== undefined) ctx.__bynkResult = result;
-        if (result.tag === "Err") globalThis.console.error("cron 0 6 * * * failed", result.error);
         return;
       }
       default:
+        globalThis.console.warn("cron expression matches no `on schedule` handler in this context:", event.cron);
         return;
     }
   },

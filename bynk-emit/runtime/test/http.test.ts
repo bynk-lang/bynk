@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import {
+  allowUnion,
   decodePath,
   matchPath,
   cfObject,
@@ -83,6 +84,22 @@ test("matchPath: captures and decodes params", () => {
 test("matchPath: returns null on literal or length mismatch", () => {
   assert.equal(matchPath("/orders/:id", "/customers/1"), null);
   assert.equal(matchPath("/orders/:id", "/orders/1/extra"), null);
+});
+
+test("matchPath: empty segments are insignificant, and literals compare percent-decoded (#3909)", () => {
+  assert.deepEqual(matchPath("/items", "/items/"), { params: {} });
+  assert.deepEqual(matchPath("/items", "//items"), { params: {} });
+  assert.deepEqual(matchPath("/a/:x", "/a//b/"), { params: { x: "b" } });
+  assert.deepEqual(matchPath("/caf\u00e9", "/caf%C3%A9"), { params: {} });
+  assert.equal(matchPath("/items", "/item"), null);
+  // An undecodable segment equals no literal.
+  assert.equal(matchPath("/a/b", "/a/%E0%A4%A"), null);
+});
+
+test("allowUnion: the union is alphabetical and adds only the routes the path matches (#3909)", () => {
+  const extras: [string, string][] = [["/a/:x/c", "GET, HEAD, OPTIONS, PUT"]];
+  assert.equal(allowUnion("GET, HEAD, OPTIONS", "/a/b/c", extras), "GET, HEAD, OPTIONS, PUT");
+  assert.equal(allowUnion("DELETE, OPTIONS", "/a/b/d", extras), "DELETE, OPTIONS");
 });
 
 test("matchPath: malformed percent-encoding is reported, not thrown (#3908)", () => {

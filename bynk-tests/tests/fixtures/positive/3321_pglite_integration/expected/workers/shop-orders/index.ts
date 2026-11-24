@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.orders`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -35,7 +35,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/orders") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/orders", path) !== null) {
           __route = "GET /orders";
           const result = await surface.http_GET_orders();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
@@ -43,13 +43,13 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/orders") {
+        if (method === "POST" && __matchPath("/orders", path) !== null) {
           __route = "POST /orders";
           const result = await surface.http_POST_orders();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
         }
       }
-      if (path === "/orders") {
+      if (__matchPath("/orders", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

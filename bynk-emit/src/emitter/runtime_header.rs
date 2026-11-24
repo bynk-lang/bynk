@@ -254,6 +254,7 @@ const WORKER_ORDER: &[&str] = &[
     "__untilBodyTooLarge",
     "__mediaTypeMatches",
     "__jsonMediaTypeMatches",
+    "__allowUnion",
     "__requestHeaders",
     "__queryObject",
     "__cookieObject",

@@ -2388,6 +2388,19 @@ pub fn queue_deliveries(table: &UnitTable) -> Vec<QueueDelivery> {
     out
 }
 
+/// #3872: the variant names of the sum type `name` declared in `table`, in
+/// declaration order; empty when `name` is not a sum declared here (a record, a
+/// base type, or a type of another unit). A cron run's failure record may name
+/// the variant of a sum error and nothing of any other error.
+pub fn sum_variant_names(table: &UnitTable, name: &str) -> Vec<String> {
+    match table.types.get(name).map(|t| &t.body) {
+        Some(bynk_syntax::ast::TypeBody::Sum(sum)) => {
+            sum.variants.iter().map(|v| v.name.name.clone()).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 pub fn cron_and_queue_triggers(table: &UnitTable) -> (Vec<String>, Vec<String>) {
     let mut crons: Vec<String> = Vec::new();
     let mut queues: Vec<String> = Vec::new();

@@ -2,7 +2,7 @@
 // Worker entry point for context `hooks.github`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
 
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/echo") {
+        if (method === "POST" && __matchPath("/echo", path) !== null) {
           __route = "POST /echo";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 256) {
@@ -57,7 +57,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/github") {
+        if (method === "POST" && __matchPath("/github", path) !== null) {
           __route = "POST /github";
           if (!__mediaTypeMatches(request, ["application/json"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_github);
@@ -84,12 +84,12 @@ export default {
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_github);
         }
       }
-      if (path === "/echo") {
+      if (__matchPath("/echo", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_github);
       }
-      if (path === "/github") {
+      if (__matchPath("/github", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_github);

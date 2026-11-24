@@ -129,7 +129,12 @@ test("a tampered payload or signature is refused", async () => {
   const [h, p, m] = c.split(".") as [string, string, string];
   const evil = b64url(JSON.stringify(goodPayload({ sub: "root" })));
   assertErr(await verify(`${h}.${evil}.${m}`), "bad signature");
-  const flipped = m.slice(0, -2) + (m.endsWith("AA") ? "BB" : "AA");
+  // Change a middle character of the tag: it carries a full 6 bits, so the
+  // result is still a canonical base64url encoding of 32 different bytes. (The
+  // last character carries only 4 bits, so changing it can make a non-canonical
+  // encoding, refused as `malformed signature` instead.)
+  const i = 10;
+  const flipped = m.slice(0, i) + (m[i] === "A" ? "B" : "A") + m.slice(i + 1);
   assertErr(await verify(`${h}.${p}.${flipped}`), "bad signature");
 });
 
