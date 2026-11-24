@@ -2,7 +2,7 @@
 // Worker entry point for context `r`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -36,40 +36,40 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/", path) !== null) {
           __route = "GET /";
           const result = await surface.http_GET(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\"", "Bynk realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/greet") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/greet", path) !== null) {
           __route = "GET /greet";
           const result = await surface.http_GET_greet(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\"", "Bynk realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/plain") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/plain", path) !== null) {
           __route = "GET /plain";
           const result = await surface.http_GET_plain(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/") {
+      if (__matchPath("/", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/greet") {
+      if (__matchPath("/greet", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/plain") {
+      if (__matchPath("/plain", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

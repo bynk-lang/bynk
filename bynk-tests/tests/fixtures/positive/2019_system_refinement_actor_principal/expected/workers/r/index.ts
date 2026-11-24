@@ -2,7 +2,7 @@
 // Worker entry point for context `r`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -36,53 +36,53 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/admin") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/admin", path) !== null) {
           __route = "GET /admin";
           const result = await surface.http_GET_admin(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/gate") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/gate", path) !== null) {
           __route = "GET /gate";
           const result = await surface.http_GET_gate(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/ops") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/ops", path) !== null) {
           __route = "GET /ops";
           const result = await surface.http_GET_ops(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/staff") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/staff", path) !== null) {
           __route = "GET /staff";
           const result = await surface.http_GET_staff(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"r\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/admin") {
+      if (__matchPath("/admin", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/gate") {
+      if (__matchPath("/gate", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/ops") {
+      if (__matchPath("/ops", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/staff") {
+      if (__matchPath("/staff", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

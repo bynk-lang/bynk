@@ -56,6 +56,12 @@ pub(crate) struct LowerCtx<'a> {
     /// by walking the stack innermost-out and falls back to the natural
     /// `ts_ident` name when no frame renamed it.
     pub shadow_scopes: Vec<HashMap<String, String>>,
+    /// #3980: the `match`es being lowered, innermost last, so an `expect false` arm can name its
+    /// arm and the value matched (`lower::expect_was`).
+    scrutinee_frames: Vec<super::lower::expect_was::ScrutineeFrame>,
+    /// #3981: whether a statement-form `expect … is P(x)` declares `x` for the statements after
+    /// it: a case body, not a `property` body (mirrors the checker's `expect_is_bindings`).
+    pub(crate) expect_is_bindings: bool,
     /// #2024: identifiers the generated scaffold around this body already
     /// binds in the body's own JS scope — a test runner's `deps`, `__obs`, and
     /// the target's destructured services, agents, functions and assets. A
@@ -181,6 +187,8 @@ impl<'a> LowerCtx<'a> {
             // at `__r0`.
             next_tmp: 0,
             shadow_scopes: vec![HashMap::new()],
+            scrutinee_frames: Vec::new(),
+            expect_is_bindings: false,
             harness_bound: HashSet::new(),
             is_receiver_temps: HashMap::new(),
             is_temp_hoist: None,
@@ -1614,6 +1622,26 @@ impl<'a> LowerCtx<'a> {
     }
     /// #2617: whether a simple `is` receiver (an ident or a field-access
     /// chain ending at one) starts at a constant.
+    pub(in crate::emitter) fn scrutinee_frames(
+        &self,
+    ) -> &[super::lower::expect_was::ScrutineeFrame] {
+        &self.scrutinee_frames
+    }
+    pub(in crate::emitter) fn push_scrutinee(
+        &mut self,
+        f: Option<super::lower::expect_was::ScrutineeFrame>,
+    ) -> bool {
+        match f {
+            Some(f) => {
+                self.scrutinee_frames.push(f);
+                true
+            }
+            None => false,
+        }
+    }
+    pub(in crate::emitter) fn pop_scrutinee(&mut self) {
+        self.scrutinee_frames.pop();
+    }
     pub(crate) fn roots_at_const(&self, value: &Expr) -> bool {
         match value.kind.chain_link() {
             Some(bynk_syntax::ast::ChainLink::Root(_)) => self.const_ref(value).is_some(),

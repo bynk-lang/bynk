@@ -1511,7 +1511,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
     },
     Explain {
@@ -2750,6 +2750,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
     },
     Explain {
+        code: "bynk.http.unreachable_route",
+        blurb: "A router tries the routes of a method in a fixed order: they are compared segment by segment, left to right, and at the first segment where two differ a literal segment beats a `:name` one. So `GET /users/me` answers `/users/me` and `GET /users/:id` answers every other `/users/<x>`, whichever is written first. Overlap is fine, even intended. But a route is refused when every path it matches is answered first by other routes (of the same method, in this context or, in a worker group, in any member): no request could ever reach it. Parameter names are not part of the shape, so `GET /a/:x` beside `GET /a/:y` leaves the second unreachable. Remove the route, or make it match a path the others do not.",
+        example: "on GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:y\") (y: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `/a/:x` already answers every path it matches\n\non GET(\"/a/b\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/a/:x\") (x: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a literal and a parameter overlap, and each is reachable",
+    },
+    Explain {
         code: "bynk.index.bad_argument",
         blurb: "`@indexed` says which field of the map's value type to maintain a secondary index on, and the only form it takes is `by: <field>`. A bare name, another label or an expression leaves the compiler without a field to index. Write `by:` followed by the field's name. A name that is not a field of the value type is `bynk.index.unknown_key`.",
         example: "type Order = { id: String, customerId: String }\n\nstore orders: Map[String, Order] @indexed(customerId)       // ✗ not a `by:` label\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓",
@@ -2916,6 +2921,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
                 `\\n`, or use a multi-line string literal.",
         example: "const Greeting: String = \"hello      // ✗ no closing quote\n\
                   const Greeting: String = \"hello\"   // ✓",
+    },
+    Explain {
+        code: "bynk.list.par_limit_range",
+        blurb: "The `limit` of a `ParOptions` bounds how many steps of `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` or `parTraverseTryWith` are in flight at once. It must be a whole number from 1 to 1000: zero or a negative bound would never start a step, and a bound above 1000 is past what a single invocation can usefully hold open (connection and subrequest limits). The check applies when the limit is a literal or a constant; a limit computed at run time faults the call instead. Pick a value in range, or use the plain form (`parForEach`, `parTraverse`, …) for an unbounded fan-out.",
+        example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
         code: "bynk.messages.format_mismatch",
@@ -3161,7 +3171,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.par.store_write_in_closure",
-        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` runs \
+        blurb: "The closure given to `parForEach`, `parTraverse`, `parTraverseAll` or `parTraverseTry` (or their `…With` forms) runs \
                 once per element, all at once, so it may not write a `store` field, which is \
                 the rule a `par { … }` block already follows. Every `<-` is an await point, \
                 so a `get` then a `put` in the closure lets the other branches write in \
@@ -3281,6 +3291,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.parse.duplicate_cors",
         blurb: "A service has one CORS policy, and it applies to every route in it. Two `cors` blocks could grant different things, and the reader would not know which holds, so the second is refused. Merge them into one. `security` and `limits` follow the same rule (`bynk.parse.duplicate_security`, `bynk.parse.duplicate_limits`), as does `json` (`bynk.parse.duplicate_json`).",
         example: "service api from http {\n    cors { origins: [\"https://a.example\"] }\n    cors { origins: [\"https://b.example\"] }          // ✗ a second `cors`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://a.example\", \"https://b.example\"] }   // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_delivery",
+        blurb: "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
         code: "bynk.parse.duplicate_json",
@@ -4064,6 +4079,21 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
     },
     Explain {
+        code: "bynk.queue.dead_letter_type_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
+    },
+    Explain {
+        code: "bynk.queue.delivery_bad_option",
+        blurb: "A `delivery { }` section sets the consumer's `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours), `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole seconds, 0 to 60) and `concurrency` (1 to 250). Those are Cloudflare's limits, so a value outside its range, a key that is not one of these, or one written twice is refused here rather than failing at deploy. The dead-letter queue also cannot be the consumer's own queue, which would redeliver a failed message to the consumer that failed it. A literal, or a constant of the key's type, is accepted.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 500, deadLetter: None }   // ✗ at most 100\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, retryDelay: 30.seconds, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    },
+    Explain {
+        code: "bynk.queue.delivery_not_queue",
+        blurb: "A `delivery { }` section sets how a queue consumer's messages are retried, delayed, dead-lettered and batched. Only a `from queue` service consumes a queue, so on any other service the section has nothing to govern. Move it to the `from queue` service it was meant for, or delete it.",
+        example: "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+    },
+    Explain {
         code: "bynk.queue.duplicate_consumer",
         blurb: "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue. The rule holds across the project too: Cloudflare accepts one consumer Worker per queue, so two contexts consuming one queue, in a `[deploy.workers]` group or not, could never both deploy. Move the queue to one context; any number of contexts may still send to it.",
         example: "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] { … }\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓ a queue of its own\n}",
@@ -4072,6 +4102,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.queue.invalid_name",
         blurb: "`from queue(\"…\")` names a Cloudflare queue, so the name must be one Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`, starting and ending with a letter or digit. An empty name, capitals or `_` are refused here, rather than failing at deploy. Rename it, for example `order-events`.",
         example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
+    },
+    Explain {
+        code: "bynk.queue.no_dead_letter",
+        blurb: "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
+        example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
         code: "bynk.queue.return_not_queue_result",
@@ -6317,7 +6352,10 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 take a type from, and the compiler will not guess, because the element type \
                 becomes part of the type of everything the collection touches. Give it one: \
                 annotate the binding, as `let xs: List[Int] = []`, or use the empty value \
-                where a type is expected, such as an argument or a return value.",
+                where a type is expected, such as an argument or a return value. The seed \
+                of a `fold` is such a place: `fold(Set.empty(), …)` takes its type from the \
+                result the fold is expected to produce, so annotate the result (`let tags: \
+                Set[String] = xs.fold(Set.empty(), …)`).",
         example: "fn count() -> Int {\n    let xs = []                  // ✗ a list of what?\n    xs.length()\n}\n\n\
                   fn count() -> Int {\n    let xs: List[Int] = []       // ✓\n    xs.length()\n}",
     },
@@ -8442,6 +8480,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A handler carries an annotation outside the closed set (`@cache`/`@limit`).",
     ),
     d(
+        "bynk.http.unreachable_route",
+        "A route no request can reach: every path it matches is answered first by other routes of its method (in the context, or across a worker group).",
+    ),
+    d(
         "bynk.index.bad_argument",
         "An `@indexed` argument is not a `by: <field>` label.",
     ),
@@ -8578,6 +8620,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.list.deprecated_function",
         "A `bynk.list` free function is deprecated in favour of the `List` method form (warning; auto-fixable).",
     )),
+    warn(d(
+        "bynk.list.par_limit_one",
+        "A `limit` of 1 runs the `…With` call one step at a time; the sequential `forEach`, `traverse`, `traverseAll` or `traverseTry` says so directly (warning).",
+    )),
+    d(
+        "bynk.list.par_limit_range",
+        "A `ParOptions` `limit` that is statically known is outside 1 to 1000.",
+    ),
     warn(d(
         "bynk.list.par_traverse_unit",
         "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable).",
@@ -8776,6 +8826,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_cors",
         "A service declares more than one `cors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_delivery",
+        "A service declares more than one `delivery { }` policy.",
         &["service_decl"],
     ),
     dg(
@@ -9197,6 +9252,21 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["queue_handler"],
     ),
     dg(
+        "bynk.queue.dead_letter_type_mismatch",
+        "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from.",
+        &["delivery_policy"],
+    ),
+    dg(
+        "bynk.queue.delivery_bad_option",
+        "A `delivery { }` key is unknown, repeated, out of range or of the wrong type, or the dead-letter queue is the consumer's own.",
+        &["delivery_policy"],
+    ),
+    dg(
+        "bynk.queue.delivery_not_queue",
+        "A `delivery { }` policy on a service that is not `from queue`.",
+        &["delivery_policy"],
+    ),
+    dg(
         "bynk.queue.duplicate_consumer",
         "Two `on message` handlers, in one context or in two, consume the same queue.",
         &["queue_handler"],
@@ -9206,6 +9276,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses.",
         &["queue_handler"],
     ),
+    warn(dg(
+        "bynk.queue.no_dead_letter",
+        "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
+        &["delivery_policy"],
+    )),
     dg(
         "bynk.queue.return_not_queue_result",
         "An `on message` handler does not return `Effect[QueueResult]`.",

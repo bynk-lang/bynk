@@ -682,6 +682,8 @@ pub fn phase_parse(
         return Err(());
     }
 
+    // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
+    crate::implicit_uses::add_implicit_uses(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }
@@ -5525,6 +5527,7 @@ pub fn phase_topology(
     phase_workers_unprovided_capabilities(target, parsed, groups, kinds, unit_tables, errors);
     crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
     crate::queue_consumers::phase_duplicate_queue_consumers(parsed, groups, kinds, errors);
+    crate::queue_delivery::phase_dead_letter_consumers(parsed, groups, kinds, errors);
     phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
 }
 

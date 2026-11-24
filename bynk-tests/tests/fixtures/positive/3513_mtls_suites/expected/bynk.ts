@@ -3,6 +3,7 @@
 
 import { Ok, Err, type Result, type Option } from "./__bynk_runtime/result.js";
 import { __bynkIsCron } from "./__bynk_runtime/time.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 import { LocaleTag } from "./bynk/locale/types.js";
@@ -14,7 +15,7 @@ export type Uuid = string & { readonly __brand: "Uuid" };
 
 export const Uuid = {
   of(value: string): Result<Uuid, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$", "u").test(value))) {
       return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", value });
     }
     return Ok(value as Uuid);
@@ -142,6 +143,20 @@ export interface FetchOptions {
 }
 
 export const FetchOptions = {
+};
+
+/**
+ * The options of the bounded fan-out methods `parForEachWith`, `parTraverseWith`,
+ * `parTraverseAllWith` and `parTraverseTryWith`. `limit` is the most steps in
+ * flight at once: a whole number from 1 to 1000, with no default, so a call
+ * always states it. A literal or constant outside that range is the error
+ * `bynk.list.par_limit_range`; a computed one faults the call.
+ */
+export interface ParOptions {
+  readonly limit: number;
+}
+
+export const ParOptions = {
 };
 
 /**

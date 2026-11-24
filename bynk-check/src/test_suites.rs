@@ -1328,6 +1328,7 @@ pub fn typecheck_integration_case_body(
         case.span,
         HashMap::new(),
         checker::CapabilityCtx {
+            expect_is_bindings: true,
             // #3147: a case may `D1.peek` its participants' databases.
             peek_env: Some(Arc::new(peek_env(
                 participants,
@@ -4236,6 +4237,7 @@ fn typecheck_case_body_recording(
         return_ty_span,
         initial_scope,
         checker::CapabilityCtx {
+            expect_is_bindings: true,
             capabilities: capability_info_map.clone(),
             declared_capabilities: capability_info_map,
             given_remaining: given_declared.iter().cloned().collect(),
@@ -6402,6 +6404,7 @@ service sweeper from cron {
 }
 
 service intake from queue(\"orders\") {
+  delivery { deadLetter: None }
   on message(item: Item) -> Effect[QueueResult] {
     Ack
   }

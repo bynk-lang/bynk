@@ -1323,6 +1323,44 @@ requires the section be on a `from http` service.
 
 One `name: value` field inside a `json { }` policy.
 
+### delivery_policy {#rule-delivery_policy}
+
+{{#grammar delivery_policy}}
+
+The optional delivery policy of a `from queue` service (#3877), in header
+position after `json`. `delivery` is a contextual keyword, so it stays an
+ordinary identifier elsewhere.
+
+**Example.**
+```bynk
+context mail
+
+type EmailJob = {
+	to: String,
+}
+
+service outbox from queue("outbound-email") {
+	delivery {
+		retries: 5,
+		retryDelay: 30.seconds,
+		deadLetter: "outbound-email-dlq",
+	}
+
+	on message(job: EmailJob) -> Effect[QueueResult] {
+		Ack
+	}
+}
+```
+
+The checker validates the closed key set, the value ranges and that the section
+is on a `from queue` service.
+
+### delivery_field {#rule-delivery_field}
+
+{{#grammar delivery_field}}
+
+One `name: value` field inside a `delivery { }` policy.
+
 ### handler {#rule-handler}
 
 {{#grammar handler}}

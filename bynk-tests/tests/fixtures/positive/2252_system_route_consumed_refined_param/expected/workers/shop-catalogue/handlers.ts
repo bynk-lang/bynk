@@ -2,6 +2,7 @@
 // context shop.catalogue
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
@@ -9,7 +10,7 @@ export type Sku = string & { readonly __brand: "shop.catalogue.Sku" };
 
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{1,16}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
       return Err({ field: "Sku", message: "must match /[a-z0-9]{1,16}/", value });
     }
     return Ok(value as Sku);

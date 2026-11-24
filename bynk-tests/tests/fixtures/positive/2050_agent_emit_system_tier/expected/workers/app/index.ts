@@ -2,7 +2,7 @@
 // Worker entry point for context `app`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -41,25 +41,25 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/bump") {
+        if (method === "POST" && __matchPath("/bump", path) !== null) {
           __route = "POST /bump";
           const result = await surface.http_POST_bump();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"app\""]), __security_api);
         }
       }
       {
-        if (method === "POST" && path === "/note") {
+        if (method === "POST" && __matchPath("/note", path) !== null) {
           __route = "POST /note";
           const result = await surface.http_POST_note();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"app\""]), __security_api);
         }
       }
-      if (path === "/bump") {
+      if (__matchPath("/bump", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/note") {
+      if (__matchPath("/note", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);

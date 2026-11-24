@@ -87,18 +87,26 @@ pub(super) fn check_effect_iter(
 /// that returns `Effect[()]` still type-checks under the new signature (the call
 /// is `Effect[List[()]]`), so the old reading is flagged here, with the fix.
 fn warn_unit_par_traverse(method: &Ident, ctx: &mut Ctx) {
+    // The `…With` form (#3968) renames to its own `…With` sibling, keeping the options.
+    let (from, to) = if method.name == "parTraverseWith" {
+        ("parTraverseWith", "parForEachWith")
+    } else {
+        ("parTraverse", "parForEach")
+    };
     ctx.errors.push(
         CompileError::new(
             "bynk.list.par_traverse_unit",
             method.span,
-            "`List.parTraverse` now returns the steps' values; a step that returns `()` is `parForEach`",
+            format!(
+                "`List.{from}` now returns the steps' values; a step that returns `()` is `{to}`"
+            ),
         )
-        .with_note(
-            "`parForEach` runs the steps concurrently and returns `()`, as `parTraverse` did before the traversal names lined up",
-        )
+        .with_note(format!(
+            "`{to}` runs the steps concurrently and returns `()`, as `{from}` did before the traversal names lined up"
+        ))
         .with_suggestion(
-            "rename to `parForEach`",
-            vec![(method.span, "parForEach".to_string())],
+            format!("rename to `{to}`"),
+            vec![(method.span, to.to_string())],
             Applicability::MachineApplicable,
         ),
     );

@@ -33,14 +33,17 @@ fn case_try_stmt(
     // The tail's checkpoint falls on the `return` when the tail added no statement of its own.
     return_pass.span = tail_span;
     guarded.push(return_pass);
-    let failure = |message: TsExpr, location: TsExpr, violation: Option<TsExpr>| {
-        let mut error = vec![
-            ("message".to_string(), message),
-            ("location".to_string(), location),
-        ];
-        error.extend(violation.map(|v| ("violation".to_string(), v)));
-        outcome(false, vec![("error".to_string(), TsExpr::object(error))])
-    };
+    let failure =
+        |message: TsExpr, location: TsExpr, violation: Option<TsExpr>, actual: Option<TsExpr>| {
+            let mut error = vec![
+                ("message".to_string(), message),
+                ("location".to_string(), location),
+            ];
+            error.extend(violation.map(|v| ("violation".to_string(), v)));
+            // #3980: the value a failed `is` tested; absent otherwise.
+            error.extend(actual.map(|a| ("actual".to_string(), a)));
+            outcome(false, vec![("error".to_string(), TsExpr::object(error))])
+        };
     let expectation_failure = crate::ts_build::if_(
         crate::ts_build::binary(
             TsBinaryOp::InstanceOf,
@@ -51,12 +54,14 @@ fn case_try_stmt(
             crate::ts_build::member(ident("e"), "message"),
             crate::ts_build::member(ident("e"), "location"),
             None,
+            Some(crate::ts_build::member(ident("e"), "actual")),
         )]),
     );
     let other_failure = failure(
         call(ident("String"), vec![ident("e")]),
         crate::ts_build::str_lit("unknown"),
         Some(call(ident("__bynkViolationOf"), vec![ident("e")])),
+        None,
     );
     TsStmt::try_catch(
         crate::ts_build::block(guarded),

@@ -683,6 +683,7 @@ pub(super) fn emit_test_case_function(
         rel_path,
         runtime_use,
         case.name == crate::testgen::EVAL_CASE,
+        true,
     );
     out.extend(suite_late_codec_stmts(
         suite_fns,
@@ -715,6 +716,8 @@ pub(super) fn emit_test_case_function(
                     TsExpr::object(vec![
                         ("message".to_string(), member(ident("e"), "message")),
                         ("location".to_string(), member(ident("e"), "location")),
+                        // #3980: the value a failed `is` tested; absent otherwise.
+                        ("actual".to_string(), member(ident("e"), "actual")),
                     ]),
                 ),
             ])),

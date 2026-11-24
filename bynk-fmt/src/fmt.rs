@@ -2178,6 +2178,7 @@ impl<'a> Formatter<'a> {
                 if s.security.is_some()
                     || s.limits.is_some()
                     || s.json.is_some()
+                    || s.delivery.is_some()
                     || !s.handlers.is_empty()
                 {
                     f.newline();
@@ -2185,18 +2186,28 @@ impl<'a> Formatter<'a> {
             }
             if let Some(security) = &s.security {
                 f.format_security_policy(security);
-                if s.limits.is_some() || s.json.is_some() || !s.handlers.is_empty() {
+                if s.limits.is_some()
+                    || s.json.is_some()
+                    || s.delivery.is_some()
+                    || !s.handlers.is_empty()
+                {
                     f.newline();
                 }
             }
             if let Some(limits) = &s.limits {
                 f.format_limits_policy(limits);
-                if s.json.is_some() || !s.handlers.is_empty() {
+                if s.json.is_some() || s.delivery.is_some() || !s.handlers.is_empty() {
                     f.newline();
                 }
             }
             if let Some(json) = &s.json {
                 f.format_json_policy(json);
+                if s.delivery.is_some() || !s.handlers.is_empty() {
+                    f.newline();
+                }
+            }
+            if let Some(delivery) = &s.delivery {
+                f.format_delivery_policy(delivery);
                 if !s.handlers.is_empty() {
                     f.newline();
                 }
@@ -2214,6 +2225,7 @@ impl<'a> Formatter<'a> {
                     || s.security.is_some()
                     || s.limits.is_some()
                     || s.json.is_some()
+                    || s.delivery.is_some()
                 {
                     f.newline();
                 }
@@ -2270,6 +2282,21 @@ impl<'a> Formatter<'a> {
             .map(|f| (&f.name, &f.value, &f.trivia))
             .collect();
         self.format_policy("json", &json.trivia, &fields, &json.trailing_comments);
+    }
+
+    /// Format a `delivery { }` policy section (#3877), as `format_cors_policy`.
+    fn format_delivery_policy(&mut self, delivery: &DeliveryPolicy) {
+        let fields: Vec<_> = delivery
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy(
+            "delivery",
+            &delivery.trivia,
+            &fields,
+            &delivery.trailing_comments,
+        );
     }
 
     /// A `cors`/`security`/`limits` policy: `keyword {`, one `name: value,` field

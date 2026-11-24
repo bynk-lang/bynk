@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -86,7 +86,7 @@ export default {
           const __raw_key = __m.params["key"];
           const key = __raw_key;
           const result = await surface.http_GET_read_Param_key(key);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"registry.publish\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

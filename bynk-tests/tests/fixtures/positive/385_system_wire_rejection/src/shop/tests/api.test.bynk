@@ -48,14 +48,13 @@ suite shop.api as system {
     let r <- api.PUT("/cart/:sku", Wire("far-too-long-sku"), Item { sku: "widget" }) by User("alice")
     expect r is Rejected(RefinementViolation(_))
   }
-  // #1660 review: pins the routing decision the case above records. An empty
-  // raw path segment does not route: `PUT /cart/` matches no `/cart/:sku`, so the
-  // request falls through to a 404 (which the system harness reads as `Handled`)
-  // instead of reaching `Sku.of`. If the router ever starts matching empty
-  // segments, this case fails and the decision gets revisited.
-  case "an empty raw path segment does not route and falls through" {
+  // #1660 review, revisited by #3909 (decision C): an empty raw path segment does
+  // not route to `/cart/:sku`, so the request never reaches `Sku.of`. But empty
+  // segments are insignificant, so `PUT /cart/` is the path `/cart`, which only
+  // `POST` answers: a `405` (read by the system harness as `Rejected`).
+  case "an empty raw path segment is the parent path, which does not answer PUT" {
     let r <- api.PUT("/cart/:sku", Wire(""), Item { sku: "widget" }) by User("alice")
-    expect r is Handled(_)
+    expect r is Rejected(MethodNotAllowed)
   }
   case "a typed path segment with a raw body passes both through the boundary" {
     let r <- api.PUT("/cart/:sku", "widget", Wire("{\"sku\": \"widget\"}")) by User("alice")

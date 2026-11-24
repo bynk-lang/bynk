@@ -403,7 +403,11 @@ impl Lin<'_> {
                 method,
                 "forEach"
                     | "parForEach"
+                    | "parForEachWith"
                     | "parTraverse"
+                    | "parTraverseWith"
+                    | "parTraverseAllWith"
+                    | "parTraverseTryWith"
                     | "traverseAll"
                     | "parTraverseAll"
                     | "traverseTry"

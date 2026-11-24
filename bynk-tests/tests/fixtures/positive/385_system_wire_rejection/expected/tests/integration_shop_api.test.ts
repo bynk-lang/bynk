@@ -12,18 +12,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -31,8 +45,34 @@ function __bynkViolationOf(e: any): { kind: string, agent: string, name: string,
   const v = e && e.invariantViolation;
   return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
 }
+// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
+// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
+// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
+function __bynkShowLeaf(x: any): unknown {
+  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
+    const neg = x.coefficient < 0n;
+    let digits = (neg ? -x.coefficient : x.coefficient).toString();
+    let text = digits;
+    if (x.scale > 0) {
+      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
+      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
+    }
+    return (neg ? "-" : "") + text + "d";
+  }
+  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
+  return x;
+}
 function __bynkShow(v: unknown): string {
-  try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
+  try {
+    if (typeof v === "bigint") return String(v);
+    const leaf = __bynkShowLeaf(v);
+    if (typeof leaf === "string" && leaf !== v) return leaf;
+    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
+    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
+    }
+    return JSON.stringify(v) ?? String(v);
+  } catch { return String(v); }
 }
 
 
@@ -251,11 +291,11 @@ async function test_a_typed_create_returns_Created_over_the_real_wire() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const item = await __sysdrive_api_http_POST_cart({ sku: ("widget" as any) }, undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(item.tag === "Created"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:4:12", 174, 192, "expect item is Created(_)"); }
+    if (!(((__c: boolean) => __c)(item.tag === "Created"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:4:12", 174, 192, "expect item is Created(_)", "item", () => __bynkShow(item)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -267,11 +307,11 @@ async function test_an_empty_sku_is_rejected_at_the_boundary_before_the_handler(
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"\"}", undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:8:12", 352, 389, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:8:12", 352, 389, "expect r is Rejected(RefinementViolation(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -283,11 +323,11 @@ async function test_malformed_json_is_rejected_at_the_boundary() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_cart("{not json", undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MalformedJson"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:12:12", 526, 557, "expect r is Rejected(MalformedJson(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MalformedJson"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:12:12", 526, 557, "expect r is Rejected(MalformedJson(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -299,11 +339,11 @@ async function test_valid_raw_input_passes_the_boundary_to_the_handler() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_cart("{\"sku\": \"raw-ok\"}", undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:16:12", 714, 729, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:16:12", 714, 729, "expect r is Handled(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -315,11 +355,11 @@ async function test_no_credential_is_rejected_at_the_seam() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_noauth_api_http_POST_cart({ sku: ("widget" as any) }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:20:12", 859, 886, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:20:12", 859, 886, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -331,11 +371,11 @@ async function test_no_credential_combined_with_a_raw_body_is_rejected_at_the_se
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawnoauth_api_http_POST_cart("{\"sku\": \"widget\"}", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:24:12", 1048, 1075, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:24:12", 1048, 1075, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -347,11 +387,11 @@ async function test_no_credential_combined_with_a_raw_path_and_a_typed_body_is_r
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawnoauth_api_http_PUT_cart_Param_sku("widget", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:28:12", 1267, 1294, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:28:12", 1267, 1294, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -363,11 +403,11 @@ async function test_the_wrong_method_is_a_405_fall_through() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_wrongmethod_api("DELETE", "/cart");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MethodNotAllowed"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:32:12", 1393, 1424, "expect r is Rejected(MethodNotAllowed)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MethodNotAllowed"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:32:12", 1393, 1424, "expect r is Rejected(MethodNotAllowed)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -379,11 +419,11 @@ async function test_a_handler_returned_400_is_Handled__not_a_boundary_rejection(
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_POST_reject("{\"sku\": \"ok\"}", undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:36:12", 1588, 1603, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:36:12", 1588, 1603, "expect r is Handled(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -395,11 +435,11 @@ async function test_a_raw_path_segment_with_a_typed_body_passes_both_through_the
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("widget", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:40:12", 1792, 1807, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:40:12", 1792, 1807, "expect r is Handled(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -411,27 +451,27 @@ async function test_a_raw_path_segment_failing_refinement_is_rejected_even_with_
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("far-too-long-sku", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:49:12", 2360, 2397, "expect r is Rejected(RefinementViolation(_))"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:49:12", 2360, 2397, "expect r is Rejected(RefinementViolation(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
 }
 
-async function test_an_empty_raw_path_segment_does_not_route_and_falls_through() {
+async function test_an_empty_raw_path_segment_is_the_parent_path__which_does_not_answer_PUT() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku("", globalThis.JSON.stringify(__ns_shop_api.__serialise_Item(({ sku: ("widget" as any) } as any))), undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:58:12", 2952, 2967, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "MethodNotAllowed"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:57:12", 2900, 2931, "expect r is Rejected(MethodNotAllowed)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -443,11 +483,11 @@ async function test_a_typed_path_segment_with_a_raw_body_passes_both_through_the
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_raw_api_http_PUT_cart_Param_sku(String(("widget" as any)), "{\"sku\": \"widget\"}", undefined, ("alice" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:62:12", 3157, 3172, "expect r is Handled(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Handled"))) { throw __bynkExpectFailure("shop/tests/api.test.bynk:61:12", 3121, 3136, "expect r is Handled(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -462,14 +502,14 @@ async function test_a_refinement_rejection_carries_the_router_s_detail() {
     void (((__d) => {
       if (__d.tag === "Rejected" && __d.value.tag === "RefinementViolation") {
         const d = __d.value.detail;
-        return __bynkExpect((d.includes("sku")), "shop/tests/api.test.bynk:69:50", 3523, 3540, "expect d.contains(\"sku\")");
+        return __bynkExpect((d.includes("sku")), "shop/tests/api.test.bynk:68:50", 3487, 3504, "expect d.contains(\"sku\")");
       }
-      return __bynkExpect((false), "shop/tests/api.test.bynk:70:19", 3559, 3564, "expect false");
+      return __bynkExpect((false), "shop/tests/api.test.bynk:69:19", 3523, 3528, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
     })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -484,14 +524,14 @@ async function test_a_malformed_body_s_rejection_carries_the_parser_s_detail() {
     void (((__d) => {
       if (__d.tag === "Rejected" && __d.value.tag === "MalformedJson") {
         const d = __d.value.detail;
-        return __bynkExpect((d.length > 0), "shop/tests/api.test.bynk:76:44", 3767, 3781, "expect d.length() > 0");
+        return __bynkExpect((d.length > 0), "shop/tests/api.test.bynk:75:44", 3731, 3745, "expect d.length() > 0");
       }
-      return __bynkExpect((false), "shop/tests/api.test.bynk:77:19", 3800, 3805, "expect false");
+      return __bynkExpect((false), "shop/tests/api.test.bynk:76:19", 3764, 3769, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
     })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -506,14 +546,14 @@ async function test_a_handled_raw_body_carries_the_handler_s_typed_result() {
     void (((__d) => {
       if (__d.tag === "Handled" && __d.value.tag === "Created") {
         const item = __d.value.value;
-        return __bynkExpect((item.sku === "raw-ok"), "shop/tests/api.test.bynk:83:40", 4013, 4033, "expect item.sku == \"raw-ok\"");
+        return __bynkExpect((item.sku === "raw-ok"), "shop/tests/api.test.bynk:82:40", 3977, 3997, "expect item.sku == \"raw-ok\"");
       }
-      return __bynkExpect((false), "shop/tests/api.test.bynk:84:19", 4052, 4057, "expect false");
+      return __bynkExpect((false), "shop/tests/api.test.bynk:83:19", 4016, 4021, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
     })(r));
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -522,7 +562,7 @@ async function test_a_handled_raw_body_carries_the_handler_s_typed_result() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
@@ -533,7 +573,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["a typed create returns Created over the real wire", "an empty sku is rejected at the boundary before the handler", "malformed json is rejected at the boundary", "valid raw input passes the boundary to the handler", "no credential is rejected at the seam", "no credential combined with a raw body is rejected at the seam", "no credential combined with a raw path and a typed body is rejected at the seam", "the wrong method is a 405 fall-through", "a handler-returned 400 is Handled, not a boundary rejection", "a raw path segment with a typed body passes both through the boundary", "a raw path segment failing refinement is rejected even with a typed body", "an empty raw path segment does not route and falls through", "a typed path segment with a raw body passes both through the boundary", "a refinement rejection carries the router's detail", "a malformed body's rejection carries the parser's detail", "a handled raw body carries the handler's typed result"];
+export const __bynkCases: readonly string[] = ["a typed create returns Created over the real wire", "an empty sku is rejected at the boundary before the handler", "malformed json is rejected at the boundary", "valid raw input passes the boundary to the handler", "no credential is rejected at the seam", "no credential combined with a raw body is rejected at the seam", "no credential combined with a raw path and a typed body is rejected at the seam", "the wrong method is a 405 fall-through", "a handler-returned 400 is Handled, not a boundary rejection", "a raw path segment with a typed body passes both through the boundary", "a raw path segment failing refinement is rejected even with a typed body", "an empty raw path segment is the parent path, which does not answer PUT", "a typed path segment with a raw body passes both through the boundary", "a refinement rejection carries the router's detail", "a malformed body's rejection carries the parser's detail", "a handled raw body carries the handler's typed result"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -604,9 +644,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("an empty raw path segment does not route and falls through")) {
+  if (want("an empty raw path segment is the parent path, which does not answer PUT")) {
     const started = __bynkCaseNow();
-    const r = { name: "an empty raw path segment does not route and falls through", ...(await test_an_empty_raw_path_segment_does_not_route_and_falls_through()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "an empty raw path segment is the parent path, which does not answer PUT", ...(await test_an_empty_raw_path_segment_is_the_parent_path__which_does_not_answer_PUT()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

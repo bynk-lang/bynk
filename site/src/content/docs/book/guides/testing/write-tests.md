@@ -31,6 +31,26 @@ takes the same `Bool` predicate an `invariant` does (`is`, `implies`, the
 operators, pure methods) — one predicate surface across code and tests — and a
 failure reports the predicate structure: `expected` versus `actual`.
 
+## Keep what an `expect … is` binds
+
+A statement-form `expect … is P(x)` keeps `x` bound for the rest of the block, so a
+case reads straight down instead of nesting a `match`:
+
+```bynk,fragment
+suite counters {
+	case "a stored count comes back" {
+		let r <- Counter(CounterId.unsafe("c1")).stored()
+		expect r is Some(n)
+		expect n == 0
+	}
+}
+```
+
+Only the names directly inside the pattern bind (`Some(n)`, `Ok(code)`, a record's
+fields), not names in a nested sub-pattern (`Rejected(RefinementViolation(d))`
+binds nothing: unwrap it in two steps or use a `match`). A `property` body binds
+nothing across its claims. See [`expect`](/reference/testing/#expect-is-bindings).
+
 ## Share a fixture with a helper `fn`
 
 When several cases need the same request or value, declare a `fn` in the suite

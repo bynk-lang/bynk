@@ -195,6 +195,12 @@ pub struct Case {
     /// the case raised none, so every other document keeps its layout.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warnings: Option<Vec<Warning>>,
+    /// #3980: the whole value a failed `expect <subject> is …` (or `expect false` in a
+    /// `match` arm) tested, as `Json.encode` writes it. The message carries it too,
+    /// cut at 2,000 characters. Appended after `warnings` and absent otherwise, so a
+    /// document without one keeps its layout.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actual: Option<String>,
     /// How long the case ran, in milliseconds, as its module measured it (#2267
     /// stage 2). Never part of the JSON document, which stays deterministic; the
     /// `ndjson` stream's `case` event carries it, last.
@@ -475,6 +481,7 @@ impl TestRun {
                 refusals: None,
                 origin: None,
                 warnings: None,
+                actual: None,
                 duration_ms: None,
             };
             match suites.iter_mut().find(|s| &s.name == suite) {
@@ -688,6 +695,7 @@ pub(crate) fn case_from_event(value: &serde_json::Value) -> Case {
         refusals,
         origin: None,
         warnings: None,
+        actual: str_opt(value, "actual"),
         duration_ms: value.get("durationMs").and_then(serde_json::Value::as_f64),
     }
 }

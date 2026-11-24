@@ -18,3 +18,21 @@ export function __bynkCodePointLength(s: string): number {
   return n;
 }
 
+const regExps = new Map<string, RegExp>();
+
+/**
+ * The `RegExp` for a source and flags, built once (#3950). A refinement's
+ * `Matches` check runs on every construction, so it shares one compiled
+ * pattern; a non-global, non-sticky `RegExp`'s `test` keeps no state, which
+ * makes sharing safe.
+ */
+export function __bynkRegExp(source: string, flags: string): RegExp {
+  const key = `${flags}/${source}`;
+  let re = regExps.get(key);
+  if (re === undefined) {
+    re = new RegExp(source, flags);
+    regExps.set(key, re);
+  }
+  return re;
+}
+

@@ -2,7 +2,7 @@
 // Worker entry point for context `site.prefs`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __cookieObject } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -37,7 +37,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/visit") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/visit", path) !== null) {
           __route = "GET /visit";
           const __c = __cookieObject(request, [{ name: "theme", kind: "enum", list: false, option: false }, { name: "visits", wire: "__Host-visits", kind: "int", list: false, option: false }, { name: "price", kind: "decimal", list: false, option: true }, { name: "dark", kind: "bool", list: false, option: false }, { name: "qty", kind: "int", list: false, option: true }, { name: "note", kind: "string", list: false, option: true }]);
           if (!__c.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__c.error), { status: 400, headers: { "content-type": "application/json" } }), __security_site);
@@ -45,47 +45,47 @@ export default {
           if (__r_cookies.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_cookies.error), { status: 400, headers: { "content-type": "application/json" } }), __security_site);
           const cookies = __r_cookies.value;
           const result = await surface.http_GET_visit(cookies);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_site);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"site.prefs\""]), __security_site);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if (method === "POST" && path === "/leaves") {
+        if (method === "POST" && __matchPath("/leaves", path) !== null) {
           __route = "POST /leaves";
           const result = await surface.http_POST_leaves();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_site);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"site.prefs\""]), __security_site);
         }
       }
       {
-        if (method === "POST" && path === "/theme/dark") {
+        if (method === "POST" && __matchPath("/theme/dark", path) !== null) {
           __route = "POST /theme/dark";
           const result = await surface.http_POST_theme_dark();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_site);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"site.prefs\""]), __security_site);
         }
       }
       {
-        if (method === "POST" && path === "/theme/reset") {
+        if (method === "POST" && __matchPath("/theme/reset", path) !== null) {
           __route = "POST /theme/reset";
           const result = await surface.http_POST_theme_reset();
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_site);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"site.prefs\""]), __security_site);
         }
       }
-      if (path === "/leaves") {
+      if (__matchPath("/leaves", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_site);
       }
-      if (path === "/theme/dark") {
+      if (__matchPath("/theme/dark", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_site);
       }
-      if (path === "/theme/reset") {
+      if (__matchPath("/theme/reset", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_site);
       }
-      if (path === "/visit") {
+      if (__matchPath("/visit", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_site);

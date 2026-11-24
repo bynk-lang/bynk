@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches, __renderRejection } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches, __renderRejection } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
@@ -39,7 +39,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/signed") {
+        if (method === "POST" && __matchPath("/signed", path) !== null) {
           __route = "POST /signed";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -60,9 +60,9 @@ export default {
           let __body_json: __JsonValue;
           const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];
-          if (typeof __secret !== "string") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(null, { status: 401 }), (why) => surface.rejected_api(why)), __security_api);
+          if (typeof __secret !== "string") return __applySecurityHeaders(await __renderRejection(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"r.api\", header=\"X-Sig\""]), (why) => surface.rejected_api(why)), __security_api);
           const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Sig"), null, null);
-          if (!__ok) return __applySecurityHeaders(await __renderRejection(new globalThis.Response(null, { status: 401 }), (why) => surface.rejected_api(why)), __security_api);
+          if (!__ok) return __applySecurityHeaders(await __renderRejection(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"r.api\", header=\"X-Sig\""]), (why) => surface.rejected_api(why)), __security_api);
           try {
             __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
           } catch {
@@ -72,11 +72,11 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_signed(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"r.api\", header=\"X-Sig\""]), __security_api);
         }
       }
       {
-        if (method === "PUT" && path === "/blobs") {
+        if (method === "PUT" && __matchPath("/blobs", path) !== null) {
           __route = "PUT /blobs";
           if (!__mediaTypeMatches(request, ["application/octet-stream"])) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/octet-stream" }), { status: 415, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -96,7 +96,7 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_PUT_blobs(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v)), request, ["Bynk realm=\"r.api\""]), __security_api);
         }
       }
       {
@@ -111,7 +111,7 @@ export default {
           if (__r_code.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           const code = __r_code.value;
           const result = await surface.http_GET_codes_Param_code(code);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"r.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -150,10 +150,10 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           const body = __r_body.value;
           const result = await surface.http_PUT_items_Param_id(id, body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"r.api\""]), __security_api);
         }
       }
-      if (path === "/blobs") {
+      if (__matchPath("/blobs", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } }), (why) => surface.rejected_api(why));
         return __applySecurityHeaders(__res, __security_api);
@@ -168,7 +168,7 @@ export default {
         const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, PUT" } }), (why) => surface.rejected_api(why));
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/signed") {
+      if (__matchPath("/signed", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = await __renderRejection(new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } }), (why) => surface.rejected_api(why));
         return __applySecurityHeaders(__res, __security_api);

@@ -68,6 +68,7 @@ pub mod hover;
 pub mod index_queries;
 pub mod locals_nav;
 pub mod packages;
+pub mod queue_delivery;
 pub mod sequence;
 pub mod signature_help;
 pub mod symbols;

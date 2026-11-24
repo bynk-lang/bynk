@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyEdgeCache, __noStore, __edgeCacheGuard, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __applyEdgeCache, __noStore, __edgeCacheGuard, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -49,18 +49,18 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
     }
 
     {
-      if ((method === "GET" || method === "HEAD") && path === "/bad-tag") {
+      if ((method === "GET" || method === "HEAD") && __matchPath("/bad-tag", path) !== null) {
         __route = "GET /bad-tag";
         const result = await surface.http_GET_bad_tag();
-        const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyEdgeCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 60, "public"), request), __security_files);
+        const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__applyEdgeCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 60, "public"), request), request, ["Bynk realm=\"registry.files\""]), __security_files);
         return method === "HEAD" ? __headResponse(__response) : __response;
       }
     }
     {
-      if ((method === "GET" || method === "HEAD") && path === "/status") {
+      if ((method === "GET" || method === "HEAD") && __matchPath("/status", path) !== null) {
         __route = "GET /status";
         const result = await surface.http_GET_status();
-        const __response = __applySecurityHeaders(__notModifiedIfMatch(__noStore(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true })), request), __security_files);
+        const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__noStore(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true })), request), request, ["Bynk realm=\"registry.files\""]), __security_files);
         return method === "HEAD" ? __headResponse(__response) : __response;
       }
     }
@@ -74,7 +74,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
         const __raw_hex = __m.params["hex"];
         const hex = __raw_hex;
         const result = await surface.http_GET_dl_sha256_Param_hex(hex);
-        const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyEdgeCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 31536000, "public", true), request), __security_files);
+        const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__applyEdgeCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 31536000, "public", true), request), request, ["Bynk realm=\"registry.files\""]), __security_files);
         return method === "HEAD" ? __headResponse(__response) : __response;
       }
     }
@@ -88,10 +88,10 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
         const __raw_hex = __m.params["hex"];
         const hex = __raw_hex;
         const result = await surface.http_POST_takedown_Param_hex(hex);
-        return __applySecurityHeaders(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), __security_files);
+        return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: boolean) => __v as __JsonValue), request, ["Bynk realm=\"registry.files\""]), __security_files);
       }
     }
-    if (path === "/bad-tag") {
+    if (__matchPath("/bad-tag", path) !== null) {
       const __status = method === "OPTIONS" ? 204 : 405;
       const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
       return __applySecurityHeaders(__res, __security_files);
@@ -101,7 +101,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
       const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
       return __applySecurityHeaders(__res, __security_files);
     }
-    if (path === "/status") {
+    if (__matchPath("/status", path) !== null) {
       const __status = method === "OPTIONS" ? 204 : 405;
       const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
       return __applySecurityHeaders(__res, __security_files);

@@ -4,7 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -62,7 +62,7 @@ export default {
       }
 
       {
-        if (method === "POST" && path === "/avatar") {
+        if (method === "POST" && __matchPath("/avatar", path) !== null) {
           __route = "POST /avatar";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
@@ -79,11 +79,11 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_avatar(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_avatars);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.thumbs\""]), __security_avatars);
         }
       }
       {
-        if (method === "POST" && path === "/probe") {
+        if (method === "POST" && __matchPath("/probe", path) !== null) {
           __route = "POST /probe";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
@@ -100,11 +100,11 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_probe(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_probe);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.thumbs\""]), __security_probe);
         }
       }
       {
-        if (method === "POST" && path === "/resize") {
+        if (method === "POST" && __matchPath("/resize", path) !== null) {
           __route = "POST /resize";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
@@ -121,11 +121,11 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_resize(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_streams);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"shop.thumbs\""]), __security_streams);
         }
       }
       {
-        if (method === "POST" && path === "/safe") {
+        if (method === "POST" && __matchPath("/safe", path) !== null) {
           __route = "POST /safe";
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
@@ -142,25 +142,25 @@ export default {
           }
           const body = __bytes;
           const result = await surface.http_POST_safe(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_safe);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"shop.thumbs\""]), __security_safe);
         }
       }
-      if (path === "/avatar") {
+      if (__matchPath("/avatar", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_avatars);
       }
-      if (path === "/probe") {
+      if (__matchPath("/probe", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_probe);
       }
-      if (path === "/resize") {
+      if (__matchPath("/resize", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_streams);
       }
-      if (path === "/safe") {
+      if (__matchPath("/safe", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_safe);

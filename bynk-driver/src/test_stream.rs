@@ -433,6 +433,7 @@ impl<'a> Stream<'a> {
                             refusals: None,
                             origin: self.origin_of(suite, name),
                             warnings: None,
+                            actual: None,
                             duration_ms: None,
                         },
                     ));
@@ -571,6 +572,7 @@ mod tests {
             refusals: None,
             origin: None,
             warnings: None,
+            actual: None,
             duration_ms: None,
         }
     }

@@ -61,6 +61,9 @@ struct QueueBindings {
 struct QueueConsumer {
     /// The queue's user-given name, straight from `from queue("n")`.
     queue: String,
+    /// #3877: the consumer's dead-letter queue, from its `delivery { deadLetter }`.
+    #[serde(default)]
+    dead_letter_queue: Option<String>,
 }
 
 /// One `[exports.<Class>]` entry. Only the fields that say whether it is a
@@ -578,6 +581,18 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
             .parent()
             .ok_or_else(|| "configuration has no directory".to_string())?,
     )?;
+    // #3877: a dead-letter queue is created before the push like a queue the Worker sends to,
+    // and recorded only when Bynk created it.
+    let dead_letters: Vec<String> = parsed
+        .queues
+        .consumers
+        .iter()
+        .filter_map(|c| c.dead_letter_queue.clone())
+        .collect();
+    let mut producer_queues = declared.producer_queues;
+    producer_queues.extend(dead_letters);
+    producer_queues.sort();
+    producer_queues.dedup();
     let mut queues: Vec<String> = parsed
         .queues
         .consumers
@@ -630,7 +645,7 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         binds_to: declared.binds_to,
         foreign_services: declared.foreign_services,
         queues,
-        producer_queues: declared.producer_queues,
+        producer_queues,
         durable_objects,
         renamed_durable_objects,
         deleted_durable_objects,
@@ -1756,6 +1771,7 @@ max_batch_size = 10
                 bindings,
                 &["0 * * * *".to_string()],
                 &[],
+                &[],
                 &["orders@shop.example".to_string()],
                 &[],
                 Some(true),
@@ -1828,6 +1844,7 @@ max_batch_size = 10
                 &[],
                 &[],
                 &[],
+                &[],
                 None,
                 &Default::default(),
                 &Default::default(),
@@ -1874,6 +1891,7 @@ max_batch_size = 10
             &bindings,
             &["0 * * * *".to_string()],
             &["jobs".to_string()],
+            &[],
             &[],
             &[],
             None,
@@ -2044,6 +2062,50 @@ max_batch_size = 10
         let producer = &doc["env"]["staging"]["queues"]["producers"][0];
         assert_eq!(producer["queue"].as_str(), Some("order-events-staging"));
         assert_eq!(producer["binding"].as_str(), Some("QUEUE_ORDER_EVENTS"));
+    }
+
+    #[test]
+    fn a_dead_letter_queue_is_created_like_a_queue_the_context_sends_to() {
+        // #3877: the dead-letter queue is read from the consumer's table, so it is made before
+        // the push and recorded only when Bynk made it (a producer-style queue).
+        let declared = parse_with(
+            "dead-letter",
+            r#"
+name = "shop"
+main = "index.ts"
+
+[[queues.consumers]]
+queue = "outbound-email"
+max_batch_size = 10
+dead_letter_queue = "outbound-email-dlq"
+"#,
+            "shop",
+            &[],
+        );
+        assert_eq!(
+            declared,
+            Resources::default()
+                .consumes(&["outbound-email"])
+                .produces(&["outbound-email-dlq"]),
+        );
+        assert_eq!(
+            declared.all_queues(),
+            names(&["outbound-email", "outbound-email-dlq"])
+        );
+    }
+
+    #[test]
+    fn the_environment_block_qualifies_a_dead_letter_queue() {
+        let config = "name = \"shop\"\n\n[[queues.consumers]]\nqueue = \"outbound-email\"\nmax_batch_size = 10\ndead_letter_queue = \"outbound-email-dlq\"\n";
+        let out = environment_block(config, "staging", &kv_ids(&[]), &BTreeSet::new()).unwrap();
+        let doc: toml::Table = out.parse().unwrap();
+        let consumer = &doc["env"]["staging"]["queues"]["consumers"][0];
+        assert_eq!(consumer["queue"].as_str(), Some("outbound-email-staging"));
+        assert_eq!(
+            consumer["dead_letter_queue"].as_str(),
+            Some("outbound-email-dlq-staging")
+        );
+        assert_eq!(consumer["max_batch_size"].as_integer(), Some(10));
     }
 
     #[test]

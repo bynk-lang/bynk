@@ -1,0 +1,6 @@
+[project]
+name = "queue-no-dead-letter"
+version = "0.1.0"
+
+[paths]
+include = ["src"]

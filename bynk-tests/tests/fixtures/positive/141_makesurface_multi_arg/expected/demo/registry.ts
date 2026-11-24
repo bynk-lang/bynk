@@ -2,6 +2,7 @@
 // context demo.registry
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 /**
@@ -15,7 +16,7 @@ export type Code = string & { readonly __brand: "demo.registry.Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{3,8}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[a-z0-9]{3,8}" + ")$", "u").test(value))) {
       return Err({ field: "Code", message: "must match /[a-z0-9]{3,8}/", value });
     }
     return Ok(value as Code);
@@ -26,7 +27,7 @@ export type Target = string & { readonly __brand: "demo.registry.Target" };
 
 export const Target = {
   of(value: string): Result<Target, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "https?://.+" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "https?://.+" + ")$", "u").test(value))) {
       return Err({ field: "Target", message: "must match /https?://.+/", value });
     }
     return Ok(value as Target);

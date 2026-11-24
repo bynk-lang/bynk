@@ -2,6 +2,7 @@
 // Worker entry point for context `echo`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __applyChallenge } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -40,7 +41,7 @@ export default {
         __route = "ws Echo";
         const __ws_roomId = url.searchParams.get("roomId");
         if (__ws_roomId === null) return new globalThis.Response("Missing parameter: roomId", { status: 400 });
-        return surface.ws_Echo_open(request, __ws_roomId);
+        return __applyChallenge(await surface.ws_Echo_open(request, __ws_roomId), request, ["Bearer realm=\"echo\""]);
       }
 
       return new globalThis.Response("Not Found", { status: 404 });

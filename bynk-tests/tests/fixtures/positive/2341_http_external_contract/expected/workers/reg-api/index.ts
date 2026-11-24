@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -37,10 +37,10 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/whoami") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/whoami", path) !== null) {
           __route = "GET /whoami";
           const result = await surface.http_GET_whoami(__requestHeaders(request));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"reg.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -54,7 +54,7 @@ export default {
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_DELETE_packages_Param_name(name);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk realm=\"reg.api\""]), __security_api);
         }
       }
       {
@@ -70,7 +70,7 @@ export default {
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_notes_Param_id(request, id, __requestHeaders(request, undefined, ["x-sig", "authorization"]));
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"reg.api\", header=\"X-Sig\"", "Bearer realm=\"reg.api\""]), __security_api);
         }
       }
       {
@@ -95,7 +95,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_PUT_packages_Param_name(name, body, __requestHeaders(request));
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"reg.api\""]), __security_api);
         }
       }
       if (__matchPath("/notes/:id", path) !== null) {
@@ -108,7 +108,7 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "DELETE, OPTIONS, PUT" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/whoami") {
+      if (__matchPath("/whoami", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

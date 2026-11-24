@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `<context>.<service>.outcome(args)` returns a `CallOutcome` (`Handled`, `Rejected`, `Faulted`, `Unreachable`), so a caller can handle a failed cross-context call; `bynk` gains `CallOutcome`, `CallFailure` and `Refusal`, and a consumed service's `stub` gains `rejected`, `faulted` and `unreachable`
-breaking: A context that writes a bare `consumes bynk` (no braces) and declares its own `CallOutcome`, `CallFailure` or `Refusal` now fails as `bynk.consumes.name_conflict`; rename the type, or consume only what you use with `consumes bynk { … }`.
----
+# 0910 — `svc.outcome(…)` returns a `CallOutcome`, so a caller can handle a failed call
 
-## ADR: call-outcome
-title: `svc.outcome(…)` returns a `CallOutcome`, so a caller can handle a failed call
-summary: A cross-context call's failure becomes a value on request, grouped by whether the callee's handler ran
+- **Status:** Accepted (v0.656)
 
 **Context.** Every failure of a cross-context call throws in the caller:
 `ContractMismatch`, a marked `CalleeFaulted`, `Transport`, an unparseable

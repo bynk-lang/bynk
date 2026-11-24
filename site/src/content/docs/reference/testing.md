@@ -63,10 +63,8 @@ under the case and counts them as `detached_failures` in `--format json`.
 suite app.web {
 	case "the greeting names the visitor" {
 		let r <- api.GET("/hello") by Visitor
-		match r {
-			Ok(greeting) => expect greeting.startsWith("Hello"),
-			_ => expect false,
-		}
+		expect r is Ok(greeting)
+		expect greeting.startsWith("Hello")
 	}
 }
 ```
@@ -186,10 +184,8 @@ services by passing the asset instead of a route:
 suite t.web {
 	case "the stylesheet is served" {
 		let r <- api.GET(style)
-		match r {
-			Raw(body, ct) => expect ct == "text/css; charset=utf-8",
-			_ => expect false,
-		}
+		expect r is Raw(body, ct)
+		expect ct == "text/css; charset=utf-8"
 	}
 }
 ```
@@ -511,7 +507,9 @@ suite shop.inventory as system {
   `unit`, when the handler declares it; a handler that doesn't is fired at the
   epoch. The address yields
   the handler's `Result`, which the test build's entry hands back to the harness.
-  A cron handler that faults fails the case, as it does at `unit`.
+  A cron handler that faults fails the case, as it does at `unit`. A handler that
+  returns `Err` is reported to the platform by the entry; the double records that
+  report without counting it, since the case already reads the `Err` as its result.
 - **`q.message(m)`** serialises `m` as the producer does, sends it through a JSON
   round trip, and calls `queue` with a one-message batch. A message whose type
   doesn't survive the round trip fails as it would on the platform. The batch
@@ -825,6 +823,37 @@ Ok(_)`. When the predicate is a top-level comparison (`==`, `!=`, `<`, `<=`, `>`
 `>=`), a failure reports the predicate and its **expected-vs-actual** operands, not
 just a location.
 
+A failed `is` reports the value it tested. When the subject is a name or a field
+path, the failure adds `<subject> was <value>`, so the case that fails says what
+it got:
+
+```text
+✗ is reports actual
+  expect r is Ok(_)
+  r was {"tag":"Err","error":"not a number: x"}
+at tests/t.test.bynk:4:12
+```
+
+An `expect false` that is a whole `match` arm, as in `_ => expect false`, names the
+arm and shows the value that was matched, when that is a name or a field path:
+
+```text
+✗ the greeting names the visitor
+  expect false (in the `_` arm of `match r`)
+  r was {"tag":"NotFound"}
+at tests/web.test.bynk:7:10
+```
+
+The value is shown in the runtime's own tagged form (`{"tag":"Err","error":"…"}`),
+the same printer a comparison failure uses, and only when the claim fails. A subject
+that is not plain data (a function, a stream, a held connection)
+shows its type instead (`r was an Option[Stream[Int]]`). A value of a redacted type
+(`SigningKey`, `VerifyKey`, `TokenClaims`) shows `<redacted>`. The message cuts a long
+value at 2,000 characters and says so; `--format json` carries the whole value as
+`actual` ([Machine-readable output](#machine-readable-output---format-json)). A subject that is a
+call, or any other expression, reports no value: bind it first (`let r = f(x)`), then
+state the claim about `r`.
+
 The predicate is **pure**: it states a claim, it does not run anything. A call that
 has an effect, such as a capability operation or a service call, is refused
 inside it (`bynk.expect.impure_predicate`), even when it is held in a list or
@@ -843,6 +872,36 @@ is refused even if nothing applies it (`[() => Logger.log("x")].length() == 1`).
 `expect`'s own forms are the exceptions: a [fault claim](#faults) runs its call,
 and an [observation](#observation) or `trace(Cap.op)` reads the calls already
 recorded.
+
+### Names an `is` binds stay bound {#expect-is-bindings}
+
+A statement-form `expect … is P(x)` keeps the names `P` binds for the rest of the
+enclosing block (the case body, or the `if` or `match` arm body the statement sits
+in). A failed `expect` ends the case, so nothing after it runs unless the predicate
+held:
+
+```bynk,fragment
+let r <- api.GET("/hello") by Visitor
+expect r is Ok(greeting)
+expect greeting.startsWith("Hello")
+```
+
+The older staircase, `match r { Ok(greeting) => …, _ => expect false }`, still works,
+and a failed `_ => expect false` arm [reports the value it matched](#expect).
+
+- The whole predicate holding is what binds: `expect r is Ok(a) && o is Some(b)`
+  binds `a` and `b`. An or-pattern, `expect s is Circle(k) | Square(k)`, binds what
+  every alternative binds. A predicate that does not prove the test (`||`, `!`)
+  binds nothing, as in an `if`.
+- Only names directly inside the pattern bind (`Ok(code)`, `Some(n)`, a record's
+  fields, an or-pattern's shared names), as in an `if`. A nested sub-pattern's names
+  (`Rejected(RefinementViolation(d))`) do not: use a `match` for that shape.
+- A bound name that shadows an existing one is renamed in the output the way a
+  re-`let` is, and reads as the new binding afterwards.
+- An `expect` used as an expression (inside a `match` arm's expression, a lambda)
+  binds nothing beyond itself.
+- A `property` body binds nothing across its claims: it evaluates them once per
+  input, and a binding that carried on would complicate the shrunk report.
 
 ### `?` in a case {#question-in-case}
 
@@ -2199,7 +2258,10 @@ handler bodies per-statement). A one-click VS Code launch is in progress.
 `bynk test --format json` emits a single pinned JSON document of results
 instead of the human ✓ / ✗ output — one `suites` array of `{ name, kind, cases }`,
 each case `{ name, outcome, message?, location? }` with `outcome` one of `"pass"`
-or `"fail"`. A project that doesn't compile yields `error.kind == "compile"`
+or `"fail"`. A case that failed an `expect … is …` (or a `match`-arm `expect false`)
+also carries `actual`: the whole value tested, as the message prints it, where the
+message shows at most 2,000 characters of it. It is absent when the subject shows its
+type instead, or is redacted. A project that doesn't compile yields `error.kind == "compile"`
 (the diagnostic lines); a runner that crashes mid-stream yields
 `error.kind == "runtime"` with the observed prefix and captured stderr. A project
 with no tests yields an empty `suites` array, or, under `--require-tests`,

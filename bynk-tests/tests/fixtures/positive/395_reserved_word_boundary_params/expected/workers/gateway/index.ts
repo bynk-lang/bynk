@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -15,6 +15,23 @@ function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>
   const fault = globalThis.Promise.reject(e);
   fault.catch(() => {});
   ctx.waitUntil(fault);
+}
+
+async function __bynkCronRun<T extends { readonly tag: string; readonly error?: unknown }>(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, site: string, errType: string, variants: readonly string[], run: () => globalThis.Promise<T>): globalThis.Promise<T> {
+  try {
+    const result = await run();
+    if (result.tag === "Err") {
+      const error = result.error as { readonly tag?: unknown } | null;
+      const variant = typeof error === "object" && error !== null && typeof error.tag === "string" && variants.includes(error.tag) ? error.tag : "";
+      globalThis.console.error({ message: "a cron run returned Err", level: "error", fields: { site, type: errType, variant } });
+      __bynkReportFault(ctx, new globalThis.Error(`${site} returned ${errType}${variant === "" ? "" : `.${variant}`}`));
+    }
+    return result;
+  } catch (thrown) {
+    globalThis.console.error(`${site} faulted`, thrown instanceof globalThis.Error ? (thrown.stack || globalThis.String(thrown)) : thrown);
+    __bynkReportFault(ctx, thrown);
+    throw thrown;
+  }
 }
 
 export default {
@@ -88,7 +105,7 @@ export default {
         __route = "ws ChatGateway";
         const __ws_export = url.searchParams.get("export");
         if (__ws_export === null) return new globalThis.Response("Missing parameter: export", { status: 400 });
-        return surface.ws_ChatGateway_open(request, __ws_export);
+        return __applyChallenge(await surface.ws_ChatGateway_open(request, __ws_export), request, ["Bearer realm=\"gateway\""]);
       }
 
       {
@@ -101,7 +118,7 @@ export default {
           const __raw_delete = __m.params["delete"];
           const __id_delete = __raw_delete;
           const result = await surface.http_GET_bearer_Param_delete(request, __id_delete);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -115,7 +132,7 @@ export default {
           const __raw_class = __m.params["class"];
           const __id_class = __raw_class;
           const result = await surface.http_GET_lookup_Param_class(__id_class);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"gateway\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -129,7 +146,7 @@ export default {
           const __raw_function = __m.params["function"];
           const __id_function = __raw_function;
           const result = await surface.http_GET_oidc_Param_function(request, __id_function);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -143,7 +160,7 @@ export default {
           const __raw_import = __m.params["import"];
           const __id_import = __raw_import;
           const result = await surface.http_GET_sum_Param_import(request, __id_import);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\"", "Bynk realm=\"gateway\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -159,7 +176,7 @@ export default {
           if (__r_public.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.public", violation: __r_public.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __id_public = __r_public.value;
           const result = await surface.http_GET_tag_Param_public(__id_public);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"gateway\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -197,15 +214,15 @@ export default {
       return __faultResponse("gateway", __route);
     }
   },
-  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env): globalThis.Promise<void> {
+  async scheduled(event: { readonly cron: string; readonly scheduledTime: number }, env: Env, ctx?: { waitUntil(promise: globalThis.Promise<unknown>): void }): globalThis.Promise<void> {
     const surface = compose(env);
     switch (event.cron) {
       case "*/5 * * * *": {
-        const result = await surface.cron_sweeper_0(event.scheduledTime);
-        if (result.tag === "Err") globalThis.console.error("cron */5 * * * * failed", result.error);
+        const result = await __bynkCronRun(ctx, "cron `*/5 * * * *` (sweeper)", "(unnamed)", [], () => surface.cron_sweeper_0(event.scheduledTime));
         return;
       }
       default:
+        globalThis.console.warn("cron expression matches no `on schedule` handler in this context:", event.cron);
         return;
     }
   },

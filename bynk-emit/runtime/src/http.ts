@@ -20,26 +20,14 @@ export function decodePath(path: string): string[] | null {
   return out;
 }
 
-// The 1-based position of the first segment of `path` that is not valid
-// percent-encoding, counting non-empty segments. Names a position, never the content.
-function malformedSegment(path: string): number {
-  const raw = path.split("/").filter(Boolean);
-  for (let i = 0; i < raw.length; i++) {
-    try {
-      decodeURIComponent(raw[i]);
-    } catch {
-      return i + 1;
-    }
-  }
-  return 0;
-}
-
 // Match a path pattern (e.g., "/orders/:id") against a request path.
-// Returns the captured parameter map, or null on no match. #3908: a path with
-// malformed percent-encoding whose shape the pattern would match answers
-// `malformed` (a description naming the segment's position) instead of
-// throwing, so the route answers a `400 MalformedPath` before its handler,
-// actor or body is touched.
+// Returns the captured parameter map, or null on no match. Empty segments are
+// insignificant (#3909: `/items`, `/items/` and `//items` are one path), and
+// every segment is compared percent-decoded, a literal as much as a parameter,
+// so `/caf%C3%A9` reaches `GET /café`. #3908: a path with malformed
+// percent-encoding whose shape the pattern would match answers `malformed` (a
+// description naming the segment's position) instead of throwing, so the route
+// answers a `400 MalformedPath` before its handler, actor or body is touched.
 export function matchPath(
   pattern: string,
   path: string,
@@ -47,20 +35,38 @@ export function matchPath(
   const patternSegments = pattern.split("/").filter(Boolean);
   const pathSegments = path.split("/").filter(Boolean);
   if (patternSegments.length !== pathSegments.length) return null;
-  for (let i = 0; i < patternSegments.length; i++) {
-    const p = patternSegments[i];
-    if (!p.startsWith(":") && p !== pathSegments[i]) return null;
-  }
-  const decoded = decodePath(path);
-  if (decoded === null) {
-    return { params: {}, malformed: `path segment ${malformedSegment(path)} is not valid percent-encoding` };
-  }
   const params: Record<string, string> = {};
+  let malformedAt = 0;
   for (let i = 0; i < patternSegments.length; i++) {
     const p = patternSegments[i];
-    if (p.startsWith(":")) params[p.slice(1)] = decoded[i];
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(pathSegments[i]);
+    } catch {
+      // No literal equals undecodable text; a parameter takes the 400 below.
+      if (!p.startsWith(":")) return null;
+      if (malformedAt === 0) malformedAt = i + 1;
+      continue;
+    }
+    if (p.startsWith(":")) params[p.slice(1)] = decoded;
+    else if (p !== decoded) return null;
+  }
+  if (malformedAt !== 0) {
+    return { params: {}, malformed: `path segment ${malformedAt} is not valid percent-encoding` };
   }
   return { params };
+}
+
+// #3909: the `Allow` of a path whose routes overlap. `base` is the `Allow` of the
+// routes that match every request to the matched pattern; `extras` are routes that
+// match only some of them, each with its own `Allow`, added when `path` is one of
+// theirs. The union is alphabetical, as the compiler derives a single route's.
+export function allowUnion(base: string, path: string, extras: readonly (readonly [string, string])[]): string {
+  const methods = new Set(base.split(", "));
+  for (const [pattern, allow] of extras) {
+    if (matchPath(pattern, path) !== null) for (const m of allow.split(", ")) methods.add(m);
+  }
+  return [...methods].sort().join(", ");
 }
 
 // The HTTP status code each HttpResult variant maps to. Kept in sync with
@@ -1675,6 +1681,28 @@ export function applyCors<R extends Response>(
   response.headers.set("access-control-allow-origin", allowOrigin);
   if (allowOrigin !== "*") response.headers.append("vary", "Origin");
   if (policy.credentials) response.headers.set("access-control-allow-credentials", "true");
+  // #3914 (E): a `401`'s challenge is readable by a browser client.
+  if (response.headers.has("www-authenticate")) {
+    response.headers.append("access-control-expose-headers", "WWW-Authenticate");
+  }
+  return response;
+}
+
+// #3914 (RFC 9110 §15.5.2): every `401` carries a `WWW-Authenticate` challenge derived from
+// the route's actor(s), in the order given (one header line per challenge). A response that
+// already carries one is left alone. A `Bearer` challenge gains `error="invalid_token"` (RFC
+// 6750 §3) only when the request presented a bearer token, and never an `error_description`.
+export function applyChallenge<R extends Response>(
+  response: R,
+  request: Request,
+  challenges: readonly string[],
+): R {
+  if (response.status !== 401 || response.headers.has("www-authenticate")) return response;
+  const presented = /^\s*bearer\s+\S/i.test(request.headers.get("authorization") ?? "");
+  for (const c of challenges) {
+    const withError = presented && c.startsWith("Bearer ") ? `${c}, error="invalid_token"` : c;
+    response.headers.append("www-authenticate", withError);
+  }
   return response;
 }
 

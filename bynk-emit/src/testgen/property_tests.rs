@@ -320,6 +320,7 @@ pub(super) fn emit_test_property_function(
         rel_path,
         runtime_use,
         false,
+        false,
     );
     out.extend(suite_late_codec_stmts(
         suite_fns,
@@ -669,6 +670,7 @@ pub(super) fn emit_test_history_property_function(
         source,
         rel_path,
         runtime_use,
+        false,
         false,
     );
     out.extend(suite_late_codec_stmts(

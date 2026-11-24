@@ -416,6 +416,8 @@ service api from http {
 fn templated_paths_differing_only_in_param_names_clash() {
     let dir = scratch("clash");
     write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    // Two contexts, each with its own router (in one context the second route
+    // would be `bynk.http.unreachable_route`).
     write(
         &dir.join("src/p.bynk"),
         r#"context p
@@ -425,6 +427,11 @@ service a from http {
     Ok(id)
   }
 }
+"#,
+    );
+    write(
+        &dir.join("src/q.bynk"),
+        r#"context q
 
 service b from http {
   on GET("/x/:key") (key: String) -> Effect[HttpResult[String]] by v: Visitor {

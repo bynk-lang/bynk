@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -39,15 +39,15 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/cart/size") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/cart/size", path) !== null) {
           __route = "GET /cart/size";
           const result = await surface.http_GET_cart_size(request);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bearer realm=\"shop.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if (method === "POST" && path === "/cart") {
+        if (method === "POST" && __matchPath("/cart", path) !== null) {
           __route = "POST /cart";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -62,15 +62,15 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_cart(request, body);
-          return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_Item), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_Item), request, ["Bearer realm=\"shop.api\""]), __security_api);
         }
       }
-      if (path === "/cart") {
+      if (__matchPath("/cart", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/cart/size") {
+      if (__matchPath("/cart/size", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

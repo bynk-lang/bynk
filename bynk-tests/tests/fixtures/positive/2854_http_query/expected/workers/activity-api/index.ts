@@ -2,7 +2,7 @@
 // Worker entry point for context `activity.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, type __SecurityPolicy, __applySecurityHeaders, __queryObject, __requestQuery } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __queryObject, __requestQuery } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -37,7 +37,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/activity") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/activity", path) !== null) {
           __route = "GET /activity";
           const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false, option: true }, { name: "since", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }, { name: "tag", kind: "string", list: true, option: false }, { name: "fresh", kind: "bool", list: false, option: false }, { name: "limit", kind: "int", list: false, option: false }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -45,12 +45,12 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const query = __r_query.value;
           const result = await surface.http_GET_activity(query);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"activity.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/cached") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/cached", path) !== null) {
           __route = "GET /cached";
           const __q = __queryObject(request, [{ name: "repo", kind: "string", list: false, option: true }, { name: "since", kind: "string", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }, { name: "tag", kind: "string", list: true, option: false }, { name: "fresh", kind: "bool", list: false, option: false }, { name: "limit", kind: "int", list: false, option: false }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -58,20 +58,20 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const query = __r_query.value;
           const result = await surface.http_GET_cached(query);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 60, "public"), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), 60, "public"), request), request, ["Bynk realm=\"activity.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/echo") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/echo", path) !== null) {
           __route = "GET /echo";
           const result = await surface.http_GET_echo(__requestQuery(request));
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"activity.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
       {
-        if ((method === "GET" || method === "HEAD") && path === "/priced") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/priced", path) !== null) {
           __route = "GET /priced";
           const __q = __queryObject(request, [{ name: "price", kind: "decimal", list: false, option: true }, { name: "kind", kind: "enum", list: false, option: true }]);
           if (!__q.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__q.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
@@ -79,7 +79,7 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const query = __r_query.value;
           const result = await surface.http_GET_priced(query);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"activity.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -98,11 +98,11 @@ export default {
           if (__r_query.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_query.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const query = __r_query.value;
           const result = await surface.http_GET_activity_Param_owner(owner, query);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"activity.api\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
-      if (path === "/activity") {
+      if (__matchPath("/activity", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
@@ -112,17 +112,17 @@ export default {
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/cached") {
+      if (__matchPath("/cached", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/echo") {
+      if (__matchPath("/echo", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/priced") {
+      if (__matchPath("/priced", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);

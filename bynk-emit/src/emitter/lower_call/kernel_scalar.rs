@@ -328,10 +328,6 @@ pub(in crate::emitter) fn lower_bytes_kernel(
             let kids = operands(&mut pre, cx, &[receiver, other]);
             Some(plain_call("__bynkBytesConcat", kids))
         }
-        (BytesOp::Compare, [other]) => {
-            let kids = operands(&mut pre, cx, &[receiver, other]);
-            Some(plain_call("__bynkBytesCompare", kids))
-        }
         (BytesOp::ToHex, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("__bynkBytesToHex", kids))
@@ -364,7 +360,8 @@ fn regex_parts(literal: &str, extra: &str, anchored: bool) -> (String, String) {
     } else {
         pat
     };
-    (source, format!("{flags}{extra}"))
+    // #3950: every Bynk regex runs in Unicode mode.
+    (source, format!("{flags}{extra}u"))
 }
 
 /// [`regex_construction`] as a node: `new globalThis.RegExp("<source>", "<flags>")`. The `Str`
@@ -1052,12 +1049,6 @@ mod tests {
                 "__bynkBytesConcat",
             ),
             (
-                "b: Bytes, c: Bytes",
-                "Int { b.compare(c) }",
-                "__bynkBytesCompare(b, c)",
-                "__bynkBytesCompare",
-            ),
-            (
                 "b: Bytes",
                 "String { b.toHex() }",
                 "__bynkBytesToHex(b)",
@@ -1252,35 +1243,35 @@ mod tests {
         for (body, want) in [
             (
                 "Bool { s.matchesRegex(\"a+\") }",
-                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:a+)(?![\\\\s\\\\S])\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:a+)(?![\\\\s\\\\S])\", \"u\").test(s)".to_string(),
             ),
             (
                 "Bool { s.matchesRegex(\"(?i)abc\") }",
-                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:abc)(?![\\\\s\\\\S])\", \"i\").test(s)".to_string(),
+                "new globalThis.RegExp(\"(?<![\\\\s\\\\S])(?:abc)(?![\\\\s\\\\S])\", \"iu\").test(s)".to_string(),
             ),
             (
                 "Bool { s.containsRegex(\"a\\\\.b\") }",
-                "new globalThis.RegExp(\"a\\\\.b\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"a\\\\.b\", \"u\").test(s)".to_string(),
             ),
             (
                 "Bool { s.containsRegex(\"\\\"q\\\"$\") }",
-                "new globalThis.RegExp(\"\\\"q\\\"$\", \"\").test(s)".to_string(),
+                "new globalThis.RegExp(\"\\\"q\\\"$\", \"u\").test(s)".to_string(),
             ),
             (
                 "Option[List[Option[String]]] { s.findRegex(\"(a)(b)?\") }",
                 format!(
-                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(({groups})(__m)))(new globalThis.RegExp(\"(a)(b)?\", \"\").exec(s))"
+                    "((__m: globalThis.RegExpExecArray | null): Option<readonly Option<string>[]> => __m === null ? None : Some(({groups})(__m)))(new globalThis.RegExp(\"(a)(b)?\", \"u\").exec(s))"
                 ),
             ),
             (
                 "List[List[Option[String]]] { s.findAllRegex(\"\\\\d+\") }",
                 format!(
-                    "([...s.matchAll(new globalThis.RegExp(\"\\\\d+\", \"g\"))].map({groups}) as readonly (readonly Option<string>[])[])"
+                    "([...s.matchAll(new globalThis.RegExp(\"\\\\d+\", \"gu\"))].map({groups}) as readonly (readonly Option<string>[])[])"
                 ),
             ),
             (
                 "String { s.replaceRegex(\"\\\\s+\", \" \") }",
-                "s.replace(new globalThis.RegExp(\"\\\\s+\", \"g\"), \" \")".to_string(),
+                "s.replace(new globalThis.RegExp(\"\\\\s+\", \"gu\"), \" \")".to_string(),
             ),
         ] {
             let ts = emitted("s: String", body);
@@ -1310,7 +1301,7 @@ mod tests {
             "{ts}"
         );
         assert!(
-            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"y\"))"),
+            ts[end..].starts_with("})(s, new globalThis.RegExp(\",\", \"yu\"))"),
             "{ts}"
         );
         assert!(ts.contains("\n    while (__q < __s.length) {\n"), "{ts}");

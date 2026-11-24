@@ -1,0 +1,25 @@
+context r.api
+
+// Two routes that both match `/a/b/c`: the literal at the first differing segment
+// wins, whatever the declaration order or the spelling.
+service api from http {
+	on GET("/a/:x/c") (x: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("x-route \(x)")
+	}
+
+	on GET("/a/b/:y") (y: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("y-route \(y)")
+	}
+
+	on GET("/users/:id") (id: String) -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("user \(id)")
+	}
+
+	on GET("/users/me") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("me")
+	}
+
+	on GET("/items") () -> Effect[HttpResult[String]] by v: Visitor {
+		Ok("items")
+	}
+}
