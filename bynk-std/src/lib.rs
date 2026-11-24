@@ -317,6 +317,28 @@ pub const BYNK_LOCALE_TYPES_SRC: &str = include_str!("../lib/core/bynk.locale.ty
 /// `uses bynk.ordering`.
 pub const ORDERING_UNIT: &str = "bynk.ordering";
 
+/// #4231: a type every unit may name with no `uses`, and the first-party unit
+/// that declares it. A unit reaches `unit` as if it wrote `uses <unit>` when its
+/// source mentions the type's name or one of `triggers` (a method the type
+/// comes from, written with its leading `.`). The one registration point:
+/// resolution, rebranding and the bare-variant rule read this table, so a new
+/// compiler-known sum is one row here and its unit.
+pub struct PreludeType {
+    /// The type's name, as a unit writes it.
+    pub name: &'static str,
+    /// The first-party commons that declares it.
+    pub unit: &'static str,
+    /// Spellings other than the name whose presence also makes the unit reachable.
+    pub triggers: &'static [&'static str],
+}
+
+/// Every prelude type. `Ordering` is what `compare` and `sortWith` answer (#3955).
+pub const PRELUDE_TYPES: &[PreludeType] = &[PreludeType {
+    name: "Ordering",
+    unit: ORDERING_UNIT,
+    triggers: &[".compare", ".sortWith"],
+}];
+
 /// `bynk.ordering` — the `Ordering` enum (`Less`, `Equal`, `Greater`) that
 /// `compare` and `sortWith` use, with `then` and `reverse`.
 pub const BYNK_ORDERING_SRC: &str = include_str!("../lib/core/bynk.ordering.bynk");

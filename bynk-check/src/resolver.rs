@@ -49,7 +49,10 @@ pub fn compute_is_uses_commons_type(
     types: &HashMap<String, Arc<TypeDecl>>,
     name: &str,
 ) -> bool {
-    matches!(imported_from_kind.get(name), Some(UnitKind::Commons)) && types.contains_key(name)
+    // #4231: the prelude `Ordering` is shared by every context as it is, not
+    // rebranded per context, so it is constructible anywhere.
+    matches!(imported_from_kind.get(name), Some(UnitKind::Commons))
+        && types.get(name).is_some_and(|t| !is_prelude_type(t))
 }
 
 #[cfg(test)]
@@ -4751,7 +4754,7 @@ pub(crate) fn bare_variant_owners<'a>(
     // says so, so a sum of the author's own that shares `Less`/`Equal`/`Greater`
     // is never ambiguous with it.
     if in_scope.len() > 1 {
-        in_scope.retain(|t| !is_prelude_ordering(t));
+        in_scope.retain(|t| !is_prelude_type(t));
     }
     if in_scope.is_empty() {
         left_out
@@ -4760,14 +4763,19 @@ pub(crate) fn bare_variant_owners<'a>(
     }
 }
 
-/// #3955: whether `t` is the `Ordering` of `bynk.ordering`, which a unit reaches
-/// without writing `uses`. Its variants resolve only from context (an expected
-/// type, the other operand of a comparison, a `match`), unless nothing else in
-/// scope declares the name.
-pub(crate) fn is_prelude_ordering(t: &TypeDecl) -> bool {
-    t.name.name == "Ordering"
-        && matches!(&t.body, TypeBody::Sum(s)
-            if s.variants.iter().map(|v| v.name.name.as_str()).eq(["Less", "Equal", "Greater"]))
+/// #3955, #4231: whether `t` is a prelude type ([`bynk_std::PRELUDE_TYPES`]), the
+/// declaration of a first-party unit a unit reaches without writing `uses`. Its
+/// variants resolve only from context (an expected type, the other operand of a
+/// comparison, a `match`) unless nothing else in scope declares the name, and it
+/// is shared by every context as it is, not rebranded.
+pub(crate) fn is_prelude_type(t: &TypeDecl) -> bool {
+    bynk_std::PRELUDE_TYPES.iter().any(|p| {
+        p.name == t.name.name
+            && crate::firstparty::UNITS
+                .iter()
+                .find(|u| u.name == p.unit)
+                .is_some_and(|u| t.span.file == crate::project_model::firstparty_file_id(u))
+    })
 }
 
 /// #1848: a match-arm guard is resolved like every other expression, in its
