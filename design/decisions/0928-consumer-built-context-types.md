@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A context's `transparent` types are constructible from a consumer on every target; under Workers the consumer builds them with its own copy of the guards
----
+# 0928 — A consumer builds a context's transparent types itself
 
-## ADR: consumer-built-context-types
-title: A consumer builds a context's transparent types itself
-summary: a consumer lowers `.of` and a sum variant of a consumed context's type inline, so no value import crosses the Worker boundary, and the checker's adapter-only qualification goes
+- **Status:** Accepted (v0.671)
 
 **Context.** The maintainer's ruling on #3948 is that a transparent type is constructible outside its owner and an opaque one is not. #4212 applied it to a type an adapter exports, because an adapter is linked into every consumer. A context-owned type was left with the old rule: under Workers a consumer imports a consumed context's types as types only (#661), so `Port.of(n)` or `Shape.Circle(r)` emitted a value reference to an export the callee's `handlers.ts` does not have, and `tsc` rejected it.
 
