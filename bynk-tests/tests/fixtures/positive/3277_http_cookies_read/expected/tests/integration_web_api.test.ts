@@ -7,80 +7,9 @@ import { __responseToHttpResult, __responseToHttpOutcome, __cookieString, __requ
 import * as __ns_web_api from "../workers/web-api/handlers.js";
 import worker___ns_web_api from "../workers/web-api/index.js";
 
-class ExpectationError extends Error {
-  location: string;
-  start: number;
-  end: number;
-  actual?: string;
-  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
-    super(`${detail}\n  at ${location}`);
-    this.location = location;
-    this.start = start;
-    this.end = end;
-    this.actual = actual;
-  }
-}
-// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
-// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
-// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
-// (the `--format json` record) carries the whole text.
-function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
-  if (was === undefined) return { line: "" };
-  let full: string;
-  try { full = was(); } catch { return { line: "" }; }
-  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
-  return { line: `\n  ${label} was ${shown}`, actual: full };
-}
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
-  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
-  return new ExpectationError(location, start, end, detail + w.line, w.actual);
-}
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
-}
-// #2272: the declaration an invariant or transition violation names, as a failed case
-// reports it. `undefined` for any other error, so it is omitted from the report.
-function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
-  const v = e && e.invariantViolation;
-  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
-}
-// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
-// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
-// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
-function __bynkShowLeaf(x: any): unknown {
-  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
-    const neg = x.coefficient < 0n;
-    let digits = (neg ? -x.coefficient : x.coefficient).toString();
-    let text = digits;
-    if (x.scale > 0) {
-      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
-      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
-    }
-    return (neg ? "-" : "") + text + "d";
-  }
-  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
-  return x;
-}
-function __bynkShow(v: unknown): string {
-  try {
-    if (typeof v === "bigint") return String(v);
-    const leaf = __bynkShowLeaf(v);
-    if (typeof leaf === "string" && leaf !== v) return leaf;
-    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
-    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
-      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
-    }
-    return JSON.stringify(v) ?? String(v);
-  } catch { return String(v); }
-}
+<<bynk-shared: testing/expectation>>
 
-
-let __bynkClockNow = 0;
-function __bynkAdvanceClock(by: number): void {
-  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
-  __bynkClockNow += by;
-}
-const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
+<<bynk-shared: testing/clock>>
 function __buildHarness() {
   const env___ns_web_api: any = {};
   env___ns_web_api.__bynkClock = __bynkClock;
@@ -95,17 +24,7 @@ function __makeHarness() {
   return (__bynkHarness ??= __buildHarness());
 }
 
-function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
-function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
-  const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const p = __b64url(JSON.stringify(payload));
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
-  return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
-}
+<<bynk-shared: testing/jwt_signer>>
 async function __sysdrive_api_http_GET_me(cookies: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookieString(__ns_web_api.__serialise_Session(cookies)) } });
@@ -315,19 +234,7 @@ async function test_a_path_parameter_and_cookies_together() {
   }
 }
 
-type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+<<bynk-shared: testing/case_timing>>
 
 export const __bynkCases: readonly string[] = ["a typed cookies record round-trips through the router", "absent cookies take None and their defaults", "cookies are read off the Cookie header", "a name sent twice fills a list", "unknown cookies are ignored", "a cookie value is not decoded", "a refinement violation is refused before the handler", "a non-numeric cookie is a structural mismatch", "a name sent twice for a single-valued cookie is refused", "an unknown enum variant is refused", "a path parameter and cookies together"];
 

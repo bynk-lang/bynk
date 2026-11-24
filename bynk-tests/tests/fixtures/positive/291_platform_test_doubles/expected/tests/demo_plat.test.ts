@@ -8,89 +8,8 @@ import * as __ns_bynk from "./../bynk.js";
 import * as __ns_bynk_cloudflare from "./../bynk/cloudflare.js";
 import * as __ns_bynk_locale_types from "./../bynk/locale/types.js";
 
-class ExpectationError extends Error {
-  location: string;
-  start: number;
-  end: number;
-  actual?: string;
-  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
-    super(`${detail}\n  at ${location}`);
-    this.location = location;
-    this.start = start;
-    this.end = end;
-    this.actual = actual;
-  }
-}
-// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
-// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
-// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
-// (the `--format json` record) carries the whole text.
-function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
-  if (was === undefined) return { line: "" };
-  let full: string;
-  try { full = was(); } catch { return { line: "" }; }
-  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
-  return { line: `\n  ${label} was ${shown}`, actual: full };
-}
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
-  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
-  return new ExpectationError(location, start, end, detail + w.line, w.actual);
-}
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
-}
-// #2272: the declaration an invariant or transition violation names, as a failed case
-// reports it. `undefined` for any other error, so it is omitted from the report.
-function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
-  const v = e && e.invariantViolation;
-  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
-}
-// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
-// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
-// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
-function __bynkShowLeaf(x: any): unknown {
-  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
-    const neg = x.coefficient < 0n;
-    let digits = (neg ? -x.coefficient : x.coefficient).toString();
-    let text = digits;
-    if (x.scale > 0) {
-      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
-      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
-    }
-    return (neg ? "-" : "") + text + "d";
-  }
-  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
-  return x;
-}
-function __bynkShow(v: unknown): string {
-  try {
-    if (typeof v === "bigint") return String(v);
-    const leaf = __bynkShowLeaf(v);
-    if (typeof leaf === "string" && leaf !== v) return leaf;
-    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
-    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
-      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
-    }
-    return JSON.stringify(v) ?? String(v);
-  } catch { return String(v); }
-}
-
-function __bynkRecordDeps(deps: any, spec: Record<string, string[]>, obs: { log: Record<string, { args: any[]; order: number }[]>; n: number }): any {
-  for (const cap of Object.keys(spec)) {
-    if (!deps || !deps[cap]) continue;
-    for (const op of spec[cap]) {
-      const orig = deps[cap][op];
-      if (typeof orig !== "function") continue;
-      const key = cap + "." + op;
-      obs.log[key] = obs.log[key] ?? [];
-      deps[cap][op] = (...args: any[]) => {
-        obs.log[key].push({ args, order: obs.n++ });
-        return orig.apply(deps[cap], args);
-      };
-    }
-  }
-  return deps;
-}
+<<bynk-shared: testing/expectation>>
+<<bynk-shared: testing/observation>>
 
 type __Clock_now_Call = {};
 type __Fetch_send_Call = { req: __ns_bynk.Request };
@@ -372,25 +291,7 @@ class __Stub_Kv {
   }
 }
 
-function __bynkOverlay(base: unknown, stub: object, cap: string): unknown {
-  return new globalThis.Proxy(stub, {
-    get(target, prop) {
-      const t = target as Record<PropertyKey, unknown> & { __applies?: (op: string) => boolean };
-      // An own property (the stub's state, or a wrapper the recording proxy
-      // installed) always answers; a stubbed operation answers when it applies
-      // to the running case.
-      if (globalThis.Object.prototype.hasOwnProperty.call(t, prop)) return t[prop];
-      if (prop in t && (t.__applies === undefined || typeof prop !== "string" || t.__applies(prop))) return t[prop];
-      if (base !== undefined) {
-        const v = (base as Record<PropertyKey, unknown>)[prop];
-        return typeof v === "function" ? v.bind(base) : v;
-      }
-      return () => {
-        throw new globalThis.Error(`bynk: ${cap}.${String(prop)} is not stubbed, and the capability has no provider in this test`);
-      };
-    },
-  });
-}
+<<bynk-shared: testing/stub_overlay>>
 
 function __bynkTest_Clock(): __ns_bynk.Clock {
   return {
@@ -2503,19 +2404,7 @@ async function test_the_doubles_hold_at_the_integration_tier() {
   }
 }
 
-type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+<<bynk-shared: testing/case_timing>>
 
 export const __bynkCases: readonly string[] = ["the clock reads the epoch", "random integers come from a fixed seed", "random uuids count up", "no secret is set", "the locale is en", "the logger records without printing", "idempotency remembers within a case", "idempotency is fresh per case", "kv is in-memory", "kv is fresh per case", "a stubbed operation answers; the rest reach the double", "a stubbed fetch answers for the network", "a fetch double sees the request's headers", "an unstubbed fetch faults rather than reach the network", "the doubles hold at the integration tier"];
 

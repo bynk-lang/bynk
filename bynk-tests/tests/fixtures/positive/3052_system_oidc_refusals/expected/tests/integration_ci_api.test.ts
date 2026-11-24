@@ -7,80 +7,9 @@ import { __responseToHttpResult, __responseToHttpOutcome, __responseToUnauthOutc
 import * as __ns_ci_api from "../workers/ci-api/handlers.js";
 import worker___ns_ci_api from "../workers/ci-api/index.js";
 
-class ExpectationError extends Error {
-  location: string;
-  start: number;
-  end: number;
-  actual?: string;
-  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
-    super(`${detail}\n  at ${location}`);
-    this.location = location;
-    this.start = start;
-    this.end = end;
-    this.actual = actual;
-  }
-}
-// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
-// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
-// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
-// (the `--format json` record) carries the whole text.
-function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
-  if (was === undefined) return { line: "" };
-  let full: string;
-  try { full = was(); } catch { return { line: "" }; }
-  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
-  return { line: `\n  ${label} was ${shown}`, actual: full };
-}
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
-  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
-  return new ExpectationError(location, start, end, detail + w.line, w.actual);
-}
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
-}
-// #2272: the declaration an invariant or transition violation names, as a failed case
-// reports it. `undefined` for any other error, so it is omitted from the report.
-function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
-  const v = e && e.invariantViolation;
-  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
-}
-// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
-// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
-// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
-function __bynkShowLeaf(x: any): unknown {
-  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
-    const neg = x.coefficient < 0n;
-    let digits = (neg ? -x.coefficient : x.coefficient).toString();
-    let text = digits;
-    if (x.scale > 0) {
-      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
-      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
-    }
-    return (neg ? "-" : "") + text + "d";
-  }
-  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
-  return x;
-}
-function __bynkShow(v: unknown): string {
-  try {
-    if (typeof v === "bigint") return String(v);
-    const leaf = __bynkShowLeaf(v);
-    if (typeof leaf === "string" && leaf !== v) return leaf;
-    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
-    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
-      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
-    }
-    return JSON.stringify(v) ?? String(v);
-  } catch { return String(v); }
-}
+<<bynk-shared: testing/expectation>>
 
-
-let __bynkClockNow = 0;
-function __bynkAdvanceClock(by: number): void {
-  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
-  __bynkClockNow += by;
-}
-const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
+<<bynk-shared: testing/clock>>
 // #2134: the running case's `env` entries, set by each case runner.
 let __bynkEnv: globalThis.Record<string, string> = {};
 
@@ -99,137 +28,9 @@ function __makeHarness() {
   return (__bynkHarness ??= __buildHarness());
 }
 
-function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
-function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
-  const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const p = __b64url(JSON.stringify(payload));
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
-  return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
-}
+<<bynk-shared: testing/jwt_signer>>
 const __bynkOidcRemote: boolean = false;
-// #3052: the `system` driver's test OIDC issuer. Test-only: it lives in the
-// generated test module and never in an emitted Worker. It generates an ES256
-// key pair, answers the Worker's JWKS `fetch` for the actor's `jwks` URL, and
-// mints the tokens a call presents. The Worker's own verifier runs unmodified
-// against it.
-type __BynkOidcTrust = { issuer: string; audience: string; jwks: string };
-type __BynkOidcMint = {
-  sub: string;
-  claims: globalThis.Record<string, unknown>;
-  // Which credential: signed by the published key (`valid`), by an unpublished
-  // key with the same `kid` (`forged`), or published-key tokens whose `exp`,
-  // `iss` or `aud` the seam must refuse. `algnone` and `alghs256` carry an
-  // otherwise valid payload under an algorithm the seam must refuse: `none`
-  // (no signature), and `HS256` keyed with the public key (algorithm
-  // confusion). `emptysub` and `nosub` are correctly signed with a `sub` the
-  // seam must refuse: empty, and absent.
-  kind: "valid" | "forged" | "expired" | "wrongissuer" | "wrongaudience" | "algnone" | "alghs256" | "emptysub" | "nosub";
-};
-interface __BynkOidcIssuer {
-  kid: string;
-  jwk: globalThis.Record<string, unknown>;
-  signKey: CryptoKey;
-  forgedKey: CryptoKey;
-  // The published public key, DER-encoded: what an algorithm-confusion attacker
-  // holds, and so what `alghs256` uses as its HMAC secret.
-  publicSpki: Uint8Array;
-  jwksUris: Set<string>;
-}
-function __bynkOidcB64(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-function __bynkOidcText(s: string): string { return __bynkOidcB64(new TextEncoder().encode(s)); }
-// A claim list is `"name: value"` lines, read as `TokenClaims.of` reads them in
-// process: every value is a trimmed string (`"n: 1"` is the string `"1"`), so
-// the `system` and `integration` tiers see the same claims.
-function __bynkOidcClaims(lines: readonly string[]): globalThis.Record<string, unknown> {
-  const claims: globalThis.Record<string, unknown> = {};
-  for (const line of lines) {
-    const i = line.indexOf(":");
-    if (i > 0) claims[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-  }
-  return claims;
-}
-// The trust roots the seam checks: the actor's declaration, replaced by its
-// `trustFrom` variable's JSON when the case's `env` (or the process) sets it,
-// exactly as the Worker's `__oidcTrust` reads it.
-function __bynkOidcTrustOf(declared: __BynkOidcTrust, raw: string | undefined): __BynkOidcTrust {
-  if (raw === undefined || raw === "") return declared;
-  let parsed: { issuer?: unknown; audience?: unknown; jwks?: unknown };
-  try { parsed = JSON.parse(raw); } catch { throw new globalThis.Error("an Oidc actor's trustFrom variable isn't JSON"); }
-  if (typeof parsed !== "object" || parsed === null || typeof parsed.issuer !== "string" || typeof parsed.jwks !== "string") {
-    throw new globalThis.Error("an Oidc actor's trustFrom variable needs string `issuer` and `jwks`");
-  }
-  if (parsed.audience !== undefined && typeof parsed.audience !== "string") {
-    throw new globalThis.Error("an Oidc actor's trustFrom `audience` must be a string");
-  }
-  return { issuer: parsed.issuer, jwks: parsed.jwks, audience: (parsed.audience as string | undefined) ?? declared.audience };
-}
-// One issuer per test process, shared by every test module in it. The Worker's
-// JWKS cache is keyed by URL with a ten-minute TTL, so a key that changed
-// between suites would be refused from the cache.
-async function __bynkOidcIssuerOf(): Promise<__BynkOidcIssuer> {
-  const g = globalThis as unknown as { __bynkTestOidcIssuer?: Promise<__BynkOidcIssuer> };
-  g.__bynkTestOidcIssuer ??= (async (): Promise<__BynkOidcIssuer> => {
-    const gen = (): Promise<CryptoKeyPair> => crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]) as Promise<CryptoKeyPair>;
-    const pair = await gen();
-    const forged = await gen();
-    const kid = "bynk-test-issuer";
-    const jwk = { ...((await crypto.subtle.exportKey("jwk", pair.publicKey)) as globalThis.Record<string, unknown>), kid, alg: "ES256", use: "sig" };
-    const publicSpki = new Uint8Array((await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer);
-    const issuer: __BynkOidcIssuer = { kid, jwk, signKey: pair.privateKey, forgedKey: forged.privateKey, publicSpki, jwksUris: new Set() };
-    // Answer the Worker's JWKS fetch for the registered URLs; anything else
-    // goes to the real `fetch`.
-    const real = globalThis.fetch.bind(globalThis);
-    globalThis.fetch = (async (input: globalThis.RequestInfo | globalThis.URL, init?: globalThis.RequestInit): Promise<globalThis.Response> => {
-      const url = typeof input === "string" ? input : input instanceof globalThis.URL ? input.href : input.url;
-      const method = (init?.method ?? (typeof input === "object" && "method" in input ? input.method : "GET")).toUpperCase();
-      if (method === "GET" && issuer.jwksUris.has(url)) {
-        return new globalThis.Response(JSON.stringify({ keys: [jwk] }), { status: 200, headers: { "content-type": "application/json" } });
-      }
-      return real(input, init);
-    }) as typeof globalThis.fetch;
-    return issuer;
-  })();
-  return g.__bynkTestOidcIssuer;
-}
-// Mint the credential a call presents and make the Worker's JWKS fetch for
-// `trust.jwks` answer with the test issuer's key.
-async function __bynkOidcToken(remote: boolean, trust: __BynkOidcTrust, o: __BynkOidcMint): Promise<string> {
-  if (remote) {
-    throw new globalThis.Error("an `Oidc` route is driven against an in-process Worker: a remote target fetches its own JWKS, which the driver cannot answer");
-  }
-  const issuer = await __bynkOidcIssuerOf();
-  issuer.jwksUris.add(trust.jwks);
-  const now = __bynkNow();
-  const payload: globalThis.Record<string, unknown> = {
-    ...o.claims,
-    sub: o.sub,
-    iss: o.kind === "wrongissuer" ? `${trust.issuer}/not-the-issuer` : trust.issuer,
-    aud: o.kind === "wrongaudience" ? `${trust.audience}-not-the-audience` : trust.audience,
-    iat: now,
-    exp: o.kind === "expired" ? now - 3600 : now + 3600,
-  };
-  // `emptysub` and `nosub` are the only kinds whose `sub` is not the call's.
-  if (o.kind === "emptysub") payload.sub = "";
-  if (o.kind === "nosub") delete payload.sub;
-  const alg = o.kind === "algnone" ? "none" : o.kind === "alghs256" ? "HS256" : "ES256";
-  const head = __bynkOidcText(JSON.stringify({ alg, typ: "JWT", kid: issuer.kid }));
-  const body = __bynkOidcText(JSON.stringify(payload));
-  const signed = new TextEncoder().encode(`${head}.${body}`);
-  if (o.kind === "algnone") return `${head}.${body}.`;
-  if (o.kind === "alghs256") {
-    // Algorithm confusion: the public key, which the JWKS publishes, as the
-    // HMAC secret of a symmetric token.
-    const mac = await crypto.subtle.importKey("raw", issuer.publicSpki as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    return `${head}.${body}.${__bynkOidcB64(new Uint8Array(await crypto.subtle.sign("HMAC", mac, signed)))}`;
-  }
-  // WebCrypto's ECDSA signature is the raw `r || s` a JWS carries.
-  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, o.kind === "forged" ? issuer.forgedKey : issuer.signKey, signed);
-  return `${head}.${body}.${__bynkOidcB64(new Uint8Array(sig))}`;
-}
+<<bynk-shared: testing/oidc_issuer>>
 async function __sysdrive_api_http_GET_who(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/who`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkOidcToken(__bynkOidcRemote, { issuer: "https://issuer.example.com", audience: "bynk-registry", jwks: "https://issuer.example.com/.well-known/jwks.json" }, { sub: __sub, claims: __claims, kind: "valid" })}` } });
@@ -854,19 +655,7 @@ async function test_a_token_for_another_audience_is_not_handled() {
   }
 }
 
-type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+<<bynk-shared: testing/case_timing>>
 
 export const __bynkCases: readonly string[] = ["a valid token with chosen claims is admitted", "a valid token with no claims is admitted", "a non-ASCII subject round-trips", "a missing token is refused", "a forged token is refused", "an expired token is refused", "a token for another issuer is refused", "a token for another audience is refused", "a valid raw request is admitted", "a forged raw request is refused", "an expired raw request is refused", "the trustFrom variable moves the trust roots", "a trustFrom without an audience keeps the declared one", "a forged token is not handled", "an expired token is not handled", "a token for another issuer is not handled", "a token for another audience is not handled"];
 

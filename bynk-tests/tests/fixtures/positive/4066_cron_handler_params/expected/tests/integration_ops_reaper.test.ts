@@ -8,80 +8,9 @@ import { __makeIntegrationD1, __makeIntegrationDoNamespace } from "../__bynk_run
 import * as __ns_ops_reaper from "../workers/ops-reaper/handlers.js";
 import worker___ns_ops_reaper from "../workers/ops-reaper/index.js";
 
-class ExpectationError extends Error {
-  location: string;
-  start: number;
-  end: number;
-  actual?: string;
-  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
-    super(`${detail}\n  at ${location}`);
-    this.location = location;
-    this.start = start;
-    this.end = end;
-    this.actual = actual;
-  }
-}
-// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
-// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
-// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
-// (the `--format json` record) carries the whole text.
-function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
-  if (was === undefined) return { line: "" };
-  let full: string;
-  try { full = was(); } catch { return { line: "" }; }
-  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
-  return { line: `\n  ${label} was ${shown}`, actual: full };
-}
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
-  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
-  return new ExpectationError(location, start, end, detail + w.line, w.actual);
-}
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
-}
-// #2272: the declaration an invariant or transition violation names, as a failed case
-// reports it. `undefined` for any other error, so it is omitted from the report.
-function __bynkViolationOf(e: any): { kind: string, agent: string, name: string, location: string } | undefined {
-  const v = e && e.invariantViolation;
-  return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
-}
-// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
-// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
-// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
-function __bynkShowLeaf(x: any): unknown {
-  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
-    const neg = x.coefficient < 0n;
-    let digits = (neg ? -x.coefficient : x.coefficient).toString();
-    let text = digits;
-    if (x.scale > 0) {
-      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
-      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
-    }
-    return (neg ? "-" : "") + text + "d";
-  }
-  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
-  return x;
-}
-function __bynkShow(v: unknown): string {
-  try {
-    if (typeof v === "bigint") return String(v);
-    const leaf = __bynkShowLeaf(v);
-    if (typeof leaf === "string" && leaf !== v) return leaf;
-    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
-    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
-      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
-    }
-    return JSON.stringify(v) ?? String(v);
-  } catch { return String(v); }
-}
+<<bynk-shared: testing/expectation>>
 
-
-let __bynkClockNow = 0;
-function __bynkAdvanceClock(by: number): void {
-  if (!(by >= 0)) throw new globalThis.Error(`\`advance Clock by\` takes a non-negative Duration, but got ${by} ms`);
-  __bynkClockNow += by;
-}
-const __bynkClock = { async now(): Promise<number> { return __bynkClockNow; } };
+<<bynk-shared: testing/clock>>
 function __buildHarness() {
   const env___ns_ops_reaper: any = {};
   env___ns_ops_reaper.__bynkClock = __bynkClock;
@@ -98,17 +27,7 @@ function __makeHarness() {
   return (__bynkHarness ??= __buildHarness());
 }
 
-function __bynkNow(): number { return Math.floor(Date.now() / 1000); }
-function __b64url(s: string): string { return __bytesB64url(new TextEncoder().encode(s)); }
-function __bytesB64url(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-async function __bynkSignHs256(payload: Record<string, unknown>, secret: string): Promise<string> {
-  const h = __b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const p = __b64url(JSON.stringify(payload));
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey("raw", enc.encode(secret) as BufferSource, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
-  return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
-}
+<<bynk-shared: testing/jwt_signer>>
 async function __sysdrive_api_http_GET_seen(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/seen`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
@@ -128,76 +47,7 @@ async function __sysdrive_wrongmethod_api(method: string, path: string) {
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => Ok(__j as never));
 }
 
-// #3541: `report` records a detached failure on the case, as the HTTP and service double's does (send.ts), so a detached `Err` in a cron or queue handler is counted in `detached_failures` and not left to `console.error`.
-type __BynkJobDetachReport = { kind: string; site: string; type: string | null; variant: string | null };
-type __BynkJobExec = { pending: Promise<unknown>[]; waitUntil(promise: Promise<unknown>): void; report(record: __BynkJobDetachReport): void; __bynkResult?: unknown };
-function __bynkJobExec(): __BynkJobExec {
-  const pending: Promise<unknown>[] = [];
-  const reports = ((globalThis as unknown as { __bynkDetachedReports?: __BynkJobDetachReport[] }).__bynkDetachedReports ??= []);
-  return { pending, waitUntil(promise: Promise<unknown>): void { pending.push(promise); }, report(record: __BynkJobDetachReport): void { reports.push(record); } };
-}
-async function __bynkJobSettle(exec: __BynkJobExec, run: Promise<void>): Promise<void> {
-  await run;
-  while (exec.pending.length > 0) {
-    await Promise.allSettled(exec.pending.splice(0));
-  }
-}
-function __bynkFault(what: string, e: unknown): Error {
-  return new globalThis.Error(`${what} faulted: ${e instanceof globalThis.Error ? e.message : globalThis.String(e)}`);
-}
-async function __bynkScheduled<T>(cron: string, run: (exec: __BynkJobExec) => Promise<void>): Promise<T> {
-  const exec = __bynkJobExec();
-  const log = globalThis.console.error;
-  // #3872: the entry reports an `Err` run (a structured record, and a fault to the platform). The double records
-  // that report without counting it (the list is this case's: reset per call): the case reads the `Err` as the result, so counting would report it twice.
-  const cronReports: unknown[] = ((globalThis as unknown as { __bynkCronReports?: unknown[] }).__bynkCronReports = []);
-  globalThis.console.error = (...args: unknown[]): void => {
-    const record = args[0] as { message?: unknown } | null;
-    if (typeof record === "object" && record !== null && record.message === "a cron run returned Err") cronReports.push(record);
-    else log(...args);
-  };
-  try {
-    await __bynkJobSettle(exec, run(exec));
-  } catch (e) {
-    throw __bynkFault(`the cron handler for "${cron}"`, e);
-  } finally {
-    globalThis.console.error = log;
-  }
-  if (!("__bynkResult" in exec)) throw new globalThis.Error(`the Worker ran no cron handler for "${cron}"`);
-  return exec.__bynkResult as T;
-}
-type __BynkQueueMessage = { readonly id: string; readonly timestamp: Date; readonly attempts: number; readonly body: unknown; ack(): void; retry(): void };
-type __BynkQueueBatch = { readonly queue: string; readonly messages: ReadonlyArray<__BynkQueueMessage>; ackAll(): void; retryAll(): void };
-async function __bynkDeliver<T>(queue: string, body: unknown, delivery: { attempts: number; sentAt: number } | undefined, run: (batch: __BynkQueueBatch, exec: __BynkJobExec) => Promise<void>): Promise<T> {
-  const wire: unknown = globalThis.JSON.parse(globalThis.JSON.stringify(body ?? null));
-  let verdict: { tag: "Ack" } | { tag: "Retry"; reason: string } | undefined;
-  let reason = "";
-  const message: __BynkQueueMessage = {
-    id: "bynk-test-message-1", timestamp: new globalThis.Date(delivery?.sentAt ?? 0), attempts: delivery?.attempts ?? 1, body: wire,
-    ack(): void { verdict ??= { tag: "Ack" }; },
-    retry(): void { verdict ??= { tag: "Retry", reason }; },
-  };
-  const batch: __BynkQueueBatch = { queue, messages: [message], ackAll(): void { message.ack(); }, retryAll(): void { message.retry(); } };
-  const exec = __bynkJobExec();
-  const log = globalThis.console.error;
-  const prefix = `queue ${queue} `;
-  // The entry logs why it retries; that becomes the `Retry`'s reason.
-  globalThis.console.error = (...args: unknown[]): void => {
-    const label = args[0];
-    if (typeof label !== "string" || !label.startsWith(prefix)) { log(...args); return; }
-    const what = label.slice(prefix.length);
-    const detail = typeof args[1] === "string" ? args[1] : __bynkShow(args[1]);
-    reason = what === "retry" ? detail : `${what}: ${detail}`;
-  };
-  try {
-    await __bynkJobSettle(exec, run(batch, exec));
-  } catch (e) {
-    throw __bynkFault(`the consumer of queue "${queue}"`, e);
-  } finally {
-    globalThis.console.error = log;
-  }
-  return (verdict ?? { tag: "Retry", reason: "the consumer neither acked nor retried the message" }) as T;
-}
+<<bynk-shared: testing/jobs>>
 async function __sysdrive_schedule_sweeper_0() {
   const __h = __makeHarness();
   return __bynkScheduled<Awaited<ReturnType<typeof __ns_ops_reaper.sweeper.cron_sweeper_0>>>("0 1 * * *", (exec) => worker___ns_ops_reaper.scheduled({ cron: "0 1 * * *", scheduledTime: 0 }, __h.env___ns_ops_reaper, exec));
@@ -333,19 +183,7 @@ async function test_at_system__a_run_key_sweeps_once_at_the_same_time() {
   }
 }
 
-type CaseResult = {
-  name: string;
-  pass: boolean;
-  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
-  durationMs: number;
-  retries?: number;
-  kind?: string;
-  seed?: string;
-  counterexample?: string;
-};
-const __bynkCasePerformance = (globalThis as unknown as { performance?: { now(): number } }).performance;
-const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
-const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
+<<bynk-shared: testing/case_timing>>
 
 export const __bynkCases: readonly string[] = ["at system: none", "at system: the time alone", "at system: the schedule alone", "at system: the schedule, then the time", "at system: the time, then the schedule", "at system: a run key sweeps once at the same time"];
 
