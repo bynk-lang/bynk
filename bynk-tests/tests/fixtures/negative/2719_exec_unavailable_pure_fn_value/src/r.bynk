@@ -3,7 +3,7 @@ context r
 consumes bynk
 
 fn tick(n: Int) -> Effect[()] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(())
 }
 

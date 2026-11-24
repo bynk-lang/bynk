@@ -680,13 +680,15 @@ impl<'a> Parser<'a> {
                             span,
                         };
                         self.deepen_spine(e.span)?;
-                    } else if let (ExprKind::IntLit { value: v, .. }, Some(unit)) =
-                        (&e.kind, DurationUnit::from_name(&member.name))
-                    {
+                    } else if let ExprKind::IntLit { value: v, .. } = &e.kind {
                         // v0.86 (ADR 0112): `<int-literal>.<unit>` is a `Duration`
                         // literal, not a field access — an integer-literal
-                        // receiver has no fields, so this is unambiguous.
+                        // receiver has no fields, so this is unambiguous (#3947:
+                        // a word that names no unit is `unknown_unit`, and the
+                        // unit must agree with the number).
                         let value = *v;
+                        let unit =
+                            duration::resolve_duration_unit(value, &member.name, member.span)?;
                         let span = e.span.merge(member.span);
                         let millis = value.checked_mul(unit.millis()).ok_or_else(|| {
                             CompileError::new(
@@ -694,7 +696,7 @@ impl<'a> Parser<'a> {
                                 span,
                                 format!(
                                     "the duration `{value}.{}` overflows the millisecond range",
-                                    unit.name()
+                                    unit.name_for(value)
                                 ),
                             )
                         })?;

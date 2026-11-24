@@ -48,7 +48,7 @@ mod tests {
     fn what_a_remote_run_cannot_honour_is_refused() {
         for (body, code) in [
             (
-                "    advance Clock by 1.minutes\n    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)",
+                "    advance Clock by 1.minute\n    let n <- api.GET(\"/n\") by Visitor\n    expect n is Ok(1)",
                 "bynk.test.remote_unsupported_advance",
             ),
             (

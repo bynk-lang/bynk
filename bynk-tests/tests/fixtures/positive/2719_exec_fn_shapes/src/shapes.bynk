@@ -58,7 +58,7 @@ fn viaLambda(f: (Int) -> Effect[()], n: Int) -> Effect[Int] {
 
 // A function named as a value.
 fn tick(n: Int) -> Effect[()] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(())
 }
 
@@ -75,12 +75,12 @@ type Box = { n: Int }
 
 // A method and a static method.
 fn Box.bump(self, d: Int) -> Effect[Int] {
-	let r <- Effect.pure(self.n + d).within(1.seconds)
+	let r <- Effect.pure(self.n + d).within(1.second)
 	Effect.pure(self.n + d)
 }
 
 fn Box.make(n: Int) -> Effect[Box] {
-	let _ <- Effect.pure(n).within(1.seconds)
+	let _ <- Effect.pure(n).within(1.second)
 	Effect.pure(Box { n: n })
 }
 

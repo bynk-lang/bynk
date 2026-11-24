@@ -6,7 +6,7 @@ commons clockwork
 // to raw epoch millis.
 
 fn horizon(now: Instant) -> Instant {
-  now + 1.hours
+  now + 1.hour
 }
 
 fn rewind(now: Instant) -> Instant {

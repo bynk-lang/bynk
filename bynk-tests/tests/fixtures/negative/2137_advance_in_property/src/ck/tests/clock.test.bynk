@@ -3,7 +3,7 @@
 suite ck.clock {
   property "time moves on" {
     for all n: Int {
-      advance Clock by 1.minutes
+      advance Clock by 1.minute
       expect n == n
     }
   }

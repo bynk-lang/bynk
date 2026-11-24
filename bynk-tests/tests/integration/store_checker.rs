@@ -409,7 +409,7 @@ fn valid_cache_agent_compiles_cleanly() {
     let cs = codes(
         "cacheok",
         &cache_agent(
-            "store c: Cache[String, Int] @ttl(1.minutes)",
+            "store c: Cache[String, Int] @ttl(1.minute)",
             " given Clock",
             "let _ <- c.put(k, p)",
         ),
@@ -438,7 +438,7 @@ fn cache_op_without_given_clock_is_rejected() {
     let cs = codes(
         "cacheclock",
         &cache_agent(
-            "store c: Cache[String, Int] @ttl(1.minutes)",
+            "store c: Cache[String, Int] @ttl(1.minute)",
             "",
             "let _ <- c.put(k, p)",
         ),
@@ -455,7 +455,7 @@ fn cache_remove_needs_no_clock() {
     let cs = codes(
         "cacherm",
         &cache_agent(
-            "store c: Cache[String, Int] @ttl(1.minutes)",
+            "store c: Cache[String, Int] @ttl(1.minute)",
             "",
             "let _ <- c.remove(k)",
         ),
@@ -471,7 +471,7 @@ fn cache_unknown_op_is_rejected() {
     let cs = codes(
         "cacheop",
         &cache_agent(
-            "store c: Cache[String, Int] @ttl(1.minutes)",
+            "store c: Cache[String, Int] @ttl(1.minute)",
             " given Clock",
             "let _ <- c.frobnicate(k)",
         ),

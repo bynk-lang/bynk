@@ -277,7 +277,7 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         ExprKind::FloatLit { lexeme, .. } => lexeme.clone(),
         ExprKind::DecimalLit { lexeme, .. } => lexeme.clone(),
         // v0.86 (ADR 0112): a duration literal `<value>.<unit>`.
-        ExprKind::DurationLit { value, unit, .. } => format!("{value}.{}", unit.name()),
+        ExprKind::DurationLit { value, unit, .. } => format!("{value}.{}", unit.name_for(*value)),
         ExprKind::StrLit(s) => {
             written_string_form(e, Some(s)).unwrap_or_else(|| format!("\"{}\"", escape_string(s)))
         }

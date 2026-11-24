@@ -34,7 +34,7 @@ service quotes {
 // up on is still performed.
 service booking {
 	on call(id: Int) -> Effect[Bool] by Caller given Ledger {
-		let r <- Ledger.book(id).within(1.seconds)
+		let r <- Ledger.book(id).within(1.second)
 		Effect.pure(r.isOk())
 	}
 }

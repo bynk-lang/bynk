@@ -36,5 +36,5 @@ lazily, then shapes it with the pure `summarise` helper from `commons digest`.
 
 The HTTP service records with `POST /events` and reads with `GET /events/recent`
 (last 20). The windowed routes read the clock at the boundary and do `Instant` minus
-`Duration` arithmetic: `GET /events/last-hour` passes `now - 1.hours` into
+`Duration` arithmetic: `GET /events/last-hour` passes `now - 1.hour` into
 `breakdown`, and `GET /events/last-day` passes `now - 24.hours` into `countSince`.

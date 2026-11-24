@@ -2,7 +2,7 @@
 // which a run against a real runtime would also refuse, never runs.
 suite shop.api as system {
   case "the project's own case" {
-    advance Clock by 1.seconds
+    advance Clock by 1.second
     expect false
   }
 }

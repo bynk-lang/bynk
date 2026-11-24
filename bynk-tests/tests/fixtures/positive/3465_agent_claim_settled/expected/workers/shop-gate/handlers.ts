@@ -106,8 +106,8 @@ export class Gate {
       __r = await (async () => {
         const __state = { ...(await this.loadState()) };
         const __result = await (async () => {
-          const __letElse838 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.burst::${job}`, 3600000));
-          switch (__letElse838.tag) {
+          const __letElse837 = await (await (async (__k: string, __t: number) => __claims.note(__k, await deps.Idempotency.claim(__k, __claims.lease(__t)), __t))(`shop.gate.Gate.burst::${job}`, 3600000));
+          switch (__letElse837.tag) {
             case "Claimed": {
               __state.taken = 99;
               return Ok("done");

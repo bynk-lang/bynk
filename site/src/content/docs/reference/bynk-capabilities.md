@@ -67,7 +67,7 @@ on reserve(orderId: OrderId) -> ReserveOutcome given Idempotency {
 
 Both operations are written with their type argument here (`dedup[ReserveOutcome]`,
 `remember[ReserveOutcome]`). `dedup` has no argument that mentions `T`, so it is always written;
-`remember` takes `T` from its `value` argument, so `Idempotency.remember(key, outcome, 1.hours)`
+`remember` takes `T` from its `value` argument, so `Idempotency.remember(key, outcome, 1.hour)`
 infers it (see [Capabilities & providers](/reference/capabilities/#generic-operations)). Calling
 `dedup` alone does **not** cache anything — `remember` is what writes the entry, so
 forgetting to call it after a cache miss means that key is recomputed every time, not an
@@ -628,7 +628,7 @@ entry with `simple = { limit = 20, period = 60 }`.
 
 - `@limit(n)` is the number of calls allowed per key in one window: a positive
   `Int` literal.
-- `@period(d)` is the window: `10.seconds` or `60.seconds` (`1.minutes` is the
+- `@period(d)` is the window: `10.seconds` or `60.seconds` (`1.minute` is the
   same), the only two the platform offers.
 - Both are required (`bynk.capability.missing_option`). A limit that isn't a
   positive `Int` literal, or another window, is `bynk.capability.invalid_option`.

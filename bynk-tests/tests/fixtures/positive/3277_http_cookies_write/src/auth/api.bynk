@@ -23,7 +23,7 @@ service api from http {
 	on POST("/prefs") () -> Effect[HttpResult[()]] by v: Visitor {
 		NoContent
 			.withCookie(Cookie { name: "theme", value: "dark", path: "/app" })
-			.withCookie(Cookie { name: "lang", value: "fr", maxAge: Some(1.days) })
+			.withCookie(Cookie { name: "lang", value: "fr", maxAge: Some(1.day) })
 	}
 
 	// Deleting a cookie sends it again, empty and already expired.

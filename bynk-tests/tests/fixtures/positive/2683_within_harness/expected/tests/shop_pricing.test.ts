@@ -495,7 +495,7 @@ async function test_a_stub_faster_than_the_deadline_is_Ok() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:15:12", 570, 585, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
+    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:15:12", 569, 584, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -528,7 +528,7 @@ async function test_a_tie_goes_to_the_effect() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:21:12", 718, 733, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
+    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:21:12", 717, 732, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -561,7 +561,7 @@ async function test_a_stub_that_never_finishes_times_out() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:27:12", 858, 885, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
+    if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:27:12", 857, 884, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -594,7 +594,7 @@ async function test_a_stub_with_no_latency_resolves_at_once() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "quoted 9")) { throw __bynkExpectFailure("tests/pricing.bynk:33:12", 1017, 1032, "expect r == \"quoted 9\"\n  expected: r == \"quoted 9\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 9"))); }
+    if (!(r === "quoted 9")) { throw __bynkExpectFailure("tests/pricing.bynk:33:12", 1016, 1031, "expect r == \"quoted 9\"\n  expected: r == \"quoted 9\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 9"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -628,12 +628,12 @@ async function test_the_abandoned_call_is_observed_once_the_case_settles() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(4, deps));
-    if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:39:12", 1193, 1220, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
-    if (!(((__obs.log["Pricing.quote"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/pricing.bynk:40:12", 1232, 1257, "expect Pricing.quote called once"); }
+    if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:39:12", 1192, 1219, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
+    if (!(((__obs.log["Pricing.quote"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/pricing.bynk:40:12", 1231, 1256, "expect Pricing.quote called once"); }
     if (!((((__obs.log["Pricing.quote"] ?? []).filter((__c: { args: unknown[] }) => {
       const { id } = { id: __c.args[0] } as __Pricing_quote_Call;
       return (id === 4);
-    }).length) >= 1))) { throw __bynkExpectFailure("tests/pricing.bynk:41:12", 1269, 1302, "expect Pricing.quote called with id == 4"); }
+    }).length) >= 1))) { throw __bynkExpectFailure("tests/pricing.bynk:41:12", 1268, 1301, "expect Pricing.quote called with id == 4"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -667,8 +667,8 @@ async function test_the_abandoned_effect_still_ran__the_clock_reached_its_comple
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, booking.call(1, deps));
-    if (!(r === false)) { throw __bynkExpectFailure("tests/pricing.bynk:47:12", 1475, 1485, "expect r == false\n  expected: r == false\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((false))); }
-    if (!(((__obs.log["Ledger.book"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/pricing.bynk:48:12", 1497, 1520, "expect Ledger.book called once"); }
+    if (!(r === false)) { throw __bynkExpectFailure("tests/pricing.bynk:47:12", 1474, 1484, "expect r == false\n  expected: r == false\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((false))); }
+    if (!(((__obs.log["Ledger.book"] ?? []).length === (1)))) { throw __bynkExpectFailure("tests/pricing.bynk:48:12", 1496, 1519, "expect Ledger.book called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -701,7 +701,7 @@ async function test_a_fast_effect_still_gives_the_Ok_branch() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, booking.call(1, deps));
-    if (!(r === true)) { throw __bynkExpectFailure("tests/pricing.bynk:54:12", 1675, 1684, "expect r == true\n  expected: r == true\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((true))); }
+    if (!(r === true)) { throw __bynkExpectFailure("tests/pricing.bynk:54:12", 1674, 1683, "expect r == true\n  expected: r == true\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((true))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -735,8 +735,8 @@ async function test_a_lambda_in_the_handler_bounds_each_call_alone() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const n = await __bynkSettleVirtual(deps, many.call([1, 2], deps));
-    if (!(n === 2)) { throw __bynkExpectFailure("tests/pricing.bynk:61:12", 1894, 1900, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
-    if (!(((__obs.log["Pricing.quote"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/pricing.bynk:62:12", 1912, 1940, "expect Pricing.quote called 2 times"); }
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/pricing.bynk:61:12", 1892, 1898, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    if (!(((__obs.log["Pricing.quote"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/pricing.bynk:62:12", 1910, 1938, "expect Pricing.quote called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -770,7 +770,7 @@ async function test_advance_Clock_fires_nothing_when_no_timer_is_due() {
     type Uuid = __ns_bynk.Uuid;
     __bynkAdvanceClock(10000);
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:69:12", 2129, 2144, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
+    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:69:12", 2126, 2141, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -804,8 +804,8 @@ async function test_in_a_par_block_each_within_bounds_its_own_effect() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, together.call(5, deps));
-    if (!(r === "true false")) { throw __bynkExpectFailure("tests/pricing.bynk:76:12", 2355, 2372, "expect r == \"true false\"\n  expected: r == \"true false\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("true false"))); }
-    if (!(((__obs.log["Pricing.quote"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/pricing.bynk:77:12", 2384, 2412, "expect Pricing.quote called 2 times"); }
+    if (!(r === "true false")) { throw __bynkExpectFailure("tests/pricing.bynk:76:12", 2351, 2368, "expect r == \"true false\"\n  expected: r == \"true false\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("true false"))); }
+    if (!(((__obs.log["Pricing.quote"] ?? []).length === (2)))) { throw __bynkExpectFailure("tests/pricing.bynk:77:12", 2380, 2408, "expect Pricing.quote called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -838,7 +838,7 @@ async function test_a_real_provider_call_under_within_is_not_timed_out() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(3, deps));
-    if (!(r === "quoted 3")) { throw __bynkExpectFailure("tests/pricing.bynk:82:12", 2519, 2534, "expect r == \"quoted 3\"\n  expected: r == \"quoted 3\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 3"))); }
+    if (!(r === "quoted 3")) { throw __bynkExpectFailure("tests/pricing.bynk:82:12", 2515, 2530, "expect r == \"quoted 3\"\n  expected: r == \"quoted 3\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 3"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -871,7 +871,7 @@ async function test_a_latency_stub_drives_the_same_timeout_at_integration() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:88:12", 2711, 2738, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
+    if (!(r === "timed out after 2000")) { throw __bynkExpectFailure("tests/pricing.bynk:88:12", 2707, 2734, "expect r == \"timed out after 2000\"\n  expected: r == \"timed out after 2000\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("timed out after 2000"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -904,7 +904,7 @@ async function test_a_latency_stub_that_wins_at_integration_is_Ok() {
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
     const r = await __bynkSettleVirtual(deps, quotes.call(1, deps));
-    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:94:12", 2907, 2922, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
+    if (!(r === "quoted 7")) { throw __bynkExpectFailure("tests/pricing.bynk:94:12", 2902, 2917, "expect r == \"quoted 7\"\n  expected: r == \"quoted 7\"\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow(("quoted 7"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

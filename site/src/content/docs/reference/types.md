@@ -166,7 +166,12 @@ Pairing a `Decimal` with an ISO 4217 currency is not part of the type; a
 
 `Duration` (v0.86) is a **span of time**, erased to a `number` of milliseconds. A
 `Duration` literal is `<int>.<unit>` over a closed unit set — `5.minutes`,
-`30.seconds`, `1.hours`, `2.days`, `100.milliseconds`. The operator surface is
+`30.seconds`, `1.hour`, `2.days`, `100.milliseconds`. The unit agrees with its
+number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with
+every other number, `0` included (`0.seconds`). `1.hours` and `5.hour` are
+`bynk.duration.unit_agreement`, with a fix; any other word after an integer
+literal (`5.hr`, `1.week`) is `bynk.duration.unknown_unit`. A negative duration is
+the negation of a literal (`-1.hour`). The operator surface is
 `Duration ± Duration`, `Duration * Int` / `Int * Duration` (scalar scaling), and
 `Duration` comparison (subtraction is unclamped — may go negative). Convert
 explicitly: `d.toMillis() -> Int` and the static `Duration.millis(n: Int) ->

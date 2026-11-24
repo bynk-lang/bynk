@@ -15,7 +15,7 @@ service api from http {
   cors {
     origins: ["https://app.example.com"],
     credentials: false,
-    maxAge: 1.hours,
+    maxAge: 1.hour,
   }
 
   // Service-wide default ceiling: 1 MiB.

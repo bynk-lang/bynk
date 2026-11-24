@@ -1,0 +1,2 @@
+bynk.duration.unit_agreement
+`1` takes the singular unit: `1.hour`

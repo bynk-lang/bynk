@@ -228,6 +228,10 @@ pub fn complete_in(
     if let Some((record, field)) = cookie_field_receiver(line_prefix) {
         return cookie_field_members(&record, &field, doc_text, files);
     }
+    // 3d. #3947: `<int>.<cursor>` — the `Duration` units that agree with the number.
+    if let Some(units) = crate::duration_completion::duration_unit_candidates(line_prefix) {
+        return units;
+    }
     // 4. `UpperIdent.<cursor>` — name-receiver members: sum variants, refined/
     //    opaque `of`/`unsafe`, capability ops, or built-in type statics.
     if let Some(receiver) = member_receiver(line_prefix) {
@@ -3975,11 +3979,18 @@ mod tests {
 
     #[test]
     fn value_receiver_and_decimal_are_not_expression_positions() {
-        // A trailing `x.`/`1.` is a member/decimal context, not an expression
-        // start — `complete()` yields nothing (the value-receiver path is
-        // handler-side; see `record_value_and_decimal_receivers_yield_nothing`).
+        // A trailing `x.` is a member context, not an expression start —
+        // `complete()` yields nothing (the value-receiver path is handler-side;
+        // see `record_value_and_decimal_receivers_yield_nothing`). A trailing
+        // `1.` offers the `Duration` units (#3947), not expressions.
         assert!(complete("  let p = q.", "context a.b\n", None).is_empty());
-        assert!(complete("  let n = 1.", "context a.b\n", None).is_empty());
+        let units = complete("  let n = 1.", "context a.b\n", None);
+        assert!(
+            units
+                .iter()
+                .all(|c| c.detail.as_deref() == Some("`Duration` unit"))
+        );
+        assert_eq!(units.len(), 5);
     }
 
     /// Free `fn` names declared in a unit source (registry-driven test helper).
@@ -4443,7 +4454,7 @@ mod tests {
 
     #[test]
     fn a_signed_cookie_actor_offers_issue_and_expire() {
-        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hours), identity = UserId }\n";
+        let doc = "context a.b\n\ntype UserId = String where NonEmpty\n\nactor User { auth = SignedCookie(secret = \"K\", ttl = 1.hour), identity = UserId }\n";
         let items = complete("    User.", doc, None);
         let issue = find(&items, "issue", CompletionKind::Member).expect("`issue` offered");
         assert_eq!(
@@ -4640,8 +4651,12 @@ fn Box.size(self) -> Int { 1 }
         assert!(complete("  Point.", doc, None).is_empty(), "record");
         // A lowercase value receiver is deferred to slice 3.
         assert!(complete("  let p = q.", doc, None).is_empty(), "value");
-        // A decimal literal is not a member access.
-        assert!(complete("  let n = 1.", doc, None).is_empty(), "decimal");
+        // An integer literal's `.` is a `Duration` unit (#3947), singular after `1`.
+        let units: Vec<_> = complete("  let n = 1.", doc, None)
+            .into_iter()
+            .map(|c| c.label)
+            .collect();
+        assert_eq!(units, ["millisecond", "second", "minute", "hour", "day"]);
     }
 
     #[test]

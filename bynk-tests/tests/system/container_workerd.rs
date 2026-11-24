@@ -43,7 +43,7 @@ const SOURCE: &str = "context box.smoke
 consumes bynk
 consumes bynk.cloudflare { Container }
 
-capability Echo = Container @build(\"containers/echo\") @port(8080) @sleepAfter(1.minutes)
+capability Echo = Container @build(\"containers/echo\") @port(8080) @sleepAfter(1.minute)
 
 service api from http {
 \ton GET(\"/boot\") () -> Effect[HttpResult[String]] by Visitor {

@@ -16,6 +16,6 @@ agent Feed {
     store n: Cell[Int] = 0
 
     on call quote() -> Effect[Result[Int, TimedOut]] {
-        Slow("a").get().within(1.seconds)
+        Slow("a").get().within(1.second)
     }
 }
