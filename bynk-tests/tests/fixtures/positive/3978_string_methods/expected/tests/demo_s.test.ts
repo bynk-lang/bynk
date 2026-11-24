@@ -81,7 +81,8 @@ function __makeTestDeps() {
 async function test_padStart_pads_to_a_width__and_leaves_a_wide_string_alone() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     if (!(invoiceNo(42) === "INV-000042")) { throw __bynkExpectFailure("tests/demo/s.bynk:4:9", 88, 117, "expect invoiceNo(42) == \"INV-000042\"\n  expected: invoiceNo(42) == \"INV-000042\"\n  actual:   " + __bynkShow((invoiceNo(42))) + " == " + __bynkShow(("INV-000042"))); }
     if (!(__bynkPad("hello", 3, "-", true) === "hello")) { throw __bynkExpectFailure("tests/demo/s.bynk:5:9", 126, 161, "expect \"hello\".padStart(3, \"-\") == \"hello\"\n  expected: \"hello\".padStart(3, \"-\") == \"hello\"\n  actual:   " + __bynkShow((__bynkPad("hello", 3, "-", true))) + " == " + __bynkShow(("hello"))); }
     if (!(__bynkPad("x", 6, "ab", true) === "ababax")) { throw __bynkExpectFailure("tests/demo/s.bynk:6:9", 170, 203, "expect \"x\".padStart(6, \"ab\") == \"ababax\"\n  expected: \"x\".padStart(6, \"ab\") == \"ababax\"\n  actual:   " + __bynkShow((__bynkPad("x", 6, "ab", true))) + " == " + __bynkShow(("ababax"))); }
@@ -98,7 +99,8 @@ async function test_padStart_pads_to_a_width__and_leaves_a_wide_string_alone() {
 async function test_padStart_and_padEnd_count_code_points__so_an_astral_character_is_one_position() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     if (!(__bynkPad("😀", 4, "-", true) === "---😀")) { throw __bynkExpectFailure("tests/demo/s.bynk:10:9", 302, 338, "expect \"😀\".padStart(4, \"-\") == \"---😀\"\n  expected: \"😀\".padStart(4, \"-\") == \"---😀\"\n  actual:   " + __bynkShow((__bynkPad("😀", 4, "-", true))) + " == " + __bynkShow(("---😀"))); }
     if (!(__bynkPad("😀", 3, "-", false) === "😀--")) { throw __bynkExpectFailure("tests/demo/s.bynk:11:9", 347, 380, "expect \"😀\".padEnd(3, \"-\") == \"😀--\"\n  expected: \"😀\".padEnd(3, \"-\") == \"😀--\"\n  actual:   " + __bynkShow((__bynkPad("😀", 3, "-", false))) + " == " + __bynkShow(("😀--"))); }
     if (!(__bynkPad("a", 3, "😀", true) === "😀😀a")) { throw __bynkExpectFailure("tests/demo/s.bynk:12:9", 389, 427, "expect \"a\".padStart(3, \"😀\") == \"😀😀a\"\n  expected: \"a\".padStart(3, \"😀\") == \"😀😀a\"\n  actual:   " + __bynkShow((__bynkPad("a", 3, "😀", true))) + " == " + __bynkShow(("😀😀a"))); }
@@ -115,7 +117,8 @@ async function test_padStart_and_padEnd_count_code_points__so_an_astral_characte
 async function test_padEnd_cuts_a_multi_character_fill_to_fit() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     if (!(rightAligned("x", 6) === "xababa")) { throw __bynkExpectFailure("tests/demo/s.bynk:16:9", 490, 522, "expect rightAligned(\"x\", 6) == \"xababa\"\n  expected: rightAligned(\"x\", 6) == \"xababa\"\n  actual:   " + __bynkShow((rightAligned("x", 6))) + " == " + __bynkShow(("xababa"))); }
     return { pass: true };
   } catch (e) {
@@ -130,7 +133,8 @@ async function test_padEnd_cuts_a_multi_character_fill_to_fit() {
 async function test_join_on_a_List_String___with_an_empty_list() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     const none: readonly string[] = [];
     if (!(csvRow(["a", "b", "c"]) === "a,b,c")) { throw __bynkExpectFailure("tests/demo/s.bynk:21:9", 615, 649, "expect csvRow([\"a\", \"b\", \"c\"]) == \"a,b,c\"\n  expected: csvRow([\"a\", \"b\", \"c\"]) == \"a,b,c\"\n  actual:   " + __bynkShow((csvRow(["a", "b", "c"]))) + " == " + __bynkShow(("a,b,c"))); }
     if (!(csvRow(none) === "")) { throw __bynkExpectFailure("tests/demo/s.bynk:22:9", 658, 676, "expect csvRow(none) == \"\"\n  expected: csvRow(none) == \"\"\n  actual:   " + __bynkShow((csvRow(none))) + " == " + __bynkShow((""))); }
@@ -148,7 +152,8 @@ async function test_join_on_a_List_String___with_an_empty_list() {
 async function test_isEmpty__trimStart_and_trimEnd() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     if (!(isBlank("   "))) { throw __bynkExpectFailure("tests/demo/s.bynk:27:9", 763, 777, "expect isBlank(\"   \")"); }
     if (!(!isBlank("  x"))) { throw __bynkExpectFailure("tests/demo/s.bynk:28:9", 786, 801, "expect !isBlank(\"  x\")"); }
     if (!("".length === 0)) { throw __bynkExpectFailure("tests/demo/s.bynk:29:9", 810, 822, "expect \"\".isEmpty()"); }
@@ -168,7 +173,8 @@ async function test_isEmpty__trimStart_and_trimEnd() {
 async function test_lines_splits_on_LF_and_CRLF__with_no_empty_last_line() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     const none: readonly string[] = [];
     if (!(__bynkEq(lineList("a\nb\nc"), ["a", "b", "c"]))) { throw __bynkExpectFailure("tests/demo/s.bynk:37:9", 1039, 1077, "expect lineList(\"a\\nb\\nc\") == [\"a\", \"b\", \"c\"]\n  expected: lineList(\"a\\nb\\nc\") == [\"a\", \"b\", \"c\"]\n  actual:   " + __bynkShow((lineList("a\nb\nc"))) + " == " + __bynkShow((["a", "b", "c"]))); }
     if (!(__bynkEq(lineList("a\r\nb\r\n"), ["a", "b"]))) { throw __bynkExpectFailure("tests/demo/s.bynk:38:9", 1086, 1122, "expect lineList(\"a\\r\\nb\\r\\n\") == [\"a\", \"b\"]\n  expected: lineList(\"a\\r\\nb\\r\\n\") == [\"a\", \"b\"]\n  actual:   " + __bynkShow((lineList("a\r\nb\r\n"))) + " == " + __bynkShow((["a", "b"]))); }
@@ -188,7 +194,8 @@ async function test_lines_splits_on_LF_and_CRLF__with_no_empty_last_line() {
 async function test_lastIndexOf__and_replaceFirst_inserting_literally() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     if (!(__bynkEq(lastDot("a.b.c"), Some(3)))) { throw __bynkExpectFailure("tests/demo/s.bynk:45:9", 1292, 1319, "expect lastDot(\"a.b.c\") == Some(3)\n  expected: lastDot(\"a.b.c\") == Some(3)\n  actual:   " + __bynkShow((lastDot("a.b.c"))) + " == " + __bynkShow((Some(3)))); }
     if (!(__bynkEq(lastDot("abc"), None))) { throw __bynkExpectFailure("tests/demo/s.bynk:46:9", 1328, 1350, "expect lastDot(\"abc\") == None\n  expected: lastDot(\"abc\") == None\n  actual:   " + __bynkShow((lastDot("abc"))) + " == " + __bynkShow((None))); }
     if (!(firstOnly("a-a-a", "a", "b") === "b-a-a")) { throw __bynkExpectFailure("tests/demo/s.bynk:47:9", 1359, 1398, "expect firstOnly(\"a-a-a\", \"a\", \"b\") == \"b-a-a\"\n  expected: firstOnly(\"a-a-a\", \"a\", \"b\") == \"b-a-a\"\n  actual:   " + __bynkShow((firstOnly("a-a-a", "a", "b"))) + " == " + __bynkShow(("b-a-a"))); }
@@ -207,9 +214,26 @@ async function test_lastIndexOf__and_replaceFirst_inserting_literally() {
 async function test_repeat_makes_n_copies() {
   try {
     const deps = {};
-    const { csvRow, firstOnly, invoiceNo, isBlank, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
     if (!(stars(3) === "***")) { throw __bynkExpectFailure("tests/demo/s.bynk:53:9", 1535, 1552, "expect stars(3) == \"***\"\n  expected: stars(3) == \"***\"\n  actual:   " + __bynkShow((stars(3))) + " == " + __bynkShow(("***"))); }
     if (!(stars(0) === "")) { throw __bynkExpectFailure("tests/demo/s.bynk:54:9", 1561, 1575, "expect stars(0) == \"\"\n  expected: stars(0) == \"\"\n  actual:   " + __bynkShow((stars(0))) + " == " + __bynkShow((""))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_join_on_a_list_of_refined_strings() {
+  try {
+    const deps = {};
+    const { Tag, csvRow, firstOnly, invoiceNo, isBlank, joinTags, lastDot, lineCount, lineList, rightAligned, stars, trimmedBoth } = __ns_demo_s;
+    type Tag = __ns_demo_s.Tag;
+    if (!(joinTags([("a" as any), ("bc" as any)]) === "a|bc")) { throw __bynkExpectFailure("tests/demo/s.bynk:58:9", 1630, 1661, "expect joinTags([\"a\", \"bc\"]) == \"a|bc\"\n  expected: joinTags([\"a\", \"bc\"]) == \"a|bc\"\n  actual:   " + __bynkShow((joinTags([("a" as any), ("bc" as any)]))) + " == " + __bynkShow(("a|bc"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -233,7 +257,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["padStart pads to a width, and leaves a wide string alone", "padStart and padEnd count code points, so an astral character is one position", "padEnd cuts a multi-character fill to fit", "join on a List[String], with an empty list", "isEmpty, trimStart and trimEnd", "lines splits on LF and CRLF, with no empty last line", "lastIndexOf, and replaceFirst inserting literally", "repeat makes n copies"];
+export const __bynkCases: readonly string[] = ["padStart pads to a width, and leaves a wide string alone", "padStart and padEnd count code points, so an astral character is one position", "padEnd cuts a multi-character fill to fit", "join on a List[String], with an empty list", "isEmpty, trimStart and trimEnd", "lines splits on LF and CRLF, with no empty last line", "lastIndexOf, and replaceFirst inserting literally", "repeat makes n copies", "join on a list of refined strings"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -283,6 +307,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("repeat makes n copies")) {
     const started = __bynkCaseNow();
     const r = { name: "repeat makes n copies", ...(await test_repeat_makes_n_copies()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("join on a list of refined strings")) {
+    const started = __bynkCaseNow();
+    const r = { name: "join on a list of refined strings", ...(await test_join_on_a_list_of_refined_strings()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

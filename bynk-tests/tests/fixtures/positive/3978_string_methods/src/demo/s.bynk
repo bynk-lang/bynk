@@ -3,6 +3,8 @@
 ---
 commons demo.s
 
+type Tag = String where MinLength(1)
+
 fn invoiceNo(n: Int) -> String {
 	"INV-\(n.toString().padStart(6, "0"))"
 }
@@ -41,4 +43,9 @@ fn firstOnly(s: String, old: String, new: String) -> String {
 
 fn stars(n: Int) -> String {
 	"*".repeat(n)
+}
+
+// A refined `String` element widens to its base.
+fn joinTags(tags: List[Tag]) -> String {
+	tags.join("|")
 }

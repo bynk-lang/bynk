@@ -864,7 +864,7 @@ pub(crate) fn check_list_kernel_method(
             args, elem, span, false, true, ctx,
         )?))),
         Some(ListOp::Join) if args.len() == 1 => {
-            super::string_more::check_list_join(method, args, elem, span, ctx)
+            super::string_more::check_list_join(method, args, elem, ctx)
         }
         Some(ListOp::Join) => {
             Some(tys.intern(Ty::List(check_pred_join(args, elem, span, false, ctx)?)))

@@ -53,3 +53,7 @@ case "repeat makes n copies" {
 	expect stars(3) == "***"
 	expect stars(0) == ""
 }
+
+case "join on a list of refined strings" {
+	expect joinTags(["a", "bc"]) == "a|bc"
+}

@@ -45,18 +45,25 @@ pub(super) fn check_pad_fill(method: &Ident, args: &[Expr], ctx: &mut Ctx) {
 }
 
 /// `xs.join(sep)` on a `List[String]`: the elements joined with `sep`, `""` for an
-/// empty list. Any other element type is `bynk.types.method_not_found` with a note,
-/// since there is no implicit `toString`.
+/// empty list. A refined `String` (`List[Email]`) widens to its base, as it does for the
+/// free `bynk.string.join`, so the deprecation's fix keeps compiling; an opaque one does
+/// not. Any other element type is `bynk.types.method_not_found` with a note, since there is
+/// no implicit `toString`; an element that already failed to type is reported once, there.
 pub(super) fn check_list_join(
     method: &Ident,
     args: &[Expr],
     elem: TyId,
-    span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let string = tys.intern(Ty::Base(BaseType::String));
-    if elem != string {
+    if elem.is_error(tys) {
+        for a in args {
+            let _ = type_of(a, None, ctx);
+        }
+        return None;
+    }
+    if elem.base(tys) != Some(BaseType::String) {
         ctx.errors.push(
             CompileError::new(
                 "bynk.types.method_not_found",
@@ -74,6 +81,5 @@ pub(super) fn check_list_join(
         return None;
     }
     check_arg(&args[0], string, "the `List.join` separator", ctx);
-    let _ = span;
     Some(string)
 }
