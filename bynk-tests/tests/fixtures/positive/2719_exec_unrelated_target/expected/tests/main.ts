@@ -9,7 +9,7 @@ import * as test_1 from "./timed.test.js";
 type Result = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs?: number;
   retries?: number;
   kind?: string;
@@ -108,7 +108,7 @@ async function main() {
           emit({ type: "case", suite, name: r.name, outcome: "pass", detached_failures: (detached.length > 0 ? detached.length : undefined), detached: (detached.length > 0 ? detached : undefined), durationMs: r.durationMs });
         } else {
           failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.error && r.error.violation, refusals: r.error && r.error.refusals, detached_failures: (detached.length > 0 ? detached.length : undefined), detached: (detached.length > 0 ? detached : undefined), durationMs: r.durationMs });
+          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.error && r.error.violation, refusals: r.error && r.error.refusals, actual: r.error && r.error.actual, detached_failures: (detached.length > 0 ? detached.length : undefined), detached: (detached.length > 0 ? detached : undefined), durationMs: r.durationMs });
         }
       }
       await runSelected(m.run, report);

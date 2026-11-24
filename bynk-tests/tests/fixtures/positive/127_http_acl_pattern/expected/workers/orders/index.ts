@@ -2,7 +2,7 @@
 // Worker entry point for context `orders`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -51,7 +51,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_orders(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, handlers.__serialise_OrderView), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, handlers.__serialise_OrderView), request, ["Bynk realm=\"orders\""]), __security_api);
         }
       }
       if (__matchPath("/orders", path) !== null) {

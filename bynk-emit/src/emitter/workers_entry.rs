@@ -372,6 +372,7 @@ pub fn emit_worker_entry(
         visible_types,
         edge_cache,
         needs_locale_request,
+        context,
     );
 
     // v0.131 (ADR 0159): the per-service CORS policies. A `from http` service
@@ -550,7 +551,7 @@ pub fn emit_worker_entry(
 
     // 1.5. WebSocket upgrade dispatch: see `ws_upgrade_dispatch`.
     if !ws_open_routes.is_empty() {
-        try_body.push(ws_upgrade_dispatch(&ws_open_routes));
+        try_body.push(ws_upgrade_dispatch(&ws_open_routes, table, context));
         try_body.push(TsStmt::blank(None));
     }
 

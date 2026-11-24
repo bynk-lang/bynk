@@ -565,6 +565,17 @@ signature ([§7.3.4d](#734d-the-request-signature)) is checked under the key the
 callee holds for the edge from that caller, so a request whose caller is absent,
 or holds no key there, never reaches the dispatch.
 
+**The `401` challenge** (#3914). RFC 9110 §15.5.2 requires a `401` to carry a
+`WWW-Authenticate` challenge. The entry computes each route's challenges at compile time
+from its `by` actor(s) (one per sum member, in order) and the context's name as `realm`, and
+wraps the route's response in `applyChallenge(response, request, challenges)`, which appends
+one header line per challenge to a `401` that carries none: `Bearer realm="…"` for `Bearer`
+and `Oidc` (with `error="invalid_token"` when the request presented a bearer token),
+`Bynk-Signature realm="…", header="…"` for `Signature`, `Bynk-Cookie realm="…"` for
+`SignedCookie`, `Bynk realm="…"` otherwise. It wraps the seam's `401`, a handler's own
+`Unauthorized` and a `WebSocket` upgrade's refusal alike, inside `applyCors`, which adds
+`WWW-Authenticate` to `Access-Control-Expose-Headers` when the response has one.
+
 ### §7.3.4b The cross-context boundary codec (v0.176)
 
 Every value crossing a `workers` cross-context boundary is encoded and decoded by

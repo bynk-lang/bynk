@@ -3,7 +3,7 @@
 
 import { __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -52,7 +52,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_quote(body);
-          return __applySecurityHeaders(__httpResultToResponse(result, (__v: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalToString(__v) as __JsonValue), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalToString(__v) as __JsonValue), request, ["Bynk realm=\"shop\""]), __security_api);
         }
       }
       {
@@ -65,7 +65,7 @@ export default {
           const __raw_amount = __m.params["amount"];
           const amount = __raw_amount;
           const result = await surface.http_GET_price_Param_amount(amount);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalToString(__v) as __JsonValue, { weakEtag: true }), request), __security_api);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: { readonly coefficient: bigint; readonly scale: number }) => __bynkDecimalToString(__v) as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"shop\""]), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

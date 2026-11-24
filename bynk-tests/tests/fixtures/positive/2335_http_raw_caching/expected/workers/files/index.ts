@@ -2,7 +2,7 @@
 // Worker entry point for context `files`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyCache, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
@@ -38,7 +38,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/bad-tag", path) !== null) {
           __route = "GET /bad-tag";
           const result = await surface.http_GET_bad_tag();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_files);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"files\""]), __security_files);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -46,7 +46,7 @@ export default {
         if ((method === "GET" || method === "HEAD") && __matchPath("/big", path) !== null) {
           __route = "GET /big";
           const result = await surface.http_GET_big();
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_files);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"files\""]), __security_files);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -60,7 +60,7 @@ export default {
           const __raw_hex = __m.params["hex"];
           const hex = __raw_hex;
           const result = await surface.http_GET_dl_Param_hex(hex);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 31536000, "public", true), request), __security_files);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 31536000, "public", true), request), request, ["Bynk realm=\"files\""]), __security_files);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -74,7 +74,7 @@ export default {
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_GET_index_Param_name(name);
-          const __response = __applySecurityHeaders(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 60, "public"), request), __security_files);
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__applyCache(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), 60, "public"), request), request, ["Bynk realm=\"files\""]), __security_files);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

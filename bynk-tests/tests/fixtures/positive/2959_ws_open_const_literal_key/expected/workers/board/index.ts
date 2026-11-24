@@ -2,6 +2,7 @@
 // Worker entry point for context `board`.
 
 import { __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { __applyChallenge } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -40,7 +41,7 @@ export default {
         __route = "ws live";
         const __ws_user = url.searchParams.get("user");
         if (__ws_user === null) return new globalThis.Response("Missing parameter: user", { status: 400 });
-        return surface.ws_live_open(request, __ws_user);
+        return __applyChallenge(await surface.ws_live_open(request, __ws_user), request, ["Bynk realm=\"board\""]);
       }
 
       return new globalThis.Response("Not Found", { status: 404 });

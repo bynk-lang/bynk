@@ -11,18 +11,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -306,11 +320,11 @@ async function test_a_lone_signed_notice_is_accepted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_hook("hi", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "got hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:6:10", 250, 267, "expect r is Ok(\"got hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "got hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:6:10", 250, 267, "expect r is Ok(\"got hi\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -322,11 +336,11 @@ async function test_a_lone_notice_as_the_processor_is_accepted() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_hook("hi", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "got hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:11:10", 382, 399, "expect r is Ok(\"got hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "got hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:11:10", 382, 399, "expect r is Ok(\"got hi\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -338,11 +352,11 @@ async function test_a_notice_to_the_sum_route_as_the_processor_is_signed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_notify("hi", undefined, "", "Processor");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "signed hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:16:10", 526, 546, "expect r is Ok(\"signed hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "signed hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:16:10", 526, 546, "expect r is Ok(\"signed hi\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -354,11 +368,11 @@ async function test_a_notice_to_the_sum_route_as_a_user_carries_a_token() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_notify("hi", undefined, ("bob" as any), "User");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bob: hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:21:10", 674, 692, "expect r is Ok(\"bob: hi\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "bob: hi"))) { throw __bynkExpectFailure("tests/hooks.bynk:21:10", 674, 692, "expect r is Ok(\"bob: hi\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -372,13 +386,13 @@ async function test_unsigned__forged_and_stale_notices_to_the_sum_route_are_refu
     const none = await __sysdrive_noauth_api_http_POST_notify("hi", undefined, "");
     const forged = await __sysdrive_forged_api_http_POST_notify("hi", undefined, "");
     const stale = await __sysdrive_stale_api_http_POST_notify("hi", undefined, "");
-    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 932, 962, "expect none is Rejected(Unauthorized)"); }
-    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 972, 1004, "expect forged is Rejected(Unauthorized)"); }
-    if (!(((__c: boolean) => __c)(stale.tag === "Rejected" && stale.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:30:10", 1014, 1045, "expect stale is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(none.tag === "Rejected" && none.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:28:10", 932, 962, "expect none is Rejected(Unauthorized)", "none", () => __bynkShow(none)); }
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:29:10", 972, 1004, "expect forged is Rejected(Unauthorized)", "forged", () => __bynkShow(forged)); }
+    if (!(((__c: boolean) => __c)(stale.tag === "Rejected" && stale.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:30:10", 1014, 1045, "expect stale is Rejected(Unauthorized)", "stale", () => __bynkShow(stale)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -390,11 +404,11 @@ async function test_an_expired_token_to_the_sum_route_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_expired_api_http_POST_notify("hi", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:35:10", 1162, 1189, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:35:10", 1162, 1189, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -406,11 +420,11 @@ async function test_a_forged_raw_notice_to_the_sum_route_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_rawforged_api_http_POST_notify("hi", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1314, 1341, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/hooks.bynk:40:10", 1314, 1341, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -422,11 +436,11 @@ async function test_a_Bearer_primary_s_public_member_is_reached_with_no_token() 
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_greet(undefined, "", "Visitor");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello stranger"))) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1463, 1488, "expect r is Ok(\"hello stranger\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello stranger"))) { throw __bynkExpectFailure("tests/hooks.bynk:45:10", 1463, 1488, "expect r is Ok(\"hello stranger\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -438,11 +452,11 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_greet(undefined, ("ann" as any), "User");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello ann"))) { throw __bynkExpectFailure("tests/hooks.bynk:50:10", 1603, 1623, "expect r is Ok(\"hello ann\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "hello ann"))) { throw __bynkExpectFailure("tests/hooks.bynk:50:10", 1603, 1623, "expect r is Ok(\"hello ann\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -451,7 +465,7 @@ async function test_a_Bearer_primary_s_member_is_reached_as_itself() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

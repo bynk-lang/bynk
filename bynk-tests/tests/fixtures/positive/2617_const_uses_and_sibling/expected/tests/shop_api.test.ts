@@ -8,18 +8,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -76,7 +90,7 @@ async function test_the_context_reads_a_used_commons__constants() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -99,7 +113,7 @@ async function test_a_service_answers_with_a_used_constant() {
           return __bynkExpect((n === 20), "tests/shop/api.bynk:15:21", 328, 335, "expect n == 20");
         }
         default: {
-          return __bynkExpect((false), "tests/shop/api.bynk:16:17", 352, 357, "expect false");
+          return __bynkExpect((false), "tests/shop/api.bynk:16:17", 352, 357, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -107,7 +121,7 @@ async function test_a_service_answers_with_a_used_constant() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -130,7 +144,7 @@ async function test_a_service_answers_with_the_context_s_own_constant() {
           return __bynkExpect((s === Welcome()), "tests/shop/api.bynk:23:21", 488, 500, "expect s == Welcome");
         }
         default: {
-          return __bynkExpect((false), "tests/shop/api.bynk:24:17", 517, 522, "expect false");
+          return __bynkExpect((false), "tests/shop/api.bynk:24:17", 517, 522, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -138,7 +152,7 @@ async function test_a_service_answers_with_the_context_s_own_constant() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -161,7 +175,7 @@ async function test_a_sibling_file_s_function_reads_its_sibling_s_constants() {
           return __bynkExpect((n === 2), "tests/shop/api.bynk:31:21", 656, 662, "expect n == 2");
         }
         default: {
-          return __bynkExpect((false), "tests/shop/api.bynk:32:17", 679, 684, "expect false");
+          return __bynkExpect((false), "tests/shop/api.bynk:32:17", 679, 684, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -169,7 +183,7 @@ async function test_a_sibling_file_s_function_reads_its_sibling_s_constants() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -192,7 +206,7 @@ async function test_a_refined_constant_crosses_the_context_s_rebrand() {
           return __bynkExpect((q === SmallBatch()), "tests/shop/api.bynk:39:21", 811, 826, "expect q == SmallBatch");
         }
         default: {
-          return __bynkExpect((false), "tests/shop/api.bynk:40:17", 843, 848, "expect false");
+          return __bynkExpect((false), "tests/shop/api.bynk:40:17", 843, 848, "expect false (in the `_` arm of `match b`)", "b", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -200,7 +214,7 @@ async function test_a_refined_constant_crosses_the_context_s_rebrand() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -223,7 +237,7 @@ async function test_a_sum_constant_crosses_the_context_s_rebrand() {
           return __bynkExpect((s === "gold"), "tests/shop/api.bynk:47:21", 970, 981, "expect s == \"gold\"");
         }
         default: {
-          return __bynkExpect((false), "tests/shop/api.bynk:48:17", 998, 1003, "expect false");
+          return __bynkExpect((false), "tests/shop/api.bynk:48:17", 998, 1003, "expect false (in the `_` arm of `match t`)", "t", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -231,7 +245,7 @@ async function test_a_sum_constant_crosses_the_context_s_rebrand() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -240,7 +254,7 @@ async function test_a_sum_constant_crosses_the_context_s_rebrand() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
