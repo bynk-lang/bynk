@@ -56,6 +56,11 @@ module.exports = grammar({
   word: ($) => $.identifier,
 
   conflicts: ($) => [
+    // #3932: after `capability X = K`, an `@…` is the derived capability's own
+    // annotation or the first of an `agent`'s; the next token (`agent` or not) decides.
+    [$.capability_decl],
+    [$.opaque_type],
+    [$.refined_type],
     // #2654: `let (T { … })` is a parenthesised pattern either way; only the
     // end of the statement (an `else` or none) says whether the record
     // pattern stood alone.
@@ -1078,6 +1083,8 @@ module.exports = grammar({
 
     agent_decl: ($) =>
       seq(
+        // #3932: `@busyAfter(5.seconds)` before `agent`.
+        repeat($.store_annotation),
         "agent",
         field("name", $.identifier),
         // State-migrations S3 (#2248): `agent New replaces Old` — a class
