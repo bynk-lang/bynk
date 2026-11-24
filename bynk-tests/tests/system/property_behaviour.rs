@@ -186,8 +186,9 @@ fn a_failed_property_reports_its_seed_and_counterexample_as_data() {
         failed["message"]
             .as_str()
             .unwrap()
-            .contains("property failed after 74 cases (seed 0x5f3a)"),
-        "the message text is unchanged: {failed}"
+            // #4199: a widened draw changes which case first hits the counterexample.
+            .contains("property failed after 38 cases (seed 0x5f3a)"),
+        "the message text is the pinned one: {failed}"
     );
     let passed = case_named(&whole, "stays at least zero");
     assert_eq!(passed["outcome"], "pass");
@@ -370,5 +371,72 @@ fn a_decimal_or_bytes_counterexample_prints_in_bynk_form() {
     assert_eq!(
         case_named(&doc, "bytes differ from themselves")["counterexample"],
         "b = Bytes.fromHex(\"\")"
+    );
+}
+
+/// #4199: `for all` draws each plain type across its realistic domain, so a claim that held only
+/// in the old narrow domain (an `Int` within 1000, a string of at most eight lowercase
+/// characters, a float below 1001, a duration under a day) is found false and shrunk to a small
+/// counterexample; a refined `Int` still stays inside its range.
+#[test]
+fn for_all_draws_across_the_realistic_domain_of_each_plain_type() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-domain")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_domain"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    let shown = |name: &str| {
+        let c = case_named(&doc, name);
+        assert_eq!(c["outcome"], "fail", "{name}: {c}");
+        c["counterexample"].as_str().unwrap().to_string()
+    };
+    // An `Int` beyond 1000 shrinks to the smallest value that breaks the claim.
+    assert_eq!(shown("ints stay below 1001"), "n = 1001");
+    // A string draws whitespace, punctuation, accented, CJK or astral characters beside a-z.
+    let s = shown("strings stay within eight characters");
+    assert!(
+        s.chars()
+            .any(|c| !c.is_ascii_lowercase() && c != '"' && c != ' ' && c != '=' && c != 's'),
+        "a string outside lowercase a-z: {s}"
+    );
+    // A float beyond 1000 shrinks to an ordinary size.
+    let x: f64 = shown("floats stay below 1001")
+        .trim_start_matches("x = ")
+        .parse()
+        .expect("a float");
+    assert!((1001.0..1_000_000.0).contains(&x), "{x}");
+    // A duration beyond a day.
+    assert_eq!(shown("durations stay under a day"), "d = 86400000");
+    // A refinement narrows the draw: the claim over `Percent` holds.
+    assert_eq!(
+        case_named(&doc, "a refined int stays inside its range")["outcome"],
+        "pass"
     );
 }

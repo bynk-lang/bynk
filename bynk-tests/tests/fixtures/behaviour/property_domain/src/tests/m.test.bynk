@@ -1,0 +1,34 @@
+// #4199: `for all` draws each plain type across its realistic domain, so a claim that holds only
+// in the old narrow domain (an Int within 1000, a string of at most eight characters, a float
+// below 1001) is found false.
+suite demo.m {
+  property "ints stay below 1001" {
+    for all n: Int {
+      expect n < 1001
+    }
+  }
+
+  property "strings stay within eight characters" {
+    for all s: String {
+      expect s.length() < 9
+    }
+  }
+
+  property "floats stay below 1001" {
+    for all x: Float {
+      expect x < 1001.0
+    }
+  }
+
+  property "durations stay under a day" {
+    for all d: Duration {
+      expect d < 1.day
+    }
+  }
+
+  property "a refined int stays inside its range" {
+    for all p: Percent {
+      expect p >= 0 && p <= 100
+    }
+  }
+}

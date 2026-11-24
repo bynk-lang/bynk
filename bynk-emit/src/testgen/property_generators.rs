@@ -11,12 +11,20 @@ use bynk_syntax::ast::{BaseType, PredKind, Refinement, TypeBody, TypeDecl};
 use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsParam, TsStmt, TsType};
 use std::sync::Arc;
 
+/// The largest integer a `number` holds exactly.
+const MAX_SAFE_INT: i64 = 9_007_199_254_740_991;
+
+/// A `Duration` or `Instant` draws within the span of a JavaScript `Date`, in milliseconds.
+const MAX_TIME_MS: &str = "8640000000000000";
+const MIN_TIME_MS: &str = "-8640000000000000";
+
 /// Integer generation bounds `(lo, hi, floor)` derived from a refinement: `lo`
 /// and `hi` bound the random draw (and the boundary values), `floor` is the
-/// shrink target. Unrefined `Int` draws over `[-1000, 1000]` toward `0`.
+/// shrink target. Unrefined `Int` draws across the safe-integer range toward `0` (#4199), a
+/// refinement narrowing it.
 pub(super) fn int_bounds(refinement: Option<&Refinement>) -> (i64, i64, i64) {
-    let mut lo = -1000i64;
-    let mut hi = 1000i64;
+    let mut lo = -MAX_SAFE_INT;
+    let mut hi = MAX_SAFE_INT;
     let mut floor = 0i64;
     if let Some(r) = refinement {
         for p in &r.predicates {
@@ -110,6 +118,33 @@ pub(super) fn str_min(refinement: Option<&Refinement>) -> i64 {
     min
 }
 
+/// Maximum string length a refinement allows, or `min + 64` when none bounds it (#4199).
+pub(super) fn str_max(refinement: Option<&Refinement>) -> i64 {
+    let min = str_min(refinement);
+    let mut max = min + 64;
+    if let Some(r) = refinement {
+        for p in &r.predicates {
+            if let PredKind::MaxLength(k) | PredKind::Length(k) = p.kind {
+                max = max.min(k.max(min));
+            }
+        }
+    }
+    max
+}
+
+/// Whether nothing in `refinement` bounds a `Float`'s range, so the draw may use extreme
+/// magnitudes and signed zero (#4199).
+fn float_unbounded(refinement: Option<&Refinement>) -> bool {
+    refinement.is_none_or(|r| {
+        !r.predicates.iter().any(|p| {
+            matches!(
+                p.kind,
+                PredKind::Positive | PredKind::NonNegative | PredKind::InRangeF(..)
+            )
+        })
+    })
+}
+
 /// A canonical (deterministic) TypeScript literal inhabiting a base type — used
 /// for opaque `.unsafe` wrapping of the exotic bases (`Duration`, `Bytes`, …).
 pub(super) fn base_canon_node(base: BaseType) -> TsExpr {
@@ -186,7 +221,7 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
             let (lo, hi, _) = int_bounds(refinement);
             method_call(
                 ident("rng"),
-                "int",
+                "intWide",
                 vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
             )
         }
@@ -194,32 +229,49 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
             let (lo, hi) = float_bounds(refinement);
             method_call(
                 ident("rng"),
-                "float",
-                vec![num_lit(lo.to_string()), num_lit(hi.to_string())],
+                "floatWide",
+                vec![
+                    num_lit(lo.to_string()),
+                    num_lit(hi.to_string()),
+                    TsExpr::Lit(TsLit::Bool(float_unbounded(refinement))),
+                ],
             )
         }
         BaseType::String => {
             let min = str_min(refinement);
             method_call(
                 ident("rng"),
-                "str",
-                vec![num_lit(min.to_string()), num_lit((min + 8).to_string())],
+                "strWide",
+                vec![
+                    num_lit(min.to_string()),
+                    num_lit(str_max(refinement).to_string()),
+                ],
             )
         }
         BaseType::Bool => method_call(ident("rng"), "bool", vec![]),
+        // #4199: an unrefined `Decimal` draws across scales and signs.
+        BaseType::Decimal if refinement.is_none() => {
+            method_call(ident("rng"), "decimalWide", vec![])
+        }
         // #2622: a random coefficient at a fixed scale.
         BaseType::Decimal => {
             let (lo, hi, scale) = decimal_bounds(refinement);
             decimal_node(
                 method_call(
                     ident("rng"),
-                    "int",
+                    "intWide",
                     vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
                 ),
                 scale,
             )
         }
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => base_canon_node(base),
+        // #4199: a span or instant across signs and magnitudes, within a `Date`'s reach.
+        BaseType::Duration | BaseType::Instant => method_call(
+            ident("rng"),
+            "numWide",
+            vec![num_lit(MIN_TIME_MS), num_lit(MAX_TIME_MS)],
+        ),
+        BaseType::Bytes => method_call(ident("rng"), "bytes", vec![num_lit("0"), num_lit("64")]),
     }
 }
 
@@ -529,24 +581,7 @@ pub(super) fn gen_ts_for_ty(
         return canon_ts_for_ty(ty, types, 1, tys, site);
     }
     match &*tys.get(ty) {
-        checker::Ty::Base(BaseType::Int) => {
-            let (lo, hi, _) = int_bounds(None);
-            method_call(
-                ident("rng"),
-                "int",
-                vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
-            )
-        }
-        checker::Ty::Base(BaseType::String) => {
-            method_call(ident("rng"), "str", vec![num_lit("0"), num_lit("8")])
-        }
-        checker::Ty::Base(BaseType::Bool) => method_call(ident("rng"), "bool", vec![]),
-        checker::Ty::Base(BaseType::Float) => method_call(
-            ident("rng"),
-            "float",
-            vec![num_lit("-1000"), num_lit("1000")],
-        ),
-        checker::Ty::Base(b) => base_canon_node(*b),
+        checker::Ty::Base(b) => base_draw_ts(*b, None),
         checker::Ty::Named { name, .. } => {
             let Some(decl) = types.get(name) else {
                 return missing_fact_named(site, "a declaration of the type", name);
@@ -829,6 +864,8 @@ pub(super) fn binding_gen(
                     TsExpr::bigint(floor),
                     TsExpr::bigint(hi),
                     TsExpr::bigint(lo),
+                    TsExpr::bigint(1),
+                    TsExpr::bigint(-1),
                 ],
                 call(
                     ident("__bynkShrinkInt"),
@@ -836,9 +873,46 @@ pub(super) fn binding_gen(
                 ),
             )
         }
+        // #4199: the boundaries that commonly break code, per plain type.
         checker::Ty::Base(BaseType::String) => (
-            vec![str_lit("")],
+            ["", " ", "A", "\n", "é", "😀"]
+                .into_iter()
+                .map(str_lit)
+                .collect(),
             call(ident("__bynkShrinkString"), vec![ident("v"), num_lit("0")]),
+        ),
+        checker::Ty::Base(BaseType::Float) => (
+            ["0", "-0", "1", "-1", "1e300", "-1e300", "5e-324"]
+                .into_iter()
+                .map(num_lit)
+                .collect(),
+            call(ident("__bynkShrinkNum"), vec![ident("v"), num_lit("0")]),
+        ),
+        checker::Ty::Base(BaseType::Duration | BaseType::Instant) => (
+            ["0", "1", "-1", "86400000", MIN_TIME_MS, MAX_TIME_MS]
+                .into_iter()
+                .map(num_lit)
+                .collect(),
+            call(ident("__bynkShrinkNum"), vec![ident("v"), num_lit("0")]),
+        ),
+        checker::Ty::Base(BaseType::Decimal) => (
+            [(0i64, 0u32), (1, 0), (-1, 0), (5, 2), (-5, 2), (12345, 3)]
+                .into_iter()
+                .map(|(c, sc)| decimal_node(TsExpr::bigint(c as i128), sc))
+                .collect(),
+            call(ident("__bynkShrinkDecimal"), vec![ident("v")]),
+        ),
+        checker::Ty::Base(BaseType::Bytes) => (
+            [vec![], vec!["0"], vec!["255"], vec!["0", "255"]]
+                .into_iter()
+                .map(|bytes| {
+                    new(
+                        member(ident("globalThis"), "Uint8Array"),
+                        vec![TsExpr::array(bytes.into_iter().map(num_lit).collect())],
+                    )
+                })
+                .collect(),
+            call(ident("__bynkShrinkBytes"), vec![ident("v")]),
         ),
         checker::Ty::Base(BaseType::Bool) => (
             vec![
@@ -954,14 +1028,7 @@ pub(super) fn binding_gen(
                 TsExpr::array(vec![]),
             ),
         },
-        checker::Ty::Base(
-            BaseType::Float
-            | BaseType::Duration
-            | BaseType::Instant
-            | BaseType::Bytes
-            | BaseType::Decimal,
-        )
-        | checker::Ty::Error
+        checker::Ty::Error
         | checker::Ty::Never
         | checker::Ty::Result(..)
         | checker::Ty::Option(_)

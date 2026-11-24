@@ -112,6 +112,58 @@ function __bynkRng(seed: number) {
       for (let i = 0; i < len; i++) out += alpha[Math.floor(next() * alpha.length)];
       return out;
     },
+    // #4199: draws across a plain type's realistic domain. `intWide` picks a magnitude tier
+    // (small, 32-bit, safe-integer) so small values stay common and the extremes still appear,
+    // always inside `[lo, hi]`.
+    intWide(lo: bigint, hi: bigint): bigint {
+      if (hi <= lo) return lo;
+      const tiers = [10n, 1000n, 2147483647n];
+      const span = tiers[Math.floor(next() * tiers.length)];
+      let a = lo > -span ? lo : -span;
+      let b = hi < span ? hi : span;
+      if (a > b) { a = lo; b = lo + span < hi ? lo + span : hi; }
+      if (hi < -span) { b = hi; a = hi - span > lo ? hi - span : lo; }
+      return this.int(a, b);
+    },
+    // Finite floats only: 0 and -0, ordinary values, and extreme magnitudes. `wide` is false
+    // when a refinement bounds the range.
+    floatWide(lo: number, hi: number, wide: boolean): number {
+      if (!wide) return lo + next() * (hi - lo);
+      const r = next();
+      if (r < 0.05) return 0;
+      if (r < 0.1) return -0;
+      if (r < 0.75) return -1000 + next() * 2000;
+      const sign = next() < 0.5 ? -1 : 1;
+      return sign * (1 + next()) * Math.pow(10, Math.floor(next() * 600) - 300);
+    },
+    // Whitespace, punctuation, accented, CJK and astral characters beside ASCII letters.
+    strWide(min: number, max: number): string {
+      const tiers = [8, 8, 16, 64];
+      const cap = Math.max(min, Math.min(max, tiers[Math.floor(next() * tiers.length)]));
+      const len = min + Math.floor(next() * (cap - min + 1));
+      const pools = [
+        "abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "0123456789", " \t\n\r",
+        "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", "éüñßøçÅ", "日本語中文", "😀🎉𝒳𐍈",
+      ];
+      let out = "";
+      for (let i = 0; i < len; i++) {
+        const pool = Array.from(next() < 0.6 ? pools[0] : pools[Math.floor(next() * pools.length)]);
+        out += pool[Math.floor(next() * pool.length)];
+      }
+      return out;
+    },
+    numWide(lo: number, hi: number): number { return Number(this.intWide(BigInt(lo), BigInt(hi))); },
+    decimalWide(): { coefficient: bigint, scale: number } {
+      const scale = Math.floor(next() * 9);
+      return { coefficient: this.intWide(-1000000000000000000n, 1000000000000000000n), scale };
+    },
+    bytes(min: number, max: number): Uint8Array {
+      const tiers = [4, 16, 64];
+      const cap = Math.max(min, Math.min(max, tiers[Math.floor(next() * tiers.length)]));
+      const out = new Uint8Array(min + Math.floor(next() * (cap - min + 1)));
+      for (let i = 0; i < out.length; i++) out[i] = next() < 0.15 ? (next() < 0.5 ? 0 : 255) : Math.floor(next() * 256);
+      return out;
+    },
     bool(): boolean { return next() < 0.5; },
     pick(thunks: Array<() => any>): any { return thunks[Math.floor(next() * thunks.length)](); },
   };
@@ -121,7 +173,7 @@ function __bynkShrinkInt(v: bigint, floor: bigint): bigint[] {
   if (v === floor) return out;
   out.push(floor);
   let cur = v;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 64; i++) {
     const mid = floor + (cur - floor) / 2n;
     if (mid === cur || mid === floor) break;
     out.push(mid);
@@ -130,12 +182,52 @@ function __bynkShrinkInt(v: bigint, floor: bigint): bigint[] {
   if (v > floor) out.push(v - 1n);
   return out;
 }
+// Strings shrink by code point, so an astral character is never cut in half.
 function __bynkShrinkString(v: string, min: number): string[] {
   const out: string[] = [];
-  if (v.length > min) {
-    out.push(v.slice(0, min));
-    if (v.length - 1 > min) out.push(v.slice(0, v.length - 1));
+  const cps = Array.from(v);
+  if (cps.length > min) {
+    out.push(cps.slice(0, min).join(""));
+    if (cps.length - 1 > min) out.push(cps.slice(0, cps.length - 1).join(""));
   }
+  return out;
+}
+// #4199: a number (`Float`, `Duration`, `Instant`) shrinks toward `floor`.
+function __bynkShrinkNum(v: number, floor: number): number[] {
+  const out: number[] = [];
+  if (Object.is(v, floor)) return out;
+  out.push(floor);
+  const whole = Math.trunc(v);
+  if (whole !== v && whole >= floor) out.push(whole);
+  // A huge magnitude first drops by orders of magnitude, so it reaches an ordinary size within
+  // the shrink budget.
+  for (const f of [1e100, 1e50, 1e10, 1e3]) {
+    const scaled = floor + (v - floor) / f;
+    if (Math.abs(v - floor) > f && scaled !== v) out.push(scaled);
+  }
+  let cur = v;
+  for (let i = 0; i < 64; i++) {
+    const mid = floor + (cur - floor) / 2;
+    if (mid === cur || mid === floor) break;
+    out.push(mid);
+    cur = mid;
+  }
+  return out;
+}
+function __bynkShrinkDecimal(v: { coefficient: bigint, scale: number }): Array<{ coefficient: bigint, scale: number }> {
+  const out: Array<{ coefficient: bigint, scale: number }> = [];
+  if (v.coefficient === 0n && v.scale === 0) return out;
+  out.push({ coefficient: 0n, scale: 0 });
+  for (const c of __bynkShrinkInt(v.coefficient, 0n)) out.push({ coefficient: c, scale: v.scale });
+  if (v.scale > 0 && v.coefficient % 10n === 0n) out.push({ coefficient: v.coefficient / 10n, scale: v.scale - 1 });
+  return out;
+}
+function __bynkShrinkBytes(v: Uint8Array): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  if (v.length === 0) return out;
+  out.push(new Uint8Array(0));
+  if (v.length > 1) out.push(v.slice(0, v.length - 1));
+  if (v.some((b) => b !== 0)) out.push(new Uint8Array(v.length));
   return out;
 }
 function __bynkIsFailure(e: any): e is Error {
@@ -216,7 +308,7 @@ async function __prop_test_record_int_field_participates_in_arithmetic() {
   const { Point } = __ns_demo_gen;
   type Point = __ns_demo_gen.Point;
   const __gens = [
-    { name: "p", boundaries: [{ x: globalThis.Number(0n), y: globalThis.Number(0n) }], gen: (rng: any) => ({ x: globalThis.Number(rng.int(-1000n, 1000n)), y: globalThis.Number(rng.int(-1000n, 1000n)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
+    { name: "p", boundaries: [{ x: globalThis.Number(0n), y: globalThis.Number(0n) }], gen: (rng: any) => ({ x: globalThis.Number(rng.intWide(-9007199254740991n, 9007199254740991n)), y: globalThis.Number(rng.intWide(-9007199254740991n, 9007199254740991n)) }), shrink: (v: any) => [], show: (v: any) => __bynkShow(v) },
   ];
   const __where = null;
   const __body = async (__vals: any[]) => {
