@@ -293,29 +293,36 @@ pub fn pred_condition_and_message_over(
             cmp(TsBinaryOp::StrictEq, recv_length(), num(n.to_string())),
             format!("length must be exactly {n}"),
         ),
-        PredKind::Matches(pat) => {
-            // The condition's own `RegExp` source uses `pat` raw, not
+        PredKind::Matches(literal) => {
+            // The condition's own `RegExp` source uses the pattern raw, not
             // `escaped` — `TsLit::Str`'s printer already applies the exact
             // same escaping as `escape_ts_literal`
             // (`bynk_check::wire_default::escape_ts_literal`, kept
             // deliberately identical — see `bynk-ts/src/printer.rs`'s own
-            // `render_lit`), so escaping `pat` here too would double-escape
-            // it, same bug class `msg`'s own doc above already argues
-            // against. `escaped` is still needed for `msg`, which is opaque
-            // text spliced with no further escaping.
-            let escaped = escape_ts_literal(pat);
+            // `render_lit`), so escaping it here too would double-escape it,
+            // same bug class `msg`'s own doc above already argues against.
+            // `escaped` is still needed for `msg`, which is opaque text
+            // spliced with no further escaping.
+            //
+            // #3950: the leading flag group moves into the flags and every
+            // pattern runs in Unicode mode (`u`). The `RegExp` is built once
+            // per source and flags, by the runtime's `__bynkRegExp`; a
+            // non-global, non-sticky `RegExp`'s `test` keeps no state, so the
+            // shared one is safe.
+            let escaped = escape_ts_literal(literal);
+            let (pat, flags) = bynk_syntax::ast::matches_pattern_and_flags(literal);
             let pattern = cmp(
                 TsBinaryOp::Add,
                 cmp(
                     TsBinaryOp::Add,
                     TsExpr::Lit(TsLit::Str("^(?:".to_string())),
-                    TsExpr::Lit(TsLit::Str(pat.clone())),
+                    TsExpr::Lit(TsLit::Str(pat)),
                 ),
                 TsExpr::Lit(TsLit::Str(")$".to_string())),
             );
-            let regexp = TsExpr::New {
-                callee: Box::new(TsExpr::Ident("globalThis.RegExp".to_string())),
-                args: vec![pattern],
+            let regexp = TsExpr::Call {
+                callee: Box::new(TsExpr::Ident("__bynkRegExp".to_string())),
+                args: vec![pattern, TsExpr::Lit(TsLit::Str(flags))],
             };
             let test_call = TsExpr::Call {
                 callee: Box::new(TsExpr::Member {

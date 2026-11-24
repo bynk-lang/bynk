@@ -2,13 +2,14 @@
 // commons demo
 
 import { Ok, Err, type Result } from "./__bynk_runtime/result.js";
+import { __bynkRegExp } from "./__bynk_runtime/text.js";
 import type { ValidationError } from "./__bynk_runtime/errors.js";
 
 export type Gerund = string & { readonly __brand: "Gerund" };
 
 export const Gerund = {
   of(value: string): Result<Gerund, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z]+(?<=ing)" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[a-z]+(?<=ing)" + ")$", "u").test(value))) {
       return Err({ field: "Gerund", message: "must match /[a-z]+(?<=ing)/", value });
     }
     return Ok(value as Gerund);

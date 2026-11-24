@@ -403,6 +403,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkPgRow", "time"),
     ("__bynkProcessExec", "settle"),
     ("__bynkRace", "settle"),
+    ("__bynkRegExp", "text"),
     ("__bynkSetDifference", "keys"),
     ("__bynkSetFilter", "keys"),
     ("__bynkSetFold", "keys"),
