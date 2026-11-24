@@ -27,8 +27,34 @@ function __bynkViolationOf(e: any): { kind: string, agent: string, name: string,
   const v = e && e.invariantViolation;
   return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
 }
+// #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
+// Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
+// as a bare object. `Duration` and `Instant` are plain numbers at runtime.
+function __bynkShowLeaf(x: any): unknown {
+  if (x !== null && typeof x === "object" && typeof x.coefficient === "bigint" && typeof x.scale === "number") {
+    const neg = x.coefficient < 0n;
+    let digits = (neg ? -x.coefficient : x.coefficient).toString();
+    let text = digits;
+    if (x.scale > 0) {
+      if (digits.length <= x.scale) digits = "0".repeat(x.scale + 1 - digits.length) + digits;
+      text = digits.slice(0, digits.length - x.scale) + "." + digits.slice(digits.length - x.scale);
+    }
+    return (neg ? "-" : "") + text + "d";
+  }
+  if (x instanceof Uint8Array) return `Bytes.fromHex("${Array.from(x, (b) => b.toString(16).padStart(2, "0")).join("")}")`;
+  return x;
+}
 function __bynkShow(v: unknown): string {
-  try { return typeof v === "bigint" ? String(v) : (JSON.stringify(v) ?? String(v)); } catch { return String(v); }
+  try {
+    if (typeof v === "bigint") return String(v);
+    const leaf = __bynkShowLeaf(v);
+    if (typeof leaf === "string" && leaf !== v) return leaf;
+    if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
+    if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+      return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
+    }
+    return JSON.stringify(v) ?? String(v);
+  } catch { return String(v); }
 }
 
 function __makeTestDeps() {
@@ -41,7 +67,7 @@ async function test_backslash_r_and_n_produce_a_real_CR_LF() {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
     if (!(statusLine() === "HTTP/1.1 200 OK\r\n")) { throw __bynkExpectFailure("tests/text.test.bynk:3:12", 79, 122, "expect statusLine() == \"HTTP/1.1 200 OK\\u{D}\\u{A}\"\n  expected: statusLine() == \"HTTP/1.1 200 OK\\u{D}\\u{A}\"\n  actual:   " + __bynkShow((statusLine())) + " == " + __bynkShow(("HTTP/1.1 200 OK\r\n"))); }
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:HTTP/1\\.1 200 OK\\r\\n)(?![\\s\\S])", "").test(statusLine()))) { throw __bynkExpectFailure("tests/text.test.bynk:4:12", 134, 184, "expect statusLine().matchesRegex(r\"HTTP/1\\.1 200 OK\\r\\n\")"); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:HTTP/1\\.1 200 OK\\r\\n)(?![\\s\\S])", "u").test(statusLine()))) { throw __bynkExpectFailure("tests/text.test.bynk:4:12", 134, 184, "expect statusLine().matchesRegex(r\"HTTP/1\\.1 200 OK\\r\\n\")"); }
     if (!(__bynkEq(splitLines("a\r\nb\nc"), ["a", "b", "c"]))) { throw __bynkExpectFailure("tests/text.test.bynk:5:12", 196, 238, "expect splitLines(\"a\\r\\nb\\nc\") == [\"a\", \"b\", \"c\"]\n  expected: splitLines(\"a\\r\\nb\\nc\") == [\"a\", \"b\", \"c\"]\n  actual:   " + __bynkShow((splitLines("a\r\nb\nc"))) + " == " + __bynkShow((["a", "b", "c"]))); }
     return { pass: true };
   } catch (e) {
@@ -58,9 +84,9 @@ async function test_unicode_escapes_name_the_scalar_value() {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
     if (!(nbsp() === "a b")) { throw __bynkExpectFailure("tests/text.test.bynk:9:12", 304, 320, "expect nbsp() == \"a b\"\n  expected: nbsp() == \"a b\"\n  actual:   " + __bynkShow((nbsp())) + " == " + __bynkShow(("a b"))); }
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u00A0b)(?![\\s\\S])", "").test(nbsp()))) { throw __bynkExpectFailure("tests/text.test.bynk:10:12", 332, 364, "expect nbsp().matchesRegex(r\"a\\u00A0b\")"); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u00A0b)(?![\\s\\S])", "u").test(nbsp()))) { throw __bynkExpectFailure("tests/text.test.bynk:10:12", 332, 364, "expect nbsp().matchesRegex(r\"a\\u00A0b\")"); }
     if (!(grin() === "😀")) { throw __bynkExpectFailure("tests/text.test.bynk:11:12", 376, 392, "expect grin() == \"😀\"\n  expected: grin() == \"😀\"\n  actual:   " + __bynkShow((grin())) + " == " + __bynkShow(("😀"))); }
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u2028b)(?![\\s\\S])", "").test(lineSeparator()))) { throw __bynkExpectFailure("tests/text.test.bynk:12:12", 404, 445, "expect lineSeparator().matchesRegex(r\"a\\u2028b\")"); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:a\\u2028b)(?![\\s\\S])", "u").test(lineSeparator()))) { throw __bynkExpectFailure("tests/text.test.bynk:12:12", 404, 445, "expect lineSeparator().matchesRegex(r\"a\\u2028b\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -75,7 +101,7 @@ async function test_nul_survives_to_the_runtime() {
   try {
     const deps = {};
     const { digits, greeting, grin, hashed, isVersion, isVersionEscaped, lineSeparator, nbsp, noHole, nul, pattern, query, splitLines, statusLine, windowsPath } = __ns_shop_text;
-    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:x\\x00y)(?![\\s\\S])", "").test(nul()))) { throw __bynkExpectFailure("tests/text.test.bynk:16:12", 501, 530, "expect nul().matchesRegex(r\"x\\x00y\")"); }
+    if (!(new globalThis.RegExp("(?<![\\s\\S])(?:x\\x00y)(?![\\s\\S])", "u").test(nul()))) { throw __bynkExpectFailure("tests/text.test.bynk:16:12", 501, 530, "expect nul().matchesRegex(r\"x\\x00y\")"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

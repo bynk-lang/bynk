@@ -1665,8 +1665,12 @@ pattern, and the compiler checks them identically.
   group, `None` for a group that did not take part.
 - **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
   `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
-- **Semantics** are JavaScript's `RegExp`, without the `u` flag, as `Matches`
-  uses.
+- **Semantics** are JavaScript's `RegExp` in Unicode mode (`u`), as `Matches`
+  uses: `\p{L}` and the other property escapes work, and `.` and a negated class
+  match a whole astral character rather than half of a surrogate pair. `\w`, `\d`
+  and `\b` stay ASCII even with `u` (JavaScript's rule); write `\p{L}` and
+  `\p{Nd}` for the Unicode forms. A pattern that is valid only without `u`, such
+  as an identity escape `\-` outside a class, is `bynk.types.invalid_regex`.
 - **`replaceRegex`** reads `$1`, `$<name>`, `$&` and `$$` in the replacement,
   unlike `replace`, which inserts its text literally.
 

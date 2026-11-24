@@ -2,6 +2,7 @@
 // commons demo.admit
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Quantity = number & { readonly __brand: "Quantity" };
@@ -22,7 +23,7 @@ export type Code = string & { readonly __brand: "Code" };
 
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "[a-z0-9]{3,8}" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "[a-z0-9]{3,8}" + ")$", "u").test(value))) {
       return Err({ field: "Code", message: "must match /[a-z0-9]{3,8}/", value });
     }
     return Ok(value as Code);

@@ -1,0 +1,3 @@
+commons demo {
+  type Name = String where Matches("a\\-b")
+}

@@ -2,6 +2,7 @@
 // commons bynk.locale.types
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __bynkRegExp } from "../../__bynk_runtime/text.js";
 import type { ValidationError } from "../../__bynk_runtime/errors.js";
 
 /**
@@ -21,7 +22,7 @@ export type LocaleTag = string & { readonly __brand: "LocaleTag" };
 
 export const LocaleTag = {
   of(value: string): Result<LocaleTag, ValidationError> {
-    if (!(new globalThis.RegExp("^(?:" + "(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*(?:-[a-wy-z0-9](?:-[a-z0-9]{2,8}){1,8})*(?:-x(?:-[a-z0-9]{1,8}){1,8})?|x(?:-[a-z0-9]{1,8}){1,8})" + ")$").test(value))) {
+    if (!(__bynkRegExp("^(?:" + "(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*(?:-[a-wy-z0-9](?:-[a-z0-9]{2,8}){1,8})*(?:-x(?:-[a-z0-9]{1,8}){1,8})?|x(?:-[a-z0-9]{1,8}){1,8})" + ")$", "u").test(value))) {
       return Err({ field: "LocaleTag", message: "must match /(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*(?:-[a-wy-z0-9](?:-[a-z0-9]{2,8}){1,8})*(?:-x(?:-[a-z0-9]{1,8}){1,8})?|x(?:-[a-z0-9]{1,8}){1,8})/", value });
     }
     return Ok(value as LocaleTag);

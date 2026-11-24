@@ -493,7 +493,7 @@
       }
       __out.push(__s.slice(__p));
       return __out;
-    })(oid, new globalThis.RegExp(",", "y")), oid))(__x)))))(), (__q) => __q.length);
+    })(oid, new globalThis.RegExp(",", "yu")), oid))(__x)))))(), (__q) => __q.length);
   }
 === indexed byId
   async byId(rid: string, deps: {}): globalThis.Promise<number> {
@@ -560,7 +560,7 @@
           }
           __out.push(__s.slice(__p));
           return __out;
-        })(k, new globalThis.RegExp(",", "y")), k).length)(__state.n);
+        })(k, new globalThis.RegExp(",", "yu")), k).length)(__state.n);
         return undefined;
       })();
       return undefined;
@@ -610,7 +610,7 @@
           }
           __out.push(__s.slice(__p));
           return __out;
-        })(k, new globalThis.RegExp(",", "y")), k)));
+        })(k, new globalThis.RegExp(",", "yu")), k)));
         return undefined;
       })();
       return undefined;

@@ -2,7 +2,7 @@
 // Worker entry point for context `auth.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
-import { __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
 
@@ -36,7 +36,7 @@ export default {
       }
 
       {
-        if ((method === "GET" || method === "HEAD") && path === "/go") {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/go", path) !== null) {
           __route = "GET /go";
           const result = await surface.http_GET_go();
           const __response = __applySecurityHeaders(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), __security_api);
@@ -44,7 +44,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/bad") {
+        if (method === "POST" && __matchPath("/bad", path) !== null) {
           __route = "POST /bad";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -63,7 +63,7 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/login") {
+        if (method === "POST" && __matchPath("/login", path) !== null) {
           __route = "POST /login";
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
@@ -82,40 +82,40 @@ export default {
         }
       }
       {
-        if (method === "POST" && path === "/logout") {
+        if (method === "POST" && __matchPath("/logout", path) !== null) {
           __route = "POST /logout";
           const result = await surface.http_POST_logout();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
         }
       }
       {
-        if (method === "POST" && path === "/prefs") {
+        if (method === "POST" && __matchPath("/prefs", path) !== null) {
           __route = "POST /prefs";
           const result = await surface.http_POST_prefs();
           return __applySecurityHeaders(__httpResultToResponse(result, (__v: void) => null), __security_api);
         }
       }
-      if (path === "/bad") {
+      if (__matchPath("/bad", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/go") {
+      if (__matchPath("/go", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/login") {
+      if (__matchPath("/login", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/logout") {
+      if (__matchPath("/logout", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
       }
-      if (path === "/prefs") {
+      if (__matchPath("/prefs", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_api);
