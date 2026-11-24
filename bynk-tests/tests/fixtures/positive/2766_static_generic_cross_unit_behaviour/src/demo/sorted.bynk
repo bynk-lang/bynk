@@ -5,10 +5,9 @@ type parameter of its own.
 ---
 commons demo.sorted
 
-uses bynk.list
 
 type Sorted[T: Ord] = { items: List[T] }
 
-fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: sort(xs) } }
+fn Sorted.fromList(xs: List[T]) -> Sorted[T] { Sorted { items: xs.sort() } }
 
 fn Sorted.empty() -> Sorted[T] { Sorted { items: [] } }

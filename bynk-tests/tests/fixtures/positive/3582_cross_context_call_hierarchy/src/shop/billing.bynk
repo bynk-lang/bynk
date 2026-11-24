@@ -3,7 +3,7 @@ context shop.billing
 consumes shop.pay as Pay
 
 service invoice {
-  on call(total: Int) -> Effect[Result[Int, Int]] {
+  on call(total: Int) -> Effect[Result[Int, Int]] by Caller {
     let paid <- Pay.charge(total)
     paid
   }

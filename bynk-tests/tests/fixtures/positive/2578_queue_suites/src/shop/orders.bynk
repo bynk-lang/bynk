@@ -22,7 +22,7 @@ service api from http {
 }
 
 service place {
-	on call(id: String) -> Effect[Int] given OrderEvents {
+	on call(id: String) -> Effect[Int] by Caller given OrderEvents {
 		let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(30.seconds) })
 		let _ <- OrderEvents.sendBatch([Json.encode(1), Json.encode(2)])
 		Effect.pure(3)

@@ -14,7 +14,7 @@ context commerce.payment {
   }
 
   service authorise {
-    on call(amount: Int) -> Effect[Result[AuthId, String]] given Logger {
+    on call(amount: Int) -> Effect[Result[AuthId, String]] by Caller given Logger {
       let _ <- Logger.log("start")
       let _ <- Logger.log("checking")
       let _ <- Logger.warn("authorised")

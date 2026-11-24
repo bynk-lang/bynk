@@ -27,7 +27,7 @@ fn each(items: List[String], f: String -> Effect[()]) -> Effect[()] {
 }
 
 service api {
-	on call(sku: String) -> Effect[()] {
+	on call(sku: String) -> Effect[()] by Caller {
 		each([sku], warn)
 	}
 }

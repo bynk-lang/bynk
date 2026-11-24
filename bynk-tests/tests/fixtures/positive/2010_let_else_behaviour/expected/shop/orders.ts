@@ -36,10 +36,10 @@ export function authorise(card: number): Result<number, Problem> {
 export function label(o: Option<number>): string {
   const n = (() => {
     if (true) {
-      const __letElse2278 = o;
-      switch (__letElse2278.tag) {
+      const __letElse2308 = o;
+      switch (__letElse2308.tag) {
         case "Some": {
-          const v = __letElse2278.value;
+          const v = __letElse2308.value;
           return v + 1;
         }
         default: {
@@ -58,10 +58,10 @@ export function label(o: Option<number>): string {
  * A `?` inside an `else` still returns from the whole function.
  */
 export function pick(r: Result<number, Problem>, fallback: Result<number, Problem>): Result<number, Problem> {
-  const __letElse2536 = r;
-  switch (__letElse2536.tag) {
+  const __letElse2566 = r;
+  switch (__letElse2566.tag) {
     case "Ok": {
-      const n = __letElse2536.value;
+      const n = __letElse2566.value;
       return Ok(n + 1);
     }
     default: {
@@ -249,21 +249,21 @@ export function __makeStock(key: string, env?: { STOCK?: __DurableObjectNamespac
  */
 export const place = {
   async call(id: string, qty: number, card: number, deps: {}): globalThis.Promise<Result<string, Problem>> {
-    const __letElse1465 = await __makeOrder(id).open(deps);
-    switch (__letElse1465.tag) {
+    const __letElse1475 = await __makeOrder(id).open(deps);
+    switch (__letElse1475.tag) {
       case "Ok": {
-        const __letElse1521 = await __makeStock("widget").reserve(qty, deps);
-        switch (__letElse1521.tag) {
+        const __letElse1531 = await __makeStock("widget").reserve(qty, deps);
+        switch (__letElse1531.tag) {
           case "Ok": {
-            const __letElse1635 = authorise(card);
-            switch (__letElse1635.tag) {
+            const __letElse1645 = authorise(card);
+            switch (__letElse1645.tag) {
               case "Ok": {
-                const reference = __letElse1635.value;
+                const reference = __letElse1645.value;
                 await __makeOrder(id).confirm(deps);
                 return Ok(`placed ${String(reference)}`);
               }
               case "Err": {
-                const why = __letElse1635.error;
+                const why = __letElse1645.error;
                 await __makeStock("widget").release(qty, deps);
                 await __makeOrder(id).reject(deps);
                 return Err(why);

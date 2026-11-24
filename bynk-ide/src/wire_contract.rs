@@ -1210,7 +1210,7 @@ service api from http {
 type Quote = { amount: Int, currency: String }
 
 service Pricing {
-  on call(sku: String, qty: Int) -> Effect[Quote] {
+  on call(sku: String, qty: Int) -> Effect[Quote] by Caller {
     Quote { amount: qty * 100, currency: "USD" }
   }
 }
@@ -1220,7 +1220,7 @@ service Pricing {
 consumes billing
 
 service checkout {
-  on call(sku: String, qty: Int) -> Effect[Int] {
+  on call(sku: String, qty: Int) -> Effect[Int] by Caller {
     let q <- billing.Pricing(sku, qty)
     q.amount
   }
@@ -1304,7 +1304,7 @@ service checkout {
         let src = r#"context solo
 
 service Ping {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     1
   }
 }

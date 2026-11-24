@@ -6,7 +6,7 @@ consumes bynk.cloudflare { Postgres, PgError, PgRun, PgStatement }
 capability Main = Postgres
 
 service probe {
-  on call(table: String) -> Effect[Result[List[PgRun], PgError]] given Main {
+  on call(table: String) -> Effect[Result[List[PgRun], PgError]] by Caller given Main {
     Main.transaction([PgStatement { sql: table, params: [] }])
   }
 }

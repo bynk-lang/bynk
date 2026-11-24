@@ -3,5 +3,5 @@ context shop.orders
 consumes shop.payment as Pay
 
 service refund {
-  on call(qty: Int) -> Effect[Bool] { Pay.authorise(qty) }
+  on call(qty: Int) -> Effect[Bool] by Caller { Pay.authorise(qty) }
 }

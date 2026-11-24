@@ -8,7 +8,7 @@ type Amount = { cents: Int }
 type Box = { a: Amount }
 
 service store {
-  on call(b: Box) -> Effect[Int] {
+  on call(b: Box) -> Effect[Int] by Caller {
     Effect.pure(b.a.cents)
   }
 }

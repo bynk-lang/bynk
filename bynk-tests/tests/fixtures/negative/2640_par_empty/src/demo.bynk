@@ -11,7 +11,7 @@ capability Orders {
 }
 
 service dash {
-  on call(id: Int) -> Effect[Int] {
+  on call(id: Int) -> Effect[Int] by Caller {
     par {
     }
     Effect.pure(0)

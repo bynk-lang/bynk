@@ -18,7 +18,8 @@ impl Drop for Scratch {
     }
 }
 
-const SERVICE: &str = "service api {\n  on call() -> Effect[Int] {\n    Effect.pure(1)\n  }\n}\n";
+const SERVICE: &str =
+    "service api {\n  on call() -> Effect[Int] by Caller {\n    Effect.pure(1)\n  }\n}\n";
 
 fn duplicate_service_project(tag: &str) -> Scratch {
     let dir = std::env::temp_dir().join(format!(

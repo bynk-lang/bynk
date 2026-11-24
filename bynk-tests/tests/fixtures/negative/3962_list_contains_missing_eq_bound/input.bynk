@@ -1,0 +1,5 @@
+commons c {
+  fn has[T](xs: List[T], x: T) -> Bool {
+    xs.contains(x)
+  }
+}

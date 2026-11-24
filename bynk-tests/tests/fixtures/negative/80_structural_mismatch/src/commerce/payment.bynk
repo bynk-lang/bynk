@@ -10,7 +10,7 @@ type Amount = {
 }
 
 service authorise {
-  on call(amount: Amount) -> Effect[Result[AuthId, Int]] {
+  on call(amount: Amount) -> Effect[Result[AuthId, Int]] by Caller {
     Effect.pure(Err(0))
   }
 }

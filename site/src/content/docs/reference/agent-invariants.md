@@ -118,11 +118,35 @@ methods; pure `Bool`), with the same restrictions:
 A transition that mentions neither `old` nor `new` is a snapshot claim in
 disguise — write it as an `invariant`.
 
-**Ordered transitions need ordered types.** `old.status is Paid implies
-new.status is Paid` uses `is`/`implies`, which need no ordering. An *ordered* step
-like `new.balance >= old.balance` needs `>=`, available on numeric and temporal
-fields but **not on enums** (enums are unordered today) — an ordered-status
-transition is a [named follow-on](/project/versioning-and-roadmap/).
+**Ordered transitions.** `old.status is Paid implies new.status is Paid` uses
+`is`/`implies`, which need no ordering. An *ordered* step such as
+`new.balance >= old.balance` takes `<`, `<=`, `>` and `>=` on any
+[`Ord`](/reference/types/#ordering-your-own-types) field: a numeric or temporal
+field, a `String`, or a `derives Ord` enum or record. So a status that may only
+move forward is one line:
+
+```bynk
+context shop
+
+type Status = enum { Pending, Placed, Paid } derives Ord
+
+agent Order {
+	key id: String
+
+	store status: Cell[Status] = Pending
+
+	transition forward_only:
+		new.status >= old.status
+
+	on call advance() -> Effect[()] {
+		status := Paid
+	}
+}
+```
+
+Declaration order is the order, so `Pending < Placed < Paid` here, and reordering
+the variants changes what `forward_only` accepts (a check for a reordered `derives Ord` type is proposed in [#3956](https://github.com/bynk-lang/bynk/issues/3956)). A type without `derives Ord`
+is not ordered, and `>=` on it is `bynk.types.not_orderable`.
 
 Transitions are checked at the **commit boundary**, alongside the snapshot
 invariants — see below.

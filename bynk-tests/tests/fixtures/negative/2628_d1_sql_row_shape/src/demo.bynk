@@ -11,7 +11,7 @@ type Tags = { id: String, tags: List[String] }
 type Status = enum { Open, Closed }
 
 service probe {
-  on call(text: String) -> Effect[Bool] {
+  on call(text: String) -> Effect[Bool] by Caller {
     let a = Json.decodeSql[Order](text)
     let b = Json.decodeSql[List[Tags]](text)
     let c = Json.decodeSql[Status](text)

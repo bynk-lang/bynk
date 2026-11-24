@@ -5,7 +5,7 @@ consumes bynk.cloudflare { D1 }
 capability Orders = D1
 
 service probe {
-    on call(id: String) -> Effect[Bool] given Orders {
+    on call(id: String) -> Effect[Bool] by Caller given Orders {
         let _ <- Orders.all("SELECT id FROM orders WHERE id = '\(id)'", [])
         true
     }

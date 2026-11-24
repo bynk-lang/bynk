@@ -19,13 +19,13 @@ fn has(flags: Int, bit: Int) -> Bool {
 }
 
 service bits {
-	on call(a: Int, b: Int) -> Effect[Int] {
+	on call(a: Int, b: Int) -> Effect[Int] by Caller {
 		Effect.pure(a.and(b))
 	}
 }
 
 service shift {
-	on call(n: Int, count: Int) -> Effect[Int] {
+	on call(n: Int, count: Int) -> Effect[Int] by Caller {
 		Effect.pure(n.shl(count))
 	}
 }

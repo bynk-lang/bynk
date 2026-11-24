@@ -518,14 +518,14 @@ const SERVICE_FIXTURE: &str = "context reps {
   }
 
   service pinger {
-    on call(n: Int) -> Effect[()] given Events {
+    on call(n: Int) -> Effect[()] by Caller given Events {
       let doubled = n * 2
       Events.emit[Pinged](Pinged { n: doubled })
     }
   }
 
   service tripler {
-    on call(n: Int) -> Effect[Int] {
+    on call(n: Int) -> Effect[Int] by Caller {
       let tripled = n * 3
       tripled
     }
@@ -537,7 +537,7 @@ const CLAIM_FIXTURE: &str = "context reps {
   consumes bynk { Idempotency, Claim }
 
   service ledger {
-    on call(id: String) -> Effect[Result[String, String]] given Idempotency {
+    on call(id: String) -> Effect[Result[String, String]] by Caller given Idempotency {
       let Claim.Claimed <- Idempotency.claim(id, 1.hours) else { Ok(\"duplicate\") }
       let tagged = \"\\(id)!\"
       if id == \"bad\" { Err(tagged) } else { Ok(tagged) }
@@ -958,12 +958,12 @@ const CRON_QUEUE_FIXTURE: &str = "context reps {
   }
 
   service sweeper from cron {
-    on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+    on schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
       let _ <- Counter(\"c\").bump(1)
       Ok(())
     }
 
-    on schedule(\"0 * * * *\") (at: Int) -> Effect[Result[(), String]] {
+    on schedule(\"0 * * * *\") (at: Instant) -> Effect[Result[(), String]] {
       let _ <- Counter(\"d\").bump(2)
       Ok(())
     }

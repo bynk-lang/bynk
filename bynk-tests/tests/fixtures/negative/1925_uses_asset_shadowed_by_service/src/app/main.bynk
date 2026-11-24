@@ -6,13 +6,13 @@ uses lib.brand
 // the local service shadows the imported asset.
 
 service logo {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }
 
 service page {
-  on call() -> Effect[String] {
+  on call() -> Effect[String] by Caller {
     Effect.pure(logo.url)
   }
 }

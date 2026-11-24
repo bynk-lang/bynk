@@ -10,7 +10,7 @@ type Outer = { inner: Inner }
 agent Index {
 	key id: String
 	store n: Cell[Int]
-	on call(o: Outer) -> Effect[Int] {
+	on call(o: Outer) -> Effect[Int] by Caller {
 		Effect.pure(0)
 	}
 }

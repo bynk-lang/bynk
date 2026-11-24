@@ -9,37 +9,37 @@ consumes shop.post
 type Region = enum { Here, There }
 
 service orderId {
-  on call(o: Order) -> Effect[String] {
+  on call(o: Order) -> Effect[String] by Caller {
     o.id
   }
 }
 
 service parcelRef {
-  on call(p: Parcel) -> Effect[String] {
+  on call(p: Parcel) -> Effect[String] by Caller {
     p.ref
   }
 }
 
 service echo {
-  on call(os: List[Order]) -> Effect[List[Order]] {
+  on call(os: List[Order]) -> Effect[List[Order]] by Caller {
     os
   }
 }
 
 service first {
-  on call(os: List[Order]) -> Effect[Option[Order]] {
+  on call(os: List[Order]) -> Effect[Option[Order]] by Caller {
     os.first()
   }
 }
 
 service present {
-  on call(o: Option[Parcel]) -> Effect[Bool] {
+  on call(o: Option[Parcel]) -> Effect[Bool] by Caller {
     o is Some(_)
   }
 }
 
 service here {
-  on call() -> Effect[Region] {
+  on call() -> Effect[Region] by Caller {
     Region.Here
   }
 }

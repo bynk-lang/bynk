@@ -140,7 +140,7 @@ const CONSUMER_SRC: &str = r#"context ops.jobs
 consumes platformtime { Clock }
 
 service run {
-  on call() -> Effect[Int] given Clock {
+  on call() -> Effect[Int] by Caller given Clock {
     let now <- Clock.now()
     now
   }

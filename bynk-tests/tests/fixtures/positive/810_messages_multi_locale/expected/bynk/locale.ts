@@ -3,7 +3,6 @@
 
 import { Some, None } from "../__bynk_runtime/result.js";
 
-import { reverse } from "./list.js";
 import { LocaleTag, Message, MessageArg } from "./locale/types.js";
 import { join } from "./string.js";
 
@@ -18,7 +17,7 @@ export function render(tag: LocaleTag, msg: Message): string {
     return msg.code;
   } else {
     const init: readonly string[] = ([] as readonly string[]);
-    const parts = reverse(((__xs: readonly string[], __acc: readonly string[], __f: (acc: readonly string[], x: string) => readonly string[]) => {
+    const parts = ((__xs: readonly string[]) => [...__xs].reverse())(((__xs: readonly string[], __acc: readonly string[], __f: (acc: readonly string[], x: string) => readonly string[]) => {
       for (const __x of __xs) __acc = __f(__acc, __x);
       return __acc;
     })([...[...msg.params.keys()]].sort((__a: string, __b: string) => {

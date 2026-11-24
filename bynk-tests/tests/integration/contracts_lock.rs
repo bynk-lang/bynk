@@ -10,7 +10,7 @@ use bynk_project::contracts_lock::{self, ContractsLock};
 
 fn shop(receipt: &str) -> String {
     format!(
-        "context demo.shop\n\ntype Receipt = {receipt}\n\nservice calc {{\n  on call(n: Int) -> Effect[Receipt] {{\n    Effect.pure(Receipt {{ ok: true }})\n  }}\n}}\n"
+        "context demo.shop\n\ntype Receipt = {receipt}\n\nservice calc {{\n  on call(n: Int) -> Effect[Receipt] by Caller {{\n    Effect.pure(Receipt {{ ok: true }})\n  }}\n}}\n"
     )
 }
 

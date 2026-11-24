@@ -5,7 +5,6 @@ import { Some, None, type Option } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { __bynkDistinctBy, __bynkGroupBy, __bynkJoinOn, __bynkMapInsert, __bynkSetInsert, __bynkSetOf, __bynkSetRemove } from "../__bynk_runtime/keys.js";
 import * as __ns_demo_keys from "./../demo/keys.js";
-import * as __ns_bynk_list from "./../bynk/list.js";
 import * as __ns_bynk_map from "./../bynk/map.js";
 
 class ExpectationError extends Error {
@@ -47,7 +46,6 @@ async function test_a_record_keys_a_map_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const a = { region: "eu", n: 7 };
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(__bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), a, 3), { region: "us", n: 1 }, 4);
@@ -73,7 +71,6 @@ async function test_inserting_an_equal_key_replaces_in_place() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const m: ReadonlyMap<OrderId, number> = __bynkMapInsert<OrderId, number>(__bynkMapInsert<OrderId, number>(__bynkMapInsert<OrderId, number>(new globalThis.Map<OrderId, number>(), { region: "eu", n: 1 }, 1), { region: "us", n: 1 }, 2), { region: "eu", n: 1 }, 9);
     if (!(m.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:23:10", 913, 928, "expect m.length() == 2\n  expected: m.length() == 2\n  actual:   " + __bynkShow((m.size)) + " == " + __bynkShow((2))); }
@@ -96,7 +93,6 @@ async function test_an_enum_is_a_set_member_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const s: ReadonlySet<Status> = __bynkSetOf<Status>([Status.Open, Status.Shipped, Status.Open]);
     if (!(s.size === 2)) { throw __bynkExpectFailure("tests/demo/keys.bynk:30:10", 1152, 1167, "expect s.length() == 2\n  expected: s.length() == 2\n  actual:   " + __bynkShow((s.size)) + " == " + __bynkShow((2))); }
@@ -123,7 +119,6 @@ async function test_Bytes_key_a_map_by_content() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const k1 = new globalThis.TextEncoder().encode("ab");
     const k2 = new globalThis.TextEncoder().encode("ab");
@@ -147,7 +142,6 @@ async function test_an_Option_and_a_List_can_key_a_map() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const m: ReadonlyMap<Option<number>, string> = __bynkMapInsert<Option<number>, string>(__bynkMapInsert<Option<number>, string>(new globalThis.Map<Option<number>, string>(), Some(1), "one"), None, "none");
     if (!(__bynkEq(((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(1)), Some("one")))) { throw __bynkExpectFailure("tests/demo/keys.bynk:49:10", 1782, 1811, "expect m.get(Some(1)) == Some(\"one\")\n  expected: m.get(Some(1)) == Some(\"one\")\n  actual:   " + __bynkShow((((__m: ReadonlyMap<Option<number>, string>, __k: Option<number>) => __m.has(__k) ? Some(__m.get(__k) as string) : None)(m, Some(1)))) + " == " + __bynkShow((Some("one")))); }
@@ -173,7 +167,6 @@ async function test_distinct_and_distinctBy_compare_records_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const ls = [{ id: { region: "eu", n: 1 }, qty: 1 }, { id: { region: "eu", n: 1 }, qty: 2 }, { id: { region: "us", n: 1 }, qty: 3 }];
     if (!(__bynkEq(distinctIds(ls), [{ region: "eu", n: 1 }, { region: "us", n: 1 }]))) { throw __bynkExpectFailure("tests/demo/keys.bynk:63:10", 2287, 2370, "expect distinctIds(ls) == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  expected: distinctIds(ls) == [OrderId { region: \"eu\", n: 1 }, OrderId { region: \"us\", n: 1 }]\n  actual:   " + __bynkShow((distinctIds(ls))) + " == " + __bynkShow(([{ region: "eu", n: 1 }, { region: "us", n: 1 }]))); }
@@ -195,7 +188,6 @@ async function test_groupBy_and_joinOn_hash_record_keys_by_value() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const ls = [{ id: { region: "eu", n: 1 }, qty: 1 }, { id: { region: "us", n: 1 }, qty: 3 }, { id: { region: "eu", n: 1 }, qty: 2 }];
     const totals = __bynkGroupBy(ls, (l: Line) => l.id, (id: OrderId, rows: readonly Line[]) => (rows).map((__x: Line) => ((r: Line) => r.qty)(__x)));
@@ -220,7 +212,6 @@ async function test_a_generic_helper_over_a_Key_parameter() {
     type Line = __ns_demo_keys.Line;
     type OrderId = __ns_demo_keys.OrderId;
     type Status = __ns_demo_keys.Status;
-    const { all, any, filter, find, map, max, min, reverse, sort, traverse } = __ns_bynk_list;
     const { contains, getOr, values } = __ns_bynk_map;
     const ls = [{ id: { region: "eu", n: 1 }, qty: 1 }, { id: { region: "eu", n: 1 }, qty: 2 }, { id: { region: "us", n: 1 }, qty: 3 }];
     const counts = countBy(ls, (l: Line) => l.id);

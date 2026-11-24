@@ -167,7 +167,7 @@ fn grouped_project_with(tag: &str, audit_first: bool) -> PathBuf {
     .unwrap();
     std::fs::write(
         root.join("src/shop/audit.bynk"),
-        "context shop.audit\n\nservice probe_audit {\n\ton call() -> Effect[Int] {\n\t\tEffect.pure(1)\n\t}\n}\n",
+        "context shop.audit\n\nservice probe_audit {\n\ton call() -> Effect[Int] by Caller {\n\t\tEffect.pure(1)\n\t}\n}\n",
     )
     .unwrap();
     for (context, file, agent) in [
@@ -177,7 +177,7 @@ fn grouped_project_with(tag: &str, audit_first: bool) -> PathBuf {
         std::fs::write(
             root.join(format!("src/shop/{file}.bynk")),
             format!(
-                "context {context}\n\nagent {agent} {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice probe_{file} {{\n\ton call() -> Effect[Int] {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
+                "context {context}\n\nagent {agent} {{\n\tkey id: String\n\tstore n: Cell[Int] = 0\n\n\ton call bump() -> Effect[Int] {{ Effect.pure(1) }}\n}}\n\nservice probe_{file} {{\n\ton call() -> Effect[Int] by Caller {{\n\t\tEffect.pure(1)\n\t}}\n}}\n"
             ),
         )
         .unwrap();

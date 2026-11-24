@@ -975,7 +975,7 @@ mod tests {
     /// declaration and at a call.
     #[test]
     fn a_given_fn_hovers_with_its_capabilities() {
-        let src = "context demo.m\n\ncapability Logger {\n  fn error(m: String) -> Effect[()]\n}\n\nfn warn(what: String) -> Effect[()] given Logger {\n  Logger.error(what)\n}\n\nservice s {\n  on call() -> Effect[()] given Logger {\n    warn(\"x\")\n  }\n}\n";
+        let src = "context demo.m\n\ncapability Logger {\n  fn error(m: String) -> Effect[()]\n}\n\nfn warn(what: String) -> Effect[()] given Logger {\n  Logger.error(what)\n}\n\nservice s {\n  on call() -> Effect[()] by Caller given Logger {\n    warn(\"x\")\n  }\n}\n";
         for nth in [0, 1] {
             let h = hover_at(src, "warn", nth).expect("`warn` hovers");
             assert!(

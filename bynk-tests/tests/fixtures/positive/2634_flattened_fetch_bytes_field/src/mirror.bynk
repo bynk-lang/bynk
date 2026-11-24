@@ -8,7 +8,7 @@ context mirror
 consumes bynk { Fetch, Request, Method, FetchOptions, Redirect }
 
 service note {
-	on call(url: String) -> Effect[Int] given Fetch {
+	on call(url: String) -> Effect[Int] by Caller given Fetch {
 		let got <- Fetch.receiveBytes(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None }, FetchOptions { timeout: None, redirect: Follow })
 		match got {
 			Ok(r) => Effect.pure(r.status)

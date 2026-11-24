@@ -23,7 +23,7 @@ actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 // One parameter: the single-argument dispatch path.
 service one {
-	on call(body: String) -> Effect[Int] given Clock {
+	on call(body: String) -> Effect[Int] by Caller given Clock {
 		let t <- Clock.now()
 		t + body.length()
 	}
@@ -31,7 +31,7 @@ service one {
 
 // Several parameters: the keyed-object dispatch path.
 service many {
-	on call(key: String, body: String, result: String, args: String, argsObj: String, surface: String, request: String, env: String, ctx: String, handlers: String, deps: String) -> Effect[Int] {
+	on call(key: String, body: String, result: String, args: String, argsObj: String, surface: String, request: String, env: String, ctx: String, handlers: String, deps: String) -> Effect[Int] by Caller {
 		body.length() + result.length() + args.length() + argsObj.length() + surface.length() + request.length() + env.length() + ctx.length() + handlers.length() + deps.length() + key.length()
 	}
 }
@@ -61,13 +61,13 @@ service api from http {
 }
 
 service ticker from cron {
-	on schedule("*/5 * * * *") (deps: Int) -> Effect[Result[(), String]] {
+	on schedule("*/5 * * * *") (deps: Instant) -> Effect[Result[(), String]] {
 		Ok(())
 	}
 }
 
 service ticker2 from cron {
-	on schedule("0 * * * *") (result: Int) -> Effect[Result[(), String]] {
+	on schedule("0 * * * *") (result: Instant) -> Effect[Result[(), String]] {
 		Ok(())
 	}
 }

@@ -226,8 +226,8 @@ mod tests {
 
     #[test]
     fn an_on_call_address_is_refused() {
-        const PAY: &str = "context shop.pay\n\nservice charge {\n  on call(n: Int) -> Effect[Int] {\n    n\n  }\n}\n";
-        const ORDERS: &str = "context shop.orders\n\nconsumes shop.pay\n\nservice place {\n  on call(n: Int) -> Effect[Int] {\n    let r <- shop.pay.charge(n)\n    r\n  }\n}\n";
+        const PAY: &str = "context shop.pay\n\nservice charge {\n  on call(n: Int) -> Effect[Int] by Caller {\n    n\n  }\n}\n";
+        const ORDERS: &str = "context shop.orders\n\nconsumes shop.pay\n\nservice place {\n  on call(n: Int) -> Effect[Int] by Caller {\n    let r <- shop.pay.charge(n)\n    r\n  }\n}\n";
         const SUITE: &str = "suite shop.orders as system {\n  case \"places across the wire\" {\n    let r <- shop.orders.place(1)\n    expect r == 1\n  }\n}\n";
         let refused = compile_files_in_memory_remote(
             &[

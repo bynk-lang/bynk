@@ -27,21 +27,21 @@ provides Mode = SecretMode given Secrets {
 }
 
 service mode {
-	on call() -> Effect[String] given Mode {
+	on call() -> Effect[String] by Caller given Mode {
 		let m <- Mode.current()
 		m
 	}
 }
 
 service key {
-	on call() -> Effect[Bool] given Secrets {
+	on call() -> Effect[Bool] by Caller given Secrets {
 		let k <- Secrets.get("API_KEY")
 		k is Some(_)
 	}
 }
 
 service voice {
-	on call() -> Effect[String] given Tone {
+	on call() -> Effect[String] by Caller given Tone {
 		let t <- Tone.current()
 		t
 	}

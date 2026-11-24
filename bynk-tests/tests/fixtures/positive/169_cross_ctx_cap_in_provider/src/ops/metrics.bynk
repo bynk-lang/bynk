@@ -14,7 +14,7 @@ provides Stamp = ClockStamp given platform.time.Clock {
 }
 
 service report {
-  on call() -> Effect[Int] given Stamp {
+  on call() -> Effect[Int] by Caller given Stamp {
     let s <- Stamp.make()
     s
   }

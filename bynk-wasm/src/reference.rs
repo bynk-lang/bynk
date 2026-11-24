@@ -332,11 +332,10 @@ mod tests {
         let map = member(list, "functions", "map");
         assert_eq!(map["deprecated"], "use the `List` method form `xs.map(f)`");
         assert!(map["doc"].is_string());
-        // `reverse` has no method form yet.
-        assert!(
-            member(list, "functions", "reverse")
-                .get("deprecated")
-                .is_none()
+        // Every function has a method form since #3962, `reverse` included.
+        assert_eq!(
+            member(list, "functions", "reverse")["deprecated"],
+            "use the `List` method form `xs.reverse()`"
         );
     }
 

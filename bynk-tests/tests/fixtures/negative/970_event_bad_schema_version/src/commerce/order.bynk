@@ -7,7 +7,7 @@ event PaymentConfirmed @schema(0) = {
 }
 
 service markPaid {
-  on call(orderId: String) -> Effect[()] {
+  on call(orderId: String) -> Effect[()] by Caller {
     Effect.pure(())
   }
 }

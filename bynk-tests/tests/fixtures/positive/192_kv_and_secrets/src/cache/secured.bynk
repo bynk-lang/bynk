@@ -4,7 +4,7 @@ consumes bynk { Secrets }
 consumes bynk.cloudflare { Kv }
 
 service vault {
-  on call(key: String) -> Effect[Option[String]] given Kv, Secrets {
+  on call(key: String) -> Effect[Option[String]] by Caller given Kv, Secrets {
     let fallback <- Secrets.get("CACHE_FALLBACK")
     let hit <- Kv.get(key)
     match hit {

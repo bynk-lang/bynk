@@ -9,7 +9,7 @@ type Region = enum { North, South }
 type Parcel = { ref: String, region: Region }
 
 service send {
-  on call(ref: String) -> Effect[Parcel] {
+  on call(ref: String) -> Effect[Parcel] by Caller {
     Parcel { ref: ref, region: Region.South }
   }
 }

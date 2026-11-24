@@ -5,7 +5,7 @@ exports opaque { AuthId }
 type AuthId = String where Matches("AUTH-[0-9]{8}")
 
 service authorise {
-  on call(amount: Int) -> Effect[Result[AuthId, Int]] {
+  on call(amount: Int) -> Effect[Result[AuthId, Int]] by Caller {
     Effect.pure(Err(0))
   }
 }

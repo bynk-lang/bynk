@@ -2724,6 +2724,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     if crate::actors::default_actor(protocol).is_some() {
         return;
     }
+    if matches!(protocol, ServiceProtocol::Call) {
+        // Only a real `on call` handler: a stray kind in a call service has its own error.
+        if handler.kind == HandlerKind::Call {
+            errors.push(missing_by_on_call(handler));
+        }
+        return;
+    }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
     // connection is accepted — `on open` must name its actor, no anonymous upgrade.
     let (msg, note) = match protocol {
@@ -2739,6 +2746,38 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     errors.push(
         CompileError::new("bynk.actor.missing_by_on_http", handler.span, msg).with_note(note),
     );
+}
+
+/// Where a handler's `given` clause sits: after its return type, and after its
+/// own `by` clause when it writes one (`-> T by A given C`). A `by` inherited
+/// from a service header lies before the handler and does not move the anchor.
+fn given_anchor_after_by(handler: &Handler) -> Span {
+    let ret = handler.return_type.span();
+    match &handler.by_clause {
+        Some(by) if by.span.start >= ret.end => by.span,
+        _ => ret,
+    }
+}
+
+/// #3891: an `on call` handler states its actor, as an HTTP route does. The
+/// fix-it inserts `by Caller` (the former silent default: any consuming
+/// context) after the return type.
+fn missing_by_on_call(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_call",
+        handler.span,
+        "an `on call` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Caller` admits any context that consumes this one; a refinement or a `Foreign` actor narrows it. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_call`",
+    )
+    .with_suggestion(
+        "add `by Caller`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
 }
 
 /// Once per context, after every actor declaration is read: the checks on foreign callers' secrets.
@@ -3520,7 +3559,7 @@ fn check_service_decls(
                 checker::HandlerBodyCheck {
                     capabilities: handler_caps,
                     declared_capabilities: capability_info_map.clone(),
-                    given_anchor: Some(handler.return_type.span()),
+                    given_anchor: Some(given_anchor_after_by(handler)),
                     report_unused: true,
                     actor_binding,
                     borrowed_held,
@@ -6735,36 +6774,37 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
-/// Validate an `on cron "expr" (at: Int?) -> Effect[Result[(), E]]` handler
-/// (v0.10a §4.1): at most one `Int` parameter (the scheduled time, Unix epoch
-/// milliseconds), a structurally well-formed schedule, and the unit-Result
+/// Validate an `on schedule("expr") (at: Instant?) -> Effect[Result[(), E]]`
+/// handler (v0.10a §4.1): at most one `Instant` parameter (the scheduled time), a structurally well-formed schedule, and the unit-Result
 /// return shape. The service-only rule is enforced earlier, in the parser
 /// (`bynk.parse.handler_in_agent`).
 fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
     // A cron handler takes at most one parameter — the scheduled time, typed
-    // `Int` (epoch milliseconds). A scheduled trigger has no other payload.
+    // `Instant`. A scheduled trigger has no other payload.
     if handler.params.len() > 1 {
         errors.push(
             CompileError::new(
                 "bynk.cron.bad_params",
                 handler.params[1].span,
-                "`on cron` handlers take at most one parameter (the scheduled time)",
+                "`on schedule` handlers take at most one parameter (the scheduled time)",
             )
             .with_note("a scheduled trigger's only input is the time it fired"),
         );
     } else if let Some(p) = handler.params.first()
-        && !matches!(p.type_ref, TypeRef::Base(BaseType::Int, _))
+        && !matches!(p.type_ref, TypeRef::Base(BaseType::Instant, _))
     {
         errors.push(
             CompileError::new(
                 "bynk.cron.bad_params",
                 p.type_ref.span(),
                 format!(
-                    "an `on cron` parameter must be `Int` (the scheduled time in epoch milliseconds), got `{}`",
+                    "an `on schedule` parameter must be `Instant` (the scheduled time), got `{}`",
                     ts_type_ref_display(&p.type_ref),
                 ),
             )
-            .with_note("wrap it in your own time type inside the body if you want stronger typing"),
+            .with_note(
+                "declare it as `at: Instant`; where the body needs the number, use `at.toEpochMillis()`",
+            ),
         );
     }
     // The schedule must be five whitespace-separated fields (light structural
@@ -7632,7 +7672,7 @@ service Api {
 context demo
 
 service Api {
-  on call(ping: String) -> Effect[String] {
+  on call(ping: String) -> Effect[String] by Caller {
     Effect.pure(ping)
   }
 }

@@ -17,7 +17,7 @@ fn LocalLedger.authorise(self, amount: Int) -> Effect[Result[Int, String]] {
 }
 
 service log {
-  on call(amount: Int) -> Effect[Result[Int, String]] {
+  on call(amount: Int) -> Effect[Result[Int, String]] by Caller {
     let Ledger = LocalLedger { balance: 0 }
     let r <- Ledger.authorise(amount)
     r

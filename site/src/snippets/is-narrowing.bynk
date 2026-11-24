@@ -16,7 +16,7 @@ fn useValue(r: Result[Int, String]) -> Int {
 Run calls `service playground`: one `Ok` and one `Err`, so you see both branches.
 ---
 service playground {
-  on call() -> Effect[List[Int]] {
+  on call() -> Effect[List[Int]] by Caller {
     [useValue(Ok(7)), useValue(Err("missing"))]
   }
 }

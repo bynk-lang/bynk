@@ -7,7 +7,7 @@ capability Orders = Queue @name("orders")
 
 // #2793: a batch of values that are not `Codable`.
 service probe {
-	on call(pkcs8: Bytes) -> Effect[()] given Crypto, Orders {
+	on call(pkcs8: Bytes) -> Effect[()] by Caller given Crypto, Orders {
 		let imported <- Crypto.importSigningKey(Ed25519, pkcs8)
 		match imported {
 			Err(_) => Effect.pure(())

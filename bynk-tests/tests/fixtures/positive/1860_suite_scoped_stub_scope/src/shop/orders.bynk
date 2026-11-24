@@ -9,7 +9,7 @@ provides Stamp = FixedStamp {
 }
 
 service place {
-  on call() -> Effect[Int] given Stamp {
+  on call() -> Effect[Int] by Caller given Stamp {
     Stamp.next()
   }
 }

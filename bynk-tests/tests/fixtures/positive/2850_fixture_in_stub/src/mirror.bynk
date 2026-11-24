@@ -3,7 +3,7 @@ context mirror
 consumes bynk { Fetch, Request, Method }
 
 service body {
-	on call(url: String) -> Effect[String] given Fetch {
+	on call(url: String) -> Effect[String] by Caller given Fetch {
 		let res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })
 		match res {
 			Ok(r) => Effect.pure(r.body)

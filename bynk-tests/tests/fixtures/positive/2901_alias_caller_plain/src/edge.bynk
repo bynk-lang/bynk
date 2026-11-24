@@ -4,7 +4,7 @@ consumes app
 consumes lib { Code }
 
 service probe {
-	on call() -> Effect[Int] {
+	on call() -> Effect[Int] by Caller {
 		let echoed <- app.echo(Code.Alpha)
 		match echoed {
 			Alpha => Effect.pure(1)
@@ -14,7 +14,7 @@ service probe {
 }
 
 service forward {
-	on call() -> Effect[Code] {
+	on call() -> Effect[Code] by Caller {
 		let echoed <- app.echo(Code.Beta)
 		Effect.pure(echoed)
 	}

@@ -7,7 +7,7 @@ type Order = { id: String, total: Int }
 type Email = String where MinLength(3)
 
 service place {
-  on call(order: Order, email: Email) -> Effect[()] given Audit {
+  on call(order: Order, email: Email) -> Effect[()] by Caller given Audit {
     let _ <- Audit.append("order", order)
     let _ <- Audit.append[Email]("typed", email)
     let _ <- Audit.appendAll([order])

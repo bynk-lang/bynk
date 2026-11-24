@@ -30,7 +30,7 @@ agent Counter {
 }
 
 service bump {
-	on call(id: CounterId) -> Effect[Result[Int, CounterError]] {
+	on call(id: CounterId) -> Effect[Result[Int, CounterError]] by Caller {
 		let counter = Counter(id)
 		let total <- counter.increment()
 		total
@@ -38,7 +38,7 @@ service bump {
 }
 
 service read {
-	on call(id: CounterId) -> Effect[Result[Int, CounterError]] {
+	on call(id: CounterId) -> Effect[Result[Int, CounterError]] by Caller {
 		let counter = Counter(id)
 		let total <- counter.current()
 		total

@@ -31,13 +31,13 @@ agent Acc {
 }
 
 service add {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     Acc("a").add(n)
   }
 }
 
 service calls {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Calls("a").bump()
   }
 }

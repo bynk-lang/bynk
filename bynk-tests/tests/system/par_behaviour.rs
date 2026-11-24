@@ -43,7 +43,7 @@ capability Audit {
 }
 
 service dash {
-  on call(id: Int) -> Effect[String] given Users, Orders, Audit {
+  on call(id: Int) -> Effect[String] by Caller given Users, Orders, Audit {
     par {
       let user <- Users.get(id)
       let orders <- Orders.forUser(id)
@@ -54,7 +54,7 @@ service dash {
 }
 
 service hoist {
-  on call(id: Int) -> Effect[Int] given Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Orders {
     par {
       let a <- Orders.forUser(id)
       let b <- Orders.forUser(match id { 0 => 1, _ => id })
@@ -64,7 +64,7 @@ service hoist {
 }
 
 service rebind {
-  on call(id: Int) -> Effect[Int] given Orders {
+  on call(id: Int) -> Effect[Int] by Caller given Orders {
     let orders <- Orders.forUser(id)
     par {
       let orders <- Orders.forUser(orders + 1)

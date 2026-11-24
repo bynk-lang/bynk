@@ -1021,7 +1021,7 @@ mod tests {
         consumes bynk { Clock, Logger }\n\
         \n\
         service demo {\n\
-        \x20 on call() -> Effect[Instant] given Clock, Logger {\n\
+        \x20 on call() -> Effect[Instant] by Caller given Clock, Logger {\n\
         \x20   let _ <- Logger.info(\"hi\")\n\
         \x20   let now <- Clock.now()\n\
         \x20   now\n\
@@ -1266,7 +1266,7 @@ mod tests {
             consumes bynk.cloudflare { Kv }\n\
             \n\
             service cache {\n\
-            \x20 on call(k: String) -> Effect[Option[String]] given Kv {\n\
+            \x20 on call(k: String) -> Effect[Option[String]] by Caller given Kv {\n\
             \x20   let v <- Kv.get(k)\n\
             \x20   v\n\
             \x20 }\n\
@@ -1302,7 +1302,7 @@ mod tests {
         let prog = "context kv.index\n\n\
             consumes bynk.cloudflare { Kv }\n\n\
             service scan {\n\
-            \x20 on call(prefix: String) -> Effect[Result[List[String], ()]] given Kv {\n\
+            \x20 on call(prefix: String) -> Effect[Result[List[String], ()]] by Caller given Kv {\n\
             \x20   let keys <- Kv.list(Some(prefix))\n\
             \x20   Ok(keys)\n\
             \x20 }\n\
@@ -1341,7 +1341,7 @@ mod tests {
         let prog = "context app.demo\n\n\
             consumes bynk { Logger }\n\n\
             service demo {\n\
-            \x20 on call() -> Effect[Int] given Logger {\n\
+            \x20 on call() -> Effect[Int] by Caller given Logger {\n\
             \x20   let _ <- Logger.info(\"x\")\n\
             \x20   \"not an int\"\n\
             \x20 }\n\
@@ -1410,7 +1410,7 @@ mod tests {
         let prog = "context app.demo\n\n\
             consumes bynk { Clock, Logger }\n\n\
             service demo {\n\
-            \x20 on call() -> Effect[Instant] given \n\
+            \x20 on call() -> Effect[Instant] by Caller given \n\
             \x20   Clock.now()\n\
             \x20 }\n\
             }\n";
@@ -1550,7 +1550,7 @@ mod tests {
         uses app.text\n\n\
         consumes bynk { Logger }\n\n\
         service api {\n\
-        \x20 on call() -> Effect[String] given Logger {\n\
+        \x20 on call() -> Effect[String] by Caller given Logger {\n\
         \x20   let _ <- Logger.info(\"hi\")\n\
         \x20   let message = greeting(\"World\")\n\
         \x20   message\n\
@@ -1804,7 +1804,7 @@ mod tests {
         type Node = { label: String, next: Option[Node] }\n\
         \n\
         service greet {\n\
-        \x20 on call(tag: Slug, n: Int, pts: List[Point], s: Shape, node: Node) -> Effect[String] {\n\
+        \x20 on call(tag: Slug, n: Int, pts: List[Point], s: Shape, node: Node) -> Effect[String] by Caller {\n\
         \x20   \"hi\"\n\
         \x20 }\n\
         }\n";
@@ -1883,8 +1883,9 @@ mod tests {
 
     #[test]
     fn compile_failure_reports_no_entries_and_keeps_the_existing_shape() {
-        let v =
-            compile_json("context app.bad\nservice s { on call(x: Nope) -> Effect[Int] { 1 } }\n");
+        let v = compile_json(
+            "context app.bad\nservice s { on call(x: Nope) -> Effect[Int] by Caller { 1 } }\n",
+        );
         assert_eq!(v["ok"], false);
         assert!(v["entries"].as_array().unwrap().is_empty());
         assert!(v["files"].as_array().unwrap().is_empty());
@@ -1900,7 +1901,7 @@ mod tests {
              type Page[T] = { items: List[T] }\n\
              \n\
              service s {\n\
-             \x20 on call(t: Token, m: Map[String, Int], r: Result[Int, String], u: Set[Int], p: Page[Int]) -> Effect[Int] { 1 }\n\
+             \x20 on call(t: Token, m: Map[String, Int], r: Result[Int, String], u: Set[Int], p: Page[Int]) -> Effect[Int] by Caller { 1 }\n\
              }\n",
         );
         assert_eq!(v["ok"], true, "{v}");
@@ -1925,7 +1926,7 @@ mod tests {
         for i in 1..8 {
             src.push_str(&format!("type R{i} = {{ inner: R{} }}\n", i - 1));
         }
-        src.push_str("\nservice s {\n  on call(r: R7) -> Effect[Int] { 1 }\n}\n");
+        src.push_str("\nservice s {\n  on call(r: R7) -> Effect[Int] by Caller { 1 }\n}\n");
         let v = compile_json(&src);
         assert_eq!(v["ok"], true, "{v}");
         let mut shape = &v["entries"][0]["params"][0]["shape"];
@@ -1947,7 +1948,7 @@ mod tests {
              type W = { a: P, b: P, c: P }\n\
              \n\
              service s {\n\
-             \x20 on call(w: W, p: P) -> Effect[Int] { 1 }\n\
+             \x20 on call(w: W, p: P) -> Effect[Int] by Caller { 1 }\n\
              }\n",
         );
         assert_eq!(v["ok"], true, "{v}");

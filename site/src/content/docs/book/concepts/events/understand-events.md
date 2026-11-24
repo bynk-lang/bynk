@@ -44,7 +44,7 @@ flowchart LR
 
   ```bynk,fragment
   service markPaid {
-    on call(orderId: String) -> Effect[()] given Events {
+    on call(orderId: String) -> Effect[()] by Caller given Events {
       Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: orderId })
     }
   }
@@ -430,7 +430,7 @@ consumes commerce.order
 consumes bynk { Events }
 
 service leak {
-  on call() -> Effect[()] given Events {
+  on call() -> Effect[()] by Caller given Events {
     Events.emit[PaymentConfirmed](PaymentConfirmed { orderId: "x" })
   }
 }

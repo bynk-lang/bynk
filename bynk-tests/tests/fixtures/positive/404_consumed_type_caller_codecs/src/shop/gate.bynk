@@ -21,7 +21,7 @@ service enter {
   callee's `TokenError` never appears in this context's own signature — it is
   reached only inside the generated `deserialise_Result_Grant_TokenError`.
   ---
-  on call(seed: String) -> Effect[Result[(), GateError]] {
+  on call(seed: String) -> Effect[Result[(), GateError]] by Caller {
     let g <- Tokens.issue(seed)
     match g {
       Ok(_) => Ok(())

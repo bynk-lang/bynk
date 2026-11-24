@@ -4,7 +4,7 @@ context svc
 type Download = { contentType: String, body: Stream[Bytes] }
 
 service s {
-	on call() -> Effect[List[Download]] {
+	on call() -> Effect[List[Download]] by Caller {
 		Effect.pure([])
 	}
 }

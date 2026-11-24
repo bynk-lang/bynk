@@ -6,7 +6,7 @@ fn read(ms: Int) -> Option[Instant] {
 }
 
 service probe {
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(0)
   }
 }

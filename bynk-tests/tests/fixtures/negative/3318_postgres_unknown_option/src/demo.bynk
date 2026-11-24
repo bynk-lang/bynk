@@ -6,7 +6,7 @@ consumes bynk.cloudflare { Postgres }
 capability Main = Postgres @connection("postgres://db.example/shop")
 
 service probe {
-  on call() -> Effect[Int] given Main {
+  on call() -> Effect[Int] by Caller given Main {
     Effect.pure(0)
   }
 }

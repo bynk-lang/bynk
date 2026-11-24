@@ -18,14 +18,14 @@ capability Sessions = Kv
 capability PriceCache = Kv
 
 service remember {
-	on call(k: String, v: String) -> Effect[Option[String]] given Sessions {
+	on call(k: String, v: String) -> Effect[Option[String]] by Caller given Sessions {
 		let _ <- Sessions.put(k, v)
 		Sessions.get(k)
 	}
 }
 
 service peek {
-	on call(k: String) -> Effect[Option[String]] given PriceCache {
+	on call(k: String) -> Effect[Option[String]] by Caller given PriceCache {
 		PriceCache.get(k)
 	}
 }

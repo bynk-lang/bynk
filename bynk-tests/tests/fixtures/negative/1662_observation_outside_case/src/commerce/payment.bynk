@@ -13,7 +13,7 @@ context commerce.payment {
   }
 
   service authorise {
-    on call() -> Effect[Bool] given Logger {
+    on call() -> Effect[Bool] by Caller given Logger {
       let _ <- Logger.log("x")
       expect Logger.log called once
       Effect.pure(true)

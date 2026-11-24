@@ -9,7 +9,7 @@ capability Orders = D1
 type Job = { statement: SqlStatement }
 
 service exec {
-  on call(s: SqlStatement) -> Effect[Result[List[SqlRun], SqlError]] given Orders {
+  on call(s: SqlStatement) -> Effect[Result[List[SqlRun], SqlError]] by Caller given Orders {
     Orders.batch([s])
   }
 }
@@ -21,7 +21,7 @@ event Prepared = {
 }
 
 service prepare {
-  on call() -> Effect[Option[SqlStatement]] {
+  on call() -> Effect[Option[SqlStatement]] by Caller {
     Effect.pure(None)
   }
 }
@@ -31,7 +31,7 @@ agent Keeper {
 
   store last: Cell[Option[SqlStatement]]
 
-  on call() -> Effect[Int] {
+  on call() -> Effect[Int] by Caller {
     Effect.pure(1)
   }
 }

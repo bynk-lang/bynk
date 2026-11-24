@@ -28,7 +28,7 @@ agent Gate {
 }
 
 service gate {
-  on call(id: String, job: String) -> Effect[Result[String, String]] {
+  on call(id: String, job: String) -> Effect[Result[String, String]] by Caller {
     let g = Gate(id)
     let r <- g.take(job)
     r

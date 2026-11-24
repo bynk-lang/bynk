@@ -3,7 +3,7 @@ context boundary.provider
 uses lib.money
 
 service price {
-  on call(n: Int) -> Effect[Result[Cents, Int]] {
+  on call(n: Int) -> Effect[Result[Cents, Int]] by Caller {
     Effect.pure(Err(n))
   }
 }

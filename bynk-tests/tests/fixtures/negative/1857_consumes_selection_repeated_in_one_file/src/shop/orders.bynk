@@ -5,5 +5,5 @@ consumes shop.clock { Clock }
 consumes shop.clock { Clock }
 
 service place {
-  on call() -> Effect[Int] given Clock { Clock.now() }
+  on call() -> Effect[Int] by Caller given Clock { Clock.now() }
 }

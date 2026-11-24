@@ -19,7 +19,7 @@ exports transparent { Receipt }
 type Receipt = { id: String, extra: Option[String] }
 
 service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     Ok(Receipt { id: id, extra: None })
   }
 }
@@ -33,7 +33,7 @@ exports transparent { Receipt }
 type Receipt = { id: String, extra: Option[String], note: Option[String] }
 
 service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     Ok(Receipt { id: id, extra: None, note: None })
   }
 }
@@ -48,7 +48,7 @@ exports transparent { Receipt }
 type Receipt = { id: String, extra: Option[Int] }
 
 service authorise {
-  on call(id: String) -> Effect[Result[Receipt, Int]] {
+  on call(id: String) -> Effect[Result[Receipt, Int]] by Caller {
     Ok(Receipt { id: id, extra: None })
   }
 }
@@ -59,7 +59,7 @@ const ORDERS: &str = r#"context shop.orders
 consumes shop.payment
 
 service place {
-  on call(id: String) -> Effect[Result[String, Int]] {
+  on call(id: String) -> Effect[Result[String, Int]] by Caller {
     let receipt <- shop.payment.authorise(id)
     match receipt {
       Ok(r) => Ok(r.id)

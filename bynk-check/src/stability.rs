@@ -264,11 +264,11 @@ mod tests {
         ),
         (
             "app/qual.bynk",
-            "context app.qual\n\nconsumes bynk\n\nservice ping {\n\ton call() -> Effect[Int] given bynk.Clock {\n\t\tlet _ <- bynk.Clock.now()\n\t\tEffect.pure(1)\n\t}\n}\n",
+            "context app.qual\n\nconsumes bynk\n\nservice ping {\n\ton call() -> Effect[Int] by Caller given bynk.Clock {\n\t\tlet _ <- bynk.Clock.now()\n\t\tEffect.pure(1)\n\t}\n}\n",
         ),
         (
             "app/probe.bynk",
-            "context app.probe\n\nuses bynk.string\nuses bynk.locale.types\nconsumes bynk { Random }\nconsumes bynk.cloudflare { Kv }\n\nservice probe {\n\ton call(xs: List[String]) -> Effect[String] given Kv {\n\t\tlet _ <- Kv.putTtl(\"k\", \"v\", 120)\n\t\tlet joiner: (List[String], String) -> String = join\n\t\tEffect.pure(join(xs, \",\"))\n\t}\n}\n",
+            "context app.probe\n\nuses bynk.string\nuses bynk.locale.types\nconsumes bynk { Random }\nconsumes bynk.cloudflare { Kv }\n\nservice probe {\n\ton call(xs: List[String]) -> Effect[String] by Caller given Kv {\n\t\tlet _ <- Kv.putTtl(\"k\", \"v\", 120)\n\t\tlet joiner: (List[String], String) -> String = join\n\t\tEffect.pure(join(xs, \",\"))\n\t}\n}\n",
         ),
     ];
 
@@ -356,7 +356,7 @@ mod tests {
             .collect()
     }
 
-    const FETCH_MATCH: &str = "context app.probe\n\nconsumes bynk { Fetch, Request, Method, FetchError }\n\nservice probe {\n\ton call(url: String) -> Effect[String] given Fetch {\n\t\tlet res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })\n\t\tmatch res {\n\t\t\tOk(r) => Effect.pure(\"ok\")\n\t\t\tErr(Network) => Effect.pure(\"network\")\n\t\t\tErr(Timeout) => Effect.pure(\"timeout\")\n\t\t\tErr(InvalidHeader) => Effect.pure(\"header\")\n\t\t\tErr(InvalidBody) => Effect.pure(\"body\")\nWILDCARD\t\t}\n\t}\n}\n";
+    const FETCH_MATCH: &str = "context app.probe\n\nconsumes bynk { Fetch, Request, Method, FetchError }\n\nservice probe {\n\ton call(url: String) -> Effect[String] by Caller given Fetch {\n\t\tlet res <- Fetch.send(Request { method: Get, url: url, contentType: None, authorization: None, headers: Map.empty(), body: None })\n\t\tmatch res {\n\t\t\tOk(r) => Effect.pure(\"ok\")\n\t\t\tErr(Network) => Effect.pure(\"network\")\n\t\t\tErr(Timeout) => Effect.pure(\"timeout\")\n\t\t\tErr(InvalidHeader) => Effect.pure(\"header\")\n\t\t\tErr(InvalidBody) => Effect.pure(\"body\")\nWILDCARD\t\t}\n\t}\n}\n";
 
     /// An extensible enum (S3, #1963): listing every variant it has today is
     /// not enough; a wildcard is, and it is then not reported unreachable (the
@@ -385,7 +385,7 @@ mod tests {
     fn a_users_own_enum_of_the_same_name_is_not_extensible() {
         assert_eq!(
             codes(
-                "context app.probe\n\ntype FetchError = enum { Network, Timeout, InvalidHeader }\n\nfn label(e: FetchError) -> String {\n\tmatch e {\n\t\tNetwork => \"n\"\n\t\tTimeout => \"t\"\n\t\tInvalidHeader => \"h\"\n\t}\n}\n\nservice probe {\n\ton call() -> Effect[String] {\n\t\tEffect.pure(label(Network))\n\t}\n}\n"
+                "context app.probe\n\ntype FetchError = enum { Network, Timeout, InvalidHeader }\n\nfn label(e: FetchError) -> String {\n\tmatch e {\n\t\tNetwork => \"n\"\n\t\tTimeout => \"t\"\n\t\tInvalidHeader => \"h\"\n\t}\n}\n\nservice probe {\n\ton call() -> Effect[String] by Caller {\n\t\tEffect.pure(label(Network))\n\t}\n}\n"
             ),
             Vec::<&str>::new()
         );

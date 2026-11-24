@@ -5773,7 +5773,7 @@ mod tests {
 
     const SRC: &str = "context demo\n\
         service svc {\n\
-          on call(n: Int) -> Effect[Int] {\n\
+          on call(n: Int) -> Effect[Int] by Caller {\n\
             let a <- first(n)\n\
             let b = if n > 0 { let c = second(n)\n c } else { third(n) }\n\
             fourth(a + b)\n\
@@ -5860,7 +5860,7 @@ service webhooks from http {
 }
 
 service jobs {
-  on call(n: Int) -> Effect[Int] { Effect.pure(n) }
+  on call(n: Int) -> Effect[Int] by Caller { Effect.pure(n) }
 }
 ";
 
@@ -6058,7 +6058,7 @@ service api from http {
 }
 
 service calc {
-  on call(n: Int) -> Effect[Int] {
+  on call(n: Int) -> Effect[Int] by Caller {
     n
   }
 }

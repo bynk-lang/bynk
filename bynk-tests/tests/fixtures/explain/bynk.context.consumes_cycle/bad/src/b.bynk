@@ -3,7 +3,7 @@ context b
 consumes a
 
 service quote {
-	on call(rate: Int) -> Effect[Int] {
+	on call(rate: Int) -> Effect[Int] by Caller {
 		a.base()
 	}
 }
