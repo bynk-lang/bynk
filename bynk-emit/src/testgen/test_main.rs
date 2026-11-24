@@ -693,13 +693,9 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
                                             ),
                                         ),
                                         // #2272: the steps of a failed history that an agent refused.
-                                        TsObjectEntry::prop(
-                                            "refusals".to_string(),
-                                            and_expr(
-                                                member(ident("r"), "error"),
-                                                member(member(ident("r"), "error"), "refusals"),
-                                            ),
-                                        ),
+                                        error_prop("refusals"),
+                                        // #3980: the whole value a failed `is` tested; absent otherwise.
+                                        error_prop("actual"),
                                     ]
                                     .into_iter()
                                     .chain(retries_entry())
@@ -947,6 +943,18 @@ fn snapshot_files_decl(modules: Vec<TsExpr>) -> TsStmt {
 }
 
 /// #2842: the report declaration, when some selected module takes a snapshot.
+/// `<name>: r.error && r.error.<name>`: a field of the failed case's error, absent (dropped by
+/// `JSON.stringify`) when the case passed or the error has none.
+fn error_prop(name: &str) -> TsObjectEntry {
+    TsObjectEntry::prop(
+        name.to_string(),
+        and_expr(
+            member(ident("r"), "error"),
+            member(member(ident("r"), "error"), name),
+        ),
+    )
+}
+
 fn snapshot_report_decl(sorted: &[&RunnableTest]) -> Option<TsStmt> {
     let modules: Vec<TsExpr> = sorted
         .iter()

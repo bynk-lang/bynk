@@ -110,6 +110,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/4058_cron_schedule_warnings` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.queue.no_dead_letter",
+        "a warning; `positive/3877_queue_no_dead_letter` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),

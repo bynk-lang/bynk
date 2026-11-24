@@ -254,6 +254,7 @@ impl WorkersEmit<'_> {
         // AST contact here was incidental to where the loop happened
         // to be written, not structural.
         let (crons, queues) = bynk_check::symbols::cron_and_queue_triggers(table);
+        let queue_deliveries = bynk_check::symbols::queue_deliveries(table);
         // Arc C slice 4 (#1323): `emit_worker_entry` returns a real
         // `TsProgram` directly — the construction site's own
         // `Verbatim`/`NotYetConverted` wrap is gone, matching the
@@ -312,6 +313,7 @@ impl WorkersEmit<'_> {
             context: ctx_name.clone(),
             crons,
             queues,
+            queue_deliveries,
             addresses: bynk_check::email::routed_addresses(table),
             has_events: own_handles_events(table),
             has_migrate: !migratable.is_empty(),
@@ -438,6 +440,10 @@ impl WorkersEmit<'_> {
             bindings,
             &union(|p| &p.crons),
             &union(|p| &p.queues),
+            &members
+                .iter()
+                .flat_map(|(p, _)| p.queue_deliveries.iter().cloned())
+                .collect::<Vec<_>>(),
             &union(|p| &p.addresses),
             compatibility_flags,
             workers_dev,
@@ -791,6 +797,8 @@ pub(crate) struct MemberParts {
     context: String,
     crons: Vec<String>,
     queues: Vec<String>,
+    /// #3877: its consumers' `delivery { }` settings.
+    queue_deliveries: Vec<bynk_check::symbols::QueueDelivery>,
     addresses: Vec<String>,
     /// Whether it subscribes to events (answers `/_bynk/event/`).
     has_events: bool,

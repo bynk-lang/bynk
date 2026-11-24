@@ -401,6 +401,8 @@ mod system {
     mod examples;
     #[path = "expect_is_narrowing_behaviour.rs"]
     mod expect_is_narrowing_behaviour;
+    #[path = "expect_was_behaviour.rs"]
+    mod expect_was_behaviour;
     #[path = "failure_explanation_behaviour.rs"]
     mod failure_explanation_behaviour;
     #[path = "fetch_headers.rs"]
@@ -475,6 +477,8 @@ mod system {
     mod property_behaviour;
     #[path = "question_in_case_behaviour.rs"]
     mod question_in_case_behaviour;
+    #[path = "queue_delivery_workerd.rs"]
+    mod queue_delivery_workerd;
     #[path = "recovery_never_emits.rs"]
     mod recovery_never_emits;
     #[path = "recursive_boundary_behaviour.rs"]

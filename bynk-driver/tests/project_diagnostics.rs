@@ -321,3 +321,62 @@ service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail)
         check.email_forwards
     );
 }
+
+/// #4233: `bynk check` emits each suite's test module, and a case that delivers
+/// an event (`Svc.event(e, env)`) reads the unit's event-subscriber shapes. The
+/// analysis path used to return before recording them, so the check panicked
+/// ("the events service `X` of unit `Y` has no recorded subscriber shape") where
+/// `bynk test` did not. Runs the checked-in `2052_test_event_address` fixture.
+#[test]
+fn check_does_not_panic_on_a_suite_that_delivers_an_event() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../bynk-tests/tests/fixtures/positive/2052_test_event_address");
+    let opts = bynk_driver::project_options(&fixture).expect("fixture must be readable");
+    let check = project::check_project(&opts);
+    assert!(
+        !check.has_errors(),
+        "{:?}",
+        check
+            .errors
+            .iter()
+            .map(|e| &e.error.category)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// #4233 (review): a half-edited program must not panic either. A type error in
+/// the events service's own file means the unit's subscriber shapes are never
+/// recorded, yet the suite that delivers an event is still lowered; only the
+/// user's own error is reported, not an internal fault.
+#[test]
+fn check_reports_only_the_users_error_when_the_events_service_file_is_broken() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../bynk-tests/tests/fixtures/positive/2052_test_event_address");
+    let read = |rel: &str| fs::read_to_string(fixture.join(rel)).unwrap();
+    let manifest = read("bynk.toml");
+    let ledger = format!(
+        "{}\nfn broken() -> Int {{ \"not an int\" }}\n",
+        read("src/shop/ledger.bynk")
+    );
+    let order = read("src/shop/order.bynk");
+    let archive = read("src/shop/archive.bynk");
+    let suite = read("tests/ledger.bynk");
+    let root = scratch_project(
+        "broken_events_service",
+        &[
+            ("bynk.toml", &manifest),
+            ("src/shop/ledger.bynk", &ledger),
+            ("src/shop/order.bynk", &order),
+            ("src/shop/archive.bynk", &archive),
+            ("tests/ledger.bynk", &suite),
+        ],
+    );
+    let opts = bynk_driver::project_options(&root.0).expect("scratch project must be readable");
+    let check = project::check_project(&opts);
+    let categories: Vec<&str> = check.errors.iter().map(|e| e.error.category).collect();
+    assert!(!categories.is_empty(), "the type error must be reported");
+    assert!(
+        !categories.iter().any(|c| c.starts_with("bynk.internal")),
+        "no internal fault may be reported on top of the user's error: {categories:?}"
+    );
+}

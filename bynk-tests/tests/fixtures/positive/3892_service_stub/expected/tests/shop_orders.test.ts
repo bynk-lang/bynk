@@ -11,18 +11,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -207,7 +221,7 @@ async function test_an_order_is_placed_when_payment_succeeds() {
     const Pay = (deps as any).surface?.Pay;
     const stock = (deps as any).surface?.stock;
     const r = await placeOrder.call("widget", 100, deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "r1"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:9:12", 278, 291, "expect r is Ok(\"r1\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "r1"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:9:12", 278, 291, "expect r is Ok(\"r1\")", "r", () => __bynkShow(r)); }
     if (!(((__obs.log["Pay.authorise"] ?? []).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:10:12", 303, 328, "expect Pay.authorise called once"); }
     if (!((((__obs.log["Pay.authorise"] ?? []).filter((__c: { args: unknown[] }) => {
       const { total } = { total: __c.args[0] } as __Pay_authorise_Call;
@@ -216,7 +230,7 @@ async function test_an_order_is_placed_when_payment_succeeds() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -233,11 +247,11 @@ async function test_a_declined_payment_is_reported() {
     const Pay = (deps as any).surface?.Pay;
     const stock = (deps as any).surface?.stock;
     const r = await placeOrder.call("widget", 100, deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "declined"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:17:12", 529, 549, "expect r is Err(\"declined\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "declined"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:17:12", 529, 549, "expect r is Err(\"declined\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -256,13 +270,13 @@ async function test_a_sequence_of_payments() {
     const stock = (deps as any).surface?.stock;
     const r1 = await placeOrder.call("w", 1, deps);
     const r2 = await placeOrder.call("w", 2, deps);
-    if (!(((__c: boolean) => __c)(r1.tag === "Ok" && r1.value === "a"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:24:12", 752, 765, "expect r1 is Ok(\"a\")"); }
-    if (!(((__c: boolean) => __c)(r2.tag === "Err" && r2.error === "declined"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:25:12", 777, 798, "expect r2 is Err(\"declined\")"); }
+    if (!(((__c: boolean) => __c)(r1.tag === "Ok" && r1.value === "a"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:24:12", 752, 765, "expect r1 is Ok(\"a\")", "r1", () => __bynkShow(r1)); }
+    if (!(((__c: boolean) => __c)(r2.tag === "Err" && r2.error === "declined"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:25:12", 777, 798, "expect r2 is Err(\"declined\")", "r2", () => __bynkShow(r2)); }
     if (!(((__obs.log["Pay.authorise"] ?? []).length === (2)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:26:12", 810, 838, "expect Pay.authorise called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -280,12 +294,12 @@ async function test_the_first_matching_pattern_answers() {
     const Pay = (deps as any).surface?.Pay;
     const stock = (deps as any).surface?.stock;
     const r = await placeOrder.call("w", 5, deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "declined"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:33:12", 1044, 1064, "expect r is Err(\"declined\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "declined"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:33:12", 1044, 1064, "expect r is Err(\"declined\")", "r", () => __bynkShow(r)); }
     if (!(((__obs.log["Pay.authorise"] ?? []).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:34:12", 1076, 1101, "expect Pay.authorise called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -303,12 +317,12 @@ async function test_an_unreserved_sku_never_reaches_payment() {
     const Pay = (deps as any).surface?.Pay;
     const stock = (deps as any).surface?.stock;
     const r = await placeOrder.call("gone", 1, deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "sold out"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:41:12", 1327, 1347, "expect r is Err(\"sold out\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Err" && r.error === "sold out"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:41:12", 1327, 1347, "expect r is Err(\"sold out\")", "r", () => __bynkShow(r)); }
     if (!(((__obs.log["Pay.authorise"] ?? []).length === 0))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:42:12", 1359, 1385, "expect Pay.authorise never called"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -325,11 +339,11 @@ async function test_a_fault_in_payment_fails_the_case() {
     const Pay = (deps as any).surface?.Pay;
     const stock = (deps as any).surface?.stock;
     const r = await placeOrder.call("widget", 100, deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "r1"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:48:12", 1523, 1536, "expect r is Ok(\"r1\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "r1"))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:48:12", 1523, 1536, "expect r is Ok(\"r1\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -351,7 +365,7 @@ async function test_a_wrong_call_count_fails_the_case() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -369,12 +383,12 @@ async function test_an_integration_case_stubs_a_consumed_service_too() {
     const Pay = (deps as any).surface?.Pay;
     const stock = (deps as any).surface?.stock;
     const r = await placeOrder.call("widget", 100, deps);
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "wired"))) { throw __bynkExpectFailure("src/tests/orders_integration.test.bynk:9:12", 290, 306, "expect r is Ok(\"wired\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "wired"))) { throw __bynkExpectFailure("src/tests/orders_integration.test.bynk:9:12", 290, 306, "expect r is Ok(\"wired\")", "r", () => __bynkShow(r)); }
     if (!(((__obs.log["Pay.authorise"] ?? []).length === (1)))) { throw __bynkExpectFailure("src/tests/orders_integration.test.bynk:10:12", 318, 343, "expect Pay.authorise called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -383,7 +397,7 @@ async function test_an_integration_case_stubs_a_consumed_service_too() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

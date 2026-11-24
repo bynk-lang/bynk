@@ -1194,6 +1194,11 @@ pub struct ServiceDecl {
     /// response bodies, byte-for-byte unchanged; a route's `@json(options:)`
     /// overrides it.
     pub json: Option<JsonPolicy>,
+    /// The optional consumer delivery policy (#3877) — a `delivery { }` section
+    /// in the service body, only meaningful on a `from queue` service. `None`
+    /// keeps Cloudflare's defaults, except that a missing dead-letter queue is
+    /// warned about (`bynk.queue.no_dead_letter`).
+    pub delivery: Option<DeliveryPolicy>,
     pub handlers: Vec<Handler>,
     pub documentation: Option<Doc>,
     pub span: Span,
@@ -1507,6 +1512,99 @@ impl JsonPolicy {
         self.field("options")
             .and_then(JsonOptions::from_expr)
             .unwrap_or_default()
+    }
+}
+
+/// A queue consumer's delivery policy (#3877): the `delivery { }` section in a
+/// `from queue` service body. Parsed leniently as a list of `name: value` fields
+/// (as `limits { }`); the checker validates the closed key set, the value shapes
+/// and the ranges.
+#[derive(Debug, Clone)]
+pub struct DeliveryPolicy {
+    pub fields: Vec<DeliveryField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+/// One `name: value` field inside a `delivery { }` policy.
+#[derive(Debug, Clone)]
+pub struct DeliveryField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+/// What a `deadLetter:` key says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeadLetter<'a> {
+    /// Messages that reach the retry limit are written to this queue.
+    Queue(&'a str),
+    /// `None`: the author chose, deliberately, to let them be deleted.
+    Deleted,
+}
+
+impl DeliveryPolicy {
+    /// The value of the last field named `name` (a repeat is flagged by the
+    /// checker).
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+
+    fn int(&self, name: &str) -> Option<i64> {
+        match self.field(name).map(|e| &e.kind) {
+            Some(ExprKind::IntLit { value, .. }) => Some(*value),
+            _ => None,
+        }
+    }
+
+    fn secs(&self, name: &str) -> Option<i64> {
+        match self.field(name).map(|e| &e.kind) {
+            Some(ExprKind::DurationLit { millis, .. }) if millis % 1_000 == 0 => {
+                Some(millis / 1_000)
+            }
+            _ => None,
+        }
+    }
+
+    /// `retries:`, the consumer's `max_retries`. Malformed values were reported
+    /// by the checker and read as unset here.
+    pub fn retries(&self) -> Option<i64> {
+        self.int("retries").filter(|n| (0..=100).contains(n))
+    }
+
+    /// `retryDelay:` in whole seconds.
+    pub fn retry_delay_secs(&self) -> Option<i64> {
+        self.secs("retryDelay").filter(|n| (0..=86_400).contains(n))
+    }
+
+    /// `batchSize:`, the consumer's `max_batch_size`.
+    pub fn batch_size(&self) -> Option<i64> {
+        self.int("batchSize").filter(|n| (1..=100).contains(n))
+    }
+
+    /// `batchWait:` in whole seconds, the consumer's `max_batch_timeout`.
+    pub fn batch_wait_secs(&self) -> Option<i64> {
+        self.secs("batchWait").filter(|n| (0..=60).contains(n))
+    }
+
+    /// `concurrency:`, the consumer's `max_concurrency`.
+    pub fn concurrency(&self) -> Option<i64> {
+        self.int("concurrency").filter(|n| (1..=250).contains(n))
+    }
+
+    /// `deadLetter:`, `None` when the key is absent or malformed.
+    pub fn dead_letter(&self) -> Option<DeadLetter<'_>> {
+        match self.field("deadLetter").map(|e| &e.kind) {
+            Some(ExprKind::StrLit(s)) => Some(DeadLetter::Queue(s)),
+            Some(ExprKind::None) => Some(DeadLetter::Deleted),
+            _ => None,
+        }
     }
 }
 
