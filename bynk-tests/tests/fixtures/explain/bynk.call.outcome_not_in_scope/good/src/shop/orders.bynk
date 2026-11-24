@@ -1,0 +1,11 @@
+context shop.orders
+
+consumes shop.pay as Pay
+consumes bynk { CallOutcome }
+
+service place {
+	on call(total: Int) -> Effect[Int] by Caller {
+		let o <- Pay.authorise.outcome(total)
+		Effect.pure(1)
+	}
+}

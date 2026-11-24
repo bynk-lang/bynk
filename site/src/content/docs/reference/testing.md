@@ -1144,6 +1144,29 @@ suite shop.orders {
   none, the last segment of its path).
 - A service stub still ends at `system` as a capability's does:
   `bynk.stub.at_system`.
+- **A call's failure is stubbed with `rejected`, `faulted` and `unreachable`** (#3894),
+  the outcomes `<context>.<service>.outcome(args)` hands back as a `CallOutcome`:
+
+  ```bynk,fragment
+  suite shop.orders {
+  	consumes shop.pay { Receipt }
+
+  	case "a refused payment is undone" {
+  		stub Stock.reserve(_) returns Ok(())
+  		stub Pay.authorise(_) rejected NotAdmitted
+  		let r <- placeOrder.call("widget", 100)
+  		expect r is Err(_)
+  	}
+  }
+  ```
+
+  `returns <value>` is `Handled(value)`. `rejected <Refusal>` is `Rejected(<Refusal>)`, for
+  one of `TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `NotAdmitted`,
+  `StaleContract` or `Undecodable`. `faulted` is `Faulted`, and `unreachable` is
+  `Unreachable(None)`. These words belong to a consumed service alone
+  (`bynk.stub.outcome_word`; a capability's `stub` faults with `fails`), and are not
+  accepted inside `returns each`. A plain call to such a stub, written without
+  `.outcome`, faults as a real failed call does.
 
 ### Sequenced `stub` — `returns each`
 

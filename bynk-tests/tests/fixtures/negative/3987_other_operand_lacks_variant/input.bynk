@@ -1,0 +1,11 @@
+commons demo {
+  type DbError = | Constraint(message: String) | Failed(message: String)
+
+  type MailError = | RateLimited | Failed(message: String)
+
+  type Level = enum { Low, Medium, High } derives Ord
+
+  fn wrong(p: Level) -> Bool {
+    p == Failed("x")
+  }
+}

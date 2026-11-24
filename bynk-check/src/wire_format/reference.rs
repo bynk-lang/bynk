@@ -438,6 +438,60 @@ fn status_rows(out: &mut String) {
     }
 }
 
+/// #3894: what a Bynk caller makes of each way a call can fail, with `.outcome(…)`.
+const CALLER_OUTCOME: &str = r#"### What a caller makes of a failure
+
+A Bynk caller that writes `<context>.<service>.outcome(args)` gets the call's
+failure as a value, a `CallOutcome[R]` (`bynk`), instead of a fault. The
+variants are grouped by whether the callee's handler ran:
+
+| The callee answered | The caller's outcome | The handler ran? |
+|---|---|---|
+| `200` | `Handled(result)` | yes, and answered |
+| `413` (check 2) | `Rejected(TooLarge)` | no |
+| `401` (check 3) | `Rejected(NotAuthenticated)` | no |
+| `400` `UnsupportedWireVersion` (check 4) | `Rejected(UnsupportedWire)` | no |
+| `404` (check 5) | `Rejected(NoSuchService)` | no |
+| `403` (check 6) | `Rejected(NotAdmitted)` | no |
+| `409` `ContractMismatch` (check 7) | `Rejected(StaleContract)` | no |
+| any other `400` (checks 8 and 9) | `Rejected(Undecodable)` | no |
+| a marked `500` | `Faulted` | yes, and committed nothing |
+| any other status | `Unreachable(Some(status))` | unknown |
+| no response (the `fetch` threw) | `Unreachable(None)` | unknown |
+
+A `200` the caller cannot decode stays a fault: the contract hash makes it a
+toolchain bug rather than an outcome. A failure turned into a value is still
+logged once, as it would have been as a fault. On the `bundle` target
+there is no wire: only `Handled` and `Faulted` occur.
+
+"#;
+
+/// The responses once every check passes, and what a Bynk caller makes of a failure.
+fn write_responses(out: &mut String) {
+    let _ = write!(
+        out,
+        r#"
+If every check passes, the handler runs:
+
+- **`200`**, `content-type: application/json`, with the handler's return value
+  encoded as below. A domain error is a `200` too: `Result[T, E]`'s `Err` is a
+  value, not a status.
+- **`500`**, text `Internal Server Error`, if the handler faults (including
+  encoding a value the format cannot carry, such as an unsafe `Int`). The
+  callee logs the fault; the body says nothing more. The response carries
+  `X-Bynk-Fault: <context>`, the callee's qualified name, so the caller can
+  say which Worker faulted. Only a `/_bynk/call/` fault is marked.
+
+A status not listed here (a platform error between the Workers, for example)
+is a transport failure. A Bynk caller reports a `409` `ContractMismatch` and a
+marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
+`Transport`, with the status.
+
+"#
+    );
+    out.push_str(CALLER_OUTCOME);
+}
+
 /// The whole page, in mdBook form (`# H1` title, relative `.md` links).
 pub fn render_reference() -> String {
     let mut out = String::new();
@@ -540,26 +594,10 @@ request.
 "#
     );
     status_rows(&mut out);
+    write_responses(&mut out);
     let _ = write!(
         out,
-        r#"
-If every check passes, the handler runs:
-
-- **`200`**, `content-type: application/json`, with the handler's return value
-  encoded as below. A domain error is a `200` too: `Result[T, E]`'s `Err` is a
-  value, not a status.
-- **`500`**, text `Internal Server Error`, if the handler faults (including
-  encoding a value the format cannot carry, such as an unsafe `Int`). The
-  callee logs the fault; the body says nothing more. The response carries
-  `X-Bynk-Fault: <context>`, the callee's qualified name, so the caller can
-  say which Worker faulted. Only a `/_bynk/call/` fault is marked.
-
-A status not listed here (a platform error between the Workers, for example)
-is a transport failure. A Bynk caller reports a `409` `ContractMismatch` and a
-marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
-`Transport`, with the status.
-
-### Error bodies
+        r#"### Error bodies
 
 Every JSON error body is an object with a `kind`:
 

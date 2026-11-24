@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **908** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **911** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -463,6 +463,8 @@ There are **908** codes in total. Every code is an error unless it is marked **W
 
 ## Other
 
+- [`bynk.call.outcome_construction`](/reference/diagnostics/bynk.call.outcome_construction/) — A `CallOutcome` or `CallFailure` variant was written as a value in a context; only `.outcome(…)` and a test `stub` make them.
+- [`bynk.call.outcome_not_in_scope`](/reference/diagnostics/bynk.call.outcome_not_in_scope/) — `<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope.
 - [`bynk.cell.invalid_target`](/reference/diagnostics/bynk.cell.invalid_target/) — A `:=` write targets something that is not a `store Cell` field.
 - [`bynk.cell.self_reference`](/reference/diagnostics/bynk.cell.self_reference/) — A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`.
 - [`bynk.codegen.tsc_failed`](/reference/diagnostics/bynk.codegen.tsc_failed/) — `tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).
@@ -815,6 +817,7 @@ There are **908** codes in total. Every code is an error unless it is marked **W
 - [`bynk.stub.bad_sequence`](/reference/diagnostics/bynk.stub.bad_sequence/) — A `stub … returns each […]` sequence is malformed (e.g. empty).
 - [`bynk.stub.generic_op`](/reference/diagnostics/bynk.stub.generic_op/) — A test `stub` targets a capability operation that declares its own type parameter — not supported at v1.
 - [`bynk.stub.not_a_seam`](/reference/diagnostics/bynk.stub.not_a_seam/) — A test `stub` overrides a capability the unit under test does not consume.
+- [`bynk.stub.outcome_word`](/reference/diagnostics/bynk.stub.outcome_word/) — A test `stub` ends `rejected <Refusal>`, `faulted` or `unreachable` on something that is not a consumed context's service, or `rejected` names something that is not a `Refusal`.
 - [`bynk.stub.rhs_type`](/reference/diagnostics/bynk.stub.rhs_type/) — A test `stub … returns <value>` right-hand side does not match the operation's return type.
 - [`bynk.stub.unknown_op`](/reference/diagnostics/bynk.stub.unknown_op/) — A test `stub` names an operation the capability does not declare.
 

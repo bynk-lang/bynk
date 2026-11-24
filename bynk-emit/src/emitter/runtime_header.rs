@@ -113,6 +113,8 @@ const ORDER: &[&str] = &[
     "__BoundaryError",
     "__ServiceBinding",
     "__callService",
+    "__callServiceOutcome",
+    "__callOutcome",
     "__boundaryError",
     // `Bytes`, `Instant`, predicates, `par`, effects, faults, traces.
     "__bynkBytesEqual",
@@ -333,6 +335,8 @@ const TEST_ORDER: &[&str] = &[
     "__bynkSetRemove",
     "__bynkSettleAll",
     "__callService",
+    "__callServiceOutcome",
+    "__callOutcome",
     "__JsonValue",
     "__BoundaryError",
     "__ServiceBinding",

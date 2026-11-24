@@ -73,8 +73,10 @@ class __Stub_Greeter {
   }
 
   async hello(name: string): globalThis.Promise<string> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -85,6 +87,7 @@ class __Stub_Greeter {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -113,8 +116,10 @@ class __Stub_Secrets {
   }
 
   async get(name: string): globalThis.Promise<Option<string>> {
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -125,6 +130,7 @@ class __Stub_Secrets {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -187,8 +193,10 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
   try {
     const deps = __makeIntegrationDeps("the real binding runs at the integration tier");
     const { welcome } = __ns_app;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -199,6 +207,7 @@ async function test_the_real_binding_runs_at_the_integration_tier() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -221,8 +230,10 @@ async function test_the_unit_tier_stubs_the_adapter() {
   try {
     const deps = __makeTestDeps("the unit tier stubs the adapter");
     const { welcome } = __ns_app;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -233,6 +244,7 @@ async function test_the_unit_tier_stubs_the_adapter() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -255,8 +267,10 @@ async function test_a_case_calls_a_capability_directly() {
   try {
     const deps = __makeTestDeps("a case calls a capability directly");
     const { welcome } = __ns_app;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -267,6 +281,7 @@ async function test_a_case_calls_a_capability_directly() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;

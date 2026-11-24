@@ -79,8 +79,10 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -91,6 +93,7 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -114,8 +117,10 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -126,6 +131,7 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
@@ -149,8 +155,10 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
     type Claim = __ns_bynk.Claim;
     type Cookie = __ns_bynk.Cookie;
     type CronSchedule = __ns_bynk.CronSchedule;
@@ -161,6 +169,7 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     type LogLevel = __ns_bynk.LogLevel;
     type Method = __ns_bynk.Method;
     type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
