@@ -436,8 +436,9 @@ fn per_publisher_fifo_on_workerd() {
         "expected workers/fifo-subscriber — context dasherisation changed?"
     );
 
-    // Two ports for the Workers, and two MORE for the V8 inspector: `wrangler dev` binds one whether
-    // or not `--inspector-port` is passed (default 9229), so two instances
+    // Two ports for the Workers, and two MORE for the V8 inspector:
+    // `wrangler dev` binds one whether or not `--inspector-port` is passed
+    // (default 9229), so two instances
     // spawned by this test collide with each other on every run unless both
     // are given distinct explicit ports — `bynk/src/dev.rs`'s multi-context
     // `serve_args` does exactly this for the same reason. Confirmed the hard
