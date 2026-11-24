@@ -265,6 +265,7 @@ pub(super) fn lower_list_kernel(
         (ListOp::LeftJoin, [other, left, right, into]) => {
             Some(list_join_on(&a, true, other, left, right, into, p, cx))
         }
+        (ListOp::Join, [sep]) => Some(list_join_strings(&a, sep, p, cx)),
         (ListOp::Join, [other, on, into]) => Some(list_join(&a, other, on, into, p, cx)),
         (ListOp::GroupBy, [key, into]) => Some(list_group_by(&a, key, into, p, cx)),
         _ => None,
@@ -782,6 +783,17 @@ fn list_take(a: &ListArm, n: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts
         let c = vec![recv, n];
         let [recv, n] = take(c);
         bracketed_method_call(recv, "slice", vec![zero(), clamped_at_zero(n)])
+    }
+}
+
+/// #3978: `xs.join(sep)` on a `List[String]`: the elements joined with `sep`, `""` when empty.
+fn list_join_strings(a: &ListArm, sep: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
+    let recv = pre.lower_node(a.receiver, cx);
+    let sep = pre.lower_node(sep, cx);
+    {
+        let c = vec![recv, sep];
+        let [recv, sep] = take(c);
+        bracketed_method_call(recv, "join", vec![sep])
     }
 }
 
