@@ -197,7 +197,13 @@ the negation of a literal (`-1.hour`). The operator surface is
 `Duration ± Duration`, `Duration * Int` / `Int * Duration` (scalar scaling), and
 `Duration` comparison (subtraction is unclamped — may go negative). Convert
 explicitly: `d.toMillis() -> Int` and the static `Duration.millis(n: Int) ->
-Duration`. It round-trips through the JSON codec as an integer. See
+Duration`. The whole-unit conversions `d.toSeconds()`, `d.toMinutes()`,
+`d.toHours()` and `d.toDays()` return an `Int` and **round towards zero**:
+`90.seconds.toMinutes()` is `1`, and a span of −90 seconds is `-1` minutes.
+Every one is `d.toMillis()` divided by the unit and truncated, so the unit change
+is named rather than hidden in `d.toMillis() / 1000`. A `Duration` can be refined
+(`type Ttl = Duration where AtLeast(60.seconds)`, see
+[Refined types](/reference/refined-types/)). It round-trips through the JSON codec as an integer. See
 [Operators](/reference/operators/#duration--instant-arithmetic).
 
 ### Instant

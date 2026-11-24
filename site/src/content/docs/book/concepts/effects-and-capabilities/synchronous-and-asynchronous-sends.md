@@ -13,7 +13,7 @@ When you call an effectful operation, two things are independent:
 2. **Do you need to wait** for it to complete?
 
 It's tempting to think `Effect[()]` ("no value") means "no need to wait", but it
-doesn't. A durable write like `Kv.putTtl(key, value, 86400)` returns `Effect[()]`
+doesn't. A durable write like `Kv.putTtl(key, value, 1.day)` returns `Effect[()]`
 yet you *must* await it, or a later read in the same handler might not see it. A
 webhook call also has a reply you may not care about, but you may not want the
 response to wait for it either. Same type, different waiting.

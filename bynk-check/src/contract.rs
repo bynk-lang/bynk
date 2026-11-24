@@ -626,6 +626,17 @@ pub(crate) fn canon_pred_set(r: &Refinement) -> Vec<String> {
     preds
 }
 
+/// The value of a one-sided bound, canonical across spellings (#3948).
+fn canon_bound(b: &bynk_syntax::ast::PredBound) -> String {
+    use bynk_syntax::ast::PredBound;
+    match b {
+        PredBound::Int(a) => a.value.to_string(),
+        PredBound::Float(a) => a.value.to_string(),
+        PredBound::Decimal(a) => bynk_syntax::decimal::canonical(&a.coef, a.scale),
+        PredBound::Duration(a) => a.millis.to_string(),
+    }
+}
+
 pub fn canon_predicate(p: &PredKind) -> String {
     match p {
         PredKind::Matches(s) => format!("Matches({s:?})"),
@@ -639,6 +650,10 @@ pub fn canon_predicate(p: &PredKind) -> String {
             bynk_syntax::decimal::canonical(&a.coef, a.scale),
             bynk_syntax::decimal::canonical(&b.coef, b.scale)
         ),
+        // #3948: a `Duration` bound is its milliseconds, the value on the wire.
+        PredKind::InRangeDur(a, b) => format!("InRangeDur({}, {})", a.millis, b.millis),
+        PredKind::AtLeast(b) => format!("AtLeast({})", canon_bound(b)),
+        PredKind::AtMost(b) => format!("AtMost({})", canon_bound(b)),
         PredKind::MinLength(n) => format!("MinLength({n})"),
         PredKind::MaxLength(n) => format!("MaxLength({n})"),
         PredKind::Length(n) => format!("Length({n})"),
