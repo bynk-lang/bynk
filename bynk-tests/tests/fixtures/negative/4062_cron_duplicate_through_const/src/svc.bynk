@@ -1,0 +1,12 @@
+context svc
+
+const Nightly: String = "0 2 * * *"
+
+service sweeper from cron {
+  on schedule(Nightly) () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+  on schedule("0 2 * * *") () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

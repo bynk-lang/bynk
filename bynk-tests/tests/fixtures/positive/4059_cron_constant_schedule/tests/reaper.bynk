@@ -1,0 +1,12 @@
+suite ops.reaper as integration {
+	case "a test that names the constant fires the handler with that schedule" {
+		let a <- sweeper.schedule(Nightly)
+		expect a is Ok(_)
+		let b <- sweeper.schedule(Hourly)
+		expect b is Ok(_)
+		let c <- sweeper.schedule("30 4 * * *")
+		expect c is Ok(_)
+		let n <- api.GET("/runs") by Visitor
+		expect n is Ok(111)
+	}
+}

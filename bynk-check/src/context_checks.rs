@@ -3483,6 +3483,15 @@ fn check_service_decls(
                 continue;
             };
             validate_cron_handler(handler, expr, errors);
+            // #3875: a schedule constant that was refused has no expression to
+            // compare; it is already reported.
+            if handler
+                .schedule_const
+                .as_ref()
+                .is_some_and(|s| s.refusal.is_some())
+            {
+                continue;
+            }
             if let Some(prev) = schedule_first_span.get(expr).copied() {
                 errors.push(
                     CompileError::new(
@@ -6830,11 +6839,46 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// #3875 [DECISION D]: a schedule constant that does not denote a schedule. An
+/// unknown name is the ordinary unknown name (so a private constant of a used
+/// commons reads as `bynk.visibility.private_item`); a constant of another type
+/// is `bynk.cron.invalid_schedule` with a note naming the constant and its
+/// declared type.
+fn refused_schedule_const(
+    sc: &bynk_syntax::ast::ScheduleConst,
+    refusal: &bynk_syntax::ast::ScheduleRefusal,
+) -> CompileError {
+    use bynk_syntax::ast::ScheduleRefusal;
+    let name = &sc.name.name;
+    match refusal {
+        ScheduleRefusal::Unknown => CompileError::new(
+            "bynk.resolve.unknown_name",
+            sc.name.span,
+            format!("the schedule in `on schedule(…)` names an unknown constant `{name}`"),
+        )
+        .with_note("a schedule is a string literal, or a `String` or `CronSchedule` constant"),
+        ScheduleRefusal::Declared(ty) => CompileError::new(
+            "bynk.cron.invalid_schedule",
+            sc.name.span,
+            format!("`{name}` is not a cron schedule: it is declared `{ty}`"),
+        )
+        .with_note(format!(
+            "`schedule(…)` takes a string literal, or a constant declared exactly `String` or `CronSchedule` and bound to a literal; `const {name}` is declared `{ty}`"
+        )),
+    }
+}
+
 /// #3873: the schedule must be valid Cloudflare cron syntax
 /// ([`bynk_syntax::cron::is_cron_expression`]); the message names the failing
 /// field. A valid one may draw the two advisory warnings (`numeric_weekday`,
 /// `uneven_step`), both silenced by writing a name or an explicit list.
 fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
+    if let Some(sc) = &handler.schedule_const
+        && let Some(refusal) = &sc.refusal
+    {
+        errors.push(refused_schedule_const(sc, refusal));
+        return;
+    }
     match bynk_syntax::cron::is_cron_expression(expr) {
         Err(fault) => {
             let mut err = CompileError::new(
