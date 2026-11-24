@@ -563,6 +563,13 @@ pub(crate) fn check_list_kernel_method(
         Some(o @ (ListOp::ForEach | ListOp::ParForEach | ListOp::ParTraverse)) => {
             super::list_par::check_effect_iter(method, o, args, elem, span, ctx)
         }
+        // #3968: the bounded concurrent forms.
+        Some(
+            o @ (ListOp::ParForEachWith
+            | ListOp::ParTraverseWith
+            | ListOp::ParTraverseAllWith
+            | ListOp::ParTraverseTryWith),
+        ) => super::list_par_with::check_par_with(method, o, args, elem, span, ctx),
         // v0.148 (ADR 0172): the collect-all effectful iterators.
         // `traverseAll(f: A -> Effect[Result[B, E]]) -> Effect[List[Result[B, E]]]`
         // runs `f` over each element **in order**; `parTraverseAll` runs them
@@ -1612,7 +1619,13 @@ pub(crate) fn check_duration_kernel_method(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let sig: Option<(Vec<TyId>, Ty)> = match op {
-        Some(DurationOp::ToMillis) => Some((vec![], Ty::Base(BaseType::Int))),
+        Some(
+            DurationOp::ToMillis
+            | DurationOp::ToSeconds
+            | DurationOp::ToMinutes
+            | DurationOp::ToHours
+            | DurationOp::ToDays,
+        ) => Some((vec![], Ty::Base(BaseType::Int))),
         Some(DurationOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
         None => None,
     };
@@ -1621,7 +1634,7 @@ pub(crate) fn check_duration_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toString`",
+                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`",
                 method.name
             ),
         ));

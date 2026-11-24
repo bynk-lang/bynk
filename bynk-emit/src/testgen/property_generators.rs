@@ -7,7 +7,7 @@ use crate::emitter::internal_fault::FaultSite;
 // #1759: every namespace a test module imports, from one definition.
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self};
-use bynk_syntax::ast::{BaseType, PredKind, Refinement, TypeBody, TypeDecl};
+use bynk_syntax::ast::{BaseType, PredBound, PredKind, Refinement, TypeBody, TypeDecl};
 use bynk_ts::{TsArrowBody, TsExpr, TsLit, TsParam, TsStmt, TsType};
 use std::sync::Arc;
 
@@ -34,9 +34,17 @@ pub(super) fn int_bounds(refinement: Option<&Refinement>) -> (i64, i64, i64) {
                     hi = b.value;
                     floor = a.value;
                 }
+                PredKind::AtLeast(PredBound::Int(a)) => {
+                    lo = lo.max(a.value);
+                    floor = floor.max(a.value);
+                }
+                PredKind::AtMost(PredBound::Int(b)) => hi = hi.min(b.value),
                 PredKind::Matches(_)
                 | PredKind::InRangeF(..)
                 | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
                 | PredKind::MinLength(_)
                 | PredKind::MaxLength(_)
                 | PredKind::Length(_)
@@ -69,9 +77,14 @@ pub(super) fn float_bounds(refinement: Option<&Refinement>) -> (f64, f64) {
                     lo = a.value;
                     hi = b.value;
                 }
+                PredKind::AtLeast(PredBound::Float(a)) => lo = lo.max(a.value),
+                PredKind::AtMost(PredBound::Float(b)) => hi = hi.min(b.value),
                 PredKind::Matches(_)
                 | PredKind::InRange(..)
                 | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
                 | PredKind::MinLength(_)
                 | PredKind::MaxLength(_)
                 | PredKind::Length(_)
@@ -99,6 +112,9 @@ pub(super) fn str_min(refinement: Option<&Refinement>) -> i64 {
                 | PredKind::InRange(..)
                 | PredKind::InRangeF(..)
                 | PredKind::InRangeD(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
                 | PredKind::MaxLength(_)
                 | PredKind::NonNegative
                 | PredKind::Positive
@@ -131,14 +147,70 @@ fn decimal_node(coefficient: TsExpr, scale: u32) -> TsExpr {
     ])
 }
 
+/// #3948: `Duration` generation bounds in milliseconds `(lo, hi)` from a
+/// refinement, or `None` for an unrefined `Duration` (which draws `0`, as
+/// before). A one-sided bound leaves a day of room above or below it.
+pub(super) fn duration_bounds(refinement: Option<&Refinement>) -> Option<(i64, i64)> {
+    const DAY: i64 = 86_400_000;
+    let r = refinement.filter(|r| !r.predicates.is_empty())?;
+    let (mut lo, mut hi) = (0i64, DAY);
+    for p in &r.predicates {
+        match &p.kind {
+            PredKind::Positive => lo = lo.max(1),
+            PredKind::NonNegative => lo = lo.max(0),
+            PredKind::InRangeDur(a, b) => {
+                lo = a.millis;
+                hi = b.millis;
+            }
+            PredKind::AtLeast(PredBound::Duration(a)) => {
+                lo = lo.max(a.millis);
+                hi = hi.max(lo.saturating_add(DAY));
+            }
+            PredKind::AtMost(PredBound::Duration(b)) => hi = hi.min(b.millis),
+            PredKind::InRangeD(..)
+            | PredKind::Matches(..)
+            | PredKind::InRange(..)
+            | PredKind::InRangeF(..)
+            | PredKind::AtLeast(_)
+            | PredKind::AtMost(_)
+            | PredKind::MinLength(..)
+            | PredKind::MaxLength(..)
+            | PredKind::Length(..)
+            | PredKind::NonEmpty
+            | PredKind::IsoDate
+            | PredKind::Cron => {}
+        }
+    }
+    if lo > hi {
+        hi = lo;
+    }
+    Some((lo, hi))
+}
+
 /// `Decimal` generation bounds `(lo, hi, scale)` as coefficients at `scale`,
 /// from a refinement (#2622). Unrefined draws over `[-1000.00, 1000.00]`.
 pub(super) fn decimal_bounds(refinement: Option<&Refinement>) -> (i128, i128, u32) {
     let mut scale = 2u32;
     if let Some(r) = refinement {
         for p in &r.predicates {
-            if let PredKind::InRangeD(a, b) = &p.kind {
-                scale = scale.max(a.scale).max(b.scale);
+            match &p.kind {
+                PredKind::InRangeD(a, b) => scale = scale.max(a.scale).max(b.scale),
+                PredKind::AtLeast(PredBound::Decimal(a))
+                | PredKind::AtMost(PredBound::Decimal(a)) => scale = scale.max(a.scale),
+                PredKind::InRangeDur(..)
+                | PredKind::NonNegative
+                | PredKind::Positive
+                | PredKind::Matches(..)
+                | PredKind::InRange(..)
+                | PredKind::InRangeF(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
+                | PredKind::MinLength(..)
+                | PredKind::MaxLength(..)
+                | PredKind::Length(..)
+                | PredKind::NonEmpty
+                | PredKind::IsoDate
+                | PredKind::Cron => {}
             }
         }
     }
@@ -159,9 +231,22 @@ pub(super) fn decimal_bounds(refinement: Option<&Refinement>) -> (i128, i128, u3
                         hi = y;
                     }
                 }
+                PredKind::AtLeast(PredBound::Decimal(a)) => {
+                    if let Some(x) = at(&a.coef, a.scale) {
+                        lo = lo.max(x);
+                    }
+                }
+                PredKind::AtMost(PredBound::Decimal(b)) => {
+                    if let Some(y) = at(&b.coef, b.scale) {
+                        hi = hi.min(y);
+                    }
+                }
                 PredKind::Matches(_)
                 | PredKind::InRange(..)
                 | PredKind::InRangeF(..)
+                | PredKind::InRangeDur(..)
+                | PredKind::AtLeast(_)
+                | PredKind::AtMost(_)
                 | PredKind::MinLength(_)
                 | PredKind::MaxLength(_)
                 | PredKind::Length(_)
@@ -219,7 +304,18 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
                 scale,
             )
         }
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => base_canon_node(base),
+        BaseType::Duration => match duration_bounds(refinement) {
+            Some((lo, hi)) => call(
+                ident("globalThis.Number"),
+                vec![method_call(
+                    ident("rng"),
+                    "int",
+                    vec![TsExpr::bigint(lo), TsExpr::bigint(hi)],
+                )],
+            ),
+            None => base_canon_node(base),
+        },
+        BaseType::Instant | BaseType::Bytes => base_canon_node(base),
     }
 }
 
@@ -246,7 +342,11 @@ pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> 
             let c = 0i128.clamp(lo, hi);
             decimal_node(TsExpr::bigint(c), scale)
         }
-        BaseType::Duration | BaseType::Instant | BaseType::Bytes => base_canon_node(base),
+        BaseType::Duration => match duration_bounds(refinement) {
+            Some((lo, _)) => num_lit(lo.to_string()),
+            None => base_canon_node(base),
+        },
+        BaseType::Instant | BaseType::Bytes => base_canon_node(base),
     }
 }
 

@@ -55,7 +55,7 @@ service api from http {
 \t}
 
 \ton GET(\"/ttl/:key/:value\") (key: String, value: String) -> Effect[HttpResult[String]] by Visitor given Kv {
-\t\tlet _ <- Kv.putTtl(key, value, 120)
+\t\tlet _ <- Kv.putTtl(key, value, 2.minutes)
 \t\tOk(\"ttl\")
 \t}
 

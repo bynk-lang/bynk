@@ -17,6 +17,10 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0924](0924-adapter-transparent-types-are-constructible.md) | **A type an adapter exports transparent is constructible by its consumers** (v0.667) — `.of`, a variant and a record literal are open to a consumer for an adapter's transparent types; a context's own stay the owner's | Accepted (v0.667) |
+| [0923](0923-duration-whole-unit-conversions-and-predicates.md) | **`Duration` converts to whole units towards zero and takes numeric predicates, and `bynk.cloudflare` types its KV spans** (v0.667) — toSeconds/toMinutes/toHours/toDays, predicates over Duration, AtLeast/AtMost, KvTtl and KvCacheTtl | Accepted (v0.667) |
+| [0922](0922-par-fan-out-options-record.md) | **A bounded fan-out is spelled with a ParOptions record, not a named argument** (v0.666) — Adds the four ...With fan-out forms taking ParOptions { limit } so concurrency can be capped without a grammar change | Accepted (v0.666) |
+| [0921](0921-expect-is-bindings.md) | **A statement-form expect keeps the names its `is` binds** (v0.665) — Scope, emission and exclusions of `expect v is P(x)` bindings after the statement | Accepted (v0.665) |
 | [0920](0920-ordering-and-comparators.md) | **`Ordering`, a universal `compare` and `sortWith`** (v0.664) — `a.compare(b)` answers an `Ordering` on every `Ord` type, `then` and `reverse` combine them, `List.sortWith` sorts by a comparator that returns one, and `Ordering`'s variants resolve only from context | Accepted (v0.664) |
 | [0919](0919-fold-seed-takes-expected-type.md) | **An empty fold seed takes its type from the fold's expected result** (v0.663) — Passes the fold call's expected type to its empty seed, rather than inferring the accumulator from the step function | Accepted (v0.663) |
 | [0918](0918-www-authenticate-on-401.md) | **Every 401 carries a WWW-Authenticate challenge** (v0.662.1) — The challenge follows the route's actor, uses a registered scheme where one exists, and is exposed to browsers by CORS | Accepted (v0.662.1) |
