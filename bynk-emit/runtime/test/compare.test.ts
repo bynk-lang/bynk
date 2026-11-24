@@ -16,13 +16,18 @@ import {
 
 const sign = (n: number): number => (n < 0 ? -1 : n > 0 ? 1 : 0);
 
-test("Int and String compare in numeric and code-unit order", () => {
+test("Int and String compare in numeric and code-point order", () => {
   assert.equal(sign(__bynkCmpInt(1, 2)), -1);
   assert.equal(sign(__bynkCmpInt(2, 1)), 1);
   assert.equal(sign(__bynkCmpInt(2, 2)), 0);
   assert.equal(sign(__bynkCmpString("a", "b")), -1);
-  // UTF-16 code units: U+FFFF sorts after a surrogate pair's lead unit.
-  assert.equal(sign(__bynkCmpString("\u{1F600}", "￿")), -1);
+  // Code points (#3954): U+FFFF and U+FF5E sort before an astral character,
+  // although a surrogate pair's lead unit (U+D83D) is below them.
+  assert.equal(sign(__bynkCmpString("\u{1F600}", "￿")), 1);
+  assert.equal(sign(__bynkCmpString("\u{FF5E}", "\u{1F600}")), -1);
+  assert.equal(sign(__bynkCmpString("a\u{1F600}", "a\u{1F601}")), -1);
+  assert.equal(sign(__bynkCmpString("ab", "abc")), -1);
+  assert.equal(__bynkCmpString("é", "é"), 0);
 });
 
 test("Float is a total order: NaN last and equal to itself, -0 equal to 0", () => {

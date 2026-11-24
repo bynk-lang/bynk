@@ -1482,7 +1482,7 @@ type that derives `Ord` must be `Ord`, else
 |---|---|
 | `Int`, `Duration`, `Instant` | numeric |
 | `Decimal` | numeric, ignoring scale (`1.2d` and `1.20d` are equal) |
-| `String` | UTF-16 code unit, element by element (not code point, not locale) |
+| `String` | code point, element by element (not locale); agrees with storage key order and SQLite's `BINARY` collation |
 | `Bytes` | unsigned octets, lexicographic |
 | `Float` | total: `NaN` last and equal to itself, `-0` equal to `0` |
 | `Option[T]` | `None` first, then `Some` by payload |

@@ -1,0 +1,2 @@
+# #3954, #3949: String orders and measures by code point.
+passed=5 failed=0

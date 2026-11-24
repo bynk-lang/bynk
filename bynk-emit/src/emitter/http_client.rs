@@ -91,12 +91,14 @@ const FILE_CODEC_USES: &[&str] = &[
 const WIRE_PREFIX: &str = "__Wire_";
 
 /// The runtime modules the codecs may reach, in dependency order: `bytes`, `decimal`,
-/// `time` (`IsoDate`), `keys` (`Map` and `Set`, which reads `decimal`).
-const OPTIONAL_MODULES: [(&str, &str); 4] = [
+/// `time` (`IsoDate`), `keys` (`Map` and `Set`, which reads `decimal`), `text`
+/// (the code-point length of a `String` predicate).
+const OPTIONAL_MODULES: [(&str, &str); 5] = [
     ("bytes", BYTES_MODULE),
     ("decimal", DECIMAL_MODULE),
     ("time", TIME_MODULE),
     ("keys", KEYS_MODULE),
+    ("text", TEXT_MODULE),
 ];
 
 const RUNTIME: &str = include_str!("http_client_runtime.ts");
@@ -105,6 +107,7 @@ const BYTES_MODULE: &str = include_str!("../../runtime/src/bytes.ts");
 const DECIMAL_MODULE: &str = include_str!("../../runtime/src/decimal.ts");
 const KEYS_MODULE: &str = include_str!("../../runtime/src/keys.ts");
 const TIME_MODULE: &str = include_str!("../../runtime/src/time.ts");
+const TEXT_MODULE: &str = include_str!("../../runtime/src/text.ts");
 
 /// The `bynk client` experimental notice, in the generated header.
 const EXPERIMENTAL: &str = "Experimental: member names and the shape of this module may change in a minor version until it is stabilised.";

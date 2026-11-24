@@ -2,13 +2,14 @@
 // commons b
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
+import { __bynkCodePointLength } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Beta = string & { readonly __brand: "Beta" };
 
 export const Beta = {
   of(value: string): Result<Beta, ValidationError> {
-    if (!(value.length > 0)) {
+    if (!(__bynkCodePointLength(value) > 0)) {
       return Err({ field: "Beta", message: "must be non-empty", value });
     }
     return Ok(value as Beta);
