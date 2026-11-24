@@ -197,7 +197,7 @@ sees a producer and its consumer. When a context in the project consumes the que
 `Queue @name("…")` instance sends to, the typed sends are checked against the
 consumer's message type:
 
-```bynk,fragment
+```bynk,ignore
 // shop.orders
 capability OrderEvents = Queue @name("order-events")
 
