@@ -659,26 +659,46 @@ pub fn describe_path_param_at(source: &str, offset: usize) -> Option<String> {
                 }
                 let name = &p.name.name;
                 let ty = bynk_syntax::print::type_ref_to_string(&p.type_ref);
-                // What the segment is read as, and whether a refinement can refuse it.
-                let (reads, refined) = match &p.type_ref {
-                    TypeRef::Base(b, _) => (base_phrase(b), false),
+                // What the segment is read as (when this file declares the type), whether it can
+                // fail to read, and whether a refinement can refuse it.
+                let known = |base: &BaseType, refined: bool| {
+                    let text = *base == BaseType::String;
+                    (Some(base_phrase(base)), !text, refined)
+                };
+                let (reads, mismatch, refined) = match &p.type_ref {
+                    TypeRef::Base(b, _) => known(b, false),
                     TypeRef::Named(id) => match decls.get(id.name.as_str()).map(|t| &t.body) {
-                        Some(TypeBody::Refined { base, .. }) => (base_phrase(base), true),
+                        Some(TypeBody::Refined { base, .. }) => known(base, true),
                         Some(TypeBody::Opaque {
                             base, refinement, ..
-                        }) => (base_phrase(base), refinement.is_some()),
-                        Some(TypeBody::Sum(_)) => ("a variant name".to_string(), false),
-                        _ => ("its own text form".to_string(), true),
+                        }) => known(base, refinement.is_some()),
+                        Some(TypeBody::Sum(_)) => (Some("a variant name".to_string()), true, false),
+                        // Declared in another file, a commons or a consumed context: not known here.
+                        _ => (None, true, true),
                     },
                     _ => return None,
                 };
-                let mut text = format!(
-                    "**`{name}`** — a path parameter: the `:{name}` segment, read as {reads} and decoded as `{ty}` after the route matches.\n\n- `400 StructuralMismatch` at `path.{name}` when the segment does not read as {reads}."
-                );
+                let mut text = match &reads {
+                    Some(r) => format!(
+                        "**`{name}`** — a path parameter: the `:{name}` segment, read as {r} and decoded as `{ty}` after the route matches."
+                    ),
+                    None => format!(
+                        "**`{name}`** — a path parameter: the `:{name}` segment, decoded as `{ty}` after the route matches."
+                    ),
+                };
+                if mismatch {
+                    let what = reads.unwrap_or_else(|| format!("`{ty}`"));
+                    text.push_str(&format!(
+                        "\n\n- `400 StructuralMismatch` at `path.{name}` when the segment does not read as {what}."
+                    ));
+                }
                 if refined {
                     text.push_str(&format!(
                         "\n- `400 RefinementViolation` at `path.{name}` when it breaks `{ty}`'s refinement."
                     ));
+                }
+                if !mismatch && !refined {
+                    text.push_str("\n\nAny text binds.");
                 }
                 return Some(text);
             }
@@ -5237,6 +5257,19 @@ mod tests {
             "{n}"
         );
         assert!(at("q: String").is_none(), "q binds no segment");
+        // A plain `String` has no 400; a type declared elsewhere makes no specific claim.
+        let svc2 = "context api\nservice api from http {\n  on GET(\"/a/:s/:o\") (s: String, o: Elsewhere) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"x\")\n  }\n}\n";
+        let plain = describe_path_param_at(svc2, svc2.find("s: String").unwrap()).expect("hovers");
+        assert!(
+            plain.contains("Any text binds") && !plain.contains("400"),
+            "{plain}"
+        );
+        let other =
+            describe_path_param_at(svc2, svc2.find("o: Elsewhere").unwrap()).expect("hovers");
+        assert!(
+            !other.contains("variant name") && !other.contains("read as a"),
+            "{other}"
+        );
     }
 
     #[test]
