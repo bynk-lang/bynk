@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `Ordering` is a prelude type, nameable with no import in every context and commons, and building it in a context is not a rebrand construction
----
+# 0925 — Prelude types: one registration point for compiler-known sums
 
-## ADR: prelude-types
-title: Prelude types: one registration point for compiler-known sums
-summary: a table of prelude types (name, declaring first-party unit, trigger spellings) drives implicit reach, bare-variant resolution and the exemption from per-context rebranding; `Ordering` is the first row
+- **Status:** Accepted (v0.668)
 
 **Context.** #3955 shipped `Ordering` as the first-party commons `bynk.ordering`, reached by an implicit `uses` that a textual check added to a unit mentioning `.compare`, `.sortWith` or `Ordering`. That worked for naming the type in a commons and a context, but the rule lived in three unrelated places, and a context that built `Ordering.Less` or a bare `Less` was refused as `bynk.context.rebrand_construction`, because a commons type a context reaches through `uses` is rebranded per context and its constructors are not in scope there. #3952 and #3976 add compiler-known sums of their own.
 
