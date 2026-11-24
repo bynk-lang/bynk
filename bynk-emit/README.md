@@ -62,8 +62,8 @@ directly.
 
 ```toml
 [dependencies]
-bynk-driver = "0.665"
-bynk-emit = "0.665"
+bynk-driver = "0.666"
+bynk-emit = "0.666"
 ```
 
 <!-- Not a doctest: it drives `bynk-driver`, which `bynk-emit` does not depend on, even for its tests

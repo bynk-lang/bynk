@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes, ast_importers
-changelog: `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` and `parTraverseTryWith` bound a concurrent fan-out with a `ParOptions { limit }` from `bynk`
----
+# 0922 — A bounded fan-out is spelled with a ParOptions record, not a named argument
 
-## ADR: par-fan-out-options-record
-title: A bounded fan-out is spelled with a ParOptions record, not a named argument
-summary: Adds the four ...With fan-out forms taking ParOptions { limit } so concurrency can be capped without a grammar change
+- **Status:** Accepted (v0.666)
 
 **Context.** `parForEach`, `parTraverse`, `parTraverseAll` and `parTraverseTry` start every step at once, which exhausts connection and subrequest limits on a long list. A bound is needed, but calls are positional only (ADR 0780) and there are no optional parameters or overloading (ADR 0051), so a `limit:` argument or a defaulted parameter would need a grammar change.
 

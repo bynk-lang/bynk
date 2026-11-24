@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0922](0922-par-fan-out-options-record.md) | **A bounded fan-out is spelled with a ParOptions record, not a named argument** (v0.666) — Adds the four ...With fan-out forms taking ParOptions { limit } so concurrency can be capped without a grammar change | Accepted (v0.666) |
 | [0921](0921-expect-is-bindings.md) | **A statement-form expect keeps the names its `is` binds** (v0.665) — Scope, emission and exclusions of `expect v is P(x)` bindings after the statement | Accepted (v0.665) |
 | [0920](0920-ordering-and-comparators.md) | **`Ordering`, a universal `compare` and `sortWith`** (v0.664) — `a.compare(b)` answers an `Ordering` on every `Ord` type, `then` and `reverse` combine them, `List.sortWith` sorts by a comparator that returns one, and `Ordering`'s variants resolve only from context | Accepted (v0.664) |
 | [0919](0919-fold-seed-takes-expected-type.md) | **An empty fold seed takes its type from the fold's expected result** (v0.663) — Passes the fold call's expected type to its empty seed, rather than inferring the accumulator from the step function | Accepted (v0.663) |
