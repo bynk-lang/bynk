@@ -1215,17 +1215,6 @@ pub(super) fn run_checks(
         &mut errors,
     );
 
-    // #3890: a call the callee's `Caller` refinement does not admit, and an
-    // `IsContext(…)` name that is no context.
-    bynk_check::caller_admission::phase_caller_admission(
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        &unit_callees,
-        &mut errors,
-    );
-
     platform_lock_phase(
         target,
         platform,

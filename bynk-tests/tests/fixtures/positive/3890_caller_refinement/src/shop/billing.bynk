@@ -1,6 +1,5 @@
 context shop.billing
 
-// #3890: refinements over `Caller` name the contexts that may call.
 actor Admin = Caller where IsContext(shop.admin)
 actor Fulfilment = Caller where IsContext(shop.orders, shop.fulfil)
 actor NotLegacy = Caller where !IsContext(shop.legacy)
@@ -24,7 +23,6 @@ service status {
   }
 }
 
-// A refinement over `Caller` is a sum's one `Internal` member.
 service book {
   on call(id: String) -> Effect[Result[String, String]] by who: Fulfilment | Ledger {
     match who {

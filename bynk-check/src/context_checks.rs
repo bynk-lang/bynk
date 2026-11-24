@@ -2807,28 +2807,27 @@ fn check_foreign_secret_dupes(table: &UnitTable, errors: &mut Vec<CompileError>)
     }
 }
 
-fn check_actor_contracts(
+/// A refinement actor's declaration (`actor Admin = <Base> where <pred>`): over
+/// the prelude `Caller` (#3890) the predicate is `IsContext(…)`; over a declared
+/// `Bearer` actor (v0.53) it is the closed claim-predicate set.
+fn check_refinement_actor(
+    actor: &bynk_syntax::ast::ActorDecl,
     table: &UnitTable,
-    resolved: &ResolvedCommons,
     refs: &mut RefSink,
     errors: &mut Vec<CompileError>,
 ) {
     use crate::actors::{self, Scheme};
-
-    // Pass 1 — actor declaration well-formedness.
-    for actor in table.actors.values() {
-        refs.set_owner(&actor.name.name);
-        // v0.53: a refinement actor (`actor Admin = User where <pred>`) carries
-        // an authorisation invariant. Its base MUST be a declared `Bearer` actor
-        // (only Bearer carries claims to authorise against), and its `where`
-        // predicate MUST be in the closed claim-predicate set.
-        if let Some(r) = &actor.refinement
-            && is_caller_refinement(actor, table)
-        {
-            // #3890: a refinement over the prelude `Caller` narrows which
-            // contexts may call, by the closed `IsContext(…)` vocabulary.
-            if let Err(span) = actors::parse_caller_predicate(&r.predicate) {
-                errors.push(
+    // v0.53: a refinement actor (`actor Admin = User where <pred>`) carries
+    // an authorisation invariant. Its base MUST be a declared `Bearer` actor
+    // (only Bearer carries claims to authorise against), and its `where`
+    // predicate MUST be in the closed claim-predicate set.
+    if let Some(r) = &actor.refinement
+        && is_caller_refinement(actor, table)
+    {
+        // #3890: a refinement over the prelude `Caller` narrows which
+        // contexts may call, by the closed `IsContext(…)` vocabulary.
+        if let Err(span) = actors::parse_caller_predicate(&r.predicate) {
+            errors.push(
                     CompileError::new(
                         "bynk.actor.refinement_predicate_unsupported",
                         span,
@@ -2839,36 +2838,35 @@ fn check_actor_contracts(
                          `hasClaim` belong to a `Bearer` actor",
                     ),
                 );
-            }
-            continue;
         }
-        if let Some(r) = &actor.refinement {
-            let base = table.actors.get(&r.base.name);
-            let base_is_bearer = base.is_some_and(|b| {
-                b.refinement.is_none()
-                    && b.auth.as_ref().and_then(|a| Scheme::from_name(&a.name))
-                        == Some(Scheme::Bearer)
-            });
-            if base_is_bearer {
-                refs.record(r.base.span, SymbolKind::Actor, &r.base.name);
-            } else {
-                errors.push(
-                    CompileError::new(
-                        "bynk.actor.refinement_base_unsupported",
-                        r.base.span,
-                        format!(
-                            "the base actor `{}` of refinement `{}` must be a declared `Bearer` actor",
-                            r.base.name, actor.name.name,
-                        ),
-                    )
-                    .with_note(
-                        "authorisation invariants test JWT claims, which only a `Bearer` actor \
-                         carries — refine a `Bearer` actor, not `None`/`Internal`/`Signature`",
+        return;
+    }
+    if let Some(r) = &actor.refinement {
+        let base = table.actors.get(&r.base.name);
+        let base_is_bearer = base.is_some_and(|b| {
+            b.refinement.is_none()
+                && b.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) == Some(Scheme::Bearer)
+        });
+        if base_is_bearer {
+            refs.record(r.base.span, SymbolKind::Actor, &r.base.name);
+        } else {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.refinement_base_unsupported",
+                    r.base.span,
+                    format!(
+                        "the base actor `{}` of refinement `{}` must be a declared `Bearer` actor",
+                        r.base.name, actor.name.name,
                     ),
-                );
-            }
-            if let Err(span) = actors::parse_claim_predicate(&r.predicate) {
-                errors.push(
+                )
+                .with_note(
+                    "authorisation invariants test JWT claims, which only a `Bearer` actor \
+                         carries — refine a `Bearer` actor, not `None`/`Internal`/`Signature`",
+                ),
+            );
+        }
+        if let Err(span) = actors::parse_claim_predicate(&r.predicate) {
+            errors.push(
                     CompileError::new(
                         "bynk.actor.refinement_predicate_unsupported",
                         span,
@@ -2880,7 +2878,23 @@ fn check_actor_contracts(
                          belongs to a refinement over `Caller`)",
                     ),
                 );
-            }
+        }
+    }
+}
+
+fn check_actor_contracts(
+    table: &UnitTable,
+    resolved: &ResolvedCommons,
+    refs: &mut RefSink,
+    errors: &mut Vec<CompileError>,
+) {
+    use crate::actors::Scheme;
+
+    // Pass 1 — actor declaration well-formedness.
+    for actor in table.actors.values() {
+        refs.set_owner(&actor.name.name);
+        if actor.refinement.is_some() {
+            check_refinement_actor(actor, table, refs, errors);
             continue;
         }
         let Some(auth) = &actor.auth else {

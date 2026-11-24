@@ -203,7 +203,15 @@ fn check_handler_calls(
             && let Some(by) = h.by_clause.as_ref().or(svc.default_by.as_ref())
         {
             let names: Vec<&str> = by.actors.iter().map(|a| a.name.as_str()).collect();
-            if !names.iter().any(|n| actor_admits(n, table, caller)) {
+            // Only a `Caller` refinement narrows the contexts at compile time; a
+            // foreign-only handler's refusal of a context stays a run-time `403`.
+            let refined = names.iter().any(|n| {
+                table
+                    .actors
+                    .get(*n)
+                    .is_some_and(|d| caller_refinement(d, &table.actors).is_some())
+            });
+            if refined && !names.iter().any(|n| actor_admits(n, table, caller)) {
                 let (actor, admitted) = admitted_note(&names, table, contexts, caller);
                 errors.push_for(
                     Some(file),

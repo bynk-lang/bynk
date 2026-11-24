@@ -1253,17 +1253,6 @@ fn phase_clean_program_checks(
         errors,
     );
 
-    // #3890: a call the callee's `Caller` refinement does not admit, and an
-    // `IsContext(…)` name that is no context.
-    crate::caller_admission::phase_caller_admission(
-        parsed,
-        groups,
-        kinds,
-        unit_tables,
-        unit_callees,
-        errors,
-    );
-
     // v0.19 (decisions 0017/0024), P5.3: platform-lock enforcement — closes
     // category 5 of this module's own residual-gap accounting. Inherited from
     // the now-deleted `analyse_project_with`'s own hardcoded
