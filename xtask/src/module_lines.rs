@@ -287,7 +287,7 @@ pub fn render_ceilings(measured: &[ModuleLines]) -> String {
 }
 
 /// What is wrong, if anything: a file past its ceiling, one that newly crossed the
-/// threshold, an entry that no longer names a file over it, a new entry at or over
+/// threshold, an entry that no longer names a file over it, an entry at or over
 /// [`EXIT_CAP`], and a key with a `\\`.
 pub fn violations(measured: &[ModuleLines], ceilings: &[(String, usize)]) -> Vec<String> {
     let mut out = Vec::new();
