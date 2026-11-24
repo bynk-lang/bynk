@@ -19,6 +19,27 @@ commons totals {
 }
 ```
 
+A `fold` takes its accumulator type from the seed. A seed such as `0` or `""` says it
+all, and an empty collection (`List.empty()`, `Set.empty()`, `Map.empty()`) says it too
+when the fold is expected to produce a known type, such as a function's return type or a
+typed `let`:
+
+```bynk
+commons tags {
+	type Post = {
+		id: Int,
+		tags: Set[String],
+	}
+
+	fn tagsOf(posts: List[Post]) -> Set[String] {
+		posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))
+	}
+}
+```
+
+With no such context (`let tags = posts.fold(Set.empty(), …)`) the compiler cannot tell
+what the set holds: annotate the result, `let tags: Set[String] = …`, or pass a typed seed.
+
 Recursion is for what the kernel does not cover: a loop whose number of steps
 depends on what it finds (a parser, a state machine, a search that stops early,
 a fetch that pages until a cursor runs out), and a structure that is itself

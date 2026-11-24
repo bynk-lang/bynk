@@ -88,7 +88,7 @@ pub(crate) fn check_collection_static(
                 ),
             )
             .with_note(
-                "annotate the binding (`let xs: List[T] = List.empty()`) or use it where the collection type is expected",
+                "annotate the binding (`let xs: List[T] = List.empty()`) or use it where the collection type is expected; for a `fold`, annotate its result (`let tags: Set[String] = xs.fold(Set.empty(), …)`) or pass a typed seed",
             ),
         );
     }
@@ -509,7 +509,11 @@ pub(crate) fn check_list_kernel_method(
             if !arity(2, ctx) {
                 return None;
             }
-            let acc = type_of(&args[0], None, ctx)?;
+            let acc = type_of(
+                &args[0],
+                super::collections::fold_seed_expected(&args[0], ctx),
+                ctx,
+            )?;
             let step = Ty::Fn {
                 params: vec![acc, elem],
                 ret: acc,

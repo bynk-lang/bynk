@@ -1,0 +1,12 @@
+commons demo.f
+
+type Post = { id: Int, tags: Set[String] }
+
+fn count[T](s: Set[T]) -> Int {
+	s.length()
+}
+
+// The callee's parameter type still holds `T`, so it is no expectation for the seed.
+fn viaGeneric(posts: List[Post]) -> Int {
+	count(posts.fold(Set.empty(), (acc, p) => acc.union(p.tags)))
+}

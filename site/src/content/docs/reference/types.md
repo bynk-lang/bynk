@@ -883,6 +883,8 @@ The effect methods form one grid of names:
 | in order | `forEach` | `traverse` | `traverseAll` | `traverseTry` |
 | concurrently | `parForEach` | `parTraverse` | `parTraverseAll` | `parTraverseTry` |
 
+**An empty seed (#4193).** `fold` takes its accumulator type from `init`, so an empty collection as the seed (`List.empty()`, `Set.empty()`, `Map.empty()`) has nothing to take a type from unless the fold itself is expected to produce one. It then takes it from there: a typed `let` (`let tags: Set[String] = posts.fold(Set.empty(), (acc, p) => acc.union(p.tags))`), a function's return type, or an argument position. `Set.fold` and `Map.fold` follow the same rule. A fold with an empty seed and no such context is `bynk.types.uninferable_element_type`, and its note says to annotate the result or pass a typed seed. The step function does not settle the type.
+
 Before #3967 `parTraverse` returned `()`; that is now `parForEach`. A `parTraverse` whose step returns `Effect[()]` still type-checks, so it gets the warning `bynk.list.par_traverse_unit`, whose fix (`bynk check --fix`) renames the call. A concurrent call that faults waits for every step to settle, then raises the first fault in input order, as `par` does; results are in input order whatever order the steps finish in.
 
 The methods returning an `Effect` can only be called where effects are allowed.
