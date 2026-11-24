@@ -105,7 +105,7 @@ async function main() {
           emit({ type: "case", suite, name: r.name, outcome: "pass", durationMs: r.durationMs });
         } else {
           failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.error && r.error.violation, refusals: r.error && r.error.refusals, actual: r.error && r.error.actual, durationMs: r.durationMs });
+          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.error && r.error.violation, refusals: r.error && r.error.refusals, actual: r.error && r.error.actual, kind: r.kind, seed: r.seed, counterexample: r.counterexample, durationMs: r.durationMs });
         }
       }
       await runSelected(m.run, report);

@@ -6,7 +6,7 @@
 use bynk_syntax::ast::Expr;
 
 use super::super::lower_ctx::LowerCtx;
-use super::is::gather_is_bindings_for_emit;
+use super::is::gather_is_bindings_for_statement;
 
 /// The `const name = …;` declarations for the `is` tests `predicate` proves, for the statements
 /// after an `expect predicate`. Empty when it binds nothing.
@@ -16,6 +16,6 @@ pub(in crate::emitter) fn declarations(
 ) -> Vec<bynk_ts::TsStmt> {
     let mut out = Vec::new();
     let mut found = false;
-    gather_is_bindings_for_emit(predicate, true, cx, &mut out, &mut found);
+    gather_is_bindings_for_statement(predicate, cx, &mut out, &mut found);
     out
 }

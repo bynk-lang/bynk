@@ -2,6 +2,7 @@
 // context demo.greet
 
 import { Ok, Err, Some, None, type Result, type Option } from "../__bynk_runtime/result.js";
+import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 export type Shape =
     { readonly tag: "Circle"; readonly n: number }
@@ -14,6 +15,20 @@ export const Shape = {
   Empty: { tag: "Empty" } as Shape,
 };
 
+export type Positive = number & { readonly __brand: "demo.greet.Positive" };
+
+export const Positive = {
+  of(value: number): Result<Positive, ValidationError> {
+    if (!globalThis.Number.isSafeInteger(value)) {
+      return Err({ field: "Positive", message: "must be a safe integer", value });
+    }
+    if (!(value >= 1 && value <= 100)) {
+      return Err({ field: "Positive", message: "must be in range [1, 100]", value });
+    }
+    return Ok(value as Positive);
+  },
+};
+
 export function parse(n: number): Result<number, string> {
   return (n > 0 ? Ok(n) : Err("not positive"));
 }
@@ -24,4 +39,8 @@ export function shape(n: number): Shape {
 
 export function find(n: number): Option<number> {
   return (n > 0 ? Some(n) : None);
+}
+
+export function double(p: Positive): number {
+  return p * 2;
 }

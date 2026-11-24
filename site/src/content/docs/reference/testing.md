@@ -630,8 +630,10 @@ The body and path rejections carry `detail`, the router's one-line
 description of what it refused:
 
 ```bynk,fragment
-expect r is Rejected(RefinementViolation(d))
-expect d.contains("sku")
+match r {
+  Rejected(RefinementViolation(d)) => expect d.contains("sku")
+  _ => expect false
+}
 ```
 
 `HttpOutcome` and `BoundaryRejection` are checked like any sum, so a mistyped
@@ -891,6 +893,9 @@ and a failed `_ => expect false` arm [reports the value it matched](#expect).
   binds `a` and `b`. An or-pattern, `expect s is Circle(k) | Square(k)`, binds what
   every alternative binds. A predicate that does not prove the test (`||`, `!`)
   binds nothing, as in an `if`.
+- Only names directly inside the pattern bind (`Ok(code)`, `Some(n)`, a record's
+  fields, an or-pattern's shared names), as in an `if`. A nested sub-pattern's names
+  (`Rejected(RefinementViolation(d))`) do not: use a `match` for that shape.
 - A bound name that shadows an existing one is renamed in the output the way a
   re-`let` is, and reads as the new binding afterwards.
 - An `expect` used as an expression (inside a `match` arm's expression, a lambda)

@@ -36,12 +36,40 @@ suite demo.greet {
     expect v == 3
   }
 
-  case "an expression-form expect binds nothing beyond itself" {
+  case "an expression-form expect is a check only" {
     let r = parse(8)
-    let v = match r {
-      Ok(x) => x
-      Err(_) => 0
+    let checked = match r {
+      Ok(x) => expect r is Ok(_)
+      Err(_) => expect false
     }
+    expect r is Ok(v)
     expect v == 8
+  }
+
+  case "a name that shadows an earlier let reads as the new binding" {
+    let y = 1
+    let r = parse(5)
+    expect r is Ok(y)
+    expect y == 5
+  }
+
+  case "a refined subject is re-bound under its refined type" {
+    let v = 5
+    expect v is Positive
+    expect double(v) == 10
+  }
+
+  case "a complex receiver to the right of && binds too" {
+    let r = parse(4)
+    expect r is Ok(a) && parse(a) is Ok(b)
+    expect b == 4
+  }
+
+  property "an is binding in a property does not shadow across claims" {
+    for all n: Int {
+      let y = 1
+      expect find(7) is Some(_)
+      expect y == 1
+    }
   }
 }
