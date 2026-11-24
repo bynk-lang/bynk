@@ -3,7 +3,8 @@
 //! declaration kind (back-half paydown 2.1, #4086). This file only declares those files and
 //! re-exports them, so every `emitter::emit::X` and `emitter::X` path still resolves; each child
 //! imports what it uses explicitly. The one glob import below is not for this file: moved function
-//! bodies spell `super::tco::plan` and `super::commons_alias`, and those paths resolve through it.
+//! bodies spell parent paths through it, such as `super::tco::plan`, `super::commons_alias`,
+//! `super::serialisation::…` and `super::ty_to_type_ref`.
 //!
 //! - `types`: type, refined, record and sum declarations and their checks;
 //! - `functions`: attached methods, free functions, constants and contract guards;

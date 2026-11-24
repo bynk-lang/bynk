@@ -16,9 +16,9 @@
 //! 4. a file that shrinks but stays over keeps its looser ceiling until
 //!    `cargo xtask module-lines --apply` rewrites the file from the tree.
 //!
-//! The track's exit cap is [`EXIT_CAP`] production lines. It binds a *new* entry now: an
-//! entry at or over it must be named in [`GRANDFATHERED`], the files that were already over
-//! it when the ratchet landed. At track exit the list is empty and the constant goes.
+//! The track's exit cap is [`EXIT_CAP`] production lines: no entry may be at or over it. The
+//! files that were already over it when the ratchet landed were exempt until Phase 2's splits
+//! took each one under; the last went in 2.5b (#4090), and the exemption was then retired.
 //!
 //! Keys are `crate/src/path.rs` from the repository root with `/` separators on every
 //! platform ([`repo_rel_slash`]); Windows CI runs the gate.
@@ -34,17 +34,11 @@ use crate::greenfield_status::{
 pub const THRESHOLD: usize = 2000;
 
 /// The track's exit target: no back-half file at or over this many production lines. It
-/// binds new ceilings now and every ceiling at track exit.
+/// binds every ceiling.
 pub const EXIT_CAP: usize = 3000;
 
 /// The committed ceilings, relative to the repository root.
 pub const CEILINGS_FILE: &str = "xtask/module-line-ceilings.txt";
-
-/// Back-half files that were already at or over [`EXIT_CAP`] when the ratchet landed (23
-/// November 2026), exempt from the cap until track exit. An entry leaves the list when its
-/// ceiling falls under [`EXIT_CAP`] (the test fails while a listed file is under it); the
-/// slice that takes the last one under deletes this constant and the rule that reads it.
-pub const GRANDFATHERED: &[&str] = &[];
 
 /// One measured file.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -281,7 +275,7 @@ pub fn render_ceilings(measured: &[ModuleLines]) -> String {
          # {THRESHOLD} production lines: comments and blank lines count; `#[cfg(test)]` modules,\n\
          # whole-test files and `#[cfg(test)] mod x;` files do not. A file may not grow past its\n\
          # ceiling, none may newly reach {THRESHOLD}, and an entry whose file has dropped below\n\
-         # {THRESHOLD} (or gone, or been renamed) must be removed. A new entry may not be\n\
+         # {THRESHOLD} (or gone, or been renamed) must be removed. No entry may be\n\
          # {EXIT_CAP} or more: split along a seam first. Prefer splitting a file to raising its\n\
          # ceiling; a raise needs its justification in review. `cargo xtask module-lines --apply`\n\
          # rewrites this file from the tree (lowering ceilings after a file shrinks).\n"
@@ -294,18 +288,8 @@ pub fn render_ceilings(measured: &[ModuleLines]) -> String {
 
 /// What is wrong, if anything: a file past its ceiling, one that newly crossed the
 /// threshold, an entry that no longer names a file over it, a new entry at or over
-/// [`EXIT_CAP`], a grandfathered entry that has fallen under it, and a key with a `\\`.
+/// [`EXIT_CAP`], and a key with a `\\`.
 pub fn violations(measured: &[ModuleLines], ceilings: &[(String, usize)]) -> Vec<String> {
-    violations_with(measured, ceilings, GRANDFATHERED)
-}
-
-/// [`violations`] against an explicit exemption list, so the rule can be tested while the
-/// committed [`GRANDFATHERED`] list is empty.
-fn violations_with(
-    measured: &[ModuleLines],
-    ceilings: &[(String, usize)],
-    grandfathered_files: &[&str],
-) -> Vec<String> {
     let mut out = Vec::new();
     for m in measured {
         match ceilings.iter().find(|(k, _)| *k == m.file) {
@@ -336,41 +320,10 @@ fn violations_with(
                  (or is gone or renamed): remove its entry from {CEILINGS_FILE}"
             ));
         }
-        let grandfathered = grandfathered_files.contains(&key.as_str());
-        if *ceiling >= EXIT_CAP && !grandfathered {
+        if *ceiling >= EXIT_CAP {
             out.push(format!(
-                "{key} has a ceiling of {ceiling}, at or over the {EXIT_CAP}-line exit cap, and is not \
-                 grandfathered: split it along a seam before it grows that far"
-            ));
-        }
-        if *ceiling < EXIT_CAP && grandfathered {
-            out.push(format!(
-                "{key} is under the {EXIT_CAP}-line exit cap: remove it from GRANDFATHERED in \
-                 xtask/src/module_lines.rs"
-            ));
-        }
-    }
-    out
-}
-
-/// Grandfathered files that no longer have a ceiling entry (a split took them under the
-/// threshold and deleted it): remove them from [`GRANDFATHERED`]. Checked against the whole
-/// committed file, so it is separate from [`violations`], which unit tests feed partial lists.
-pub fn stale_grandfathered(ceilings: &[(String, usize)]) -> Vec<String> {
-    stale_grandfathered_in(ceilings, GRANDFATHERED)
-}
-
-/// [`stale_grandfathered`] against an explicit exemption list (see [`violations_with`]).
-fn stale_grandfathered_in(
-    ceilings: &[(String, usize)],
-    grandfathered_files: &[&str],
-) -> Vec<String> {
-    let mut out = Vec::new();
-    for g in grandfathered_files {
-        if !ceilings.iter().any(|(k, _)| k == g) {
-            out.push(format!(
-                "{g} is in GRANDFATHERED but has no ceiling entry: remove it from GRANDFATHERED in \
-                 xtask/src/module_lines.rs"
+                "{key} has a ceiling of {ceiling}, at or over the {EXIT_CAP}-line exit cap: split it \
+                 along a seam before it grows that far"
             ));
         }
     }
@@ -466,10 +419,6 @@ mod tests {
         assert!(!got.iter().any(|(p, _)| p.contains("emitter/testkit")));
     }
 
-    /// A stand-in for a grandfathered file, so the exemption rule stays tested while the
-    /// committed list is empty.
-    const FAKE_GRANDFATHERED: &str = "a/src/legacy.rs";
-
     fn m(file: &str, lines: usize) -> ModuleLines {
         ModuleLines {
             file: file.into(),
@@ -529,26 +478,11 @@ mod tests {
     }
 
     #[test]
-    fn a_new_entry_at_the_exit_cap_is_reported_but_a_grandfathered_one_is_not() {
+    fn an_entry_at_the_exit_cap_is_reported() {
         // 3,000 exactly is over the cap (the probe counts with `>=`).
         let v = violations(&[m("a/src/big.rs", 3000)], &[c("a/src/big.rs", 3000)]);
         assert!(v.iter().any(|x| x.contains("exit cap")), "{v:?}");
-        let list = [FAKE_GRANDFATHERED];
-        let g = list[0];
-        assert!(violations_with(&[m(g, 3500)], &[c(g, 3500)], &list).is_empty());
-        // A grandfathered file that fell under the cap must leave the list.
-        let v = violations_with(&[m(g, 2999)], &[c(g, 2999)], &list);
-        assert!(v.iter().any(|x| x.contains("GRANDFATHERED")), "{v:?}");
-    }
-
-    #[test]
-    fn a_grandfathered_file_without_an_entry_is_reported() {
-        let list = [FAKE_GRANDFATHERED];
-        let all: Vec<(String, usize)> = list.iter().map(|g| c(g, 3500)).collect();
-        assert!(stale_grandfathered_in(&all, &list).is_empty());
-        let v = stale_grandfathered_in(&all[1..], &list);
-        assert_eq!(v.len(), 1, "{v:?}");
-        assert!(v[0].contains(list[0]));
+        assert!(violations(&[m("a/src/big.rs", 2999)], &[c("a/src/big.rs", 2999)]).is_empty());
     }
 
     #[test]
@@ -578,11 +512,5 @@ mod tests {
         let measured = [m("a/src/x.rs", 2400), m("b/src/y.rs", 2100)];
         let parsed = parse_ceilings(&render_ceilings(&measured));
         assert_eq!(parsed, vec![c("a/src/x.rs", 2400), c("b/src/y.rs", 2100)]);
-    }
-
-    #[test]
-    fn the_grandfathered_list_has_no_duplicates() {
-        let set: BTreeSet<&&str> = GRANDFATHERED.iter().collect();
-        assert_eq!(set.len(), GRANDFATHERED.len());
     }
 }
