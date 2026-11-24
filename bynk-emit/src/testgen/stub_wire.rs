@@ -19,12 +19,12 @@ pub const WIRE_IMPORT_MARK: &str = "__wire from \"../workers/";
 
 /// The namespace the consumed context's codecs are imported under.
 pub(super) fn wire_ns(ctx: &str) -> String {
-    format!("{}__wire", ctx.replace('.', "_"))
+    [&ctx.replace('.', "_"), "__wire"].concat()
 }
 
 /// `import * as <ns> from "../workers/<ctx>/handlers.js"`.
 pub(super) fn wire_import(ctx: &str, ext: &str) -> TsStmt {
-    let module = format!("workers/{}/handlers", bynk_project::worker_dir_name(ctx));
+    let module = ["workers/", &bynk_project::worker_dir_name(ctx), "/handlers"].concat();
     TsStmt::decl(
         TsDecl::ImportNamespace {
             type_only: false,
@@ -80,7 +80,7 @@ fn codec_pair(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
 
 /// `__bynkWireStub(<double>, { <service>: { args: [...], ret: [...] }, ... })`.
 pub(super) fn wire_wrap(rp: &ResolvedStub, ctx: &str, double: TsExpr, ru: &RuntimeUse) -> TsExpr {
-    let ns = format!("{}.", wire_ns(ctx));
+    let ns = [&wire_ns(ctx), "."].concat();
     let ops: Vec<(String, TsExpr)> = rp
         .cap_decl
         .ops

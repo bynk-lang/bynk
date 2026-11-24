@@ -60,6 +60,8 @@ fn events_emit_loop() -> TsStmt {
 /// deps' own entries is that entry, held in a local, not a second copy: in a
 /// test a `stub` overlays the entry, and a copy would escape it (#1864
 /// review).
+///
+/// #4190: `wire` is `Some` at `integration`, where a stubbed service crosses its wire codecs.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_test_deps(
     target_name: &str,
@@ -78,8 +80,6 @@ pub(super) fn emit_test_deps(
     // #2050: whether the target's handlers emit, so their `deps` require
     // `__eventsDispatch` ([`target_emits_events`]).
     uses_emit: bool,
-    // #4190: `Some` at `integration`, where a stubbed consumed service's calls
-    // cross its context's wire codecs (`stub_wire`).
     wire: Option<&crate::emitter::RuntimeUse>,
 ) -> TestDeps {
     let mut units: BTreeSet<String> = BTreeSet::new();
