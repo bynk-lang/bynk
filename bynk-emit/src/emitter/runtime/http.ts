@@ -47,18 +47,18 @@ export function matchPath(
   const patternSegments = pattern.split("/").filter(Boolean);
   const pathSegments = path.split("/").filter(Boolean);
   if (patternSegments.length !== pathSegments.length) return null;
+  for (let i = 0; i < patternSegments.length; i++) {
+    const p = patternSegments[i];
+    if (!p.startsWith(":") && p !== pathSegments[i]) return null;
+  }
   const decoded = decodePath(path);
+  if (decoded === null) {
+    return { params: {}, malformed: `path segment ${malformedSegment(path)} is not valid percent-encoding` };
+  }
   const params: Record<string, string> = {};
   for (let i = 0; i < patternSegments.length; i++) {
     const p = patternSegments[i];
-    if (p.startsWith(":")) {
-      if (decoded !== null) params[p.slice(1)] = decoded[i];
-    } else if (p !== pathSegments[i]) {
-      return null;
-    }
-  }
-  if (decoded === null) {
-    return { params, malformed: `path segment ${malformedSegment(path)} is not valid percent-encoding` };
+    if (p.startsWith(":")) params[p.slice(1)] = decoded[i];
   }
   return { params };
 }

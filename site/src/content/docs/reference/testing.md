@@ -332,7 +332,7 @@ like a form's. A `File` is a record literal (`File { filename: Some("a.png"), co
 is; at `system` the driver sends it as the `FormData` it encodes to, a `Blob` per `File`.
 A `Wire(…)` body is the multipart text itself, framed with the boundary `bynk-boundary`, so
 a case can send what a browser would, and observe the boundary's rejections:
-`Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(MalformedPath(_))` for a path that does not percent-decode, `Rejected(PayloadTooLarge(_))`
+`Rejected(MalformedForm(_))` for a body that is not multipart, `Rejected(PayloadTooLarge(_))`
 for a file over `maxFile` or too many parts.
 
 ### Sending a streamed body {#sending-a-streamed-body}
@@ -585,6 +585,8 @@ case "an empty sku is rejected at the boundary" as system {
 
 A `Wire` stands in any slot of the address. In a typed [`query`](#request-query)'s
 slot it is the raw query string, `?` and all: `api.GET("/activity", Wire("?limit=0"))`.
+In a path parameter's slot it is the raw path segment, so `api.GET("/orders/:id", Wire("%E0%A4%A"))`
+is `Rejected(MalformedPath(_))`, a path that does not percent-decode.
 
 A `Wire`-carrying call yields an `HttpOutcome[T]` instead of the handler's
 `HttpResult[T]`.
