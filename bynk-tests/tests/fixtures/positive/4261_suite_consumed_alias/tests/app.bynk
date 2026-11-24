@@ -1,0 +1,6 @@
+suite app
+
+case "a suite that does not import the alias checks the result" {
+  expect tag("ABC") is Ok(_)
+  expect tag("abc") is Err(_)
+}

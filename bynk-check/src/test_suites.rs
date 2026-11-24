@@ -5703,6 +5703,7 @@ pub fn privileged_view(
             imported.push(t.clone());
         }
     }
+    unalias_own_signatures(&mut view, local);
     view.merge_assets(owning_unit, unit_tables, unit_uses);
     view.merge_embeds(owning_unit, unit_tables, unit_uses);
     view.merge_consts(owning_unit, unit_tables, unit_uses);
@@ -5727,6 +5728,47 @@ pub fn privileged_view(
         .retain(|n, _| local.consts.contains_key(n) || !hidden_by_local(n));
     view.close(&imported, unit_tables, unit_uses, false);
     Some(view)
+}
+
+/// #4261: a suite is not a consuming context (#2890), so it names a consumed
+/// type by the name its unit declares and never by the target's alias. The
+/// target's own functions, though, are written with its aliases
+/// (`consumes shapes { Code as Tag }`, `fn tag() -> Tag`). Their signatures
+/// enter the view under the declared name, so a case calling one gets a type
+/// instead of `Ty::Error`, which the emitter cannot render.
+fn unalias_own_signatures(view: &mut SuiteView, local: &UnitTable) {
+    if local.consumed_type_aliases.is_empty() {
+        return;
+    }
+    let renames: HashMap<String, String> = local
+        .consumed_type_aliases
+        .iter()
+        .map(|(alias, a)| (alias.clone(), a.original.clone()))
+        .collect();
+    let unalias = |decl: &Arc<FnDecl>| {
+        let mut out = (**decl).clone();
+        for p in &mut out.params {
+            crate::symbols::rename_type_ref(&mut p.type_ref, &renames);
+        }
+        crate::symbols::rename_type_ref(&mut out.return_type, &renames);
+        Arc::new(out)
+    };
+    for name in local.fns.keys() {
+        if let Some(decl) = view.fns.get_mut(name) {
+            *decl = unalias(decl);
+        }
+    }
+    for (ty, table) in &local.methods {
+        let Some(mine) = view.methods.get_mut(ty) else {
+            continue;
+        };
+        for (m, decl) in table.instance.iter() {
+            mine.instance.insert(m.clone(), unalias(decl));
+        }
+        for (m, decl) in table.statics.iter() {
+            mine.statics.insert(m.clone(), unalias(decl));
+        }
+    }
 }
 
 /// #1814: a `system` case's harness view: types, fns and methods from the

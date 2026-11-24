@@ -1,0 +1,7 @@
+context app
+
+consumes shapes { Code as Tag }
+
+fn tag(s: String) -> Result[Tag, ValidationError] {
+  Tag.of(s)
+}
