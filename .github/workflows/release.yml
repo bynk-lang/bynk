@@ -291,10 +291,9 @@ jobs:
           # repos — re-enabled at the public flip (June 2026).
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
+          # macOS (x86_64-apple-darwin, aarch64-apple-darwin) is paused: GitHub's
+          # arm64 macOS runners went unallocated for two attempts at v0.661.1 and
+          # held the whole release back (#4263). Restore both legs with that fix.
           - os: windows-latest
             target: x86_64-pc-windows-msvc
     steps:
