@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **925** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **924** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -328,13 +328,10 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 - [`bynk.http.body_on_get_or_delete`](/reference/diagnostics/bynk.http.body_on_get_or_delete/) — A GET or DELETE handler declares a `body` parameter.
 - [`bynk.http.cache_bad_immutable`](/reference/diagnostics/bynk.http.cache_bad_immutable/) — A `@cache` annotation's `immutable` is not a `Bool` literal.
 - [`bynk.http.cache_bad_max_age`](/reference/diagnostics/bynk.http.cache_bad_max_age/) — A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal.
-- [`bynk.http.cache_bad_no_store`](/reference/diagnostics/bynk.http.cache_bad_no_store/) — A `@cache` annotation's `noStore` is not a `Bool` literal.
 - [`bynk.http.cache_bad_scope`](/reference/diagnostics/bynk.http.cache_bad_scope/) — A `@cache` annotation's `scope` is not `public` or `private`.
 - [`bynk.http.cache_duplicate`](/reference/diagnostics/bynk.http.cache_duplicate/) — A handler carries more than one `@cache` annotation.
 - [`bynk.http.cache_max_age_fractional_seconds`](/reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/) — A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds.
-- [`bynk.http.cache_no_store_conflict`](/reference/diagnostics/bynk.http.cache_no_store_conflict/) — A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`.
-- [`bynk.http.cache_on_non_get`](/reference/diagnostics/bynk.http.cache_on_non_get/) — A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).
-- [`bynk.http.cache_public_authenticated`](/reference/diagnostics/bynk.http.cache_public_authenticated/) — A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.
+- [`bynk.http.cache_on_non_get`](/reference/diagnostics/bynk.http.cache_on_non_get/) — A `@cache` annotation is placed on a handler that is not `on http GET`.
 - [`bynk.http.cache_public_reads_cookies`](/reference/diagnostics/bynk.http.cache_public_reads_cookies/) — A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another.
 - [`bynk.http.cache_unknown_arg`](/reference/diagnostics/bynk.http.cache_unknown_arg/) — A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`).
 - [`bynk.http.cf_wrong_type`](/reference/diagnostics/bynk.http.cf_wrong_type/) — An HTTP handler's `cf` parameter is not typed `RequestCf`.
@@ -572,6 +569,8 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 - [`bynk.revert.secret_changed`](/reference/diagnostics/bynk.revert.secret_changed/) — `bynk revert` refused because a secret changed after the target was live, so the rollback could restore an old secret value that its peers no longer accept.
 - [`bynk.secrets.computed_name`](/reference/diagnostics/bynk.secrets.computed_name/) — <span class="diagnostic-severity">Warning</span> A `bynk.Secrets` read names its secret with a computed expression rather than a literal, so `bynk deploy` cannot plan it (warning).
 - [`bynk.set.deprecated_function`](/reference/diagnostics/bynk.set.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.set` free function is deprecated in favour of the `Set` method form (warning; auto-fixable).
+- [`bynk.string.deprecated_function`](/reference/diagnostics/bynk.string.deprecated_function/) — <span class="diagnostic-severity">Warning</span> A `bynk.string` free function is deprecated in favour of the `List[String]` method form (warning; auto-fixable).
+- [`bynk.string.empty_pad_fill`](/reference/diagnostics/bynk.string.empty_pad_fill/) — The `fill` of `String.padStart` or `String.padEnd` is an empty literal, so there is nothing to pad with.
 - [`bynk.target.browser_bundle_only`](/reference/diagnostics/bynk.target.browser_bundle_only/) — The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build.
 - [`bynk.target.vendor_conflict`](/reference/diagnostics/bynk.target.vendor_conflict/) — One deployment unit's in-process closure uses platform-native capabilities from two mutually-exclusive platforms.
 - [`bynk.target.vendor_required`](/reference/diagnostics/bynk.target.vendor_required/) — A deployment unit uses a platform-native capability but the build selects another `--platform`.
