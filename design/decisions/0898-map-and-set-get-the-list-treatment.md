@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `Map` gains `remove`, `contains`, `getOrElse`, `isEmpty`, `entries`, `filter`, `mapValues`, `fold` and `Map.of`, `Set` gains `union`, `intersect`, `difference`, `isSubsetOf`, `isEmpty`, `filter`, `map` and `fold`, and `bynk.map` and `bynk.set` are deprecated in favour of the methods
----
+# 0898 — Map and Set are as complete as methods as List became under ADR 0116
 
-## ADR: map-and-set-get-the-list-treatment
-title: Map and Set are as complete as methods as List became under ADR 0116
-summary: Adds the missing Map and Set methods, with insertion order specified, and deprecates bynk.map and bynk.set
+- **Status:** Accepted (v0.648)
 
 **Context.** A value `Map` could not remove a key (its kernel was `length`,
 `keys`, `values`, `get`, `insert`), could not be walked by entry, and `bynk.map`
