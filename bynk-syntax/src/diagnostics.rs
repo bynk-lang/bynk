@@ -1600,8 +1600,8 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.duration.unit_agreement",
-        blurb: "A `Duration` literal uses the unit that agrees with its number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with every other number, `0` included (`2.hours`, `0.seconds`). `1.hour` and `5.hour` read wrongly and give a duration two spellings, so they are refused with a fix that rewrites the unit. The rule reads the literal's own number: a negative duration is the negation of a literal (`-1.hour`).",
-        example: "fn tick() -> Duration { 1.hour }     // ✗ `1` takes the singular unit
+        blurb: "A `Duration` literal uses the unit that agrees with its number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with every other number, `0` included (`2.hours`, `0.seconds`). `1.hours` and `5.hour` read wrongly and give a duration two spellings, so they are refused with a fix that rewrites the unit. The rule reads the literal's own number: a negative duration is the negation of a literal (`-1.hour`).",
+        example: "fn tick() -> Duration { 1.hours }     // ✗ `1` takes the singular unit
 
 fn tick() -> Duration { 1.hour }      // ✓",
     },

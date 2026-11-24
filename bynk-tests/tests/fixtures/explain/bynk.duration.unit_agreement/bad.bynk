@@ -1,3 +1,3 @@
 commons demo
 
-fn tick() -> Duration { 1.hour }
+fn tick() -> Duration { 1.hours }

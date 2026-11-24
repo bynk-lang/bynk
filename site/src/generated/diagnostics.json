@@ -455,7 +455,7 @@
     "categoryAnchor": "actors",
     "code": "bynk.actor.signed_cookie_secret_shared",
     "constructs": [],
-    "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hours), identity = UserId }   // ✓",
+    "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }\nactor Admin { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1.hour), identity = UserId }   // ✗ same key\n\nactor Admin { auth = SignedCookie(secret = \"ADMIN_SESSION_KEY\", ttl = 1.hour), identity = UserId }   // ✓",
     "severity": "error",
     "summary": "A `SignedCookie` actor's `secret` or `previous` is also used by another actor, or by itself."
   },
@@ -1988,6 +1988,26 @@
     "summary": "A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range."
   },
   {
+    "blurb": "A `Duration` literal uses the unit that agrees with its number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with every other number, `0` included (`2.hours`, `0.seconds`). `1.hours` and `5.hour` read wrongly and give a duration two spellings, so they are refused with a fix that rewrites the unit. The rule reads the literal's own number: a negative duration is the negation of a literal (`-1.hour`).",
+    "category": "Other",
+    "categoryAnchor": "other",
+    "code": "bynk.duration.unit_agreement",
+    "constructs": [],
+    "example": "fn tick() -> Duration { 1.hours }     // ✗ `1` takes the singular unit\n\nfn tick() -> Duration { 1.hour }      // ✓",
+    "severity": "error",
+    "summary": "A `Duration` literal's unit does not agree with its number: `1` takes the singular unit, every other number the plural."
+  },
+  {
+    "blurb": "An integer literal has no fields, so a word after one (`5.hr`) is always read as the unit of a `Duration` literal. The units are `millisecond(s)`, `second(s)`, `minute(s)`, `hour(s)` and `day(s)`; there is no `week`. The diagnostic lists them and suggests the nearest one. Write the unit out in full, in the form that agrees with the number (`1.hour`, `5.hours`).",
+    "category": "Other",
+    "categoryAnchor": "other",
+    "code": "bynk.duration.unknown_unit",
+    "constructs": [],
+    "example": "fn wait() -> Duration { 5.hr }        // ✗ `hr` is not a unit\n\nfn wait() -> Duration { 5.hours }     // ✓",
+    "severity": "error",
+    "summary": "An integer literal is followed by a word that is not a `Duration` unit."
+  },
+  {
     "blurb": "`<-` waits for an effect, so it is only allowed in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises that it waits for nothing and reaches nothing outside, and a `<-` inside it would break that promise for every caller. A `par` block awaits too, and is refused in the same place. Change the return type to `Effect[T]` and return `Effect.pure(…)`, or compute the value without an effect. Calling a function value that returns an `Effect` is `bynk.effect.fn_value_in_pure_context`.",
     "category": "Effects",
     "categoryAnchor": "effects",
@@ -3174,12 +3194,12 @@
     "summary": "A `@cache` annotation's `immutable` is not a `Bool` literal."
   },
   {
-    "blurb": "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number, a string or a singular unit such as `1.hour` is refused; the units are plural: `30.seconds`, `5.minutes`, `1.hours`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
+    "blurb": "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number or a string is refused; write a `Duration` literal whose unit agrees with its number: `30.seconds`, `5.minutes`, `1.hour`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
     "category": "HTTP",
     "categoryAnchor": "http",
     "code": "bynk.http.cache_bad_max_age",
     "constructs": [],
-    "example": "@cache(maxAge: 1.hour)    // ✗ the unit is plural\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hours)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hours\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    "example": "@cache(maxAge: 3600)      // ✗ a bare number, not a `Duration`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hour)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hour\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     "severity": "error",
     "summary": "A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal."
   },
@@ -3199,7 +3219,7 @@
     "categoryAnchor": "http",
     "code": "bynk.http.cache_duplicate",
     "constructs": [],
-    "example": "@cache(maxAge: 1.minutes)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    "example": "@cache(maxAge: 1.minute)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     "severity": "error",
     "summary": "A handler carries more than one `@cache` annotation."
   },
@@ -3448,7 +3468,7 @@
     "summary": "An HTTP handler's `cookies` parameter is not a record type."
   },
   {
-    "blurb": "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hours`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+    "blurb": "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
     "category": "HTTP",
     "categoryAnchor": "http",
     "code": "bynk.http.cors_invalid_field",
@@ -3483,7 +3503,7 @@
     "categoryAnchor": "http",
     "code": "bynk.http.cors_unknown_field",
     "constructs": [],
-    "example": "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hours }    // ✓",
+    "example": "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hour }    // ✓",
     "severity": "error",
     "summary": "A `cors { }` policy declares a field outside the closed set."
   },
@@ -9787,7 +9807,7 @@
     "constructs": [
       "method_call"
     ],
-    "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.seconds)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.seconds)   // ✓ the service handler has\n    }\n}",
+    "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Result[Int, TimedOut]] {\n        Slow(\"a\").get().within(1.second)   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Result[Int, TimedOut]] by Caller {\n        Slow(\"a\").get().within(1.second)   // ✓ the service handler has\n    }\n}",
     "severity": "error",
     "summary": "`e.within(d)` was used in an agent handler, which has no execution context to hand the abandoned effect to."
   },
@@ -9799,7 +9819,7 @@
     "constructs": [
       "method_call"
     ],
-    "example": "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.seconds)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.seconds)\n}",
+    "example": "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.second)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.second)\n}",
     "severity": "error",
     "summary": "`e.within(d)` was used in a pure (non-effectful) context."
   },
@@ -9811,7 +9831,7 @@
     "constructs": [
       "method_call"
     ],
-    "example": "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.seconds)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
+    "example": "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.second)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
     "severity": "error",
     "summary": "`e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
   },

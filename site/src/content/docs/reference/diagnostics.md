@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **899** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **901** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -477,6 +477,8 @@ There are **899** codes in total. Every code is an error unless it is marked **W
 - [`bynk.detach.in_pure_context`](/reference/diagnostics/bynk.detach.in_pure_context/) — A `detach` was used in a pure (non-effectful) context.
 - [`bynk.detach.store_op`](/reference/diagnostics/bynk.detach.store_op/) — A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached.
 - [`bynk.duration.literal_overflow`](/reference/diagnostics/bynk.duration.literal_overflow/) — A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range.
+- [`bynk.duration.unit_agreement`](/reference/diagnostics/bynk.duration.unit_agreement/) — A `Duration` literal's unit does not agree with its number: `1` takes the singular unit, every other number the plural.
+- [`bynk.duration.unknown_unit`](/reference/diagnostics/bynk.duration.unknown_unit/) — An integer literal is followed by a word that is not a `Duration` unit.
 - [`bynk.email.bad_params`](/reference/diagnostics/bynk.email.bad_params/) — An email `on message` handler does not take exactly one `InboundEmail` parameter.
 - [`bynk.email.duplicate_address`](/reference/diagnostics/bynk.email.duplicate_address/) — Two `from email` services claim the same recipient address.
 - [`bynk.email.duplicate_handler`](/reference/diagnostics/bynk.email.duplicate_handler/) — A `from email` service declares more than one `on message` handler; it has exactly one.

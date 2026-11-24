@@ -168,7 +168,7 @@ Pairing a `Decimal` with an ISO 4217 currency is not part of the type; a
 `Duration` literal is `<int>.<unit>` over a closed unit set — `5.minutes`,
 `30.seconds`, `1.hour`, `2.days`, `100.milliseconds`. The unit agrees with its
 number: the singular unit with `1` (`1.hour`, `1.second`) and the plural unit with
-every other number, `0` included (`0.seconds`). `1.hour` and `5.hour` are
+every other number, `0` included (`0.seconds`). `1.hours` and `5.hour` are
 `bynk.duration.unit_agreement`, with a fix; any other word after an integer
 literal (`5.hr`, `1.week`) is `bynk.duration.unknown_unit`. A negative duration is
 the negation of a literal (`-1.hour`). The operator surface is
