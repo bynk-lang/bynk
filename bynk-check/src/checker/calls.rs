@@ -4504,7 +4504,10 @@ fn check_test_service_address(
             expr_id,
             Callee::TestService {
                 service: id.name.clone(),
-                address: HandlerAddress::Schedule { expr: None },
+                address: HandlerAddress::Schedule {
+                    expr: None,
+                    param: None,
+                },
                 extra_headers: false,
             },
         );
@@ -4550,7 +4553,27 @@ fn check_test_service_address(
             }
             return None;
         };
-        let params = handler.params.clone();
+        // #3874: a `CronSchedule` parameter is filled from the address's own schedule
+        // (the first argument), so it is not an argument; the rest are checked as ever.
+        let schedule_param = handler.params.iter().position(|p| {
+            bynk_syntax::cron::cron_param(&p.type_ref)
+                == Some(bynk_syntax::cron::CronParam::Schedule)
+        });
+        let params: Vec<_> = handler
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| Some(*i) != schedule_param)
+            .map(|(_, p)| p.clone())
+            .collect();
+        ctx.callees.insert(
+            expr_id,
+            Callee::TestService {
+                service: id.name.clone(),
+                address: HandlerAddress::schedule_with_param(expr, schedule_param),
+                extra_headers: false,
+            },
+        );
         let _ = type_of(&args[0], None, ctx);
         check_address_args(&id.name, "schedule", &params, &args[1..], method.span, ctx);
         return handler_outcome(handler, ctx);

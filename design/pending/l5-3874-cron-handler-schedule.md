@@ -1,0 +1,35 @@
+---
+level: minor
+changelog: A cron handler can take its schedule: `(schedule: CronSchedule, at: Instant)` in either order, so a run key such as `"sweeper:\(schedule)@\(at.toEpochMillis())"` needs no repeated literal
+---
+
+## ADR: cron-handler-schedule-parameter
+title: A cron handler can take the schedule that fired it
+summary: Up to two parameters, told apart by type, in either order: an `Instant` and exactly `CronSchedule`
+
+**Context.** A handler could not see which schedule fired it, since only the
+generated entry sees `event.cron`, so a run key for `Idempotency.claim` either
+repeated the schedule literal by hand or left the schedule out.
+
+**Decision.** A. A cron handler takes up to two parameters, told apart by type, in
+either order: one may be `Instant` (the scheduled time) and one may be
+`CronSchedule` (the schedule). A second parameter of the same type, or any other
+type, is `bynk.cron.bad_params`. A single `Tick { at, schedule }` record is
+rejected (Cloudflare's event carries nothing else for it to grow into, and it makes
+the common one-parameter case wordier), as is a fixed positional order (one more
+rule for no gain). B. The parameter's type is exactly `CronSchedule`, not `String`
+and not another `Cron` refinement: one spelling, and a `CronSchedule` widens to
+`String` wherever it is read. C. The value is `event.cron`; under the single-space
+rule it equals the expression as written. At `unit` and `integration` the test
+address passes its own first argument; at `system` the driver already sends it, so
+the address's shape is unchanged and `schedule` is not an argument of it. The
+entry hands each handler `event.scheduledTime` and/or `event.cron` in declared
+order; the brand is a type, so the plain string is cast to it at the call.
+
+**Consequences.** While a handler has exactly one literal schedule the parameter
+always holds the same value; it still removes a repeated literal from run keys, and
+becomes the only way to tell runs apart once a schedule can come from a constant or
+a handler can carry several. In a worker group two members may share an expression
+and both run, in one Worker and so one idempotency store (the
+`<worker>-idempotency` database): a key built from `schedule` and `at` alone
+collides, so the recipe puts the service name in the key.

@@ -1,0 +1,81 @@
+context ops.reaper
+
+consumes bynk { Claim, CronSchedule, Idempotency }
+
+// #3874: a cron handler takes up to two parameters, told apart by type, in either
+// order: an `Instant` (the scheduled time) and exactly `CronSchedule` (the
+// schedule that fired it).
+agent Seen {
+	key id: String
+	store line: Cell[String]
+	store runs: Cell[Int]
+
+	on call put(text: String) -> Effect[String] {
+		let _ <- line.update((_) => text)
+		text
+	}
+
+	on call count() -> Effect[Int] {
+		let _ <- runs.update((n) => n + 1)
+		runs
+	}
+
+	on call read() -> Effect[String] {
+		line
+	}
+
+	on call total() -> Effect[Int] {
+		runs
+	}
+}
+
+service sweeper from cron {
+	on schedule("0 1 * * *") () -> Effect[Result[(), String]] {
+		let _ <- Seen("s").put("none")
+		Ok(())
+	}
+
+	on schedule("0 2 * * *") (at: Instant) -> Effect[Result[(), String]] {
+		let _ <- Seen("s").put("at=\(at.toEpochMillis())")
+		Ok(())
+	}
+
+	on schedule("0 3 * * *") (schedule: CronSchedule) -> Effect[Result[(), String]] {
+		let _ <- Seen("s").put("schedule=\(schedule)")
+		Ok(())
+	}
+
+	on schedule("0 4 * * *") (schedule: CronSchedule, at: Instant) -> Effect[Result[(), String]] {
+		let _ <- Seen("s").put("\(schedule)@\(at.toEpochMillis())")
+		Ok(())
+	}
+
+	on schedule("0 5 * * *") (at: Instant, schedule: CronSchedule) -> Effect[Result[(), String]] {
+		let _ <- Seen("s").put("\(at.toEpochMillis())@\(schedule)")
+		Ok(())
+	}
+
+	// A ready-made run key: the service, the schedule and the scheduled time.
+	on schedule("0 6 * * *") (schedule: CronSchedule, at: Instant) -> Effect[Result[(), String]] given Idempotency {
+		let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hours)
+		match claim {
+			Claimed => {
+				let _ <- Seen("s").count()
+				Ok(())
+			}
+			AlreadyClaimed => Ok(()),
+		}
+	}
+}
+
+service api from http {
+	on GET("/seen") () -> Effect[HttpResult[String]] by Visitor {
+		let s <- Seen("s").read()
+		Ok(s)
+	}
+
+	on GET("/swept") () -> Effect[HttpResult[Int]] by Visitor {
+		let n <- Seen("s").total()
+		Ok(n)
+	}
+}

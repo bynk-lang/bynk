@@ -6830,6 +6830,50 @@ fn validate_raw_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     }
 }
 
+/// #3874 [DECISION A, B]: a cron handler takes up to two parameters, told apart by
+/// type, in either order: an `Instant` (the scheduled time) and exactly
+/// `CronSchedule` (the schedule that fired the run). A second parameter of the
+/// same type, a third, or any other type is `bynk.cron.bad_params`.
+fn check_cron_params(handler: &Handler, errors: &mut Vec<CompileError>) {
+    use bynk_syntax::cron::{CronParam, cron_param};
+    let mut seen: Vec<CronParam> = Vec::new();
+    for (i, p) in handler.params.iter().enumerate() {
+        let Some(kind) = cron_param(&p.type_ref) else {
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.type_ref.span(),
+                    format!(
+                        "an `on schedule` parameter must be `Instant` (the scheduled time) or `CronSchedule` (the schedule that fired), got `{}`",
+                        ts_type_ref_display(&p.type_ref),
+                    ),
+                )
+                .with_note(
+                    "declare `at: Instant`; where the body needs the number, use `at.toEpochMillis()`. `schedule: CronSchedule` is the expression that fired this run",
+                ),
+            );
+            continue;
+        };
+        if seen.contains(&kind) || i >= 2 {
+            let what = match kind {
+                CronParam::Time => "an `Instant`",
+                CronParam::Schedule => "a `CronSchedule`",
+            };
+            errors.push(
+                CompileError::new(
+                    "bynk.cron.bad_params",
+                    p.span,
+                    format!("an `on schedule` handler takes at most one parameter of each type, but this is a second {what}"),
+                )
+                .with_note(
+                    "a scheduled trigger carries two things: the time it fired (`Instant`) and the schedule that fired it (`CronSchedule`)",
+                ),
+            );
+        }
+        seen.push(kind);
+    }
+}
+
 /// #3873: the schedule must be valid Cloudflare cron syntax
 /// ([`bynk_syntax::cron::is_cron_expression`]); the message names the failing
 /// field. A valid one may draw the two advisory warnings (`numeric_weekday`,
@@ -6890,34 +6934,7 @@ fn check_cron_schedule(handler: &Handler, expr: &str, errors: &mut Vec<CompileEr
 /// return shape. The service-only rule is enforced earlier, in the parser
 /// (`bynk.parse.handler_in_agent`).
 fn validate_cron_handler(handler: &Handler, expr: &str, errors: &mut Vec<CompileError>) {
-    // A cron handler takes at most one parameter — the scheduled time, typed
-    // `Instant`. A scheduled trigger has no other payload.
-    if handler.params.len() > 1 {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.bad_params",
-                handler.params[1].span,
-                "`on schedule` handlers take at most one parameter (the scheduled time)",
-            )
-            .with_note("a scheduled trigger's only input is the time it fired"),
-        );
-    } else if let Some(p) = handler.params.first()
-        && !matches!(p.type_ref, TypeRef::Base(BaseType::Instant, _))
-    {
-        errors.push(
-            CompileError::new(
-                "bynk.cron.bad_params",
-                p.type_ref.span(),
-                format!(
-                    "an `on schedule` parameter must be `Instant` (the scheduled time), got `{}`",
-                    ts_type_ref_display(&p.type_ref),
-                ),
-            )
-            .with_note(
-                "declare it as `at: Instant`; where the body needs the number, use `at.toEpochMillis()`",
-            ),
-        );
-    }
+    check_cron_params(handler, errors);
     check_cron_schedule(handler, expr, errors);
     // The return type must be `Effect[Result[(), E]]`.
     let return_ok = match &handler.return_type {

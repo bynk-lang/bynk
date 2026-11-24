@@ -45,6 +45,30 @@ service sweeper from cron {
 }
 ```
 
+## Run once per scheduled time
+
+A run can start twice for the same scheduled time. Declare the schedule beside the
+time, and claim a key built from both with `Idempotency.claim`:
+
+```bynk,fragment
+service sweeper from cron {
+	on schedule("0 2 * * *") (schedule: CronSchedule, at: Instant)
+			-> Effect[Result[(), SweepError]] given Idempotency {
+		let claim <- Idempotency.claim("sweeper:\(schedule)@\(at.toEpochMillis())", 1.hours)
+		match claim {
+			Claimed => sweep(at),
+			AlreadyClaimed => Ok(()),
+		}
+	}
+}
+```
+
+`schedule: CronSchedule` is the expression that fired this run (not the next one),
+and the parameters may come in either order. Put the service name in the key: in a
+worker group, two members that share a schedule share one Worker and so one
+idempotency store, and both see the same `schedule` and `at`, so a key built from
+those alone collides and one member would skip its run.
+
 ## Signal success or failure
 
 Return `Ok(())` when the run succeeds. A cron run has no caller to answer and no

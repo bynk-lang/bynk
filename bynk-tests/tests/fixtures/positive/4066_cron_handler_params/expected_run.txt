@@ -1,0 +1,2 @@
+# #1660: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+passed=12 failed=0
