@@ -412,6 +412,25 @@ fn refined_raw_quick_fix_drops_dot_raw() {
     assert_clean("app/refine.bynk", &fixed);
 }
 
+// -- #3946: `?` on a predicate-free named type's `.of` → "drop the `?`" quick-fix --
+
+#[test]
+fn named_type_of_question_fix_drops_the_question_mark() {
+    // `type Id = Int` has no predicate, so `Id.of(n)` is total and returns `Id`;
+    // the `?` written when it returned a `Result` is the error.
+    let src = "commons app.refine\n\n\
+               type Id = Int\n\n\
+               fn mk(n: Int) -> Result[Id, ValidationError] {\n  let id = Id.of(n)?\n  Ok(id)\n}\n";
+    let diags = diagnose_with("app/refine.bynk", src);
+    let s = sole_suggestion(&diags, "bynk.types.question_on_non_result");
+    let fixed = apply(src, &s);
+    assert!(
+        fixed.contains("let id = Id.of(n)\n"),
+        "`?` removed: {fixed:?}"
+    );
+    assert_clean("app/refine.bynk", &fixed);
+}
+
 // -- #852: add missing record field(s) --
 
 /// Overlay for `app/refine.bynk`: a `Point { x: Int, y: Int }` record plus an
