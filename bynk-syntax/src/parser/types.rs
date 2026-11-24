@@ -662,8 +662,8 @@ impl<'a> Parser<'a> {
                 ),
             )
             .with_note(
-                "valid predicates: Matches, InRange, MinLength, MaxLength, Length, \
-                 NonNegative, Positive, NonEmpty, IsoDate, Cron",
+                "valid predicates: Matches, InRange, AtLeast, AtMost, MinLength, MaxLength, \
+                 Length, NonNegative, Positive, NonEmpty, IsoDate, Cron",
             ));
         }
         self.bump();
@@ -690,6 +690,9 @@ impl<'a> Parser<'a> {
                     (SignedNumLit::Decimal(a), SignedNumLit::Decimal(b)) => {
                         PredKind::InRangeD(a, b)
                     }
+                    (SignedNumLit::Duration(a), SignedNumLit::Duration(b)) => {
+                        PredKind::InRangeDur(a, b)
+                    }
                     _ => {
                         return Err(CompileError::new(
                             "bynk.types.no_numeric_coercion",
@@ -698,9 +701,23 @@ impl<'a> Parser<'a> {
                         )
                         .with_note(
                             "both bounds must be the same numeric type — \
-                             write `InRange(0, 1)`, `InRange(0.0, 1.0)` or `InRange(0.00d, 1.00d)`",
+                             write `InRange(0, 1)`, `InRange(0.0, 1.0)`, `InRange(0.00d, 1.00d)` \
+                             or `InRange(1.second, 1.day)`",
                         ));
                     }
+                };
+                (kind, close.span)
+            }
+            "AtLeast" | "AtMost" => {
+                self.expect(TokenKind::LParen, &format!("after `{name}`"))?;
+                let bound = self
+                    .parse_signed_num_literal(&format!("as the bound of `{name}`"))?
+                    .into_pred_bound();
+                let close = self.expect(TokenKind::RParen, &format!("after the `{name}` bound"))?;
+                let kind = if matches!(name, "AtLeast") {
+                    PredKind::AtLeast(bound)
+                } else {
+                    PredKind::AtMost(bound)
                 };
                 (kind, close.span)
             }
@@ -737,8 +754,8 @@ impl<'a> Parser<'a> {
                     format!("unknown refinement predicate `{other}`"),
                 )
                 .with_note(
-                    "valid predicates: Matches, InRange, MinLength, MaxLength, Length, \
-                     NonNegative, Positive, NonEmpty, IsoDate, Cron",
+                    "valid predicates: Matches, InRange, AtLeast, AtMost, MinLength, MaxLength, \
+                     Length, NonNegative, Positive, NonEmpty, IsoDate, Cron",
                 ));
             }
         };
@@ -771,6 +788,46 @@ impl<'a> Parser<'a> {
         Ok((if neg { -n } else { n }, text))
     }
 
+    /// #3948: after an integer literal in bound position, `.unit` makes it a
+    /// `Duration` bound (`60.seconds`), with the literal rules of an
+    /// expression (unit agreement, overflow).
+    fn try_duration_bound(
+        &mut self,
+        n: i64,
+        neg: bool,
+        start: Span,
+    ) -> Result<Option<DurationBound>, CompileError> {
+        if self.tokens.get(self.pos).map(|t| t.kind) != Some(TokenKind::Dot)
+            || self.tokens.get(self.pos + 1).map(|t| t.kind) != Some(TokenKind::Ident)
+        {
+            return Ok(None);
+        }
+        self.bump();
+        let unit_tok = self.tokens[self.pos];
+        self.bump();
+        let word = self.slice(unit_tok.span).to_string();
+        let unit = duration::resolve_duration_unit(n, &word, unit_tok.span)?;
+        let span = start.merge(unit_tok.span);
+        let millis = n
+            .checked_mul(unit.millis())
+            .map(|m| if neg { -m } else { m })
+            .ok_or_else(|| {
+                CompileError::new(
+                    "bynk.duration.literal_overflow",
+                    span,
+                    format!(
+                        "the duration `{n}.{}` overflows the millisecond range",
+                        unit.name_for(n)
+                    ),
+                )
+            })?;
+        Ok(Some(DurationBound {
+            millis,
+            lexeme: format!("{}{n}.{}", if neg { "-" } else { "" }, unit.name_for(n)),
+            span,
+        }))
+    }
+
     /// A signed numeric literal in refinement-bound position (v0.21):
     /// either an `Int` or a `Float` literal, optionally negated. The float
     /// form keeps its (signed) lexeme for byte-stable emission.
@@ -799,6 +856,9 @@ impl<'a> Parser<'a> {
                             ),
                         )
                     })?;
+                if let Some(bound) = self.try_duration_bound(n, neg, span_of(t.span))? {
+                    return Ok(SignedNumLit::Duration(bound));
+                }
                 Ok(SignedNumLit::Int(IntBound {
                     value: if neg { -n } else { n },
                     lexeme: format!("{}{slice}", if neg { "-" } else { "" }),

@@ -1341,13 +1341,15 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.context.external_construction",
-        blurb: "A context that `consumes` another may hold and pass on the other's types, but \
-                may not build one. A refined or opaque type can promise an invariant, a \
-                `Matches` pattern or a smart constructor, and that holds only if every value is \
-                made by the owner; `.of`, `.unsafe` and a variant constructor are refused from \
-                outside, as is the record syntax of an opaque type. Ask the owner for the value \
-                instead: a service that returns it, or takes the plain input and does the check. \
-                `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+        blurb: "A context that `consumes` another may hold and pass on the other's types, but may not \
+                build one. (An adapter's `transparent` types, such as `bynk.cloudflare`'s `KvTtl`, \
+                are the exception: `.of`, a variant and a record literal are open to a consumer.) A \
+                refined or opaque type can promise an invariant, a `Matches` pattern or a smart constructor, \
+                and that holds only if every value is made by the owner; `.of`, `.unsafe` and a variant \
+                constructor are refused from outside, as is the record syntax of an opaque type. Ask the owner \
+                for the value instead: a service that returns it, or takes the plain input and \
+                does the check. `bynk.context.opaque_inspection` is the other side, looking \
+                inside such a value.",
         example: "// payment.bynk\n\
                   context payment\n\
                   \n\
@@ -6059,7 +6061,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.no_numeric_coercion",
         blurb: "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, \
-                a comparison or an `InRange` bound. Each conversion can lose or invent \
+                a comparison or an `InRange`, `AtLeast` or `AtMost` bound, which takes literals of the base's own type (`1.second` for a `Duration`). Each conversion can lose or invent \
                 precision, so Bynk makes you write it: `.toFloat()` on an `Int`, \
                 `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, \
                 `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same \
@@ -6197,7 +6199,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.predicate_base_mismatch",
-        blurb: "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive` and `InRange` to an `Int`, `Float` or `Decimal`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
+        blurb: "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive`, `InRange`, `AtLeast` and `AtMost` to an `Int`, `Float`, `Decimal` or `Duration`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
         example: "type Code = Int where NonEmpty         // ✗ `NonEmpty` is a `String` predicate\n\ntype Code = String where NonEmpty      // ✓",
     },
     Explain {

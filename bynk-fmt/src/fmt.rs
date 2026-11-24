@@ -1698,6 +1698,11 @@ impl<'a> Formatter<'a> {
             PredKind::InRange(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::InRangeF(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
             PredKind::InRangeD(a, b) => self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme)),
+            PredKind::InRangeDur(a, b) => {
+                self.push(&format!("InRange({}, {})", a.lexeme, b.lexeme))
+            }
+            PredKind::AtLeast(b) => self.push(&format!("AtLeast({})", b.lexeme())),
+            PredKind::AtMost(b) => self.push(&format!("AtMost({})", b.lexeme())),
             PredKind::MinLength(n) => self.push(&format!("MinLength({})", arg(*n))),
             PredKind::MaxLength(n) => self.push(&format!("MaxLength({})", arg(*n))),
             PredKind::Length(n) => self.push(&format!("Length({})", arg(*n))),

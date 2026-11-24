@@ -135,6 +135,27 @@ fn dec(text: &str) -> Option<Dec<'_>> {
 }
 
 fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
+    // #3948: one-sided bounds, `AtLeast(lo)` and `AtMost(hi)`, parsed by the
+    // base's own bound parser.
+    fn one_sided<'a, T>(p: &'a str, parse: impl Fn(&'a str) -> Option<T>) -> Option<Interval<T>> {
+        if let Some(a) = pred_args(p, "AtLeast") {
+            return Some(Interval {
+                lo: Some((parse(a.first()?)?, false)),
+                hi: None,
+            });
+        }
+        let a = pred_args(p, "AtMost")?;
+        Some(Interval {
+            lo: None,
+            hi: Some((parse(a.first()?)?, false)),
+        })
+    }
+    // `Duration` is compared as milliseconds, an integer on the wire.
+    let range_name = if base == "Duration" {
+        "InRangeDur"
+    } else {
+        "InRange"
+    };
     let int_pred = || -> Option<Interval<i128>> {
         Some(match p {
             "Positive" => Interval {
@@ -145,8 +166,9 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
                 lo: Some((0, false)),
                 hi: None,
             },
+            _ if p.starts_with("At") => one_sided(p, |t| t.parse().ok())?,
             _ => {
-                let a = pred_args(p, "InRange")?;
+                let a = pred_args(p, range_name)?;
                 closed(a.first()?.parse().ok()?, a.get(1)?.parse().ok()?)
             }
         })
@@ -161,6 +183,7 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
                 lo: Some((0.0, false)),
                 hi: None,
             },
+            _ if p.starts_with("At") => one_sided(p, |t| t.parse().ok())?,
             _ => {
                 let a = pred_args(p, "InRangeF")?;
                 closed(a.first()?.parse().ok()?, a.get(1)?.parse().ok()?)
@@ -177,6 +200,7 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
                 lo: Some((dec("0")?, false)),
                 hi: None,
             },
+            _ if p.starts_with("At") => one_sided(p, dec)?,
             _ => {
                 let a = pred_args(p, "InRangeD")?;
                 closed(dec(a.first()?)?, dec(a.get(1)?)?)
@@ -213,7 +237,7 @@ fn domain<'a>(base: &str, p: &'a str) -> Option<Domain<'a>> {
         return Some(Domain::Length(closed(n, n)));
     }
     match base {
-        "Int" => int_pred().map(Domain::Int),
+        "Int" | "Duration" => int_pred().map(Domain::Int),
         "Float" => float_pred().map(Domain::Float),
         "Decimal" => dec_pred().map(Domain::Decimal),
         _ => None,

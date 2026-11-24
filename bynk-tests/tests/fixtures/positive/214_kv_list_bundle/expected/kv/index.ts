@@ -25,7 +25,7 @@ export const scan = {
 
 export const cache = {
   async call(key: string, e: Entry, deps: { Kv: bynk_cloudflare.Kv }): globalThis.Promise<Option<Entry>> {
-    const __r0 = await deps.Kv.putTtl(key, globalThis.JSON.stringify(__serialise_Entry(e)), 60);
+    const __r0 = await deps.Kv.putTtl(key, globalThis.JSON.stringify(__serialise_Entry(e)), (60000 as bynk_cloudflare.KvTtl));
     const stored = await deps.Kv.get(key);
     switch (stored.tag) {
       case "Some": {
