@@ -2034,7 +2034,6 @@ fn check_test_bodies(
         unit_tables,
         unit_consumes,
         unit_consumes_aliases,
-        stubbed_services(stubs, None),
     );
 
     // #1814: the types the target's privileged view reaches but does not
@@ -2196,21 +2195,7 @@ fn check_test_bodies(
             check_bad_signature_tier(case, tier, &mut errors);
             check_wire_tier(case, tier, &mut errors);
             if tier != bynk_syntax::ast::TestTier::System {
-                // #3892: a service the case stubs (itself or its suite) is no
-                // crossing; the gate then names only those left unstubbed.
-                let case_stubs = stubbed_services(stubs, Some(&case.name));
-                if case_stubs.len() > crossing.stubbed.len() {
-                    CrossingServices::of(
-                        target_name,
-                        unit_tables,
-                        unit_consumes,
-                        unit_consumes_aliases,
-                        case_stubs,
-                    )
-                    .check_case(target_name, case, tier, &mut errors);
-                } else {
-                    crossing.check_case(target_name, case, tier, &mut errors);
-                }
+                crossing.check_case_stubbed(stubs, target_name, case, tier, &mut errors);
             }
         }
         // v0.114: generative `property` blocks — check their `for all` bindings,
@@ -2236,7 +2221,7 @@ fn check_test_bodies(
                 d1_sql,
                 parsed[i].source(),
             );
-            crossing.check_property(target_name, prop, &mut errors);
+            crossing.check_property_stubbed(stubs, target_name, prop, &mut errors);
             check_advance_in_property(prop, &mut errors);
             check_snapshot_in_property(prop, &mut errors);
         }
@@ -2558,10 +2543,30 @@ struct CrossingServices<'a> {
     /// #3892: the consumed services the body under check stubs. A stub makes the
     /// call legal below `system`: the double answers, no context is reached.
     stubbed: HashSet<CrossCall>,
+    /// The maps this was built from, to rebuild it per case's stubs.
+    consumes: &'a HashMap<String, Vec<String>>,
+    all_aliases: &'a HashMap<String, HashMap<String, String>>,
 }
 
 impl<'a> CrossingServices<'a> {
     fn of(
+        target_name: &str,
+        unit_tables: &'a HashMap<String, UnitTable>,
+        unit_consumes: &'a HashMap<String, Vec<String>>,
+        unit_consumes_aliases: &'a HashMap<String, HashMap<String, String>>,
+    ) -> Self {
+        Self::of_stubbed(
+            target_name,
+            unit_tables,
+            unit_consumes,
+            unit_consumes_aliases,
+            HashSet::new(),
+        )
+    }
+
+    /// [`Self::of`], with the consumed services a body stubs (#3892): they are
+    /// no crossing, whatever reaches them.
+    fn of_stubbed(
         target_name: &str,
         unit_tables: &'a HashMap<String, UnitTable>,
         unit_consumes: &'a HashMap<String, Vec<String>>,
@@ -2578,6 +2583,8 @@ impl<'a> CrossingServices<'a> {
                 .unwrap_or(&[]),
             aliases: unit_consumes_aliases.get(target_name),
             unit_tables,
+            consumes: unit_consumes,
+            all_aliases: unit_consumes_aliases,
             stubbed,
         };
         let Some(table) = this.table else {
@@ -2804,6 +2811,54 @@ impl<'a> CrossingServices<'a> {
                     )),
             );
         }
+    }
+
+    /// This gate over the services `case` (or, with `None`, only its suite) stubs.
+    fn with_stubs(
+        &self,
+        target_name: &str,
+        stubs: &HashMap<String, ResolvedStub>,
+        case: Option<&str>,
+    ) -> Option<CrossingServices<'a>> {
+        let stubbed = stubbed_services(stubs, case);
+        (!stubbed.is_empty()).then(|| {
+            Self::of_stubbed(
+                target_name,
+                self.unit_tables,
+                self.consumes,
+                self.all_aliases,
+                stubbed,
+            )
+        })
+    }
+
+    /// [`Self::check_case`], with the services the case or its suite stubs.
+    fn check_case_stubbed(
+        &self,
+        stubs: &HashMap<String, ResolvedStub>,
+        target_name: &str,
+        case: &Case,
+        tier: TestTier,
+        errors: &mut Vec<CompileError>,
+    ) {
+        let gate = self.with_stubs(target_name, stubs, Some(&case.name));
+        gate.as_ref()
+            .unwrap_or(self)
+            .check_case(target_name, case, tier, errors);
+    }
+
+    /// [`Self::check_property`], with the services its suite stubs.
+    fn check_property_stubbed(
+        &self,
+        stubs: &HashMap<String, ResolvedStub>,
+        target_name: &str,
+        prop: &PropertyDecl,
+        errors: &mut Vec<CompileError>,
+    ) {
+        let gate = self.with_stubs(target_name, stubs, None);
+        gate.as_ref()
+            .unwrap_or(self)
+            .check_property(target_name, prop, errors);
     }
 
     /// The gate for a non-`system` `case`.

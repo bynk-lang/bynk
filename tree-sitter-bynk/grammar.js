@@ -1423,6 +1423,10 @@ module.exports = grammar({
         "stub",
         field("cap", $.identifier),
         ".",
+        // #3892: a consumed service is named by its context's qualified path
+        // (`stub shop.pay.authorise(_) …`), so more dotted segments may precede
+        // the operation.
+        repeat(seq(field("path", $.identifier), ".")),
         field("op", $.identifier),
         "(",
         optional(

@@ -48,7 +48,10 @@ case "a declined payment releases the stock" {
 
 case "the first payment fails, the retry succeeds" {
 	stub Pay.authorise(_) returns each [Err(Down), Ok(Receipt { id: "r2" })]
-	…
+	let first <- placeOrder.call("widget", 100)
+	let second <- placeOrder.call("widget", 100)
+	expect first is Err(_)
+	expect second is Ok(_)
 }
 
 case "a payment outage is a fault" {

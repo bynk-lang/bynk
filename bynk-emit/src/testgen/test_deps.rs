@@ -192,16 +192,9 @@ pub(super) fn emit_test_deps(
             // from its `__Stub_<…>` double, which is also a top-level entry so
             // the recording wrapper sees its calls. The services it does not
             // stub throw a named error when called.
-            if let Some(rp) = stubs
-                .values()
-                .find(|rp| rp.service_context.as_deref() == Some(q.as_str()))
+            if let Some(local) =
+                stub_service_double(stubs, q, &key, &surface_ty, &mut service_doubles)
             {
-                let local = format!("__svc_{key}");
-                service_doubles.push((
-                    key.clone(),
-                    local.clone(),
-                    stub_overlay(rp, &surface_ty, Some(undefined_as_unknown_as(&surface_ty))),
-                ));
                 surface_entries.push((key, ident(local)));
                 continue;
             }
@@ -297,14 +290,7 @@ pub(super) fn emit_test_deps(
             declare(&dep.id, &built, &mut declared, &mut body);
         }
     }
-    for (_, local, value) in &service_doubles {
-        body.push(TsStmt::const_stmt(
-            TsBindingName::Ident(local.clone()),
-            None,
-            value.clone(),
-            None,
-        ));
-    }
+    body.extend(service_double_consts(&service_doubles));
     let mut entries: Vec<(String, TsExpr)> = built
         .into_iter()
         .map(|dep| {
@@ -316,11 +302,7 @@ pub(super) fn emit_test_deps(
             (dep.key, value)
         })
         .collect();
-    // The same double, by its context's name at the top level, where
-    // `__bynkRecordDeps` wraps each operation to record its calls.
-    for (key, local, _) in &service_doubles {
-        entries.push((key.clone(), ident(local.clone())));
-    }
+    entries.extend(service_double_entries(&service_doubles));
     if !surface_entries.is_empty() {
         entries.push(("surface".to_string(), TsExpr::object(surface_entries)));
     }
@@ -424,6 +406,50 @@ pub(super) fn emit_test_deps(
         units,
         doubles,
     }
+}
+
+/// #3892: the double of a consumed context whose services the suite stubs, built
+/// over nothing so an unstubbed service throws a named error. Records
+/// `(surface key, local, value)` and returns the local, or `None` when no
+/// service of `ctx` is stubbed.
+fn stub_service_double(
+    stubs: &HashMap<String, ResolvedStub>,
+    ctx: &str,
+    key: &str,
+    surface_ty: &str,
+    doubles: &mut Vec<(String, String, TsExpr)>,
+) -> Option<String> {
+    let rp = stubs
+        .values()
+        .find(|rp| rp.service_context.as_deref() == Some(ctx))?;
+    let local = format!("__svc_{key}");
+    let value = stub_overlay(rp, surface_ty, Some(undefined_as_unknown_as(surface_ty)));
+    doubles.push((key.to_string(), local.clone(), value));
+    Some(local)
+}
+
+/// The `const __svc_<key> = …;` statements declaring each service double.
+fn service_double_consts(doubles: &[(String, String, TsExpr)]) -> Vec<TsStmt> {
+    doubles
+        .iter()
+        .map(|(_, local, value)| {
+            TsStmt::const_stmt(
+                TsBindingName::Ident(local.clone()),
+                None,
+                value.clone(),
+                None,
+            )
+        })
+        .collect()
+}
+
+/// The same doubles by their context's name at the top level of the deps, where
+/// `__bynkRecordDeps` wraps each operation to record its calls.
+fn service_double_entries(doubles: &[(String, String, TsExpr)]) -> Vec<(String, TsExpr)> {
+    doubles
+        .iter()
+        .map(|(key, local, _)| (key.clone(), ident(local.clone())))
+        .collect()
 }
 
 /// What [`emit_test_deps`] built (#1863).

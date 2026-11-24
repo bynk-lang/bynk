@@ -100,15 +100,7 @@ pub(super) fn emit_stub_class(
     // (`consumes U { T as Alias }`) to keep them off a type of its own: those
     // names are `U`'s whatever else the target binds them to.
     let mut sig_type_ns = type_ns.clone();
-    // #3892: a consumed service's signature names the types its own context
-    // declares, qualified by that context's namespace.
-    if let Some(ctx) = &rp.service_context
-        && let Some(table) = unit_tables.get(ctx)
-    {
-        for n in public_types(table) {
-            sig_type_ns.insert(n.clone(), test_ns(ctx));
-        }
-    }
+    add_service_sig_types(rp, unit_tables, &mut sig_type_ns);
     if let Some(owner) = unit_tables
         .get(&owning_unit)
         .and_then(|t| t.flattened_caps.get(&rp.cap))
@@ -248,22 +240,8 @@ pub(super) fn emit_stub_class(
             .collect();
         let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
 
-        let mut body = emit_ns_destructure(&scope_ns, &scope_names, &scope_type_names);
-        let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
-        // #3892: a consumed service's own context's types, whose variants a
-        // value may name bare (`Err(Declined)`).
-        if let Some(ctx) = &rp.service_context
-            && let Some(table) = unit_tables.get(ctx)
-        {
-            let types = aliased_types(table, |n| {
-                is_public_type(table, n)
-                    && !taken.contains(n)
-                    && !scope_type_names.iter().any(|(t, _)| t == n)
-            });
-            let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
-            taken.extend(names.iter().cloned());
-            body.extend(emit_ns_destructure(&test_ns(ctx), &names, &types));
-        }
+        let (mut body, mut taken) =
+            method_scope(rp, unit_tables, &scope_ns, &scope_names, &scope_type_names);
         // #2947: a suite helper inlined ahead of a value (#2907) spells its
         // signature's types unqualified, as in a case runner, so a method with
         // one binds the same `uses` commons' names `emit_test_scope_setup`
@@ -947,6 +925,50 @@ pub(super) fn scopes_test(scopes: &[&StubScope]) -> TsExpr {
         .into_iter()
         .reduce(or_expr)
         .unwrap_or_else(|| bool_lit(false))
+}
+
+/// #3892: a consumed service's signature names the types its own context
+/// declares, qualified by that context's namespace.
+fn add_service_sig_types(
+    rp: &ResolvedStub,
+    unit_tables: &HashMap<String, UnitTable>,
+    sig_type_ns: &mut HashMap<String, String>,
+) {
+    if let Some(ctx) = &rp.service_context
+        && let Some(table) = unit_tables.get(ctx)
+    {
+        for n in public_types(table) {
+            sig_type_ns.insert(n.clone(), test_ns(ctx));
+        }
+    }
+}
+
+/// The names a stub method's body binds before its values: the target's own
+/// types and functions, and (#3892) for a consumed service its own context's
+/// types, whose variants a value may name bare (`Err(Declined)`). Returns the
+/// statements and the names taken.
+fn method_scope(
+    rp: &ResolvedStub,
+    unit_tables: &HashMap<String, UnitTable>,
+    scope_ns: &str,
+    scope_names: &[String],
+    scope_type_names: &[(String, Vec<String>)],
+) -> (Vec<TsStmt>, HashSet<String>) {
+    let mut body = emit_ns_destructure(scope_ns, scope_names, scope_type_names);
+    let mut taken: HashSet<String> = scope_names.iter().cloned().collect();
+    if let Some(ctx) = &rp.service_context
+        && let Some(table) = unit_tables.get(ctx)
+    {
+        let types = aliased_types(table, |n| {
+            is_public_type(table, n)
+                && !taken.contains(n)
+                && !scope_type_names.iter().any(|(t, _)| t == n)
+        });
+        let names: Vec<String> = types.iter().map(|(n, _)| n.clone()).collect();
+        taken.extend(names.iter().cloned());
+        body.extend(emit_ns_destructure(&test_ns(ctx), &names, &types));
+    }
+    (body, taken)
 }
 
 /// The name of a seam's stub class: `__Stub_<Cap>`. A consumed service is
