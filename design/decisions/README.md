@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0903](0903-cron-refinement-predicate.md) | **A `Cron` refinement predicate and the `CronSchedule` type** (v0.652) — `Cron` admits exactly Cloudflare's cron syntax, single-spaced; `CronSchedule` names it | Accepted (v0.652) |
 | [0902](0902-duration-literal-unit-agreement.md) | **Duration literals use the unit that agrees with the number, and an unknown unit is its own error** (v0.651) — Singular exactly with 1, plural with every other number; an integer literal followed by a word is always a Duration attempt | Accepted (v0.651) |
 | [0901](0901-caller-refinement-is-context.md) | **Refinement actors over `Caller` admit named calling contexts** (v0.650) — `Caller` becomes a refinement base, `IsContext(…)` its predicate, decided against the project's call graph | Accepted (v0.650) |
 | [0900](0900-stub-consumed-services.md) | **A consumed context's service is a `stub` seam below `system`** (v0.649) — `stub` substitutes a consumed service, so a handler that calls another context is testable in-process | Accepted (v0.649) |

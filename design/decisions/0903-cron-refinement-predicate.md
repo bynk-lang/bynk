@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A `Cron` refinement predicate and the `CronSchedule` type admit exactly Cloudflare's cron syntax; a schedule's fields are now checked, with `bynk.cron.numeric_weekday` and `bynk.cron.uneven_step` warnings
-breaking: A cron schedule with irregular whitespace (a double space, a tab, a leading or trailing space) now fails as `bynk.cron.invalid_schedule`, as does any schedule Cloudflare would reject (`61 * * * *`); write the fields separated by single spaces (the note gives the corrected form). A schedule that smuggled a `"` or `\` into a field, which the old field-count check let reach `wrangler.toml`, is refused too, closing that TOML-injection path.
----
+# 0903 — A `Cron` refinement predicate and the `CronSchedule` type
 
-## ADR: cron-refinement-predicate
-title: A `Cron` refinement predicate and the `CronSchedule` type
-summary: `Cron` admits exactly Cloudflare's cron syntax, single-spaced; `CronSchedule` names it
+- **Status:** Accepted (v0.652)
 
 **Context.** The cron schedule was only checked for having five fields, so
 `"61 * * * *"` compiled and failed at deploy, and nothing could name "a valid

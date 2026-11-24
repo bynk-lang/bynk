@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.652.0** | A `Cron` refinement predicate and the `CronSchedule` type admit exactly Cloudflare's cron syntax; a schedule's fields are now checked, with `bynk.cron.numeric_weekday` and `bynk.cron.uneven_step` warnings |
 | **v0.651.0** | A `Duration` literal uses the singular unit with `1` and the plural otherwise (`1.hour`, `5.hours`), and an unknown unit is `bynk.duration.unknown_unit` |
 | **v0.650.0** | A refinement over `Caller` (`actor Admin = Caller where IsContext(shop.admin)`) admits named calling contexts, checked at compile time (`bynk.actor.caller_not_admitted`, `bynk.actor.unknown_context`) and again at the callee (`403`) |
 | **v0.649.0** | A consumed context's service is a `stub` seam at `unit` and `integration`: `stub Pay.authorise(_) returns Ok(…)` substitutes it, `expect Pay.authorise called once` observes it, and `bynk.tier.cross_context_needs_system` names only the services left unstubbed |
