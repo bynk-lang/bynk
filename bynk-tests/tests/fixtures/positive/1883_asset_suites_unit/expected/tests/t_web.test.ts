@@ -9,18 +9,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -64,7 +78,7 @@ async function test_the_stylesheet_is_served() {
           return __bynkExpect((ct === "text/css; charset=utf-8"), "tests/t/web.bynk:8:31", 345, 376, "expect ct == \"text/css; charset=utf-8\"");
         }
         default: {
-          return __bynkExpect((false), "tests/t/web.bynk:9:19", 395, 400, "expect false");
+          return __bynkExpect((false), "tests/t/web.bynk:9:19", 395, 400, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -72,7 +86,7 @@ async function test_the_stylesheet_is_served() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -86,11 +100,11 @@ async function test_the_favicon_is_at_its_fixed_path() {
     const { link, style } = __ns_t_page;
     if (!(favicon.url === "/favicon.ico")) { throw __bynkExpectFailure("tests/t/web.bynk:13:12", 466, 495, "expect favicon.url == \"/favicon.ico\"\n  expected: favicon.url == \"/favicon.ico\"\n  actual:   " + __bynkShow((favicon.url)) + " == " + __bynkShow(("/favicon.ico"))); }
     const r = await __bynkAssetGet(favicon.url);
-    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/t/web.bynk:15:12", 537, 551, "expect r is Raw(_, _)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Raw"))) { throw __bynkExpectFailure("tests/t/web.bynk:15:12", 537, 551, "expect r is Raw(_, _)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -110,7 +124,7 @@ async function test_a_refusal_carries_its_message() {
           return __bynkExpect((m === "no"), "tests/t/web.bynk:22:31", 814, 823, "expect m == \"no\"");
         }
         default: {
-          return __bynkExpect((false), "tests/t/web.bynk:23:19", 842, 847, "expect false");
+          return __bynkExpect((false), "tests/t/web.bynk:23:19", 842, 847, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -118,7 +132,7 @@ async function test_a_refusal_carries_its_message() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -127,7 +141,7 @@ async function test_a_refusal_carries_its_message() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

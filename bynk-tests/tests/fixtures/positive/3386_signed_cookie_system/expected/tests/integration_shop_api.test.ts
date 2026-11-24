@@ -12,18 +12,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -316,11 +330,11 @@ async function test_a_signed_in_read_works() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:8:10", 386, 400, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:8:10", 386, 400, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -332,11 +346,11 @@ async function test_a_state_changing_request_from_the_same_origin_works() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:12:10", 521, 535, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:12:10", 521, 535, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -348,11 +362,11 @@ async function test_POST_same_origin_with_a_listed_Origin_is_allowed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-origin", "Origin: https://app.example.com"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 740, 754, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:16:10", 740, 754, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -364,11 +378,11 @@ async function test_POST_same_origin_with_an_unlisted_Origin_is_allowed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-origin", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:20:10", 959, 973, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:20:10", 959, 973, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -380,11 +394,11 @@ async function test_POST_same_origin_with_a_null_Origin_is_allowed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-origin", "Origin: null"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:24:10", 1157, 1171, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:24:10", 1157, 1171, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -396,11 +410,11 @@ async function test_POST_same_origin_with_no_Origin_is_allowed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-origin"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:28:10", 1335, 1349, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:28:10", 1335, 1349, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -412,11 +426,11 @@ async function test_GET_same_origin_with_an_unlisted_Origin_is_not_checked() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(__requestHeaders(["Sec-Fetch-Site: same-origin", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1552, 1566, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1552, 1566, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -428,11 +442,11 @@ async function test_POST_same_site_with_a_listed_Origin_is_allowed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-site", "Origin: https://app.example.com"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1767, 1781, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:36:10", 1767, 1781, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -444,11 +458,11 @@ async function test_POST_same_site_with_an_unlisted_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-site", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:40:10", 1982, 1996, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:40:10", 1982, 1996, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -460,11 +474,11 @@ async function test_POST_same_site_with_a_null_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-site", "Origin: null"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:44:10", 2176, 2190, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:44:10", 2176, 2190, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -476,11 +490,11 @@ async function test_POST_same_site_with_no_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: same-site"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 2350, 2364, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 2350, 2364, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -492,11 +506,11 @@ async function test_GET_same_site_with_an_unlisted_Origin_is_not_checked() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(__requestHeaders(["Sec-Fetch-Site: same-site", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:52:10", 2563, 2577, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:52:10", 2563, 2577, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -508,11 +522,11 @@ async function test_POST_cross_site_with_a_listed_Origin_is_allowed() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://app.example.com"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 2780, 2794, "expect r is NoContent"); }
+    if (!(((__c: boolean) => __c)(r.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:56:10", 2780, 2794, "expect r is NoContent", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -524,11 +538,11 @@ async function test_POST_cross_site_with_an_unlisted_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:60:10", 2997, 3011, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:60:10", 2997, 3011, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -540,11 +554,11 @@ async function test_POST_cross_site_with_a_null_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: null"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:64:10", 3193, 3207, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:64:10", 3193, 3207, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -556,11 +570,11 @@ async function test_POST_cross_site_with_no_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:68:10", 3369, 3383, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:68:10", 3369, 3383, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -572,11 +586,11 @@ async function test_GET_cross_site_with_an_unlisted_Origin_is_not_checked() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:72:10", 3584, 3598, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:72:10", 3584, 3598, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -588,11 +602,11 @@ async function test_POST_none_with_a_listed_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: none", "Origin: https://app.example.com"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 3789, 3803, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 3789, 3803, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -604,11 +618,11 @@ async function test_POST_none_with_an_unlisted_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: none", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:80:10", 3994, 4008, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:80:10", 3994, 4008, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -620,11 +634,11 @@ async function test_POST_none_with_a_null_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: none", "Origin: null"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:84:10", 4178, 4192, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:84:10", 4178, 4192, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -636,11 +650,11 @@ async function test_POST_none_with_no_Origin_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_rename(__requestHeaders(["Sec-Fetch-Site: none"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 4342, 4356, "expect r is Forbidden"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 4342, 4356, "expect r is Forbidden", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -652,11 +666,11 @@ async function test_GET_none_with_an_unlisted_Origin_is_not_checked() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_me(__requestHeaders(["Sec-Fetch-Site: none", "Origin: https://evil.example"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:92:10", 4545, 4559, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:92:10", 4545, 4559, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -668,11 +682,11 @@ async function test_no_cookie_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_noauth_api_http_GET_me(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:96:10", 4639, 4666, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:96:10", 4639, 4666, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -684,11 +698,11 @@ async function test_a_forged_cookie_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_forged_api_http_GET_me(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:101:10", 4753, 4780, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:101:10", 4753, 4780, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -700,11 +714,11 @@ async function test_an_expired_cookie_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_expired_api_http_GET_me(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:106:10", 4870, 4897, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:106:10", 4870, 4897, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -716,11 +730,11 @@ async function test_a_state_changing_request_with_no_cookie_is_refused_as_unauth
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_noauth_api_http_POST_rename(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:111:10", 5032, 5059, "expect r is Rejected(Unauthorized)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:111:10", 5032, 5059, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -732,11 +746,11 @@ async function test_the_handler_never_sees_the_session_cookie_in_its_headers() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_cookie_header(__requestHeaders(["X-Trace: 1"]), ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "none"))) { throw __bynkExpectFailure("tests/api.bynk:116:10", 5227, 5242, "expect r is Ok(\"none\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "none"))) { throw __bynkExpectFailure("tests/api.bynk:116:10", 5227, 5242, "expect r is Ok(\"none\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -748,11 +762,11 @@ async function test_a_session_cookie_sent_twice_is_refused() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_jar(__requestCookies(["__Host-session=junk"]), undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:121:10", 5391, 5408, "expect r is Unauthorized"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:121:10", 5391, 5408, "expect r is Unauthorized", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -764,11 +778,11 @@ async function test_another_cookie_beside_the_session_cookie_does_not_disturb_it
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_jar(__requestCookies(["theme=dark"]), undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:126:10", 5570, 5584, "expect r is Ok(\"ada\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:126:10", 5570, 5584, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -777,7 +791,7 @@ async function test_another_cookie_beside_the_session_cookie_does_not_disturb_it
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

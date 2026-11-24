@@ -13,18 +13,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -119,9 +133,9 @@ async function test_a_handle_reads_what_the_app_wrote() {
       const __d = __decode(__r.value);
       return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (!(((__c: boolean) => __c)(before.tag === "Ok" && before.value.length === 0))) { throw __bynkExpectFailure("tests/orders.test.bynk:6:12", 210, 226, "expect before is Ok([])"); }
+    if (!(((__c: boolean) => __c)(before.tag === "Ok" && before.value.length === 0))) { throw __bynkExpectFailure("tests/orders.test.bynk:6:12", 210, 226, "expect before is Ok([])", "before", () => __bynkShow(before)); }
     const r = await __sysdrive_api_http_POST_orders_Param_id("o1", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "stored"))) { throw __bynkExpectFailure("tests/orders.test.bynk:9:12", 293, 310, "expect r is Ok(\"stored\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "stored"))) { throw __bynkExpectFailure("tests/orders.test.bynk:9:12", 293, 310, "expect r is Ok(\"stored\")", "r", () => __bynkShow(r)); }
     const after = await (async () => {
       const __decode = (__s: string): Result<readonly Order[], DecodeError> => {
         let __j: __JsonValue;
@@ -140,7 +154,7 @@ async function test_a_handle_reads_what_the_app_wrote() {
       const __d = __decode(__r.value);
       return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (!(((__c: boolean) => __c)(after.tag === "Ok" && after.value.length === 1 && after.value[0].id === "o1" && after.value[0].owner === "bob" && after.value[0].qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:12:12", 404, 463, "expect after is Ok([Order { id: \"o1\", owner: \"bob\", qty: 2, .. }])"); }
+    if (!(((__c: boolean) => __c)(after.tag === "Ok" && after.value.length === 1 && after.value[0].id === "o1" && after.value[0].owner === "bob" && after.value[0].qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:12:12", 404, 463, "expect after is Ok([Order { id: \"o1\", owner: \"bob\", qty: 2, .. }])", "after", () => __bynkShow(after)); }
     const one = await (async () => {
       const __decode = (__s: string): Result<Order, DecodeError> => {
         let __j: __JsonValue;
@@ -160,7 +174,7 @@ async function test_a_handle_reads_what_the_app_wrote() {
       const __d = __decode(__r.value.value);
       return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (!(((__c: boolean) => __c)(one.tag === "Ok" && one.value.tag === "Some" && one.value.value.id === "o1" && one.value.value.owner === "bob" && one.value.value.qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:15:12", 552, 613, "expect one is Ok(Some(Order { id: \"o1\", owner: \"bob\", qty: 2, .. }))"); }
+    if (!(((__c: boolean) => __c)(one.tag === "Ok" && one.value.tag === "Some" && one.value.value.id === "o1" && one.value.value.owner === "bob" && one.value.value.qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:15:12", 552, 613, "expect one is Ok(Some(Order { id: \"o1\", owner: \"bob\", qty: 2, .. }))", "one", () => __bynkShow(one)); }
     const none = await (async () => {
       const __decode = (__s: string): Result<Order, DecodeError> => {
         let __j: __JsonValue;
@@ -180,11 +194,11 @@ async function test_a_handle_reads_what_the_app_wrote() {
       const __d = __decode(__r.value.value);
       return __d.tag === "Ok" ? Ok(Some(__d.value)) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (!(((__c: boolean) => __c)(none.tag === "Ok" && none.value.tag === "None"))) { throw __bynkExpectFailure("tests/orders.test.bynk:18:12", 705, 721, "expect none is Ok(None)"); }
+    if (!(((__c: boolean) => __c)(none.tag === "Ok" && none.value.tag === "None"))) { throw __bynkExpectFailure("tests/orders.test.bynk:18:12", 705, 721, "expect none is Ok(None)", "none", () => __bynkShow(none)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -218,11 +232,11 @@ async function test_each_case_starts_from_an_empty_database() {
       const __d = __decode(__r.value);
       return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (!(((__c: boolean) => __c)(rows.tag === "Ok" && rows.value.length === 0))) { throw __bynkExpectFailure("tests/orders.test.bynk:24:12", 910, 924, "expect rows is Ok([])"); }
+    if (!(((__c: boolean) => __c)(rows.tag === "Ok" && rows.value.length === 0))) { throw __bynkExpectFailure("tests/orders.test.bynk:24:12", 910, 924, "expect rows is Ok([])", "rows", () => __bynkShow(rows)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -239,7 +253,7 @@ async function test_a_handle_may_take_any_name__the_harness_s_own_included() {
     type SqlValue = __ns_bynk_cloudflare.SqlValue;
     const env = (deps.__peek_shop_orders_Orders = new bynk_cloudflare__binding.WorkersD1({ D1_ORDERS: deps.env___ns_shop_orders.D1_ORDERS.readOnly() }, "D1_ORDERS"));
     const r = await __sysdrive_api_http_POST_orders_Param_id("o2", undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "stored"))) { throw __bynkExpectFailure("tests/orders.test.bynk:30:12", 1103, 1120, "expect r is Ok(\"stored\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "stored"))) { throw __bynkExpectFailure("tests/orders.test.bynk:30:12", 1103, 1120, "expect r is Ok(\"stored\")", "r", () => __bynkShow(r)); }
     const rows = await (async () => {
       const __decode = (__s: string): Result<readonly Order[], DecodeError> => {
         let __j: __JsonValue;
@@ -258,11 +272,11 @@ async function test_a_handle_may_take_any_name__the_harness_s_own_included() {
       const __d = __decode(__r.value);
       return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error });
     })();
-    if (!(((__c: boolean) => __c)(rows.tag === "Ok" && rows.value.length === 1 && rows.value[0].id === "o2" && rows.value[0].owner === "bob" && rows.value[0].qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 1214, 1272, "expect rows is Ok([Order { id: \"o2\", owner: \"bob\", qty: 2, .. }])"); }
+    if (!(((__c: boolean) => __c)(rows.tag === "Ok" && rows.value.length === 1 && rows.value[0].id === "o2" && rows.value[0].owner === "bob" && rows.value[0].qty === 2))) { throw __bynkExpectFailure("tests/orders.test.bynk:33:12", 1214, 1272, "expect rows is Ok([Order { id: \"o2\", owner: \"bob\", qty: 2, .. }])", "rows", () => __bynkShow(rows)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -271,7 +285,7 @@ async function test_a_handle_may_take_any_name__the_harness_s_own_included() {
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;

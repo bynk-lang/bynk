@@ -13,18 +13,32 @@ class ExpectationError extends Error {
   location: string;
   start: number;
   end: number;
-  constructor(location: string, start: number, end: number, detail: string) {
+  actual?: string;
+  constructor(location: string, start: number, end: number, detail: string, actual?: string) {
     super(`${detail}\n  at ${location}`);
     this.location = location;
     this.start = start;
     this.end = end;
+    this.actual = actual;
   }
 }
-function __bynkExpectFailure(location: string, start: number, end: number, detail: string) {
-  return new ExpectationError(location, start, end, detail);
+// #3980: the value a failed `expect <subject> is …` (or `expect false` in a `match` arm) tested.
+// `was` prints it with `__bynkShow`; it runs only on failure, and a throw while
+// printing leaves the report as it was. The message shows at most 2,000 characters; `actual`
+// (the `--format json` record) carries the whole text.
+function __bynkWasText(label: string, was: (() => string) | undefined): { line: string, actual?: string } {
+  if (was === undefined) return { line: "" };
+  let full: string;
+  try { full = was(); } catch { return { line: "" }; }
+  const shown = full.length > 2000 ? `${full.slice(0, 2000)}… (${full.length - 2000} more characters; \`--format json\` has the whole value)` : full;
+  return { line: `\n  ${label} was ${shown}`, actual: full };
 }
-function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string): void {
-  if (!cond) { throw __bynkExpectFailure(location, start, end, detail); }
+function __bynkExpectFailure(location: string, start: number, end: number, detail: string, label?: string, was?: () => string) {
+  const w = label === undefined ? { line: "" } : __bynkWasText(label, was);
+  return new ExpectationError(location, start, end, detail + w.line, w.actual);
+}
+function __bynkExpect(cond: boolean, location: string, start: number, end: number, detail: string, label?: string, was?: () => string): void {
+  if (!cond) { throw __bynkExpectFailure(location, start, end, detail, label, was); }
 }
 // #2272: the declaration an invariant or transition violation names, as a failed case
 // reports it. `undefined` for any other error, so it is omitted from the report.
@@ -125,7 +139,7 @@ async function test_the_router_sends_the_cookie_with_the_safe_defaults() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_login({ user: "ada" }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "ok"))) { throw __bynkExpectFailure("tests/api.bynk:17:10", 462, 480, "expect r is Created(\"ok\")"); }
+    if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === "ok"))) { throw __bynkExpectFailure("tests/api.bynk:17:10", 462, 480, "expect r is Created(\"ok\")", "r", () => __bynkShow(r)); }
     void (((__d) => {
       switch (__d.tag) {
         case "Some": {
@@ -148,7 +162,7 @@ async function test_the_router_sends_the_cookie_with_the_safe_defaults() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -160,12 +174,12 @@ async function test_a_redirect_carries_a_cookie_too() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_GET_go(undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "SeeOther"))) { throw __bynkExpectFailure("tests/api.bynk:35:10", 821, 837, "expect r is SeeOther(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "SeeOther"))) { throw __bynkExpectFailure("tests/api.bynk:35:10", 821, 837, "expect r is SeeOther(_)", "r", () => __bynkShow(r)); }
     if (!((((r as any).cookies ?? [])).length === 1)) { throw __bynkExpectFailure("tests/api.bynk:36:10", 847, 872, "expect r.cookies().length() == 1\n  expected: r.cookies().length() == 1\n  actual:   " + __bynkShow(((((r as any).cookies ?? [])).length)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -196,7 +210,7 @@ async function test_several_cookies__in_order() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -227,7 +241,7 @@ async function test_a_cleared_cookie_is_sent_empty_and_expired() {
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -239,11 +253,11 @@ async function test_a_cookie_value_that_is_not_a_cookie_octet_faults_the_request
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_api_http_POST_bad({ user: "a b" }, undefined, "");
-    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 1555, 1574, "expect r is ServerError(_)"); }
+    if (!(((__c: boolean) => __c)(r.tag === "ServerError"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 1555, 1574, "expect r is ServerError(_)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
-      return { pass: false, error: { message: e.message, location: e.location } };
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
     }
     return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
   }
@@ -252,7 +266,7 @@ async function test_a_cookie_value_that_is_not_a_cookie_octet_faults_the_request
 type CaseResult = {
   name: string;
   pass: boolean;
-  error?: { message: string; location: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
+  error?: { message: string; location: string; actual?: string; violation?: { kind: string; agent: string; name: string; location: string }; refusals?: { index: number; call: string; kind: string; agent: string; name: string; location: string }[] };
   durationMs: number;
   retries?: number;
   kind?: string;
