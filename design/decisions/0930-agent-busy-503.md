@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An agent call that waits past its queue limit (`AgentBusy`) now answers `503` with `Retry-After: 1` at an HTTP route, logged as busy rather than reported as a fault; `@busyAfter(d)` before `agent` lowers the 30-second wait
-breaking: An HTTP route whose agent call hits `AgentBusy` now answers `503` with `Retry-After: 1` instead of `500`, and is no longer reported to the platform as a fault, so a client or alert that matched the `500` must match the `503`; a cross-context call that does so is `503` too, unmarked, so its caller reads it as unreachable rather than `CalleeFaulted`.
----
+# 0930 — `AgentBusy` answers `503` with `Retry-After`, and `@busyAfter(d)` lowers the 30-second wait
 
-## ADR: agent-busy-503
-title: `AgentBusy` answers `503` with `Retry-After`, and `@busyAfter(d)` lowers the 30-second wait
-summary: A busy agent instance is load, not a fault: an HTTP route answers 503, and an agent may lower its queue wait
+- **Status:** Accepted (v0.672)
 
 **Context.** A call that waits 30 seconds behind a hot instance's queue faults
 `AgentBusy` (ADR 0781). That is a transient condition, but at an HTTP handler it
