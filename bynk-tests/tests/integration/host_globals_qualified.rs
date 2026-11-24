@@ -19,6 +19,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "../support/shared_snapshots.rs"]
+mod shared_snapshots;
+
 /// The host globals emitted code references. Kept in step with the emitter:
 /// add a name here when emitted code starts using a new global. `String` is
 /// the one global emitted bare (`String(x)`): it is a hard Bynk keyword, so no
@@ -173,7 +176,7 @@ fn unit_modules_reach_host_globals_through_global_this() {
                 continue;
             }
             scanned += 1;
-            let code = code_only(&fs::read_to_string(&file).expect("readable"));
+            let code = code_only(&shared_snapshots::read_expanded(&file));
             for name in HOST_GLOBALS {
                 // Count first: one pass over the module, and most modules
                 // have no bare reference to most globals. `declares` is a
