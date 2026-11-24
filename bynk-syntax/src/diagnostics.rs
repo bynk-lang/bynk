@@ -2285,7 +2285,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.held.query_accessor_on_held_map",
         blurb: "A held `Map[K, Connection]` is iterated with the broadcast operations, `forEach` (one at a time) or `parTraverse` (in parallel), not with a key query. `.entries`, `.keys` and `.values` would lift the connections out into a query, which the single-owner rules for held values do not allow. To send to every connection, broadcast over the map; to learn who is connected, keep a separate `Set` of their keys.",
-        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
     },
     Explain {
         code: "bynk.held.unsupported_map_op",

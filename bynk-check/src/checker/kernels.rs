@@ -1126,30 +1126,14 @@ pub(crate) fn check_query_kernel_method(
             };
             Some(eff(tys.intern(Ty::Option(tys.intern(result)))))
         }
-        // v0.107 (slice 4): `forEach` runs the effectful function over each element
-        // **in turn**; `parForEach` runs them **concurrently** (the broadcast form —
-        // a slow/half-dead connection must not head-of-line-block the rest). Same
-        // type; the difference is sequential-vs-parallel lowering. #4177: `parTraverse`
-        // is the old spelling of `parForEach`, an error with a fix; the call is still
-        // checked as `parForEach` so one wrong name raises one error.
+        // `forEach` (in turn), `parForEach` (concurrently: the broadcast form) and, #4177,
+        // the retired `parTraverse` spelling. They share one type; see `query_par`.
         Some(op @ (QueryOp::ForEach | QueryOp::ParForEach | QueryOp::ParTraverse)) => {
-            if op == QueryOp::ParTraverse {
-                super::query_par::report_query_par_traverse(method, ctx);
-            }
+            super::query_par::report_old_name(op, method, ctx);
             if !arity(1, ctx) {
                 return None;
             }
-            let f = Ty::Fn {
-                params: vec![elem],
-                ret: tys.intern(Ty::Effect(tys.intern(Ty::Unit))),
-            };
-            check_arg(
-                &args[0],
-                tys.intern(f.clone()),
-                &format!("the `Query.{}` function", method.name),
-                ctx,
-            );
-            Some(eff(tys.intern(Ty::Unit)))
+            Some(super::query_par::check_step(method, args, elem, ctx))
         }
         // v0.149 (ADR 0173): the collect-all terminals over a lazy `Query`/a
         // lifted storage collection (the broadcast form for a held

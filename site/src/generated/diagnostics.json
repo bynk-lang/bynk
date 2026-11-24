@@ -3173,9 +3173,9 @@
     "categoryAnchor": "other",
     "code": "bynk.held.query_accessor_on_held_map",
     "constructs": [],
-    "example": "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+    "example": "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
     "severity": "error",
-    "summary": "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query."
+    "summary": "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`), not a key query."
   },
   {
     "blurb": "`update` and `upsert` rebuild a map entry from its old value with a function. A held connection cannot be rebuilt from another: it is a live handle, stored and found by identity. So a held `Map[K, Connection]` takes `put`, `get`, `remove`, `contains` and `size`, and not these two. To replace an entry, `put` the new connection under the key, and to drop one, `remove` it.",
