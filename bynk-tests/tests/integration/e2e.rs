@@ -1067,3 +1067,29 @@ fn a_build_emits_the_same_bytes_every_time() {
         }
     }
 }
+
+/// #4235: a shared region is elided only when it is the *current* shared text. A fixture whose
+/// emitted module carries a changed fragment keeps it in full, so its comparison fails with the
+/// whole difference instead of passing against a stale marker; and an untouched module elides.
+#[test]
+fn a_changed_test_runtime_fragment_is_not_elided() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "tests/fixtures/positive/1649_agent_state_round_trip/expected/tests/demo_state.test.ts",
+    );
+    let real = shared_snapshots::read_expanded(&path);
+    let rel = Path::new("tests/demo_state.test.ts");
+
+    let intact = shared_snapshots::elide(rel, &real);
+    assert!(intact.text.contains("<<bynk-shared: testing/expectation>>"));
+    assert!(!intact.text.contains("class ExpectationError"));
+    assert!(shared_snapshots::check_regions(&intact.regions).is_empty());
+
+    let changed = real.replacen("class ExpectationError", "class  ExpectationError", 1);
+    let out = shared_snapshots::elide(rel, &changed);
+    assert!(!out.text.contains("<<bynk-shared: testing/expectation>>"));
+    assert!(out.text.contains("class  ExpectationError"));
+    assert_ne!(
+        out.text, intact.text,
+        "the fixture's own comparison would fail"
+    );
+}
