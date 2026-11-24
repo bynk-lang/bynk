@@ -30,3 +30,12 @@ fn evens(xs: List[Int]) -> Int {
 fn all(xs: List[Int]) -> Int {
 	xs.count()
 }
+
+// Inline lambdas whose body already has an `Option` type: the element type changes.
+fn ports(raw: List[String]) -> List[Int] {
+	raw.filterMap((s) => Int.parse(s))
+}
+
+fn pick(names: List[String], idx: List[Int]) -> List[String] {
+	idx.filterMap((i) => names.get(i))
+}

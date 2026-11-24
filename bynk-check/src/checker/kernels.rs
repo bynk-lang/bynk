@@ -815,7 +815,7 @@ pub(crate) fn check_list_kernel_method(
         Some(o @ (ListOp::FilterMap | ListOp::ZipWith | ListOp::TakeWhile | ListOp::SkipWhile)) => {
             super::list_more::check_list_more(method, o, args, elem, span, ctx)
         }
-        Some(o @ ListOp::Count) if args.len() == 1 => {
+        Some(o @ ListOp::Count) if !args.is_empty() => {
             super::list_more::check_list_more(method, o, args, elem, span, ctx)
         }
         Some(o @ (ListOp::Min | ListOp::Max)) if args.is_empty() => {

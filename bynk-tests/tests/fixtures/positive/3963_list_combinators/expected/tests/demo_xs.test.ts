@@ -79,7 +79,7 @@ function __makeTestDeps() {
 async function test_filterMap_keeps_the_Some_results__in_order() {
   try {
     const deps = {};
-    const { all, big, bigs, evens, head, tail, totals } = __ns_demo_xs;
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
     if (!(__bynkEq(bigs([1, 3, 2, 5]), [30, 50]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:4:9", 75, 105, "expect bigs([1, 3, 2, 5]) == [30, 50]\n  expected: bigs([1, 3, 2, 5]) == [30, 50]\n  actual:   " + __bynkShow((bigs([1, 3, 2, 5]))) + " == " + __bynkShow(([30, 50]))); }
     return { pass: true };
   } catch (e) {
@@ -94,7 +94,7 @@ async function test_filterMap_keeps_the_Some_results__in_order() {
 async function test_filterMap_on_an_empty_list__and_when_every_result_is_None() {
   try {
     const deps = {};
-    const { all, big, bigs, evens, head, tail, totals } = __ns_demo_xs;
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
     const none: readonly number[] = [];
     if (!(__bynkEq(bigs(none), none))) { throw __bynkExpectFailure("tests/demo/xs.bynk:9:9", 210, 228, "expect bigs(none) == none\n  expected: bigs(none) == none\n  actual:   " + __bynkShow((bigs(none))) + " == " + __bynkShow((none))); }
     if (!(__bynkEq(bigs([1, 2]), none))) { throw __bynkExpectFailure("tests/demo/xs.bynk:10:9", 237, 257, "expect bigs([1, 2]) == none\n  expected: bigs([1, 2]) == none\n  actual:   " + __bynkShow((bigs([1, 2]))) + " == " + __bynkShow((none))); }
@@ -111,7 +111,7 @@ async function test_filterMap_on_an_empty_list__and_when_every_result_is_None() 
 async function test_zipWith_pairs_elements_and_stops_at_the_shorter_list() {
   try {
     const deps = {};
-    const { all, big, bigs, evens, head, tail, totals } = __ns_demo_xs;
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
     if (!(__bynkEq(totals([2, 3, 4], [10, 100]), [20, 300]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:14:9", 331, 372, "expect totals([2, 3, 4], [10, 100]) == [20, 300]\n  expected: totals([2, 3, 4], [10, 100]) == [20, 300]\n  actual:   " + __bynkShow((totals([2, 3, 4], [10, 100]))) + " == " + __bynkShow(([20, 300]))); }
     if (!(__bynkEq(totals([2], [10, 100, 1000]), [20]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:15:9", 381, 417, "expect totals([2], [10, 100, 1000]) == [20]\n  expected: totals([2], [10, 100, 1000]) == [20]\n  actual:   " + __bynkShow((totals([2], [10, 100, 1000]))) + " == " + __bynkShow(([20]))); }
     const none: readonly number[] = [];
@@ -129,7 +129,7 @@ async function test_zipWith_pairs_elements_and_stops_at_the_shorter_list() {
 async function test_takeWhile_and_skipWhile_split_at_the_first_failing_element() {
   try {
     const deps = {};
-    const { all, big, bigs, evens, head, tail, totals } = __ns_demo_xs;
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
     if (!(__bynkEq(head([1, 2, 3, 1]), [1, 2]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:21:9", 557, 585, "expect head([1, 2, 3, 1]) == [1, 2]\n  expected: head([1, 2, 3, 1]) == [1, 2]\n  actual:   " + __bynkShow((head([1, 2, 3, 1]))) + " == " + __bynkShow(([1, 2]))); }
     if (!(__bynkEq(tail([1, 2, 3, 1]), [3, 1]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:22:9", 594, 622, "expect tail([1, 2, 3, 1]) == [3, 1]\n  expected: tail([1, 2, 3, 1]) == [3, 1]\n  actual:   " + __bynkShow((tail([1, 2, 3, 1]))) + " == " + __bynkShow(([3, 1]))); }
     return { pass: true };
@@ -145,7 +145,7 @@ async function test_takeWhile_and_skipWhile_split_at_the_first_failing_element()
 async function test_takeWhile_and_skipWhile_on_empty__all_true_and_all_false() {
   try {
     const deps = {};
-    const { all, big, bigs, evens, head, tail, totals } = __ns_demo_xs;
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
     const none: readonly number[] = [];
     if (!(__bynkEq(head(none), none))) { throw __bynkExpectFailure("tests/demo/xs.bynk:27:9", 726, 744, "expect head(none) == none\n  expected: head(none) == none\n  actual:   " + __bynkShow((head(none))) + " == " + __bynkShow((none))); }
     if (!(__bynkEq(tail(none), none))) { throw __bynkExpectFailure("tests/demo/xs.bynk:28:9", 753, 771, "expect tail(none) == none\n  expected: tail(none) == none\n  actual:   " + __bynkShow((tail(none))) + " == " + __bynkShow((none))); }
@@ -166,11 +166,27 @@ async function test_takeWhile_and_skipWhile_on_empty__all_true_and_all_false() {
 async function test_count_with_a_predicate__and_count_without() {
   try {
     const deps = {};
-    const { all, big, bigs, evens, head, tail, totals } = __ns_demo_xs;
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
     if (!(evens([1, 2, 3, 4, 6]) === 3)) { throw __bynkExpectFailure("tests/demo/xs.bynk:36:9", 954, 981, "expect evens([1, 2, 3, 4, 6]) == 3\n  expected: evens([1, 2, 3, 4, 6]) == 3\n  actual:   " + __bynkShow((evens([1, 2, 3, 4, 6]))) + " == " + __bynkShow((3))); }
     if (!(all([1, 2, 3]) === 3)) { throw __bynkExpectFailure("tests/demo/xs.bynk:37:9", 990, 1009, "expect all([1, 2, 3]) == 3\n  expected: all([1, 2, 3]) == 3\n  actual:   " + __bynkShow((all([1, 2, 3]))) + " == " + __bynkShow((3))); }
     const none: readonly number[] = [];
     if (!(evens(none) === 0)) { throw __bynkExpectFailure("tests/demo/xs.bynk:39:9", 1044, 1060, "expect evens(none) == 0\n  expected: evens(none) == 0\n  actual:   " + __bynkShow((evens(none))) + " == " + __bynkShow((0))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_filterMap_with_an_inline_lambda_that_changes_the_element_type() {
+  try {
+    const deps = {};
+    const { all, big, bigs, evens, head, pick, ports, tail, totals } = __ns_demo_xs;
+    if (!(__bynkEq(ports(["80", "x", "443", ""]), [80, 443]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:43:9", 1143, 1185, "expect ports([\"80\", \"x\", \"443\", \"\"]) == [80, 443]\n  expected: ports([\"80\", \"x\", \"443\", \"\"]) == [80, 443]\n  actual:   " + __bynkShow((ports(["80", "x", "443", ""]))) + " == " + __bynkShow(([80, 443]))); }
+    if (!(__bynkEq(pick(["a", "b", "c"], [2, 9, 0, -1]), ["c", "a"]))) { throw __bynkExpectFailure("tests/demo/xs.bynk:44:9", 1194, 1244, "expect pick([\"a\", \"b\", \"c\"], [2, 9, 0, -1]) == [\"c\", \"a\"]\n  expected: pick([\"a\", \"b\", \"c\"], [2, 9, 0, -1]) == [\"c\", \"a\"]\n  actual:   " + __bynkShow((pick(["a", "b", "c"], [2, 9, 0, -1]))) + " == " + __bynkShow((["c", "a"]))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -194,7 +210,7 @@ const __bynkCasePerformance = (globalThis as unknown as { performance?: { now():
 const __bynkCaseNow = (): number => (__bynkCasePerformance ? __bynkCasePerformance.now() : Date.now());
 const __bynkCaseSince = (started: number): number => Math.round((__bynkCaseNow() - started) * 100) / 100;
 
-export const __bynkCases: readonly string[] = ["filterMap keeps the Some results, in order", "filterMap on an empty list, and when every result is None", "zipWith pairs elements and stops at the shorter list", "takeWhile and skipWhile split at the first failing element", "takeWhile and skipWhile on empty, all-true and all-false", "count with a predicate, and count without"];
+export const __bynkCases: readonly string[] = ["filterMap keeps the Some results, in order", "filterMap on an empty list, and when every result is None", "zipWith pairs elements and stops at the shorter list", "takeWhile and skipWhile split at the first failing element", "takeWhile and skipWhile on empty, all-true and all-false", "count with a predicate, and count without", "filterMap with an inline lambda that changes the element type"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -232,6 +248,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("count with a predicate, and count without")) {
     const started = __bynkCaseNow();
     const r = { name: "count with a predicate, and count without", ...(await test_count_with_a_predicate__and_count_without()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("filterMap with an inline lambda that changes the element type")) {
+    const started = __bynkCaseNow();
+    const r = { name: "filterMap with an inline lambda that changes the element type", ...(await test_filterMap_with_an_inline_lambda_that_changes_the_element_type()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

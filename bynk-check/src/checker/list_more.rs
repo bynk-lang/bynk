@@ -20,14 +20,16 @@ pub(super) fn check_list_more(
     let name = method.name.as_str();
     let expect = if op == ListOp::ZipWith { 2 } else { 1 };
     if args.len() != expect {
+        // `count` is the only one with two arities: none, or a predicate.
+        let takes = if op == ListOp::Count {
+            "0 arguments, or 1 (a predicate)".to_string()
+        } else {
+            format!("{expect} argument{}", if expect == 1 { "" } else { "s" })
+        };
         ctx.errors.push(CompileError::new(
             "bynk.types.method_arity",
             span,
-            format!(
-                "`List.{name}` takes {expect} argument{}, got {}",
-                if expect == 1 { "" } else { "s" },
-                args.len()
-            ),
+            format!("`List.{name}` takes {takes}, got {}", args.len()),
         ));
         for a in args {
             let _ = type_of(a, None, ctx);

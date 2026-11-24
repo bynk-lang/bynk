@@ -44,3 +44,17 @@ export function evens(xs: readonly number[]): number {
 export function all(xs: readonly number[]): number {
   return (xs).length;
 }
+
+export function ports(raw: readonly string[]): readonly number[] {
+  return ((__xs: readonly string[], __f) => __xs.flatMap((__x) => {
+    const __o = __f(__x);
+    return __o.tag === "Some" ? [__o.value] : [];
+  }))(raw, (s: string) => ((__s: string) => { if (!/^[+-]?[0-9]+$/.test(__s)) return None; const __n = globalThis.Number(__s) + 0; return globalThis.Number.isSafeInteger(__n) ? Some(__n) : None; })(s));
+}
+
+export function pick(names: readonly string[], idx: readonly number[]): readonly string[] {
+  return ((__xs: readonly number[], __f) => __xs.flatMap((__x) => {
+    const __o = __f(__x);
+    return __o.tag === "Some" ? [__o.value] : [];
+  }))(idx, (i: number) => ((__xs: readonly string[], __i: number) => __i >= 0 && __i < __xs.length ? Some(__xs[__i] as string) : None)(names, i));
+}

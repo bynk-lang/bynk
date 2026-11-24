@@ -38,3 +38,8 @@ case "count with a predicate, and count without" {
 	let none: List[Int] = []
 	expect evens(none) == 0
 }
+
+case "filterMap with an inline lambda that changes the element type" {
+	expect ports(["80", "x", "443", ""]) == [80, 443]
+	expect pick(["a", "b", "c"], [2, 9, 0, -1]) == ["c", "a"]
+}
