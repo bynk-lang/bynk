@@ -376,8 +376,10 @@ fn members_that_declare_the_same_route_collide() {
 /// alone.
 #[test]
 fn a_member_route_shadowed_by_another_member_is_unreachable() {
-    let root =
-        std::env::temp_dir().join(format!("bynk-deploy-groups-shadow-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "bynk-deploy-groups-unreachable-{}",
+        std::process::id()
+    ));
     write_project(&root, WORKERS_TARGET);
     let route = |svc: &str, path: &str, param: &str| {
         format!(
