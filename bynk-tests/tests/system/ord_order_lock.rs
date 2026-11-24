@@ -115,7 +115,10 @@ fn reordering_variants_is_refused_and_names_both_orders() {
     assert!(err.contains("bynk.types.ord_order_changed"), "{err}");
     assert!(err.contains("recorded order: Low < Medium < High"), "{err}");
     assert!(err.contains("new order:      High < Low < Medium"), "{err}");
-    assert!(err.contains("bynk lock accept-order Priority"), "{err}");
+    assert!(
+        err.contains("bynk lock accept-order tasks.Priority"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -144,6 +147,19 @@ fn appending_removing_and_renaming_in_place_are_allowed_and_the_lock_follows() {
     assert!(!p.lock().contains("Medium"), "{}", p.lock());
     p.ok(&priority("Low, Top, Urgent"));
     assert!(p.lock().contains("Top") && !p.lock().contains("\"High\""));
+}
+
+#[test]
+fn reordering_a_variants_payload_is_refused_and_appending_one_is_allowed() {
+    let p = Project::new("payload");
+    let shape = |circle: &str| {
+        format!("commons tasks\n\ntype Shape = | Circle({circle}) | Dot derives Ord\n")
+    };
+    p.ok(&shape("r: Int, x: Int"));
+    let err = p.refused(&shape("x: Int, r: Int"));
+    assert!(err.contains("bynk.types.ord_order_changed"), "{err}");
+    p.ok(&shape("r: Int, x: Int, y: Int"));
+    assert!(p.lock().contains("\"y\""), "{}", p.lock());
 }
 
 #[test]

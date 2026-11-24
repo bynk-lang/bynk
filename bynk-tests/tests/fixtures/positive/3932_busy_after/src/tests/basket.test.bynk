@@ -1,0 +1,6 @@
+suite shop.basket {
+	case "a call to an annotated agent is served" {
+		let t <- Basket("b1").add(2)
+		expect t == 2
+	}
+}

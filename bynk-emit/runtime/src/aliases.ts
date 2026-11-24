@@ -5,7 +5,7 @@
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
 import { containerClass } from "./container.ts";
-import { AGENT_WIRE_PASS, StateRegistry, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
+import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
@@ -147,6 +147,8 @@ export {
   responseToUnauthOutcome as __responseToUnauthOutcome,
   selectPluralArm as __selectPluralArm,
   serialiseAgentKey as __serialiseAgentKey,
+  agentBusyAfter as __agentBusyAfter,
+  agentBusyResponse as __agentBusyResponse,
   serialiseAgentClass as __serialiseAgentClass,
   containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,

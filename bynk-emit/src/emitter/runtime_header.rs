@@ -214,6 +214,8 @@ const WORKER_ORDER: &[&str] = &[
     "__mysqlExecute",
     "__pgExecute",
     "__serialiseAgentClass",
+    "__agentBusyAfter",
+    "__agentBusyResponse",
     "__serialiseAgentKey",
     "__dispatchToEventsFanout",
     "__sessionCookieOf",

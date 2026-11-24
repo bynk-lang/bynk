@@ -140,8 +140,9 @@ fn names_keep_order(old: &[String], new: &[String]) -> bool {
         let removed = gap(old, &in_new, k);
         let added = gap(new, &in_old, k);
         // A name inserted in the middle changes how existing values compare with
-        // it; one replacing a removed name in the same place is a rename.
-        if added > 0 && removed != added {
+        // it; one replacing a removed name in the same place is a rename, and
+        // fewer new names than removed ones is a rename plus a removal.
+        if added > removed {
             return false;
         }
     }
@@ -250,7 +251,8 @@ fn order_changed(item: &OrderedType<'_>, recorded: &OrderEntry) -> CompileError 
         "every sort, `<`, `min` and `max` on `{name}` now gives a different result"
     ))
     .with_note(format!(
-        "help: if this is intended, run `bynk lock accept-order {name}`; otherwise restore the order"
+        "help: if this is intended, run `bynk lock accept-order {}`; otherwise restore the order",
+        item.key
     ));
     match restore_edits(item, recorded) {
         Some(edits) => error.with_suggestion(
@@ -359,6 +361,15 @@ mod tests {
         assert!(
             names_keep_order(&old, &names(&["a", "b"])),
             "remove the last"
+        );
+        let four = names(&["a", "b", "c", "d"]);
+        assert!(
+            names_keep_order(&four, &names(&["a", "x", "d"])),
+            "one removed and one renamed in the same gap"
+        );
+        assert!(
+            !names_keep_order(&four, &names(&["a", "x", "y", "z", "d"])),
+            "more new names than removed ones in a gap"
         );
     }
 

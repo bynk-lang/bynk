@@ -2909,7 +2909,7 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
     // records and a reorder must accept.
     if let Some(order) = bynk_check::ord_order::signature(t) {
         out.push_str(&format!(
-            "\nOrder (recorded in `bynk.schema.lock`): {}\n",
+            "\nSorts by: {}\n",
             bynk_check::ord_order::describe(&order)
         ));
     }

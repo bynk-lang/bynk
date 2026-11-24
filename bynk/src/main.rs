@@ -614,7 +614,6 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
     root
 }
 
-/// `bynk fetch`: the lock file, as JSON when asked.
 /// `bynk update`: re-resolve the named dependencies (all when none are named).
 fn run_update(names: Vec<String>, path: &Path) -> ExitCode {
     let opts = bynk::fetch::FetchOptions {
@@ -640,6 +639,7 @@ fn run_lock_command(command: bynk::cli::LockCommand) -> ExitCode {
     }
 }
 
+/// `bynk fetch`: the lock file, as JSON when asked.
 fn run_fetch(
     path: &Path,
     lock: bynk::cli::LockArgs,

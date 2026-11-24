@@ -1,0 +1,13 @@
+context shop.basket
+
+@cache(maxAge: 5.minutes)
+agent Basket {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
