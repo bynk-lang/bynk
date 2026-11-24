@@ -40,6 +40,9 @@ export default {
         const __m = __matchPath("/render/:name", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /render/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_GET_render_Param_name(name);
@@ -51,6 +54,9 @@ export default {
         const __m = __matchPath("/thumb/:name", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /thumb/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_name = __m.params["name"];
           const name = __raw_name;
           const result = await surface.http_GET_thumb_Param_name(name);

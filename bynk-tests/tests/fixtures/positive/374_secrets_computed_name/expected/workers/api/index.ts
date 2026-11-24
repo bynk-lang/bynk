@@ -38,6 +38,9 @@ export default {
         const __m = __matchPath("/secret/:which", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /secret/:which";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_which = __m.params["which"];
           const which = __raw_which;
           const result = await surface.http_GET_secret_Param_which(which);

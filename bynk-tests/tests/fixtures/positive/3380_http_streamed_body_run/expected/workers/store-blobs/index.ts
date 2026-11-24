@@ -39,6 +39,9 @@ export default {
         const __m = __matchPath("/blobs/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /blobs/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_blobs);
+          }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_blobs);
@@ -58,6 +61,9 @@ export default {
         const __m = __matchPath("/rendered/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /rendered/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_rendered(why)), __security_rendered);
+          }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_rendered(why)), __security_rendered);
@@ -77,6 +83,9 @@ export default {
         const __m = __matchPath("/zips/:name", path);
         if (method === "PUT" && __m) {
           __route = "PUT /zips/:name";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_blobs);
+          }
           if (!__mediaTypeMatches(request, ["application/zip"])) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/zip" }), { status: 415, headers: { "content-type": "application/json" } }), __security_blobs);
           }

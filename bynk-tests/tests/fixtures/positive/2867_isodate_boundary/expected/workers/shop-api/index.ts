@@ -58,6 +58,9 @@ export default {
         const __m = __matchPath("/x/:day", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /x/:day";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_day = __m.params["day"];
           const __r_day = handlers.Day.of(__raw_day);
           if (__r_day.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.day", violation: __r_day.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

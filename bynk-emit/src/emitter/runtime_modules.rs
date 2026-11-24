@@ -577,6 +577,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("decodeAgentArgs", "agent"),
     ("decodeAgentKey", "agent"),
     ("decodeKeyPart", "entries"),
+    ("decodePath", "http"),
     ("deliverEvent", "boundary"),
     ("deserialiseEventEnvelope", "boundary"),
     ("diffEntries", "entries"),

@@ -62,6 +62,9 @@ export default {
         const __m = __matchPath("/flaky/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /flaky/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_flaky_Param_id(id);
@@ -72,6 +75,9 @@ export default {
         const __m = __matchPath("/hooks/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /hooks/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_hooks_Param_id(id);
@@ -82,6 +88,9 @@ export default {
         const __m = __matchPath("/receipt/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /receipt/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_skew);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_receipt_Param_id(id);
@@ -92,6 +101,9 @@ export default {
         const __m = __matchPath("/replay/:id", path);
         if (method === "POST" && __m) {
           __route = "POST /replay/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_replay);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_POST_replay_Param_id(id);
@@ -102,6 +114,9 @@ export default {
         const __m = __matchPath("/skew/:id/:mode", path);
         if (method === "POST" && __m) {
           __route = "POST /skew/:id/:mode";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_skew);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const __raw_mode = __m.params["mode"];

@@ -50,6 +50,9 @@ export default {
         const __m = __matchPath("/c\\d/:id", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /c\\d/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(__applyCors(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __cors_api, request.headers.get("origin")), __security_api);
+          }
           const __raw_id = __m.params["id"];
           const id = __raw_id;
           const result = await surface.http_GET_c_d_Param_id(id);
