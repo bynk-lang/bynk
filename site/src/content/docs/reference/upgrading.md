@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.658.0
+
+A cron `Err` is no longer logged as `cron <expr> failed <payload>`; the log is now a structured record with the error's type and variant only, so an alert keyed on the old line stops matching, and the payload no longer reaches the log
+
 ## v0.656.0
 
 A context that writes a bare `consumes bynk` (no braces) and declares its own `CallOutcome`, `CallFailure` or `Refusal` now fails as `bynk.consumes.name_conflict`; rename the type, or consume only what you use with `consumes bynk { … }`.
