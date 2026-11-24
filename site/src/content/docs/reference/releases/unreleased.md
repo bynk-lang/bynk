@@ -7,6 +7,10 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.671.2** | Releases no longer publish prebuilt macOS binaries for now (GitHub's macOS runners were holding releases back); on macOS, `install.sh` says so and points to `cargo install bynk bynk-lsp` |
+| **v0.671.1** | A failing `for all` over a `Duration` or `Instant`, and a failed `expect … is …` whose subject holds one, print it in Bynk's form (`3.seconds`, `Instant.fromEpochMillis(0)`) instead of as bare milliseconds |
+| **v0.671.0** | A context's `transparent` types are constructible from a consumer on every target; under Workers the consumer builds them with its own copy of the guards |
+| **v0.670.0** | A path parameter takes the types a typed `query` field does (`Int`, `Bool`, `Decimal`, enums, and refined or opaque types over them), decoded after the route matches with a `400` at `path.<name>` |
 | **v0.669.0** | A queue consumer's `on message` handler can take its delivery metadata as a second parameter, `QueueDelivery { attempts, sentAt }`, in either order; `q.message(m)` in a test takes an optional delivery |
 | **v0.668.0** | `Ordering` is a prelude type, nameable with no import in every context and commons, and building it in a context is not a rebrand construction |
 | **v0.667.0** | `Duration` gains `toSeconds`, `toMinutes`, `toHours` and `toDays` (rounding towards zero); `NonNegative`, `Positive`, `InRange` and the new one-sided `AtLeast` and `AtMost` apply to `Duration` (and `AtLeast`/`AtMost` to `Int`, `Float` and `Decimal`); `bynk.cloudflare` takes `KvTtl` and `KvCacheTtl` where it took a bare `Int` or an unchecked `Duration`; a type an adapter exports `transparent` is constructible by a consumer |

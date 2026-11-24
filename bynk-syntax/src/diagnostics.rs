@@ -1342,18 +1342,18 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.context.external_construction",
         blurb: "A context that `consumes` another may hold and pass on the other's types, but may not \
-                build one. (An adapter's `transparent` types, such as `bynk.cloudflare`'s `KvTtl`, \
-                are the exception: `.of`, a variant and a record literal are open to a consumer.) A \
-                refined or opaque type can promise an invariant, a `Matches` pattern or a smart constructor, \
-                and that holds only if every value is made by the owner; `.of`, `.unsafe` and a variant \
-                constructor are refused from outside, as is the record syntax of an opaque type. Ask the owner \
-                for the value instead: a service that returns it, or takes the plain input and \
-                does the check. `bynk.context.opaque_inspection` is the other side, looking \
+                build an opaque one. (A `transparent` export, whether a context's or an adapter's, such \
+                as `bynk.cloudflare`'s `KvTtl`, is open to a consumer: `.of`, a variant and a record \
+                literal build it.) An opaque type can promise an invariant, a `Matches` pattern or a \
+                smart constructor, and that holds only if every value is made by the owner; `.of`, a \
+                variant constructor and record syntax are refused from outside, and so is `.unsafe` on \
+                any type. Ask the owner for the value instead: a service that returns it, or takes the \
+                plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking \
                 inside such a value.",
         example: "// payment.bynk\n\
                   context payment\n\
                   \n\
-                  exports transparent { AuthId }\n\
+                  exports opaque { AuthId }\n\
                   \n\
                   type AuthId = String where Matches(\"AUTH-[0-9]+\")\n\
                   \n\
@@ -2620,8 +2620,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.path_param_not_stringy",
-        blurb: "A path parameter is read from a segment of the URL, which is text, so its type must be one the router can build from a string: `String`, a refined `String`, or an opaque type over `String`. An `Int`, an enum or a record is refused here, though a `query` field may be one. Take the segment as a refined `String` that states its shape.",
-        example: "on GET(\"/items/:id\") (id: Int) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a path segment is a string\n\ntype ItemId = String where Matches(\"^[0-9]+$\")\non GET(\"/items/:id\") (id: ItemId) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+        blurb: "A path parameter is read from one segment of the URL, which is text, so its type must be one the router can read from a single value: a `String`, `Int`, `Bool` or `Decimal`, an enum (by variant name), or a refined or opaque type over one of those, the set a typed `query` field takes. A segment is always present and holds one value, so `Option` and `List` make no sense here, and a record or any other type is refused. The router decodes the segment after matching the route and answers `400` when it does not read as the type or breaks a refinement. Take the segment as a type that states its shape.",
+        example: "on GET(\"/items/:id\") (id: Option[Int]) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ a segment is always present\n\ntype ItemNo = Int where Positive\non GET(\"/items/:id\") (id: ItemNo) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
         code: "bynk.http.query_field_not_stringy",
@@ -8369,7 +8369,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     dg(
         "bynk.http.path_param_not_stringy",
-        "A path parameter's type is not constructible from a string.",
+        "A path parameter's type is not one a single path segment can carry.",
         &["http_handler"],
     ),
     dg(

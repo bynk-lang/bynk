@@ -362,7 +362,7 @@ fn ts_spelling_in_scope_everywhere(t: TyId, tys: &Arc<Types>) -> bool {
 /// import of this Worker (#661). The companion's constructors are pure data,
 /// so the literal is the same value; the cast keeps the tag narrow, through
 /// the type-only import of `Status`. `None` for any other sum.
-pub(super) fn consumed_variant_literal(
+pub(in crate::emitter) fn consumed_variant_literal(
     e: &Expr,
     sum: &str,
     tag: &str,

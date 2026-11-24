@@ -63,6 +63,16 @@ pub(super) fn request_init(method: &str, headers: Entries, body: Entries) -> TsE
 /// The request URL `https://test<path><query>`: each `:name` segment of `path` is that
 /// parameter's value, and `query` (a query string expression, or none) follows the path.
 pub(super) fn request_url(path: &str, query: Option<TsExpr>) -> TsExpr {
+    request_url_with(path, query, |name| ident(crate::emitter::ts_ident(name)))
+}
+
+/// [`request_url`] with each `:name` segment written by `param`, for a route whose parameter is
+/// not text (#3910): an enum is in memory a `{ tag }`, written as its variant's name.
+pub(super) fn request_url_with(
+    path: &str,
+    query: Option<TsExpr>,
+    param: impl Fn(&str) -> TsExpr,
+) -> TsExpr {
     let mut parts: Vec<String> = Vec::new();
     let mut exprs: Vec<TsExpr> = Vec::new();
     let mut current = String::from("https://test");
@@ -72,7 +82,7 @@ pub(super) fn request_url(path: &str, query: Option<TsExpr>) -> TsExpr {
         current.push('/');
         if let Some(name) = seg.strip_prefix(':') {
             parts.push(std::mem::take(&mut current));
-            exprs.push(ident(crate::emitter::ts_ident(name)));
+            exprs.push(param(name));
         } else {
             current.push_str(seg);
         }

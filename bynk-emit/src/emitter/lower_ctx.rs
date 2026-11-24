@@ -372,6 +372,15 @@ impl<'a> LowerCtx<'a> {
         self.module.target
     }
 
+    /// #2887: the name a consumed type is declared under by its owner, when this
+    /// module renames it (`consumes c { T as U }`); `None` when it is not renamed.
+    pub(crate) fn consumed_declared_name(&self, alias: &str) -> Option<&str> {
+        self.module
+            .consumed_type_declared
+            .get(alias)
+            .map(String::as_str)
+    }
+
     /// #2045: whether `name` is a consumed context's type on `workers`.
     pub(crate) fn is_consumed_context_type(&self, name: &str) -> bool {
         self.module.consumed_context_types.contains(name)
