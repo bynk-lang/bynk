@@ -1471,7 +1471,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.bad_params",
-        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Instant`: the time the schedule fired. Drop the parameter, or type it `Instant`. A parameter typed `Int` (the old spelling) is this error too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number.",
+        blurb: "A scheduled trigger carries two things: the time it fired and the schedule that fired it. So an `on schedule` handler takes at most two parameters, told apart by type and in either order: an `Instant` (the scheduled time) and exactly `CronSchedule` (the schedule expression that fired this run). A second parameter of the same type, a third parameter, or any other type is this error. A parameter typed `Int` (the old spelling of the time) is too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number. Drop the parameter if the handler does not need it.",
         example: "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     },
     Explain {
@@ -2628,8 +2628,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.raw_bad_content_type",
-        blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`. Write `\"image/png\"`, or `\"*/*\"` to accept any type.",
-        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")   // ✓\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+        blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`, or a non-empty list of them. Write `\"image/png\"`, `[\"image/png\", \"image/jpeg\"]` to accept either, or `\"*/*\"` alone to accept any type; the wildcard cannot be one of several, since it would make the others pointless.",
+        example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: [\"image/png\", \"*/*\"])   // ✗ `\"*/*\"` is only valid alone\n\n@raw(contentType: \"image/png\")   // ✓\n\n@raw(contentType: [\"image/png\", \"image/jpeg\"])   // ✓ either type\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.raw_body_not_bytes",
@@ -7384,7 +7384,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.bad_params",
-        "A cron handler declares more than one parameter, or a non-`Instant` one.",
+        "A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two.",
         &["cron_handler"],
     ),
     dg(
@@ -8320,7 +8320,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.raw_bad_content_type",
-        "A `@raw` annotation's `contentType` is missing or not a `type/subtype` (or `\"*/*\"`) string literal.",
+        "A `@raw` annotation's `contentType` is missing, or not a `type/subtype` (or `\"*/*\"`) string literal or a list of `type/subtype` literals.",
     ),
     d(
         "bynk.http.raw_body_not_bytes",

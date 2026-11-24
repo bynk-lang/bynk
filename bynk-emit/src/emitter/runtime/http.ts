@@ -711,15 +711,29 @@ export async function renderRejection(
 // the router's rejection bodies in `workers_entry.rs`.
 const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "StructuralMismatch"]);
 
-// Whether `request`'s `Content-Type` is the media type a `@raw` route declares:
-// parameters (`; charset=…`) are not part of the match, the comparison is
-// case-insensitive, `"*/*"` accepts anything, and a missing header matches only
-// that wildcard.
-export function mediaTypeMatches(request: Request, declared: string): boolean {
-  if (declared === "*/*") return true;
+// Whether `request`'s `Content-Type` is a media type a `@raw` route declares (#3912:
+// one, or any of a list): parameters (`; charset=…`) are not part of the match,
+// the comparison is case-insensitive, `"*/*"` accepts anything, and a missing
+// header matches only that wildcard.
+export function mediaTypeMatches(request: Request, declared: string | readonly string[]): boolean {
+  const types = typeof declared === "string" ? [declared] : declared;
+  if (types.includes("*/*")) return true;
   const given = request.headers.get("content-type");
   if (given === null) return false;
-  return given.split(";")[0].trim().toLowerCase() === declared.toLowerCase();
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return types.some((t) => mediaType === t.toLowerCase());
+}
+
+// #3912: whether `request`'s `Content-Type` is one a JSON `body` route can mean:
+// absent (a client that sends no type, such as a bare `curl --data-binary`),
+// `application/json`, or a `+json` type (`application/problem+json`). A form,
+// multipart or any other type is refused with `415`. Parameters are ignored and
+// the comparison is case-insensitive.
+export function jsonMediaTypeMatches(request: Request): boolean {
+  const given = request.headers.get("content-type");
+  if (given === null || given.trim() === "") return true;
+  const mediaType = given.split(";")[0].trim().toLowerCase();
+  return mediaType === "application/json" || mediaType.endsWith("+json");
 }
 
 // #2341 (decision A): an HTTP handler's `headers: RequestHeaders` — a read-only
@@ -1852,5 +1866,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { applyCache as __applyCache, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

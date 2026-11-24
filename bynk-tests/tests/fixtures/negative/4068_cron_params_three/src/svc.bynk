@@ -1,0 +1,9 @@
+context svc
+
+consumes bynk { CronSchedule }
+
+service sweeper from cron {
+  on schedule("*/5 * * * *") (a: Instant, s: CronSchedule, b: CronSchedule) -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}
