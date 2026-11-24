@@ -546,6 +546,16 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "adapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt {          // ✗ the binding supplies it\n        fn sign(secret: String) -> Effect[String] { secret }\n    }\n}\n\nadapter tokens {\n    binding \"./tokens.binding.ts\"\n\n    capability Jwt {\n        fn sign(secret: String) -> Effect[String]\n    }\n\n    provides Jwt = JoseJwt            // ✓ no body\n}",
     },
     Explain {
+        code: "bynk.agent.bad_annotation",
+        blurb: "An agent has one annotation, `@busyAfter(<Duration>)`, written once, immediately before `agent`, taking a single `Duration` literal such as `5.seconds`. Another name, a second `@busyAfter`, or an argument that is not one `Duration` literal (a label, a second argument, a number, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)`, or drop the annotation.",
+        example: "@cache(maxAge: 5.minutes)   // ✗ not an agent annotation\nagent Basket { … }\n\n@busyAfter(5.seconds)       // ✓\nagent Basket { … }",
+    },
+    Explain {
+        code: "bynk.agent.busy_after_out_of_range",
+        blurb: "An agent instance runs one handler at a time, so a call to a busy one waits in a queue, and gives up after 30 seconds with `AgentBusy`. `@busyAfter(d)` lowers that wait for one agent class, so a latency-sensitive route fails fast. It cannot raise it: a longer wait only holds callers longer, and the runtime's limit is 30 seconds. Use a `Duration` from 1 second to 30 seconds.",
+        example: "@busyAfter(60.seconds)   // ✗ longer than the 30-second limit\nagent Basket { … }\n\n@busyAfter(5.seconds)    // ✓ lowers the wait\nagent Basket { … }",
+    },
+    Explain {
         code: "bynk.agent.class_conflict",
         blurb: "An agent class that bynk.schema.lock records can't just disappear from source: it \
                 must be given one fate, either `agent New replaces Old` (its data moves) or \
@@ -7057,6 +7067,14 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.adapter.provider_has_body",
         "A provider inside an `adapter` has a Bynk body; adapter providers must be external.",
         &["provider_decl"],
+    ),
+    d(
+        "bynk.agent.bad_annotation",
+        "An agent carries an annotation other than a single `@busyAfter(<Duration literal>)`, or `@busyAfter` is written twice or with the wrong argument.",
+    ),
+    d(
+        "bynk.agent.busy_after_out_of_range",
+        "An agent's `@busyAfter(d)` is outside the 1 to 30 seconds it may lower the queue wait to.",
     ),
     d(
         "bynk.agent.class_conflict",

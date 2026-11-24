@@ -1670,6 +1670,9 @@ pub enum ServiceProtocol {
 #[derive(Debug, Clone)]
 pub struct AgentDecl {
     pub name: Ident,
+    /// #3932: `@busyAfter(5.seconds)`, written immediately before `agent`. The
+    /// checker restricts which annotations apply.
+    pub annotations: Vec<Annotation>,
     /// State-migrations S3 (#2248): `agent New replaces Old` — the class
     /// `Old` is renamed to this one, its stored data moving with it.
     pub replaces: Option<Ident>,

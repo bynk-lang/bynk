@@ -690,6 +690,26 @@
     "summary": "A provider inside an `adapter` has a Bynk body; adapter providers must be external."
   },
   {
+    "blurb": "An agent has one annotation, `@busyAfter(<Duration>)`, written once, immediately before `agent`, taking a single `Duration` literal such as `5.seconds`. Another name, a second `@busyAfter`, or an argument that is not one `Duration` literal (a label, a second argument, a number, a name that is not a constant) means nothing and is refused rather than ignored. Write `@busyAfter(5.seconds)`, or drop the annotation.",
+    "category": "Agents",
+    "categoryAnchor": "agents",
+    "code": "bynk.agent.bad_annotation",
+    "constructs": [],
+    "example": "@cache(maxAge: 5.minutes)   // ✗ not an agent annotation\nagent Basket { … }\n\n@busyAfter(5.seconds)       // ✓\nagent Basket { … }",
+    "severity": "error",
+    "summary": "An agent carries an annotation other than a single `@busyAfter(<Duration literal>)`, or `@busyAfter` is written twice or with the wrong argument."
+  },
+  {
+    "blurb": "An agent instance runs one handler at a time, so a call to a busy one waits in a queue, and gives up after 30 seconds with `AgentBusy`. `@busyAfter(d)` lowers that wait for one agent class, so a latency-sensitive route fails fast. It cannot raise it: a longer wait only holds callers longer, and the runtime's limit is 30 seconds. Use a `Duration` from 1 second to 30 seconds.",
+    "category": "Agents",
+    "categoryAnchor": "agents",
+    "code": "bynk.agent.busy_after_out_of_range",
+    "constructs": [],
+    "example": "@busyAfter(60.seconds)   // ✗ longer than the 30-second limit\nagent Basket { … }\n\n@busyAfter(5.seconds)    // ✓ lowers the wait\nagent Basket { … }",
+    "severity": "error",
+    "summary": "An agent's `@busyAfter(d)` is outside the 1 to 30 seconds it may lower the queue wait to."
+  },
+  {
     "blurb": "An agent class that bynk.schema.lock records can't just disappear from source: it must be given one fate, either `agent New replaces Old` (its data moves) or `removed agent Old` (its data is deleted). Giving a name two fates is a conflict: renamed twice, renamed and removed, or removed twice. A rename onto a class that already has recorded history of its own is also refused, since it would merge two histories and Cloudflare refuses a rename onto an existing namespace. Decide what becomes of the old class, and declare that once.",
     "category": "Agents",
     "categoryAnchor": "agents",
