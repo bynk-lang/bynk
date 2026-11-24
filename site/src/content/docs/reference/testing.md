@@ -587,6 +587,8 @@ case "an empty sku is rejected at the boundary" as system {
 
 A `Wire` stands in any slot of the address. In a typed [`query`](#request-query)'s
 slot it is the raw query string, `?` and all: `api.GET("/activity", Wire("?limit=0"))`.
+In a path parameter's slot it is the raw path segment, so `api.GET("/orders/:id", Wire("%E0%A4%A"))`
+is `Rejected(MalformedPath(_))`, a path that does not percent-decode.
 
 A `Wire`-carrying call yields an `HttpOutcome[T]` instead of the handler's
 `HttpResult[T]`.
@@ -603,6 +605,7 @@ BoundaryRejection = RefinementViolation(detail: String)
                   | PayloadTooLarge(detail: String)
                   | UnsupportedMediaType(detail: String)
                   | MalformedForm(detail: String)
+                  | MalformedPath(detail: String)
 ```
 
 `Rejected` means the request was refused before the handler ran. `Handled`

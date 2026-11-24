@@ -346,6 +346,48 @@ pub fn describe_fields(s: &str) -> Option<Vec<(&'static str, String)>> {
     )
 }
 
+/// #3874: what a cron handler's parameter receives. A handler may declare up to
+/// two, told apart by type, in either order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CronParam {
+    /// An `Instant`: the scheduled time (`event.scheduledTime`).
+    Time,
+    /// Exactly `CronSchedule`: the schedule expression that fired the run
+    /// (`event.cron`).
+    Schedule,
+}
+
+/// #3874 [DECISION B]: the kind of a cron handler parameter by its declared
+/// type: exactly `Instant`, or exactly the prelude's `CronSchedule` (not
+/// `String`, and not another `Cron` refinement). `None` for any other type.
+pub fn cron_param(ty: &crate::ast::TypeRef) -> Option<CronParam> {
+    use crate::ast::{BaseType, TypeRef};
+    match ty {
+        TypeRef::Base(BaseType::Instant, _) => Some(CronParam::Time),
+        TypeRef::Named(id) if id.name == "CronSchedule" => Some(CronParam::Schedule),
+        _ => None,
+    }
+}
+
+/// #3872: the name of the error type `E` in a cron handler's declared
+/// `Effect[Result[(), E]]`, for the failure record a run leaves. `Error` when the
+/// return type is not in that shape (the checker reports that separately) or the
+/// error is not a named or base type.
+pub fn cron_error_type(ret: &crate::ast::TypeRef) -> String {
+    use crate::ast::TypeRef;
+    if let TypeRef::Effect(inner, _) = ret
+        && let TypeRef::Result(_, err, _) = &**inner
+    {
+        if let TypeRef::Named(name) = &**err {
+            return name.name.clone();
+        }
+        if let TypeRef::Base(base, _) = &**err {
+            return base.name().to_string();
+        }
+    }
+    "Error".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

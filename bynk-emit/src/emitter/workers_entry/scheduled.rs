@@ -2,8 +2,8 @@
 
 use super::respond::{case_, default_case};
 use crate::ts_build::{
-    arrow, await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_, str_lit,
-    strict_neq, switch_stmt,
+    arrow, as_expr, await_expr, call, const_, expr_stmt, ident, if_, member, method_call, return_,
+    str_lit, strict_neq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_ts::{TsExpr, TsObjectEntry, TsParam, TsStmt, TsSwitchCase, TsType, TsTypeMember};
@@ -56,12 +56,21 @@ pub(super) fn emit_scheduled_handler(
     let mut cases: Vec<TsSwitchCase> = Vec::new();
     for route in cron_routes {
         let method_key = crate::emitter::cron_handler_method_name(&route.service, route.index);
-        // Pass the scheduled fire time (epoch ms) when the handler asked for it.
-        let args: Vec<TsExpr> = if route.has_param {
-            vec![member(ident("event"), "scheduledTime")]
-        } else {
-            vec![]
-        };
+        // Pass what each declared parameter asks for, in declaration order: the
+        // scheduled fire time (epoch ms) and/or the schedule that fired.
+        let args: Vec<TsExpr> = route
+            .params
+            .iter()
+            .map(|p| match p {
+                bynk_syntax::cron::CronParam::Time => member(ident("event"), "scheduledTime"),
+                // `event.cron` is the schedule this case matched on, which the
+                // checker proved is a valid `CronSchedule`; the brand is a type, so
+                // the plain string is cast to it.
+                bynk_syntax::cron::CronParam::Schedule => {
+                    as_expr(member(ident("event"), "cron"), TsType::named("never"))
+                }
+            })
+            .collect();
         // #3872: the run goes through `__bynkCronRun`, which marks an `Err` or a
         // fault as failed to the platform (`__bynkReportFault`) and logs a
         // labelled record (type and variant, never the payload).
@@ -127,8 +136,10 @@ pub(super) struct CronRoute {
     pub(super) service: String,
     pub(super) index: usize,
     pub(super) expr: String,
-    /// Whether the handler declares the optional scheduled-time parameter.
-    pub(super) has_param: bool,
+    /// What each declared parameter receives, in declaration order (#3874): the
+    /// scheduled time (`event.scheduledTime`) and/or the schedule that fired
+    /// (`event.cron`).
+    pub(super) params: Vec<bynk_syntax::cron::CronParam>,
     /// #3872: the handler's declared error type, named in the failure record.
     pub(super) err_type: String,
 }
@@ -138,22 +149,6 @@ impl CronRoute {
     fn site(&self) -> String {
         format!("cron `{}` ({})", self.expr, self.service)
     }
-}
-
-/// The error type of a cron handler's `Effect[Result[(), E]]`, by name.
-fn cron_err_type(ret: &bynk_syntax::ast::TypeRef) -> String {
-    use bynk_syntax::ast::TypeRef;
-    if let TypeRef::Effect(inner, _) = ret
-        && let TypeRef::Result(_, err, _) = &**inner
-    {
-        if let TypeRef::Named(name) = &**err {
-            return name.name.clone();
-        }
-        if let TypeRef::Base(base, _) = &**err {
-            return base.name().to_string();
-        }
-    }
-    "Error".to_string()
 }
 
 /// Collect the cron handlers across the services, carrying the per-service
@@ -174,8 +169,12 @@ pub(super) fn collect_cron_routes(table: &UnitTable, service_names: &[&String]) 
                     service: (*sname).clone(),
                     index: cron_idx,
                     expr,
-                    has_param: !h.params.is_empty(),
-                    err_type: cron_err_type(&h.return_type),
+                    params: h
+                        .params
+                        .iter()
+                        .filter_map(|p| bynk_syntax::cron::cron_param(&p.type_ref))
+                        .collect(),
+                    err_type: bynk_syntax::cron::cron_error_type(&h.return_type),
                 });
                 cron_idx += 1;
             }

@@ -643,6 +643,7 @@ fn each_test_service_address_records_its_typed_form() {
         "schedule */5 * * * *",
         HandlerAddress::Schedule {
             expr: Some("*/5 * * * *".to_string()),
+            param: None,
         },
     );
     has(

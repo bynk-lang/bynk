@@ -1026,7 +1026,12 @@ pub enum HandlerAddress {
         path: Option<String>,
     },
     /// `svc.schedule(expr, …)`: a cron handler, matched by its schedule once `expr` is known.
-    Schedule { expr: Option<String> },
+    /// #3874: `param` is the position among the handler's parameters of its
+    /// `CronSchedule` one, which the address fills from `expr` (not from an argument).
+    Schedule {
+        expr: Option<String>,
+        param: Option<usize>,
+    },
     /// `svc.message(msg)`: the queue `on message` handler.
     Message,
     /// `svc.event(payload, …)`: the `on event` handler.
@@ -1040,6 +1045,24 @@ impl HandlerAddress {
     pub fn schedule(expr: &str) -> HandlerAddress {
         HandlerAddress::Schedule {
             expr: Some(expr.to_string()),
+            param: None,
+        }
+    }
+
+    /// A `schedule` address before its expression is read (#3874).
+    pub fn schedule_unread() -> HandlerAddress {
+        HandlerAddress::Schedule {
+            expr: None,
+            param: None,
+        }
+    }
+
+    /// [`HandlerAddress::schedule`] for a handler with a `CronSchedule` parameter at
+    /// position `param` (#3874).
+    pub fn schedule_with_param(expr: &str, param: Option<usize>) -> HandlerAddress {
+        HandlerAddress::Schedule {
+            expr: Some(expr.to_string()),
+            param,
         }
     }
 
@@ -1069,8 +1092,10 @@ impl HandlerAddress {
                 verb,
                 path: Some(path),
             } => format!("{} {path}", verb.as_str()),
-            HandlerAddress::Schedule { expr: None } => "schedule".to_string(),
-            HandlerAddress::Schedule { expr: Some(expr) } => format!("schedule {expr}"),
+            HandlerAddress::Schedule { expr: None, .. } => "schedule".to_string(),
+            HandlerAddress::Schedule {
+                expr: Some(expr), ..
+            } => format!("schedule {expr}"),
             HandlerAddress::Message => "message".to_string(),
             HandlerAddress::Event => "event".to_string(),
             HandlerAddress::Ws(WsAddress::Open) => "ws open".to_string(),
@@ -6836,6 +6861,8 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     // #3276: the router's `400` to a `multipart/form-data` body that is not one
     // (no boundary, never closed). A breaking addition to a closed sum, as ADR 0586's.
     ("MalformedForm", true),
+    // #3908: the router's `400` to a path whose percent-encoding does not decode.
+    ("MalformedPath", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────

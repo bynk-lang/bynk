@@ -85,6 +85,17 @@ pub(super) const CRON_RUN_HELPER: &str = "async function __bynkCronRun<T extends
 }
 ";
 
+/// The fault helpers a Worker entry carries: `__bynkReportFault`, and with cron handlers (#3872)
+/// `__bynkCronRun`, which reports through it. One raw snippet, so the entry's text writes do not grow.
+pub(super) fn fault_helpers(has_cron: bool) -> String {
+    let all: &[&str] = if has_cron {
+        &[REPORT_FAULT_HELPER, CRON_RUN_HELPER]
+    } else {
+        &[REPORT_FAULT_HELPER]
+    };
+    all.join("\n")
+}
+
 /// #3562 (G2b, 2c-4a): the marker of a member's own misses. A Worker group's
 /// dispatcher tries its members in turn and must tell a member that does not own
 /// a request (its router's `404`, its synthesised `405`) from one that answered

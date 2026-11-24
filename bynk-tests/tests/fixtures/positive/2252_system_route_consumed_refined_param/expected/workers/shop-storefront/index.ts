@@ -39,6 +39,9 @@ export default {
         const __m = __matchPath("/items/:sku", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /items/:sku";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_sku = __m.params["sku"];
           const __r_sku = handlers.__deserialise_Sku(__raw_sku, "path.sku");
           if (__r_sku.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__r_sku.error), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

@@ -112,6 +112,9 @@ export default {
         const __m = __matchPath("/bearer/:delete", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /bearer/:delete";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_delete = __m.params["delete"];
           const __id_delete = __raw_delete;
           const result = await surface.http_GET_bearer_Param_delete(request, __id_delete);
@@ -123,6 +126,9 @@ export default {
         const __m = __matchPath("/lookup/:class", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /lookup/:class";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_class = __m.params["class"];
           const __id_class = __raw_class;
           const result = await surface.http_GET_lookup_Param_class(__id_class);
@@ -134,6 +140,9 @@ export default {
         const __m = __matchPath("/oidc/:function", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /oidc/:function";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_function = __m.params["function"];
           const __id_function = __raw_function;
           const result = await surface.http_GET_oidc_Param_function(request, __id_function);
@@ -145,6 +154,9 @@ export default {
         const __m = __matchPath("/sum/:import", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /sum/:import";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_import = __m.params["import"];
           const __id_import = __raw_import;
           const result = await surface.http_GET_sum_Param_import(request, __id_import);
@@ -156,6 +168,9 @@ export default {
         const __m = __matchPath("/tag/:public", path);
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /tag/:public";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_public = __m.params["public"];
           const __r_public = handlers.Tag.of(__raw_public);
           if (__r_public.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.public", violation: __r_public.error }), { status: 400, headers: { "content-type": "application/json" } }), __security_api);

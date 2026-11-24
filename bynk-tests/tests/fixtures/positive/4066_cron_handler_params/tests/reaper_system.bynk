@@ -1,0 +1,45 @@
+suite ops.reaper as system {
+	case "at system: none" {
+		let r <- sweeper.schedule("0 1 * * *")
+		expect r is Ok(_)
+		let s <- api.GET("/seen") by Visitor
+		expect s is Ok("none")
+	}
+
+	case "at system: the time alone" {
+		let r <- sweeper.schedule("0 2 * * *", Instant.fromEpochMillis(7200000))
+		expect r is Ok(_)
+		let s <- api.GET("/seen") by Visitor
+		expect s is Ok("at=7200000")
+	}
+
+	case "at system: the schedule alone" {
+		let r <- sweeper.schedule("0 3 * * *")
+		expect r is Ok(_)
+		let s <- api.GET("/seen") by Visitor
+		expect s is Ok("schedule=0 3 * * *")
+	}
+
+	case "at system: the schedule, then the time" {
+		let r <- sweeper.schedule("0 4 * * *", Instant.fromEpochMillis(14400000))
+		expect r is Ok(_)
+		let s <- api.GET("/seen") by Visitor
+		expect s is Ok("0 4 * * *@14400000")
+	}
+
+	case "at system: the time, then the schedule" {
+		let r <- sweeper.schedule("0 5 * * *", Instant.fromEpochMillis(18000000))
+		expect r is Ok(_)
+		let s <- api.GET("/seen") by Visitor
+		expect s is Ok("18000000@0 5 * * *")
+	}
+
+	case "at system: a run key sweeps once at the same time" {
+		let a <- sweeper.schedule("0 6 * * *", Instant.fromEpochMillis(21600000))
+		let b <- sweeper.schedule("0 6 * * *", Instant.fromEpochMillis(21600000))
+		expect a is Ok(_)
+		expect b is Ok(_)
+		let n <- api.GET("/swept") by Visitor
+		expect n is Ok(1)
+	}
+}

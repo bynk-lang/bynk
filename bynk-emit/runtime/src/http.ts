@@ -3,23 +3,62 @@ import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
 import type { HttpResult } from "./httpresult.ts";
 
+// #3908: the path's segments, percent-decoded once (empty segments dropped, so
+// `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
+// percent-encoding: no route can match such a path, and it is the client's
+// error, not a fault.
+export function decodePath(path: string): string[] | null {
+  const out: string[] = [];
+  for (const raw of path.split("/")) {
+    if (raw === "") continue;
+    try {
+      out.push(decodeURIComponent(raw));
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+
+// The 1-based position of the first segment of `path` that is not valid
+// percent-encoding, counting non-empty segments. Names a position, never the content.
+function malformedSegment(path: string): number {
+  const raw = path.split("/").filter(Boolean);
+  for (let i = 0; i < raw.length; i++) {
+    try {
+      decodeURIComponent(raw[i]);
+    } catch {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
 // Match a path pattern (e.g., "/orders/:id") against a request path.
-// Returns the captured parameter map, or null on no match.
+// Returns the captured parameter map, or null on no match. #3908: a path with
+// malformed percent-encoding whose shape the pattern would match answers
+// `malformed` (a description naming the segment's position) instead of
+// throwing, so the route answers a `400 MalformedPath` before its handler,
+// actor or body is touched.
 export function matchPath(
   pattern: string,
   path: string,
-): { params: Record<string, string> } | null {
+): { params: Record<string, string>; malformed?: string } | null {
   const patternSegments = pattern.split("/").filter(Boolean);
   const pathSegments = path.split("/").filter(Boolean);
   if (patternSegments.length !== pathSegments.length) return null;
+  for (let i = 0; i < patternSegments.length; i++) {
+    const p = patternSegments[i];
+    if (!p.startsWith(":") && p !== pathSegments[i]) return null;
+  }
+  const decoded = decodePath(path);
+  if (decoded === null) {
+    return { params: {}, malformed: `path segment ${malformedSegment(path)} is not valid percent-encoding` };
+  }
   const params: Record<string, string> = {};
   for (let i = 0; i < patternSegments.length; i++) {
     const p = patternSegments[i];
-    if (p.startsWith(":")) {
-      params[p.slice(1)] = decodeURIComponent(pathSegments[i]);
-    } else if (p !== pathSegments[i]) {
-      return null;
-    }
+    if (p.startsWith(":")) params[p.slice(1)] = decoded[i];
   }
   return { params };
 }
@@ -639,6 +678,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
   switch (body.kind) {
     case "MalformedJson":
     case "MalformedForm":
+    case "MalformedPath":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
       return str(body.details);
@@ -709,7 +749,7 @@ export async function renderRejection(
 // The `BoundaryError.kind`s the router emits when it refuses input *before* the
 // handler — the only shapes that make an outcome `Rejected`. Kept in sync with
 // the router's rejection bodies in `workers_entry.rs`.
-const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "StructuralMismatch"]);
+const BOUNDARY_REJECTION_KINDS = new Set(["RefinementViolation", "MalformedJson", "MalformedForm", "MalformedPath", "StructuralMismatch"]);
 
 // Whether `request`'s `Content-Type` is a media type a `@raw` route declares (#3912:
 // one, or any of a list): parameters (`; charset=…`) are not part of the match,

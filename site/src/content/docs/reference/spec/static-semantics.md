@@ -1859,8 +1859,8 @@ codes and result; the tag's syntax is checked at run time
 constant declared exactly `String` or `CronSchedule` and bound, through any chain of such
 constants, to a string literal; the literal is the schedule, checked as a literal
 schedule is (`bynk.cron.invalid_schedule` otherwise), and duplicate detection and the
-trigger table read it. A cron handler MUST take at most one
-`Instant` parameter, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
+trigger table read it. A cron handler MUST take at most two parameters, at most one `Instant` (the
+scheduled time) and at most one `CronSchedule` (the schedule that fired the run), in either order, a valid schedule (`Cron`: Cloudflare's five-field syntax, single-spaced), and return `Effect[Result[(), E]]`
 (the `bynk.cron.*` codes); an `on message` handler MUST take exactly one `message`
 parameter, a Cloudflare-valid queue name, and the same return shape (the `bynk.queue.*`
 codes).
@@ -2717,7 +2717,7 @@ Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
 PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
-MalformedForm(detail: String)`. Neither
+MalformedForm(detail: String) | MalformedPath(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

@@ -1471,7 +1471,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.bad_params",
-        blurb: "A scheduled trigger carries one thing, the time it fired, so an `on schedule` handler takes at most one parameter, and it must be an `Instant`: the time the schedule fired. Drop the parameter, or type it `Instant`. A parameter typed `Int` (the old spelling) is this error too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number.",
+        blurb: "A scheduled trigger carries two things: the time it fired and the schedule that fired it. So an `on schedule` handler takes at most two parameters, told apart by type and in either order: an `Instant` (the scheduled time) and exactly `CronSchedule` (the schedule expression that fired this run). A second parameter of the same type, a third parameter, or any other type is this error. A parameter typed `Int` (the old spelling of the time) is too: write `at: Instant`, and use `at.toEpochMillis()` where the body needs the number. Drop the parameter if the handler does not need it.",
         example: "on schedule(\"*/5 * * * *\") (at: Int) -> Effect[Result[(), String]] { … }   // ✗ the time is an `Instant`\n\non schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] { … }          // ✓",
     },
     Explain {
@@ -1491,7 +1491,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.cron.return_not_effect_result",
-        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` logs `e` and completes. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
+        blurb: "A cron run has no caller to hand a value to and no retry channel: `Ok(())` completes the run silently and `Err(e)` marks it failed in the Cron Trigger's Past Events and logs the error's type and variant. So the handler must return `Effect[Result[(), E]]`, with `()` on the success side, for some error type `E`. Return `Ok(())` when the work is done and map a failure to `Err`. The queue counterpart is `bynk.queue.return_not_queue_result`.",
         example: "on schedule(\"*/5 * * * *\") () -> Effect[Result[Int, String]] { … }   // ✗ a cron run has nowhere to put an `Int`\n\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ unit on success",
     },
     Explain {
@@ -7384,7 +7384,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.cron.bad_params",
-        "A cron handler declares more than one parameter, or a non-`Instant` one.",
+        "A cron handler declares a parameter that is neither an `Instant` nor a `CronSchedule`, or two of the same type, or more than two.",
         &["cron_handler"],
     ),
     dg(

@@ -1,0 +1,11 @@
+context svc
+
+// A type of the same name is not the prelude's `CronSchedule`: the entry hands a
+// schedule parameter the string that fired the run, which only the prelude's type admits.
+type CronSchedule = Int where Positive
+
+service sweeper from cron {
+  on schedule("*/5 * * * *") (s: CronSchedule) -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}
