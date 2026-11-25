@@ -46,6 +46,8 @@ pub struct WorkerGroup {
     /// #4127: this Worker's Workers Logs settings, laid over the project's
     /// `[workers.observability]` key by key; `None` when the group sets none.
     pub observability: Option<crate::observability::ObservabilityOverride>,
+    /// #4128: this Worker's CPU limit and placement, laid over the project's.
+    pub tuning: Option<crate::worker_tuning::WorkerTuningOverride>,
 }
 
 impl WorkerGroup {
@@ -65,6 +67,8 @@ pub const GROUP_KEYS: &[&str] = &[
     "routes",
     "custom_domains",
     "observability",
+    "cpu_ms",
+    "placement",
 ];
 
 fn bad(key: &str, reason: String) -> ProjectPathsError {
@@ -171,7 +175,7 @@ fn group_from(key: &str, value: &toml::Value) -> Result<WorkerGroup, ProjectPath
             return Err(bad(
                 key,
                 format!(
-                    "has no key named `{k}`{hint} (its keys are `contexts`, `name`, `routes`, `custom_domains` and `observability`)"
+                    "has no key named `{k}`{hint} (its keys are `contexts`, `name`, `routes`, `custom_domains`, `observability`, `cpu_ms` and `placement`)"
                 ),
             ));
         }
@@ -251,12 +255,14 @@ fn group_from(key: &str, value: &toml::Value) -> Result<WorkerGroup, ProjectPath
             ));
         }
     };
+    let tuning = crate::worker_tuning::from_table(entry).map_err(|reason| bad(key, reason))?;
     Ok(WorkerGroup {
         contexts,
         name,
         routes,
         custom_domains,
         observability,
+        tuning: (!tuning.is_empty()).then_some(tuning),
     })
 }
 
