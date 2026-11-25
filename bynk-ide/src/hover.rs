@@ -202,6 +202,13 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         {
             return Some(content);
         }
+        // 2c. #4035: the name after `violates` in a refusal claim: the declaration that
+        //     refuses, with its predicate. Ahead of the locals rung, which would read it as a name.
+        if let Some(text) = a.snapshots.get(a.rel)
+            && let Some(content) = crate::violates::describe_at(text, a.offset, Some(a.snapshots))
+        {
+            return Some(content);
+        }
         // 3. v0.122 (slice 1): a local / parameter → its inferred type, and
         //    `self` → its receiver/agent type. Both read the retained analysis
         //    tables and run before the lexical fallback, which knows only
