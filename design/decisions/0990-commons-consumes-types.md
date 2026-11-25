@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A commons may `consumes` types of an adapter, in braces (`consumes bynk { TimedOut }`); a whole-unit or aliased form, a capability, an unknown name and a context are refused with `bynk.commons.consumes_not_types`
-probes: explained_codes, diagnostic_coverage, emit_diagnostics
----
+# 0990 — A commons may consume the types an adapter exports, in braces
 
-## ADR: commons-consumes-types
-title: A commons may consume the types an adapter exports, in braces
-summary: `consumes U { T, … }` is allowed in a commons for an adapter's exported types; every other form is `bynk.commons.consumes_not_types`
+- **Status:** Accepted (v0.725)
 
 **Context.** A commons is the unit for shared, pure code, and types are pure, but `consumes` began as a context-to-context dependency, so a commons could name no type of a first-party adapter: a helper that maps a `SqlError` to a domain error, formats a `TimedOut` or reads a `KvEntry` was repeated in every context. #4181 let a commons reach the `bynk` adapter's transparent types without writing a clause, by adding the type-only clause itself; this adds the clause to the language, for any adapter.
 

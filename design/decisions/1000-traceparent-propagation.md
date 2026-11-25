@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A call and an event delivery carry the request's W3C `traceparent` between contexts, and `EventEnvelope` gains an optional `trace`
----
+# 1000 — A request's trace crosses contexts as a W3C traceparent, and an event envelope carries its id
 
-## ADR: traceparent-propagation
-title: A request's trace crosses contexts as a W3C traceparent, and an event envelope carries its id
-summary: How a trace id is minted, carried on calls and events, trusted only from a proved caller, and held in a request scope that may be absent
+- **Status:** Accepted (v0.735)
 
 **Context.** One request that crosses contexts leaves a log line in each Worker it touches, and nothing says they belong together. #3895 (decisions A to E) adds a trace id every one of those lines can carry. This is its first half: the propagation core, with no entry point starting a trace yet and no log line attaching one, so a deployed project behaves as before.
 

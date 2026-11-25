@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A service's `cors { }` gains `expose` and every CORS response lists the headers Bynk writes for a client in `Access-Control-Expose-Headers`; `origins` accepts `String` and `List[String]` constants (per-environment through `env(…)`)
----
+# 1007 — CORS exposes headers, and origins accept constants
 
-## ADR: cors-expose-and-origin-constants
-title: CORS exposes headers, and origins accept constants
-summary: `expose` plus an automatic exposed set; `origins` read constants; per-environment origins come from `env(…)` constants, not a `bynk.toml` table
+- **Status:** Accepted (v0.741)
 
 **Context.** A browser script reading a cross-origin response sees only the CORS-safelisted headers, so it could not read `WWW-Authenticate` (#3914), `Retry-After` or `Location` (#3915), or a header an author adds with `withHeader`. `origins` had to be string literals, so a staging front end on another origin needed a source edit and the same list repeated across services could drift.
 

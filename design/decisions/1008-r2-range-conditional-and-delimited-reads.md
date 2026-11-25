@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_abi_shapes
-raises: emit_abi_shapes — the `WorkersR2` binding names five more types (`R2GetIf`, `R2List`, `R2Partial`, `R2Range`, `R2Read`) that the new operations take and return (#4049)
-changelog: `R2` gains `getRange` (a byte range as a stream), `getStreamIf` (a read gated on the etag, answering `NotModified`) and `listWith` (a delimiter that folds keys into `prefixes`), with `R2Listing.prefixes`
----
+# 1008 — R2 reads can take a byte range, an etag condition and a listing delimiter
 
-## ADR: r2-range-conditional-and-delimited-reads
-title: R2 reads can take a byte range, an etag condition and a listing delimiter
-summary: Three experimental R2 operations that map directly onto R2's own get options and list delimiter, with an R2Listing that reports the delimited prefixes
+- **Status:** Accepted (v0.742)
 
 **Context.** `R2`'s reads are whole-object only: no range read (video, audio, resumed downloads, `Range` requests), no conditional get (`R2Condition` applies to `putWith` alone, so a revalidating read still transfers an unchanged object), and no delimiter on `list` (a folder view means listing everything under the path). These are R2's own capabilities that the binding did not expose.
 

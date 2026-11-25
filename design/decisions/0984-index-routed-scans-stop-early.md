@@ -1,11 +1,6 @@
----
-level: patch
-changelog: `any` and `all` over an equality filter on an `@indexed` Map field read that value's posting list a page at a time and stop at the answer
----
+# 0984 — any and all over an index-routed filter read the posting list a page at a time
 
-## ADR: index-routed-scans-stop-early
-title: any and all over an index-routed filter read the posting list a page at a time
-summary: An equality filter on an @indexed field, ahead of any or all, is read from its posting list lazily; every other terminal keeps the whole-list read
+- **Status:** Accepted (v0.720.1)
 
 **Context.** ADR store-scans-stop-early left an equality `filter` on an `@indexed` `Map` field on its posting-list route, which reads the whole list of that value's postings and every entry they name before the terminal runs. For `any` and `all` the order of the values does not matter, so the list can be read a page at a time and the read can stop at the answer.
 

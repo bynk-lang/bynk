@@ -1,13 +1,6 @@
----
-level: patch
-probes: emit_diagnostics
-changelog: A generic type that holds its parameter under an `Effect` can no longer be given an effect: `Wrap[Effect[Int]]` is `bynk.types.nested_effect`
-breaking: a program that gives an `Effect` to a generic type's parameter where the type's declaration puts that parameter directly under an `Effect` (`type Wrap[T] = { v: Effect[T] }` used as `Wrap[Effect[Int]]`, written or returned by a generic call) now gets `bynk.types.nested_effect`; such a program type-checked before but had a field `Effect[Effect[Int]]`, which cannot exist at run time.
----
+# 0989 — A generic type that wraps its parameter in an Effect takes no Effect
 
-## ADR: no-nested-effect-in-wrapper
-title: A generic type that wraps its parameter in an Effect takes no Effect
-summary: Extends the nested-effect refusal to Wrap[Effect[T]], at a written type and at a generic call's instantiation, with the same code
+- **Status:** Accepted (v0.724.1)
 
 **Context.** #4324 refused `Effect[Effect[T]]`, written or built by instantiation, but left one hole, recorded in its ADR and filed as #4364: a user generic type whose declaration holds its parameter directly under an `Effect`, given an effect for that parameter, has a field of type `Effect[Effect[Int]]`, which cannot exist at run time. The issue's own repro, `type Wrap[T] = { v: T }` with `Wrap[Effect[Int]]`, is not that case: the field is then an effect held in a record, which is legal, like a `List[Effect[T]]`. The hole is `type Wrap[T] = { v: Effect[T] }`.
 

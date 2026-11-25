@@ -1,11 +1,6 @@
----
-level: patch
-changelog: Two suites of one target that use different test-only commons declaring the same name each see their own, in cases, properties and stub values
----
+# 0996 — A suite's test-only names are emitted over that suite's own commons
 
-## ADR: test-only-commons-per-suite-emission
-title: A suite's test-only names are emitted over that suite's own commons
-summary: The emitted module imports every suite's test-only commons, but each runner and each stub clause is lowered and bound over its own suite's
+- **Status:** Accepted (v0.730.1)
 
 **Context.** Checking was scoped to a suite's own test-only commons (#4348), but the emitted test module is one module per target and was lowered over the union of every suite's. Two suites using different test-only commons that declare the same name (a function, a type, a constant) then crashed emission ("re-typed for emission reported errors the check pass did not"), and in a stub class two suites' same-named names were bound twice and failed `tsc` (#4373).
 

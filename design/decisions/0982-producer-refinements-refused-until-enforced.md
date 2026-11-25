@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A refinement of `Producer` (`actor Shop = Producer where IsContext(shop.web)`) is now a valid actor declaration, and a `Foreign` actor passes the queue protocol's scheme check; naming either on an `on message` handler is refused with `bynk.actor.queue_actor_not_enforced` until signed queue delivery lands
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0982 — A queue consumer cannot name a Producer refinement or a Foreign actor until delivery verifies it
 
-## ADR: producer-refinements-refused-until-enforced
-title: A queue consumer cannot name a Producer refinement or a Foreign actor until delivery verifies it
-summary: `Producer` is a refinement base with the `IsContext(…)` vocabulary and `Foreign` is admissible on `queue`, but a `by` that names either is an error, because accepting it would read as a restriction while admitting every producer
+- **Status:** Accepted (v0.719)
 
 **Context.** Part of #3899. A consumer should be able to narrow who may send to it: a refinement of `Producer` admitting only named contexts, and a `Foreign` actor for a producer outside the project. Both need the signed message format and its verification, which is a later part of #3899.
 

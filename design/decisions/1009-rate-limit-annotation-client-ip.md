@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A route can carry `@rateLimit(Limiter, key: clientIp)`: the router asks the `RateLimit` limiter before it reads the body and answers `429` with `Retry-After` and the new rejection `RateLimited`
-breaking: `BoundaryRejection` gains `RateLimited(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `RateLimited(_)`, or a wildcard
----
+# 1009 — A route's rate limit is asked before its body is read
 
-## ADR: rate-limit-annotation-client-ip
-title: A route's rate limit is asked before its body is read
-summary: `@rateLimit(Limiter, key: clientIp)`, a `429` and `RateLimited`; `key: identity` waits for authentication ahead of the body read
+- **Status:** Accepted (v0.743)
 
 **Context.** `RateLimit` is a capability a handler calls (`allow(key)`), so it runs after the body has been read, decoded and validated: an unauthenticated flood of large bodies costs the full read and parse before anything says no, and a limit keyed on the client's address is written by hand in every handler. Only the router acts before the body is read, as it does for the `413` and `415`.
 

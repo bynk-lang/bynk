@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A type's declared bounds are checked at every application, through a type parameter and an inferred instantiation as well as a written argument, with the existing `missing_*_bound` diagnostics and fixes
-breaking: A bounded generic type applied to a type parameter that lacks the bound (`fn mk[U](xs: List[U]) -> Sorted[U]` over `type Sorted[T: Ord]`), or built by a literal whose inferred argument fails the bound (`Sorted { items: [true] }`), is now an error: `bynk.generics.missing_ord_bound` (and `missing_eq_bound`, `missing_key_bound`, `missing_codable_bound`) or `bynk.types.not_orderable` (and `not_comparable`, `not_keyable`, `not_codable`); `bynk check --fix` declares the missing bounds down a chain of generic types and functions
----
+# 0981 — A type's declared bounds hold at every application, including through a type parameter and an inferred instantiation
 
-## ADR: bounds-hold-at-every-application
-title: A type's declared bounds hold at every application, including through a type parameter and an inferred instantiation
-summary: Which applications of a bounded generic type are checked, with which diagnostics, and where a bound is declared
+- **Status:** Accepted (v0.718)
 
 **Context.** `type Sorted[T: Ord]` promises that every `Sorted` holds orderable items, but the bound was checked only against a type argument written out in source. A bare type parameter as the argument (`Sorted[U]`) was not checked, and neither was an instantiation the compiler infers (`Sorted { items: [true] }`), so a `Sorted[Bool]` could be built, held, stored and encoded. Nothing misbehaved at run time, because every use that depends on the bound is checked at its own call, but the declared bound was a promise the compiler did not keep.
 

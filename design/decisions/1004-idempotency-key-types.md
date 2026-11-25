@@ -1,11 +1,6 @@
----
-level: minor
-changelog: Idempotency keys may be any Key type, stored under the canonical encoding, and a capability operation's written type arguments may cover only its leading type parameters
----
+# 1004 — Idempotency keys are any Key type, and capability operations may be called with leading type arguments
 
-## ADR: idempotency-key-types
-title: Idempotency keys are any Key type, and capability operations may be called with leading type arguments
-summary: How a non-String key is stored, how the call site encodes it, and the one language rule the signature needed
+- **Status:** Accepted (v0.738)
 
 **Context.** `dedup`, `remember` and `claim` took `key: String`, so a typed id was turned into a string by hand, and two call sites could encode one record two ways (#4116).
 

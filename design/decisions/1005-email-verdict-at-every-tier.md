@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A test case's `InboundEmail.headers` now set the DMARC verdict at every tier, by the Worker's own rule, and a handler bound to a `Sender` refinement refuses mail it does not admit at `unit`, `integration` and `system` alike; `by s: Authenticated` now binds the sender identity
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 1005 — A case sets the DMARC verdict through its headers, at every tier
 
-## ADR: email-verdict-at-every-tier
-title: A case sets the DMARC verdict through its headers, at every tier
-summary: The harness reads the verdict from a case's `authentication-results` header with the Worker's own reader, and a `Sender` refinement's admission check is part of the handler, so the same case means the same thing at `unit`, `integration` and `system`
+- **Status:** Accepted (v0.739)
 
 **Context.** Part of #3888 (Decision D). At `unit` and `integration` a `Sender`-bound handler always read `DmarcNone`, while at `system` a case set the verdict through an `authentication-results` header, so the same case meant different things at different tiers.
 

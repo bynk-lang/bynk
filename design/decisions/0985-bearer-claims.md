@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A `Bearer` binder, and a refinement of one, reads its verified token's claims with `.claims`, as an `Oidc` binder does, and a test or `system` case supplies them as the principal's `TokenClaims.of([…])`
----
+# 0985 — A `Bearer` binder reads the verified token's claims with `.claims`
 
-## ADR: bearer-claims
-title: A `Bearer` binder reads the verified token's claims with `.claims`
-summary: `.claims` on a `Bearer` binder and its refinements, in `TokenClaims`'s own rules, and what is left for sums
+- **Status:** Accepted (v0.721)
 
 **Context.** An `Oidc` binder has `.claims` (`get(name)`, `has(name)`), but a `Bearer` binder did not: a
 handler behind an ordinary HS256 JWT could not read a tenant, a scope or a plan claim, though its

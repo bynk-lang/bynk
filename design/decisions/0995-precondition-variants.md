@@ -1,13 +1,6 @@
----
-level: minor
-probes: ts_writes
-raises: ts_writes — two more HttpResult statuses in the runtime's status tables (#3917)
-changelog: HttpResult gains PreconditionFailed (412) and PreconditionRequired (428) for conditional writes, both RawError statuses and both rendered under the service's error format
----
+# 0995 — HttpResult gains PreconditionFailed (412) and PreconditionRequired (428) for conditional writes
 
-## ADR: precondition-variants
-title: HttpResult gains PreconditionFailed (412) and PreconditionRequired (428) for conditional writes
-summary: Two message-carrying statuses, and how a handler guards a write with If-Match
+- **Status:** Accepted (v0.730)
 
 **Context.** Optimistic concurrency, "update this only if it has not changed since I read it", is a standard HTTP pattern: the client sends `If-Match` and the server answers `412` when the resource has moved on, or `428` when a condition is required (RFC 9110 §13.1.1, RFC 6585 §3). `HttpResult` is a fixed vocabulary of statuses with neither, and `RawError` accepts only the listed names, so neither status could be answered at all. The automatic `ETag` is weak, and `If-Match` compares strongly, so the validators Bynk already emits cannot guard a write.
 

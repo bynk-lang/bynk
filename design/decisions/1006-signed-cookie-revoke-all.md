@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `SignedCookie` actor with `sessions = true` gains `Actor.revokeAll(identity)` to log out everywhere, a `by Revoked` test principal, and `expire()` ending the session from a sum handler
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 1006 — `revokeAll` and `by Revoked` complete revocable cookie sessions
 
-## ADR: signed-cookie-revoke-all
-title: `revokeAll` and `by Revoked` complete revocable cookie sessions
-summary: `Actor.revokeAll(identity)` ends every session of an identity, and `by Revoked` tests that the seam refuses a revoked cookie
+- **Status:** Accepted (v0.740)
 
 **Context.** Part A of #3938 made a `SignedCookie` session a record in a generated agent, checked by the seam on every request, and let `expire()` end the current one. Logging out everywhere and ending every session after a password change or compromise still had no language surface, and a test had no way to present a cookie for a revoked session. The cookie arm of an actor sum (#3936) checked the session but could not end it.
 

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes, ast_importers
-changelog: A `SignedCookie` actor and an `Oidc` actor may be members of an actor sum, so one route admits a browser session or an API token (`by who: User | ApiClient`); the cookie arm's cross-site check applies only when that arm is tried, and `bynk openapi` lists each member's scheme as an alternative (#3936)
----
+# 0991 — A `SignedCookie` and an `Oidc` actor may be sum members
 
-## ADR: actor-sum-cookie-oidc
-title: A `SignedCookie` and an `Oidc` actor may be sum members
-summary: One route admits a session cookie or a token; members are tried in declared order, and the cross-site check is the cookie arm's
+- **Status:** Accepted (v0.726)
 
 **Context.** The most common arrangement for an API is a web app signed in with a session cookie plus
 CLI, mobile or partner clients sending a token, against the same routes. `SignedCookie` stood alone on its

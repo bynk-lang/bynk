@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The runtime gains the signing and verification of a signed queue message (`bynk-queue-v1`), documented beside the call wire format; nothing emits or consumes it yet
----
+# 1001 — A signed queue message carries its signature inside the body, over a canonical form bound to the source queue
 
-## ADR: signed-queue-message-format
-title: A signed queue message carries its signature inside the body, over a canonical form bound to the source queue
-summary: A queue message has no headers, so the signature travels in the body as `{ bynk: { v, from, id, ts, sig }, body }`, an HMAC-SHA256 over the version, sender, id, timestamp, source queue name and canonical body, with the previous key admitted during a rotation and replays refused by claiming the id
+- **Status:** Accepted (v0.735.1)
 
 **Context.** Part of #3899 (Decisions D, F, G and H, at the library level). A consumer that admits only named senders needs to know who sent a message, and a Cloudflare queue message carries nothing but its body.
 

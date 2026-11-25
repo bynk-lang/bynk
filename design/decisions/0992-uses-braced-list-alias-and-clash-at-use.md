@@ -1,14 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, explained_codes, ts_raw_sites_emit, ts_writes
-raises: ts_writes — the qualifier's namespace text, as for ts_raw_sites_emit (#4045)
-raises: ts_raw_sites_emit — a commons' full name used as a qualifier (`lib.y.Status`) needs a TypeScript `namespace lib { export import y = … }`, which the typed nodes have no declaration for (#4045)
-changelog: `uses` takes a braced list and an alias (`uses lib.y { Status as YStatus, describe }`, `uses lib.y as Y`), and two used commons that declare one name clash only where the name is written bare, as `bynk.uses.ambiguous_name`
----
+# 0992 — `uses` takes a braced list and an alias, and a name clash is reported only where the name is written
 
-## ADR: uses-braced-list-alias-and-clash-at-use
-title: `uses` takes a braced list and an alias, and a name clash is reported only where the name is written
-summary: The three `uses` forms, qualified names, clashes at the reference, and where the qualified spelling departs from the proposal
+- **Status:** Accepted (v0.727)
 
 **Context.** `uses` had one form, the whole commons. Two used commons that declared one name could not be used together even when the file never wrote the name, and there was no way round it: `consumes` has braced and aliased forms, `uses` had neither. Libraries naming common things (`Status`, `Id`, `Error`) is normal.
 

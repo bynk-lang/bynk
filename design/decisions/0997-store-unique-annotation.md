@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `@unique(by: k)` on a `store Map` keeps a value of `k` on at most one entry, refusing at commit a state in which two entries share it; it implies `@indexed(by: k)`
----
+# 0997 — `@unique(by: k)` enforces a value on at most one entry of a store Map, at commit
 
-## ADR: store-unique-annotation
-title: `@unique(by: k)` enforces a value on at most one entry of a store Map, at commit
-summary: A storage annotation implying `@indexed`, checked against the staged postings when the state commits, refused as an InvariantViolation
+- **Status:** Accepted (v0.731)
 
 **Context.** "No two customers share an email" cannot be expressed: an invariant may not scan a collection (#4034 allows only `size()`), and `@indexed(by: k)` maintains an index but enforces nothing, so every author writes a check-then-put that is right only while every writer remembers it.
 

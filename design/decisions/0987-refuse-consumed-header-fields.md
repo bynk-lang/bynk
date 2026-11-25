@@ -1,13 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, explained_codes
-breaking: A route whose typed headers record has a required field reading a header the route's actor consumes (authorization on a Bearer, Oidc or sum route, a signature header, cookie on a SignedCookie route) no longer compiles; the field was never present, except `cookie` on a SignedCookie route, which was present when the request carried a second cookie and is refused on purpose, so read cookies through a `cookies` record and the identity through the actor.
-changelog: A typed headers field that reads a header the route's actor consumes, such as authorization on a Bearer route, is a compile error, and an Option field of that kind is a warning
----
+# 0987 — A typed headers field cannot read a header the route's actor consumes
 
-## ADR: refuse-consumed-header-fields
-title: A typed headers field cannot read a header the route's actor consumes
-summary: Why a required field on authorization, a signature header or the session cookie is refused at compile time
+- **Status:** Accepted (v0.723)
 
 **Context.** The router hides a credential its actor's seam consumed from a typed `headers` record: `authorization` on a `Bearer`, `Oidc` or `Signature`-sum route, the signature header, and the session cookie out of `cookie` on a `SignedCookie` route. A field that reads one therefore never sees it, and a required field answers `400` on every request, so the route compiled but could never succeed (for the session cookie, only when no other cookie was sent).
 

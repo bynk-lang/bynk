@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `SignedCookie` actor takes `sessions = true`: each session is a record in a generated `<Actor>Sessions` agent the seam checks after the signature, `issue` adds one and `expire()` ends the current one, so a copied cookie stops working
----
+# 0998 — Revocable `SignedCookie` sessions are a generated agent the seam checks
 
-## ADR: signed-cookie-sessions
-title: Revocable `SignedCookie` sessions are a generated agent the seam checks
-summary: `sessions = true` opts a `SignedCookie` actor into a per-identity session agent, checked after the signature on every request
+- **Status:** Accepted (v0.732)
 
 **Context.** A stateless signed cookie cannot be revoked before it expires: a copy a user already took keeps working, and `expire` only removes it from one browser. Rotating `secret` is the only bulk revocation and it logs out every user. Logging out everywhere and ending sessions after a password change were left to copying `examples/sessions`. The cookie is issued and verified by generated code and the handler never sees it, so revocation needs the seam to check something, and that has to be generated.
 

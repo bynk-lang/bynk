@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `expect <call> violates <name>` claims that a named invariant, transition or `@unique` constraint refused the call's commit; it fails with what actually happened otherwise
----
+# 1003 — `expect <call> violates <name>` holds only when the named declaration refused the commit
 
-## ADR: expect-violates-names-the-refusal
-title: `expect <call> violates <name>` holds only when the named declaration refused the commit
-summary: A fault claim that names an invariant, a transition or a `@unique` constraint, matched against the InvariantViolation the commit raised, in-process only
+- **Status:** Accepted (v0.737)
 
 **Context.** `expect <call> faults` holds for any fault, so a case meant to prove that `paid_has_payment_ref` refuses a bad state also passes when a stub fails, an `unreachable` fires or a different invariant refuses the commit. The runtime already knows which declaration fired: `InvariantViolation` carries `invariant` and `declaration`.
 

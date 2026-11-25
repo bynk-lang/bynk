@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A derived capability instance's option (`Service @worker`, `Queue @name`, `Email @to`, `RateLimit @limit` and `@period`, …) takes a constant declared exactly the option's type, resolved to its literal before the option is checked
----
+# 1002 — A derived capability instance's options take constants
 
-## ADR: instance-option-constants
-title: A derived capability instance's options take constants
-summary: ADR 0826's constant resolution extended to instance options, resolved before each option's validator, with the option's own error when it does not resolve
+- **Status:** Accepted (v0.736)
 
 **Context.** ADR 0826 lets a constant stand for its literal in a set of annotation arguments, but not in a derived capability instance's options (`Service @worker`, `Queue @name`, `Email @to`, `StoredSecret @store`, `RateLimit @limit` and `@period`, `R2 @jurisdiction`, `MySql @tls`). The same Worker name, queue name or address was therefore repeated as a literal, could not be shared with the code that uses it, and could not take a per-environment value through an `env(…)` constant (#3942).
 

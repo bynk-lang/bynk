@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A test-only commons is in scope only in the suites that `uses` it, not in every suite of the same target
----
+# 0986 — A test-only commons is in scope only where it is used
 
-## ADR: test-only-commons-scoped-to-users
-title: A test-only commons is in scope only where it is used
-summary: How each suite's view is built from its own uses, and what the emitted module still unions
+- **Status:** Accepted (v0.722.1)
 
 **Context.** #3984 added a test-only commons to the target's view for every suite of that target, so a suite saw its names although it had no `uses` of it, and compiled only while a sibling suite imported it (#4348).
 

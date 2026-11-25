@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A refinement of `Sender` (`actor Authenticated = Sender where Dmarc(DmarcPass)`) narrows an email handler to mail with the listed DMARC verdicts; the Worker refuses other mail with `sender not authenticated` before the handler runs
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0994 — A Sender refinement admits only authenticated mail
 
-## ADR: email-sender-refinement
-title: A Sender refinement admits only authenticated mail
-summary: `Sender` is a refinement base with a closed `Dmarc(…)` predicate; the emitted route lists the verdicts it admits and the runtime refuses other mail before the handler, as a rejection and not a fault
+- **Status:** Accepted (v0.729)
 
 **Context.** Part of #3888. A handler that acts only on authenticated mail began with `if s.identity.dmarc == DmarcPass { … } else { Reject(…) }`, and forgetting the `if` was silent.
 

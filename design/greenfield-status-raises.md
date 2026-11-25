@@ -5,6 +5,9 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| emit_abi_shapes | 104 | 109 | v0.742.0 | #4406 | the `WorkersR2` binding names five more types (`R2GetIf`, `R2List`, `R2Partial`, `R2Range`, `R2Read`) that the new operations take and return (#4049) |
+| ts_writes | 473 | 475 | v0.730.0 | #4376 | two more HttpResult statuses in the runtime's status tables (#3917) |
+| ts_writes | 473 | 475 | v0.727.0 | #4367 | the qualifier's namespace text, as for ts_raw_sites_emit (#4045) |
 | ts_writes | 471 | 473 | v0.692.0 |  | the security policy literal carries two more typed string fields, the HTML CSP and referrer policy (#3923) |
 | ts_writes | 470 | 471 | v0.674.0 | #4249 | the typed headers decoder is built as typed nodes in the entry emitter (#3911) |
 | ts_writes | 467 | 470 | v0.670.0 | #4241 | the typed path-parameter decoder and the enum segment of the system driver URL are built as typed nodes in the entry and driver emitters (#3910) |

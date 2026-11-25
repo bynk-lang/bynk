@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A first-party `bynk.html` commons has `escapeText` and `escapeAttr`, the two HTML escapes by context, and the serve-a-page guide uses them
----
+# 0993 — A first-party bynk.html commons escapes HTML text and quoted attributes
 
-## ADR: html-escape-commons
-title: A first-party bynk.html commons escapes HTML text and quoted attributes
-summary: Two pure functions, one per context, so every project stops hand-writing an escape that misses the single quote
+- **Status:** Accepted (v0.728)
 
 **Context.** Escaping a value substituted into markup was left to each author (`reference/embeds.md`: nothing is escaped for you), and the serve-a-page guide hand-wrote `escape(s)` covering `&`, `<`, `>` and `"` only. That misses `'`, so it is unsafe in a single-quoted attribute, and every project copies or reinvents it. A missing or incomplete escape around request data is a cross-site scripting hole, and an escape has exactly one right answer, which is the standard library's job.
 

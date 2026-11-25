@@ -1,13 +1,6 @@
----
-level: minor
-changelog: An email `on message` handler must state its actor with a `by` clause (`bynk.actor.missing_by_on_email`); `by Sender` is the explicit form of the former default, and `bynk check --fix=bynk.actor.missing_by_on_email` migrates a project
-breaking: An email `on message` handler with no `by` clause, and no `by` on its service header, is now a compile error (`bynk.actor.missing_by_on_email`). It meant "any mail, whatever its DMARC verdict" before; the fix inserts `by Sender`, which means the same, so behaviour is unchanged once migrated
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0988 — An email handler states what mail it acts on
 
-## ADR: email-handler-states-its-actor
-title: An email handler states what mail it acts on
-summary: `by` is required on `from email` handlers, as it is on `http`, `websocket` and `call`, so acting on unauthenticated mail is a written decision
+- **Status:** Accepted (v0.724)
 
 **Context.** A `from email` handler inherited `Sender` silently, so whether it acts on mail that failed DMARC was never written down. Mail arrives from the internet, which is closer to HTTP, where `by` is required, than to a queue. This is the first part of #3888, which goes on to let a handler narrow it with a refinement of `Sender` (`Dmarc(…)`).
 

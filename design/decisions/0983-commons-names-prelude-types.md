@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A commons names the `bynk` adapter's transparent types (`CronSchedule`, `Uuid`, `Request`, …) with no `consumes`, so a constant or function over one can be shared between contexts
----
+# 0983 — A commons names the bynk adapter's transparent types without consumes
 
-## ADR: commons-names-prelude-types
-title: A commons names the bynk adapter's transparent types without consumes
-summary: a commons that writes a type `bynk` exports `transparent` reaches it through a type-only clause the compiler adds, so a shared constant can be a `CronSchedule`; capabilities and opaque types stay unnameable
+- **Status:** Accepted (v0.720)
 
 **Context.** `consumes` is not allowed in a commons, so a commons could not name any type of the `bynk` adapter: `fn f(u: Uuid)` was `bynk.resolve.unknown_type`, and the headline example of #3875, `const Nightly: CronSchedule = "0 2 * * *"` in a commons shared by two contexts, did not compile. A schedule shared across contexts had to be a `String` constant, losing the check the type gives it.
 

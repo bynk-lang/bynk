@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `Kv.getValue[T]` and `Kv.putValue[T]` store and read a `Codable` value as its encoded JSON, decoding at the call site; a stored value that does not decode faults, naming the path and never the value (experimental)
----
+# 0999 — Kv.getValue[T] and putValue[T] are typed reads and writes that fault on a stored value that does not decode
 
-## ADR: kv-typed-values-fault-on-undecodable
-title: Kv.getValue[T] and putValue[T] are typed reads and writes that fault on a stored value that does not decode
-summary: Two experimental Kv operations under ADR 0830's typed capability reads, storing the value's encoded JSON text, with the default fault policy for an undecodable stored value
+- **Status:** Accepted (v0.734)
 
 **Context.** `Kv` reads and writes `String` or `Bytes`, so every structured value is a hand-written `Json.encode` on the way in and a `Json.decode`, with its own error handling, on the way out, at every call site. ADR 0830 anticipates a typed `Kv` read: a first-party operation may return its `Codable` parameter, decoded at the call site, with the failure policy declared per operation.
 
