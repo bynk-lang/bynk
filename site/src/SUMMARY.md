@@ -156,6 +156,7 @@
     - [Deploy from CI](guides/projects-build-and-deployment/deploy-from-ci.md)
     - [Roll back a deployment](guides/projects-build-and-deployment/roll-back-a-deployment.md)
     - [Contract skew across independently deployed contexts](guides/projects-build-and-deployment/contract-skew.md)
+    - [Follow a request across contexts](guides/projects-build-and-deployment/follow-a-request-across-contexts.md)
     - [Target Cloudflare Workers](guides/projects-build-and-deployment/cloudflare-workers.md)
     - [Adopt Bynk beside a TypeScript Worker](guides/projects-build-and-deployment/adopt-beside-a-typescript-worker.md)
   - By topic

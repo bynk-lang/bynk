@@ -2,6 +2,7 @@
 // for what the bundled runtime.ts exports; the bundle script concatenates the
 // modules below (in this dependency order) into one flat file.
 export * from "./result.ts";
+export * from "./traceparent.ts";
 export * from "./bytes.ts";
 export * from "./decimal.ts";
 export * from "./time.ts";
@@ -16,7 +17,6 @@ export * from "./storage.ts";
 export * from "./vectorize.ts";
 export * from "./store.ts";
 export * from "./entries.ts";
-export * from "./traceparent.ts";
 export * from "./boundary.ts";
 export * from "./yaml.ts";
 export * from "./codec.ts";

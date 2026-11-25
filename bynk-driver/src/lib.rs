@@ -2202,7 +2202,7 @@ mod tests {
         let dir = workers_project("compat_flags_default_1890", "[project]\nname = \"p\"\n");
         let (text, warnings) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
         assert!(
-            text.contains("compatibility_flags = [\"global_fetch_strictly_public\"]\n"),
+            text.contains("compatibility_flags = [\"global_fetch_strictly_public\", \"nodejs_als\"]\n"),
             "{text}"
         );
         assert!(warnings.is_empty(), "{warnings:?}");

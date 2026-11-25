@@ -157,3 +157,57 @@ test("eventEnvelopeOf: a minted envelope's bare id becomes an Option, and an Opt
   const kept = { ...BASE, trace: Some(TRACE) };
   assert.equal(eventEnvelopeOf(kept), kept);
 });
+
+// #3895 part 2: an entry point starts a trace, and a verified call replaces it.
+
+import { enterTrace, withTrace, withTraceField } from "../src/traceparent.ts";
+
+test("enterTrace: starts a fresh trace for the work it runs, and none outside it", async () => {
+  assert.equal(currentTraceId(), undefined);
+  const seen = await enterTrace(async () => {
+    await new Promise((r) => setTimeout(r, 1));
+    return currentTraceId();
+  });
+  assert.ok(isTraceId(seen));
+  assert.equal(currentTraceId(), undefined);
+  const again = await enterTrace(async () => currentTraceId());
+  assert.notEqual(again, seen, "each entry starts its own trace");
+});
+
+test("enterTrace: a signed call's trace replaces the one the entry started, for the rest of the request", async () => {
+  const headers = await signedHeaders(ENV, "shop.orders", "shop.payment", "/_bynk/call/svc", "", "1", "{}", "test");
+  const req = new Request("http://internal/_bynk/call/svc", {
+    method: "POST",
+    headers: { ...headers, [TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` },
+    body: "{}",
+  });
+  const [before, after] = await enterTrace(async () => {
+    const started = currentTraceId();
+    assert.equal(await verifyCall(req, CALLEE_ENV, "shop.payment"), "{}");
+    await new Promise((r) => setTimeout(r, 1));
+    return [started, currentTraceId()];
+  });
+  assert.notEqual(before, TRACE);
+  assert.equal(after, TRACE);
+});
+
+test("enterTrace: a public request's traceparent is not read, so the trace is the entry's own", async () => {
+  const claimed = new Request("http://localhost/", { headers: { [TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` } });
+  const seen = await enterTrace(async () => {
+    // A public route never reaches `verifyCall`, so nothing admits the header.
+    assert.equal(admittedTrace(claimed), undefined);
+    return currentTraceId();
+  });
+  assert.notEqual(seen, TRACE);
+});
+
+test("withTrace and withTraceField: a log line names the trace inside one, and is untouched outside", async () => {
+  assert.equal(withTrace("CallUnreachable a -> b"), "CallUnreachable a -> b");
+  const fields = { site: "s" };
+  assert.equal(withTraceField(fields), fields);
+  await runInTrace(TRACE, async () => {
+    assert.equal(withTrace("CallUnreachable a -> b"), `CallUnreachable a -> b trace=${TRACE}`);
+    assert.deepEqual(withTraceField({ site: "s", trace: "mine" }), { site: "s", trace: TRACE });
+  });
+});
+

@@ -2,10 +2,10 @@
 // context app
 
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __invariantViolation } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
-import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";

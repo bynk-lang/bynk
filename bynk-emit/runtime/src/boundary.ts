@@ -3,7 +3,7 @@ import type { Option } from "./result.ts";
 import { Ok, Err, Some, None } from "./result.ts";
 import type { ValidationBound, ValidationError, ValidationRule, WireViolation } from "./errors.ts";
 import { __bynkDecimalToString } from "./decimal.ts";
-import { TRACEPARENT_HEADER, admitTrace, formatTraceparent, isTraceId, outgoingTraceparent } from "./traceparent.ts";
+import { TRACEPARENT_HEADER, admitTrace, formatTraceparent, isTraceId, outgoingTraceparent, withTrace } from "./traceparent.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
@@ -608,7 +608,7 @@ async function callServiceCore<R>(
       if (detail && detail.kind === "ContractMismatch") {
         // #1826: logged on the caller's side too, with both hashes, before the
         // fault: the caller's catch reports only `BoundaryError: ContractMismatch`.
-        globalThis.console.error(`ContractMismatch ${callerContext} -> ${servicePath}`, detail);
+        globalThis.console.error(withTrace(`ContractMismatch ${callerContext} -> ${servicePath}`), detail);
         return { kind: "error", error: detail };
       }
     }
@@ -623,7 +623,7 @@ async function callServiceCore<R>(
         service: servicePath,
         status: response.status,
       };
-      globalThis.console.error(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`);
+      globalThis.console.error(withTrace(`CalleeFaulted ${callerContext} -> ${detail.context} call ${servicePath}`));
       return { kind: "error", error: detail };
     }
     return { kind: "error", error: { kind: "Transport", status: response.status, details: raw } };
@@ -678,13 +678,13 @@ export async function callServiceOutcome<R>(
   const raw = await callServiceCore(binding, servicePath, argsJson, deserialiseResult, callerContext, contractHash, env, calleeContext);
   if (raw.kind === "ok") return { tag: "Handled", result: raw.value };
   if (raw.kind === "thrown") {
-    globalThis.console.error(`CallUnreachable ${callerContext} -> ${servicePath}`);
+    globalThis.console.error(withTrace(`CallUnreachable ${callerContext} -> ${servicePath}`));
     return { tag: "Unreachable", status: None };
   }
   const outcome = outcomeOfCallError<R>(raw.error);
   if (outcome === null) throw boundaryError(raw.error);
   if (raw.error.kind === "Transport") {
-    globalThis.console.error(`Call${outcome.tag} ${callerContext} -> ${servicePath} status ${raw.error.status}`);
+    globalThis.console.error(withTrace(`Call${outcome.tag} ${callerContext} -> ${servicePath} status ${raw.error.status}`));
   }
   return outcome;
 }
@@ -740,7 +740,7 @@ export async function callOutcome<R>(call: Promise<R>): Promise<CallOutcome<R>> 
     if (stub?.tag === "Unreachable") {
       return { tag: "Unreachable", status: stub.status === undefined ? None : Some(stub.status) };
     }
-    globalThis.console.error("CalleeFaulted bundle call");
+    globalThis.console.error(withTrace("CalleeFaulted bundle call"));
     return { tag: "Faulted" };
   }
 }

@@ -3,6 +3,7 @@
 #[rustfmt::skip]
 pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[
     ("result", include_str!("runtime/result.ts")),
+    ("traceparent", include_str!("runtime/traceparent.ts")),
     ("bytes", include_str!("runtime/bytes.ts")),
     ("decimal", include_str!("runtime/decimal.ts")),
     ("time", include_str!("runtime/time.ts")),
@@ -20,7 +21,6 @@ pub(crate) const RUNTIME_MODULES: &[(&str, &str)] = &[
     ("entries", include_str!("runtime/entries.ts")),
     ("lazy", include_str!("runtime/lazy.ts")),
     ("scan", include_str!("runtime/scan.ts")),
-    ("traceparent", include_str!("runtime/traceparent.ts")),
     ("boundary", include_str!("runtime/boundary.ts")),
     ("yaml", include_str!("runtime/yaml.ts")),
     ("codec", include_str!("runtime/codec.ts")),
@@ -468,6 +468,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__dispatchToEventsFanout", "agent"),
     ("__edgeCacheGuard", "http"),
     ("__encodeAgentResult", "agent"),
+    ("__enterTrace", "traceparent"),
     ("__eraseStored", "entries"),
     ("__eventEnvelopeOf", "boundary"),
     ("__expireSessionCookie", "session"),
@@ -602,6 +603,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__withPlainJson", "http"),
     ("__withResponseHeader", "http"),
     ("__withRetryAfter", "http"),
+    ("__withTrace", "traceparent"),
     ("acceptHibernatableConnection", "connection"),
     ("admitTrace", "traceparent"),
     ("admittedTrace", "traceparent"),
@@ -660,6 +662,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("encodeHeaderText", "email"),
     ("encodeKeyPart", "entries"),
     ("ensureContainerRunning", "container"),
+    ("enterTrace", "traceparent"),
     ("entriesOf", "store"),
     ("entryKeyOf", "entries"),
     ("eraseStored", "entries"),
@@ -863,6 +866,8 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("withPlainJson", "http"),
     ("withResponseHeader", "http"),
     ("withRetryAfter", "http"),
+    ("withTrace", "traceparent"),
+    ("withTraceField", "traceparent"),
 ];
 
 /// The exported names that name only a type: an import of one is `import type`.

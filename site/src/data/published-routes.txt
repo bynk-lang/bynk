@@ -113,6 +113,7 @@
 /book/guides/projects-build-and-deployment/contract-skew/
 /book/guides/projects-build-and-deployment/deploy-from-ci/
 /book/guides/projects-build-and-deployment/deploy-to-cloudflare/
+/book/guides/projects-build-and-deployment/follow-a-request-across-contexts/
 /book/guides/projects-build-and-deployment/layout/
 /book/guides/projects-build-and-deployment/roll-back-a-deployment/
 /book/guides/projects-build-and-deployment/run-a-private-registry/

@@ -32,6 +32,7 @@ const SRC = join(pkgRoot, "src");
 // the re-export order in src/index.ts. `aliases` is the alias source of truth.
 const MODULES = [
   "result",
+  "traceparent",
   "bytes",
   "decimal",
   "time",
@@ -49,7 +50,6 @@ const MODULES = [
   "entries",
   "lazy",
   "scan",
-  "traceparent",
   "boundary",
   "yaml",
   "codec",
