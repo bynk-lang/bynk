@@ -279,6 +279,17 @@ export function dmarcVerdict(headers: readonly { readonly key: string; readonly 
   return { tag: "DmarcNone" };
 }
 
+/**
+ * #3888: the verdict of a message whose headers are already a map (an `InboundEmail` in a case).
+ * The same rule as the Worker's, so a case that sets `authentication-results:
+ * mx.cloudflare.net; dmarc=pass` reads `DmarcPass` at every tier.
+ */
+export function dmarcVerdictOf(headers: ReadonlyMap<string, string>): DmarcVerdict {
+  // Header names are case-insensitive (RFC 5322), and the Worker's parser lower-cases them, so a case's
+  // `Authentication-Results` must read as the Worker reads it. The first spelling of a header wins.
+  return dmarcVerdict([...headers].map(([key, value]) => ({ key: key.toLowerCase(), value })));
+}
+
 // ------------------------------------------------------------------- parsing
 
 /** The raw message, or `null` when it is over `cap` bytes. Never over-reads. */
@@ -681,5 +692,5 @@ export async function handleEmail(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { handleEmail as __handleEmail };
+export { dmarcVerdictOf as __dmarcVerdictOf, handleEmail as __handleEmail };
 export type { InboundMessage as __InboundMessage, SenderIdentity as __SenderIdentity };

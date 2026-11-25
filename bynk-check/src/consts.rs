@@ -661,6 +661,51 @@ pub fn resolve_const_literal<'a>(
     })
 }
 
+/// #3925: resolve the bare name `name`, written in unit `at`, to the list of
+/// string literals a constant declared exactly `List[String]` denotes (a chain of
+/// such constants ends at a list literal of string literals). `None` when any hop
+/// is not that, so the position's own diagnostic reports the argument as written.
+pub fn resolve_string_list_const<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+) -> Option<ResolvedConst<'a>> {
+    let is_string_list = |ty: &TypeRef| matches!(ty, TypeRef::List(inner, _) if matches!(**inner, TypeRef::Base(BaseType::String, _)));
+    let (table, uses) = unit(at)?;
+    let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+    let first = vis.get(name)?;
+    let (decl, owner) = (first.decl, first.owner);
+    let mut scope = owner.unwrap_or(at);
+    let mut current = decl;
+    for _ in 0..=64 {
+        if !is_string_list(&current.ty) {
+            return None;
+        }
+        match &current.init.kind {
+            ExprKind::ListLit(items, ..)
+                if items.iter().all(|i| matches!(i.kind, ExprKind::StrLit(_))) =>
+            {
+                return Some(ResolvedConst {
+                    decl,
+                    literal: &current.init,
+                    owner,
+                });
+            }
+            ExprKind::Ident(n) => {
+                let (table, uses) = unit(scope)?;
+                let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
+                let found = vis.get(n.name.as_str())?;
+                if let Some(o) = found.owner {
+                    scope = o;
+                }
+                current = found.decl;
+            }
+            _ => return None,
+        }
+    }
+    None
+}
+
 /// #3875: whether a constant's declared type is one a cron schedule position
 /// takes: exactly `String`, or exactly the prelude's `CronSchedule`. A constant
 /// of any other refined type (`String where MaxLength(20)`, a user's own

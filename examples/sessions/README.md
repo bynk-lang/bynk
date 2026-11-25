@@ -41,7 +41,8 @@ What it shows:
 > can be ended at once and holds whatever you like. If you would rather keep no store and can accept a
 > session that lives until its `ttl`, a [`SignedCookie` actor](../../site/src/content/docs/book/guides/actors/authenticate-with-a-signed-cookie.md)
 > signs the cookie for you, issues it with `User.issue(identity)` and checks it (and cross-site posts) before
-> your handler runs.
+> your handler runs. If you want that and the ability to log a user out everywhere, add `sessions = true` to the
+> actor: the compiler keeps the sessions in an agent for you and gives you `User.revokeAll(identity)`.
 
 ## Layout
 

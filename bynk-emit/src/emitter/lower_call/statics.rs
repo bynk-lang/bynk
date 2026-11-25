@@ -15,7 +15,7 @@ use bynk_ts::{
 };
 
 use super::super::lower::{
-    Pre, lower_http_variant_args, member_node, runtime_ctor_call, settle_built,
+    Pre, lower_http_variant_args, member_node, runtime_ctor_call, settle_built, type_member_node,
 };
 use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{key_is_plain, take};
@@ -100,7 +100,7 @@ pub(in crate::emitter) fn lower_type_static_call(
         }
         // Slice 4 (DECISION B): explicit type arguments (`Box.empty[Int]()`) are
         // kept, so a call with no argument of type `T` still types as written.
-        let mut callee = member_node(&id.name, &method.name);
+        let mut callee = type_member_node(&id.name, &method.name);
         if !type_args.is_empty() {
             callee = type_app(callee, explicit_type_args(type_args));
         }

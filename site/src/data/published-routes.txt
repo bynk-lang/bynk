@@ -505,6 +505,7 @@
 /book/reference/diagnostics/bynk.http.cors_not_http/
 /book/reference/diagnostics/bynk.http.cors_unknown_field/
 /book/reference/diagnostics/bynk.http.cors_wildcard_credentials/
+/book/reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
 /book/reference/diagnostics/bynk.http.duplicate_rejected/
 /book/reference/diagnostics/bynk.http.duplicate_route/
 /book/reference/diagnostics/bynk.http.error_status_position/
@@ -1673,6 +1674,7 @@
 /reference/diagnostics/bynk.http.cors_not_http/
 /reference/diagnostics/bynk.http.cors_unknown_field/
 /reference/diagnostics/bynk.http.cors_wildcard_credentials/
+/reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
 /reference/diagnostics/bynk.http.duplicate_rejected/
 /reference/diagnostics/bynk.http.duplicate_route/
 /reference/diagnostics/bynk.http.error_status_position/
@@ -2098,6 +2100,7 @@
 /reference/diagnostics/bynk.test.remote_unsupported_peek/
 /reference/diagnostics/bynk.test.remote_unsupported_queue/
 /reference/diagnostics/bynk.test.remote_unsupported_schedule/
+/reference/diagnostics/bynk.test.revoked_needs_sessions_route/
 /reference/diagnostics/bynk.test.service_bad_address/
 /reference/diagnostics/bynk.test.service_call_arity/
 /reference/diagnostics/bynk.test.service_no_call_handler/

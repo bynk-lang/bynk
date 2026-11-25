@@ -73,6 +73,12 @@ export const api = {
     })();
     return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (c)] }))(HttpResult.NoContent);
   },
+  async http_POST_password(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; identity: UserId }): globalThis.Promise<HttpResult<void>> {
+    const __r0 = await (async (__sub: UserId) => {
+      await __makeUserSessions(__sub, deps.env).revokeAll(deps);
+    })(deps.identity);
+    return HttpResult.NoContent;
+  },
   async http_DELETE_session(deps: {}): globalThis.Promise<HttpResult<void>> {
     return HttpResult.NoContent;
   },

@@ -197,6 +197,27 @@ pub(in crate::emitter) fn decode_capability_reply(
     )
 }
 
+/// #4116: whether an `Idempotency` key argument is statically text: a `String`, or a refined or
+/// opaque `String`. A type variable is not, and goes through `__bynkIdempotencyKey`, which stores
+/// a run-time string as it is.
+fn key_is_text(key: &Expr, cx: &LowerCtx) -> bool {
+    use bynk_check::checker::{NamedKind, Ty};
+    use bynk_syntax::ast::BaseType;
+    // An unrecorded type is not known to be text: the run-time helper decides.
+    let Some(te) = cx.commons().expr_types.get(&key.id) else {
+        return false;
+    };
+    let ty = te.ty.get(cx.ty_render().types());
+    matches!(
+        &*ty,
+        Ty::Base(BaseType::String)
+            | Ty::Named {
+                kind: NamedKind::Refined(BaseType::String) | NamedKind::Opaque(BaseType::String),
+                ..
+            }
+    )
+}
+
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
 /// `Idempotency.remember[T](key, value, expiresAfter)` and
 /// `Idempotency.claim(key, expiresAfter)` all take the
@@ -222,6 +243,7 @@ pub(in crate::emitter) fn scope_idempotency_key(
     is_first_party: bool,
     method: &str,
     args_lowered: &mut Vec<bynk_ts::TsExpr>,
+    key_arg: Option<&Expr>,
     cx: &LowerCtx,
 ) {
     if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
@@ -230,7 +252,13 @@ pub(in crate::emitter) fn scope_idempotency_key(
     let scope = cx
         .handler_scope()
         .unwrap_or_else(|| panic!("Idempotency.{method} lowered with no handler_scope set"));
-    let key = args_lowered.remove(0);
+    let mut key = args_lowered.remove(0);
+    // #4116: a key that is not text is stored under its canonical encoding. A `String`, a
+    // refined `String` and an opaque `String` are stored as they were, so existing entries match.
+    if key_arg.is_some_and(|k| !key_is_text(k, cx)) {
+        cx.runtime_use().note_cmp("__bynkIdempotencyKey");
+        key = call(ident("__bynkIdempotencyKey"), vec![key]);
+    }
     // `TemplateLit` parts print verbatim, so the scope prints as it is spelled.
     let scoped = TsExpr::template_lit(vec![format!("{scope}::"), String::new()], vec![key]);
     args_lowered.insert(0, scoped);
@@ -442,6 +470,9 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
+    if let Some(Callee::SessionRevokeAll { actor }) = cx.commons().callees.get(&e.id).cloned() {
+        return lower_session_revoke_all(&actor, args.first()?, cx, pre);
+    }
     let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
     else {
         return None;
@@ -781,7 +812,13 @@ pub(in crate::emitter) fn lower_capability_call(
                 ..
             })
         );
-        scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        scope_idempotency_key(
+            is_first_party,
+            &method.name,
+            &mut args_lowered,
+            args.first(),
+            cx,
+        );
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
             let cap_node = member(cx.cap_deps_node(), &recv.name);
             return Some(tracked_claim_call(cap_node, args_lowered, cx));
@@ -827,7 +864,13 @@ pub(in crate::emitter) fn lower_cross_capability_call(
             ..
         })
     );
-    scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
+    scope_idempotency_key(
+        first_party,
+        &method.name,
+        &mut args_lowered,
+        args.first(),
+        cx,
+    );
     if first_party && method.name == "claim" && cx.tracks_claims() {
         let cap_node = member(cx.cap_deps_node(), &cap);
         return Some(tracked_claim_call(cap_node, args_lowered, cx));
@@ -908,6 +951,38 @@ fn lower_session_expire(
         ret(expire),
     ];
     call(paren(block_arrow(vec![], true, body)), vec![])
+}
+
+/// #3938: `Actor.revokeAll(identity)`: end every session of `identity` in its session agent. An
+/// effect, like `issue`: an async arrow applied to the identity, whose agent call is awaited.
+fn lower_session_revoke_all(
+    actor: &str,
+    identity: &Expr,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let seam = cx.commons().commons.items.iter().find_map(|i| {
+        i.as_actor()
+            .filter(|a| a.name.name == actor)
+            .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+    })?;
+    let key = pre.lower_node(identity, cx);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let agent = bynk_check::actors::sessions_agent_name(actor);
+    cx.record_agent_call(&agent, "revokeAll");
+    let instance = cx.agent_construct_node(&agent, ident("__sub"));
+    let revoke = crate::ts_build::await_expr(method_call(instance, "revokeAll", vec![deps_node]));
+    Some(call(
+        paren(block_arrow(
+            vec![TsParam::new(
+                "__sub".to_string(),
+                Some(TsType::named(seam.identity_type)),
+            )],
+            true,
+            vec![expr_stmt(revoke)],
+        )),
+        vec![key],
+    ))
 }
 
 #[cfg(test)]

@@ -1706,19 +1706,24 @@ fn check_call_against_fn(
 /// argument is checked twice.
 fn infer_op_type_args(
     op: &CapabilityOpInfo,
+    // #4116: the leading type arguments the call writes; the arguments determine the rest.
+    explicit: HashMap<String, TyId>,
     args: &[Expr],
     ctx: &mut Ctx,
 ) -> (Option<HashMap<String, TyId>>, Vec<Option<TyId>>) {
     let tys = ctx.tys;
-    let mut subst: HashMap<String, TyId> = HashMap::new();
+    let mut subst: HashMap<String, TyId> = explicit;
     let mut typed = Vec::with_capacity(args.len());
     let mut ok = true;
     for (pattern, arg) in op.params.iter().zip(args) {
-        // Only an argument whose parameter mentions a type parameter takes part
-        // in inference; the others are checked against their own parameter type,
-        // so contextual typing (`None`, `[]`, a literal for a `Float`) still holds.
-        if !contains_var(*pattern, tys) {
-            typed.push(type_of(arg, Some(*pattern), ctx));
+        // Only an argument whose parameter still mentions an unbound type parameter takes
+        // part in inference; the others are checked against their own parameter type, so
+        // contextual typing (`None`, `[]`, a literal for a `Float`) still holds. A written
+        // type argument binds its parameter first (#4116), so `remember[List[Quote]](k, [], ttl)`
+        // types `[]` against `List[Quote]`.
+        let bound = substitute(*pattern, &subst, tys);
+        if !contains_var(bound, tys) {
+            typed.push(type_of(arg, Some(bound), ctx));
             continue;
         }
         let t = type_of(arg, None, ctx);
@@ -1754,7 +1759,7 @@ pub(crate) fn check_arg(arg: &Expr, expected: TyId, what: &str, ctx: &mut Ctx) {
 
 /// 1A.33 (Decision A): which first-party capability the local name `cap` is, seen from
 /// the unit being checked: declared here (this unit is `bynk`) or flattened in from it.
-fn local_first_party(cap: &str, ctx: &Ctx) -> Option<crate::firstparty::FirstPartyCap> {
+pub(crate) fn local_first_party(cap: &str, ctx: &Ctx) -> Option<crate::firstparty::FirstPartyCap> {
     crate::firstparty::resolve(
         cap,
         &ctx.input.commons.name.joined(),
@@ -2031,17 +2036,24 @@ pub(crate) fn check_static_call(
         // Slice 3, widened by #4113: an operation with type parameters infers its type
         // arguments from the arguments, when they determine every one.
         let mut arg_tys: Option<Vec<Option<TyId>>> = None;
-        if type_args.is_empty()
+        // #4116: written type arguments bind the leading parameters, and the arguments determine
+        // the rest (`Idempotency.dedup[Quote](key)` names `T`; `K` is the key's type).
+        let partial = type_args.len() < op_clone.type_params.len();
+        if (type_args.is_empty() || partial)
             && (!op_clone.codable_params.is_empty() || !op_clone.type_params.is_empty())
         {
-            let (inferred, typed) = infer_op_type_args(&op_clone, args, ctx);
+            let mut explicit: HashMap<String, TyId> = HashMap::new();
+            for (tp, ta) in op_clone.type_params.iter().zip(type_args) {
+                explicit.insert(tp.clone(), resolve_expr_type_ref(ta, ctx)?);
+            }
+            let (inferred, typed) = infer_op_type_args(&op_clone, explicit, args, ctx);
             arg_tys = Some(typed);
             if let Some(found) = inferred {
                 subst = found;
             }
         }
         if !op_clone.type_params.is_empty() || !type_args.is_empty() {
-            if type_args.is_empty() && subst.len() < op_clone.type_params.len() {
+            if partial && subst.len() < op_clone.type_params.len() {
                 ctx.errors.push(
                     CompileError::new(
                         "bynk.generics.uninferable_type_arg",
@@ -2063,7 +2075,7 @@ pub(crate) fn check_static_call(
                 }
                 return None;
             }
-            if !type_args.is_empty() && type_args.len() != op_clone.type_params.len() {
+            if type_args.len() > op_clone.type_params.len() {
                 ctx.errors.push(CompileError::new(
                     "bynk.generics.type_arg_mismatch",
                     span,
@@ -2081,8 +2093,13 @@ pub(crate) fn check_static_call(
                 return None;
             }
             // #4113: an inferred type argument meets the same owner-only check as a written one.
-            if type_args.is_empty() {
-                for ty in op_clone.type_params.iter().filter_map(|tp| subst.get(tp)) {
+            if partial {
+                for ty in op_clone
+                    .type_params
+                    .iter()
+                    .skip(type_args.len())
+                    .filter_map(|tp| subst.get(tp))
+                {
                     super::events_emit::check_emit_owner(
                         local_first_party(&type_name.name, ctx),
                         &method.name,
@@ -2101,6 +2118,22 @@ pub(crate) fn check_static_call(
                 );
                 subst.insert(tp.clone(), ty);
             }
+        }
+        // #4116: each `Key` type parameter takes a key type, so a `Float` or a `Map` cannot
+        // key an `Idempotency` entry that two distinct keys would then share.
+        if !super::keying::check_declared_key_args(
+            &format!("{}.{}", type_name.name, method.name),
+            span,
+            &op_clone.key_params,
+            &subst,
+            ctx,
+        ) {
+            if arg_tys.is_none() {
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+            return None;
         }
         // Slice 3: each `Codable` type parameter takes a codable type, and the
         // call records how it encodes the parameters that mention one.
@@ -4959,7 +4992,10 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
             "tokens with an empty and with a missing `sub`",
             "; only an `Oidc` seam is driven with these tokens",
         ),
-        BadCredential::Forged | BadCredential::Stale | BadCredential::Expired => return None,
+        BadCredential::Forged
+        | BadCredential::Stale
+        | BadCredential::Expired
+        | BadCredential::Revoked => return None,
     };
     Some(OidcOnlyPrincipal {
         code,
@@ -5452,6 +5488,15 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Expired, _) => {}
+            (BadCredential::Revoked, _)
+                if !by.is_some_and(|by| {
+                    crate::actors::by_clause_has_sessions(by, &ctx.test_actors)
+                }) =>
+            {
+                let err = super::session_calls::revoked_needs_sessions(p.span);
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
+            (BadCredential::Revoked, _) => {}
             (n, _) if !oidc && oidc_only_principal(n).is_some() => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
@@ -5803,7 +5848,14 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
             let CallSitePrincipal::BadCredential(bad) = kind else {
                 unreachable!("matched above")
             };
-            let err = if bad == BadCredential::Expired {
+            let err = if bad == BadCredential::Revoked {
+                CompileError::new(
+                    "bynk.test.revoked_needs_sessions_route",
+                    p.span,
+                    "`by Revoked` sends a cookie for a revoked session, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true`",
+                )
+                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`")
+            } else if bad == BadCredential::Expired {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,
@@ -6228,6 +6280,81 @@ fn flatten_ident_chain(expr: &Expr) -> Option<String> {
     }
 }
 
+/// A qualified capability call's type arguments, and the `(argument index, type)` pairs typed
+/// while inferring them.
+type CrossTypeArgs = (HashMap<String, TyId>, Vec<(usize, TyId)>);
+
+/// A qualified capability call's type arguments: the written ones bind the operation's leading
+/// type parameters; a left-out one is the type of the argument whose parameter is exactly that
+/// parameter (`key: K`), typed here once (#4116). `None` after reporting a mismatch, or a
+/// parameter no argument determines. The second result is the `(argument index, type)` pairs
+/// already typed, which the argument check skips.
+fn cross_context_type_args(
+    op: &crate::resolver::CrossContextCapabilityOp,
+    (consumed, cap, method): (&str, &str, &Ident),
+    type_args: &[TypeRef],
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> Option<CrossTypeArgs> {
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    let mut inferred_args: Vec<(usize, TyId)> = Vec::new();
+    if !op.type_params.is_empty() || !type_args.is_empty() {
+        if type_args.len() > op.type_params.len() {
+            ctx.errors.push(CompileError::new(
+                "bynk.generics.type_arg_mismatch",
+                method.span,
+                format!(
+                    "capability operation `{consumed}.{cap}.{}` takes {} type argument(s), but {} were given",
+                    method.name,
+                    op.type_params.len(),
+                    type_args.len()
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+        for (tp, ta) in op.type_params.iter().zip(type_args) {
+            let ty = resolve_expr_type_ref(ta, ctx)?;
+            subst.insert(tp.clone(), ty);
+        }
+        // #4116: a type parameter the call leaves out is the type of the argument whose parameter
+        // is exactly that parameter (`key: K`); one no argument names is not inferable here.
+        for tp in op.type_params.iter().skip(type_args.len()) {
+            let named_by = op
+                .params
+                .iter()
+                .position(|(_, tr)| matches!(tr, TypeRef::Named(id) if id.name == *tp));
+            let Some(arg) = named_by.and_then(|i| args.get(i)) else {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.generics.uninferable_type_arg",
+                        method.span,
+                        format!(
+                            "capability operation `{consumed}.{cap}.{}` takes a type parameter, but none of its arguments determine it",
+                            method.name
+                        ),
+                    )
+                    .with_note(format!(
+                        "give it explicitly: `{consumed}.{cap}.{}[T](…)`",
+                        method.name
+                    )),
+                );
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            };
+            let arg_ty = type_of(arg, None, ctx)?;
+            subst.insert(tp.clone(), arg_ty);
+            // Typed once: its parameter is now exactly this type, so it is not checked again.
+            inferred_args.push((named_by.unwrap_or_default(), arg_ty));
+        }
+    }
+    Some((subst, inferred_args))
+}
+
 /// Type-check a cross-context service call (v0.6 §4.2). `receiver` carries
 /// the prefix's source span for diagnostics. `consumed` is the resolved
 /// qualified name of the consumed context.
@@ -6369,48 +6496,20 @@ fn check_cross_context_capability_call(
     // params/return vs. call-site type args in the local-capability path,
     // `check_static_call`). Explicit only, never inferred.
     let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-    let mut subst: HashMap<String, TyId> = HashMap::new();
-    if !op.type_params.is_empty() || !type_args.is_empty() {
-        if type_args.is_empty() {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.generics.uninferable_type_arg",
-                    method.span,
-                    format!(
-                        "capability operation `{consumed}.{cap}.{}` takes a type parameter, but none of its arguments determine it",
-                        method.name
-                    ),
-                )
-                .with_note(format!(
-                    "a qualified cross-context call takes its type arguments explicitly: `{consumed}.{cap}.{}[T](…)`",
-                    method.name
-                )),
-            );
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
+    let (subst, inferred_args) =
+        cross_context_type_args(&op, (consumed, cap, method), type_args, args, ctx)?;
+    // #4116: each `Key` type parameter takes a key type (see the local path).
+    if !super::keying::check_declared_key_args(
+        &format!("{consumed}.{cap}.{}", method.name),
+        method.span,
+        &op.key_params,
+        &subst,
+        ctx,
+    ) {
+        for a in args {
+            let _ = type_of(a, None, ctx);
         }
-        if type_args.len() != op.type_params.len() {
-            ctx.errors.push(CompileError::new(
-                "bynk.generics.type_arg_mismatch",
-                method.span,
-                format!(
-                    "capability operation `{consumed}.{cap}.{}` takes {} type argument(s), but {} were given",
-                    method.name,
-                    op.type_params.len(),
-                    type_args.len()
-                ),
-            ));
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
-        }
-        for (tp, ta) in op.type_params.iter().zip(type_args) {
-            let ty = resolve_expr_type_ref(ta, ctx)?;
-            subst.insert(tp.clone(), ty);
-        }
+        return None;
     }
     // Slice 3: each `Codable` type parameter takes a codable type, and the call
     // records how it encodes the parameters that mention one.
@@ -6479,8 +6578,12 @@ fn check_cross_context_capability_call(
             .unwrap_or(tys.intern(Ty::Unit));
         let param_ty = substitute(param_ty, &subst, tys);
         // #2025: against the parameter's type; see `type_cross_context_arg`.
-        let (arg_ty, crosses) =
-            type_cross_context_arg(arg, param_ty, &caller_types, &consumed_types, consumed, ctx);
+        let (arg_ty, crosses) = match inferred_args.iter().find(|(at, _)| *at == i) {
+            Some(&(_, ty)) => (Some(ty), true),
+            None => {
+                type_cross_context_arg(arg, param_ty, &caller_types, &consumed_types, consumed, ctx)
+            }
+        };
         let Some(arg_ty) = arg_ty else {
             all_ok = false;
             continue;

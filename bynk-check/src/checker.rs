@@ -80,6 +80,7 @@ mod query_par;
 mod refined_range;
 mod refinements;
 mod result_more;
+mod session_calls;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -846,6 +847,9 @@ pub enum Callee {
     /// actor: the session cookie the actor mints, or its matching deletion.
     /// `issue` reads the `Clock` and is an `Effect`; `expire` is pure.
     SignedCookie { actor: String, issue: bool },
+    /// #3938: `Actor.revokeAll(identity)` on a `SignedCookie` actor with `sessions = true`: end
+    /// every session of the identity in its session agent. An `Effect[()]`.
+    SessionRevokeAll { actor: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.
@@ -3870,6 +3874,8 @@ pub struct CapabilityOpInfo {
     pub return_ty: TyId,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #4116: the op's type parameters declared `Key`.
+    pub key_params: Vec<String>,
     /// #3458: what an undecodable reply means for a typed read, as declared.
     pub reply_policy: codable::ReplyPolicy,
     /// #2634: for a flattened cross-unit operation, `(unit, type name, in a
