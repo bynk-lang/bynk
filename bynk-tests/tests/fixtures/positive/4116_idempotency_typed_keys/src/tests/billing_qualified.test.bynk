@@ -1,0 +1,6 @@
+suite billing.qualified as integration {
+  case "the qualified form infers the key and round-trips a value" {
+    let n <- api.call("r", "d1")
+    expect n == 4
+  }
+}

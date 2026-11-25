@@ -1,2 +1,2 @@
 bynk.parse.expected_token
-expected `faults` after a call-site `by` clause
+expected `faults` or `violates` after a call-site `by` clause

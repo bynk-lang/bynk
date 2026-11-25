@@ -134,6 +134,15 @@ pub(super) fn member_node(object: &str, property: &str) -> bynk_ts::TsExpr {
     }
 }
 
+/// `Type.property` for a Bynk type name, which a `uses` full-name qualifier may
+/// spell `lib.y.Status`: that is read through the unit's namespace import of the
+/// commons (#4397), as every other name written that way is.
+pub(super) fn type_member_node(type_name: &str, property: &str) -> bynk_ts::TsExpr {
+    let object = bynk_check::emitted_names::use_qualified_name(type_name)
+        .unwrap_or_else(|| type_name.to_string());
+    member_node(&object, property)
+}
+
 /// A runtime-constructor call with one argument — `Ok(x)`, `Some(x)`,
 /// `__bynkDecimalNeg(x)`, or `HttpResult.Ok(x)` when `object` is given — as a
 /// call node over genuine identifiers.
@@ -467,7 +476,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             pre.finish(built)
         }
         ExprKind::Faults(f) => {
-            let built = lower_faults(f, cx);
+            let built = lower_faults(f, e.span, cx);
             pre.finish(built)
         }
         // `trace(Cap.op)` → the recorded calls mapped to per-call records

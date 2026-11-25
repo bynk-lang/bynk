@@ -1,0 +1,24 @@
+suite shop {
+  consumes bynk { Idempotency, Claim }
+
+  stub Idempotency.dedup[Quote](_) returns None
+
+  case "a stub names the type no argument determines and leaves the key open" {
+    let n <- sums.call(true, 1)
+    expect n == 0
+    expect Idempotency.dedup[Quote] called once
+  }
+
+  case "an observation reads the stored key as a String" {
+    let n <- sums.call(false, 4)
+    expect n == 0
+    expect Idempotency.remember called once with key == "shop.sums.call::k:{\"tag\":\"Email\"}"
+  }
+
+  case "claim is stubbed without a type argument" {
+    stub Idempotency.claim(_, _) returns Claimed
+    let first <- claims.call("r", "d1")
+    expect first
+    expect Idempotency.claim called once
+  }
+}

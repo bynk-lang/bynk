@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. Two agents this suite reaches both declare `<name>`, so the claim does not say which one. Qualify it with the agent: `violates Account.non_negative`.",
+  "category": "Expectations",
+  "categoryAnchor": "expectations",
+  "code": "bynk.expect.ambiguous_invariant",
+  "constructs": [
+    "faults_expr"
+  ],
+  "example": "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negative           // ✗ `Account` and `Wallet` both declare it\nexpect Account(\"a\").withdraw(5) violates Account.non_negative   // ✓",
+  "severity": "error",
+  "summary": "A `violates` claim names an invariant, transition or `@unique` constraint that more than one agent this suite reaches declares; qualify it with its agent (`violates Account.non_negative`)."
+}
