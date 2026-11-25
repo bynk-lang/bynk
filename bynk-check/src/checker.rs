@@ -69,6 +69,7 @@ mod list_basics;
 mod list_more;
 mod list_par;
 mod list_par_with;
+pub(crate) mod nested_effect;
 mod par;
 mod query_par;
 mod refinements;
@@ -6037,7 +6038,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 _ => None,
             };
             let inner_ty = type_of(inner, expected_inner, ctx)?;
-            Some(tys.intern(Ty::Effect(inner_ty)))
+            nested_effect::pure(inner_ty, inner.span, ctx)
         }
         ExprKind::RecordSpread {
             type_name,

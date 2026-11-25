@@ -1,0 +1,5 @@
+commons demo.nestedoption
+
+fn maybe(x: Option[Effect[Effect[Int]]]) -> Int {
+	0
+}

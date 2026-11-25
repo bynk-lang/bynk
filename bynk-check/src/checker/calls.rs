@@ -1571,7 +1571,7 @@ fn check_generic_call(
     // parameters* — a generic fn calling another generic fn (bynk.list's
     // `map` calling `reverse`) legitimately instantiates the callee at its
     // own rigid vars, which flow through `compatible` by name-equality.
-    Some(ret)
+    super::nested_effect::instantiated(ret_pattern, ret, args, &arg_tys, name.span, ctx)
 }
 
 fn check_call_against_fn(
@@ -4207,7 +4207,8 @@ fn check_generic_method_call(
                 .record(method.span, format!("[{}]", parts.join(", ")));
         }
     }
-    Some(substitute(ret_pattern, &subst, tys))
+    let ret = substitute(ret_pattern, &subst, tys);
+    super::nested_effect::instantiated(ret_pattern, ret, args, &arg_tys, method.span, ctx)
 }
 
 /// v0.178 (#662) / v0.182 (#664): resolve a test-body service invocation against
