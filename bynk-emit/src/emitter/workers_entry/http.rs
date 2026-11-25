@@ -1229,11 +1229,7 @@ pub(super) fn emit_http_route_dispatch(
             vec![cached, ident("request")],
         )
     } else {
-        let base = call(
-            ident("__httpResultToResponse"),
-            vec![ident("result"), ser_fn],
-        );
-        no_stored(route, base)
+        no_stored(route, plain_response(ser_fn))
     };
     // #3914: a `401` carries the route's `WWW-Authenticate` challenge (inside CORS, so the
     // header is exposed to a browser client).
@@ -1375,6 +1371,14 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
         return vec![format!("Bynk-Cookie realm=\"{realm}\"")];
     }
     vec![format!("Bynk realm=\"{realm}\"")]
+}
+
+/// The response of a route that is not a `GET`: the result, serialised, with no validator.
+fn plain_response(ser_fn: TsExpr) -> TsExpr {
+    call(
+        ident("__httpResultToResponse"),
+        vec![ident("result"), ser_fn],
+    )
 }
 
 /// #3922: `@cache(noStore: true)` sends `no-store`, on a route of any method.
