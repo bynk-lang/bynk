@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A `Map` or `Log` store query that asks `any` or `all`, or a `Log` query that asks `first`, `firstOrElse` or `take(n).collect()`, stops reading pages as soon as the answer is known
----
+# 0960 — Which store scans stop reading pages early
 
-## ADR: store-scans-stop-early
-title: Which store scans stop reading pages early
-summary: any/all over Map and Log, and first/firstOrElse/take(n).collect over Log, read a page at a time and stop at the answer
+- **Status:** Accepted (v0.696.2)
 
 **Context.** A store query over a `Map` or `Log` read every entry in pages and only then ran its terminal, so `log.first()` or `map.any(p)` paid for the whole collection even when the first page held the answer. A `Map`'s scan order is its insertion order (ADR 0109), but its storage keys are in key order, so the first page of a `Map` read is not its first-inserted entries. A `Log`'s keys are its append times, so its pages are its order.
 
