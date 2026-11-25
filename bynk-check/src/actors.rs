@@ -173,13 +173,11 @@ pub fn prelude_actor(name: &str) -> Option<Contract> {
 /// The default actor a handler inherits when it omits `by`, by protocol (ADR
 /// Q5). HTTP and WebSocket have no safe default — `by` is required there — and
 /// neither has `call` (#3891, superseding ADR 0082's `Caller` default) nor `queue`
-/// (#3899: who may send to a consumer is an access decision).
+/// (#3899: who may send to a consumer is an access decision) nor email (#3888:
+/// whether to act on mail that failed DMARC is a written decision).
 pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
     match protocol {
         ServiceProtocol::Cron => Some("Scheduler"),
-        // #3328 (DECISION E): inbound mail's default actor is the envelope
-        // sender, carrying its address and the platform's DMARC verdict.
-        ServiceProtocol::Email { .. } => Some("Sender"),
         // Events track, slice 0 (spine #936): delivery is runtime-triggered,
         // not an external caller — like `Queue`'s "Producer", the default
         // actor names the event's originating publisher.
@@ -189,7 +187,8 @@ pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
         ServiceProtocol::Call
         | ServiceProtocol::Http
         | ServiceProtocol::Queue { .. }
-        | ServiceProtocol::WebSocket { .. } => None,
+        | ServiceProtocol::WebSocket { .. }
+        | ServiceProtocol::Email { .. } => None,
     }
 }
 

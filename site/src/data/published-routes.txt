@@ -1322,6 +1322,7 @@
 /reference/diagnostics/bynk.actor.foreign_secret_not_string/
 /reference/diagnostics/bynk.actor.identity_not_sealed/
 /reference/diagnostics/bynk.actor.missing_by_on_call/
+/reference/diagnostics/bynk.actor.missing_by_on_email/
 /reference/diagnostics/bynk.actor.missing_by_on_http/
 /reference/diagnostics/bynk.actor.missing_by_on_queue/
 /reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/

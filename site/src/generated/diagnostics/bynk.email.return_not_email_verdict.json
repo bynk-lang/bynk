@@ -4,7 +4,7 @@
   "categoryAnchor": "other",
   "code": "bynk.email.return_not_email_verdict",
   "constructs": [],
-  "example": "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+  "example": "on message(mail: InboundEmail) -> Effect[String] by Sender {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n    Accept\n}",
   "severity": "error",
   "summary": "An email `on message` handler does not return `Effect[EmailVerdict]`."
 }

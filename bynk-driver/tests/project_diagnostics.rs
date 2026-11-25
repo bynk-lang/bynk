@@ -294,9 +294,9 @@ fn email_forwards_come_from_the_checked_tree_not_the_text() {
     .unwrap();
     let source = "context shop.support\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\n\
 fn finance() -> String { \"finance@shop.example\" }\n\n\
-service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    // Forward(\"commented@shop.example\")\n    Forward(\"Finance@Shop.Example\")\n  }\n}\n\n\
+service billing from email(\"billing@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    // Forward(\"commented@shop.example\")\n    Forward(\"Finance@Shop.Example\")\n  }\n}\n\n\
 fn route(mail: InboundEmail) -> EmailVerdict { Forward(\"helper@shop.example\") }\n\n\
-service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    if true { Forward(finance()) } else { Reject(\"Forward(\\\"string@shop.example\\\")\") }\n  }\n}\n";
+service ops from email(\"ops@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    if true { Forward(finance()) } else { Reject(\"Forward(\\\"string@shop.example\\\")\") }\n  }\n}\n";
     let root = scratch_project(
         "email_forwards",
         &[("bynk.toml", &manifest), ("src/shop/support.bynk", source)],
