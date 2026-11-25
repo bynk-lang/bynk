@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `?` on an `Option` returns `None` early in a function that returns `Option` (or `Effect[Option]`), and in a lambda that returns one
----
+# 0976 — ? on an Option returns None early where the body returns an Option
 
-## ADR: question-on-option-in-option-fn
-title: ? on an Option returns None early where the body returns an Option
-summary: Same-type propagation only: Option to Option, never Option to Result, with the HttpResult lifting unchanged
+- **Status:** Accepted (v0.712)
 
 **Context.** `?` on an `Option` was accepted only in a handler returning `HttpResult`, where `None` becomes `NotFound` (ADR 0177). Everywhere else it was `bynk.types.question_option_outside_http`, including a function that itself returns `Option`, so an `Option` chain needed a `match`, a `let … else` or nested `andThen` calls where the `Result` equivalent is a line per step.
 

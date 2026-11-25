@@ -1,13 +1,6 @@
----
-level: minor
-changelog: A queue consumer's `on message` handler must state its actor with a `by` clause (`bynk.actor.missing_by_on_queue`); `by Producer` is the explicit form of the former default, and `bynk check --fix=bynk.actor.missing_by_on_queue` migrates a project
-breaking: An `on message` handler with no `by` clause, and no `by` on its service header, is now a compile error (`bynk.actor.missing_by_on_queue`). It meant "any producer on the Cloudflare account" before; the fix inserts `by Producer`, which means the same, so behaviour is unchanged once migrated
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0973 — A queue consumer states who may send to it
 
-## ADR: queue-consumer-states-its-actor
-title: A queue consumer states who may send to it
-summary: `by` is required on `from queue` handlers, as it is on `http`, `websocket` and `call`, so the access decision is written down and can later be narrowed
+- **Status:** Accepted (v0.709)
 
 **Context.** A `from queue("orders")` consumer accepted any well-shaped message from any producer on the Cloudflare account, and its default actor `Producer` was silent about that. Who may send to a handler is an access decision, which Bynk puts in the `by` clause. This is the first part of #3899, which goes on to let a consumer narrow it (a `Producer` refinement admitting only signed messages from named contexts, and `Foreign` producers).
 

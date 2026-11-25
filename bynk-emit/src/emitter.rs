@@ -100,7 +100,7 @@ pub use compose::{
 };
 pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::{emit_events_fanout_do, emit_group_events_fanout_do};
-pub use observability::observability_block;
+pub use observability::{observability_block, tuning_blocks};
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers_entry::{
