@@ -4,6 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 
@@ -66,14 +67,14 @@ export class Tally {
     await __commitStored(this, this.state.storage, __encodeTallyState(s), __entryFieldsOfTally, s);
   }
 
-  async bump(id: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<number> {
+  async bump(id: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<number> {
     const __state = { ...(await this.loadState()) };
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const next = __state.count + 1;
       __state.count = next;
       const __r0 = await (async () => {
-        __events.push({ type: "Tallied", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Tallied", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return next;
     })();
@@ -88,7 +89,7 @@ export class Tally {
       const methodName = url.pathname.slice("/_bynk/agent/".length);
       const { args, deps } = (await request.json()) as { args: unknown[]; deps: unknown };
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
-      const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
+      const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
       const result = await (this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName](...__decodeAgentArgs(__TallyWire, methodName, args), { ...((deps ?? {}) as globalThis.Record<string, unknown>), ...__eventsDeps });
       return new globalThis.Response(globalThis.JSON.stringify(__encodeAgentResult(__TallyWire, methodName, result)), { headers: { "content-type": "application/json" } });
     }
@@ -105,11 +106,11 @@ export function __makeTally(key: string, env?: { TALLY?: __DurableObjectNamespac
 }
 
 export const place = {
-  async call(id: string, deps: { env: { TALLY: __DurableObjectNamespace }; __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<number> {
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+  async call(id: string, deps: { env: { TALLY: __DurableObjectNamespace }; __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<number> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Placed", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Placed", payload: { id: id }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "shop.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return __makeTally(id, deps.env).bump(id, deps);
     })();

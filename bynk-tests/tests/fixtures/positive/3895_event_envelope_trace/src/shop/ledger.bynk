@@ -1,0 +1,32 @@
+// #3895: a handler that declares the envelope reads the trace the event was
+// emitted in as `env.trace`, an `Option[String]`.
+context shop.ledger
+
+consumes shop.order
+consumes bynk { EventEnvelope }
+
+agent Books {
+  key id: String
+  store seen: Cell[String] = "unset"
+
+  on call note(t: String) -> Effect[()] {
+    seen := t
+  }
+
+  on call traceSeen() -> Effect[String] {
+    seen
+  }
+}
+
+fn describe(t: Option[String]) -> String {
+  match t {
+    Some(id) => id
+    None => "none"
+  }
+}
+
+service OnPlaced from Events(Placed) {
+  on event(e: Placed, env: EventEnvelope) -> Effect[()] {
+    Books(e.id).note(describe(env.trace))
+  }
+}

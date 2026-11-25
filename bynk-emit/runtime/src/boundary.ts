@@ -3,6 +3,7 @@ import type { Option } from "./result.ts";
 import { Ok, Err, Some, None } from "./result.ts";
 import type { ValidationBound, ValidationError, ValidationRule, WireViolation } from "./errors.ts";
 import { __bynkDecimalToString } from "./decimal.ts";
+import { TRACEPARENT_HEADER, admitTrace, formatTraceparent, isTraceId, outgoingTraceparent } from "./traceparent.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
@@ -390,6 +391,15 @@ export async function signature(key: string, fields: SignedFields): Promise<stri
   return hex(await crypto.subtle.sign("HMAC", await hmacKey(key, "sign"), new TextEncoder().encode(signingInput(fields))));
 }
 
+// #3895: the `traceparent` header a call or event delivery sends from inside a
+// trace, and none outside one. It is not part of the signing input: it is
+// observability metadata, and a callee reads it only from a request that has
+// already proved its caller.
+function traceHeaders(trace?: string): Record<string, string> {
+  const traceparent = trace !== undefined && isTraceId(trace) ? formatTraceparent(trace) : outgoingTraceparent();
+  return traceparent === undefined ? {} : { [TRACEPARENT_HEADER]: traceparent };
+}
+
 // The sending side: the headers that prove `caller` sent `body` to `callee`.
 // Throws, naming the unset key, when the Worker holds none for the edge:
 // sending without it would only come back as an opaque 401.
@@ -504,7 +514,10 @@ export async function verifyCall(
     sig,
     new TextEncoder().encode(signingInput(fields)),
   );
-  return ok ? new TextDecoder().decode(bytes) : refused;
+  if (!ok) return refused;
+  // #3895: only a request that proved its caller is read for a trace.
+  admitTrace(request);
+  return new TextDecoder().decode(bytes);
 }
 
 // #1969: the published cross-context wire format's version
@@ -562,6 +575,7 @@ async function callServiceCore<R>(
       "X-Bynk-Caller": callerContext,
       "X-Bynk-Contract": contractHash,
       [WIRE_VERSION_HEADER]: WIRE_VERSION,
+      ...traceHeaders(),
       ...signed,
     },
     body,
@@ -760,7 +774,7 @@ export async function deliverEvent(
   const signed = await signedHeaders(env, publisher, subscriber, path, "", "1", body, `the event delivery to ${servicePath}`);
   const request = new Request(`http://internal/_bynk/event/${servicePath}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...signed },
+    headers: { "content-type": "application/json", ...traceHeaders(envelopeTrace(envelope)), ...signed },
     body,
   });
   const response = await binding.fetch(request);
@@ -769,7 +783,26 @@ export async function deliverEvent(
   }
 }
 
-// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion }`)
+// #3895: the trace an event was emitted under, which the envelope carries as
+// `trace` (the fan-out Durable Object delivers outside the emitting request, so
+// the request scope cannot supply it).
+function envelopeTrace(envelope: unknown): string | undefined {
+  const trace = (envelope as { trace?: unknown } | null)?.trace;
+  return typeof trace === "string" ? trace : undefined;
+}
+
+// #3895: the envelope a subscriber's handler is handed, from one that was
+// minted in this process. The minting site writes `trace` as a bare id (so it
+// serialises as the wire's optional string, and is absent outside a trace); a
+// handler reads it as an `Option[String]`. An envelope that already carries an
+// `Option` is returned as it is.
+export function eventEnvelopeOf<E extends object>(envelope: E): Omit<E, "trace"> & { trace: Option<string> } {
+  const trace = (envelope as { trace?: unknown }).trace;
+  if (typeof trace === "object" && trace !== null) return envelope as Omit<E, "trace"> & { trace: Option<string> };
+  return { ...envelope, trace: isTraceId(trace) ? Some(trace) : None };
+}
+
+// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion, trace }`)
 // is declared in `adapter bynk`, not by a consumed context, so it never goes
 // through the ordinary `emit_record_codec` machinery a context's own boundary
 // types get (that machinery is rooted at a *consumed context's* exports;
@@ -785,7 +818,7 @@ export function deserialiseEventEnvelope(
   json: JsonValue,
   path: string = "$",
 ): Result<
-  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number },
+  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace: Option<string> },
   BoundaryError
 > {
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
@@ -828,5 +861,9 @@ export function deserialiseEventEnvelope(
       actual: typeof schemaVersion,
     });
   }
-  return Ok({ eventId, publisherId, emittedAt, schemaVersion });
+  // #3895: optional and additive. Absent, `null`, a malformed id and a Bynk
+  // `None` are all `None`: a trace must never make an event undeliverable.
+  const wireTrace = obj["trace"];
+  const trace = isTraceId(wireTrace) ? Some(wireTrace) : None;
+  return Ok({ eventId, publisherId, emittedAt, schemaVersion, trace });
 }
