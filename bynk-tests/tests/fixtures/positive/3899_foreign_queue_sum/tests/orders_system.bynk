@@ -1,0 +1,8 @@
+suite shop.orders as system {
+  case "a message signed by either foreign producer reaches the handler as that producer" {
+    let a <- fulfil.message(Order { id: "o1" }) by Legacy
+    let b <- fulfil.message(Order { id: "o2" }) by Partner
+    expect a is Ack
+    expect b is Retry("from the partner")
+  }
+}

@@ -721,6 +721,9 @@ pub fn call_admission_for(
 pub struct QueueAdmission {
     /// The foreign senders admitted, in `by` order.
     pub foreign: Vec<ForeignCaller>,
+    /// For a sum (`by who: Legacy | Partner`), the members in `by` order: the handler's `match`
+    /// reads which one signed the message.
+    pub sum: Option<Vec<CallSumMember>>,
 }
 
 /// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
@@ -732,13 +735,25 @@ pub fn queue_admission_for(
     protocol: &ServiceProtocol,
     actors: &HashMap<String, ActorDecl>,
 ) -> Option<QueueAdmission> {
-    if !matches!(protocol, ServiceProtocol::Queue { .. })
-        || !matches!(handler.kind, HandlerKind::Message)
-    {
+    if !matches!(protocol, ServiceProtocol::Queue { .. }) {
         return None;
     }
+    queue_admission_of(handler, actors)
+}
+
+/// [`queue_admission_for`] without the protocol, for a caller that has only the handler (the seam
+/// lowering): an `on message` whose `by` names `Foreign` actors is a queue consumer's, because the
+/// checker admits a `Foreign` actor only on `call` and queue handlers.
+pub fn queue_admission_of(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(handler.kind, HandlerKind::Message) {
+        return None;
+    }
+    let by = handler.by_clause.as_ref()?;
     let mut foreign = Vec::new();
-    for actor in &handler.by_clause.as_ref()?.actors {
+    for actor in &by.actors {
         // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
         let decl = actors.get(&actor.name)?;
         if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
@@ -757,7 +772,14 @@ pub fn queue_admission_for(
             })
         });
     }
-    (!foreign.is_empty()).then_some(QueueAdmission { foreign })
+    let sum = by.is_sum().then(|| {
+        foreign
+            .iter()
+            .cloned()
+            .map(CallSumMember::Foreign)
+            .collect()
+    });
+    (!foreign.is_empty()).then_some(QueueAdmission { foreign, sum })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —

@@ -646,6 +646,13 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                 {
                     crate::emitter::http_handler_method_name_ir(method, &path)
                 }
+                // #3899: a queue consumer's sum of `Foreign` senders, keyed by its handler method.
+                bynk_model::IrHandlerKind::Message
+                    if bynk_check::actors::queue_admission_for(h, &decl.protocol, &t.actors)
+                        .is_some_and(|a| a.sum.is_some()) =>
+                {
+                    crate::emitter::queue_handler_method_name(name, 0)
+                }
                 bynk_model::IrHandlerKind::Call
                 | bynk_model::IrHandlerKind::Http { .. }
                 | bynk_model::IrHandlerKind::Cron { .. }

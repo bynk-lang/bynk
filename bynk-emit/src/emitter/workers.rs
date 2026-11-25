@@ -318,11 +318,14 @@ pub(super) fn message_wrapper(
     if matches!(service.protocol, ServiceProtocol::WebSocket { .. }) {
         return None;
     }
+    let who =
+        bynk_check::actors::queue_admission_for(h, &service.protocol, actors).and_then(|a| a.sum);
     Some(emit_queue_wrapper(
         sname,
         queue_idx,
         h,
         email_actors(service, actors),
+        who.as_deref(),
     ))
 }
 
@@ -343,6 +346,7 @@ fn emit_queue_wrapper(
     queue_idx: usize,
     h: &Handler,
     email: Option<&HashMap<String, ActorDecl>>,
+    who: Option<&[bynk_check::actors::CallSumMember]>,
 ) -> TsObjectEntry {
     let method_key = crate::emitter::queue_handler_method_name(sname, queue_idx);
     // The queue handler takes its message parameter; forward it with deps. P7.2:
@@ -376,6 +380,18 @@ fn emit_queue_wrapper(
             } else {
                 call_args.push(ident("deps"));
             }
+        }
+        // #3899: a signed consumer's sum takes the resolved actor first, which the entry builds from
+        // the message's signer, and threads it into `deps` as `who`.
+        None if who.is_some() => {
+            params.insert(
+                0,
+                TsParam::new(
+                    "__who".to_string(),
+                    who.map(crate::emitter::emit::call_sum_ts_type),
+                ),
+            );
+            call_args.push(deps_spread_with("who", ident("__who")));
         }
         None => call_args.push(ident("deps")),
     }
