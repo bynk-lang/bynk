@@ -17,6 +17,14 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.693.0
+
+a unit that declares its own two-parameter `type MapEntry[A, B]` now gets `bynk.resolve.duplicate_type`, because `MapEntry[K, V]` is the prelude record; rename the type.
+
+## v0.692.0
+
+A response with `Content-Type: text/html` now carries `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy: strict-origin-when-cross-origin`, so a page meant to be embedded in another site's frame stops rendering there; name the embedder with `security { frameAncestors: ["https://embedder.example"] }`.
+
 ## v0.688.0
 
 `QueueSend.delay` is an `Option[QueueDelay]` instead of an `Option[Duration]`, so a computed `Duration` is refused with `bynk.types.some_value_mismatch` until it goes through `QueueDelay.of(d)`

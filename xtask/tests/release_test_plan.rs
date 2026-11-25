@@ -133,8 +133,7 @@ jq -r "$q" "$f"
     }
 }
 
-// macOS is paused with the release's macOS binaries (#4263).
-const ALL: &str = r#"["ubuntu-latest","windows-latest"]"#;
+const ALL: &str = r#"["ubuntu-latest","macos-latest","windows-latest"]"#;
 
 #[test]
 fn a_fully_green_push_run_leaves_nothing_to_run() {
@@ -314,7 +313,7 @@ fn a_lookalike_stamp_commit_does_not_borrow_its_parents_runs() {
         ],
     );
     if let Some(m) = f.plan("push", "sss") {
-        assert_eq!(m, r#"["windows-latest"]"#);
+        assert_eq!(m, r#"["macos-latest","windows-latest"]"#);
     }
 }
 
@@ -389,7 +388,7 @@ fn a_non_linux_leg_also_needs_a_green_nightly_on_that_os() {
             ],
         );
         let expected = match nightly {
-            None => r#"["windows-latest"]"#,
+            None => r#"["macos-latest","windows-latest"]"#,
             Some(jobs) => {
                 if tag == "nightlyrunning" {
                     f.put(

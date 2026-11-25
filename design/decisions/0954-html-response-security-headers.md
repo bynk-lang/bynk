@@ -1,14 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, ts_writes
-raises: ts_writes — the security policy literal carries two more typed string fields, the HTML CSP and referrer policy (#3923)
-breaking: A response with `Content-Type: text/html` now carries `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy: strict-origin-when-cross-origin`, so a page meant to be embedded in another site's frame stops rendering there; name the embedder with `security { frameAncestors: ["https://embedder.example"] }`.
-changelog: An HTML response gets `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy: strict-origin-when-cross-origin` by default, and `security { }` gains `frameAncestors`, `referrerPolicy` and an opt-in verbatim `csp`; a JSON response is unchanged
----
+# 0954 — HTML responses get framing and referrer protection, and security { } gains frameAncestors, referrerPolicy and csp
 
-## ADR: html-response-security-headers
-title: HTML responses get framing and referrer protection, and security { } gains frameAncestors, referrerPolicy and csp
-summary: A text/html response defaults to frame-ancestors 'none' and strict-origin-when-cross-origin, and the security section can name the framing sources, the referrer policy and a whole csp
+- **Status:** Accepted (v0.692)
 
 **Context.** `security { }` stamped `nosniff` and an opt-in HSTS, and its reference said that `Content-Security-Policy` and `X-Frame-Options` were left out because Bynk serves bytes and not markup, and that the `security { }` section is where they would land if it ever served HTML. It now does: pages are built from embedded shells and returned as `Raw(…, "text/html")`, and `RawError` serves an HTML error page. Those pages could be framed by any site (clickjacking) and sent no `Referrer-Policy`.
 

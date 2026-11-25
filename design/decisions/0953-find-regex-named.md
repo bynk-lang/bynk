@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `String.findRegexNamed(pattern)` reads the named capture groups of a regex literal by name, as an `Option[Map[String, Option[String]]]`
-probes: explained_codes, diagnostic_coverage, emit_diagnostics
----
+# 0953 — `findRegexNamed` returns a regex's named groups as a Map keyed by name
 
-## ADR: find-regex-named
-title: `findRegexNamed` returns a regex's named groups as a Map keyed by name
-summary: a new `String` kernel method reads the group names from the literal pattern at compile time; a pattern with none is an error
+- **Status:** Accepted (v0.691)
 
 **Context.** `findRegex` and `findAllRegex` return groups by position, although a pattern may name them and `replaceRegex` already reads `$<name>`. Reading `v[2]` for "minor" breaks silently when the pattern gains a group. A regex in Bynk is always a literal checked at compile time, so its group names are known to the compiler.
 

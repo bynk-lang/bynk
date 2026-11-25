@@ -7923,30 +7923,7 @@ pub fn reject_fn_types(
         // through another type (the resolver's `recursive_record_field` guard
         // only catches a direct self-edge in a non-generic record).
         TypeRef::App { name, args, span } => {
-            if !stream_passes(what)
-                && let Some(rg) = bynk_syntax::ast::recursive_generic_path(
-                    &TypeRef::App {
-                        name: name.clone(),
-                        args: Vec::new(),
-                        span: *span,
-                    },
-                    types,
-                )
-            {
-                errors.push(recursive_generic_at_boundary(&rg, *span, what));
-            }
-            for a in args {
-                reject_fn_types(a, what, types, errors);
-            }
-            // K-streams (#2623): a generic record whose own fields carry a
-            // stream (`Wrap[T] = { s: Stream[T] }`) is found through its
-            // declaration; a stream argument was reported just above.
-            if !stream_passes(what)
-                && let Some(path) =
-                    bynk_syntax::ast::stream_path(&TypeRef::Named(name.clone()), types)
-            {
-                errors.push(stream_carrying_at_boundary(&name.name, &path, *span, what));
-            }
+            crate::app_boundary::reject_app(name, args, *span, what, types, errors);
         }
         // #1883, slice 1a: an `Asset` names a file the platform serves; it
         // is not data. What crosses a boundary or is stored is its `.url`.
@@ -8081,7 +8058,7 @@ fn file_at_boundary(name: &str, path: &[String], span: Span, what: &str) -> Comp
 /// operation's provider runs in the caller's isolate, so nothing in its
 /// signature is serialised; a record field or sum payload makes its type
 /// stream-carrying, which is then checked where the type is used.
-fn stream_passes(what: &str) -> bool {
+pub(crate) fn stream_passes(what: &str) -> bool {
     [CAPABILITY_SIGNATURE, RECORD_FIELD, SUM_PAYLOAD].contains(&what)
 }
 
@@ -8121,7 +8098,7 @@ pub(crate) fn recursive_generic_at_boundary(
 
 /// K-streams (#2623): `bynk.types.stream_at_boundary` for a type that carries
 /// a stream in a field, naming the field chain it is reached through.
-fn stream_carrying_at_boundary(
+pub(crate) fn stream_carrying_at_boundary(
     name: &str,
     path: &[String],
     span: Span,

@@ -165,13 +165,22 @@ mod tests {
     }
 
     /// The #1762 regression, with a `.cmd` in place of wrangler: the script
-    /// starts two long-running background processes, as wrangler starts its
+    /// starts three long-running background processes, as wrangler starts its
     /// `workerd`s. Killing the `cmd.exe` wrapper outright, as `Child::kill` did,
     /// orphans them, the way a crashed wrangler orphans its `workerd`s. They are
     /// still in the job, and stopping the job must stop them.
     ///
     /// `ping -n 300` is the long-running process, not `timeout`, which exits at
     /// once when its stdin is not a console.
+    ///
+    /// The test does not count the job's processes to know the pings are up
+    /// (#4314): `cmd.exe` and its console host (`conhost.exe`) are in the job
+    /// too, so a total of four was reached before all three pings were running
+    /// and the orphans came out as two. Instead the script writes a marker after
+    /// each `start /b` returns, which is after that ping's process exists, and
+    /// the test waits for all three markers. The script also waits for a `go`
+    /// file the test writes once the job is assigned, so no ping can start
+    /// outside the job (the assignment race the module documents).
     #[test]
     fn a_killed_wrappers_orphans_are_stopped_with_the_job() {
         let dir = TempDir(std::env::temp_dir().join(format!("bynk-job-{}", std::process::id())));
@@ -181,8 +190,14 @@ mod tests {
         std::fs::write(
             &script,
             "@echo off\r\n\
+             :gate\r\n\
+             if not exist \"%~dp0go\" goto gate\r\n\
              start /b ping -n 300 127.0.0.1 >nul\r\n\
+             echo.>\"%~dp0started1\"\r\n\
              start /b ping -n 300 127.0.0.1 >nul\r\n\
+             echo.>\"%~dp0started2\"\r\n\
+             start /b ping -n 300 127.0.0.1 >nul\r\n\
+             echo.>\"%~dp0started3\"\r\n\
              ping -n 300 127.0.0.1 >nul\r\n",
         )
         .expect("the script is written");
@@ -193,16 +208,25 @@ mod tests {
             .spawn()
             .expect("the .cmd spawns");
         let job = Job::assign(&child).expect("the child is assigned to a job");
-        // `cmd.exe` and its three `ping`s.
-        let running = await_active(&job, "the script to start its pings", |n| n >= 4);
+        std::fs::write(dir.0.join("go"), "").expect("the script is released");
+        let started = Instant::now();
+        while !(1..=3).all(|i| dir.0.join(format!("started{i}")).exists()) {
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "timed out waiting for the script to start its three pings"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
 
         let _ = child.kill();
         let _ = child.wait();
-        let orphans = await_active(&job, "the wrapper to leave the job", |n| n < running);
+        // The wrapper is gone. Each ping was started before its marker, so all
+        // three are still running, whatever else is or is not in the job.
+        let orphans = job.active().expect("the job can be queried");
         assert!(
             orphans >= 3,
-            "the pings should outlive their parent, as the workerds do: {orphans} of \
-             {running} process(es) left after the wrapper was killed"
+            "the pings should outlive their parent, as the workerds do: {orphans} \
+             process(es) left after the wrapper was killed"
         );
 
         job.terminate();

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `Result` gains `orElse(f)`, pure recovery from an `Err` that may change the error type, and `err()`, the error as an `Option`
----
+# 0952 — Result.orElse and Result.err for pure error recovery
 
-## ADR: result-or-else-and-err
-title: Result.orElse and Result.err for pure error recovery
-summary: Adds orElse(f: E -> Result[T, F]) and err() to Result, matching Effect[Result].flatMapErr and Result.ok()
+- **Status:** Accepted (v0.690)
 
 **Context.** An `Effect[Result]` could recover from an error (`flatMapErr`, ADR 0176), but a plain `Result` could not: a fallback (try the cache, then the default; parse one format, else another) needed a `match`. And `ok()` dropped the error, but there was no `err()` to drop the value.
 
