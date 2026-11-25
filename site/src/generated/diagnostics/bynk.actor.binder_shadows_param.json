@@ -1,0 +1,10 @@
+{
+  "blurb": "A `by` clause with a binder, `by who: Visitor`, adds a name to the handler body beside its parameters. If the binder is spelt like a parameter it would hide it, so a body that read `body` would silently get the actor instead of the request body. The compiler refuses the clash rather than choose one. Rename the binder or the parameter. A `by` with no binder, `by Visitor`, adds no name and cannot clash.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.binder_shadows_param",
+  "constructs": [],
+  "example": "on POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by body: Visitor {   // ✗ `body` is already a parameter\n\non POST(\"/echo\") (body: String) -> Effect[HttpResult[String]] by who: Visitor {   // ✓ a name of its own",
+  "severity": "error",
+  "summary": "A `by` actor binder collides with a handler parameter of the same name."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "The context's `scheduled` entry point picks the handler by the schedule that fired, so each schedule may be declared once across all its `from cron` services. Two handlers with the same one would leave it with two to run. Merge them into one handler, or give one a different schedule.",
+  "category": "Cron",
+  "categoryAnchor": "cron",
+  "code": "bynk.cron.duplicate_schedule",
+  "constructs": [
+    "cron_handler"
+  ],
+  "example": "on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }\non schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] { … }   // ✗ already scheduled\n\non schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }     // ✓ a different schedule",
+  "severity": "error",
+  "summary": "Two cron handlers declare the same schedule."
+}

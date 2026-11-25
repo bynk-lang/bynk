@@ -1,0 +1,10 @@
+{
+  "blurb": "A context that `consumes` another may hold and pass on the other's types, but may not build an opaque one. (A `transparent` export, whether a context's or an adapter's, such as `bynk.cloudflare`'s `KvTtl`, is open to a consumer: `.of`, a variant and a record literal build it.) An opaque type can promise an invariant, a `Matches` pattern or a smart constructor, and that holds only if every value is made by the owner; `.of`, a variant constructor and record syntax are refused from outside, and so is `.unsafe` on any type. Ask the owner for the value instead: a service that returns it, or takes the plain input and does the check. `bynk.context.opaque_inspection` is the other side, looking inside such a value.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.external_construction",
+  "constructs": [],
+  "example": "// payment.bynk\ncontext payment\n\nexports opaque { AuthId }\n\ntype AuthId = String where Matches(\"AUTH-[0-9]+\")\n\nservice issue {\n    on call() -> Effect[AuthId] by Caller { … }\n}\n\n// orders.bynk\ncontext orders\n\nconsumes payment\n\nAuthId.of(s)             // ✗ only `payment` makes an `AuthId`\n\npayment.issue()          // ✓ ask `payment` for one",
+  "severity": "error",
+  "summary": "A context-owned type was constructed from outside that context."
+}

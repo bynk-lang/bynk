@@ -1,0 +1,10 @@
+{
+  "blurb": "`@raw`, `@form` and `@multipart` each say how a route's one `body` is read off the wire: untouched octets, a urlencoded form or a multipart upload. A body has one wire format, so a handler carries at most one of them, and the second one written is reported. Keep the annotation that matches what the client sends; a JSON body needs none of them.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.body_kind_conflict",
+  "constructs": [],
+  "example": "@form\n@raw(contentType: \"image/png\")   // ✗ the body is already a form\n@limit(maxBody: 1_000_000)\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form                           // ✓ one wire format\non POST(\"/signup\") (body: SignupForm) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`."
+}

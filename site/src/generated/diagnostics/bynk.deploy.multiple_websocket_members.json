@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket upgrade request names no service, and a `from websocket` service has no path of its own, so a Worker hands every upgrade to its one WebSocket service. A `[deploy.workers.<key>]` group folds its members into one Worker, so at most one member may declare a `from websocket` service, and that one takes every upgrade, whatever its path. Put the contexts in different groups, or leave one in no group so that it is a Worker of its own. Within one context, a second WebSocket service is `bynk.service.websocket_multiple`.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.multiple_websocket_members",
+  "constructs": [],
+  "example": "// bynk.toml\n[deploy.workers.live]\ncontexts = [\"live.chat\", \"live.scores\"]\n\n// live/chat.bynk\nservice chat from websocket(in: Frame, out: Frame) { … }\n\n// live/scores.bynk\ncontext live.scores   // ✗ the second member of `live` with a WebSocket service\nservice scores from websocket(in: Frame, out: Frame) { … }\n\n// bynk.toml\ncontexts = [\"live.chat\"]   // ✓ `live.scores` is a Worker of its own",
+  "severity": "error",
+  "summary": "More than one member of a `[deploy.workers.<key>]` group declares a `from websocket` service; an upgrade request names no path or service a group could route it by, so a group has at most one such member, which takes every upgrade request whatever the path."
+}

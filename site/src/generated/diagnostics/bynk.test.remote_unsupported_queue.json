@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.remote_unsupported_queue",
+  "constructs": [
+    "case"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A `system` case delivers a queue message with `q.message(m)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a queue consumer."
+}

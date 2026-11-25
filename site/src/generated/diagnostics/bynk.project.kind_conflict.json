@@ -1,0 +1,10 @@
+{
+  "blurb": "A name belongs to one unit, so every file declaring it must agree on its kind. One file saying `commons shop` and another `context shop` would make the name both a library and a deployable unit. Give the files different names, or make them the same kind. A context is the deployable unit, and a commons is the shared code it uses.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.kind_conflict",
+  "constructs": [],
+  "example": "// shop/types.bynk\ncommons shop        // ✗ the name is also a context\ncommons shop.types  // ✓\n\n// shop/api.bynk\ncontext shop",
+  "severity": "error",
+  "summary": "A name is declared as both a commons and a context."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A `given` clause names a capability that no provider declares. A capability is a typed interface to the outside world; it has to be *declared* (as a `capability`, or brought in from a consumed context) before a handler can ask for it. This usually means a typo in the capability name, or a missing `uses`/`consumes` that would bring the capability into scope.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.unknown_capability",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "provides Greeter = Polite given Loger { … }    // ✗ no capability named `Loger`\n\nprovides Greeter = Polite given Logger { … }   // ✓ matches the declared capability",
+  "severity": "error",
+  "summary": "`given` names a capability that does not exist."
+}

@@ -1,0 +1,7 @@
+// #4261: a function returning a consumed type that the app renames with `as`,
+// checked by suites that do and do not import the name.
+context shapes
+
+exports transparent { Code }
+
+type Code = String where Matches("[A-Z]{3}")

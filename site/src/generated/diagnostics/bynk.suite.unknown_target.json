@@ -1,0 +1,12 @@
+{
+  "blurb": "A `suite` names the commons or context it tests, by its full dotted name, and that unit must be declared in the project. A name that matches none, usually a typo or a unit not written yet, would leave the suite testing nothing. Correct the name, or declare the unit.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.unknown_target",
+  "constructs": [
+    "suite_decl"
+  ],
+  "example": "// demo/ledger.bynk\ncommons demo.ledger\n\n// tests/ledger.test.bynk\nsuite demo.ledgre { … }    // ✗ no such unit\nsuite demo.ledger { … }    // ✓",
+  "severity": "error",
+  "summary": "A `suite` targets a unit that does not exist."
+}

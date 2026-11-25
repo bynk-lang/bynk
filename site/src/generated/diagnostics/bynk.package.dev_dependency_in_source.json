@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[dev-dependencies]` package is there for the project's suites, and a deployable build leaves suites out, so a package that only suites need is never compiled into it. A context or commons that reached one would break that build, so only a suite may. If the source needs the package, move its entry to `[dependencies]`; otherwise keep the use in a suite.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.dev_dependency_in_source",
+  "constructs": [],
+  "example": "// bynk.toml\n[dev-dependencies]\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }\n\n// shop.bynk\nuses lib.notify      // ✗ a `[dev-dependencies]` alias is for suites\n\n// bynk.toml\n[dependencies]       // ✓ the entry moved here\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }",
+  "severity": "error",
+  "summary": "A commons, context or adapter reaches a `[dev-dependencies]` alias, which only a suite may use."
+}

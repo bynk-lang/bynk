@@ -1,0 +1,10 @@
+{
+  "blurb": "`@build` on a `Container` is a directory inside the project, written relative to the project root with `/` separators: `@build(\"containers/renderer\")`. An empty path, an absolute path, a drive path, a path with `\\` and a path that leaves the project with `..` are refused, so the build context can never reach outside the project and the emitted configuration stays a function of the source.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.container.build_path",
+  "constructs": [],
+  "example": "capability Renderer = Container @build(\"../renderer\") @port(8080)       // ✗ leaves the project\ncapability Renderer = Container @build(\"containers/renderer\") @port(8080) // ✓",
+  "severity": "error",
+  "summary": "A `Container`'s `@build` is not a directory inside the project: it is empty, absolute, uses `\\`, or leaves the project with `..`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "The only annotation an event accepts is `@schema(N)`, which asserts its schema version. Names like `@indexed` belong to agent state and mean nothing on an event, so a stray or misspelt one would be silently ignored if it were not refused. Remove the annotation, or use `@schema` with a positive integer.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.unknown_annotation",
+  "constructs": [],
+  "example": "event Paid @indexed = { id: String }   // ✗ not an event annotation\n\nevent Paid @schema(1) = { id: String }   // ✓",
+  "severity": "error",
+  "summary": "An `event` declaration carried an `@`-annotation other than `@schema` — event annotations are a closed set."
+}

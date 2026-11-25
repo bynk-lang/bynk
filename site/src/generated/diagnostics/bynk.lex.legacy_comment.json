@@ -1,0 +1,10 @@
+{
+  "blurb": "A `--` no longer starts a comment; a line comment is `//`. The old spelling is refused rather than reread, so a file written for it never changes meaning: `x = 1 -- note` is not quietly taken for `1 - -note`. The fix is machine-applicable: `bynk check --fix` applies it and `bynk fmt` rewrites a whole project. For a real `a - -b`, write the space.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.legacy_comment",
+  "constructs": [],
+  "example": "const Limit: Int = 100 -- the cap     // ✗ `--` is the old comment\nconst Limit: Int = 100        // ✓ a comment is `//`",
+  "severity": "error",
+  "summary": "A `--` line comment, the spelling before #2203; a comment is `//` (auto-fixable; `bynk fmt` rewrites it)."
+}

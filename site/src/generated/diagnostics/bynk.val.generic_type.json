@@ -1,0 +1,12 @@
+{
+  "blurb": "`Val[T]` fabricates a value for a test from the declaration of `T`. That is not yet done for each instantiation of a generic type, so `Val` refuses one whether it is written bare, `Val[Box]`, or applied, `Val[Box[Int]]`. The type itself is fine, and may cross a boundary through its codec; only fabrication is missing. Build the value yourself instead: a record literal for a generic record, one of its variants for a generic sum.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.generic_type",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "type Box[T] = { v: T }\n\nlet b = Val[Box[Int]]    // ✗ a generic type cannot be fabricated\n\nlet b = Box { v: 1 }     // ✓ build it",
+  "severity": "error",
+  "summary": "A `Val[…]` fabricates a value of a generic type; per-instantiation value fabrication is not yet wired (ADR 0197). The type itself may cross a boundary through its monomorphised codec (v0.174). Named `bynk.generics.generic_record_at_boundary` before #3379."
+}

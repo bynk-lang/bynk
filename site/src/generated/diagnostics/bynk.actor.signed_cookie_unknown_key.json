@@ -1,0 +1,10 @@
+{
+  "blurb": "A `SignedCookie` takes `secret`, `ttl`, `cookie`, `previous` and `sameSite`, and nothing else. The set is closed so a misspelt option is refused rather than ignored. The cookie's `Domain` and `Path` are not configurable on purpose: the issued cookie is always host-only and `Path=/`, which keeps a `__Host-` name valid.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_unknown_key",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, domain = \"example.com\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` config has a key outside the closed set."
+}

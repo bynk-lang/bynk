@@ -1,0 +1,10 @@
+{
+  "blurb": "A `messages` block is pure, stateless data, which is what a `commons` holds. A context carries services and state and an adapter wraps foreign code, and neither takes a bundle. Move the bundle into a commons, with the two `uses` lines it needs, and have the context `uses` that commons.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.outside_commons",
+  "constructs": [],
+  "example": "context shop.web\n\nmessages \"en\" @reference { … }          // ✗ a context cannot hold a bundle\n\ncommons shop.messages\n\nuses bynk.locale\nuses bynk.locale.types\nmessages \"en\" @reference { … }          // ✓ a commons can",
+  "severity": "error",
+  "summary": "A `messages` declaration appears outside a commons."
+}

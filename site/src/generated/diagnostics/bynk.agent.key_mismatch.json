@@ -1,0 +1,12 @@
+{
+  "blurb": "The key is what picks an instance, so its type is fixed by the agent: the type of its `key` field. An agent keyed by `String` cannot be addressed by an `Int`, because `1` and `\"1\"` would otherwise be easy to confuse and could name different instances. Pass a value of the key's type. The number of key arguments is `bynk.agent.construction_arity`.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.key_mismatch",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Counter {\n  key id: String\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n\nlet v <- Counter(1).get()     // ✗ the key is a `String`\nlet v <- Counter(\"a\").get()   // ✓",
+  "severity": "error",
+  "summary": "An agent key argument has the wrong type."
+}

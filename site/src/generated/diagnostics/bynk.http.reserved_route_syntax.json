@@ -1,0 +1,12 @@
+{
+  "blurb": "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.reserved_route_syntax",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "A route segment contains `*`, `{` or `}`, which are reserved for a future route form."
+}

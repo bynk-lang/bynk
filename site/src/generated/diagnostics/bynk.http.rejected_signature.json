@@ -1,0 +1,12 @@
+{
+  "blurb": "`on rejected` renders the router's own refusals, such as a `413` or a `405`, before any handler or actor exists, so it has a fixed shape: one parameter typed `BoundaryRejection`, returning `HttpResult[()]` or `Effect[HttpResult[()]]`, with no `by`, since no actor is known yet, and no `given`, since it only renders a body. Each departure is reported with the form to write. A second `on rejected` is `bynk.http.duplicate_rejected`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rejected_signature",
+  "constructs": [
+    "rejected_handler"
+  ],
+  "example": "on rejected(why: String) -> Effect[HttpResult[()]] { … }             // ✗ the parameter is a `BoundaryRejection`\n\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }   // ✓",
+  "severity": "error",
+  "summary": "An `on rejected` handler is not `on rejected(why: BoundaryRejection) -> HttpResult[()]` with no `by` and no `given`."
+}

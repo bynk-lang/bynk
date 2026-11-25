@@ -44,6 +44,54 @@ use bynk_check::checker::{ExprId, Types};
 /// the crate move.
 type Overlay = HashMap<PathBuf, String>;
 
+/// #3956: the project's own parsed units (its source trees, not its
+/// dependencies'), for a command that reads declarations without checking them
+/// (`bynk lock accept-order`). A syntax error is refused: the order of a type
+/// that does not parse is not a fact to record.
+pub fn parse_own_units(options: &CompileOptions) -> Result<Vec<ParsedFile>, String> {
+    use bynk_check::project_model::{ErrorSink, phase_discovery, phase_parse};
+    let trees = options.roots.trees();
+    let excludes = options.roots.excludes();
+    let (overlay, discovered) = match &options.sources {
+        Some(sources) => sources_to_discovered(sources, &trees),
+        None => (HashMap::new(), None),
+    };
+    let mut errors = ErrorSink::new();
+    let mut snapshots = Vec::new();
+    let refused = |errors: ErrorSink| {
+        let first = errors
+            .into_all()
+            .into_iter()
+            .next()
+            .map(|e| e.error.message);
+        match first {
+            Some(why) => [
+                "the project does not parse: ",
+                why.as_str(),
+                "; fix it first (`bynk check`)",
+            ]
+            .concat(),
+            None => "the project does not parse; fix it first (`bynk check`)".to_string(),
+        }
+    };
+    let file_lists = match discovered {
+        Some(files) => files,
+        None => match phase_discovery(&trees, &excludes, &mut errors) {
+            Ok(files) => files,
+            Err(()) => return Err(refused(errors)),
+        },
+    };
+    let Ok((parsed, _, _)) =
+        phase_parse(&trees, &file_lists, &overlay, &mut errors, &mut snapshots)
+    else {
+        return Err(refused(errors));
+    };
+    if !errors.is_empty() {
+        return Err(refused(errors));
+    }
+    Ok(parsed)
+}
+
 /// One file list per `trees` entry — the same shape `phase_discovery` and
 /// `run_checks`'s own `discovered` parameter already use.
 type Discovered = Vec<Vec<PathBuf>>;

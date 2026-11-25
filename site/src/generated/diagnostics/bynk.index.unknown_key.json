@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.index.unknown_key",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An `@indexed(by: k)` field is not a field of the map's value type."
+}

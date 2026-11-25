@@ -1,0 +1,10 @@
+{
+  "blurb": "In `by who: A | B` the peers are tried in order and the first to verify wins. `Visitor`, or any other `None` peer, accepts everyone, so a peer after it can never be reached and its check would never run. Put the catch-all last. A repeated scheme is a different mistake, `bynk.actor.duplicate_sum_scheme`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.unreachable_sum_arm",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Visitor | User {   // ✗ `Visitor` accepts everyone first\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ the catch-all last",
+  "severity": "error",
+  "summary": "A multi-actor sum has an arm unreachable after a catch-all (`None`) peer."
+}

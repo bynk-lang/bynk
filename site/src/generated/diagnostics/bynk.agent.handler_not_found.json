@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent is used through the handlers it declares with `on call`, so a method name it does not declare is a mistake: usually a misspelling, or a handler that was never written. Check the name against the agent's declaration, or add the handler. To read a `store` field from a caller, add a handler that returns it.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.handler_not_found",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Counter {\n  key id: String\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n\nlet v <- Counter(\"a\").nope()   // ✗ `Counter` declares no `nope`\nlet v <- Counter(\"a\").get()    // ✓ a declared handler",
+  "severity": "error",
+  "summary": "Called a handler the agent does not declare."
+}

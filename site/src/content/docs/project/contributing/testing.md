@@ -96,6 +96,7 @@ with no content hash:
 ```text
 <<bynk-shared: std/bynk.ts#bytes+errors+result>>
 <<bynk-shared: testing/expectation>>
+<<bynk-shared: test-runner#base>>
 ```
 
 The region itself lives once under `bynk-tests/tests/fixtures/shared/`. The
@@ -109,6 +110,11 @@ emit different bytes for the same module and variant.
   Its variant is the sorted set of `__bynk_runtime/*` modules it imports (the
   emitter prunes per project). Adding or removing such an import renames the
   variant, which re-blesses the fixtures that use it.
+- The fixed part of `main()` in `tests/main.ts` (the `modules` list stays in the fixture) is
+  delimited by comments the emitter writes, `bynk:shared-begin test-runner#<variant>` to
+  `bynk:shared-end`. Its variant names the optional parts the runner carries (`detach`,
+  `generative`, `pg`, `remote`), or is `base`. A build whose runner carries something of its own
+  (a snapshot report) is not delimited and stays in the fixture.
 - A test-runtime fragment has no emitted delimiter, so it is found by exact match of
   `bynk-emit/src/testgen/test_runtime/<name>.ts`. A changed or partial copy is not
   elided and fails the comparison with a full diff.

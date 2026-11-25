@@ -1,0 +1,12 @@
+{
+  "blurb": "A backslash in a string literal starts an escape, and this one is not in the set: `\\n`, `\\r`, `\\t`, `\\0`, `\\\"`, `\\\\`, `\\u{…}` (1 to 6 hex digits in braces) and `\\(…)` for interpolation. To write a backslash itself, double it, as in a Windows path. A `\\u{…}` naming a surrogate or a value past U+10FFFF is `bynk.lex.bad_unicode_escape`.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.bad_escape",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": "const Dir: String = \"C:\\Users\"      // ✗ `\\U` is not an escape\nconst Dir: String = \"C:\\\\Users\"     // ✓ a doubled backslash",
+  "severity": "error",
+  "summary": "An invalid escape sequence in a string literal."
+}

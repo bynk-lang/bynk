@@ -1,0 +1,12 @@
+{
+  "blurb": "A lambda's parameter types come from where it is used: passed to `map` over a `List[Int]`, `(x) => x + 1` takes `x: Int`. A lambda standing alone, bound by a `let` for instance, has no such context, and the compiler asks for the type rather than guess it from the body. Annotate the parameter, or pass the lambda directly where a function type is expected.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.lambda.unannotated_param",
+  "constructs": [
+    "lambda_expr"
+  ],
+  "example": "let f = (x) => x + x          // ✗ nothing says what `x` is\n\nlet f = (x: Int) => x + x     // ✓ annotated",
+  "severity": "error",
+  "summary": "A lambda parameter has no type annotation in a position where no function type is expected to infer it from."
+}

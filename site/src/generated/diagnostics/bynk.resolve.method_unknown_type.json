@@ -1,0 +1,10 @@
+{
+  "blurb": "A method is declared on a type, as in `fn Order.total(self)`, and the type has to be declared in the same unit, so that every value of it can reach the method. A misspelt or missing type is the usual cause. Correct the name, or declare the type next to the method.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.method_unknown_type",
+  "constructs": [],
+  "example": "fn Order.total(self) -> Int { 1 }         // ✗ there is no type `Order` here\n\ntype Order = { id: Int }\n\nfn Order.total(self) -> Int { self.id }   // ✓ `Order` is declared in this unit",
+  "severity": "error",
+  "summary": "A method is defined on an unknown type."
+}

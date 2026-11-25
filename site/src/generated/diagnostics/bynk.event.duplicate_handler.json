@@ -1,0 +1,12 @@
+{
+  "blurb": "A `from Events(E)` service has exactly one `on event` handler. To react to an event in two ways, declare two services, each subscribing to it: every subscriber is delivered to independently. So the second handler is refused here, and the fix is to move it into a service of its own.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.duplicate_handler",
+  "constructs": [
+    "event_handler"
+  ],
+  "example": "service onPaid from Events(Paid) {\n    on event(e: Paid) -> Effect[()] { … }\n    on event(e: Paid) -> Effect[()] { … }   // ✗ a service has one `on event` handler\n}\n\nservice onPaidAudit from Events(Paid) {     // ✓ a second subscriber, delivered to separately\n    on event(e: Paid) -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "A `from Events` service declares more than one `on event` handler; it has exactly one."
+}

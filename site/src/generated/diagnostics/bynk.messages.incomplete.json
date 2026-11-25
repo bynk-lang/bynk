@@ -1,0 +1,10 @@
+{
+  "blurb": "Every locale is held to the reference locale: it must supply each code the reference declares, so that no locale silently lacks a message the reference has. The diagnostic is reported once per missing code, at the locale's block. Add the missing code to the locale. When you add a code to the reference, every other locale must follow. A code that is present with different placeholders is `bynk.messages.placeholder_mismatch`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.incomplete",
+  "constructs": [],
+  "example": "messages \"en\" @reference {\n  \"cart.empty\" => \"Your basket is empty.\"\n  \"cart.greeting\" => \"Hello, {name}!\"\n}\n\nmessages \"fr\" {                         // ✗ lacks \"cart.greeting\"\n  \"cart.empty\" => \"Votre panier est vide.\"\n  \"cart.greeting\" => \"Bonjour, {name} !\"  // ✓ the code added\n}",
+  "severity": "error",
+  "summary": "A locale is missing a code the reference locale declares."
+}

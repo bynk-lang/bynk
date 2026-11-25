@@ -1,0 +1,12 @@
+{
+  "blurb": "A service has one CORS policy, and it applies to every route in it. Two `cors` blocks could grant different things, and the reader would not know which holds, so the second is refused. Merge them into one. `security` and `limits` follow the same rule (`bynk.parse.duplicate_security`, `bynk.parse.duplicate_limits`), as does `json` (`bynk.parse.duplicate_json`).",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.duplicate_cors",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service api from http {\n    cors { origins: [\"https://a.example\"] }\n    cors { origins: [\"https://b.example\"] }          // ✗ a second `cors`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"https://a.example\", \"https://b.example\"] }   // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `cors { }` policy."
+}

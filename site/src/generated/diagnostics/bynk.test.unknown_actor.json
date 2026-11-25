@@ -1,0 +1,12 @@
+{
+  "blurb": "A call-site `by <Actor>` makes the case act as that actor, so it must name an `actor` the target context declares, or one of the prelude actors such as `Visitor` and `Caller`. Any other name, often a misspelling, has no identity to supply. Correct the name or declare the actor.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.unknown_actor",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/items\") by Ghost(\"x\")   // ✗ no actor `Ghost`\nlet r <- api.GET(\"/items\") by User(\"x\")    // ✓",
+  "severity": "error",
+  "summary": "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor."
+}

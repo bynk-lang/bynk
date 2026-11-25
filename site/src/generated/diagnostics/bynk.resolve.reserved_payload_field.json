@@ -1,0 +1,12 @@
+{
+  "blurb": "A sum value is encoded as a flat JSON object whose `kind` field holds the variant's name, so a payload field called `kind` would collide with that tag. Rename the field, for instance to `category`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.reserved_payload_field",
+  "constructs": [
+    "sum_type"
+  ],
+  "example": "type Shape = | Circle(kind: String, r: Int) | Square(side: Int)   // ✗ `kind` is the variant tag\n\ntype Shape = | Circle(category: String, r: Int) | Square(side: Int)   // ✓ any other name",
+  "severity": "error",
+  "summary": "A sum variant declares a payload field named `kind`, the variant's wire discriminant."
+}

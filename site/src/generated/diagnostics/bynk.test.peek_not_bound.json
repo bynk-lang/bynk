@@ -1,0 +1,12 @@
+{
+  "blurb": "`D1.peek(<participant>.<Capability>)` stands as the value of a `let`, and the case reads through the handle that binds. A `D1.peek` anywhere else, as an argument or the receiver of a call, has no handle to keep.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.peek_not_bound",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/orders.test.bynk\nsuite shop.orders as system {\n  case \"peeks\" {\n    let rows <- D1.peek(shop.orders.Orders).all(\"SELECT id FROM orders\", [])   // ✗ the handle is not bound\n    let db = D1.peek(shop.orders.Orders)                                      // ✓\n    expect true\n  }\n}",
+  "severity": "error",
+  "summary": "`D1.peek` is used anywhere but as the value of a `let`; the handle is what a case reads through."
+}

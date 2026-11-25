@@ -296,12 +296,7 @@ fn events_boundary_rejects_malformed_payload_and_envelope_on_workerd() {
         "expected workers/boundary-probe — context dasherisation changed?"
     );
 
-    // Offset from both `workers_runtime_smoke.rs`'s and
-    // `events_ordering_workerd.rs`'s port bands so three tests spawning
-    // `wrangler dev` concurrently cannot collide.
-    let base = 40_000 + 2 * (std::process::id() % 4_000) as u16;
-    let port = base;
-    let inspector_port = base + 1;
+    let [port, inspector_port] = wrangler::ports::free_ports();
 
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
@@ -503,13 +498,7 @@ fn events_boundary_field_default_cross_context_on_workerd() {
         "expected workers/commerce-order to also be emitted"
     );
 
-    // A distinct band from both `events_ordering_workerd.rs`'s
-    // (30_000 + 4*pid%4000) and this file's own self-subscription test's
-    // (40_000 + 2*pid%4000), so all three can run concurrently without a
-    // port collision.
-    let base = 55_000 + 2 * (std::process::id() % 4_000) as u16;
-    let port = base;
-    let inspector_port = base + 1;
+    let [port, inspector_port] = wrangler::ports::free_ports();
 
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();

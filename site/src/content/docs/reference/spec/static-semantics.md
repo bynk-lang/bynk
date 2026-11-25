@@ -1101,6 +1101,20 @@ or removed field) is carried through unchanged and written back, never silently
 dropped. A value that has no wire form, such as a non-finite `Float`, cannot be
 stored: the commit faults and nothing persists.
 
+**Recorded orders.** A build also reconciles the order of each `derives Ord` type
+the project itself declares (not a dependency's, and not the standard library's)
+against the lock's `[orders]` section, keyed `<unit>.<Type>`: the field names of
+a record in declaration order, or the variant names of a sum in declaration
+order with each variant's payload field names in order. A new type is recorded;
+an unchanged order keeps its entry. A field or variant added at the end, a type
+or member removed, and a member renamed in place update the entry. Any other
+change to the names both orders share (two swap relative order, or one is
+inserted anywhere but the end) is `bynk.types.ord_order_changed`, and the entry
+is left as it was until `bynk lock accept-order` rewrites it. Dropping
+`derives Ord` removes the entry. A lock with no entry is at the version it always
+had; one with entries is at version 3, which an older toolchain refuses rather
+than drops.
+
 **Recorded state shapes.** A build also reconciles each agent class's stored shape
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
 shape is its storage kind and its value types, expanded structurally (record

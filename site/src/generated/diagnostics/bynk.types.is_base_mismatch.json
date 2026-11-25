@@ -1,0 +1,12 @@
+{
+  "blurb": "`value is Quantity` runs a refined type's predicates against the value. A refined type is a base type plus predicates, so the value must have that base: an `Int` can be checked against `Int where …`, but a `String` has nothing for an `Int` range to test. Check the value against a refined type over its own type, or convert it first, for example by parsing the `String`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.is_base_mismatch",
+  "constructs": [
+    "is_expr"
+  ],
+  "example": "type Quantity = Int where InRange(1, 100)\n\ns is Quantity    // ✗ `s` is a `String`, `Quantity` is over `Int`\n\nn is Quantity    // ✓ `n` is an `Int`",
+  "severity": "error",
+  "summary": "An `is` refinement check is applied to a value of the wrong base type."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "The bindings of a `par` block are issued together and the block waits for all of them, so a `?` inside one has no single place to return from. Bind each effect's `Result` in the block and apply `?` after it, where the lines run in source order and the first `Err` propagates. A `?` on an argument can be computed before the block instead.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.par.question_in_join",
+  "constructs": [
+    "par_stmt"
+  ],
+  "example": "par {\n    let a <- Users.find(1)\n    let b <- Orders.forUser(parse(raw)?)   // ✗ `?` inside the block\n}\n\nlet key = parse(raw)?                      // ✓ unwrap it before the block\npar {\n    let a <- Users.find(1)\n    let b <- Orders.forUser(key)\n}",
+  "severity": "error",
+  "summary": "A `?` appears inside a `par { … }` binding. `?` takes a `Result` value, not an effect, so a binding's own result is unwrapped after the block (`let user = userR?`), where the `?` lines run in source order; a `?` on an argument is computed before the block."
+}

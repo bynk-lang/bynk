@@ -1,0 +1,12 @@
+{
+  "blurb": "A `let` that takes a value apart with a pattern gives its names the types they have in the value, so it has no place for an annotation after the pattern. Remove the `: Type`. To pin the type of the value itself, annotate an ordinary `let` first and match on that.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.let_pattern_annotation",
+  "constructs": [
+    "let_else_stmt"
+  ],
+  "example": "fn count(r: Result[Int, String]) -> Int {\n    let Ok(n): Int = r else { 0 }     // ✗ a pattern takes its types from the value\n    n\n}\n\nfn count(r: Result[Int, String]) -> Int {\n    let Ok(n) = r else { 0 }          // ✓\n    n\n}",
+  "severity": "error",
+  "summary": "A `let` with a pattern carries a type annotation; the pattern's names take their types from the value."
+}

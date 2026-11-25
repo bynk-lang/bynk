@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.target.vendor_conflict",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "One deployment unit's in-process closure uses platform-native capabilities from two mutually-exclusive platforms."
+}

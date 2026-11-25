@@ -1,0 +1,10 @@
+{
+  "blurb": "A `cors { }` policy has four fields: `origins`, `headers`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cors_unknown_field",
+  "constructs": [],
+  "example": "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hour }    // ✓",
+  "severity": "error",
+  "summary": "A `cors { }` policy declares a field outside the closed set."
+}

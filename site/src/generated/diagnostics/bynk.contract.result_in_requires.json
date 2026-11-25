@@ -1,0 +1,10 @@
+{
+  "blurb": "A `requires` clause is checked on entry, before the function has returned anything, so `result` is not bound there. Only an `ensures` can read it. Either state the condition over the parameters, or, if it is a claim about the return value, make it an `ensures`. A parameter that is itself named `result` is read as that parameter.",
+  "category": "Contracts",
+  "categoryAnchor": "contracts",
+  "code": "bynk.contract.result_in_requires",
+  "constructs": [],
+  "example": "fn inc(x: Int) -> Int\n  requires small: result < 100    // ✗ nothing has been returned yet\n\nfn inc(x: Int) -> Int\n  ensures small: result < 100     // ✓ checked on exit",
+  "severity": "error",
+  "summary": "A precondition (`requires`) references `result`; the return value is only in scope inside an `ensures`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.unreadable_file",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An `embed` names a file in the project's `embeds/` folder that could not be read."
+}

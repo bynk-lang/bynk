@@ -467,18 +467,20 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         })
         .collect();
     main_body.push(const_("modules", TsExpr::multiline_array(modules_items)));
-    main_body.push(TsStmt::let_stmt(
-        TsBindingName::Ident("passed".to_string()),
-        None,
-        Some(num_lit("0")),
-        None,
-    ));
-    main_body.push(TsStmt::let_stmt(
-        TsBindingName::Ident("failed".to_string()),
-        None,
-        Some(num_lit("0")),
-        None,
-    ));
+    let shared = runner_shared_comments(tests, pg);
+    main_body.extend(
+        shared
+            .as_ref()
+            .map(|(b, _)| TsStmt::comment(b.as_str(), None)),
+    );
+    for counter in ["passed", "failed"] {
+        main_body.push(TsStmt::let_stmt(
+            TsBindingName::Ident(counter.to_string()),
+            None,
+            Some(num_lit("0")),
+            None,
+        ));
+    }
     // v0.59: `--format json` sets BYNK_TEST_FORMAT=ndjson and captures stdout;
     // the runner then emits one JSON event per line (an internal protocol the
     // driver re-renders into the pinned document). Otherwise the human ✓ / ✗
@@ -841,6 +843,7 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
         expr_stmt(call(member(ident("process"), "exit"), vec![num_lit("1")])),
     ));
 
+    main_body.extend(shared.map(|(_, end)| TsStmt::comment(end, None)));
     program.push(TestRuntimeModule::TestFilter.splice());
     program.push(TsStmt::decl(
         TsDecl::Function {
@@ -856,6 +859,38 @@ pub fn emit_test_main(tests: &[RunnableTest], import_ext: ImportExt, pg: bool) -
     ));
     program.push(expr_stmt(call(ident("main"), vec![])));
     program
+}
+
+/// #4268: the begin and end comments around the fixed part of `main()`, so the snapshot harness
+/// can find it (`bynk-tests/tests/support/shared_snapshots.rs` matches these two strings). The
+/// variant names which optional parts the runner carries. Inert comments: the program is otherwise
+/// unchanged.
+const SHARED_BEGIN: &str = "bynk:shared-begin test-runner#";
+const SHARED_END: &str = "bynk:shared-end";
+
+/// The begin and end comment text for the fixed part of `main()` this build emits. The begin
+/// comment names the variant: the optional parts it carries, or `base`. `None` when the part
+/// holds something particular to this build (the snapshot report lists the modules that take a
+/// snapshot), so it is not delimited.
+fn runner_shared_comments(tests: &[RunnableTest], pg: bool) -> Option<(String, &'static str)> {
+    if tests.iter().any(|t| !t.snapshot_files.is_empty()) {
+        return None;
+    }
+    let parts: Vec<&str> = [
+        (tests.iter().any(|t| t.detach_reports), "detach"),
+        (tests.iter().any(|t| t.generative), "generative"),
+        (pg, "pg"),
+        (tests.iter().any(|t| t.remote), "remote"),
+    ]
+    .into_iter()
+    .filter_map(|(on, name)| on.then_some(name))
+    .collect();
+    let variant = if parts.is_empty() {
+        "base".to_string()
+    } else {
+        parts.join("+")
+    };
+    Some(([SHARED_BEGIN, variant.as_str()].concat(), SHARED_END))
 }
 
 /// #3321: closes the PGlite databases a run started. PGlite leaves a ten-second
@@ -1105,6 +1140,10 @@ mod tests {
         .replace(
             "<<bynk-shared: testing/test_filter>>\n",
             include_str!("../../../bynk-tests/tests/fixtures/shared/testing/test_filter.ts"),
+        )
+        .replace(
+            "<<bynk-shared: test-runner#base>>\n",
+            include_str!("../../../bynk-tests/tests/fixtures/shared/test-runner@base.ts"),
         );
         let tests = vec![RunnableTest {
             snapshot_files: Vec::new(),

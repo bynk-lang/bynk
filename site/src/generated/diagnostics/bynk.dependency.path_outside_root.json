@@ -1,0 +1,10 @@
+{
+  "blurb": "Your own project's path dependencies can point anywhere, but a dependency's own path dependencies are honoured only when they stay inside the workspace: a path out of it names a directory that need not exist where the package is used. A fetched package's path dependencies are never honoured. Move the target into the workspace.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.dependency.path_outside_root",
+  "constructs": [],
+  "example": "# lib/bynk.toml, a dependency of the project\n[dependencies]\ncore = { package = \"acme/core\", path = \"../../outside\" }   // ✗ outside the workspace\n\ncore = { package = \"acme/core\", path = \"../core\" }         // ✓ a workspace member",
+  "severity": "error",
+  "summary": "A path dependency declared by a dependency resolves outside the workspace; a dependency's own path dependencies are honoured only between members of one workspace."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Cache` entry expires, and every operation on it but `remove` reads the clock to decide whether an entry is still live. So a handler that uses a `Cache` must declare `given Clock`, the same way one that reads the time itself would; the dependency is explicit even though the body never names the clock. Add `given Clock` to the handler's signature.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.cache_needs_clock",
+  "constructs": [],
+  "example": "consumes bynk { Clock }\n\nstore live: Cache[String, Int] @ttl(5.minutes)\n\non call touch() -> Effect[()] {\n    let _ <- live.put(\"a\", 1)   // ✗ expiry reads the clock, which the handler does not declare\n    Effect.pure(())\n}\n\non call touch() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- live.put(\"a\", 1)\n    Effect.pure(())\n}",
+  "severity": "error",
+  "summary": "A handler performs a `Cache` operation (TTL expiry reads the clock) without declaring `given Clock`."
+}

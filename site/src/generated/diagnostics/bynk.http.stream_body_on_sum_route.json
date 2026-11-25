@@ -1,0 +1,10 @@
+{
+  "blurb": "A route `by` a sum of actors, such as `User | Visitor`, reads and verifies the request body itself before the handler runs. A streamed `body` is not read until the handler pulls it, so the two cannot both own it and the pair is refused. Name one actor on the route, or split it into one route per actor.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.stream_body_on_sum_route",
+  "constructs": [],
+  "example": "actor User { auth = Bearer(secret = \"AUTH_JWT_SECRET\"), identity = UserId }\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 5_000_000)\non PUT(\"/avatars\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by who: User | Visitor { … }   // ✗ a sum of actors\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 5_000_000)\non PUT(\"/avatars\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by who: User { … }             // ✓ one actor",
+  "severity": "error",
+  "summary": "A route with a streamed `body` has a `by` clause that is a sum of actors, whose wrapper reads the body itself."
+}

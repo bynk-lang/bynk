@@ -1,9 +1,9 @@
 //! Central registry of diagnostic codes.
 //!
 //! This is the single source of truth for the `bynk.*` codes the compiler can
-//! emit. The reference page `site/src/content/docs/reference/diagnostics.md` is generated
-//! from [`render_markdown`], and the test `tests/diagnostics_registry.rs`
-//! asserts that this table matches exactly the set of codes used across the
+//! emit. The reference index `site/src/content/docs/reference/diagnostics.md` is assembled at site
+//! build time from the per-code files [`render_json_per_code`] writes (#4286), and the test
+//! `tests/diagnostics_registry.rs` asserts that this table matches exactly the set of codes used across the
 //! compiler source — so a new code cannot be introduced without documenting it
 //! here, and a removed code cannot linger in the docs.
 //!
@@ -55,7 +55,7 @@ pub const D_PATH: &str = "/d/";
 /// A curated, offline-complete explanation of a diagnostic code (#853).
 ///
 /// The `blurb`/`example` are the offline answer `bynk explain` prints, and the
-/// text of the code's page on the site ([`render_json`]). Where that page
+/// text of the code's page on the site ([`render_json_per_code`]). Where that page
 /// lives, and which reference sections it links to, belong to the docs
 /// (`site/src/data/diagnostic-links.json`), not to this table (#3876): the
 /// toolchain links every code as [`href`], so a docs reorganisation never
@@ -6195,6 +6195,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Key = | Id(n: Int) | Name(n: String)\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) | Name(n) => \"key\"    // ✗ `n` is an `Int` and a `String`\n    }\n}\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) => \"id\"               // ✓ one arm each\n        Name(n) => n\n    }\n}",
     },
     Explain {
+        code: "bynk.types.ord_order_changed",
+        blurb: "A `derives Ord` type orders by declaration order: a record by its fields in turn, a sum \
+                or enum by its variants and then their payloads. Moving a field or variant changes \
+                how every value of the type sorts, and nothing else would notice, so bynk.schema.lock \
+                records the order of each of the project's `derives Ord` types under `[orders]` and a \
+                build that finds a different one fails until the change is accepted. Swapping two \
+                existing fields or variants, or inserting one anywhere but the end, is a change; \
+                adding at the end, removing, and renaming in place are not, and the lock follows \
+                them. If the new order is intended, run `bynk lock accept-order <Type>` (or \
+                `--all`) and commit the lock with the change; otherwise put the declaration back.",
+        example: "// tasks.bynk, with `Priority` recorded as Low < Medium < High\n\
+                  type Priority = enum { High, Low, Medium } derives Ord    // ✗ the order changed\n\
+                  \n\
+                  type Priority = enum { Low, Medium, High } derives Ord    // ✓ the recorded order",
+    },
+    Explain {
         code: "bynk.types.pattern_arity",
         blurb: "A variant pattern takes one binding for each payload field the variant \
                 declares, in order, or none to ignore the payload. A different count, or any \
@@ -10631,6 +10647,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An or-pattern's alternatives give a shared binding different types (or refinements).",
         &["match_arm", "is_expr"],
     ),
+    d(
+        "bynk.types.ord_order_changed",
+        "A `derives Ord` type's field or variant order differs from the one `bynk.schema.lock` records under `[orders]`, so every sort, comparison, `min` and `max` on it would change; accept it with `bynk lock accept-order`.",
+    ),
     dg(
         "bynk.types.pattern_arity",
         "A pattern binds the wrong number of payload fields.",
@@ -11055,86 +11075,24 @@ fn category_title(cat: &str) -> &'static str {
     }
 }
 
-/// Render the diagnostic index as a Markdown reference page, grouped by
-/// category. This is the generator behind
-/// `site/src/content/docs/reference/diagnostics.md`.
-pub fn render_markdown() -> String {
-    use std::collections::BTreeMap;
-
-    // Group codes by their category title, preserving sorted code order.
-    let mut by_category: BTreeMap<&str, Vec<&DiagnosticInfo>> = BTreeMap::new();
-    for info in REGISTRY {
-        by_category
-            .entry(category_title(category(info.code)))
-            .or_default()
-            .push(info);
-    }
-
-    let mut out = String::new();
-    out.push_str("# Diagnostic index\n\n");
-    out.push_str(
-        "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: bynk-syntax/src/diagnostics.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry:: -->\n\n",
-    );
-    out.push_str(
-        "Every diagnostic code the compiler can emit, with a one-line summary of \
-         the cause, grouped by category. Each code links to its own page: what the \
-         code means, how to fix it and an example where an explanation is written, \
-         the grammar rules it governs, and the Book pages that explain it. \
-         `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
-         **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
-    );
-    out.push_str(&format!(
-        "There are **{}** codes in total. Every code is an error unless it is marked \
-         **Warning** or **Hint**.\n",
-        REGISTRY.len()
-    ));
-    // The site's filter box (`site/public/diagnostic-filter.js`) adds itself
-    // here, above the first category, and narrows the lists as you type.
-    out.push_str("\n<script type=\"module\" src=\"/diagnostic-filter.js\"></script>\n");
-
-    for (title, infos) in &by_category {
-        out.push_str(&format!("\n## {title}\n\n"));
-        // One list item per code, not a table row: nearly 900 codes in a
-        // table overflowed the content column (#3876 review), and the
-        // category heading already groups them. A code's grammar constructs
-        // are on its own page.
-        for info in infos {
-            // Every code links to its own page (#3876), which the site
-            // generates from `render_json` for every registry code.
-            let code = format!("[`{0}`]({INDEX_PATH}{0}/)", info.code);
-            // ADR 0117/finding #50: every code's severity, straight from the
-            // registry. Errors are the overwhelming majority and go unmarked;
-            // a `warn`-built entry carries a "Warning" badge, a hint "Hint".
-            let severity = match info.severity {
-                Severity::Error => "",
-                Severity::Warning => "<span class=\"diagnostic-severity\">Warning</span> ",
-                Severity::Hint => "<span class=\"diagnostic-severity\">Hint</span> ",
-            };
-            out.push_str(&format!("- {code} — {severity}{}\n", info.summary));
-        }
-    }
-
-    out
-}
-
-/// Every registry code as JSON, for the site's page per code (#3876): its
-/// summary, severity, category (title and the index anchor of its heading),
-/// grammar constructs, and the curated `blurb` and `example` where the code
-/// has one (else `null`). Sorted by code. This is the generator behind
-/// `site/src/generated/diagnostics.json`, which the route
-/// `site/src/pages/reference/diagnostics/[code].astro` renders; the
-/// docs-consistency test keeps the committed file current.
-pub fn render_json() -> String {
+/// Every registry code as JSON, one document per code, for the site's page per code (#3876): its
+/// summary, severity, category (title and the index anchor of its heading), grammar constructs,
+/// and the curated `blurb` and `example` where the code has one (else `null`). Returned as
+/// `(code, json)`, sorted by code. This is the generator behind
+/// `site/src/generated/diagnostics/<code>.json`, one committed file per code so two changes that
+/// add different codes never touch the same file (#4286). The route
+/// `site/src/pages/reference/diagnostics/[code].astro` renders them, and
+/// `site/scripts/build-diagnostics-index.mjs` assembles the index page from them at build time;
+/// the docs-consistency test keeps the committed files current.
+pub fn render_json_per_code() -> Vec<(String, String)> {
     let mut infos: Vec<&DiagnosticInfo> = REGISTRY.iter().collect();
     infos.sort_by_key(|i| i.code);
-    let codes: Vec<serde_json::Value> = infos
+    infos
         .iter()
         .map(|info| {
             let cat = category(info.code);
             let explained = explain(info.code);
-            serde_json::json!({
+            let doc = serde_json::json!({
                 "code": info.code,
                 "summary": info.summary,
                 "severity": match info.severity {
@@ -11147,12 +11105,12 @@ pub fn render_json() -> String {
                 "constructs": info.grammar_symbol,
                 "blurb": explained.map(|e| e.blurb),
                 "example": explained.map(|e| e.example),
-            })
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("diagnostic serialises");
+            out.push('\n');
+            (info.code.to_string(), out)
         })
-        .collect();
-    let mut out = serde_json::to_string_pretty(&codes).expect("diagnostics serialise");
-    out.push('\n');
-    out
+        .collect()
 }
 
 /// Invert the registry into a `{ "<rule>": [ { code, summary }, … ], … }` map,

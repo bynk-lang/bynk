@@ -1,0 +1,10 @@
+{
+  "blurb": "Only a record's fields take defaults. A variant is built like a call, with every payload field given, so a default on a payload field would be an optional argument by another name. Remove it and give the field wherever the variant is built, or hold the optional values in a record, which can have defaults, and make that record the payload.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_default_on_variant",
+  "constructs": [],
+  "example": "type Retry =\n    | Never\n    | Times(n: Int = 3)    // ✗ a variant's field has no default\n\ntype Backoff = { n: Int = 3 }\n\ntype Retry =\n    | Never\n    | Times(opts: Backoff)    // ✓ the record carries the default",
+  "severity": "error",
+  "summary": "A sum variant's payload field declares a default (`field: T = expr`). Only a record's fields may; a variant is built like a call, with every payload field given."
+}

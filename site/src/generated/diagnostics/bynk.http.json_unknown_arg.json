@@ -1,0 +1,10 @@
+{
+  "blurb": "`@json` has one argument, `options:`. The set is closed, so a misspelt or invented argument is refused rather than ignored, which would leave the route writing `Option` otherwise than you asked. Rename it to `options` or remove it. The value is checked separately: `bynk.http.json_invalid_arg`. The same name in a service's `json { }` section is `bynk.http.json_unknown_field`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.json_unknown_arg",
+  "constructs": [],
+  "example": "@json(options: plain, nulls: keep)    // ✗ not an argument of `@json`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)                 // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@json` annotation has an argument outside the closed set (`options`)."
+}

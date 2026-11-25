@@ -1,0 +1,10 @@
+{
+  "blurb": "A generic type may refer to itself only uniformly: the self-reference must pass the declaration's own type parameters through unchanged and in order, as `Weird[T]` inside `Weird[T]`. Anything else is polymorphic recursion, such as `Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`, and it generates an unbounded set of instantiations, so it is refused at the declaration. The same holds for mutually recursive generics: a partner may be applied only to the declaration's own parameters or to types that mention none, never to a type that wraps one of them.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.polymorphic_recursion",
+  "constructs": [],
+  "example": "type Weird[T] = { value: T, next: Option[Weird[List[T]]] }   // ✗ a different instantiation\n\ntype Weird[T] = { value: T, next: Option[Weird[T]] }         // ✓ parameters passed through",
+  "severity": "error",
+  "summary": "A generic type refers to itself with arguments other than its own type parameters, in order (`Weird[List[T]]` inside `Weird[T]`, or `Pair[B, A]` inside `Pair[A, B]`), or to a mutually recursive partner with an argument that wraps one of its own parameters (`Inner[List[T]]` inside `Outer[T]`). Such polymorphic recursion generates an unbounded set of instantiations and is refused at the declaration; a self-reference that passes the parameters through unchanged, and a partner applied to the declaration's own parameters or to types that mention none (of any arity), are accepted (#3192)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A service is its handlers, so one with none can never be called or triggered, and is refused. (A service that subscribes to `Events` takes exactly one `on event`.) Add a handler, or remove the service.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.empty_service",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service orders {                   // ✗ no handler\n}\n\nservice orders {\n    on call() -> Effect[Int] by Caller {     // ✓\n        Effect.pure(0)\n    }\n}",
+  "severity": "error",
+  "summary": "A `service` body is empty."
+}

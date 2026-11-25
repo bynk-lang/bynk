@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.may_shadow_route",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A parameterised HTTP route matches a fixed asset path, so it never sees requests for that path (a warning)."
+}

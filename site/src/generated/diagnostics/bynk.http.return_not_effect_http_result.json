@@ -1,0 +1,12 @@
+{
+  "blurb": "An `on http` handler returns `Effect[HttpResult[T]]`: `Effect` because it may use capabilities, and `HttpResult[T]` because the status is part of the answer (`Ok`, `Created`, `NotFound`, and so on). An `Effect[T]` with no status is refused. Wrap the type, and return one of the `HttpResult` variants.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.return_not_effect_http_result",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/items\") () -> Effect[String] by v: Visitor { … }   // ✗ no `HttpResult`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "An HTTP handler does not return `Effect[HttpResult[T]]`."
+}

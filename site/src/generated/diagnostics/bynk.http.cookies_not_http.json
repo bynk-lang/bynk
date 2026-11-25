@@ -1,0 +1,12 @@
+{
+  "blurb": "`RequestCookies` is the cookies of an HTTP request, read from its `Cookie` header. A `cron` or other handler that is not an `on http` route answers no request, so there are no cookies for it to take, and the parameter is refused. Remove it, or move the work into an HTTP handler. On an HTTP route, `cookies` is a record or `RequestCookies` and nothing else: `bynk.http.cookies_wrong_type`. `RequestQuery` has the same rule: `bynk.http.query_not_http`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookies_not_http",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "service ticker from cron {\n    on schedule(\"*/5 * * * *\") (cookies: RequestCookies) -> Effect[Result[(), String]] { … }   // ✗ no request\n}\n\ntype Session = { sid: Option[String] }\n\nservice ticker from http {\n    on GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓\n}",
+  "severity": "error",
+  "summary": "A `RequestCookies` appears on a handler that is not an HTTP route."
+}

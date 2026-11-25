@@ -1,0 +1,12 @@
+{
+  "blurb": "A function type can be written only where a value stays in the running program: as a `fn` or lambda parameter, a return, or a local. A value that is serialised, stored or sent has to be data, and a function has no wire form, so a function type in a record field, a sum payload, an event field, a service or agent handler signature, an agent key or store field, a capability operation or an actor identity is refused where it is written. Keep the function out of the type: pass it as a parameter to the `fn` that needs it, or store the data it is built from, such as a name or a number, and rebuild the behaviour on the other side.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.function_at_boundary",
+  "constructs": [
+    "function_type_ref"
+  ],
+  "example": "type Job = {\n  name: String,\n  run: Int -> Int,    // ✗ a record field cannot hold a function\n}\n\ntype Job = {\n  name: String,\n  step: Int,\n}\n\nfn run(j: Job, f: Int -> Int) -> Int {    // ✓ a parameter can\n    f(j.step)\n}",
+  "severity": "error",
+  "summary": "A function type appeared in a serialisable or boundary position (a record field, sum payload, service/agent handler signature, capability operation signature, agent state field, or agent key); functions cannot serialise or cross a boundary."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.invalid_address",
+  "constructs": [],
+  "example": "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
+  "severity": "error",
+  "summary": "A `from email(\"…\")` binding is not a recipient address a service can claim."
+}

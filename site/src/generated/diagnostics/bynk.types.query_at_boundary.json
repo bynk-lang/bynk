@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Query[T]` is a lazy read over an agent's stored data: nothing runs until a terminal such as `.collect()` executes it, in the agent that owns the data. Persisted or sent, it would be a description of a read with nothing to read from. A helper may take or return one, but it is refused as a record, sum or event field, an agent key or store field, a capability operation, or a handler's parameter or result. Run it and keep or send the `List` or `Option` it gives. A `Stream` has its own rule: `bynk.types.stream_at_boundary`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.query_at_boundary",
+  "constructs": [],
+  "example": "type Order = { id: String, total: Int }\n\ntype Report = {\n    orders: Query[Order],    // ✗ a lazy read is not data\n}\n\ntype Report = {\n    orders: List[Order],     // ✓ run the query, keep its result\n}",
+  "severity": "error",
+  "summary": "A `Query` type appears in a storable or boundary-crossing position — a query is built and executed in place, never persisted or sent (ADR 0115)."
+}

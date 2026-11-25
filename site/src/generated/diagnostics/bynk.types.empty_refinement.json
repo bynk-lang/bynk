@@ -1,0 +1,12 @@
+{
+  "blurb": "A refinement is a base type plus predicates, and a value must satisfy all of them. When the predicates contradict each other, nothing can satisfy them: the type has no values, and every `.of` and every boundary check would fail. The compiler works out the combined range of `Positive`, `NonNegative` and `InRange`, and the combined length of the length predicates, and refuses one that is empty. Drop or correct the predicate that conflicts, and read the note, which gives the empty range it found.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.empty_refinement",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Debt = Int where Positive && InRange(-10, -1)    // ✗ positive, yet at most -1\n\ntype Debt = Int where Positive && InRange(1, 10)      // ✓",
+  "severity": "error",
+  "summary": "A refinement admits no values (contradictory predicates)."
+}

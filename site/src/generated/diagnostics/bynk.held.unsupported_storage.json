@@ -1,0 +1,10 @@
+{
+  "blurb": "A held value, a `Connection[F]`, is a live handle owned by one place, not data. Only `Cell[Option[Connection]]` and `Map[K, Connection]` can hold one: a `Set` needs value equality, which a connection does not have, and a `Log` or `Cache` could retain or evict one without closing it. Keep connections in a `Map` keyed by something that identifies each, such as a user id, and iterate it with the broadcast operations.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.held.unsupported_storage",
+  "constructs": [],
+  "example": "store conns: Set[Connection[ServerFrame]]   // ✗ a `Set` cannot hold a connection\n\nstore conns: Map[UserId, Connection[ServerFrame]]   // ✓ held by key",
+  "severity": "error",
+  "summary": "A held value (`Connection[F]`) is stored in a `Set`/`Log`/`Cache` — held values may only live in `Cell[Option[Connection]]` or `Map[K, Connection]` (§2.9.3, real-time track slice 2)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "Some standard-library enums, among them `FetchError` and `Method`, are extensible: a minor release may add a variant. A `match` that names every variant they have today would then stop covering them, so the compiler asks for a wildcard arm now, and the `match` keeps compiling when a variant arrives. Listing every current variant is not enough. Add `_`, or `Err(_)` where the enum is wrapped, and put there whatever should happen for a variant you did not name. An enum of your own with the same name is not extensible; the rule follows the first-party enum. For an ordinary enum, a missing arm is `bynk.types.non_exhaustive_match`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.extensible_match_needs_wildcard",
+  "constructs": [],
+  "example": "fn verb(m: Method) -> String {\n    match m {           // ✗ every variant, but no wildcard\n        Get => \"read\"\n        Post => \"write\"\n        Put => \"write\"\n        Delete => \"write\"\n        Patch => \"write\"\n        Head => \"read\"\n        Options => \"read\"\n    }\n}\n\nfn verb(m: Method) -> String {\n    match m {\n        Get => \"read\"\n        _ => \"write\"       // ✓ also covers variants added later\n    }\n}",
+  "severity": "error",
+  "summary": "A `match` covers an extensible standard-library enum (`FetchError`, `Method`) without a wildcard; it may gain variants in a minor release."
+}
