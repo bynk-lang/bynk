@@ -1522,6 +1522,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
     },
     Explain {
+        code: "bynk.d1.decimal_numeric_affinity",
+        blurb: "A `Decimal` is exact only as text. A `Json.decodeSql` or `select` row may hold a `Decimal`, read from a SQLite `TEXT` column, which keeps its digits. A column declared `DECIMAL`, `NUMERIC`, `REAL` or an integer type has numeric affinity, so SQLite hands the value back as a number, and a number does not decode as a `Decimal`. Declare the column `TEXT` (the compiler stores a `Decimal` as its canonical text), or read the column into a `Float`. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof.",
+        example: "CREATE TABLE prices (id TEXT PRIMARY KEY, amount NUMERIC NOT NULL);   // ⚠ read as a `Decimal`, it arrives as a number\n\nCREATE TABLE prices (id TEXT PRIMARY KEY, amount TEXT NOT NULL);      // ✓ the digits stay exact",
+    },
+    Explain {
         code: "bynk.d1.migration_name",
         blurb: "A `D1` database's migrations are the SQL files in `migrations/<database>/`, applied in number order, each once. So a file's name must give its place in that order: `NNNN_<name>.sql`, four digits, an underscore, then letters, digits, `_` or `-`, directly in its database's directory. A file named any other way, one in a nested folder, or one whose number another migration of the same database already has could not be put in order, so the build refuses it rather than skip it. Rename the file, or give it the next free number.",
         example: "migrations/shop-orders/1_create_orders.sql      // ✗ not four digits\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0002_add_total.sql     // ✗ `0002` is taken\n\nmigrations/shop-orders/0001_create_orders.sql   // ✓\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0003_add_total.sql       // ✓ the next free number",
@@ -2955,6 +2960,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
     },
     Explain {
+        code: "bynk.match.refined_pattern_is_range",
+        blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
+        example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
+    },
+    Explain {
         code: "bynk.messages.format_mismatch",
         blurb: "A placeholder that appears in the reference locale's template and in another \
                 locale's must be formatted the same way in both: plain `{n}`, `plural`, `select`, \
@@ -4136,6 +4146,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
     },
     Explain {
+        code: "bynk.queue.message_type_mismatch",
+        blurb: "The queue name is a string both sides write, so the compiler is the only party that sees a producer and its consumer and can say they disagree. When a context in the project consumes the queue a `Queue @name(\"…\")` instance sends to, `sendValue`, `sendValueWith` and `sendValueBatch` (its elements) must send a type the consumer's `on message` accepts, by the comparison a cross-context call gets: the same fields and variants, and a stronger refinement is admitted where the consumer expects a weaker one. Otherwise the consumer could not decode the message, which would be retried and then dead-lettered or dropped at run time. Send the consumer's type, or change the consumer. A queue no context in the project consumes (a foreign Worker, or nobody yet) has nothing to compare with and is not checked; nor is a send whose type is still a type parameter.",
+        example: "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] { … }\n}",
+    },
+    Explain {
         code: "bynk.queue.no_dead_letter",
         blurb: "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
@@ -4149,6 +4164,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.queue.return_not_queue_result",
         blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled), `Retry(reason)` (deliver it again) and `RetryAfter(reason, delay)` (deliver it again after a delay). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
         example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
+    },
+    Explain {
+        code: "bynk.queue.untyped_send",
+        blurb: "`send`, `sendWith` and `sendBatch` take JSON text, which the compiler cannot check against the consumer's message type, so a body that does not decode is found only at run time. When a context in the project consumes the queue, they warn and name the typed form: `sendValue`, `sendValueWith` and `sendValueBatch` encode a value at the call site, put exactly the same message on the queue, and are checked against the consumer (`bynk.queue.message_type_mismatch`). The untyped forms stay legal, because they are how to forward a body that is already encoded. A queue no context in the project consumes is not warned about.",
+        example: "capability OrderEvents = Queue @name(\"order-events\")\n\nlet _ <- OrderEvents.send(Json.encode(order))   // ⚠ not checked against the consumer\n\nlet _ <- OrderEvents.sendValue(order)   // ✓ checked against the consumer",
     },
     Explain {
         code: "bynk.race.in_agent_handler",
@@ -7624,6 +7644,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["cron_handler"],
     )),
     warn(d(
+        "bynk.d1.decimal_numeric_affinity",
+        "A `Decimal` row field is read from a SQLite column declared with numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`), which hands the value back as a number that does not decode; declare the column `TEXT` (warning).",
+    )),
+    warn(d(
         "bynk.d1.migration_invalid",
         "A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning).",
     )),
@@ -8792,6 +8816,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.map.deprecated_function",
         "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable).",
     )),
+    warn(dg(
+        "bynk.match.refined_pattern_is_range",
+        "A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; quick fix, not applied by `--fix`).",
+        &["refined_pattern"],
+    )),
     d(
         "bynk.messages.format_mismatch",
         "A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales.",
@@ -9432,6 +9461,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses.",
         &["queue_handler"],
     ),
+    d(
+        "bynk.queue.message_type_mismatch",
+        "A `sendValue`, `sendValueWith` or `sendValueBatch` sends a type the queue's consumer in the project does not accept.",
+    ),
     warn(dg(
         "bynk.queue.no_dead_letter",
         "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
@@ -9446,6 +9479,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `on message` handler does not return `Effect[QueueResult]`.",
         &["handler"],
     ),
+    warn(d(
+        "bynk.queue.untyped_send",
+        "`send`, `sendWith` or `sendBatch` sends JSON text to a queue the project consumes, which the compiler cannot check against the consumer (warning).",
+    )),
     dg(
         "bynk.race.in_agent_handler",
         "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to.",
@@ -11170,6 +11207,7 @@ fn category_title(cat: &str) -> &'static str {
         "http" => "HTTP",
         "internal" => "Internal errors",
         "lex" => "Lexer",
+        "match" => "Match",
         "messages" => "Message bundles",
         "mock" => "Mocks (collaborators)",
         "observe" => "Observation",

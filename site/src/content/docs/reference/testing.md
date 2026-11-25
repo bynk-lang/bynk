@@ -1410,9 +1410,10 @@ case "a count reads back as a typed row" {
   target or of a commons it `uses`, or a sum variant) is
   `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`. A name repeated
   in the suite is `bynk.suite.duplicate_type` or `bynk.suite.duplicate_const`.
-- **Not yet in a suite-scoped `stub` value.** The value of a `stub … returns` is
-  emitted outside the runner, so it cannot name a suite type or constant. Build
-  the value in a case, or use a helper `fn`.
+- **In a suite-level `stub` value too.** The value and the argument patterns of a
+  `stub … returns` may name the suite's types and constants, whether the stub is
+  written before or after them (the order of a suite's items does not matter), and
+  for a stub of a consumed service as for one of a capability.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 
