@@ -41,6 +41,7 @@ adapter bynk.cloudflare {
 		R2UploadOptions,
 		R2Part,
 		QueueDelivery,
+		QueueDelay,
 		QueueSend,
 		RequestCf,
 		DataPoint,
@@ -359,12 +360,24 @@ adapter bynk.cloudflare {
 	}
 
 	---
+	How long a `Queue` send may hold a message back: a `Duration` from 0
+	seconds to 24 hours, the platform's `delaySeconds` range. A literal or
+	constant such as `30.seconds` is checked when the program compiles
+	(`2.days` is a compile error); a computed span goes through
+	`QueueDelay.of(d)`, which gives a `ValidationError` when it is out of
+	range. Whole seconds are taken, rounding towards zero, as
+	`Duration.toSeconds` does.
+	---
+	type QueueDelay = Duration where InRange(0.seconds, 24.hours)
+
+	---
 	The options of a `Queue.sendWith`. `delay` holds the message back before
-	it can be delivered: whole seconds (a part second rounds up), at most 12
-	hours; `None`, the default, delivers as soon as the queue can.
+	it can be delivered, by a `QueueDelay` (whole seconds, rounding towards
+	zero, at most 24 hours); `None`, the default, delivers as soon as the
+	queue can.
 	---
 	type QueueSend = {
-		delay: Option[Duration] = None,
+		delay: Option[QueueDelay] = None,
 	}
 
 	---

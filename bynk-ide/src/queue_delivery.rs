@@ -130,7 +130,7 @@ pub fn describe_delivery_at(source: &str, offset: usize) -> Option<String> {
 }
 
 /// What `RetryAfter` hovers as (#3881).
-const RETRY_AFTER_DOC: &str = "```bynk\nRetryAfter(reason: String, delay: Duration) -> QueueResult\n```\n\nRetries the message after `delay`, which overrides the consumer's `retryDelay` for this message. Cloudflare retries after a whole number of seconds, 1 second to 24 hours: a delay written as a literal outside that range is `bynk.queue.retry_delay_out_of_range`, and a computed one is rounded up and clamped, with the clamp logged. `Retry(reason)` retries after the consumer's `retryDelay`, or at once when it has none. With `attempts` from a `QueueDelivery`, a handler can back off: `RetryAfter(\"unavailable\", 30.seconds * delivery.attempts)`.";
+const RETRY_AFTER_DOC: &str = "```bynk\nRetryAfter(reason: String, delay: Duration) -> QueueResult\n```\n\nRetries the message after `delay`, which overrides the consumer's `retryDelay` for this message. Cloudflare retries after a whole number of seconds, 1 second to 24 hours: a delay written as a literal outside that range is `bynk.queue.retry_delay_out_of_range`, and a computed one is truncated to whole seconds and clamped, with the clamp logged. `Retry(reason)` retries after the consumer's `retryDelay`, or at once when it has none. With `attempts` from a `QueueDelivery`, a handler can back off: `RetryAfter(\"unavailable\", 30.seconds * delivery.attempts)`.";
 
 /// Hover on a `RetryAfter` verdict. `None` anywhere else, so a user's own name
 /// `RetryAfter` (a declared variant, a binding) keeps its own hover, which

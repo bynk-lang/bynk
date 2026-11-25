@@ -1,0 +1,10 @@
+[project]
+name = "queue-delay-over-maximum"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+
+[unstable]
+allow = ["bynk.cloudflare.Queue"]

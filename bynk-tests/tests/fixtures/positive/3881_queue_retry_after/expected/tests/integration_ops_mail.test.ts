@@ -58,17 +58,17 @@ async function test_a_backoff_doubles_with_each_attempt__system_() {
   }
 }
 
-async function test_a_computed_delay_is_clamped_and_rounded_up__system_() {
+async function test_a_computed_delay_is_clamped_and_truncated__system_() {
   try {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const long = await __sysdrive_message_clamped({ id: "b" });
-    if (!(__bynkEq(long, QueueResult.RetryAfter("too long", 86400000)))) { throw __bynkExpectFailure("tests/mail_system.bynk:15:12", 727, 767, "expect long == RetryAfter(\"too long\", 24.hours)\n  expected: long == RetryAfter(\"too long\", 24.hours)\n  actual:   " + __bynkShow((long)) + " == " + __bynkShow((QueueResult.RetryAfter("too long", 86400000)))); }
+    if (!(__bynkEq(long, QueueResult.RetryAfter("too long", 86400000)))) { throw __bynkExpectFailure("tests/mail_system.bynk:15:12", 726, 766, "expect long == RetryAfter(\"too long\", 24.hours)\n  expected: long == RetryAfter(\"too long\", 24.hours)\n  actual:   " + __bynkShow((long)) + " == " + __bynkShow((QueueResult.RetryAfter("too long", 86400000)))); }
     const short = await __sysdrive_message_clamped({ id: "b" }, { attempts: 2, sentAt: 0 });
-    if (!(__bynkEq(short, QueueResult.RetryAfter("too short", 1000)))) { throw __bynkExpectFailure("tests/mail_system.bynk:17:12", 896, 938, "expect short == RetryAfter(\"too short\", 1.second)\n  expected: short == RetryAfter(\"too short\", 1.second)\n  actual:   " + __bynkShow((short)) + " == " + __bynkShow((QueueResult.RetryAfter("too short", 1000)))); }
+    if (!(__bynkEq(short, QueueResult.RetryAfter("too short", 1000)))) { throw __bynkExpectFailure("tests/mail_system.bynk:17:12", 895, 937, "expect short == RetryAfter(\"too short\", 1.second)\n  expected: short == RetryAfter(\"too short\", 1.second)\n  actual:   " + __bynkShow((short)) + " == " + __bynkShow((QueueResult.RetryAfter("too short", 1000)))); }
     const part = await __sysdrive_message_clamped({ id: "b" }, { attempts: 3, sentAt: 0 });
-    if (!(__bynkEq(part, QueueResult.RetryAfter("part second", 2000)))) { throw __bynkExpectFailure("tests/mail_system.bynk:19:12", 1066, 1110, "expect part == RetryAfter(\"part second\", 2.seconds)\n  expected: part == RetryAfter(\"part second\", 2.seconds)\n  actual:   " + __bynkShow((part)) + " == " + __bynkShow((QueueResult.RetryAfter("part second", 2000)))); }
+    if (!(__bynkEq(part, QueueResult.RetryAfter("part second", 1000)))) { throw __bynkExpectFailure("tests/mail_system.bynk:19:12", 1065, 1108, "expect part == RetryAfter(\"part second\", 1.second)\n  expected: part == RetryAfter(\"part second\", 1.second)\n  actual:   " + __bynkShow((part)) + " == " + __bynkShow((QueueResult.RetryAfter("part second", 1000)))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -84,7 +84,7 @@ async function test_a_plain_retry_carries_no_delay_of_its_own__system_() {
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_plain({ id: "c" });
-    if (!(__bynkEq(r, QueueResult.Retry("again")))) { throw __bynkExpectFailure("tests/mail_system.bynk:24:12", 1233, 1252, "expect r == Retry(\"again\")\n  expected: r == Retry(\"again\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((QueueResult.Retry("again")))); }
+    if (!(__bynkEq(r, QueueResult.Retry("again")))) { throw __bynkExpectFailure("tests/mail_system.bynk:24:12", 1231, 1250, "expect r == Retry(\"again\")\n  expected: r == Retry(\"again\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((QueueResult.Retry("again")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -104,16 +104,16 @@ async function test_the_delay_is_readable_from_the_verdict__system_() {
       switch (__d.tag) {
         case "RetryAfter": {
           const d = __d.delay;
-          return __bynkExpect((d === 80000), "tests/mail_system.bynk:30:34", 1477, 1492, "expect d == 80.seconds");
+          return __bynkExpect((d === 80000), "tests/mail_system.bynk:30:34", 1475, 1490, "expect d == 80.seconds");
         }
         case "Retry": {
-          return __bynkExpect((false), "tests/mail_system.bynk:31:26", 1518, 1523, "expect false (in the `Retry(_)` arm of `match r`)", "r", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/mail_system.bynk:31:26", 1516, 1521, "expect false (in the `Retry(_)` arm of `match r`)", "r", () => __bynkShow(__d));
         }
         case "Ack": {
-          return __bynkExpect((false), "tests/mail_system.bynk:32:21", 1544, 1549, "expect false (in the `Ack` arm of `match r`)", "r", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/mail_system.bynk:32:21", 1542, 1547, "expect false (in the `Ack` arm of `match r`)", "r", () => __bynkShow(__d));
         }
         case "Undecodable": {
-          return __bynkExpect((false), "tests/mail_system.bynk:33:29", 1578, 1583, "expect false (in the `Undecodable` arm of `match r`)", "r", () => __bynkShow(__d));
+          return __bynkExpect((false), "tests/mail_system.bynk:33:29", 1576, 1581, "expect false (in the `Undecodable` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -129,7 +129,7 @@ async function test_the_delay_is_readable_from_the_verdict__system_() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a backoff doubles with each attempt (system)", "a computed delay is clamped and rounded up (system)", "a plain retry carries no delay of its own (system)", "the delay is readable from the verdict (system)"];
+export const __bynkCases: readonly string[] = ["a backoff doubles with each attempt (system)", "a computed delay is clamped and truncated (system)", "a plain retry carries no delay of its own (system)", "the delay is readable from the verdict (system)"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -140,9 +140,9 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
     results.push(r);
     if (onCase) onCase(r);
   }
-  if (want("a computed delay is clamped and rounded up (system)")) {
+  if (want("a computed delay is clamped and truncated (system)")) {
     const started = __bynkCaseNow();
-    const r = { name: "a computed delay is clamped and rounded up (system)", ...(await test_a_computed_delay_is_clamped_and_rounded_up__system_()), durationMs: __bynkCaseSince(started) };
+    const r = { name: "a computed delay is clamped and truncated (system)", ...(await test_a_computed_delay_is_clamped_and_truncated__system_()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

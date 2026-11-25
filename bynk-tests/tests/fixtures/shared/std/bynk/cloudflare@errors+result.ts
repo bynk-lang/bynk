@@ -269,12 +269,33 @@ export const QueueDelivery = {
 };
 
 /**
+ * How long a `Queue` send may hold a message back: a `Duration` from 0
+ * seconds to 24 hours, the platform's `delaySeconds` range. A literal or
+ * constant such as `30.seconds` is checked when the program compiles
+ * (`2.days` is a compile error); a computed span goes through
+ * `QueueDelay.of(d)`, which gives a `ValidationError` when it is out of
+ * range. Whole seconds are taken, rounding towards zero, as
+ * `Duration.toSeconds` does.
+ */
+export type QueueDelay = number & { readonly __brand: "QueueDelay" };
+
+export const QueueDelay = {
+  of(value: number): Result<QueueDelay, ValidationError> {
+    if (!(value >= 0 && value <= 86400000)) {
+      return Err({ field: "QueueDelay", message: "must be in range [0.seconds, 24.hours]", value });
+    }
+    return Ok(value as QueueDelay);
+  },
+};
+
+/**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
- * it can be delivered: whole seconds (a part second rounds up), at most 12
- * hours; `None`, the default, delivers as soon as the queue can.
+ * it can be delivered, by a `QueueDelay` (whole seconds, rounding towards
+ * zero, at most 24 hours); `None`, the default, delivers as soon as the
+ * queue can.
  */
 export interface QueueSend {
-  readonly delay: Option<number>;
+  readonly delay: Option<QueueDelay>;
 }
 
 export const QueueSend = {

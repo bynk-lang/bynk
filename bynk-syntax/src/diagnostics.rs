@@ -4117,7 +4117,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.queue.retry_delay_out_of_range",
-        blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
+        blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is truncated to whole seconds (a part second rounds towards zero) and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
         example: "on message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
     },
     Explain {

@@ -2564,7 +2564,7 @@ pub(crate) fn check_queue_variant(
 
 /// #3881: `RetryAfter(reason, delay)`: a `String` reason and a `Duration` delay. A
 /// delay written as a literal must be within Cloudflare's 1 second to 24 hours
-/// (`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up and
+/// (`bynk.queue.retry_delay_out_of_range`); a computed delay is truncated and
 /// clamped when the entry settles the message.
 fn check_retry_after(
     span: Span,
@@ -2618,7 +2618,7 @@ fn check_retry_after(
                 },
             )
             .with_note(
-                "Cloudflare retries a message after a whole number of seconds, at most 24 hours; a delay computed at run time is rounded up and clamped to that range, but a literal outside it is a mistake",
+                "Cloudflare retries a message after a whole number of seconds, at most 24 hours; a delay computed at run time is truncated and clamped to that range, but a literal outside it is a mistake",
             ),
         );
         return None;

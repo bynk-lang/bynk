@@ -1921,7 +1921,7 @@ receives from (`bynk.queue.dead_letter_type_mismatch`).
 
 `RetryAfter(reason, delay)` (#3881) is a `QueueResult` variant taking a `String` reason and a
 `Duration` delay. A `delay` written as a `Duration` literal MUST be from 1 second to 24 hours
-(`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up to whole seconds and
+(`bynk.queue.retry_delay_out_of_range`); a computed delay is truncated to whole seconds (towards zero) and
 clamped to that range when the verdict is settled. A `match` over a `QueueResult` names
 `RetryAfter` or has a wildcard.
 

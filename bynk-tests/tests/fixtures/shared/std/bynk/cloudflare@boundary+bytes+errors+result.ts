@@ -271,12 +271,33 @@ export const QueueDelivery = {
 };
 
 /**
+ * How long a `Queue` send may hold a message back: a `Duration` from 0
+ * seconds to 24 hours, the platform's `delaySeconds` range. A literal or
+ * constant such as `30.seconds` is checked when the program compiles
+ * (`2.days` is a compile error); a computed span goes through
+ * `QueueDelay.of(d)`, which gives a `ValidationError` when it is out of
+ * range. Whole seconds are taken, rounding towards zero, as
+ * `Duration.toSeconds` does.
+ */
+export type QueueDelay = number & { readonly __brand: "QueueDelay" };
+
+export const QueueDelay = {
+  of(value: number): Result<QueueDelay, ValidationError> {
+    if (!(value >= 0 && value <= 86400000)) {
+      return Err({ field: "QueueDelay", message: "must be in range [0.seconds, 24.hours]", value });
+    }
+    return Ok(value as QueueDelay);
+  },
+};
+
+/**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
- * it can be delivered: whole seconds (a part second rounds up), at most 12
- * hours; `None`, the default, delivers as soon as the queue can.
+ * it can be delivered, by a `QueueDelay` (whole seconds, rounding towards
+ * zero, at most 24 hours); `None`, the default, delivers as soon as the
+ * queue can.
  */
 export interface QueueSend {
-  readonly delay: Option<number>;
+  readonly delay: Option<QueueDelay>;
 }
 
 export const QueueSend = {
@@ -4268,6 +4289,23 @@ export function __deserialise_QueryOptions(json: __JsonValue, path: string = "$"
   return Ok({ topK: __topK, returnValues: __returnValues, returnMetadata: __returnMetadata, namespace: __namespace, filter: __filter } as QueryOptions);
 }
 
+export function __serialise_QueueDelay(value: QueueDelay): __JsonValue {
+  return value as unknown as number;
+}
+
+export function __deserialise_QueueDelay(json: __JsonValue, path: string = "$"): Result<QueueDelay, __BoundaryError> {
+  if (typeof json !== "number") {
+    return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
+  }
+  const validated = (typeof (QueueDelay as unknown as { of?: (json: unknown) => Result<unknown, ValidationError> }).of === "function")
+    ? (QueueDelay as unknown as { of: (json: unknown) => Result<unknown, ValidationError> }).of(json)
+    : (Ok(json as unknown as QueueDelay) as Result<unknown, ValidationError>);
+  if (validated.tag === "Err") {
+    return Err({ kind: "RefinementViolation", path, violation: validated.error });
+  }
+  return Ok(validated.value as QueueDelay);
+}
+
 export function __serialise_QueueDelivery(value: QueueDelivery): __JsonValue {
   return {
     attempts: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.attempts),
@@ -4299,7 +4337,7 @@ export function __deserialise_QueueDelivery(json: __JsonValue, path: string = "$
 
 export function __serialise_QueueSend(value: QueueSend): __JsonValue {
   return {
-    delay: __serialise_Option_Duration(value.delay),
+    delay: __serialise_Option_QueueDelay(value.delay),
   };
 }
 
@@ -4309,7 +4347,7 @@ export function __deserialise_QueueSend(json: __JsonValue, path: string = "$"): 
   }
   const obj = json as { [k: string]: __JsonValue };
   const __d_delay: __JsonValue = "delay" in obj ? obj["delay"] : { kind: "None" };
-  const __r_delay = __deserialise_Option_Duration(__d_delay, `${path}.delay`);
+  const __r_delay = __deserialise_Option_QueueDelay(__d_delay, `${path}.delay`);
   if (__r_delay.tag === "Err") return __r_delay;
   const __delay = __r_delay.value;
   return Ok({ delay: __delay } as QueueSend);
@@ -5725,43 +5763,39 @@ export function __deserialise_List_Condition(json: __JsonValue, path: string = "
   return Ok(out);
 }
 
-export function __serialise_Option_Duration(value: Option<number>): __JsonValue {
-  if (value.tag === "Some") return { kind: "Some", value: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Duration outside the safe-integer range at boundary"); return v as __JsonValue; })(value.value) };
+export function __serialise_Option_QueueDelay(value: Option<QueueDelay>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_QueueDelay(value.value) };
   return { kind: "None" };
 }
 
-function __option_value_Duration(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
-  if (typeof raw !== "number") {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "number", actual: typeof raw });
-  }
-  if (!globalThis.Number.isSafeInteger(raw)) {
-    return Err({ kind: "StructuralMismatch", path: at, expected: "safe integer", actual: String(raw) });
-  }
-  const __v = raw;
+function __option_value_QueueDelay(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_QueueDelay(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
   return Ok(__v);
 }
 
-export function __deserialise_Option_Duration(json: __JsonValue, path: string = "$"): Result<Option<number>, __BoundaryError> {
+export function __deserialise_Option_QueueDelay(json: __JsonValue, path: string = "$"): Result<Option<QueueDelay>, __BoundaryError> {
   if (json === undefined || json === null) {
-    return Ok(None as Option<number>);
+    return Ok(None as Option<QueueDelay>);
   }
   if (typeof json === "object" && !globalThis.Array.isArray(json)) {
     const obj = json as { [k: string]: __JsonValue };
     const __keys = globalThis.Object.keys(obj);
     if (obj["kind"] === "None" && __keys.length === 1) {
-      return Ok(None as Option<number>);
+      return Ok(None as Option<QueueDelay>);
     }
     if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
-      const __t = __option_value_Duration(obj["value"], `${path}.value`);
+      const __t = __option_value_QueueDelay(obj["value"], `${path}.value`);
       if (__t.tag === "Err") {
         return __t;
       }
-      return Ok(Some(__t.value as number) as Option<number>);
+      return Ok(Some(__t.value as QueueDelay) as Option<QueueDelay>);
     }
   }
-  const __b = __option_value_Duration(json, path);
+  const __b = __option_value_QueueDelay(json, path);
   if (__b.tag === "Ok") {
-    return Ok(Some(__b.value as number) as Option<number>);
+    return Ok(Some(__b.value as QueueDelay) as Option<QueueDelay>);
   }
   if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });

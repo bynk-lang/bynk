@@ -1,0 +1,16 @@
+context shop.orders
+
+// #4106: a send delay is a `QueueDelay`, 0 seconds to 24 hours. A literal is checked when the
+// program compiles; a computed span goes through `QueueDelay.of`.
+consumes bynk.cloudflare { Queue, QueueSend, QueueDelay }
+
+capability OrderEvents = Queue @name("order-events")
+
+service place {
+  on call(id: String, wait: Duration) -> Effect[()] by Caller given OrderEvents {
+    let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(30.seconds) })
+    let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(24.hours) })
+    let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: QueueDelay.of(wait).ok() })
+    Effect.pure(())
+  }
+}
