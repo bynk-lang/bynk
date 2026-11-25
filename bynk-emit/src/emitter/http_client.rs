@@ -53,6 +53,19 @@ use super::serialisation;
 
 mod route;
 
+/// #3918: whether `r` is a `GET` that answers `Streaming`, and so also has an `EventSource` form.
+fn has_event_source(r: &RouteInput) -> bool {
+    r.method == "GET"
+        && r.replies
+            .iter()
+            .any(|reply| reply.payload == ReplyPayload::Events)
+}
+
+/// The name of a route's `EventSource` form.
+fn event_source_name(function: &str) -> String {
+    format!("{function}EventSource")
+}
+
 /// The generated module's own type names. A boundary type of the same name is
 /// renamed (`Client` to `Client_`), never the surface.
 const SURFACE_TYPES: &[&str] = &[
@@ -493,11 +506,19 @@ impl Gen {
             let mut routes = Vec::new();
             for r in &s.routes {
                 let function = function_name(&r.method, &r.path);
-                if let Some(other) = fns.insert(function.clone(), r) {
-                    return fail(format!(
-                        "`{} {}` and `{} {}` of service `{}` both make the function `{function}`; the client cannot name them apart",
-                        other.method, other.path, r.method, r.path, s.name
-                    ));
+                // #3918: a streaming `GET` also makes `<function>EventSource`, so that name is
+                // taken too.
+                let mut made = vec![function.clone()];
+                if has_event_source(r) {
+                    made.push(event_source_name(&function));
+                }
+                for name in made {
+                    if let Some(other) = fns.insert(name.clone(), r) {
+                        return fail(format!(
+                            "`{} {}` and `{} {}` of service `{}` both make the function `{name}`; the client cannot name them apart",
+                            other.method, other.path, r.method, r.path, s.name
+                        ));
+                    }
                 }
                 let stem = if seen[&function] > 1 {
                     format!("{}{}", pascal(&s.name), pascal(&function))
@@ -1558,6 +1579,51 @@ mod tests {
         ] {
             assert_eq!(function_name(method, path), name, "{method} {path}");
         }
+    }
+
+    /// #3918: a streaming `GET` also makes `<function>EventSource`, so another route that makes that
+    /// name is refused like any two routes of one name, not left as a duplicate key.
+    #[test]
+    fn an_event_source_name_is_taken_too() {
+        let route = |method: &str, path: &str, payload: ReplyPayload| RouteInput {
+            method: method.to_string(),
+            path: path.to_string(),
+            doc: None,
+            params: Vec::new(),
+            success: None,
+            replies: vec![ReplyInput {
+                status: 200,
+                variant: "Streaming".to_string(),
+                payload,
+            }],
+        };
+        let service = |routes| HttpClientInput {
+            services: vec![ServiceInput {
+                unit: "u".to_string(),
+                name: "api".to_string(),
+                doc: None,
+                types: HashMap::new(),
+                routes,
+            }],
+            compiler_version: "0".to_string(),
+        };
+        let clash = service(vec![
+            route("GET", "/ticks", ReplyPayload::Events),
+            route("GET", "/ticks/event-source", ReplyPayload::None),
+        ]);
+        let err = emit_http_client(&clash, Layout::File).expect_err("the names clash");
+        assert!(
+            err.0
+                .contains("both make the function `getTicksEventSource`"),
+            "{}",
+            err.0
+        );
+        // A route that does not stream makes no such name, so the same paths are fine.
+        let fine = service(vec![
+            route("GET", "/ticks", ReplyPayload::None),
+            route("GET", "/ticks/event-source", ReplyPayload::None),
+        ]);
+        assert!(emit_http_client(&fine, Layout::File).is_ok());
     }
 
     #[test]

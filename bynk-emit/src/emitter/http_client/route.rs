@@ -245,9 +245,7 @@ impl Gen {
         // The function: its parameters and the encoding of each.
         let (mut params, build, arg_types) = self.encoding(r, rp)?;
         // #3918: the arguments alone, for the `EventSource` form of a streaming `GET`.
-        let event_source_form = (r.method == "GET"
-            && replies.iter().any(|(_, _, p)| *p == ReplyPayload::Events))
-        .then(|| (params.clone(), build.clone()));
+        let event_source_form = has_event_source(r).then(|| (params.clone(), build.clone()));
         let init =
             if r.params.iter().any(
                 |p| matches!(p, ParamInput::Path { name, .. } if super::super::ts_ident(name) == "init"),
@@ -1045,7 +1043,7 @@ fn event_source_entry(
     };
     let ret = TsType::named("globalThis.EventSource | CallFailure");
     TsObjectEntry::prop(
-        property(&format!("{function}EventSource")),
+        property(&event_source_name(function)),
         TsExpr::Arrow {
             params,
             is_async: false,

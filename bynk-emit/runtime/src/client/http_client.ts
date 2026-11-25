@@ -616,6 +616,19 @@ export function __eventSource(
       },
     } satisfies CallFailure;
   }
+  // A browser sends its own cookies and an `EventSource` cannot add to them: refuse typed cookies as a
+  // call does, never lose them silently.
+  if (request.cookies !== undefined && request.cookies !== "") {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: "cookies",
+        expected: "no typed cookies: an EventSource sends the browser's own (pass `credentials: \"include\"`)",
+        actual: request.cookies,
+      },
+    } satisfies CallFailure;
+  }
   const make = (globalThis as { readonly EventSource?: typeof globalThis.EventSource }).EventSource;
   if (make === undefined) {
     return { kind: "Transport", cause: new globalThis.Error("this environment has no EventSource") } satisfies CallFailure;

@@ -393,7 +393,8 @@ made (an argument that cannot be encoded, a path segment `.` or `..`, or no `Eve
 this environment, which is `Transport`).
 
 An `EventSource` cannot send a header, so it cannot send `Authorization` or any typed `headers`
-value (a non-empty one is refused as `Invalid` rather than dropped). It suits a route that is
+value, and it sends the browser's own cookies and no others, so a typed `cookies` value is no use
+to it: a non-empty one of either is refused as `Invalid` rather than dropped. It suits a route that is
 public or guarded by a cookie: pass `credentials: "include"` to `createClient` to send cookies to
 another origin. A route guarded by a `Bearer` or `Oidc` actor is read through the call's `events`
 instead, which uses `fetch` and so can send the header. The generated function carries that

@@ -1128,6 +1128,12 @@ viaEs.getFeedByModeEventSource("a b");
 c.api.getTicksEventSource();
 show("es-opened", opened);
 show("es-dot", viaEs.getFeedByModeEventSource(".."));
+// #3918: a header or a cookie cannot reach the wire through an `EventSource`, so one that is set is
+// refused, not dropped; an absent optional header is fine.
+opened.length = 0;
+show("es-header-absent", [viaEs.getResumeEventSource({}) instanceof globalThis.EventSource, opened.length]);
+show("es-header-set", viaEs.getResumeEventSource({ lastId: "x" }));
+show("es-cookie-set", viaEs.getWatchEventSource({ watcher: "w" }));
 delete globalThis.EventSource;
 show("es-none", Object.keys(viaEs.getTicksEventSource()));
 
@@ -1245,6 +1251,17 @@ fn check_raw(out: &str) {
         v("es-dot").contains(r#""kind":"Invalid""#),
         "{}",
         v("es-dot")
+    );
+    assert_eq!(v("es-header-absent"), "[true,1]");
+    let header = v("es-header-set");
+    assert!(
+        header.contains(r#""kind":"Invalid""#) && header.contains("headers.last-event-id"),
+        "{header}"
+    );
+    let cookie = v("es-cookie-set");
+    assert!(
+        cookie.contains(r#""kind":"Invalid""#) && cookie.contains(r#""path":"cookies""#),
+        "{cookie}"
     );
     assert_eq!(v("es-none"), r#"["kind","cause"]"#);
     // The server splits an element on `\n` only, so a `\r` in one ends a line for a reader.
