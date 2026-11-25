@@ -557,6 +557,14 @@ pub fn parse_sources(
     // the warnings ride out to the caller's severity-aware sink.
     let (_file_id, result) = crate::parse_cache::cached_parse(cache_key, &source);
     let (units, warnings) = result.map_err(|errors| (*errors).clone())?;
+    // #3938: a `sessions = true` actor's generated agent is appended to the source and the file
+    // parsed again, so the agent's spans point into the text the files carry.
+    if let Some(source) = crate::session_agents::with_session_agents(&source, &units) {
+        let (_id, result) = crate::parse_cache::cached_parse(cache_key, &source);
+        let (units, warnings) = result.map_err(|errors| (*errors).clone())?;
+        let files = parsed_files(root, prefix, path, abs_path, &source, units.iter().cloned());
+        return Ok((files, (*warnings).clone()));
+    }
     let files = parsed_files(root, prefix, path, abs_path, &source, units.iter().cloned());
     Ok((files, (*warnings).clone()))
 }

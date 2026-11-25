@@ -1462,6 +1462,8 @@ module.exports = grammar({
             // (`sameSite = Lax`).
             $.scheme_duration,
             $.identifier,
+            // #3938: a flag (`sessions = true`).
+            $.boolean_literal,
           ),
         ),
       ),

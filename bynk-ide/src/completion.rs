@@ -2735,6 +2735,10 @@ fn signed_cookie_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
                 "sameSite",
                 "`Lax` (the default), `Strict` or `Unrestricted`",
             ),
+            (
+                "sessions",
+                "`true` keeps each session in a generated agent the seam checks on every request (costs an agent call per request); `expire()` then ends the session server-side",
+            ),
         ]
         .into_iter()
         .filter(|(key, _)| !written.contains(key))
@@ -2756,6 +2760,13 @@ pub fn is_signed_cookie_actor(a: &bynk_syntax::ast::ActorDecl) -> bool {
 
 /// #3386: the members a `SignedCookie` actor has inside its context, as `(name, signature)`.
 pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str, String); 2] {
+    // #3938: with `sessions = true`, `expire` also ends the session in its agent, so it is an effect.
+    let expire_signature =
+        if bynk_check::actors::signed_cookie_seam_of(a, None).is_some_and(|s| s.sessions) {
+            "expire() -> Effect[Cookie]".to_string()
+        } else {
+            "expire() -> Cookie".to_string()
+        };
     let identity = a
         .identity
         .as_ref()
@@ -2765,7 +2776,7 @@ pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str,
             "issue",
             format!("issue(identity: {identity}) -> Effect[Cookie]"),
         ),
-        ("expire", "expire() -> Cookie".to_string()),
+        ("expire", expire_signature),
     ]
 }
 

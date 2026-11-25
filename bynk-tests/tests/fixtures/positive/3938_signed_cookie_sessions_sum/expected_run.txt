@@ -1,0 +1,2 @@
+# #3938: a `sessions = true` SignedCookie actor in a sum: the cookie arm checks the session agent.
+passed=12 failed=0

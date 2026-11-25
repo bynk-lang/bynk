@@ -100,7 +100,7 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// ([`Roots::trees`]) and then each path dependency's
 /// ([`bynk_project::dependency_trees`]) — so the source map partitions a
 /// dependency's files into their own tree rather than the last one.
-fn project_trees(options: &CompileOptions) -> Vec<(PathBuf, PathBuf)> {
+pub(super) fn project_trees(options: &CompileOptions) -> Vec<(PathBuf, PathBuf)> {
     let mut trees = options.roots.trees();
     if let Roots::Split { project_root, .. } = &options.roots {
         let empty = HashMap::new();
@@ -156,7 +156,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.tests,
         &options.schema_registry,
         options.remote_tests.as_ref(),
-        options.roots.project_root(),
+        (options.roots.project_root(), &options.environment),
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
         options.fixture_files.as_ref(),
@@ -303,7 +303,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         // `ProjectCheck` carries no reconciled content for anyone to write.
         &options.schema_registry,
         options.remote_tests.as_ref(),
-        options.roots.project_root(),
+        (options.roots.project_root(), &options.environment),
         options.asset_files.as_ref(),
         options.embed_files.as_ref(),
         options.fixture_files.as_ref(),
