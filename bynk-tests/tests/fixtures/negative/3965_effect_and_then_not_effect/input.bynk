@@ -1,0 +1,5 @@
+commons demo.andthennoteffect
+
+fn bump(e: Effect[Int]) -> Effect[Int] {
+	e.andThen((n) => n + 1)
+}

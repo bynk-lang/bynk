@@ -48,6 +48,7 @@ const MODULES = [
   "store",
   "entries",
   "lazy",
+  "scan",
   "boundary",
   "yaml",
   "codec",

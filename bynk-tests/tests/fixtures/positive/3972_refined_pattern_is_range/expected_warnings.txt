@@ -1,0 +1,7 @@
+# #3972: each interval predicate on an `Int`, a combined one, and a refined `Int`.
+refined_pattern_is_range this refined pattern is the range pattern `200..299`
+refined_pattern_is_range this refined pattern is the range pattern `400..499`
+refined_pattern_is_range this refined pattern is the range pattern `1..`
+refined_pattern_is_range this refined pattern is the range pattern `0..`
+refined_pattern_is_range this refined pattern is the range pattern `1..10`
+refined_pattern_is_range this refined pattern is the range pattern `0..9`
