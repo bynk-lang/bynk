@@ -1265,21 +1265,14 @@ impl<'a> LowerCtx<'a> {
             BodyMode::IntegrationCase {
                 system_http_claims, ..
             } if system_http_claims.bearer_claim_routes.contains(route) => {
-                let witness = system_http_claims
-                    .witness_on(route, self.call_site_actor.as_ref())
-                    .map(witness_claims_node);
+                let witness = system_http_claims.witness_on(route, self.call_site_actor.as_ref());
                 let presented = self.call_site_claim_lines.clone().map(|lines| {
                     let c = vec![lines];
                     call(ident("__bynkClaimLines"), c)
                 });
-                Some(match (witness, presented) {
-                    (Some(w), Some(p)) => bynk_ts::TsExpr::object_entries(vec![
-                        bynk_ts::TsObjectEntry::Spread(w),
-                        bynk_ts::TsObjectEntry::Spread(p),
-                    ]),
-                    (Some(only), None) | (None, Some(only)) => only,
-                    (None, None) => bynk_ts::TsExpr::object(vec![]),
-                })
+                Some(super::claim_predicate::bearer_claims_node(
+                    witness, presented,
+                ))
             }
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1290,7 +1283,7 @@ impl<'a> LowerCtx<'a> {
                     .and_then(|a| system_http_claims.actors.get(a))
                 {
                     // The actor's witness claims, as `{ "name": value, … }`.
-                    Some(witness) => witness_claims_node(witness),
+                    Some(witness) => super::claim_predicate::witness_claims_node(witness),
                     None => bynk_ts::TsExpr::object(vec![]),
                 },
             ),
@@ -1870,27 +1863,6 @@ impl<'a> LowerCtx<'a> {
             _ => None,
         }
     }
-}
-
-/// An actor's witness claims as an object literal: each claim a quoted key, so a name that is not
-/// an identifier reads the same, and `true` or its string value.
-fn witness_claims_node(witness: &[(String, bynk_check::actors::WitnessValue)]) -> bynk_ts::TsExpr {
-    use bynk_check::actors::WitnessValue;
-    bynk_ts::TsExpr::object_entries(
-        witness
-            .iter()
-            .map(|(name, value)| {
-                let value = match value {
-                    WitnessValue::True => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
-                    WitnessValue::Str(v) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(v.clone())),
-                };
-                bynk_ts::TsObjectEntry::prop(
-                    format!("\"{}\"", bynk_ts::escape_ts_literal(name)),
-                    value,
-                )
-            })
-            .collect(),
-    )
 }
 
 // ---- #4034: `size()` of a `store` collection inside a predicate ---------------
