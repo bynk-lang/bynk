@@ -1291,6 +1291,8 @@ suite shop.basket {
   Argument patterns are the usual ones: `_`, or a value the argument must equal, and the first
   matching clause wins, a case's before the suite's. A call no clause matches runs the real agent,
   as does every operation no clause names.
+  A handler's call to its own instance (`Basket`'s `add` calling its sibling) runs the real
+  operation, since that call goes to the instance itself, not through the agent's queue.
 - **The words:** `unreachable` is what `Basket(id).add.outcome(…)` reports for a busy agent,
   `Unreachable(None)`, and `faulted` is `Faulted`. A plain call to a stubbed operation, written
   without `.outcome`, faults, as a busy or faulting agent would. A `faulted` call is logged once

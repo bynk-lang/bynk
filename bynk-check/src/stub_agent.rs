@@ -48,8 +48,9 @@ pub(crate) fn other_context_agent_error(
     let owner = unit_tables
         .iter()
         .filter(|(unit, _)| unit.as_str() != target_name)
-        .find(|(_, t)| t.agents.contains_key(name))
-        .map(|(unit, _)| unit)?;
+        .filter(|(_, t)| t.agents.contains_key(name))
+        .map(|(unit, _)| unit)
+        .min()?;
     Some(
         CompileError::new(
             CODE,
