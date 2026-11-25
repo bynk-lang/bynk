@@ -243,25 +243,34 @@ pub struct Added {
 /// or the history is unavailable, which leaves the caller's filename order in place.
 pub fn merge_order(root: &Path) -> std::collections::HashMap<String, Added> {
     let mut order = std::collections::HashMap::new();
-    let Ok(out) = std::process::Command::new("git")
-        .args([
-            "log",
-            "--first-parent",
-            "--diff-merges=first-parent",
-            "--diff-filter=A",
-            "--format=%x01%s",
-            "--name-only",
-            "--",
-            "design/pending",
-        ])
-        .current_dir(root)
-        .output()
-    else {
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+    };
+    // In a shallow clone the boundary commit looks like a root that added every file present
+    // there, which would give them all its PR and one rank. Filename order is the honest answer.
+    match git(&["rev-parse", "--is-shallow-repository"]) {
+        Some(out) if String::from_utf8_lossy(&out.stdout).trim() == "false" => {}
+        _ => return order,
+    }
+    let Some(out) = git(&[
+        "log",
+        "--first-parent",
+        "--diff-merges=first-parent",
+        // Independent of `diff.renames`: a renamed pending file is an addition here.
+        "--no-renames",
+        "--diff-filter=A",
+        "--format=%x01%s",
+        "--name-only",
+        "--",
+        "design/pending",
+    ]) else {
         return order;
     };
-    if !out.status.success() {
-        return order;
-    }
     parse_merge_order(&String::from_utf8_lossy(&out.stdout), &mut order);
     order
 }

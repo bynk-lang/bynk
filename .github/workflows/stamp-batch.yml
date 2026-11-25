@@ -89,6 +89,8 @@ jobs:
       - name: Plan the batch
         if: steps.pending.outputs.any == 'true'
         run: |
+          # The default shell has no pipefail, so `tee` would hide a failing plan.
+          set -o pipefail
           {
             echo "### Stamp batch plan for main@$(git rev-parse --short HEAD)"
             echo
