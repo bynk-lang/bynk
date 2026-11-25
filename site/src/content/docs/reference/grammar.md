@@ -1378,7 +1378,7 @@ service outbox from queue("outbound-email") {
 		deadLetter: "outbound-email-dlq",
 	}
 
-	on message(job: EmailJob) -> Effect[QueueResult] {
+	on message(job: EmailJob) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

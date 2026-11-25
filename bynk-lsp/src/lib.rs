@@ -1214,10 +1214,29 @@ impl Backend {
         text: &str,
         offset: usize,
     ) -> Vec<CompletionItem> {
-        let Some((rewritten, recv_offset)) = completion::value_receiver_rewrite(text, offset)
-        else {
+        // #4312: `old.lines.` / `new.lines.` in a transition predicate is a
+        // dotted receiver the bare-name rewrite declines.
+        let (rewritten, recv_offset, dotted) =
+            match completion::value_receiver_rewrite(text, offset) {
+                Some((rewritten, recv_offset)) => (rewritten, recv_offset, false),
+                None => match completion::predicate_field_rewrite(text, offset) {
+                    Some((rewritten, recv_offset)) => (rewritten, recv_offset, true),
+                    None => return Vec::new(),
+                },
+            };
+        // #4312: a store field in a predicate offers `size` only, whichever
+        // form reaches it.
+        let locals = self.fast_path_locals(uri, &rewritten).await;
+        if let Some(members) =
+            completion::predicate_store_member_candidates(&rewritten, recv_offset, &locals)
+        {
+            return members.into_iter().map(to_completion_item).collect();
+        }
+        // A dotted `old.x.` outside a predicate is no store field: it offered
+        // nothing before, and still does.
+        if dotted {
             return Vec::new();
-        };
+        }
         let mut items: Vec<CompletionItem> = Vec::new();
         if let Some((ty, tys)) = self
             .type_receiver(uri, rewritten.clone(), recv_offset)
@@ -1238,7 +1257,6 @@ impl Backend {
                     .map(to_completion_item),
             );
         }
-        let locals = self.fast_path_locals(uri, &rewritten).await;
         items.extend(
             completion::store_field_member_candidates(&rewritten, recv_offset, &locals)
                 .into_iter()
@@ -11298,6 +11316,54 @@ mod tests {
             labels.contains(&"entries".to_string()),
             "the Map query accessors: {labels:?}"
         );
+    }
+
+    /// #4312: a store collection read in an agent predicate through `old.`,
+    /// `new.` or a bare name offers `size` and nothing else, through the real
+    /// `Backend::completion`.
+    #[tokio::test]
+    async fn predicate_collections_offer_size_through_old_new_and_bare() {
+        let head =
+            "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n\n";
+        let tail = "\n  on call f() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n";
+        for (tag, pred, needle) in [
+            ("pred_bare", "invariant bounded: lines.", "bounded: lines."),
+            ("pred_new", "transition grows: new.lines.", "new.lines."),
+            ("pred_old", "transition grows: old.lines.", "old.lines."),
+        ] {
+            let src = format!("{head}  {pred}\n{tail}");
+            let s = scratch_project(
+                tag,
+                &[
+                    ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                    ("src/shop.bynk", &src),
+                ],
+            );
+            let backend = backend_at(&s.0).await;
+            let uri = file_uri(&s.0, "src/shop.bynk");
+            open(&backend, &uri, &src).await;
+            backend.run_round().await;
+            let labels = complete_at(&backend, &uri, &src, needle).await;
+            assert_eq!(labels, ["size"], "after `{needle}`");
+        }
+        // A `Log` offers nothing through `old.`; and `old.lines.` in a handler
+        // body is no predicate, so no store operation is offered there.
+        let src = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n  transition quiet: old.notes.\n\n  on call f() -> Effect[()] {\n    old.lines.\n  }\n}\n";
+        let s = scratch_project(
+            "pred_empty",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/shop.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/shop.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+        for needle in ["quiet: old.notes.", "    old.lines."] {
+            let labels = complete_at(&backend, &uri, src, needle).await;
+            assert!(labels.is_empty(), "after `{needle}`: {labels:?}");
+        }
     }
 
     /// #4227: where the text names the expected type (the right of `lhs ==`,

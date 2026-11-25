@@ -133,6 +133,7 @@
   - Agents and state
     - [Build a stateful agent](guides/agents-and-state/stateful-agent.md)
     - [Model an agent as a state machine](guides/agents-and-state/state-machine.md)
+    - [Delete a user's data](guides/agents-and-state/delete-a-users-data.md)
   - Localisation
     - [Declare a message bundle](guides/localisation/declare-a-message-bundle.md)
     - [Format with ICU](guides/localisation/format-with-icu.md)

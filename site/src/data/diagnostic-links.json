@@ -259,6 +259,10 @@
   "bynk.agent.state_name_conflict": [
     "/reference/agents/#reading-and-writing-state"
   ],
+  "bynk.agent.write_after_erase": [
+    "/reference/agents/#erase",
+    "/book/guides/agents-and-state/delete-a-users-data/"
+  ],
   "bynk.agents.bad_state_initialiser": [
     "/reference/agents/#state-initialisation",
     "/reference/agents/",

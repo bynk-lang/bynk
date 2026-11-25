@@ -1,0 +1,63 @@
+context shop.account
+
+type Order = {
+	id: String,
+	status: String,
+}
+
+agent Account {
+	key id: String
+
+	store email: Cell[String] = "none"
+	store orders: Map[String, Order] @indexed(by: status)
+
+	on call open(mail: String) -> Effect[()] {
+		email := mail
+		let _ <- orders.put("o1", Order { id: "o1", status: "open" })
+		let _ <- orders.put("o2", Order { id: "o2", status: "open" })
+		Effect.pure(())
+	}
+
+	on call close() -> Effect[()] {
+		self.erase()
+	}
+
+	on call readEmail() -> Effect[String] {
+		email
+	}
+
+	on call openOrders() -> Effect[Int] {
+		orders.filter((o) => o.status == "open").count()
+	}
+
+	on call orderCount() -> Effect[Int] {
+		orders.size()
+	}
+}
+
+service api from http {
+	on GET("/open") () -> Effect[HttpResult[String]] by Visitor {
+		let _ <- Account("a").open("a@b.c")
+		Ok("opened")
+	}
+
+	on GET("/close") () -> Effect[HttpResult[String]] by Visitor {
+		let _ <- Account("a").close()
+		Ok("closed")
+	}
+
+	on GET("/email") () -> Effect[HttpResult[String]] by Visitor {
+		let mail <- Account("a").readEmail()
+		Ok(mail)
+	}
+
+	on GET("/open-orders") () -> Effect[HttpResult[String]] by Visitor {
+		let n <- Account("a").openOrders()
+		Ok(n.toString())
+	}
+
+	on GET("/orders") () -> Effect[HttpResult[String]] by Visitor {
+		let n <- Account("a").orderCount()
+		Ok(n.toString())
+	}
+}
