@@ -79,6 +79,35 @@ service web from http {
 }
 ```
 
+## What a page gets by default
+
+A response served as `text/html` is a page, and a page can be framed by any other site
+and leaks its address in `Referer`. So the router adds two headers to it, with nothing for
+you to write:
+
+- `Content-Security-Policy: frame-ancestors 'none'`, so no site can frame it;
+- `Referrer-Policy: strict-origin-when-cross-origin`.
+
+A JSON response from the same service is not touched. If a page is meant to be embedded,
+name the embedder in a `security { }` section on the service; `referrerPolicy` and a whole
+`csp` go there too:
+
+```bynk,fragment
+service site from http by Visitor {
+	security {
+		frameAncestors: ["https://partner.example"],
+		referrerPolicy: noReferrer,
+	}
+
+	on GET("/partner") () -> Effect[HttpResult[()]] {
+		Raw(Bytes.fromUtf8("<p>for the partner</p>"), "text/html")
+	}
+}
+```
+
+The same two defaults cover an HTML error page you return with `RawError`. See
+[HTTP — Security headers](/reference/http/#security-headers) for every field.
+
 ## Test it
 
 A unit suite can name the embed, and call the page's functions, so a test can

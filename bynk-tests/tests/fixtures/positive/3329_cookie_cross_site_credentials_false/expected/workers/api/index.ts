@@ -20,7 +20,7 @@ export default {
     const method = request.method;
     const surface = compose(env);
     const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["OPTIONS", "POST"], allowHeaders: ["content-type"], credentials: false, maxAgeSecs: null };
-    const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+    const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {

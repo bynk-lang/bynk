@@ -326,9 +326,10 @@ test("corsPreflightResponse: 204 without a grant for a non-allowlisted origin", 
 
 // v0.141 (ADR 0164): security response headers — nosniff on by default, HSTS opt-in.
 
-const defaultSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
-const hstsSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: 15552000 };
-const optedOutSecurity: SecurityPolicy = { nosniff: false, hstsMaxAgeSecs: null };
+const htmlDefaults = { htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+const defaultSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, ...htmlDefaults };
+const hstsSecurity: SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: 15552000, ...htmlDefaults };
+const optedOutSecurity: SecurityPolicy = { nosniff: false, hstsMaxAgeSecs: null, ...htmlDefaults };
 
 test("applySecurityHeaders: default stamps nosniff, no HSTS", () => {
   const res = applySecurityHeaders(new Response("ok"), defaultSecurity);
@@ -346,6 +347,33 @@ test("applySecurityHeaders: nosniff:false opts out of every security header", ()
   const res = applySecurityHeaders(new Response("ok"), optedOutSecurity);
   assert.equal(res.headers.get("x-content-type-options"), null);
   assert.equal(res.headers.get("strict-transport-security"), null);
+});
+
+// #3923: a text/html response gets framing and referrer protection; nothing else does.
+
+test("applySecurityHeaders: a text/html response gets frame-ancestors and a referrer policy", () => {
+  for (const type of ["text/html", "text/html; charset=utf-8", "TEXT/HTML ; charset=utf-8"]) {
+    const res = applySecurityHeaders(new Response("<p>x</p>", { headers: { "content-type": type } }), defaultSecurity);
+    assert.equal(res.headers.get("content-security-policy"), "frame-ancestors 'none'", type);
+    assert.equal(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin", type);
+  }
+});
+
+test("applySecurityHeaders: JSON, text, and a missing content type are unchanged", () => {
+  for (const type of ["application/json", "text/plain", "application/xhtml+xml", null]) {
+    const init = type === null ? undefined : { headers: { "content-type": type } };
+    const body = type === null ? null : "x";
+    const res = applySecurityHeaders(new Response(body, init), defaultSecurity);
+    assert.equal(res.headers.get("content-security-policy"), null, String(type));
+    assert.equal(res.headers.get("referrer-policy"), null, String(type));
+  }
+});
+
+test("applySecurityHeaders: nosniff:false does not turn the HTML headers off, and they overwrite the edge's", () => {
+  const html = new Response("<p>x</p>", { headers: { "content-type": "text/html", "content-security-policy": "default-src *" } });
+  const res = applySecurityHeaders(html, optedOutSecurity);
+  assert.equal(res.headers.get("x-content-type-options"), null);
+  assert.equal(res.headers.get("content-security-policy"), "frame-ancestors 'none'");
 });
 
 test("applySecurityHeaders: composes with applyCors (disjoint headers, order-independent)", () => {

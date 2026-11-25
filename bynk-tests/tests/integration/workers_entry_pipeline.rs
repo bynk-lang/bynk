@@ -199,7 +199,7 @@ fn every_route_response_carries_the_service_security_headers() {
     let ts = shop_index();
     assert!(
         ts.contains(
-            "const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };"
+            "const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: \"frame-ancestors 'none'\", htmlReferrerPolicy: \"strict-origin-when-cross-origin\" };"
         ),
         "{ts}"
     );
