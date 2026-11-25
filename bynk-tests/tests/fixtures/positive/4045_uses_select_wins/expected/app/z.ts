@@ -4,12 +4,11 @@
 import { describe } from "../lib/x.js";
 import { Status, level } from "../lib/y.js";
 import * as __use_lib_x from "../lib/x.js";
-namespace lib { export import x = __use_lib_x; }
 
 export function f(s: Status): number {
   return level(s);
 }
 
-export function g(s: lib.x.Status): string {
+export function g(s: __use_lib_x.Status): string {
   return describe(s);
 }
