@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EntryOverlay, commitStored, expiredRange, noteClock, readStored, storeKey, MAX_STORAGE_KEY_BYTES } from "../src/entries.ts";
+import { EntryOverlay, checkUnique, commitStored, expiredRange, noteClock, readStored, storeKey, MAX_STORAGE_KEY_BYTES } from "../src/entries.ts";
 import type { EntryField } from "../src/entries.ts";
 import { LazyStoreCache, LazyStoreLog, LazyStoreMap, LazyStoreSet, SCAN_PAGE } from "../src/lazy.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillLog, fillMap, fillSet, wireLog, wireMap, wirePostings, wireSet } from "../src/store.ts";
@@ -420,4 +420,168 @@ test("a posting key over the storage-key limit faults naming the field and index
     () => l.items.put("k", { team: long, n: 1 }),
     (e: Error) => e.message.includes("`items`") && e.message.includes("`by`") && !e.message.includes("yyyy"),
   );
+});
+
+// #4038: `@unique(by:)` is checked at commit against the staged postings, committed holders included.
+test("a unique index refuses a second holder, committed or staged, and allows a moved value and a None", async () => {
+  interface Row {
+    email: string | undefined;
+  }
+  const UNIQUE: Indexer<Row> = { index: "email", of: (r) => r.email, unique: true };
+  const codec = { read: (e: { v: Row }) => e.v, write: (v: Row, i: number) => ({ i, v }) };
+  const s = new InMemoryStorage();
+  const open = () => {
+    const overlay = new EntryOverlay(s as never);
+    return { overlay, rows: new LazyStoreMap<Row>(overlay, "rows", codec, [UNIQUE]) };
+  };
+  const commit = async (h: { overlay: EntryOverlay; rows: LazyStoreMap<Row> }) => {
+    h.rows.finish();
+    await h.overlay.flush({ state: { __layout: 2 } });
+  };
+
+  const first = open();
+  await first.rows.put("a", { email: "x" });
+  await first.rows.put("n1", { email: undefined });
+  await first.rows.put("n2", { email: undefined });
+  assert.equal(await first.rows.hasDuplicate("email"), false, "two Nones are not duplicates");
+  await commit(first);
+
+  // A staged put collides with a committed holder.
+  const second = open();
+  await second.rows.put("b", { email: "x" });
+  assert.equal(await second.rows.hasDuplicate("email"), true);
+
+  // Moving the value from `a` to `c` in one handler leaves one holder.
+  const third = open();
+  await third.rows.put("a", { email: "y" });
+  await third.rows.put("c", { email: "x" });
+  assert.equal(await third.rows.hasDuplicate("email"), false);
+
+  // Two staged puts of one value collide, and a removal clears the collision.
+  const fourth = open();
+  await fourth.rows.put("d", { email: "z" });
+  await fourth.rows.put("e", { email: "z" });
+  assert.equal(await fourth.rows.hasDuplicate("email"), true);
+  await fourth.rows.remove("e");
+  assert.equal(await fourth.rows.hasDuplicate("email"), false);
+
+  // Overwriting an entry with its own value is not a duplicate.
+  const fifth = open();
+  await fifth.rows.put("a", { email: "x" });
+  assert.equal(await fifth.rows.hasDuplicate("email"), false);
+  await assert.rejects(() => Promise.resolve(fifth.rows.hasDuplicate("nope")), /no index "nope"/);
+});
+
+// #4038 review: an index declared after the map already holds entries finds them. The map was
+// written with no index (no postings, no recorded index set); the first handler to touch it under a
+// `@unique` index rebuilds the postings in its own commit, so a colliding put is refused.
+test("a unique index declared on a map that already holds entries refuses a collision with one", async () => {
+  interface Row {
+    email: string | undefined;
+  }
+  const UNIQUE: Indexer<Row> = { index: "email", of: (r) => r.email, unique: true };
+  const codec = { read: (e: { v: Row }) => e.v, write: (v: Row, i: number) => ({ i, v }) };
+  const s = new InMemoryStorage();
+  // Before the annotation: two entries, no postings, no `ix` in the metadata.
+  const before = new EntryOverlay(s as never);
+  const plain = new LazyStoreMap<Row>(before, "rows", codec);
+  await plain.put("a", { email: "x" });
+  await plain.put("b", { email: "y" });
+  plain.finish();
+  await before.flush({ state: { __layout: 2 } });
+  assert.equal((await s.list({ prefix: "i/" })).size, 0, "no postings were written");
+
+  const overlay = new EntryOverlay(s as never);
+  const rows = new LazyStoreMap<Row>(overlay, "rows", codec, [UNIQUE]);
+  await rows.put("c", { email: "x" });
+  assert.equal(await rows.hasDuplicate("email"), true, "the committed holder `a` was found");
+  rows.finish();
+  await overlay.flush({ state: { __layout: 2 } });
+  // The rebuilt postings and the recorded index set are what the commit left.
+  assert.equal(((await s.get("c/rows")) as { ix?: string }).ix, "email:u");
+  assert.equal((await s.list({ prefix: "i/rows/email/" })).size, 3);
+
+  // A second handler under the same set has nothing to rebuild.
+  const again = new EntryOverlay(s as never);
+  const rows2 = new LazyStoreMap<Row>(again, "rows", codec, [UNIQUE]);
+  await rows2.put("d", { email: "q" });
+  assert.equal(await rows2.hasDuplicate("email"), false);
+});
+
+// Changing an index's key scheme (`@indexed` to `@unique` on an `Option`: the whole option, then its
+// payload) rebuilds the field's postings, so none is left orphaned under the old key.
+test("a changed index set rebuilds the postings and leaves no orphan", async () => {
+  interface Row {
+    nick: string | undefined;
+  }
+  const INDEXED: Indexer<Row> = { index: "nick", of: (r) => (r.nick === undefined ? "None" : `Some:${r.nick}`) };
+  const UNIQUE: Indexer<Row> = { index: "nick", of: (r) => r.nick, unique: true };
+  const codec = { read: (e: { v: Row }) => e.v, write: (v: Row, i: number) => ({ i, v }) };
+  const s = new InMemoryStorage();
+  const first = new EntryOverlay(s as never);
+  const indexed = new LazyStoreMap<Row>(first, "rows", codec, [INDEXED]);
+  await indexed.put("a", { nick: "ann" });
+  await indexed.put("n", { nick: undefined });
+  indexed.finish();
+  await first.flush({ state: { __layout: 2 } });
+  assert.deepEqual([...(await s.list({ prefix: "i/rows/nick/" })).keys()].sort(), ["i/rows/nick/None/n", "i/rows/nick/Some:ann/a"]);
+
+  const second = new EntryOverlay(s as never);
+  const unique = new LazyStoreMap<Row>(second, "rows", codec, [UNIQUE]);
+  await unique.put("b", { nick: "bob" });
+  unique.finish();
+  await second.flush({ state: { __layout: 2 } });
+  const keys = [...(await s.list({ prefix: "i/rows/nick/" })).keys()];
+  assert.equal(keys.length, 2, `the old keys are gone and a None is not indexed: ${keys.join(" ")}`);
+  assert.ok(keys.every((k) => k.endsWith("/a") || k.endsWith("/b")), keys.join(" "));
+  assert.ok(!keys.some((k) => k.includes("None") || k.includes("Some")), keys.join(" "));
+});
+
+// The in-memory handle judges what the handler staged, as the storage-backed one does: a duplicate it
+// was loaded with and never touched is not a refusal (#4038 review).
+test("an in-memory unique index refuses only values the handler staged", () => {
+  interface Row {
+    email: string;
+  }
+  const UNIQUE: Indexer<Row> = { index: "email", of: (r) => r.email, unique: true };
+  const loaded = StoreMap.from<Row>(
+    [
+      ["a", { email: "x" }],
+      ["b", { email: "x" }],
+    ],
+    [UNIQUE],
+  );
+  assert.equal(loaded.hasDuplicate("email"), false, "a legacy duplicate is not this handler's");
+  loaded.put("c", { email: "y" });
+  assert.equal(loaded.hasDuplicate("email"), false);
+  loaded.put("d", { email: "x" });
+  assert.equal(loaded.hasDuplicate("email"), true, "touching the duplicated value is refused");
+});
+
+// The refusal itself, not just a fault: an `InvariantViolation` of the `unique` declaration, named by
+// the field and index, locating the annotation, and carrying no value (#4038 review).
+test("checkUnique refuses a duplicate as an InvariantViolation of the unique declaration, without the value", async () => {
+  const handles = {
+    customers: StoreMap.from<{ email: string }>(
+      [["a", { email: "secret@e.com" }]],
+      [{ index: "email", of: (r) => r.email, unique: true }],
+    ),
+  };
+  handles.customers.put("b", { email: "secret@e.com" });
+  const declared = [["customers", "email", "src/demo/dir.bynk:12:3"]] as const;
+  await assert.rejects(checkUnique("Directory", handles, declared), (e: Error) => {
+    const v = (e as { invariantViolation?: Record<string, unknown> }).invariantViolation;
+    assert.deepEqual(v, {
+      kind: "InvariantViolation",
+      agent: "Directory",
+      invariant: "customers.email",
+      declaration: "unique",
+      location: "src/demo/dir.bynk:12:3",
+    });
+    assert.ok(!JSON.stringify(v).includes("secret"), "the value is never carried");
+    assert.ok(!e.message.includes("secret"), "nor named in the message");
+    return true;
+  });
+  const clean = { customers: StoreMap.from<{ email: string }>([["a", { email: "x" }]], [{ index: "email", of: (r) => r.email, unique: true }]) };
+  await checkUnique("Directory", clean, declared);
 });

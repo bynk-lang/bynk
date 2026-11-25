@@ -6,5 +6,5 @@
   "constructs": [],
   "example": "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",
   "severity": "error",
-  "summary": "A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680)."
+  "summary": "A store `Set` element or `Map`/`Cache` key is not a `Key` type (a `Float`, a `Map`, a `Set` or a function appears in it)."
 }
