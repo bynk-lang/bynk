@@ -11,7 +11,7 @@
 //! The project-wide half (a dead-letter queue's own consumer must take the same
 //! message type) is [`phase_dead_letter_consumers`].
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::{
@@ -22,8 +22,7 @@ use bynk_syntax::error::CompileError;
 use crate::context_checks::ts_type_ref_display;
 use crate::contract_compat::Verdict;
 use crate::project_model::{ErrorSink, is_queue_name};
-use crate::queue_producers::{consumers_of, message_compat};
-use crate::symbols::{UnitTable, contract_types_for};
+use crate::queue_producers::{Project, consumers_of, message_compat};
 
 /// The keys of a `delivery { }` section, with what each takes.
 const KEYS: &[(&str, &str)] = &[
@@ -183,12 +182,10 @@ pub fn phase_dead_letter_consumers(
     parsed: &[ParsedFile],
     groups: &BTreeMap<String, Vec<usize>>,
     kinds: &BTreeMap<String, UnitKind>,
-    (unit_tables, unit_uses, unit_consumes): ProjectTables<'_>,
+    project: &Project<'_>,
     errors: &mut ErrorSink,
 ) {
     let consumers = consumers_of(parsed, groups, kinds);
-    let types_of =
-        |context: &str| contract_types_for(context, unit_tables, unit_uses, unit_consumes).0;
     for (ctx_name, indices) in groups {
         if kinds.get(ctx_name) != Some(&UnitKind::Context) {
             continue;
@@ -204,9 +201,10 @@ pub fn phase_dead_letter_consumers(
                 let ServiceProtocol::Queue { name: queue } = &service.protocol else {
                     continue;
                 };
-                let Some(bynk_syntax::ast::DeadLetter::Queue(dlq)) =
-                    service.delivery.as_ref().and_then(|d| d.dead_letter())
-                else {
+                let Some(delivery) = &service.delivery else {
+                    continue;
+                };
+                let Some(bynk_syntax::ast::DeadLetter::Queue(dlq)) = delivery.dead_letter() else {
                     continue;
                 };
                 let (Some(source), Some(dead)) =
@@ -216,17 +214,13 @@ pub fn phase_dead_letter_consumers(
                 };
                 let verdict = message_compat(
                     &source.param.type_ref,
-                    &types_of(source.context),
+                    &project.types_of(source.context),
                     &dead.param.type_ref,
-                    &types_of(dead.context),
+                    &project.types_of(dead.context),
                 );
                 if verdict.verdict != Verdict::Breaking {
                     continue;
                 }
-                let delivery = service
-                    .delivery
-                    .as_ref()
-                    .expect("a dead letter has a delivery");
                 let span = delivery
                     .fields
                     .iter()
@@ -259,14 +253,6 @@ pub fn phase_dead_letter_consumers(
         }
     }
 }
-
-/// The project tables a type namespace is built from: each unit's symbol table, and what it
-/// `uses` and `consumes`.
-pub type ProjectTables<'a> = (
-    &'a HashMap<String, UnitTable>,
-    &'a HashMap<String, Vec<String>>,
-    &'a HashMap<String, Vec<String>>,
-);
 
 #[cfg(test)]
 mod tests {
@@ -388,6 +374,40 @@ mod tests {
         analyse(&[("t/q.bynk", &source("String"))]).assert_clean();
         assert_eq!(
             categories(&source("Int")),
+            ["bynk.queue.dead_letter_type_mismatch"]
+        );
+    }
+
+    /// #4305: the two consumers' types are each read in their own context, so a record with the
+    /// same fields under the same name in two contexts is the same message, and different fields
+    /// are not.
+    #[test]
+    fn dead_letter_consumers_in_two_contexts_are_compared_in_their_own_namespaces() {
+        let source = "context t.a\n\ntype Job = { id: String }\n\nservice w from queue(\"jobs\") {\n  delivery { deadLetter: \"jobs-dlq\" }\n  on message(m: Job) -> Effect[QueueResult] { Ack }\n}\n";
+        let review = |fields: &str| {
+            format!(
+                "context t.b\n\ntype Job = {{ {fields} }}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: Job) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+            )
+        };
+        analyse(&[("t/a.bynk", source), ("t/b.bynk", &review("id: String"))]).assert_clean();
+        assert_eq!(
+            analyse(&[("t/a.bynk", source), ("t/b.bynk", &review("name: String"))]).categories(),
+            ["bynk.queue.dead_letter_type_mismatch"]
+        );
+    }
+
+    /// #4305: the dead letter is the source's body, so a dead-letter consumer of a weaker
+    /// refinement accepts it and one of a stronger refinement does not.
+    #[test]
+    fn a_dead_letter_consumer_may_take_a_weaker_refinement_but_not_a_stronger() {
+        let pair = |source_ty: &str, dlq_ty: &str| {
+            format!(
+                "context t.q\n\ntype Small = Int where InRange(1, 10)\ntype Wide = Int where InRange(1, 100)\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: \"jobs-dlq\" }}\n  on message(m: {source_ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {dlq_ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+            )
+        };
+        analyse(&[("t/q.bynk", &pair("Small", "Wide"))]).assert_clean();
+        assert_eq!(
+            categories(&pair("Wide", "Small")),
             ["bynk.queue.dead_letter_type_mismatch"]
         );
     }

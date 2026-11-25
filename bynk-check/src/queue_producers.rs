@@ -242,10 +242,17 @@ pub fn phase_queue_producers(
 }
 
 /// The project tables a type namespace is built from.
-struct Project<'a> {
-    tables: &'a HashMap<String, UnitTable>,
-    uses: &'a HashMap<String, Vec<String>>,
-    consumes: &'a HashMap<String, Vec<String>>,
+pub struct Project<'a> {
+    pub tables: &'a HashMap<String, UnitTable>,
+    pub uses: &'a HashMap<String, Vec<String>>,
+    pub consumes: &'a HashMap<String, Vec<String>>,
+}
+
+impl Project<'_> {
+    /// The types `context` can name: its own, and those of the units it uses or consumes.
+    pub fn types_of(&self, context: &str) -> TypeTable {
+        contract_types_for(context, self.tables, self.uses, self.consumes).0
+    }
 }
 
 fn check_site(
@@ -265,13 +272,7 @@ fn check_site(
         return;
     };
     let taken = &consumer.param.type_ref;
-    let taken_types = contract_types_for(
-        consumer.context,
-        project.tables,
-        project.uses,
-        project.consumes,
-    )
-    .0;
+    let taken_types = project.types_of(consumer.context);
     let verdict = message_compat(&sent, own_types, taken, &taken_types);
     if verdict.verdict != Verdict::Breaking {
         return;

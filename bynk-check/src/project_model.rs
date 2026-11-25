@@ -5871,7 +5871,11 @@ pub fn phase_bundle_composition_unprovided(
         parsed,
         groups,
         kinds,
-        (unit_tables, unit_uses, unit_consumes),
+        &crate::queue_producers::Project {
+            tables: unit_tables,
+            uses: unit_uses,
+            consumes: unit_consumes,
+        },
         errors,
     );
     // #3879: a producer's message type against the queue's consumer.
