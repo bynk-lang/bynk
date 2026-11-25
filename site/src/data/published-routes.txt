@@ -1322,6 +1322,7 @@
 /reference/diagnostics/bynk.actor.foreign_secret_not_string/
 /reference/diagnostics/bynk.actor.identity_not_sealed/
 /reference/diagnostics/bynk.actor.missing_by_on_call/
+/reference/diagnostics/bynk.actor.missing_by_on_email/
 /reference/diagnostics/bynk.actor.missing_by_on_http/
 /reference/diagnostics/bynk.actor.missing_by_on_queue/
 /reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/
@@ -1676,6 +1677,8 @@
 /reference/diagnostics/bynk.http.form_on_sum_route/
 /reference/diagnostics/bynk.http.form_unknown_arg/
 /reference/diagnostics/bynk.http.header_question_not_found/
+/reference/diagnostics/bynk.http.headers_field_consumed/
+/reference/diagnostics/bynk.http.headers_field_consumed_optional/
 /reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
 /reference/diagnostics/bynk.http.invalid_path/
