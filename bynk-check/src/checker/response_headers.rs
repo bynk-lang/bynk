@@ -57,6 +57,7 @@ fn variants_of(op: HttpResultOp) -> &'static [&'static str] {
         HttpResultOp::RetryAfter => &["TooManyRequests", "ServiceUnavailable"],
         HttpResultOp::At => &["Created", "RawCreated", "Accepted"],
         HttpResultOp::Download => &["Raw", "RawTagged", "RawStreamed"],
+        HttpResultOp::Heartbeat => &["Streaming"],
         _ => &[],
     }
 }
@@ -121,6 +122,7 @@ pub(crate) fn is_response_header_op(op: HttpResultOp) -> bool {
             | HttpResultOp::RetryAfter
             | HttpResultOp::At
             | HttpResultOp::Download
+            | HttpResultOp::Heartbeat
             | HttpResultOp::Headers
     )
 }
@@ -147,6 +149,7 @@ pub(crate) fn check_response_header_method(
         HttpResultOp::RetryAfter => vec![(duration, "delay")],
         HttpResultOp::At => vec![(string, "url")],
         HttpResultOp::Download => vec![(string, "filename")],
+        HttpResultOp::Heartbeat => vec![(duration, "every")],
         _ => vec![],
     };
     if args.len() != params.len() {
@@ -261,6 +264,19 @@ fn lint_literals(op: HttpResultOp, args: &[Expr], ctx: &mut Ctx) {
                     "`at` needs a non-empty URL with no line break or control character"
                         .to_string(),
                 ));
+            }
+        }
+        HttpResultOp::Heartbeat => {
+            if let Some(ExprKind::DurationLit { millis, .. }) = args.first().map(|a| &a.kind)
+                && *millis < 1_000
+            {
+                ctx.errors.push(
+                    invalid(
+                        args[0].span,
+                        "`heartbeat` needs an interval of at least one second".to_string(),
+                    )
+                    .with_note("a comment line every few hundred milliseconds is a busy loop, not a keep-alive; 15.seconds is typical"),
+                );
             }
         }
         HttpResultOp::Download => {

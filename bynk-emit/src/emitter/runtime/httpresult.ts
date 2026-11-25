@@ -15,7 +15,12 @@ export type HttpResult<T> =
   // 2xx success — carries the serialised value.
   | { readonly tag: "Ok"; readonly value: T }
   // 2xx streamed body — SSE-framed (real-time track slice 1).
-  | { readonly tag: "Streaming"; readonly stream: AsyncIterable<string | SseEvent> }
+  | {
+      readonly tag: "Streaming";
+      readonly stream: AsyncIterable<string | SseEvent>;
+      // #3918: `.heartbeat(every)`: write a comment line whenever the stream is idle this long.
+      readonly heartbeatMs?: number;
+    }
   // 2xx raw body — author-owned bytes with an explicit content-type (v0.111).
   | { readonly tag: "Raw"; readonly body: Uint8Array; readonly contentType: string }
   // 2xx raw body with a handler-supplied entity tag, sent as its `ETag` (caching raw responses).
