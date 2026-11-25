@@ -180,7 +180,9 @@ seam finishes. An agent that cannot answer faults the request (`500`) rather tha
 The handler never sees the credential: the router leaves the session cookie out of the handler's
 `cookies` record and raw `RequestCookies` view, and a record that names it is refused
 (`bynk.actor.signed_cookie_read_directly`). `bynk deploy` mints the `secret` variable when it is unset (see [Signed cookies](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#session-keys)).
-A `system` suite signs in as `by User("ada")` and probes the seam with `by Nobody`, `by Forged` and
+A `system` suite signs in as `by User("ada")`; with `sessions = true` that is one session per principal and
+case, like one browser, so a later call in the case replays the same cookie and sees a session that `expire()`
+or `revokeAll` ended as `401`. It probes the seam with `by Nobody`, `by Forged` and
 `by Expired`, and, with `sessions = true`, `by Revoked` (see
 [the failure principals](/reference/testing/#failure-principals)); a case's own
 `Sec-Fetch-Site` and `Origin` headers probe the CSRF check.

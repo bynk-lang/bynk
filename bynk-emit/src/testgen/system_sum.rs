@@ -65,7 +65,7 @@ impl SumAuth {
                 )],
                 SumCredential::Cookie(session) => vec![assign(
                     auth("cookie"),
-                    session.pair(&session.keys, ident("__sub"), now_secs()),
+                    session.principal_pair(ident("__sub"), now_secs()),
                 )],
                 SumCredential::Signature(z) => {
                     let mut set = vec![

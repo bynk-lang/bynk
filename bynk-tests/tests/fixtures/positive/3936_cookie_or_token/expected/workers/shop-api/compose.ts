@@ -23,9 +23,7 @@ export function compose(env: Env) {
             const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
             if (__session.tag !== "Err") {
               const __id = handlers.UserId.of(__session.value.sub);
-              if (__id.tag === "Ok") {
-                __who = { tag: "User", identity: __id.value };
-              }
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
             }
           }
           else {
@@ -66,9 +64,7 @@ export function compose(env: Env) {
             const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
             if (__session.tag !== "Err") {
               const __id = handlers.UserId.of(__session.value.sub);
-              if (__id.tag === "Ok") {
-                __who = { tag: "User", identity: __id.value };
-              }
+              if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
             }
           }
           else {
@@ -87,9 +83,7 @@ export function compose(env: Env) {
           const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
           if (__session.tag !== "Err") {
             const __id = handlers.UserId.of(__session.value.sub);
-            if (__id.tag === "Ok") {
-              __who = { tag: "User", identity: __id.value };
-            }
+            if (__id.tag === "Ok") __who = { tag: "User", identity: __id.value };
           }
         }
       }

@@ -552,9 +552,9 @@ fn session_live_guard(seam: &bynk_check::actors::SignedCookieSeam, ok: TsExpr) -
 /// (`csrf_origins` is `Some`) must pass the CSRF check (fetch metadata, then `Origin`), else the
 /// arm sets `__csrfRefused` and does not resolve; then the cookie is verified and its `sub`
 /// constructs the identity.
-/// The statements that resolve a verified cookie member: `__who = { tag, identity }`, and, for a
+/// The statement that resolves a verified cookie member: `__who = { tag, identity }`, and, for a
 /// `sessions = true` actor, `__sess = { sid, sub }` (#3938).
-fn session_resolved(seam: &bynk_check::actors::SignedCookieSeam, tag: &str) -> Vec<TsStmt> {
+fn session_resolved(seam: &bynk_check::actors::SignedCookieSeam, tag: &str) -> TsStmt {
     let mut out = vec![TsStmt::assign(
         ident("__who"),
         TsExpr::object(vec![
@@ -574,7 +574,11 @@ fn session_resolved(seam: &bynk_check::actors::SignedCookieSeam, tag: &str) -> V
             None,
         ));
     }
-    out
+    if out.len() == 1 {
+        // Without a session there is the one assignment, as before part B.
+        return out.remove(0);
+    }
+    block(out)
 }
 
 /// #3938: `{ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who }`, the
@@ -638,7 +642,7 @@ fn sum_cookie_arm(
                         seam,
                         strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
                     ),
-                    block(session_resolved(seam, tag)),
+                    session_resolved(seam, tag),
                 ),
             ]),
         ),

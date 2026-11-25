@@ -1700,7 +1700,7 @@ fn session_route(
         ttl_secs: seam.ttl_secs,
         sessions: SessionAgentRef::of(&seam, ns),
     };
-    let pair = session.pair(&session.keys, ident("__sub"), now_secs());
+    let pair = session.principal_pair(ident("__sub"), now_secs());
     (
         Some(session),
         typed_cookie.render(Some(&pair)),
@@ -1809,7 +1809,7 @@ fn push_session_refusal_drivers(
     for (name, pair) in variants {
         let mut sign_stmts = vec![const_("__cookie", pair)];
         if let (Some(agent), "revoked") = (&session.sessions, name) {
-            sign_stmts.push(agent.revoke(str_lit("bynk-test")));
+            sign_stmts.extend(agent.revoke(str_lit("bynk-test")));
         }
         let sign_stmt = sign_stmts;
         routes.push(sysdrive_driver(

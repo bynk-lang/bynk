@@ -76,4 +76,26 @@ suite shop.api as system {
 		let r <- api.POST("/revoke-all") by User("ada")
 		expect r is NoContent
 	}
+
+	case "a session ended by expire from a sum handler is refused when replayed" {
+		let before <- api.GET("/orders") by User("ada")
+		expect before is Ok("cookie ada")
+		let out <- api.POST("/logout") by User("ada")
+		expect out is NoContent
+		let after <- api.GET("/orders") by User("ada")
+		expect after is Unauthorized
+	}
+
+	case "revokeAll from a sum handler refuses the identity's session and leaves another's valid" {
+		let ada <- api.GET("/orders") by User("ada")
+		expect ada is Ok("cookie ada")
+		let bob <- api.GET("/orders") by User("bob")
+		expect bob is Ok("cookie bob")
+		let revoked <- api.POST("/revoke-all") by User("ada")
+		expect revoked is NoContent
+		let adaAfter <- api.GET("/orders") by User("ada")
+		expect adaAfter is Unauthorized
+		let bobAfter <- api.GET("/orders") by User("bob")
+		expect bobAfter is Ok("cookie bob")
+	}
 }

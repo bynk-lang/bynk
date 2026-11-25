@@ -20,6 +20,8 @@ pub(super) struct SessionAgentRef {
     cookie: String,
     same_site: String,
     ttl_secs: i64,
+    /// The actor's identity type, which the signed-in `sub` must construct.
+    identity: String,
 }
 
 impl SessionAgentRef {
@@ -35,12 +37,43 @@ impl SessionAgentRef {
             cookie: seam.cookie.clone(),
             same_site: seam.same_site.clone(),
             ttl_secs: seam.ttl_secs,
+            identity: seam.identity_type.clone(),
         })
     }
 
     /// `await <agent>.revokeAll()`: end every session of `sub` in the agent, as `by Revoked` does
     /// after its cookie is issued, so the seam must refuse the cookie.
-    pub(super) fn revoke(&self, sub: TsExpr) -> TsStmt {
+    pub(super) fn revoke(&self, sub: TsExpr) -> Vec<TsStmt> {
+        // `by Revoked` claims to test revocation, so it must not pass because the seam refused a
+        // `sub` the identity type rejects before the session was ever looked at.
+        let identity_ok = crate::ts_build::strict_eq(
+            member(
+                method_call(
+                    member(ident(self.handlers_ns.clone()), self.identity.clone()),
+                    "of",
+                    vec![sub.clone()],
+                ),
+                "tag",
+            ),
+            str_lit("Ok"),
+        );
+        let refuse = TsStmt::throw_stmt(
+            crate::ts_build::new(
+                ident("globalThis.Error"),
+                vec![str_lit(format!(
+                    "`by Revoked` signs in as the test subject, which the identity type `{}` rejects, so it could not test revocation: declare an identity that accepts it",
+                    self.identity
+                ))],
+            ),
+            None,
+        );
+        vec![
+            crate::ts_build::if_(crate::ts_build::not_expr(identity_ok), refuse),
+            self.revoke_stmt(sub),
+        ]
+    }
+
+    fn revoke_stmt(&self, sub: TsExpr) -> TsStmt {
         expr_stmt(await_expr(method_call(
             call(
                 member(ident(self.handlers_ns.clone()), self.factory.clone()),
@@ -57,6 +90,15 @@ impl SessionAgentRef {
     /// The `name=value` template literal of `sub`'s session cookie, issued `issued_secs` after the
     /// epoch with `keys`, and recorded in the agent first.
     pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        TsExpr::template_lit(
+            vec![self.cookie.clone() + "=", String::new()],
+            vec![self.issue_value(keys, sub, issued_secs)],
+        )
+    }
+
+    /// `(await __issueSessionCookie(…)).value`: the signed cookie value, its session recorded in the
+    /// agent first.
+    fn issue_value(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
         let agent = self;
         let register = arrow_with(
             vec![
@@ -95,9 +137,56 @@ impl SessionAgentRef {
                 register,
             ],
         ));
+        member(paren(issued), "value")
+    }
+
+    /// The pair a signed-in principal (`by User("ada")`) sends: one session per principal and case,
+    /// like one browser, so a later call in the case replays the same cookie and sees a session an
+    /// earlier call ended or revoked as refused. The cookies are kept on the case's harness `env`,
+    /// which each case builds afresh.
+    pub(super) fn principal_pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        let env = member(call(ident("__makeHarness"), Vec::new()), self.env.clone());
+        let jar = |e: &TsExpr| member(e.clone(), "__sessionCookies");
+        let key = ident("__k");
+        let cached = |name: &str, args: Vec<TsExpr>| {
+            method_call(jar(&ident("__env")), name.to_string(), args)
+        };
+        let body = vec![
+            crate::ts_build::const_("__env", env),
+            crate::ts_build::if_(
+                crate::ts_build::strict_eq(jar(&ident("__env")), ident("undefined")),
+                TsStmt::assign(
+                    jar(&ident("__env")),
+                    crate::ts_build::new(ident("Map"), Vec::new()),
+                    None,
+                ),
+            ),
+            crate::ts_build::if_(
+                crate::ts_build::not_expr(cached("has", vec![key.clone()])),
+                expr_stmt(cached(
+                    "set",
+                    vec![
+                        key.clone(),
+                        self.issue_value(keys, key.clone(), issued_secs),
+                    ],
+                )),
+            ),
+            crate::ts_build::return_(Some(cached("get", vec![key]))),
+        ];
+        let session = call(
+            paren(crate::ts_build::block_arrow(
+                vec![TsParam::new(
+                    "__k".to_string(),
+                    Some(TsType::named("string")),
+                )],
+                true,
+                body,
+            )),
+            vec![sub],
+        );
         TsExpr::template_lit(
             vec![self.cookie.clone() + "=", String::new()],
-            vec![member(paren(issued), "value")],
+            vec![await_expr(session)],
         )
     }
 }
@@ -118,6 +207,15 @@ pub(super) struct SessionDriver {
 }
 
 impl SessionDriver {
+    /// The pair the acting principal sends: for a `sessions = true` actor, the case's one session
+    /// for that principal (see `SessionAgentRef::principal_pair`); otherwise a fresh signed cookie.
+    pub(super) fn principal_pair(&self, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        match &self.sessions {
+            Some(agent) => agent.principal_pair(&self.keys, sub, issued_secs),
+            None => self.pair(&self.keys, sub, issued_secs),
+        }
+    }
+
     /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
     /// (an expression, in seconds) after the epoch.
     pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {

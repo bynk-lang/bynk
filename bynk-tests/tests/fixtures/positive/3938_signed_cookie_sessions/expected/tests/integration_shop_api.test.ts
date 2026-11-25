@@ -32,7 +32,12 @@ function __makeHarness() {
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["SESSION_KEY"] = "Ynluay10ZXN0LXNlc3Npb24ta2V5LTAxMjM0NTY3ODk";
 async function __sysdrive_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -58,6 +63,7 @@ async function __sysdrive_expired_api_http_GET_me(__extraHeaders: { get(name: st
 }
 async function __sysdrive_revoked_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -66,13 +72,23 @@ async function __sysdrive_revoked_api_http_GET_me(__extraHeaders: { get(name: st
 }
 async function __sysdrive_api_http_GET_theme(cookies: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/theme`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [__cookieString(__ns_shop_api.__serialise_Prefs(cookies)), `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`].join("; ") } });
+  const __req = new globalThis.Request(`https://test/theme`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [__cookieString(__ns_shop_api.__serialise_Prefs(cookies)), `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}`].join("; ") } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_GET_theme(cookies: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/theme`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [cookies, `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`].join("; ") } });
+  const __req = new globalThis.Request(`https://test/theme`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [cookies, `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}`].join("; ") } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -118,6 +134,7 @@ async function __sysdrive_rawexpired_api_http_GET_theme(cookies: string, __extra
 }
 async function __sysdrive_revoked_api_http_GET_theme(cookies: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/theme`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -126,6 +143,7 @@ async function __sysdrive_revoked_api_http_GET_theme(cookies: any, __extraHeader
 }
 async function __sysdrive_rawrevoked_api_http_GET_theme(cookies: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/theme`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -134,13 +152,23 @@ async function __sysdrive_rawrevoked_api_http_GET_theme(cookies: string, __extra
 }
 async function __sysdrive_api_http_GET_cookie_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cookie-header`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...__requestHeaderPairs(headers), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/cookie-header`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...__requestHeaderPairs(headers), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_GET_cookie_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/cookie-header`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...__requestHeaderPairs(headers), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/cookie-header`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...__requestHeaderPairs(headers), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -186,6 +214,7 @@ async function __sysdrive_rawexpired_api_http_GET_cookie_header(headers: { get(n
 }
 async function __sysdrive_revoked_api_http_GET_cookie_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/cookie-header`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...__requestHeaderPairs(headers), "cookie": __cookie } });
@@ -194,6 +223,7 @@ async function __sysdrive_revoked_api_http_GET_cookie_header(headers: { get(name
 }
 async function __sysdrive_rawrevoked_api_http_GET_cookie_header(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/cookie-header`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...__requestHeaderPairs(headers), "cookie": __cookie } });
@@ -202,13 +232,23 @@ async function __sysdrive_rawrevoked_api_http_GET_cookie_header(headers: { get(n
 }
 async function __sysdrive_api_http_GET_jar(cookies: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; names(): readonly string[] }, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/jar`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [(typeof cookies === "string" ? cookies : __requestCookiesHeader(cookies)), `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`].join("; ") } });
+  const __req = new globalThis.Request(`https://test/jar`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [(typeof cookies === "string" ? cookies : __requestCookiesHeader(cookies)), `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}`].join("; ") } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
 async function __sysdrive_raw_api_http_GET_jar(cookies: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/jar`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [(typeof cookies === "string" ? cookies : __requestCookiesHeader(cookies)), `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`].join("; ") } });
+  const __req = new globalThis.Request(`https://test/jar`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": [(typeof cookies === "string" ? cookies : __requestCookiesHeader(cookies)), `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}`].join("; ") } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -254,6 +294,7 @@ async function __sysdrive_rawexpired_api_http_GET_jar(cookies: string, __extraHe
 }
 async function __sysdrive_revoked_api_http_GET_jar(cookies: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; all(name: string): readonly string[]; names(): readonly string[] }, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/jar`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -262,6 +303,7 @@ async function __sysdrive_revoked_api_http_GET_jar(cookies: { get(name: string):
 }
 async function __sysdrive_rawrevoked_api_http_GET_jar(cookies: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/jar`, { method: "GET", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -270,7 +312,12 @@ async function __sysdrive_rawrevoked_api_http_GET_jar(cookies: string, __extraHe
 }
 async function __sysdrive_api_http_POST_rename(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/rename`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/rename`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -296,6 +343,7 @@ async function __sysdrive_expired_api_http_POST_rename(__extraHeaders: { get(nam
 }
 async function __sysdrive_revoked_api_http_POST_rename(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/rename`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -310,7 +358,12 @@ async function __sysdrive_api_http_POST_login(__extraHeaders: { get(name: string
 }
 async function __sysdrive_api_http_POST_logout(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/logout`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/logout`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -336,6 +389,7 @@ async function __sysdrive_expired_api_http_POST_logout(__extraHeaders: { get(nam
 }
 async function __sysdrive_revoked_api_http_POST_logout(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/logout`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -344,7 +398,12 @@ async function __sysdrive_revoked_api_http_POST_logout(__extraHeaders: { get(nam
 }
 async function __sysdrive_api_http_POST_password(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/password`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/password`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -370,6 +429,7 @@ async function __sysdrive_expired_api_http_POST_password(__extraHeaders: { get(n
 }
 async function __sysdrive_revoked_api_http_POST_password(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/password`, { method: "POST", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -378,7 +438,12 @@ async function __sysdrive_revoked_api_http_POST_password(__extraHeaders: { get(n
 }
 async function __sysdrive_api_http_DELETE_session(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/session`, { method: "DELETE", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __sub, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__sub as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}` } });
+  const __req = new globalThis.Request(`https://test/session`, { method: "DELETE", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": `__Host-session=${await (async (__k: string) => {
+    const __env = __makeHarness().env___ns_shop_api;
+    if (__env.__sessionCookies === undefined) __env.__sessionCookies = new Map();
+    if (!__env.__sessionCookies.has(__k)) __env.__sessionCookies.set(__k, (await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", __k, 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions(__k as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value);
+    return __env.__sessionCookies.get(__k);
+  })(__sub)}` } });
   const __res = await __h.env.SHOP_API.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => Ok(undefined) as Result<void, __BoundaryError>);
 }
@@ -404,6 +469,7 @@ async function __sysdrive_expired_api_http_DELETE_session(__extraHeaders: { get(
 }
 async function __sysdrive_revoked_api_http_DELETE_session(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __cookie = `__Host-session=${(await __issueSessionCookie({ secret: ((globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SESSION_KEY"] ?? "") }, "User", "__Host-session", "Lax", "bynk-test", 43200, (__bynkNow()) * 1000, async (__sid: string, __exp: number, __now: number) => __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).add(__sid, __exp, __now, {}))).value}`;
+  if (!(__ns_shop_api.UserId.of("bynk-test").tag === "Ok")) throw new globalThis.Error("`by Revoked` signs in as the test subject, which the identity type `UserId` rejects, so it could not test revocation: declare an identity that accepts it");
   await __ns_shop_api.__makeUserSessions("bynk-test" as never, __makeHarness().env___ns_shop_api).revokeAll({});
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/session`, { method: "DELETE", headers: { "sec-fetch-site": "same-origin", ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "cookie": __cookie } });
@@ -945,9 +1011,53 @@ async function test_revokeAll_answers_for_the_acting_identity() {
   }
 }
 
+async function test_a_session_ended_by_expire_is_refused_when_replayed() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const before = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(before.tag === "Ok" && before.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:148:10", 6158, 6177, "expect before is Ok(\"ada\")", "before", () => __bynkShow(before)); }
+    const out = await __sysdrive_api_http_POST_logout(undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(out.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:150:10", 6235, 6251, "expect out is NoContent", "out", () => __bynkShow(out)); }
+    const after = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(after.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:152:10", 6306, 6327, "expect after is Unauthorized", "after", () => __bynkShow(after)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_revokeAll_refuses_the_identity_s_session_and_leaves_another_identity_s_valid() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const ada = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(ada.tag === "Ok" && ada.value === "ada"))) { throw __bynkExpectFailure("tests/api.bynk:157:10", 6471, 6487, "expect ada is Ok(\"ada\")", "ada", () => __bynkShow(ada)); }
+    const bob = await __sysdrive_api_http_GET_me(undefined, ("bob" as any));
+    if (!(((__c: boolean) => __c)(bob.tag === "Ok" && bob.value === "bob"))) { throw __bynkExpectFailure("tests/api.bynk:159:10", 6540, 6556, "expect bob is Ok(\"bob\")", "bob", () => __bynkShow(bob)); }
+    const revoked = await __sysdrive_api_http_POST_password(undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(revoked.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:161:10", 6620, 6640, "expect revoked is NoContent", "revoked", () => __bynkShow(revoked)); }
+    const adaAfter = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(adaAfter.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:163:10", 6698, 6722, "expect adaAfter is Unauthorized", "adaAfter", () => __bynkShow(adaAfter)); }
+    const bobAfter = await __sysdrive_api_http_GET_me(undefined, ("bob" as any));
+    if (!(((__c: boolean) => __c)(bobAfter.tag === "Ok" && bobAfter.value === "bob"))) { throw __bynkExpectFailure("tests/api.bynk:165:10", 6780, 6801, "expect bobAfter is Ok(\"bob\")", "bobAfter", () => __bynkShow(bobAfter)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a signed-in read works", "a state-changing request from the same origin works", "POST same-origin with a listed Origin is allowed", "POST same-origin with an unlisted Origin is allowed", "POST same-origin with a null Origin is allowed", "POST same-origin with no Origin is allowed", "GET same-origin with an unlisted Origin is not checked", "POST same-site with a listed Origin is allowed", "POST same-site with an unlisted Origin is refused", "POST same-site with a null Origin is refused", "POST same-site with no Origin is refused", "GET same-site with an unlisted Origin is not checked", "POST cross-site with a listed Origin is allowed", "POST cross-site with an unlisted Origin is refused", "POST cross-site with a null Origin is refused", "POST cross-site with no Origin is refused", "GET cross-site with an unlisted Origin is not checked", "POST none with a listed Origin is refused", "POST none with an unlisted Origin is refused", "POST none with a null Origin is refused", "POST none with no Origin is refused", "GET none with an unlisted Origin is not checked", "no cookie is refused", "a forged cookie is refused", "an expired cookie is refused", "a state-changing request with no cookie is refused as unauthenticated", "the handler never sees the session cookie in its headers", "a session cookie sent twice is refused", "another cookie beside the session cookie does not disturb it", "issue records a session", "expire ends the session", "a revoked session is refused", "revokeAll answers for the acting identity"];
+export const __bynkCases: readonly string[] = ["a signed-in read works", "a state-changing request from the same origin works", "POST same-origin with a listed Origin is allowed", "POST same-origin with an unlisted Origin is allowed", "POST same-origin with a null Origin is allowed", "POST same-origin with no Origin is allowed", "GET same-origin with an unlisted Origin is not checked", "POST same-site with a listed Origin is allowed", "POST same-site with an unlisted Origin is refused", "POST same-site with a null Origin is refused", "POST same-site with no Origin is refused", "GET same-site with an unlisted Origin is not checked", "POST cross-site with a listed Origin is allowed", "POST cross-site with an unlisted Origin is refused", "POST cross-site with a null Origin is refused", "POST cross-site with no Origin is refused", "GET cross-site with an unlisted Origin is not checked", "POST none with a listed Origin is refused", "POST none with an unlisted Origin is refused", "POST none with a null Origin is refused", "POST none with no Origin is refused", "GET none with an unlisted Origin is not checked", "no cookie is refused", "a forged cookie is refused", "an expired cookie is refused", "a state-changing request with no cookie is refused as unauthenticated", "the handler never sees the session cookie in its headers", "a session cookie sent twice is refused", "another cookie beside the session cookie does not disturb it", "issue records a session", "expire ends the session", "a revoked session is refused", "revokeAll answers for the acting identity", "a session ended by expire is refused when replayed", "revokeAll refuses the identity's session and leaves another identity's valid"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -1147,6 +1257,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("revokeAll answers for the acting identity")) {
     const started = __bynkCaseNow();
     const r = { name: "revokeAll answers for the acting identity", ...(await test_revokeAll_answers_for_the_acting_identity()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a session ended by expire is refused when replayed")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a session ended by expire is refused when replayed", ...(await test_a_session_ended_by_expire_is_refused_when_replayed()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("revokeAll refuses the identity's session and leaves another identity's valid")) {
+    const started = __bynkCaseNow();
+    const r = { name: "revokeAll refuses the identity's session and leaves another identity's valid", ...(await test_revokeAll_refuses_the_identity_s_session_and_leaves_another_identity_s_valid()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

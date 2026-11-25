@@ -1,0 +1,12 @@
+context pay.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours, sessions = true), identity = UserId }
+
+service api from http {
+	on POST("/password") () -> Effect[HttpResult[()]] by u: User {
+		let _ <- User.revokeAll(1)
+		NoContent
+	}
+}
