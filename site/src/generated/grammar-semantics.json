@@ -1062,6 +1062,14 @@
       "summary": "A field of a `@form` body record has a type a form cannot carry."
     },
     {
+      "code": "bynk.http.headers_field_consumed",
+      "summary": "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`."
+    },
+    {
+      "code": "bynk.http.headers_field_consumed_optional",
+      "summary": "An `Option` or `List` `headers` field reads a header the route's actor consumes, so it is always `None` or empty (warning)."
+    },
+    {
       "code": "bynk.http.headers_field_not_stringy",
       "summary": "A field of an HTTP handler's `headers` record has a type a header cannot carry."
     },

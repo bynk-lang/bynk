@@ -130,6 +130,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3644_queue_one_consumer_many_producers` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.http.headers_field_consumed_optional",
+        "a warning; `positive/4266_headers_consumed_optional` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),
