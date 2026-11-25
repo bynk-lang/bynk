@@ -21,22 +21,61 @@ use bynk_ts::{
 };
 use std::sync::Arc;
 
-/// Whether a stub method binds the `uses` commons' names: for a helper inlined ahead of a value
-/// (#2947), and (#4348) for a target whose suites `uses` a test-only commons, whose names a value
-/// may spell.
-fn binds_used_commons(
+/// #4373: `union` (a target's `uses`, with every suite's test-only commons) restricted to the
+/// test-only commons in `own`: what the suite declaring a clause can name, so two suites'
+/// same-named test-only names each resolve to their own suite's commons.
+pub(super) fn scoped_imports(
+    union: &HashMap<String, Vec<String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit: &str,
+    own: &[String],
+) -> HashMap<String, Vec<String>> {
+    let mut out = union.clone();
+    if let Some(list) = out.get_mut(unit) {
+        list.retain(|u| own.contains(u) || !unit_tables.get(u).is_some_and(|t| t.test_only));
+    }
+    out
+}
+
+/// #4373: the `uses` map clause `idx`'s value is emitted over: its declaring suite's.
+fn clause_imports(
     rp: &ResolvedStub,
-    clause_idxs: &[usize],
+    idx: usize,
     unit: &str,
     unit_tables: &HashMap<String, UnitTable>,
     unit_uses: &HashMap<String, Vec<String>>,
-) -> bool {
-    clause_idxs.iter().any(|&i| !rp.clause_fns[i].is_empty())
-        || unit_uses
-            .get(unit)
-            .into_iter()
-            .flatten()
-            .any(|u| unit_tables.get(u).is_some_and(|t| t.test_only))
+) -> HashMap<String, Vec<String>> {
+    scoped_imports(unit_uses, unit_tables, unit, &rp.clause_suite_uses[idx])
+}
+
+/// #4373: a clause's own block, binding the test-only commons its declaring suite `uses` ahead of
+/// the statements `body` gained from `start` on, so the names it spells are that suite's.
+fn bind_clause_commons(
+    body: &mut Vec<TsStmt>,
+    start: usize,
+    clause_imports: &HashMap<String, Vec<String>>,
+    unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+) {
+    let test_only: Vec<String> = clause_imports
+        .get(unit)
+        .into_iter()
+        .flatten()
+        .filter(|u| unit_tables.get(*u).is_some_and(|t| t.test_only))
+        .cloned()
+        .collect();
+    if test_only.is_empty() {
+        return;
+    }
+    let only = HashMap::from([(unit.to_string(), test_only)]);
+    let mut stmts: Vec<TsStmt> = Vec::new();
+    for (ns, names, types) in
+        used_commons_destructures(unit, unit_tables, &only, &mut HashSet::new())
+    {
+        stmts.extend(emit_ns_destructure(&ns, &names, &types));
+    }
+    stmts.extend(body.split_off(start));
+    body.push(block(stmts));
 }
 
 /// The namespace each type name in the stubbed capability's *signature* resolves to.
@@ -295,6 +334,7 @@ pub(super) fn emit_stub_class(
         ));
     }
 
+    let base_uses = scoped_imports(unit_uses, unit_tables, &owning_unit, &[]);
     for (method, clause_idxs) in &by_method {
         let Some(op) = rp.cap_decl.ops.iter().find(|o| &o.name.name == method) else {
             continue;
@@ -337,10 +377,13 @@ pub(super) fn emit_stub_class(
         // signature's types unqualified, as in a case runner, so a method with
         // one binds the same `uses` commons' names `emit_test_scope_setup`
         // does (assets and embeds included). A method without one is unchanged.
-        if binds_used_commons(rp, clause_idxs, &owning_unit, unit_tables, unit_uses) {
-            for (ns, names, types) in
-                used_commons_destructures(&owning_unit, unit_tables, unit_uses, &mut HashSet::new())
-            {
+        if clause_idxs.iter().any(|&i| !rp.clause_fns[i].is_empty()) {
+            for (ns, names, types) in used_commons_destructures(
+                &owning_unit,
+                unit_tables,
+                &base_uses,
+                &mut HashSet::new(),
+            ) {
                 taken.extend(names.iter().chain(types.iter().map(|(n, _)| n)).cloned());
                 body.extend(emit_ns_destructure(&ns, &names, &types));
             }
@@ -380,6 +423,10 @@ pub(super) fn emit_stub_class(
         }
         for &idx in clause_idxs {
             let clause = &rp.clauses[idx];
+            let (cl_uses, start) = (
+                &clause_imports(rp, idx, &owning_unit, unit_tables, unit_uses),
+                body.len(),
+            );
             let clause_op = rp.op_for_clause(idx).unwrap_or_else(|| op.clone());
             let op = &clause_op;
             // Argument-pattern consts: a `Value(e)` pattern lowers to a const the
@@ -396,7 +443,7 @@ pub(super) fn emit_stub_class(
                         clause_items(rp, idx),
                         target_name,
                         unit_tables,
-                        unit_uses,
+                        cl_uses,
                         unit_consumes,
                         unit_consumes_aliases,
                         runtime_use,
@@ -432,7 +479,7 @@ pub(super) fn emit_stub_class(
                     clause_items(rp, idx),
                     target_name,
                     unit_tables,
-                    unit_uses,
+                    cl_uses,
                     unit_consumes,
                     unit_consumes_aliases,
                     runtime_use,
@@ -441,6 +488,7 @@ pub(super) fn emit_stub_class(
                 )
             };
             body.push(if_(cond, block(rhs_body)));
+            bind_clause_commons(&mut body, start, cl_uses, &owning_unit, unit_tables);
         }
         body.push(no_stub_match_stmt(
             rp,

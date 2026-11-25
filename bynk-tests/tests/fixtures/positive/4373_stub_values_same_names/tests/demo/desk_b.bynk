@@ -1,0 +1,10 @@
+suite demo.desk
+
+uses demo.kit_b
+
+stub Meter.read() returns helper()
+
+case "suite b stub value" {
+  let n <- local.call(0)
+  expect n == 20
+}
