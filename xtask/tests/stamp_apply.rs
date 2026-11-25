@@ -630,3 +630,310 @@ fn stamp_without_a_raise_writes_no_raise_ledger() {
     stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
     assert!(!root.join(stamp::RAISE_LEDGER_PATH).exists());
 }
+
+// --- #4319: the stamp is idempotent ---
+
+const THING: &str = "---\nlevel: minor\nchangelog: Add the thing\n---\n\n## ADR: the-thing\ntitle: The thing is added\nsummary: How the thing works\n\n**Decision.** Add it.\n";
+
+fn changelog_rows(root: &Path, version: &str) -> usize {
+    fs::read_to_string(root.join("site/src/content/docs/reference/releases/unreleased.md"))
+        .unwrap()
+        .matches(&format!("| **v{version}** |"))
+        .count()
+}
+
+#[test]
+fn a_consumed_file_that_comes_back_is_not_stamped_again() {
+    let root = fixture("idempotent");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("first stamp");
+    assert_eq!(changelog_rows(&root, "0.186.0"), 1);
+    let ledger = fs::read_to_string(root.join("design/stamped.txt")).unwrap();
+    assert!(
+        ledger.contains("feat-thing ") && ledger.contains(" 0.186.0 adr:0206"),
+        "the stamp records slug, hash, version and ADR number:\n{ledger}"
+    );
+
+    // A stale copy of the same file returns on a branch that merged.
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let again = stamp::plan(&root).expect("plan");
+    assert!(again.is_empty(), "no increment to stamp");
+    assert_eq!(again.already_stamped.len(), 1);
+    assert_eq!(again.already_stamped[0].entry.version, "0.186.0");
+    assert_eq!(again.final_version().to_string(), "0.186.0");
+    stamp::apply(&root, &again, None, bumper(&root)).expect("second stamp");
+
+    // No new version, no new changelog row, no second ADR; the stale file is removed.
+    assert!(!root.join("design/pending/feat-thing.md").exists());
+    assert_eq!(changelog_rows(&root, "0.186.0"), 1);
+    assert_eq!(changelog_rows(&root, "0.187.0"), 0);
+    assert!(
+        fs::read_to_string(root.join("Cargo.toml"))
+            .unwrap()
+            .contains("version = \"0.186.0\"")
+    );
+    assert!(!root.join("design/decisions/0207-the-thing.md").exists());
+    assert_eq!(
+        fs::read_to_string(root.join("design/stamped.txt")).unwrap(),
+        ledger,
+        "an already-stamped file adds nothing to the ledger"
+    );
+}
+
+#[test]
+fn a_reused_slug_with_new_content_is_stamped() {
+    let root = fixture("reused-slug");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("first stamp");
+
+    // The branch name is reused for a different increment: same slug, different bytes.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        "---\nlevel: patch\nchangelog: A different fix\n---\n",
+    )
+    .unwrap();
+    let again = stamp::plan(&root).expect("plan");
+    assert!(again.already_stamped.is_empty());
+    assert_eq!(again.increments.len(), 1);
+    stamp::apply(&root, &again, None, bumper(&root)).expect("second stamp");
+    assert_eq!(changelog_rows(&root, "0.186.1"), 1);
+    let ledger = fs::read_to_string(root.join("design/stamped.txt")).unwrap();
+    assert_eq!(
+        ledger.lines().count(),
+        2,
+        "both stamps are recorded:\n{ledger}"
+    );
+}
+
+#[test]
+fn a_stale_copy_beside_a_new_increment_is_dropped_and_the_new_one_stamped() {
+    let root = fixture("mixed");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("first stamp");
+
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    fs::write(
+        root.join("design/pending/other-fix.md"),
+        "---\nlevel: patch\nchangelog: Fix the other thing\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    assert_eq!(plan.already_stamped.len(), 1);
+    assert_eq!(plan.increments.len(), 1);
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
+    assert_eq!(changelog_rows(&root, "0.186.0"), 1);
+    assert_eq!(changelog_rows(&root, "0.186.1"), 1);
+    assert!(!root.join("design/pending/feat-thing.md").exists());
+    assert!(!root.join("design/pending/other-fix.md").exists());
+}
+
+#[test]
+fn a_failed_bump_leaves_the_ledger_as_it_was() {
+    let root = fixture("ledger-rollback");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    let err = stamp::apply(&root, &plan, None, |_| {
+        Err(std::io::Error::other("bump died"))
+    });
+    assert!(err.is_err());
+    assert!(
+        !root.join("design/stamped.txt").exists(),
+        "a ledger the failed run created is removed, so a retry stamps the file"
+    );
+    assert!(root.join("design/pending/feat-thing.md").exists());
+    stamp::apply(&root, &stamp::plan(&root).unwrap(), None, bumper(&root)).expect("retry");
+    assert_eq!(changelog_rows(&root, "0.186.0"), 1);
+}
+
+#[test]
+fn check_pending_names_the_slug_and_version_of_a_stamped_file() {
+    let root = fixture("check-stamped");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("stamp");
+
+    // Fine while nothing is pending.
+    assert_eq!(xtask::check_all_in(&root), Ok(0));
+
+    // The stale copy fails, naming the slug and the version it got.
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let errors = xtask::check_all_in(&root).expect_err("a stamped file fails");
+    assert_eq!(errors.len(), 1);
+    assert!(
+        errors[0].contains("`feat-thing` was already stamped as v0.186.0")
+            && errors[0].contains("drop design/pending/feat-thing.md"),
+        "{errors:?}"
+    );
+
+    // A reused slug with different content is a new increment and passes.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        "---\nlevel: patch\nchangelog: A different fix\n---\n",
+    )
+    .unwrap();
+    assert_eq!(xtask::check_all_in(&root), Ok(1));
+}
+
+#[test]
+fn a_reused_slug_warns_and_a_crlf_copy_of_a_stamped_file_still_fails() {
+    let root = fixture("warn-and-crlf");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("stamp");
+
+    // The same bytes with Windows line endings are still the stamped file.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        THING.replace('\n', "\r\n"),
+    )
+    .unwrap();
+    assert!(xtask::check_all_in(&root).is_err(), "a CRLF copy is caught");
+    assert!(
+        xtask::check_warnings_in(&root).is_empty(),
+        "and is no mere warning"
+    );
+    let again = stamp::plan(&root).expect("plan");
+    assert_eq!(again.already_stamped.len(), 1, "the stamp drops it too");
+
+    // The same slug with different content passes, with a warning that names the version.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        "---\nlevel: patch\nchangelog: A different fix\n---\n",
+    )
+    .unwrap();
+    assert_eq!(xtask::check_all_in(&root), Ok(1));
+    let warnings = xtask::check_warnings_in(&root);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].starts_with(
+            "warning: feat-thing.md: slug `feat-thing` was stamped before, as v0.186.0"
+        ),
+        "{warnings:?}"
+    );
+}
+
+/// Run `git` in `root`, as a fixed author so the test needs no global config.
+fn git(root: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .args(args)
+        .current_dir(root)
+        .status()
+        .expect("git runs");
+    assert!(status.success(), "git {args:?}");
+}
+
+#[test]
+fn a_stamp_the_ledger_never_recorded_is_still_not_repeated() {
+    // The old stamp consumed this file and wrote no ledger line. Git still remembers it.
+    let root = fixture("git-fallback");
+    git(&root, &["init", "-q"]);
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &["commit", "-q", "-m", "a branch lands its pending file"],
+    );
+    let before = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        before.replace("0.185.0", "0.186.0"),
+    )
+    .unwrap();
+    git(&root, &["rm", "-q", "design/pending/feat-thing.md"]);
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "chore(stamp): the old stamp, with no ledger",
+        ],
+    );
+    assert!(!root.join("design/stamped.txt").exists());
+
+    // A stale copy comes back, and no ledger line exists for it. (`git rm` removed the empty dir.)
+    fs::create_dir_all(root.join("design/pending")).unwrap();
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    assert!(plan.is_empty(), "nothing to stamp");
+    assert_eq!(plan.already_stamped.len(), 1);
+    assert_eq!(plan.already_stamped[0].entry.version, "0.186.0");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
+    assert!(!root.join("design/pending/feat-thing.md").exists());
+    assert_eq!(changelog_rows(&root, "0.187.0"), 0);
+
+    // A different file under the same name is a new increment: git has only seen other bytes.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        "---\nlevel: patch\nchangelog: A different fix\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    assert!(plan.already_stamped.is_empty());
+    assert_eq!(plan.increments.len(), 1);
+}
+
+#[test]
+fn a_reverted_ledger_era_stamp_can_be_stamped_again() {
+    // A stamp made once the ledger existed, then reverted so it can be redone: the revert puts
+    // the file back with the same bytes and takes its ledger line out. Git still has the deleting
+    // commit, but the ledger is the authority now, so the file stamps.
+    let root = fixture("git-revert");
+    git(&root, &["init", "-q"]);
+    fs::write(root.join("design/stamped.txt"), "# ledger\n").unwrap();
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "the ledger exists, and a branch lands its file",
+        ],
+    );
+    let plan = stamp::plan(&root).expect("plan");
+    assert_eq!(plan.increments.len(), 1, "not stamped yet");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("stamp");
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "chore(stamp): stamped, ledger line written",
+        ],
+    );
+    git(&root, &["revert", "--no-edit", "HEAD"]);
+    assert!(root.join("design/pending/feat-thing.md").exists());
+    assert!(
+        !fs::read_to_string(root.join("design/stamped.txt"))
+            .unwrap()
+            .contains("feat-thing"),
+        "the revert took the ledger line out"
+    );
+
+    let again = stamp::plan(&root).expect("plan");
+    assert!(
+        again.already_stamped.is_empty(),
+        "git is not consulted for ledger-era stamps"
+    );
+    assert_eq!(
+        again.increments.len(),
+        1,
+        "the reverted stamp can be redone"
+    );
+}

@@ -53,6 +53,9 @@ pub struct D1SqlSite {
     /// For `select`/`firstAs`: the row type and its field names (the columns the
     /// compiler wrote), so a missing one is reported against the type.
     pub row: Option<(String, Vec<String>)>,
+    /// #4200: the row's `Decimal` fields, which a SQLite column holds exactly only as
+    /// `TEXT`: the numeric affinities hand the value back as a JSON number.
+    pub decimals: Vec<String>,
     /// The number of values passed, when the list is a list literal.
     pub passed: Option<usize>,
     /// #3108: for `select`/`firstAs`, the literal's own decoded text and where it
@@ -101,6 +104,8 @@ pub struct D1DecodeSite {
     pub row: String,
     /// The row's required fields: those not of an `Option` type.
     pub required: Vec<String>,
+    /// #4200: the row's `Decimal` fields (see [`D1SqlSite::decimals`]).
+    pub decimals: Vec<String>,
     /// The `decodeSql` call, where a missing column is reported.
     pub span: Span,
 }
@@ -214,6 +219,7 @@ pub(crate) fn record_decode(arg: &Expr, call_span: Span, t: TyId, ctx: &mut Ctx)
         arg.id,
         Callee::D1Decode(D1DecodeSite {
             site: link.site,
+            decimals: row_base_fields(&name, &ctx.input.types, BaseType::Decimal),
             row: name,
             required,
             span: call_span,
@@ -357,6 +363,7 @@ pub(crate) fn check_sql_argument(
                     text,
                     span: sql.span,
                     row: None,
+                    decimals: Vec::new(),
                     passed: literal_list_len(args.get(1), ctx),
                     literal: None,
                     batch: None,
@@ -415,6 +422,7 @@ fn record_batch_sites(cap: &str, list: Option<&Expr>, ctx: &mut Ctx) {
                 text,
                 span: sql.span,
                 row: None,
+                decimals: Vec::new(),
                 passed,
                 literal: None,
                 batch: Some(BatchPosition { group, index }),
@@ -826,8 +834,9 @@ pub(crate) fn check_typed_read(
                  of either); a MySQL date or time arrives as text without a zone, so read it \
                  as a `String`"
             } else {
-                "the row is a record whose fields are `Int`, `Float`, `String`, `Bool` or \
-                 `Bytes` (or a refined or opaque type over one, or an `Option` of either)"
+                "the row is a record whose fields are `Int`, `Float`, `String`, `Bool`, \
+                 `Bytes` or `Decimal` (or a refined or opaque type over one, or an `Option` \
+                 of either); a `Decimal` is read from a `TEXT` column"
             }),
         );
         ok = false;
@@ -936,6 +945,7 @@ pub(crate) fn check_typed_read(
                     row.clone(),
                     record.fields.iter().map(|f| f.name.name.clone()).collect(),
                 )),
+                decimals: row_base_fields(row, &ctx.input.types, BaseType::Decimal),
                 passed: literal_list_len(args.get(1), ctx),
                 literal: select_literal,
                 batch: None,
@@ -1032,11 +1042,19 @@ fn is_column(r: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>, pg: bool) -> b
     }
 }
 
+/// The base types a row column decodes to, listed so a new base type is not
+/// admitted by accident (#4200). `Decimal` is read from a SQLite `TEXT` column,
+/// which keeps it exact; `check_decimal_affinity` warns on a column that is not.
 fn is_column_base(b: BaseType, pg: bool) -> bool {
     match b {
-        BaseType::Duration => false,
+        BaseType::Int
+        | BaseType::String
+        | BaseType::Bool
+        | BaseType::Float
+        | BaseType::Bytes
+        | BaseType::Decimal => true,
         BaseType::Instant => pg,
-        _ => true,
+        BaseType::Duration => false,
     }
 }
 
@@ -1099,5 +1117,29 @@ mod tail_tests {
         assert!(begins_without_from("(SELECT 1)"));
         assert!(begins_without_from("fromage"));
         assert!(begins_without_from("éé"));
+    }
+}
+
+#[cfg(test)]
+mod column_base_tests {
+    use super::*;
+
+    /// #4200: the admitted row bases are listed, so a new base type is a compile
+    /// error here until someone decides about it.
+    #[test]
+    fn the_admitted_row_bases_are_the_listed_ones() {
+        for b in [
+            BaseType::Int,
+            BaseType::String,
+            BaseType::Bool,
+            BaseType::Float,
+            BaseType::Bytes,
+            BaseType::Decimal,
+        ] {
+            assert!(is_column_base(b, false), "{b:?}");
+        }
+        assert!(!is_column_base(BaseType::Duration, true));
+        assert!(!is_column_base(BaseType::Instant, false));
+        assert!(is_column_base(BaseType::Instant, true));
     }
 }

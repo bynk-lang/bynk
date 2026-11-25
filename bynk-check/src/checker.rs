@@ -62,6 +62,7 @@ pub(crate) mod equality;
 pub mod keying;
 pub mod ordering;
 use equality::EqScope;
+mod effect_more;
 mod expressions;
 mod kernels;
 mod linearity;

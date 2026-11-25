@@ -1460,6 +1460,7 @@
 /reference/diagnostics/bynk.cron.numeric_weekday/
 /reference/diagnostics/bynk.cron.return_not_effect_result/
 /reference/diagnostics/bynk.cron.uneven_step/
+/reference/diagnostics/bynk.d1.decimal_numeric_affinity/
 /reference/diagnostics/bynk.d1.migration_invalid/
 /reference/diagnostics/bynk.d1.migration_name/
 /reference/diagnostics/bynk.d1.migration_unreadable/
