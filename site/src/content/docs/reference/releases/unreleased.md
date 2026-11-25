@@ -7,6 +7,8 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.701.0** | An `Effect` can no longer wrap another `Effect`, as written or through a call's instantiation: `bynk.types.nested_effect` |
+| **v0.700.2** | `self.op(…)` inside an agent handler is refused as `bynk.agents.self_operation`, naming the agent and the operation and showing `Agent(key).op(…)`, where it reported a field of the internal `__<Agent>Self` record (#4291) |
 | **v0.700.1** | Signature help shows one signature per arity for `min`, `max`, `count` and `List.join`, and highlights the form that fits the arguments typed |
 | **v0.700.0** | An HttpResult takes withHeader, retryAfter, at and download for response headers, a router-owned name or a malformed literal is refused, and headers() reads them in a test |
 | **v0.699.1** | The stamp numbers several pending files in the order they merged rather than by filename, and records each increment's own PR; a dry-run `stamp-batch` workflow shows what a batched stamp would do |

@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An `Effect` can no longer wrap another `Effect`, as written or through a call's instantiation: `bynk.types.nested_effect`
-breaking: a program that writes `Effect[Effect[T]]`, or that instantiates a generic function so it wraps one effect in another (`wrap(e)` with `e: Effect[_]`, or `Effect.pure(e)`), now gets `bynk.types.nested_effect`; such a program type-checked before but failed at run time when a method was called on the flattened value. Sequence the effects with `andThen` or `<-` instead.
----
+# 0965 — An Effect cannot wrap another Effect
 
-## ADR: no-nested-effect
-title: An Effect cannot wrap another Effect
-summary: Refuses Effect[Effect[T]], written or built by instantiation, because effects are promises and flatten at runtime
+- **Status:** Accepted (v0.701)
 
 **Context.** An `Effect` lowers to a promise, and promises flatten, so `Effect[Effect[T]]` cannot exist at runtime. The type could nevertheless be written and constructed (`fn nested(e: Effect[Int]) -> Effect[Effect[Int]] { Effect.pure(e) }`, or through a generic `wrap[T](x: T) -> Effect[T]` instantiated with an effect): after `let inner <- nested(e)` the checker called `inner` an `Effect[Int]` while at runtime it was already the `Int`, so a method called on it threw. A well-typed program crashed. Found reviewing #3965.
 

@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0965](0965-no-nested-effect.md) | **An Effect cannot wrap another Effect** (v0.701) — Refuses Effect[Effect[T]], written or built by instantiation, because effects are promises and flatten at runtime | Accepted (v0.701) |
 | [0964](0964-response-headers-on-http-result.md) | **An HttpResult carries response headers through withHeader and typed helpers for Retry-After, Location and Content-Disposition** (v0.700) — How a handler sets a header of its own without touching the ones the router owns | Accepted (v0.700) |
 | [0963](0963-agent-operation-stubs.md) | **An agent operation is stubbed at `unit`, by intercepting the agent's own calls** (v0.699) — The address, scope, words and interception point of `stub <Agent>.<op>(…) faulted | unreachable` | Accepted (v0.699) |
 | [0962](0962-queue-undecodable-unreachable.md) | **An `Undecodable` pattern warns where the verdict cannot be it** (v0.698) — A checker warning on `Undecodable` patterns of a `QueueResult` outside a `system` case, so a dead arm does not look meaningful | Accepted (v0.698) |
