@@ -1,0 +1,12 @@
+context shop.pay
+
+exports transparent { Receipt, PaymentError }
+
+type Receipt = { id: String }
+type PaymentError = enum { Declined, Down }
+
+service authorise {
+  on call(total: Int) -> Effect[Result[Receipt, PaymentError]] by Caller {
+    Effect.pure(Ok(Receipt { id: "real" }))
+  }
+}

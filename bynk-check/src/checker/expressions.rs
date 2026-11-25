@@ -3311,26 +3311,43 @@ pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<
     let inner_ty = type_of(inner, None, ctx)?;
     // v0.153 (ADR 0177): `Option[T]?` lifts into an HttpResult-returning
     // handler — `Some(v)` yields `v`, `None` early-returns `NotFound` (404).
-    // Allowed ONLY where the enclosing return peels to `HttpResult[_]` (a bare
-    // `HttpResult[T]` handler or `Effect[HttpResult[T]]`); anywhere else an
-    // `Option` has no error channel to propagate into.
+    // Allowed where the enclosing return peels to `HttpResult[_]` (a bare
+    // `HttpResult[T]` handler or `Effect[HttpResult[T]]`), or (#3966) to `Option[_]`;
+    // anywhere else an `Option` has nowhere to propagate to.
     if let Ty::Option(t) = &*tys.get(inner_ty) {
         if peel_to_http_result(ctx.return_ty, tys).is_some() {
             lint_header_question(inner, span, ctx);
             return Some(*t);
         }
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.question_option_outside_http",
-                span,
-                "the `?` operator lifts an `Option` only inside a handler returning `HttpResult` (where `None` becomes `NotFound`)",
-            )
-            .with_label(
-                ctx.return_ty_span,
-                format!("function returns `{}`", ctx.return_ty.display(tys)),
-            )
-            .with_note("to turn an `Option` into a `Result` elsewhere, use `.okOr(err)`"),
-        );
+        // #3966: in a body returning `Option[_]` (or `Effect[Option[_]]`) `None` returns
+        // early as `None`. `Option` and `Result` never convert, so a `Result` body keeps the
+        // refusal, with a fix that makes the `Option` a `Result`.
+        if peel_to_option(ctx.return_ty, tys).is_some() {
+            return Some(*t);
+        }
+        let mut err = CompileError::new(
+            "bynk.types.question_option_outside_http",
+            span,
+            "the `?` operator on an `Option` needs a function returning `Option` (where `None` returns early) or `HttpResult` (where `None` becomes `NotFound`)",
+        )
+        .with_label(
+            ctx.return_ty_span,
+            format!("function returns `{}`", ctx.return_ty.display(tys)),
+        )
+        .with_note("to turn an `Option` into a `Result` elsewhere, use `.okOr(err)`");
+        if peel_to_result(ctx.return_ty, tys).is_some() {
+            err = err.with_suggestion(
+                "make the `Option` a `Result`, naming the error for `None`",
+                // `todo` has every type, so the placeholder checks, and it warns
+                // (`bynk.fault.todo`) until the author names the error.
+                vec![(
+                    Span::new_in(span.file, inner.span.end, inner.span.end),
+                    ".okOr(todo(\"the error for None\"))".to_string(),
+                )],
+                Applicability::MaybeIncorrect,
+            );
+        }
+        ctx.errors.push(err);
         return None;
     }
     let Ty::Result(t, e) = &*tys.get(inner_ty) else {
@@ -6285,7 +6302,7 @@ mod retry_after_tests {
 
     fn verdict(expr: &str) -> Vec<&'static str> {
         let source = format!(
-            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] {{ {expr} }}\n}}\n"
+            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] by Producer {{ {expr} }}\n}}\n"
         );
         analyse(&[("t/q.bynk", &source)]).categories()
     }

@@ -59,7 +59,7 @@ service tick from cron {
 }
 
 service intake from queue("jobs-a") {
-  on message(d: Job) -> Effect[QueueResult] {
+  on message(d: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -103,7 +103,7 @@ service sweep from cron {
 }
 
 service intake_b from queue("jobs-b") {
-  on message(d: Job) -> Effect[QueueResult] {
+  on message(d: Job) -> Effect[QueueResult] by Producer {
     Retry("later")
   }
 }

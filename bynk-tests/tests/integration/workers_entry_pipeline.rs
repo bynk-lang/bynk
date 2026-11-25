@@ -10,7 +10,7 @@ use emit_pipeline::{emit_project_with_tests, emit_workers};
 /// (suites stripped) is byte-identical to a project with no suite at all.
 #[test]
 fn scheduled_result_hook_is_test_build_only() {
-    const JOBS: &str = "context ops.jobs\n\nservice ticker from cron {\n\ton schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {\n\t\tOk(())\n\t}\n}\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tAck\n\t}\n}\n";
+    const JOBS: &str = "context ops.jobs\n\nservice ticker from cron {\n\ton schedule(\"*/5 * * * *\") (at: Instant) -> Effect[Result[(), String]] {\n\t\tOk(())\n\t}\n}\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] by Producer {\n\t\tAck\n\t}\n}\n";
     const SUITE: &str = "suite ops.jobs as system {\n\tcase \"ticks\" {\n\t\tlet r <- ticker.schedule(\"*/5 * * * *\", Instant.fromEpochMillis(0))\n\t\texpect r is Ok(_)\n\t}\n}\n";
     let entry = "workers/ops-jobs/index.ts";
     let with_suite = [("ops/jobs.bynk", JOBS), ("tests/jobs.bynk", SUITE)];

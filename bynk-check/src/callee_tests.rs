@@ -159,7 +159,7 @@ commons demo {
 
 service intake from queue("orders") {
   delivery { deadLetter: None }
-  on message(item: String) -> Effect[QueueResult] {
+  on message(item: String) -> Effect[QueueResult] by Producer {
     if item == "" { Retry("empty") } else { Ack }
   }
 }
@@ -587,7 +587,7 @@ service worker from cron {
 
 service deliveries from queue("deliveries") {
   delivery { deadLetter: None }
-  on message(d: Delivery) -> Effect[QueueResult] {
+  on message(d: Delivery) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

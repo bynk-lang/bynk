@@ -110,6 +110,38 @@ export default {
         }
       }
       {
+        if (method === "POST" && __matchPath("/reserve", path) !== null) {
+          __route = "POST /reserve";
+          if (!__jsonMediaTypeMatches(request)) {
+            return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } })), __security_api);
+          }
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } })), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
+          try {
+            __bytes = await __readBodyCapped(request, 1048576);
+          } catch {
+            return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } })), __security_api);
+          }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } })), __security_api);
+          }
+          let __body_json: __JsonValue;
+          try {
+            __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
+          } catch {
+            return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } })), __security_api);
+          }
+          const __r_body = handlers.__deserialise_Widget(__body_json, "$");
+          if (__r_body.tag === "Err") return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } })), __security_api);
+          const body = __r_body.value;
+          const result = await surface.http_POST_reserve(body);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { problem: true }), request, ["Bynk realm=\"api\""]), __security_api);
+        }
+      }
+      {
         if (method === "POST" && __matchPath("/widgets", path) !== null) {
           __route = "POST /widgets";
           if (!__jsonMediaTypeMatches(request)) {
@@ -138,7 +170,7 @@ export default {
           if (__r_body.tag === "Err") return __applySecurityHeaders(await __problemRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } })), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_widgets(body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"api\""]), __security_api);
+          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { problem: true }), request, ["Bynk realm=\"api\""]), __security_api);
         }
       }
       if (__matchPath("/conflict", path) !== null) {
@@ -165,6 +197,11 @@ export default {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__res, __security_plain);
+      }
+      if (__matchPath("/reserve", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
       }
       if (__matchPath("/teapot", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;

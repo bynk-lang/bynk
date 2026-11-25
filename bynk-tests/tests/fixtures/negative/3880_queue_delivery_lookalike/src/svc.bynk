@@ -4,5 +4,5 @@ context svc
 type QueueDelivery = { attempts: Int }
 
 service jobs from queue("jobs") {
-  on message(job: String, delivery: QueueDelivery) -> Effect[QueueResult] { Ack }
+  on message(job: String, delivery: QueueDelivery) -> Effect[QueueResult] by Producer { Ack }
 }

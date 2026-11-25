@@ -2,7 +2,7 @@ context jobs
 
 // ⚠ no `delivery { deadLetter }`: a message that exhausts its retries is deleted.
 service plain from queue("plain-jobs") {
-  on message(message: String) -> Effect[QueueResult] {
+  on message(message: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -13,7 +13,7 @@ service tuned from queue("tuned-jobs") {
     retries: 1,
   }
 
-  on message(message: String) -> Effect[QueueResult] {
+  on message(message: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -24,7 +24,7 @@ service throwaway from queue("throwaway-jobs") {
     deadLetter: None,
   }
 
-  on message(message: String) -> Effect[QueueResult] {
+  on message(message: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -34,7 +34,7 @@ service kept from queue("kept-jobs") {
     deadLetter: "kept-jobs-dlq",
   }
 
-  on message(message: String) -> Effect[QueueResult] {
+  on message(message: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

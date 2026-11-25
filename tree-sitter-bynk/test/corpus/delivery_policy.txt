@@ -10,7 +10,7 @@ service outbox from queue("outbound-email") {
     deadLetter: "outbound-email-dlq",
   }
 
-  on message(job: String) -> Effect[QueueResult] {
+  on message(job: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -39,6 +39,8 @@ service outbox from queue("outbound-email") {
             (base_type))
           (generic_type_ref
             (builtin_type)
+            (identifier))
+          (by_clause
             (identifier))
           (block
             (identifier)))))))

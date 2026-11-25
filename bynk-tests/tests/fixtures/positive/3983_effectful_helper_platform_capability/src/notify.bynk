@@ -1,0 +1,10 @@
+context notify
+
+consumes bynk { Logger }
+
+service ping {
+  on call() -> Effect[Int] by Caller given Logger {
+    do Logger.info("hello")
+    Effect.pure(1)
+  }
+}

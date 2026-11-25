@@ -11,7 +11,7 @@ service sweeper from cron {
 }
 
 service notifier from queue("notifications") {
-  on message(message: Notification) -> Effect[QueueResult] {
+  on message(message: Notification) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

@@ -545,7 +545,9 @@ wins, then the service. What the format does not touch: a `RawError` body, which
 [`on rejected`](#rendering-rejections) handler, which still replaces the router's body; a status
 that has no body (`401`, `403`, `404`, `405`), because RFC 9457 does not require one; the `500` a
 fault answers; and every success body. A shared mapping function that returns `HttpResult[T]`
-needs no change: its variants render as problems in this mode.
+needs no change: its variants render as problems in this mode. `bynk openapi` documents the
+errors of such a route as `application/problem+json` with a shared `BynkProblemDetails`
+schema, and `bynk client` types them as `problem: Problem`.
 
 The section is legal only on a `from http` service (`bynk.http.errors_not_http`), at most once
 (`bynk.parse.duplicate_errors`), and its one field is `format` (`bynk.http.errors_unknown_field`),
@@ -611,10 +613,10 @@ on GET("/links/:code") (code: Slug) -> Effect[HttpResult[String]] by v: Visitor 
 }
 ```
 
-`?` on an `Option` is accepted **only** where the enclosing return is an
-`HttpResult` — elsewhere an `Option` has no error channel, and the checker
-rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
-turn an `Option` into a `Result` in a `Result`-returning function). A `Result`
+In a function returning an `Option`, `?` returns the `None` as it is; here, where the
+enclosing return is an `HttpResult`, it becomes a `404`. In a `Result`-returning function
+the checker rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
+turn an `Option` into a `Result`). A `Result`
 under `?` is unchanged: its `Err` propagates as before. Mapping a **domain
 error** into an `HttpResult` — the `Result → HttpResult` direction — is a
 separate, later capability, tracked with the declared-embedding design

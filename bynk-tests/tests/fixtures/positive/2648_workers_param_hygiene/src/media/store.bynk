@@ -73,7 +73,7 @@ service ticker2 from cron {
 }
 
 service jobs from queue("jobs") {
-	on message(result: String) -> Effect[QueueResult] {
+	on message(result: String) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }
