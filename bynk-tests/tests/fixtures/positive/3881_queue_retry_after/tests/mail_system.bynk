@@ -10,13 +10,13 @@ consumes bynk.cloudflare { QueueDelivery }
     expect third == RetryAfter("dependency down", 40.seconds)
   }
 
-  case "a computed delay is clamped and truncated (system)" {
+  case "a computed delay is clamped and rounded up (system)" {
     let long <- clamped.message(Job { id: "b" })
     expect long == RetryAfter("too long", 24.hours)
     let short <- clamped.message(Job { id: "b" }, QueueDelivery { attempts: 2, sentAt: Instant.fromEpochMillis(0) })
     expect short == RetryAfter("too short", 1.second)
     let part <- clamped.message(Job { id: "b" }, QueueDelivery { attempts: 3, sentAt: Instant.fromEpochMillis(0) })
-    expect part == RetryAfter("part second", 1.second)
+    expect part == RetryAfter("part second", 2.seconds)
   }
 
   case "a plain retry carries no delay of its own (system)" {

@@ -124,14 +124,14 @@ pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ct
 
 /// #3881: retries one queue message for a `Retry` or a `RetryAfter` verdict. A `Retry` retries with no
 /// options, so the consumer's `retryDelay` (#3877) applies; a `RetryAfter` overrides it for this message
-/// with `delaySeconds`, its `Duration` truncated to whole seconds (towards zero, as #3948 settled for every span of time) and clamped to Cloudflare's range of
+/// with `delaySeconds`, its `Duration` rounded up to whole seconds (a retry comes after at least the delay) and clamped to Cloudflare's range of
 /// 1 second to 24 hours. A clamp is logged (a fault would retry with no delay, the opposite of the ask).
 pub(super) const RETRY_MESSAGE_HELPER: &str = "function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds: number }): void }, result: { readonly tag: string; readonly delay?: number }): void {
   if (result.tag !== \"RetryAfter\" || typeof result.delay !== \"number\") {
     msg.retry();
     return;
   }
-  const wanted = globalThis.Math.trunc(result.delay / 1000);
+  const wanted = globalThis.Math.ceil(result.delay / 1000);
   const seconds = globalThis.Number.isNaN(wanted) ? 1 : globalThis.Math.min(86400, globalThis.Math.max(1, wanted));
   if (seconds !== wanted) globalThis.console.error(`queue ${queue} retry delay clamped`, { requestedMs: result.delay, delaySeconds: seconds });
   msg.retry({ delaySeconds: seconds });

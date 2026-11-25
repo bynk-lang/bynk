@@ -56,7 +56,7 @@ Each message is acknowledged or retried by the handler's `QueueResult` verdict:
 `RetryAfter("smtp unavailable", 10.seconds * delivery.attempts)`. Cloudflare retries
 after a whole number of seconds, from 1 second to 24 hours, so a delay **written as a
 literal** outside that range is `bynk.queue.retry_delay_out_of_range`, and a delay
-**computed at run time** is truncated to whole seconds (a part second rounds towards zero, as `Duration.toSeconds` and a `QueueDelay` do) and clamped to the range, with
+**computed at run time** is rounded up to whole seconds (a part second rounds up, so the retry comes after at least the delay asked for) and clamped to the range, with
 the clamp logged: a fault would retry with no delay, the opposite of what the handler
 asked for. At the `system` tier a case reads the *settled* verdict: the delay the entry
 gave Cloudflare, so a rounded or clamped delay reads as the one it became (`1500.milliseconds`

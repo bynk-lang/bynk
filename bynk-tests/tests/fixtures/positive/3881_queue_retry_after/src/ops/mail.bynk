@@ -17,7 +17,7 @@ service backoff from queue("backoff-jobs") {
 }
 
 // A computed delay outside Cloudflare's range is clamped: 25 hours to 24, none to 1 second,
-// and a part second truncates towards zero (#4106).
+// and a part second rounds up.
 service clamped from queue("clamped-jobs") {
   delivery { deadLetter: None }
   on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] {

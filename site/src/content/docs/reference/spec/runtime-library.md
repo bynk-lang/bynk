@@ -171,7 +171,7 @@ non-generic `tag`-discriminated sum with a constructor namespace, variants `Ack`
 `RetryAfter` (#3881: redeliver after a `Duration`, carrying a `String` reason). A
 queue handler returns `Effect[QueueResult]`; the runtime routes `Ack` →
 `msg.ack()`, `Retry` → log the reason + `msg.retry()` and `RetryAfter` → log the
-reason + `msg.retry({ delaySeconds })`, the delay truncated to whole seconds (towards zero) and
+reason + `msg.retry({ delaySeconds })`, the delay rounded up to whole seconds and
 clamped to 1 second to 24 hours (a clamp is logged).
 
 | Export | Role |

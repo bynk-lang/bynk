@@ -731,8 +731,8 @@ on POST("/orders") (order: Order) -> Effect[HttpResult[String]] by Visitor given
   A literal or constant such as `30.seconds` is checked when the program
   compiles (`2.days` is a compile error); a computed span goes through
   `QueueDelay.of(d)`, which gives a `ValidationError` when it is out of range.
-  The delay is whole seconds, and a part second rounds towards zero, as
-  `Duration.toSeconds` does and as `KvTtl` does.
+  The delay is whole seconds, and a part second rounds up, so a message is
+  never delivered early (a retry's `RetryAfter` rounds up for the same reason).
 - `sendBatch(bodies)` sends its bodies in one call, all or none.
 - `sendValue(message)` takes any `Codable` value and sends exactly the message
   `send(Json.encode(message))` would. The call site does the encoding, so nothing
