@@ -6756,7 +6756,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 name, and that is fine until the name is written bare: then it could mean either, so \
                 the compiler refuses that reference and lists the qualified spellings. Choose one: give \
                 a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean \
-                (`uses billing { Amount }`), which also brings in only the names you list. A \
+                (`uses billing { Amount }`), which outranks the same name from a whole `uses` and brings \
+                in only the names you list; two selections of one name are still ambiguous. A \
                 declaration of the unit's own wins over a used name, and a `private` declaration is \
                 never imported, so neither can be ambiguous.",
         example: "// billing.bynk\n\

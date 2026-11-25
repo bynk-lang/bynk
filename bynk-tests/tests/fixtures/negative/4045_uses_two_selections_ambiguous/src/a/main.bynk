@@ -1,0 +1,3 @@
+commons a
+
+type Conflict = Int where Positive
