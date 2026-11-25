@@ -182,11 +182,12 @@ pub fn plan(root: &Path) -> Result<Plan, Vec<String>> {
             .map_err(|e| vec![format!("{file}: cannot read: {e}")])?;
         let hash = crate::stamped::content_hash(&bytes);
         let slug = file.strip_suffix(".md").unwrap_or(&file);
-        if let Some(entry) = crate::stamped::find(&ledger, slug, &hash) {
-            already_stamped.push(AlreadyStamped {
-                file,
-                entry: entry.clone(),
-            });
+        // The ledger first; then git history, for a stamp made before the ledger held it.
+        let known = crate::stamped::find(&ledger, slug, &hash)
+            .cloned()
+            .or_else(|| crate::stamped::find_in_git_history(root, &file, &hash));
+        if let Some(entry) = known {
+            already_stamped.push(AlreadyStamped { file, entry });
             continue;
         }
         version = version.next(&p.level);

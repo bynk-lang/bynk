@@ -94,6 +94,45 @@ pub fn find<'a>(entries: &'a [Entry], slug: &str, hash: &str) -> Option<&'a Entr
     entries.iter().find(|e| e.slug == slug && e.hash == hash)
 }
 
+/// The entry for a pending file that git history shows was already consumed, for stamps the
+/// ledger has no line for: any made by the old stamp between a ledger snapshot and the merge that
+/// introduced the ledger. A stamp deletes the pending file it consumes, so a file at this path
+/// that a commit on this history deleted, with the same content, was stamped. The version is the
+/// workspace version at that commit, which for a commit that stamped several files is the last
+/// one's. `None` when `root` is no git checkout or git cannot be run, which a fixture tree is
+/// not and the stamp's own checkout always is (it fetches full history).
+pub fn find_in_git_history(root: &Path, file: &str, hash: &str) -> Option<Entry> {
+    let git = |args: &[&str]| -> Option<Vec<u8>> {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .ok()?;
+        out.status.success().then_some(out.stdout)
+    };
+    let path = format!("design/pending/{file}");
+    let deleting = git(&["log", "--diff-filter=D", "--format=%H", "--", &path])?;
+    for commit in String::from_utf8_lossy(&deleting).lines() {
+        let Some(before) = git(&["show", &format!("{commit}^:{path}")]) else {
+            continue;
+        };
+        if content_hash(&before) != hash {
+            continue;
+        }
+        let version = git(&["show", &format!("{commit}:Cargo.toml")])
+            .and_then(|c| crate::stamp::parse_workspace_version(&String::from_utf8_lossy(&c)))
+            .map_or_else(|| format!("(commit {})", &commit[..8]), |v| v.to_string());
+        let slug = file.strip_suffix(".md").unwrap_or(file);
+        return Some(Entry {
+            slug: slug.to_string(),
+            hash: hash.to_string(),
+            version,
+            adrs: Vec::new(),
+        });
+    }
+    None
+}
+
 /// The line for a file stamped as `version` with `adrs` (ADR numbers, in order).
 pub fn line(slug: &str, hash: &str, version: &str, adrs: &[u32]) -> String {
     let mut out = format!("{slug} {hash} {version}");

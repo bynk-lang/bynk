@@ -814,3 +814,66 @@ fn a_reused_slug_warns_and_a_crlf_copy_of_a_stamped_file_still_fails() {
         "{warnings:?}"
     );
 }
+
+/// Run `git` in `root`, as a fixed author so the test needs no global config.
+fn git(root: &Path, args: &[&str]) {
+    let status = std::process::Command::new("git")
+        .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+        .args(args)
+        .current_dir(root)
+        .status()
+        .expect("git runs");
+    assert!(status.success(), "git {args:?}");
+}
+
+#[test]
+fn a_stamp_the_ledger_never_recorded_is_still_not_repeated() {
+    // The old stamp consumed this file and wrote no ledger line. Git still remembers it.
+    let root = fixture("git-fallback");
+    git(&root, &["init", "-q"]);
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &["commit", "-q", "-m", "a branch lands its pending file"],
+    );
+    let before = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        before.replace("0.185.0", "0.186.0"),
+    )
+    .unwrap();
+    git(&root, &["rm", "-q", "design/pending/feat-thing.md"]);
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "chore(stamp): the old stamp, with no ledger",
+        ],
+    );
+    assert!(!root.join("design/stamped.txt").exists());
+
+    // A stale copy comes back, and no ledger line exists for it. (`git rm` removed the empty dir.)
+    fs::create_dir_all(root.join("design/pending")).unwrap();
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    assert!(plan.is_empty(), "nothing to stamp");
+    assert_eq!(plan.already_stamped.len(), 1);
+    assert_eq!(plan.already_stamped[0].entry.version, "0.186.0");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("apply");
+    assert!(!root.join("design/pending/feat-thing.md").exists());
+    assert_eq!(changelog_rows(&root, "0.187.0"), 0);
+
+    // A different file under the same name is a new increment: git has only seen other bytes.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        "---\nlevel: patch\nchangelog: A different fix\n---\n",
+    )
+    .unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    assert!(plan.already_stamped.is_empty());
+    assert_eq!(plan.increments.len(), 1);
+}
