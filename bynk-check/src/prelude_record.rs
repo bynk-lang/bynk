@@ -44,6 +44,19 @@ pub(crate) fn is_reserved(decl: &TypeDecl) -> bool {
     decl.name.name == MAP_ENTRY && decl.type_params.len() == 2
 }
 
+/// The error for a type name declared twice, with the first declaration labelled.
+pub(crate) fn duplicate_error(
+    name: &bynk_syntax::ast::Ident,
+    prev: &TypeDecl,
+) -> bynk_syntax::error::CompileError {
+    bynk_syntax::error::CompileError::new(
+        "bynk.resolve.duplicate_type",
+        name.span,
+        format!("type `{}` is already declared", name.name),
+    )
+    .with_label(prev.name.span, "previously declared here")
+}
+
 /// The error for a unit that declares the reserved `MapEntry[A, B]`, at the declared name.
 pub(crate) fn reserved_error(name: &bynk_syntax::ast::Ident) -> bynk_syntax::error::CompileError {
     bynk_syntax::error::CompileError::new(

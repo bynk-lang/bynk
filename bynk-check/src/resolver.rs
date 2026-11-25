@@ -743,14 +743,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             | CommonsItem::Const(_) => {}
             CommonsItem::Type(t) => {
                 if let Some(prev) = types.get(&t.name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            t.name.span,
-                            format!("type `{}` is already declared", t.name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(&t.name, prev));
                 } else if crate::prelude_record::is_reserved(t) {
                     // #4192: `MapEntry[A, B]` is the prelude record, already declared.
                     errors.push(crate::prelude_record::reserved_error(&t.name));
@@ -781,14 +774,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             CommonsItem::Event(e) => {
                 let t = e.as_type_decl();
                 if let Some(prev) = types.get(&t.name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            t.name.span,
-                            format!("type `{}` is already declared", t.name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(&t.name, prev));
                 } else if let Some(prev) = fns.get(&t.name.name) {
                     errors.push(
                         CompileError::new(

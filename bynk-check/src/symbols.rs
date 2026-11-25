@@ -1248,14 +1248,7 @@ pub fn build_unit_table(
             };
             if let Some((name, decl, is_event)) = as_type {
                 if let Some(prev) = table.types.get(&name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            name.span,
-                            format!("type `{}` is already declared", name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(name, prev));
                 } else if crate::prelude_record::is_reserved(&decl) {
                     // #4192: `MapEntry[A, B]` is the prelude record, already declared.
                     errors.push(crate::prelude_record::reserved_error(name));
