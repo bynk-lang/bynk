@@ -244,6 +244,8 @@ impl Gen {
 
         // The function: its parameters and the encoding of each.
         let (mut params, build, arg_types) = self.encoding(r, rp)?;
+        // #3918: the arguments alone, for the `EventSource` form of a streaming `GET`.
+        let event_source_form = has_event_source(r).then(|| (params.clone(), build.clone()));
         let init =
             if r.params.iter().any(
                 |p| matches!(p, ParamInput::Path { name, .. } if super::super::ts_ident(name) == "init"),
@@ -296,10 +298,13 @@ impl Gen {
         if let Some(doc) = r.doc.as_deref() {
             method = method.with_doc(doc);
         }
+        let event_source = event_source_form
+            .map(|(params, build)| event_source_entry(&rp.function, &route_ident, params, build));
         Ok(RouteText {
             hash,
             constant,
             method,
+            event_source,
             response_type,
             arg_types,
         })
@@ -1008,6 +1013,49 @@ pub(super) struct RouteText {
     pub(super) hash: String,
     pub(super) constant: TsStmt,
     pub(super) method: TsObjectEntry,
+    /// #3918: the same route through a browser `EventSource`, for a `Streaming` `GET`.
+    pub(super) event_source: Option<TsObjectEntry>,
     pub(super) response_type: Option<Vec<TsStmt>>,
     pub(super) arg_types: Vec<TsStmt>,
+}
+
+/// #3918: a streaming `GET` route through the browser's own `EventSource`: the call's
+/// arguments, handed to `__eventSource` with the same encoding.
+fn event_source_entry(
+    function: &str,
+    route_ident: &str,
+    params: Vec<TsParam>,
+    build: Vec<TsStmt>,
+) -> TsObjectEntry {
+    let call = TsExpr::Call {
+        callee: Box::new(ident("__eventSource")),
+        args: vec![
+            ident("options"),
+            ident(route_ident),
+            TsExpr::Arrow {
+                params: Vec::new(),
+                is_async: false,
+                generics: Vec::new(),
+                return_type: None,
+                body: Box::new(TsArrowBody::Multiline(build)),
+            },
+        ],
+    };
+    let ret = TsType::named("globalThis.EventSource | CallFailure");
+    TsObjectEntry::prop(
+        property(&event_source_name(function)),
+        TsExpr::Arrow {
+            params,
+            is_async: false,
+            generics: Vec::new(),
+            return_type: Some(ret.clone()),
+            body: Box::new(TsArrowBody::Expr(Box::new(TsExpr::As {
+                expr: Box::new(call),
+                ty: ret,
+            }))),
+        },
+    )
+    .with_doc(
+        "The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: \"include\"` sends cookies to another origin.",
+    )
 }
