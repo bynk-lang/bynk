@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `Effect[T]` gains `map(f)` and `andThen(f)`, legal in a pure helper, and a missing `Effect` method is `method_not_found` naming the real ones
----
+# 0958 — Effect.map and Effect.andThen, as the spec already describes, usable in a pure helper
 
-## ADR: effect-map-and-then
-title: Effect.map and Effect.andThen, as the spec already describes, usable in a pure helper
-summary: Adds map and andThen to every Effect, and replaces the misleading "has no methods" error with method_not_found
+- **Status:** Accepted (v0.696)
 
 **Context.** The spec said `.map` and `.flatMap` on an `Effect[Result[T, E]]` "remain Effect's own", and advised writing `e.map((r) => …)` for `Effect[Option[T]]` or `Effect[List[T]]`. The compiler had no such methods: `EffectOp` was `within`, `race` and `detach`, and `e.map(f)` was refused with `bynk.types.method_on_non_named_type` ("type `Effect[Int]` has no methods"), which was also wrong, since `within`, `race` and `detach` are methods of every `Effect`. Only an effectful body can use `<-`, so a pure helper could reshape an `Effect[Result]` with `mapOk` but not any other `Effect` it was handed.
 
