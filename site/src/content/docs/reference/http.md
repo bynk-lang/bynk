@@ -486,6 +486,72 @@ A test matches a `RawError` by its number: `expect r is RawError(409, _, _)`. A
 system-tier test decodes the response by its status, as it does for every
 variant, so there the same response reads as `Conflict(_)`.
 
+To answer every error in the standard RFC 9457 shape instead, without writing the body
+yourself, see [Problem details](#problem-details).
+
+## Problem details {#problem-details}
+
+A service whose clients are not Bynk's can answer every error in one standard shape. With
+`errors { format: problem }`, an error variant and a router rejection each answer an
+[RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` body:
+
+```bynk,fragment
+service api from http {
+  errors { format: problem }
+
+  on POST("/widgets/:id/reserve") (id: String) -> Effect[HttpResult[()]] by v: Visitor {
+    Conflict("widget is out of stock")
+  }
+}
+```
+
+```json
+{ "type": "about:blank", "title": "Conflict", "status": 409, "detail": "widget is out of stock" }
+```
+
+A request the router refuses before the handler runs answers the same way, with a stable `type`
+and the rejection's own members (`kind`, `path`, and a refinement's `violation`) as extension members:
+
+```json
+{ "type": "https://bynk-lang.org/problems/refinement-violation", "title": "Bad Request", "status": 400,
+  "detail": "body.qty: must be positive", "kind": "RefinementViolation", "path": "body.qty",
+  "violation": { "field": "qty", "message": "must be positive", "rule": { … } } }
+```
+
+| Field | Holds |
+|---|---|
+| `status` | the response's status |
+| `title` | the status's reason phrase |
+| `detail` | the variant's message, or the rejection's detail; absent when there is none |
+| `type` | `about:blank` for an error variant (RFC 9457 §4.2.1); `https://bynk-lang.org/problems/<kind>` for a router rejection |
+| `kind` and the rejection's other members | a router rejection's kind, and what it carries: `path`; `expected` and `actual` of a structural mismatch; `violation` (the `field`, `message` and `rule`, never the rejected value) of a refinement |
+
+The rejection types are stable, and new kinds are additive. The URI is an identifier, listed
+here once:
+
+| Rejection | `type` | Status |
+|---|---|---|
+| `MalformedJson` {#problem-malformed-json} | `https://bynk-lang.org/problems/malformed-json` | `400` |
+| `MalformedForm` {#problem-malformed-form} | `https://bynk-lang.org/problems/malformed-form` | `400` |
+| `MalformedPath` {#problem-malformed-path} | `https://bynk-lang.org/problems/malformed-path` | `400` |
+| `StructuralMismatch` {#problem-structural-mismatch} | `https://bynk-lang.org/problems/structural-mismatch` | `400` |
+| `RefinementViolation` {#problem-refinement-violation} | `https://bynk-lang.org/problems/refinement-violation` | `400` |
+| `PayloadTooLarge` {#problem-payload-too-large} | `https://bynk-lang.org/problems/payload-too-large` | `413` |
+| `UnsupportedMediaType` {#problem-unsupported-media-type} | `https://bynk-lang.org/problems/unsupported-media-type` | `415` |
+
+The default is `format: bynk`, and with it every error body is what it always was, byte for byte.
+A handler overrides the service with `@errors(format: bynk)` or `@errors(format: problem)`; the route
+wins, then the service. What the format does not touch: a `RawError` body, which you chose; an
+[`on rejected`](#rendering-rejections) handler, which still replaces the router's body; a status
+that has no body (`401`, `403`, `404`, `405`), because RFC 9457 does not require one; the `500` a
+fault answers; and every success body. A shared mapping function that returns `HttpResult[T]`
+needs no change: its variants render as problems in this mode.
+
+The section is legal only on a `from http` service (`bynk.http.errors_not_http`), at most once
+(`bynk.parse.duplicate_errors`), and its one field is `format` (`bynk.http.errors_unknown_field`),
+whose value is `bynk` or `problem` (`bynk.http.errors_invalid_field`). `@errors` follows the same
+rules, and at most one per handler (`bynk.http.errors_duplicate`).
+
 ## Rendering rejections
 
 The router refuses some requests before any handler runs: a `400` for a body or
@@ -784,6 +850,59 @@ A response that sets a cookie is one user's, so a `public` cache may not keep it
 runtime a response carrying `Set-Cookie` is always sent `Cache-Control: private`, and a
 conditional-`GET` `304` keeps the `Set-Cookie` of the response it replaces. In a test,
 `result.cookies()` reads the `List[Cookie]` a result carries.
+
+## Response headers {#response-headers}
+
+A handler adds a header of its own to any `HttpResult` with `withHeader`, and the status
+that has a standard header takes a typed helper:
+
+```bynk,fragment
+on GET("/report") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("ok").withHeader("X-Request-Id", "abc")
+}
+
+on POST("/things") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+  Created(body).at("/things/1")
+}
+
+on GET("/slow") () -> Effect[HttpResult[String]] by v: Visitor {
+  TooManyRequests("slow down").retryAfter(30.seconds)
+}
+
+on GET("/export") () -> Effect[HttpResult[Bytes]] by v: Visitor {
+  Raw(Bytes.fromUtf8("a,b"), "text/csv").download("report.csv")
+}
+```
+
+| Method | Writes | Applies to |
+|---|---|---|
+| `withHeader(name, value)` | one header line; a repeated name keeps every value | any `HttpResult` |
+| `retryAfter(delay)` | `Retry-After`, `delay` in whole seconds, rounded up | `TooManyRequests`, `ServiceUnavailable` |
+| `at(url)` | `Location` of the new resource | `Created`, `RawCreated`, `Accepted` |
+| `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed` |
+
+A typed helper is written on the variant itself, after any other header methods
+(`TooManyRequests(m).withHeader("X-Reason", "deploy").retryAfter(90.seconds)`), because the router
+cannot tell at compile time which variant a stored `HttpResult` holds; on another receiver it is
+`bynk.types.method_not_found`. `retryAfter` is whole seconds, so a literal under one second is
+refused (`bynk.http.invalid_response_header`).
+
+`withHeader` cannot set a header the router owns: the caching headers (`Cache-Control`, `ETag`,
+`Vary`, `Expires`, `Last-Modified`, `Age`, `Pragma` and the CDN directives), `Content-Type` and
+`Content-Length`, `Location`, `Retry-After` and `Content-Disposition` (the typed helpers write
+those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
+`WWW-Authenticate`, `Allow` and the hop-by-hop headers. A header value is ASCII: a literal with
+another character is `bynk.http.invalid_response_header`, and a computed one answers `500`; `at`
+percent-encodes a URL instead. A literal name that is one is
+`bynk.http.reserved_response_header`, and its note names the way to set it properly. A literal name
+that is not an RFC 9110 token, or a value with a line break or another control character, is
+`bynk.http.invalid_response_header`. A name or value computed at run time is judged when the
+response is built: a bad one answers `500` and is logged, so a malformed header never reaches the
+wire.
+
+In a test, `result.headers()` reads the `Map[String, List[String]]` a result carries, with
+lower-case names and each name's values in the order they were added; the headers the router owns
+are not in it.
 
 ## Method semantics
 

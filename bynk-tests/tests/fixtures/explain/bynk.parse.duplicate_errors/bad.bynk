@@ -1,0 +1,10 @@
+context api
+
+service api from http {
+    errors { format: problem }
+    errors { format: bynk }
+
+    on GET("/items") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

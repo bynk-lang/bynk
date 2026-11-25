@@ -1,11 +1,10 @@
 context b
 
-type Status = enum { Open, Closed }
+type Pt = | Hot(t: Float) | Cold
 
-// #1680 (review of #1696): the rule is the value-`Map`/index-key one, `String`/`Int`
-// or refined/opaque over them, so a nullary enum element is rejected too.
+// #4037: a store key must be `Key`; a `Float` is never a key, at any depth.
 agent A {
   key id: String
-  store seen: Set[Status]
+  store seen: Set[Pt]
   on call get() -> Effect[Int] { 1 }
 }
