@@ -59,6 +59,7 @@ Predicates may call **pure value methods** (`Option.isSome`/`isNone`, sum
 |---|---|
 | A non-`Bool` predicate | `bynk.invariant.not_bool` |
 | Effects, capabilities, or test-only constructs | `bynk.invariant.impure_predicate` |
+| Reading a `Map`, `Set`, `Cache` or `Log` field beyond its `size()` | `bynk.invariant.collection_scan` |
 | Referencing another agent | `bynk.invariant.cross_agent_reference` |
 | Two invariants with the same name | `bynk.invariant.duplicate_name` |
 | An `invariant` after a handler | `bynk.parse.invariant_after_handler` |
@@ -66,6 +67,64 @@ Predicates may call **pure value methods** (`Option.isSome`/`isNone`, sum
 Invariants are **per-agent**: they constrain one agent's reachable states. A
 property that genuinely spans agents is eventually-consistent — express it with a
 saga or a scenario, not an invariant.
+
+## Collections: only `size()` {#collection-size}
+
+An invariant runs at every commit, so what it reads is read at every commit. A
+`Map`, `Set` or `Cache` field can be asked its **`size()`**: the commit already
+knows the staged count, so that reads one count and nothing more. A bound on a
+collection, "at most 100 lines", is one of the most common invariants:
+
+```bynk
+context shop
+
+agent Basket {
+	key id: String
+
+	store lines: Map[String, Int]
+
+	invariant bounded:
+		lines.size() <= 100
+
+	on call add(sku: String, qty: Int) -> Effect[()] {
+		lines.put(sku, qty)
+	}
+}
+```
+
+Any other read of a collection field (`lines.contains(…)`, `lines.get(…)`, a query,
+or the field on its own) would scan the collection at every commit, so it is
+`bynk.invariant.collection_scan` (`bynk.transition.collection_scan` in a
+transition). A `Log` has no `size()`, so it may not be read at all. Check such a
+property in the handler that writes the collection, where the entry in hand is
+known, or bound the collection with `size()`.
+
+The value checked is the **staged** one, as for a `Cell` field: the count after the
+handler's writes, before they are persisted. The commit adds no storage read beyond
+the one count. In a transition, `new.lines.size()` is that staged count and
+`old.lines.size()` is the last committed one:
+
+```bynk
+context shop
+
+agent Basket {
+	key id: String
+
+	store lines: Map[String, Int]
+	store paid: Cell[Bool] = false
+
+	transition never_shrinks_once_paid:
+		old.paid implies new.lines.size() >= old.lines.size()
+
+	on call add(sku: String, qty: Int) -> Effect[()] {
+		lines.put(sku, qty)
+	}
+
+	on call remove(sku: String) -> Effect[()] {
+		lines.remove(sku)
+	}
+}
+```
 
 ## Step invariants — `transition` {#step-invariants}
 
@@ -110,6 +169,7 @@ methods; pure `Bool`), with the same restrictions:
 |---|---|
 | A non-`Bool` predicate | `bynk.transition.not_bool` |
 | Effects, capabilities, or test-only constructs | `bynk.transition.impure_predicate` |
+| Reading a `Map`, `Set`, `Cache` or `Log` field beyond its `size()` | `bynk.transition.collection_scan` |
 | Referencing another agent | `bynk.transition.cross_agent_reference` |
 | Two transitions with the same name | `bynk.transition.duplicate_name` |
 | A predicate mentioning neither `old` nor `new` | `bynk.transition.no_step_reference` |

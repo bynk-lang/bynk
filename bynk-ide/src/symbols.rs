@@ -575,7 +575,9 @@ pub fn store_field_kind_at(
         let CommonsItem::Agent(a) = item else {
             continue;
         };
-        if !in_state_scope(a, recv_end) {
+        // The receiver's last character: a predicate that ends at the receiver
+        // (`invariant bounded: lines`) still covers it.
+        if !in_state_scope(a, recv_end.saturating_sub(1)) {
             continue;
         }
         if let Some(f) = a.store_fields.iter().find(|f| f.name.name == recv) {
@@ -586,6 +588,30 @@ pub fn store_field_kind_at(
         }
     }
     None
+}
+
+/// #4034: whether the `store` field receiver ending at `recv_end` sits in an
+/// invariant or transition predicate of its agent, where a collection can be
+/// asked its `size()` and nothing else.
+pub fn store_field_in_predicate_at(source: &str, recv_end: usize) -> bool {
+    let at = recv_end.saturating_sub(1);
+    let Ok(tokens) = tokenize(source) else {
+        return false;
+    };
+    let (Some(unit), _) = parse_unit_with_recovery(&tokens, source) else {
+        return false;
+    };
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    items.iter().any(|item| {
+        matches!(item, CommonsItem::Agent(a)
+            if a.invariants.iter().any(|i| span_covers(i.predicate.span, at))
+                || a.transitions.iter().any(|t| span_covers(t.predicate.span, at)))
+    })
 }
 
 /// v0.140 (ADR 0163): hover for a handler-position annotation (`@cache`). Handler

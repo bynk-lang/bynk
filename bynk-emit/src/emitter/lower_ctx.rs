@@ -652,7 +652,7 @@ impl<'a> LowerCtx<'a> {
     /// agent's state field names.
     pub(crate) fn invariant_state(&self) -> Option<(&str, &HashSet<String>)> {
         match &self.mode {
-            BodyMode::Invariant { name, fields } => Some((name.as_str(), fields)),
+            BodyMode::Invariant { name, fields, .. } => Some((name.as_str(), fields)),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }
@@ -668,11 +668,31 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #4034: inside an invariant predicate, the agent's `Map`, `Set` and `Cache`
+    /// fields.
+    pub(crate) fn invariant_collections(&self) -> Option<&HashSet<String>> {
+        if let BodyMode::Invariant { collections, .. } = &self.mode {
+            Some(collections)
+        } else {
+            None
+        }
+    }
+
+    /// #4034: inside a `transition` predicate, the agent's `Map`, `Set` and `Cache`
+    /// fields.
+    pub(crate) fn transition_collections(&self) -> Option<&HashSet<String>> {
+        if let BodyMode::Transition { collections, .. } = &self.mode {
+            Some(collections)
+        } else {
+            None
+        }
+    }
+
     /// v0.116: inside a `transition` predicate, the JS names bound to the
     /// contextual `old`/`new` state records.
     pub(crate) fn transition_states(&self) -> Option<(&str, &str)> {
         match &self.mode {
-            BodyMode::Transition { old, new } => Some((old.as_str(), new.as_str())),
+            BodyMode::Transition { old, new, .. } => Some((old.as_str(), new.as_str())),
             BodyMode::Method
             | BodyMode::FreeFn
             | BodyMode::GivenFn { .. }
@@ -1829,4 +1849,118 @@ fn witness_claims_node(witness: &[(String, bynk_check::actors::WitnessValue)]) -
             })
             .collect(),
     )
+}
+
+// ---- #4034: `size()` of a `store` collection inside a predicate ---------------
+//
+// A predicate runs in `commitState`, over the staged state. A collection's count
+// is not a field of that state: it lives in the collection's handle (the staged
+// count) and in storage (the committed count). So `commitState` binds each count
+// it needs before the checks, and the predicate reads the binding:
+// `__size_new_<field>` for the staged count (`lines.size()` in an invariant,
+// `new.lines.size()` in a transition) and `__size_old_<field>` for the last
+// committed one (`old.lines.size()`).
+
+/// The agent's `Map`, `Set` and `Cache` store fields: the collections whose
+/// `size()` a predicate may read.
+pub(crate) fn collection_names(
+    a: &bynk_syntax::ast::AgentDecl,
+) -> std::collections::HashSet<String> {
+    a.store_fields
+        .iter()
+        .filter(|f| matches!(f.kind.head.name.as_str(), "Map" | "Set" | "Cache"))
+        .map(|f| f.name.name.clone())
+        .collect()
+}
+
+/// The binding a predicate reads the count from: `old` is the committed count.
+pub(crate) fn size_binding(old: bool, field: &str) -> String {
+    ["__size_", if old { "old" } else { "new" }, "_", field].concat()
+}
+
+/// Which counts the predicates of an agent read, as field names.
+#[derive(Default)]
+pub(crate) struct SizeReads {
+    /// The staged counts: a bare `f.size()` in an invariant, `new.f.size()`.
+    pub staged: std::collections::BTreeSet<String>,
+    /// The committed counts: `old.f.size()`.
+    pub committed: std::collections::BTreeSet<String>,
+}
+
+/// The collections whose `size()` the agent's invariants and transitions read.
+pub(crate) fn size_reads(a: &bynk_syntax::ast::AgentDecl) -> SizeReads {
+    let collections = collection_names(a);
+    let mut out = SizeReads::default();
+    for inv in &a.invariants {
+        collect(&inv.predicate, &collections, false, &mut out);
+    }
+    for tr in &a.transitions {
+        collect(&tr.predicate, &collections, true, &mut out);
+    }
+    out
+}
+
+/// `(is the old state, field)` when `receiver.size()` reads a collection count:
+/// a bare collection name in an invariant, `old|new.<collection>` in a transition.
+pub(crate) fn size_read(
+    receiver: &bynk_syntax::ast::Expr,
+    collections: &std::collections::HashSet<String>,
+    step: bool,
+) -> Option<(bool, String)> {
+    if !step {
+        let bynk_syntax::ast::ExprKind::Ident(id) = &receiver.kind else {
+            return None;
+        };
+        return collections
+            .contains(&id.name)
+            .then(|| (false, id.name.clone()));
+    }
+    let bynk_syntax::ast::ExprKind::FieldAccess { receiver: r, field } = &receiver.kind else {
+        return None;
+    };
+    let bynk_syntax::ast::ExprKind::Ident(state) = &r.kind else {
+        return None;
+    };
+    if !collections.contains(&field.name) {
+        return None;
+    }
+    match state.name.as_str() {
+        "old" => Some((true, field.name.clone())),
+        "new" => Some((false, field.name.clone())),
+        _ => None,
+    }
+}
+
+pub(crate) fn is_size_call(
+    method: &bynk_syntax::ast::Ident,
+    args: &[bynk_syntax::ast::Expr],
+) -> bool {
+    method.name == "size" && args.is_empty()
+}
+
+fn collect(
+    e: &bynk_syntax::ast::Expr,
+    collections: &std::collections::HashSet<String>,
+    step: bool,
+    out: &mut SizeReads,
+) {
+    if let bynk_syntax::ast::ExprKind::MethodCall {
+        receiver,
+        method,
+        args,
+        ..
+    } = &e.kind
+        && is_size_call(method, args)
+        && let Some((old, field)) = size_read(receiver, collections, step)
+    {
+        if old {
+            out.committed.insert(field);
+        } else {
+            out.staged.insert(field);
+        }
+        return;
+    }
+    for c in bynk_syntax::ast::expr_children(e) {
+        collect(c, collections, step, out);
+    }
 }

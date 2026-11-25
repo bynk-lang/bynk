@@ -97,6 +97,10 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     // `lower_call/statics.rs`, the store, D1, cross-context, events, cookie, capability,
     // test-service and agent families each under `lower_call/`), every delegated kernel's node
     // passes through unprinted, and the plain instance call that ends this function is a node.
+    // #4034: `size()` of a collection inside an invariant or transition predicate.
+    if let Some(built) = lower_predicate_size(receiver, method, args, cx) {
+        return pre.finish(built);
+    }
     // Persisted-store receivers: held Map, Map, Set, Cache, Log, Cell (#3167).
     if let Some(built) = lower_store_method_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(built);
@@ -615,4 +619,28 @@ pub(super) fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCt
         built = settle_built(built, cx);
     }
     pre.finish(built)
+}
+
+/// The binding read when `receiver.method(args)` is a collection `size()` in a
+/// predicate being lowered, else `None`.
+fn lower_predicate_size(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &LowerCtx,
+) -> Option<bynk_ts::TsExpr> {
+    if !super::super::lower_ctx::is_size_call(method, args) {
+        return None;
+    }
+    let (collections, step) = if let Some(c) = cx.invariant_collections() {
+        (c, false)
+    } else if let Some(c) = cx.transition_collections() {
+        (c, true)
+    } else {
+        return None;
+    };
+    let (old, field) = super::super::lower_ctx::size_read(receiver, collections, step)?;
+    Some(bynk_ts::TsExpr::Ident(
+        super::super::lower_ctx::size_binding(old, &field),
+    ))
 }

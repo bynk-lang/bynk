@@ -7,7 +7,7 @@ title: Diagnostic index
 
 Every diagnostic code the compiler can emit, with a one-line summary of the cause, grouped by category. Each code links to its own page: what the code means, how to fix it and an example where an explanation is written, the grammar rules it governs, and the Book pages that explain it. `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.
 
-There are **925** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
+There are **927** codes in total. Every code is an error unless it is marked **Warning** or **Hint**.
 
 <script type="module" src="/diagnostic-filter.js"></script>
 
@@ -520,6 +520,7 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 - [`bynk.index.unkeyable_key`](/reference/diagnostics/bynk.index.unkeyable_key/) — An `@indexed(by: k)` field is not value-keyable.
 - [`bynk.index.unknown_key`](/reference/diagnostics/bynk.index.unknown_key/) — An `@indexed(by: k)` field is not a field of the map's value type.
 - [`bynk.index.unused`](/reference/diagnostics/bynk.index.unused/) — <span class="diagnostic-severity">Warning</span> A declared `@indexed(by: k)` is never used by an equality filter (a hygiene warning).
+- [`bynk.invariant.collection_scan`](/reference/diagnostics/bynk.invariant.collection_scan/) — An invariant reads a `store` collection beyond its `size()`; a predicate runs at every commit.
 - [`bynk.invariant.cross_agent_reference`](/reference/diagnostics/bynk.invariant.cross_agent_reference/) — An invariant predicate references another agent; invariants are per-agent.
 - [`bynk.invariant.duplicate_name`](/reference/diagnostics/bynk.invariant.duplicate_name/) — An agent declares two invariants with the same name.
 - [`bynk.invariant.impure_predicate`](/reference/diagnostics/bynk.invariant.impure_predicate/) — An invariant predicate uses an effectful or test-only construct.
@@ -918,6 +919,7 @@ There are **925** codes in total. Every code is an error unless it is marked **W
 
 ## Transitions (step invariants)
 
+- [`bynk.transition.collection_scan`](/reference/diagnostics/bynk.transition.collection_scan/) — A transition reads a `store` collection beyond its `size()`; a predicate runs at every commit.
 - [`bynk.transition.cross_agent_reference`](/reference/diagnostics/bynk.transition.cross_agent_reference/) — A transition predicate references another agent; step invariants are per-agent.
 - [`bynk.transition.duplicate_name`](/reference/diagnostics/bynk.transition.duplicate_name/) — An agent declares two transitions with the same name.
 - [`bynk.transition.impure_predicate`](/reference/diagnostics/bynk.transition.impure_predicate/) — A transition predicate uses an effectful or test-only construct; a step invariant must be pure.
