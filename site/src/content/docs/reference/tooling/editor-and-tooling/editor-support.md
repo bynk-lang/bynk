@@ -16,9 +16,7 @@ code --install-extension bynk-lang.bynk-vscode
 ```
 
 It uses the `bynk-lsp` on your `PATH`, or downloads the matching release if
-there isn't one. Prebuilt macOS binaries are paused for now, so on macOS there
-is nothing to download: install `bynk` and `bynk-lsp` with
-`cargo install bynk bynk-lsp` first.
+there isn't one.
 
 To build both from source instead, for example to try unreleased changes:
 
