@@ -23,7 +23,7 @@ const INDEX_PATH = "/reference/diagnostics/";
 
 /**
  * @typedef {{ code: string, summary: string, severity: string, category: string }} Entry
- * @typedef {{ code: string, version: string, why: string, replacement: string | null }} Retired
+ * @typedef {{ code: string, lastRelease: string, why: string, replacement: string | null }} Retired
  */
 
 /** The per-code documents in `dir`, sorted by code. */
@@ -88,7 +88,7 @@ export function renderIndex(/** @type {Entry[]} */ entries, /** @type {Retired[]
       "Codes the compiler no longer emits. `bynk explain <code>` still says when each was retired and why.\n\n";
     for (const r of [...retired].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))) {
       const by = r.replacement ? ` Replaced by ${r.replacement}.` : "";
-      out += `- \`${r.code}\` — retired in v${r.version}. ${r.why}${by}\n`;
+      out += `- [\`${r.code}\`](${INDEX_PATH}${r.code}/) — retired after v${r.lastRelease}. ${r.why}${by}\n`;
     }
   }
   return out;

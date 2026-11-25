@@ -6767,8 +6767,10 @@ pub fn explain(code: &str) -> Option<&'static Explain> {
 pub struct Retired {
     /// The retired code.
     pub code: &'static str,
-    /// The version that retired it, as `X.Y.Z`.
-    pub version: &'static str,
+    /// The last release that carried the code, as `X.Y.Z`. The change that removes a code cannot know
+    /// the version that will retire it (the merge-time stamp assigns that), so this is the latest
+    /// release page when the change is written.
+    pub last_release: &'static str,
     /// One sentence on why it went.
     pub why: &'static str,
     /// The code or feature that replaced it, if any.
@@ -11123,7 +11125,7 @@ pub fn render_retired_json() -> Vec<(String, String)> {
         .map(|r| {
             let doc = serde_json::json!({
                 "code": r.code,
-                "version": r.version,
+                "lastRelease": r.last_release,
                 "why": r.why,
                 "replacement": r.replacement,
             });

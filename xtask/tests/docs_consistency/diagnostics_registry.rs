@@ -426,7 +426,8 @@ fn links_to_code_pages_name_registry_codes() {
             if code.is_empty() {
                 continue;
             }
-            if !REGISTRY.iter().any(|d| d.code == code) {
+            // A retired code keeps a page too (#4277).
+            if !REGISTRY.iter().any(|d| d.code == code) && !RETIRED.iter().any(|r| r.code == code) {
                 bad.push(format!("{}: {PREFIX}{code}/", path.display()));
             }
         }
@@ -500,10 +501,21 @@ fn retired_codes_are_sorted_and_not_live() {
             "`{}` is in RETIRED but still in REGISTRY: a code is live or retired, not both",
             r.code
         );
+        assert!(!r.why.is_empty(), "RETIRED `{}` needs a `why`", r.code);
+        // `last_release` names a release that was really cut, so it cannot be a guess.
+        let stem = xtask::release_pages::release_stem(
+            xtask::stamp::Version::parse(r.last_release).expect("RETIRED last_release is X.Y.Z"),
+        );
+        let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(xtask::release_pages::RELEASES_DIR)
+            .join(format!("{stem}.md"));
         assert!(
-            !r.why.is_empty() && r.version.split('.').count() == 3,
-            "RETIRED `{}` needs a `why` and an `X.Y.Z` version",
-            r.code
+            page.exists(),
+            "RETIRED `{}` says its last release was v{}, which has no release page ({})",
+            r.code,
+            r.last_release,
+            page.display()
         );
     }
 }

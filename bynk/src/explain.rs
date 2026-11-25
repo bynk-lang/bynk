@@ -48,8 +48,8 @@ fn lookup(code: &str) -> Lookup {
 /// The tombstone text for a retired code: when it went, why, and what replaced it.
 fn render_retired(r: &Retired) -> String {
     let mut out = format!(
-        "{}\n\nThis diagnostic code was retired in v{}, and the compiler no longer emits it.\n\n{}\n",
-        r.code, r.version, r.why
+        "{}\n\nThis diagnostic code was retired after v{}, its last release, and the compiler no longer emits it.\n\n{}\n",
+        r.code, r.last_release, r.why
     );
     if let Some(by) = r.replacement {
         out.push_str(&format!("\nReplaced by: {by}\n"));
@@ -148,13 +148,13 @@ mod tests {
     fn a_retired_code_says_when_why_and_what_replaced_it() {
         let r = Retired {
             code: "bynk.http.multipart_body_unbounded",
-            version: "1.2.3",
+            last_release: "1.2.3",
             why: "The default body cap makes it unreachable.",
             replacement: Some("the default body cap (#3921)"),
         };
         let out = render_retired(&r);
         assert!(out.contains("bynk.http.multipart_body_unbounded"), "{out}");
-        assert!(out.contains("retired in v1.2.3"), "{out}");
+        assert!(out.contains("retired after v1.2.3"), "{out}");
         assert!(
             out.contains("default body cap makes it unreachable"),
             "{out}"
