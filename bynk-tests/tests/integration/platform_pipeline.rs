@@ -162,7 +162,7 @@ fn events_emit_is_a_block_iife_with_the_envelope() {
     let ts = handlers("ledger.bynk", LEDGER, "workers/ledger/handlers.ts");
     assert!(
             ts.contains(
-                "await (async () => {\n        __events.push({ type: \"Bumped\", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: \"ledger\", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });\n      })();"
+                "await (async () => {\n        __events.push({ type: \"Bumped\", payload: { amount: amount }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: \"ledger\", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });\n      })();"
             ),
             "{ts}"
         );

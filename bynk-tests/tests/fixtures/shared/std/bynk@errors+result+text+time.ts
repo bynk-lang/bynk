@@ -422,12 +422,20 @@ export const StreamResponse = {
  * non-additive change fails the build. An explicit `@schema(N)` annotation
  * (slice 3b) is checked against that computed value rather than trusted
  * outright — a mismatch is a build error, not a silent override.
+ *
+ * `trace` is the id of the trace the emission happened in (32 lowercase hex
+ * digits, the trace id of the W3C `traceparent` the delivery carries), so a
+ * handler can tie what it does to the request that caused the event. It is
+ * `None` when the event was emitted outside a trace, and for an envelope from a
+ * publisher built before traces existed: the field is additive, defaulted, and
+ * never changes whether an event is delivered.
  */
 export interface EventEnvelope {
   readonly eventId: string;
   readonly publisherId: string;
   readonly emittedAt: number;
   readonly schemaVersion: number;
+  readonly trace: Option<string>;
 }
 
 export const EventEnvelope = {

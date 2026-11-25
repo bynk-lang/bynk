@@ -186,7 +186,7 @@ use runtime_header::{header_single, write_header};
 /// object's shape at the receiving `/_bynk/event/` route, not this outer
 /// wire wrapper. Keep its field list in sync with the `envelope: { ... }`
 /// portion of this shape by hand; nothing generates either from the other.
-pub const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }";
+pub const EVENTS_WIRE_EVENT_TS_TYPE: &str = "{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }";
 
 /// Emit the contents of `out/tsconfig.json`. The CLI uses `tsc -p` against
 /// this when running `bynk test`; users can also drive `tsc` against it

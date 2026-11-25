@@ -17,7 +17,7 @@ function __bynkTest_Events(): __ns_bynk.Events {
 }
 
 function __makeTestDeps() {
-  return { Events: __bynkTest_Events(), async __eventsDispatch(events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) { for (const ev of events) await this.Events.emit(ev.payload); } };
+  return { Events: __bynkTest_Events(), async __eventsDispatch(events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) { for (const ev of events) await this.Events.emit(ev.payload); } };
 }
 
 // case tier: unit
