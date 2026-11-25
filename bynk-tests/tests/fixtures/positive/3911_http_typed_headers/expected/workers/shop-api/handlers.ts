@@ -12,10 +12,10 @@ export type IdempotencyKey = string & { readonly __brand: "shop.api.IdempotencyK
 export const IdempotencyKey = {
   of(value: string): Result<IdempotencyKey, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 8)) {
-      return Err({ field: "IdempotencyKey", message: "length must be at least 8", value });
+      return Err({ field: "IdempotencyKey", message: "length must be at least 8", rule: { tag: "MinLength", limit: 8 }, value });
     }
     if (!(__bynkCodePointLength(value) <= 64)) {
-      return Err({ field: "IdempotencyKey", message: "length must be at most 64", value });
+      return Err({ field: "IdempotencyKey", message: "length must be at most 64", rule: { tag: "MaxLength", limit: 64 }, value });
     }
     return Ok(value as IdempotencyKey);
   },
@@ -139,7 +139,7 @@ export function __deserialise_UploadHeaders(json: __JsonValue, path: string = "$
   }
   const __length = obj["length"];
   if (!(__length >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.length`, violation: { field: "length", message: "must be non-negative", value: __length } });
+    return Err({ kind: "RefinementViolation", path: `${path}.length`, violation: { field: "length", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __length } });
   }
   const __r_key = __deserialise_Option_IdempotencyKey(obj["key"], `${path}.key`);
   if (__r_key.tag === "Err") return __r_key;

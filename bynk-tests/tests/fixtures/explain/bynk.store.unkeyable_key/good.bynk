@@ -1,11 +1,11 @@
 context demo
 
-type Point = { x: Int, y: Int }
+type Reading = { at: Int, level: Int }
 
 agent Grid {
   key id: String
 
-  store cells: Map[String, Int]
+  store seen: Map[Reading, Int]
 
   on call size() -> Effect[Int] {
     Effect.pure(1)

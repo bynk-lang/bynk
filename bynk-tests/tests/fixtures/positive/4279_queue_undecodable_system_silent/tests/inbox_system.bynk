@@ -1,0 +1,26 @@
+suite ops.inbox as system {
+  case "a system case reads the verdict a real queue gives" {
+    let r <- inbox.message(Job { id: "s1" })
+    match r {
+      Ack => expect true
+      Retry(_) => expect false
+      RetryAfter(_, _) => expect false
+      Undecodable => expect false
+    }
+  }
+
+  case "an is test of Undecodable can match at system" {
+    let r <- inbox.message(Job { id: "s2" })
+    expect !(r is Undecodable)
+  }
+
+  // A helper a system case hands its verdict to can see Undecodable too.
+  fn undecodable(r: QueueResult) -> Bool {
+    r is Undecodable
+  }
+
+  case "a helper of a system suite may name Undecodable" {
+    let r <- inbox.message(Job { id: "s3" })
+    expect !undecodable(r)
+  }
+}

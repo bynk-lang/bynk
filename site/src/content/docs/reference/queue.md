@@ -138,8 +138,10 @@ The dead-letter queue is an ordinary queue:
   `bynk.deploy.lock` only when Bynk created it, as for a queue the context only
   sends to;
 - a Bynk consumer may read it (`from queue("outbound-email-dlq")`), and that
-  consumer's message type must be the source consumer's
-  (`bynk.queue.dead_letter_type_mismatch`), since the dead letter is the same body.
+  consumer must accept the source consumer's message type
+  (`bynk.queue.dead_letter_type_mismatch`), since the dead letter is the same body. The
+  comparison is the one a producer's send gets: a type with the same fields under another
+  name is the same type, and a consumer of a weaker refinement accepts a stronger one.
 
 The environment-qualified name of any queue, consumer, producer or dead-letter,
 must still fit Cloudflare's 63 characters. Only the deploy knows the environment,
@@ -207,6 +209,10 @@ the consumer's `delivery { }`:
 At the `system` tier the address yields `Undecodable` for such a body
 ([testing](/reference/testing/#cron-queue-system)).
 
+Only a `system` case can see `Undecodable`: a handler, a helper, or a `unit` or `integration` case never
+receives a body that failed to decode. A pattern of it anywhere else is a dead arm and warns
+(`bynk.queue.undecodable_unreachable`); use `_` there.
+
 ## Producers and consumers agree
 
 A queue's name is a string both sides write, so the compiler is the only party that
@@ -244,6 +250,10 @@ service fulfil from queue("order-events") {
   ordinary consumer of its own queue.
 
 Changing a consumer's message type while messages are already queued is not caught.
+
+A send can be written in a function, a service or agent handler, or a provider operation. An
+agent's `transition` predicates and `migrate` steps are pure, so a `Queue` capability is not in
+scope there: naming it is `bynk.resolve.unknown_name`, with a note that it is a capability.
 
 ## Example
 

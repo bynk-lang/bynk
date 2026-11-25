@@ -13,7 +13,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
+      return Err({ field: "Price", message: "must be positive", rule: { tag: "Positive" }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -24,7 +24,7 @@ export type Rate = { readonly coefficient: bigint; readonly scale: number } & { 
 export const Rate = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Rate, ValidationError> {
     if (!((((value).coefficient * 10n ** globalThis.BigInt(2) >= (0n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(2) <= (100n) * 10n ** globalThis.BigInt((value).scale))))) {
-      return Err({ field: "Rate", message: "must be in range [0.00, 1.00]", value: __bynkDecimalToString(value) });
+      return Err({ field: "Rate", message: "must be in range [0.00, 1.00]", rule: { tag: "InRange", lo: { tag: "DecimalBound", value: { coefficient: 0n, scale: 2 } }, hi: { tag: "DecimalBound", value: { coefficient: 100n, scale: 2 } } }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Rate);
   },
@@ -35,7 +35,7 @@ export type Debt = { readonly coefficient: bigint; readonly scale: number } & { 
 export const Debt = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Debt, ValidationError> {
     if (!((((value).coefficient * 10n ** globalThis.BigInt(2) >= (-500n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(2) <= (-100n) * 10n ** globalThis.BigInt((value).scale))))) {
-      return Err({ field: "Debt", message: "must be in range [-5.00, -1.00]", value: __bynkDecimalToString(value) });
+      return Err({ field: "Debt", message: "must be in range [-5.00, -1.00]", rule: { tag: "InRange", lo: { tag: "DecimalBound", value: { coefficient: -500n, scale: 2 } }, hi: { tag: "DecimalBound", value: { coefficient: -100n, scale: 2 } } }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Debt);
   },
@@ -46,7 +46,7 @@ export type Wide = { readonly coefficient: bigint; readonly scale: number } & { 
 export const Wide = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Wide, ValidationError> {
     if (!((((value).coefficient * 10n ** globalThis.BigInt(0) >= (1n) * 10n ** globalThis.BigInt((value).scale)) && ((value).coefficient * 10n ** globalThis.BigInt(40) <= (20000000000000000000000000000000000000000n) * 10n ** globalThis.BigInt((value).scale))))) {
-      return Err({ field: "Wide", message: "must be in range [1, 2.0000000000000000000000000000000000000000]", value: __bynkDecimalToString(value) });
+      return Err({ field: "Wide", message: "must be in range [1, 2.0000000000000000000000000000000000000000]", rule: { tag: "InRange", lo: { tag: "DecimalBound", value: { coefficient: 1n, scale: 0 } }, hi: { tag: "DecimalBound", value: { coefficient: 20000000000000000000000000000000000000000n, scale: 40 } } }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Wide);
   },
@@ -368,7 +368,7 @@ export function __deserialise_Charge(json: __JsonValue, path: string = "$"): Res
   }
   const __tip = __b_tip.value;
   if (!((__tip).coefficient >= 0n)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.tip`, violation: { field: "tip", message: "must be non-negative", value: __bynkDecimalToString(__tip) } });
+    return Err({ kind: "RefinementViolation", path: `${path}.tip`, violation: { field: "tip", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __bynkDecimalToString(__tip) } });
   }
   return Ok({ sku: __sku, fee: __fee, tip: __tip } as Charge);
 }

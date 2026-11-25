@@ -16,7 +16,7 @@ export type Code = number & { readonly __brand: "shop.ledger.Code" };
 export const Code = {
   of(value: number): Result<Code, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Code", message: "must be a safe integer", value });
+      return Err({ field: "Code", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     return Ok(value as Code);
   },

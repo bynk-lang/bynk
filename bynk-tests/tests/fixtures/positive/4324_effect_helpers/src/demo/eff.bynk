@@ -1,0 +1,36 @@
+commons demo.eff
+
+fn wrap[T](x: T) -> Effect[T] {
+	Effect.pure(x)
+}
+
+fn first[A, B](a: Effect[A], b: Effect[B]) -> Effect[A] {
+	let x <- a
+	let _ <- b
+	Effect.pure(x)
+}
+
+fn sequenced(e: Effect[Int]) -> Effect[Int] {
+	let n <- e
+	wrap(n + 1)
+}
+
+fn effects(xs: List[Int]) -> List[Effect[Int]] {
+	xs.map((x) => Effect.pure(x * 2))
+}
+
+fn pairUp[T](a: T, b: T) -> List[T] {
+	[a, b]
+}
+
+fn twoEffects(a: Effect[Int], b: Effect[Int]) -> List[Effect[Int]] {
+	pairUp(a, b)
+}
+
+fn maybe(e: Effect[Int]) -> Option[Effect[Int]] {
+	Some(e)
+}
+
+fn chained(e: Effect[Int]) -> Effect[Int] {
+	e.andThen((n) => wrap(n + 1))
+}

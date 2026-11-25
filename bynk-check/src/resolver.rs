@@ -3426,7 +3426,14 @@ fn check_type_ref_resolves_in(
         TypeRef::Option(t, _) => {
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
-        TypeRef::Effect(t, _) => {
+        TypeRef::Effect(t, span) => {
+            // #4324: an effect of an effect cannot exist at runtime.
+            if let TypeRef::Effect(..) = **t {
+                errors.push(crate::checker::nested_effect::nested_effect_error(
+                    *span,
+                    "Effect[Effect[_]]",
+                ));
+            }
             check_type_ref_resolves_in(t, types, type_params, errors);
         }
         TypeRef::HttpResult(t, _) => {

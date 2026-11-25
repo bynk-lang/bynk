@@ -84,7 +84,7 @@ export function __deserialise_CreateOrder(json: __JsonValue, path: string = "$")
   }
   const __itemCount = obj["itemCount"];
   if (!(__itemCount >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.itemCount`, violation: { field: "itemCount", message: "must be non-negative", value: __itemCount } });
+    return Err({ kind: "RefinementViolation", path: `${path}.itemCount`, violation: { field: "itemCount", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __itemCount } });
   }
   return Ok({ itemCount: __itemCount } as CreateOrder);
 }

@@ -214,6 +214,23 @@ is named rather than hidden in `d.toMillis() / 1000`. A `Duration` can be refine
 [Refined types](/reference/refined-types/)). It round-trips through the JSON codec as an integer. See
 [Operators](/reference/operators/#duration--instant-arithmetic).
 
+#### Text (#3977)
+
+`d.toString() -> String` writes the span in units, largest first: `1h30m`, `5m`, `250ms`,
+`1d2h`. The units are `d`, `h`, `m`, `s` and `ms`, each part is an integer, a zero part is left
+out, a zero span is `0s`, and a negative span takes a leading `-` (`-5s`). A day is a 24-hour
+span, as `1.day` is. The text is worked out from whole milliseconds with integer arithmetic, so a
+large span is exact. A `Duration` also fills an interpolation hole, as `toString()` does:
+`"retry in \(backoff)"` is `retry in 1m30s`.
+
+`d.toIso() -> String` writes ISO 8601: `PT1H30M`, `P1DT2H`, `PT0.25S`, `-PT5S`, `PT0S`. Days are
+the largest unit, since months and years are not fixed spans, and the seconds carry the
+millisecond fraction without trailing zeros. The leading `-` of a negative span is a widely
+accepted extension of ISO 8601, not part of the standard.
+
+`toString()` used to give the bare millisecond count (`300000`, with no unit). Code that read it
+back as a number should call `toMillis()`.
+
 ### Instant
 
 `Instant` (v0.90) is an **absolute point in time**, erased to a `number` of Unix
@@ -234,8 +251,10 @@ millis is `t.toEpochMillis() -> Int`; the zero is the epoch. Timestamp math goes
 `t.toIso() -> String` writes an instant as RFC 3339 text in UTC, always
 `YYYY-MM-DDTHH:mm:ss.sssZ`: three fraction digits and `Z`, so the text sorts in
 time order. Outside the years 0000 to 9999 the year takes the expanded `±YYYYYY`
-form, and an instant beyond ±8.64e15 ms (past any date) faults. `toString()`
-still gives the epoch milliseconds, and the JSON codec still writes a number.
+form, and an instant beyond ±8.64e15 ms (past any date) faults. `toString()` is the same text
+(#3977; it used to give the epoch milliseconds, which `toEpochMillis()` still does), an `Instant`
+fills an interpolation hole as `toString()` does (`"expires at \(expiry)"`), and the JSON codec
+still writes a number.
 
 `Instant.fromIso(s) -> Option[Instant]` reads the RFC 3339 date-time profile:
 
@@ -371,20 +390,70 @@ On an `Effect[Result[T, E]]`, `map` and `andThen` act on the whole `Result`; `ma
 `Effect` is an error, since it would nest one effect in another: use `andThen`. A method
 an `Effect` does not have is `bynk.types.method_not_found`.
 
+### `ValidationError` {#validationerror}
+
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
-A `ValidationError` has two `String` fields:
+A `ValidationError` has two `String` fields and the rule that failed:
 
 | Field | Meaning |
 |---|---|
 | `field` | the name of the refined type or field that failed validation |
-| `message` | a human-readable description of the failure |
+| `message` | a human-readable description of the failure, generated from the rule |
+| `rule` | the predicate that failed, with its argument, as a `ValidationRule` |
+
+`ValidationRule` is a closed sum with a variant per predicate, and `Bound` carries a
+numeric argument of whichever base the refined type has. Both are in scope with no
+`uses`, as `ValidationError` is:
+
+```bynk,fragment
+type ValidationRule =
+  | NonNegative
+  | Positive
+  | InRange(lo: Bound, hi: Bound)
+  | AtLeast(bound: Bound)
+  | AtMost(bound: Bound)
+  | NonEmpty
+  | MinLength(limit: Int)
+  | MaxLength(limit: Int)
+  | Length(limit: Int)
+  | Matches(pattern: String)
+  | IsoDate
+  | Cron
+  | WellFormed
+
+type Bound =
+  | IntBound(value: Int)
+  | FloatBound(value: Float)
+  | DecimalBound(value: Decimal)
+  | DurationBound(value: Duration)
+```
+
+`WellFormed` is a value that is not a valid member of its base type at all (a number that is
+not finite, an `Int` outside the safe range), before any predicate was tried. A `match` on
+`e.rule` is checked for exhaustiveness, so a new predicate is a visible change; the `_` arm
+opts out:
+
+```bynk,fragment
+fn noteProblem(e: ValidationError) -> String {
+  match e.rule {
+    MaxLength(limit) => "Keep it to \(limit) characters",
+    MinLength(limit) => "At least \(limit) characters",
+    NonEmpty => "Required",
+    _ => e.message,
+  }
+}
+```
+
+The variants name a `ValidationRule` only where the context says so (a `match` or `is` on
+one, an expected type, the other side of `==` or `!=`), so a type of your own with a
+`Positive` or `MaxLength` variant is untouched. `ValidationRule.MaxLength(…)` always works.
 
 It has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
 `"\(e.field): \(e.message)"`. The offending value is also carried at runtime
-but is not reachable from Bynk yet, so `e.value` is refused
-(`bynk.types.unknown_field`).
+but is not reachable from Bynk, so `e.value` is refused
+(`bynk.types.unknown_field`), and it is never written to an HTTP response.
 
 ## Connection
 

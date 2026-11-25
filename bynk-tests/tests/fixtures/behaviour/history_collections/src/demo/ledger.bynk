@@ -1,0 +1,11 @@
+context demo.ledger
+
+agent Ledger {
+  key id: String
+
+  store total: Cell[Int] = 0
+
+  on call addAll(amounts: List[Int], note: Option[String]) -> Effect[()] {
+    total.update((t) => t + amounts.length())
+  }
+}

@@ -1,0 +1,8 @@
+commons demo.m
+
+type Json =
+  | JNull
+  | JArr(items: List[Json])
+  | JObj(fields: Map[String, Json])
+type Tree = { value: Int, children: List[Tree] }
+type Node = { v: Int, next: Option[Node] }

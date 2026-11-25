@@ -115,10 +115,10 @@ export function __deserialise_Score(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0 && json <= 100)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be in range [0, 100]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Score", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value: json } });
   }
   return Ok(json as unknown as shop_tokens.Score);
 }

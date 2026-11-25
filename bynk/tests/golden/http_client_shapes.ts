@@ -35,6 +35,59 @@ export function __bynkInstantToIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+// #3977: the text of a `Duration`, which erases to a number of milliseconds. Both forms break
+// the span into whole days (24-hour spans, as `1.day` is), hours, minutes, seconds and
+// milliseconds with integer arithmetic only, so a large span is exact. A negative span takes a
+// leading `-`, and the parts are those of its magnitude.
+function durationParts(ms: number): { neg: boolean; d: number; h: number; m: number; s: number; ms: number } {
+  if (!Number.isFinite(ms) || !Number.isInteger(ms)) {
+    throw new Error(`Duration text: ${ms} is not a whole number of milliseconds`);
+  }
+  const neg = ms < 0;
+  let rest = Math.abs(ms);
+  const part = (unit: number): number => {
+    const n = Math.floor(rest / unit);
+    rest -= n * unit;
+    return n;
+  };
+  const d = part(86_400_000);
+  const h = part(3_600_000);
+  const m = part(60_000);
+  const s = part(1000);
+  return { neg, d, h, m, s, ms: rest };
+}
+
+// `1d2h`, `1h30m`, `5m`, `250ms`, `-5s`, `0s`: units largest first, a zero part left out, and
+// `0s` for a zero span. The units are the ones a `Duration` literal is written in.
+export function __bynkDurationToString(ms: number): string {
+  const p = durationParts(ms);
+  const text =
+    (p.d ? `${p.d}d` : "") +
+    (p.h ? `${p.h}h` : "") +
+    (p.m ? `${p.m}m` : "") +
+    (p.s ? `${p.s}s` : "") +
+    (p.ms ? `${p.ms}ms` : "");
+  if (text === "") {
+    return "0s";
+  }
+  return p.neg ? `-${text}` : text;
+}
+
+// ISO 8601: `PT1H30M`, `P1DT2H`, `PT0.25S`, `-PT5S`, `PT0S`. Days are the largest unit (months and
+// years are not fixed spans), the seconds carry the millisecond fraction without trailing zeros,
+// and a negative span takes a leading `-`, a widely accepted extension.
+export function __bynkDurationToIso(ms: number): string {
+  const p = durationParts(ms);
+  const fraction = p.ms ? `.${String(p.ms).padStart(3, "0").replace(/0+$/, "")}` : "";
+  const seconds = p.s || p.ms ? `${p.s}${fraction}S` : "";
+  const time = (p.h ? `${p.h}H` : "") + (p.m ? `${p.m}M` : "") + seconds;
+  const date = p.d ? `${p.d}D` : "";
+  if (date === "" && time === "") {
+    return "PT0S";
+  }
+  return `${p.neg ? "-" : ""}P${date}${time === "" ? "" : `T${time}`}`;
+}
+
 // The RFC 3339 date-time profile: `T` or `t`, a fraction of any length, and
 // `Z`, `z` or a `±HH:mm` offset. Nothing else.
 const ISO =
@@ -337,11 +390,48 @@ export type JsonValue =
   | JsonValue[]
   | { [k: string]: JsonValue };
 
+/** The numeric argument of a rule, of whichever base the refined type has. A `Decimal` is `{ coefficient, scale }`, a `Duration` its milliseconds. */
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+/** The predicate a refinement check enforces, with its argument; `WellFormed` is a value that is not a valid member of its base type at all. */
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 /** A refinement a value broke. */
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
+}
+
+/** A rule as the server's `400` writes it: `kind` where the in-memory form has `tag`, a `Decimal` bound as its text. */
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+/** A violation as the server's `400` carries it: the field, the message and the rule, never the value. */
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
 }
 
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
@@ -356,7 +446,7 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
@@ -994,7 +1084,7 @@ export function __deserialise_Day(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkIsIsoDate(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Day", message: "must be a calendar date (YYYY-MM-DD)", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Day", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value: json } });
   }
   return Ok(json as unknown as __Wire_Day);
 }
@@ -1008,10 +1098,10 @@ export function __deserialise_Handle(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkCodePointLength(json) >= 2)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at least 2", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at least 2", rule: { tag: "MinLength", limit: 2 }, value: json } });
   }
   if (!(__bynkCodePointLength(json) <= 32)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at most 32", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at most 32", rule: { tag: "MaxLength", limit: 32 }, value: json } });
   }
   return Ok(json as unknown as __Wire_Handle);
 }
@@ -1062,10 +1152,10 @@ export function __deserialise_Quantity(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 1 && json <= 100)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be in range [1, 100]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value: json } });
   }
   return Ok(json as unknown as __Wire_Quantity);
 }
@@ -1142,10 +1232,10 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkCodePointLength(json) === 5)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "length must be exactly 5", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "length must be exactly 5", rule: { tag: "Length", limit: 5 }, value: json } });
   }
   if (!(__bynkRegExp("^(?:" + "[A-Z]{3}[0-9]{2}" + ")$", "u").test(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[A-Z]{3}[0-9]{2}/", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[A-Z]{3}[0-9]{2}/", rule: { tag: "Matches", pattern: "[A-Z]{3}[0-9]{2}" }, value: json } });
   }
   return Ok(json as unknown as __Wire_Sku);
 }
@@ -1159,10 +1249,10 @@ export function __deserialise_Weight(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isFinite(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be a finite number", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be a finite number", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0.5 && json <= 250.0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be in range [0.5, 250.0]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be in range [0.5, 250.0]", rule: { tag: "InRange", lo: { tag: "FloatBound", value: 0.5 }, hi: { tag: "FloatBound", value: 250.0 } }, value: json } });
   }
   return Ok(json as unknown as __Wire_Weight);
 }

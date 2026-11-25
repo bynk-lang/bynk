@@ -70,6 +70,7 @@ mod list_basics;
 mod list_more;
 mod list_par;
 mod list_par_with;
+pub(crate) mod nested_effect;
 mod par;
 mod query_par;
 mod refined_range;
@@ -93,8 +94,10 @@ pub fn string_refinement_violation<'a>(
     refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
 }
 mod regex_ambiguity;
+mod response_headers;
 mod string_more;
 mod usefulness;
+mod validation_rule;
 
 use calls::*;
 use expressions::*;
@@ -4011,7 +4014,7 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
             "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
         }
         _ => {
-            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
+            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal, Duration, Instant) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`"
         }
     }
 }
@@ -5445,16 +5448,23 @@ fn maybe_auto_lift(ty: Option<TyId>, expected: Option<TyId>, tys: &Types) -> Opt
 }
 
 /// Whether a value of type `ty` may fill an interpolation hole (v0.43, ADR
-/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, or `Decimal` (ADR
-/// 0698: its canonical text) — or a refinement of one (which widens to its base
-/// for display). `Bytes`, `Duration` and `Instant` have no implicit string form
-/// — each has an explicit rendering method — and opaque types are excluded,
-/// their base being hidden (`.raw` it first).
+/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, `Decimal` (ADR
+/// 0698: its canonical text), or (#3977) `Instant` (RFC 3339 UTC) and `Duration`
+/// (`1h30m`), the text their `toString()` gives — or a refinement of one (which
+/// widens to its base for display). `Bytes` has no implicit string form (hex or
+/// base64 is a real choice), and opaque types are excluded, their base being
+/// hidden (`.raw` it first).
 fn interpolable(ty: TyId, tys: &Types) -> bool {
     let scalar = |b: BaseType| {
         matches!(
             b,
-            BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool | BaseType::Decimal
+            BaseType::String
+                | BaseType::Int
+                | BaseType::Float
+                | BaseType::Bool
+                | BaseType::Decimal
+                | BaseType::Duration
+                | BaseType::Instant
         )
     };
     match &*tys.get(ty) {
@@ -6039,7 +6049,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 _ => None,
             };
             let inner_ty = type_of(inner, expected_inner, ctx)?;
-            Some(tys.intern(Ty::Effect(inner_ty)))
+            nested_effect::pure(inner_ty, inner.span, ctx)
         }
         ExprKind::RecordSpread {
             type_name,
@@ -6909,6 +6919,9 @@ fn refinements_match(base: BaseType, a: Option<&Refinement>, b: Option<&Refineme
 
 /// #3878: the pattern-only `QueueResult` variant a `system` case sees for a body that did not decode.
 pub const QUEUE_UNDECODABLE: &str = "Undecodable";
+
+/// #4279: the warning for an `Undecodable` pattern that can never match.
+pub const UNDECODABLE_UNREACHABLE: &str = "bynk.queue.undecodable_unreachable";
 
 /// `pub` since P6.4 (#1157, Decision A) — see [`VariantInfo`]'s own doc
 /// comment for why `bynk-emit` needs this exact function rather than a

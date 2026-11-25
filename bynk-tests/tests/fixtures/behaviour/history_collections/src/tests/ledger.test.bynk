@@ -1,0 +1,8 @@
+// #4120: a history property reaches a handler that takes a list and an optional value.
+suite demo.ledger {
+  property "every call is recorded" {
+    for all run: History[Ledger] {
+      expect run.all((s) => s.accepted)
+    }
+  }
+}
