@@ -389,6 +389,9 @@ fn editor_contract(args: &[String]) -> ExitCode {
 }
 
 fn check_pending() -> ExitCode {
+    for warning in xtask::check_warnings_in(&xtask::repo_root()) {
+        eprintln!("{warning}");
+    }
     match xtask::check_all() {
         Ok(n) => {
             println!("check-pending: {n} pending file(s) valid");
@@ -417,9 +420,30 @@ fn stamp(apply: bool) -> ExitCode {
         }
     };
 
-    if plan.is_empty() {
+    if plan.has_nothing() {
         println!("stamp: no pending increments — nothing to do");
         return ExitCode::SUCCESS;
+    }
+
+    for stale in &plan.already_stamped {
+        println!(
+            "stamp: {} was already stamped as v{} — it gets no new version",
+            stale.file, stale.entry.version
+        );
+    }
+    if plan.is_empty() {
+        // Only stale copies: with `--apply` they are deleted, and nothing else changes.
+        if !apply {
+            println!("stamp: dry run — pass --apply to delete the stale copies");
+            return ExitCode::SUCCESS;
+        }
+        return match xtask::stamp::apply(&root, &plan, None, |_| Ok(())) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("stamp: apply failed: {e}");
+                ExitCode::FAILURE
+            }
+        };
     }
 
     println!("stamp: from v{}", plan.base_version);

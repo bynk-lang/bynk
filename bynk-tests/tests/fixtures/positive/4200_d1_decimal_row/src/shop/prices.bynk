@@ -1,0 +1,52 @@
+context shop.prices
+
+// #4200: a `Decimal` is admitted in a `Json.decodeSql` row, read from a `TEXT` column.
+
+consumes bynk
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlReadError, SqlValue }
+
+capability Prices = D1
+
+type Price = { id: String, amount: Decimal }
+
+type Taxed = { id: String, tax: Decimal }
+
+service save {
+	on call(id: String, amount: String) -> Effect[Result[SqlRun, SqlError]] by Caller given Prices {
+		Prices.run("INSERT INTO prices (id, amount, tax) VALUES (?1, ?2, 1.5)", [Text(id), Text(amount)])
+	}
+}
+
+service listing {
+	on call() -> Effect[Result[List[Price], String]] by Caller given Prices {
+		let rows <- Prices.all("SELECT id, amount FROM prices ORDER BY id", [])
+		match rows {
+			Ok(text) => match Json.decodeSql[List[Price]](text) {
+				Ok(prices) => Ok(prices)
+				Err(_) => Err("rows did not decode")
+			}
+			Err(_) => Err("query failed")
+		}
+	}
+}
+
+// The numeric column does not decode as a `Decimal`: the build warns, and the read fails.
+service taxes {
+	on call() -> Effect[Result[List[Taxed], String]] by Caller given Prices {
+		let rows <- Prices.all("SELECT id, tax FROM prices ORDER BY id", [])
+		match rows {
+			Ok(text) => match Json.decodeSql[List[Taxed]](text) {
+				Ok(taxed) => Ok(taxed)
+				Err(_) => Err("rows did not decode")
+			}
+			Err(_) => Err("query failed")
+		}
+	}
+}
+
+// The same read through `select[T]`, whose column list the compiler writes.
+service taxesTyped {
+	on call() -> Effect[Result[List[Taxed], SqlReadError]] by Caller given Prices {
+		Prices.select[Taxed]("FROM prices ORDER BY id", [])
+	}
+}

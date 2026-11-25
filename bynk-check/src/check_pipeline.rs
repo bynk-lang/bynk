@@ -963,8 +963,8 @@ pub fn check_file_core(
     {
         let sql_errs = ours(d1_sql.check_unit(name, table, &typed.callees, Some(pf.source())));
         if !sql_errs.is_empty() {
+            failed |= any_is_error(&sql_errs);
             errors.extend_for(Some(&pf.identity_path()), sql_errs);
-            failed = true;
         }
     }
 
@@ -992,6 +992,13 @@ fn extensible_names(imported_from: &HashMap<String, String>) -> HashSet<String> 
         .filter(|(n, unit)| crate::firstparty::is_extensible(unit, n))
         .map(|(n, _)| n.clone())
         .collect()
+}
+
+/// #4200: whether any of `errs` fails the build: a warning (a `Decimal` column's
+/// affinity, say) is reported without failing its file.
+fn any_is_error(errs: &[bynk_syntax::error::CompileError]) -> bool {
+    errs.iter()
+        .any(|e| bynk_syntax::error::Severity::for_error(e) == bynk_syntax::error::Severity::Error)
 }
 
 /// #3536: naming a type, capability or service this file's own `consumes` does
