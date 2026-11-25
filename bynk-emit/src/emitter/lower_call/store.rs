@@ -14,7 +14,7 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::lower_list::{iife_block, string_of, take};
 use super::super::{BinOp, Expr, ExprKind, Ident, LambdaExpr};
 use super::query::{
-    QueryShape, QuerySource, held_values_source, lower_query_by_name, path_values_source,
+    QueryShape, QuerySource, each, held_values_source, lower_query_by_name, path_values_source,
     query_key_cmp, query_keyed, query_other_elem,
 };
 use crate::ts_build::{
@@ -161,7 +161,8 @@ pub(in crate::emitter) fn lower_store_method_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
-    lower_store_held_map_call(e, receiver, method, args, cx, pre)
+    lower_early_exit_scan(e, receiver, method, args, cx, pre)
+        .or_else(|| lower_store_held_map_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_map_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_set_call(e, receiver, method, args, cx, pre))
         .or_else(|| lower_store_cache_call(e, receiver, method, args, cx, pre))
@@ -1009,6 +1010,26 @@ fn route_indexed_filter(
     Some(pre.finish(built))
 }
 
+/// Whether `route_indexed_filter` would turn `lam` into a posting-list lookup: `(p) => p.<field> ==
+/// <value>` over an indexed field, with a value that does not mention `p`.
+fn routes_to_index(fields: &[String], lam: &LambdaExpr) -> bool {
+    let [param] = lam.params.as_slice() else {
+        return false;
+    };
+    let pname = param.name.name.as_str();
+    let ExprKind::BinOp(BinOp::Eq, lhs, rhs) = &lam.body.kind else {
+        return false;
+    };
+    let (field, value) = match as_param_field(pname, lhs) {
+        Some(f) => (f, rhs.as_ref()),
+        None => match as_param_field(pname, rhs) {
+            Some(f) => (f, lhs.as_ref()),
+            None => return false,
+        },
+    };
+    fields.iter().any(|f| f == field) && param_independent(value, pname)
+}
+
 /// `e` as `<param>.<field>` → the field name; else `None`.
 fn as_param_field<'e>(pname: &str, e: &'e Expr) -> Option<&'e str> {
     if let ExprKind::FieldAccess { receiver, field } = &e.kind
@@ -1062,4 +1083,125 @@ fn param_independent(e: &Expr, pname: &str) -> bool {
         | ExprKind::Faults(..)
         | ExprKind::Trace { .. } => false,
     }
+}
+
+// ---- Early-exit scans (#4036) ---------------------------------------------------------------
+//
+// `<field>.any(p)`, `.all(p)`, and on a `Log` `.first()`, `.firstOrElse(d)` and `.take(n).collect()`,
+// over stages that need no whole collection (`filter`, `map`, `flatMap`, and on a `Log` `skip`),
+// read the collection a page at a time and stop at the answer. Whether a stage may stop early is
+// a question of order: a `Log`'s pages are in append order, a `Map`'s are in key order while its
+// scan order is insertion order (ADR 0109), so a `Map` stops early only where the answer does not
+// depend on the order, `any` and `all` (Decision D). Every other shape keeps the whole-array scan.
+
+/// A terminal of the scan, with the argument count it takes.
+fn scan_terminal(name: &str) -> Option<usize> {
+    match name {
+        "first" | "collect" => Some(0),
+        "any" | "all" | "firstOrElse" => Some(1),
+        _ => None,
+    }
+}
+
+/// `<field>.<stages>….<terminal>(…)` as one scan over the handle's `lazyValues()`, or `None` when
+/// the call is not that shape, or the shape must read everything.
+fn lower_early_exit_scan(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    if scan_terminal(&method.name) != Some(args.len()) {
+        return None;
+    }
+    // The stages, outermost first, down to the receiver the chain starts at.
+    let mut stages: Vec<(&Ident, &[Expr])> = Vec::new();
+    let mut root = (e, receiver);
+    let mut cur = receiver;
+    while let ExprKind::MethodCall {
+        receiver: inner,
+        method: m,
+        args: a,
+        ..
+    } = &cur.kind
+    {
+        stages.push((m, a));
+        root = (cur, inner);
+        cur = inner;
+    }
+    let ExprKind::Ident(field) = &cur.kind else {
+        return None;
+    };
+    let is_store_call = matches!(
+        cx.commons().callee(root.0.id),
+        Some(Callee::Store { .. } | Callee::Query { .. })
+    );
+    let chained = |x: &Expr| matches!(cx.commons().callee(x.id), Some(Callee::Kernel { .. }));
+    if !is_store_call || (root.0.id != e.id && !chained(e)) {
+        return None;
+    }
+    let is_map = cx.agent_store_map_value_ts(&field.name).is_some();
+    let is_log = cx.agent_store_log_retain(&field.name).is_some();
+    if !is_map && !is_log {
+        return None;
+    }
+    // An equality `filter` on an indexed `Map` field is a posting-list lookup, not a scan.
+    let (first_stage, first_args) = stages
+        .last()
+        .map_or((&method.name, args), |(m, a)| (&m.name, a));
+    if is_map
+        && first_stage == "filter"
+        && let [arg] = first_args
+        && let ExprKind::Lambda(lam) = &arg.kind
+        && routes_to_index(&cx.agent_store_index_fields(&field.name), lam)
+    {
+        return None;
+    }
+    let take_count = match (method.name.as_str(), stages.first()) {
+        ("collect", Some((m, [n]))) if is_log && m.name == "take" => {
+            stages.remove(0);
+            Some(n)
+        }
+        _ => None,
+    };
+    let order_free = matches!(method.name.as_str(), "any" | "all");
+    let terminal_ok = order_free || (is_log && (take_count.is_some() || method.name != "collect"));
+    let stages_ok = stages
+        .iter()
+        .all(|(m, a)| match (m.name.as_str(), a.len()) {
+            ("filter" | "map" | "flatMap", 1) => true,
+            ("skip", 1) => is_log,
+            _ => false,
+        });
+    // `collect` without a `take` reads everything, so it stays the array path.
+    if !terminal_ok || !stages_ok || (method.name == "collect" && take_count.is_none()) {
+        return None;
+    }
+    let var = cx.agent_store_var().to_string();
+    let mut scan = method_call(Receiver::new(&var, &field.name).node, "lazyValues", vec![]);
+    for (m, a) in stages.iter().rev() {
+        let f = pre.lower_node(&a[0], cx);
+        scan = match m.name.as_str() {
+            "filter" => call(ident("__scanFilter"), vec![scan, each(f)]),
+            "map" => call(ident("__scanMap"), vec![scan, each(f)]),
+            "flatMap" => call(ident("__scanFlatMap"), vec![scan, each(f)]),
+            _ => call(ident("__scanSkip"), vec![scan, f]),
+        };
+    }
+    let a = lower_args(args, cx, pre);
+    let built = match (method.name.as_str(), take_count) {
+        (_, Some(n)) => call(ident("__scanTake"), vec![scan, pre.lower_node(n, cx)]),
+        ("any", _) => call(ident("__scanAny"), vec![scan, each(first_arg(a))]),
+        ("all", _) => call(ident("__scanAll"), vec![scan, each(first_arg(a))]),
+        ("first", _) => call(ident("__scanFirst"), vec![scan]),
+        _ => call(ident("__scanFirstOrElse"), vec![scan, first_arg(a)]),
+    };
+    Some(built)
+}
+
+fn first_arg(a: Vec<bynk_ts::TsExpr>) -> bynk_ts::TsExpr {
+    let [x] = take(a);
+    x
 }

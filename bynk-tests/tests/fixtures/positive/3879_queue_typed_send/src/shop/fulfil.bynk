@@ -1,0 +1,12 @@
+context shop.fulfil
+
+// #3879: the one context that consumes `order-events`; its message type is what a
+// producer's `sendValue*` is checked against.
+type Order = { id: String, qty: Int }
+
+service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] {
+    Ack
+  }
+}

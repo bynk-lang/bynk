@@ -1,1 +1,2 @@
 bynk.queue.no_dead_letter
+bynk.queue.untyped_send

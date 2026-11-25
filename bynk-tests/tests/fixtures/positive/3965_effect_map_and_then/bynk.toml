@@ -1,0 +1,6 @@
+[project]
+name = "effect-map-and-then"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

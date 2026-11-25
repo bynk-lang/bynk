@@ -1,0 +1,29 @@
+context shop.orders
+
+// #3879: a producer in another context. Each send is checked against the consumer's
+// `Order`; `Placed` carries a stronger refinement, which the weaker `Int` admits.
+consumes bynk.cloudflare { Queue, QueueSend }
+
+capability OrderEvents = Queue @name("order-events")
+capability Audit = Queue @name("audit-trail")
+
+type Qty = Int where InRange(1, 100)
+type Order = { id: String, qty: Int }
+type Placed = { id: String, qty: Qty }
+
+service place {
+  on call(o: Order) -> Effect[()] by Caller given OrderEvents, Audit {
+    let _ <- OrderEvents.sendValue(o)
+    let _ <- OrderEvents.sendValueBatch([o, o])
+    let _ <- OrderEvents.sendValueWith(o, QueueSend { delay: Some(5.seconds) })
+    // `audit-trail` has no consumer in the project, so nothing is checked.
+    let _ <- Audit.send("{}")
+    Effect.pure(())
+  }
+}
+
+service confirm {
+  on call(p: Placed) -> Effect[()] by Caller given OrderEvents {
+    OrderEvents.sendValue(p)
+  }
+}
