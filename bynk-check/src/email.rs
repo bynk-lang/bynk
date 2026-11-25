@@ -80,10 +80,20 @@ pub fn check_email_services(table: &crate::symbols::UnitTable, errors: &mut Vec<
     let mut ordered: Vec<&ServiceDecl> = services.values().collect();
     ordered.sort_by_key(|s| s.name.span);
     for service in ordered {
-        let ServiceProtocol::Email { address } = &service.protocol else {
+        let ServiceProtocol::Email {
+            address,
+            address_const,
+        } = &service.protocol
+        else {
             continue;
         };
-        if let Some(why) = address_problem(address) {
+        // #3889: a constant that does not denote an address is reported once, and the
+        // empty address it left is not checked again.
+        if let Some(ac) = address_const
+            && let Some(refusal) = &ac.refusal
+        {
+            errors.push(refused_address_const(ac, refusal));
+        } else if let Some(why) = address_problem(address) {
             errors.push(
                 CompileError::new(
                     "bynk.email.invalid_address",
@@ -130,6 +140,34 @@ pub fn check_email_services(table: &crate::symbols::UnitTable, errors: &mut Vec<
         for handler in messages {
             validate_handler(handler, table, errors);
         }
+    }
+}
+
+/// #3889 [DECISION D]: an address constant that does not denote an address. An unknown
+/// name is the ordinary unknown name (so a private constant of a used commons reads as
+/// `bynk.visibility.private_item`); a constant of another type is
+/// `bynk.email.invalid_address` with a note naming the constant and its declared type.
+fn refused_address_const(
+    ac: &bynk_syntax::ast::AddressConst,
+    refusal: &bynk_syntax::ast::AddressRefusal,
+) -> CompileError {
+    use bynk_syntax::ast::AddressRefusal;
+    let name = &ac.name.name;
+    match refusal {
+        AddressRefusal::Unknown => CompileError::new(
+            "bynk.resolve.unknown_name",
+            ac.name.span,
+            format!("the address in `from email(…)` names an unknown constant `{name}`"),
+        )
+        .with_note("an address is a string literal, or a constant declared exactly `String`"),
+        AddressRefusal::Declared(ty) => CompileError::new(
+            "bynk.email.invalid_address",
+            ac.name.span,
+            format!("`{name}` is not an address a service can claim: it is declared `{ty}`"),
+        )
+        .with_note(format!(
+            "`from email(…)` takes a string literal, or a constant declared exactly `String` and bound to a literal; `const {name}` is declared `{ty}`"
+        )),
     }
 }
 
@@ -272,7 +310,7 @@ pub fn phase_duplicate_addresses(
                 let CommonsItem::Service(s) = item else {
                     continue;
                 };
-                if let ServiceProtocol::Email { address } = &s.protocol
+                if let ServiceProtocol::Email { address, .. } = &s.protocol
                     && address_problem(address).is_none()
                 {
                     here.push((s.name.span, address, i));
@@ -310,7 +348,7 @@ pub fn routed_addresses(table: &crate::symbols::UnitTable) -> Vec<String> {
         .services
         .values()
         .filter_map(|s| match &s.protocol {
-            ServiceProtocol::Email { address } => Some(address.to_lowercase()),
+            ServiceProtocol::Email { address, .. } => Some(address.to_lowercase()),
             _ => None,
         })
         .collect();

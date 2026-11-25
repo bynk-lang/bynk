@@ -1,0 +1,3 @@
+commons addresses
+
+private const Hidden: String = "hidden@shop.example"

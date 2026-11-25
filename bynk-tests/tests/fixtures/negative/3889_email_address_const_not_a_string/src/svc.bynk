@@ -1,0 +1,14 @@
+context svc
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+const Front: Int = 5
+
+service front from email(Front) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Accept
+  }
+}

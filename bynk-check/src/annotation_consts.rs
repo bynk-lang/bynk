@@ -363,6 +363,51 @@ fn rewrite_fields(fields: &mut [RecordField], scope: &Scope, refs: &mut RefSink)
     changed
 }
 
+/// #3889: `from email(Support)`: resolve the named constant to the literal it denotes
+/// and fill the protocol's address with it, so the address checks, the duplicate
+/// check, the route table, `wrangler.toml` and the deploy ledger all see the literal.
+/// A constant declared exactly `String` resolves; anything else is left with its
+/// refusal recorded for `check_email_services` to report. The literal is checked as
+/// an address afterwards, where a literal address is.
+fn rewrite_email_address(
+    protocol: &mut bynk_syntax::ast::ServiceProtocol,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    use bynk_syntax::ast::{AddressRefusal, ServiceProtocol};
+    let ServiceProtocol::Email {
+        address,
+        address_const: Some(ac),
+    } = protocol
+    else {
+        return false;
+    };
+    let name = ac.name.name.clone();
+    match crate::consts::resolve_address_literal(|u| scope.lookup(u), scope.unit, &name) {
+        Ok(found) => {
+            let ExprKind::StrLit(text) = &found.literal.kind else {
+                return false;
+            };
+            let same_file = found.owner.is_none() && scope.file_consts.contains(&name);
+            ac.decl_span = same_file.then_some(found.decl.name.span);
+            refs.record(ac.name.span, SymbolKind::Const, &name);
+            *address = text.clone();
+            true
+        }
+        Err(declared) => {
+            ac.refusal = Some(match declared {
+                None => AddressRefusal::Unknown,
+                Some(d) => {
+                    AddressRefusal::Declared(crate::context_checks::ts_type_ref_display(&d.ty))
+                }
+            });
+            // Changed: the unit's table is rebuilt, so the refusal reaches the checker
+            // with the service.
+            true
+        }
+    }
+}
+
 fn rewrite_handlers(handlers: &mut [Handler], scope: &Scope, refs: &mut RefSink) -> bool {
     let mut changed = false;
     for h in handlers {
@@ -447,6 +492,7 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
                 changed |= rewrite_annotations(&mut ev.annotations, EVENT_RULES, scope, refs);
             }
             CommonsItem::Service(svc) => {
+                changed |= rewrite_email_address(&mut svc.protocol, scope, refs);
                 changed |= rewrite_delivery(svc.delivery.as_mut(), scope, refs);
                 changed |= rewrite_cors(svc.cors.as_mut(), scope, refs);
                 changed |= rewrite_handlers(&mut svc.handlers, scope, refs)

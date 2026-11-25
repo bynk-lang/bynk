@@ -1,0 +1,5 @@
+commons shop.addresses
+
+const Support: String = "support@shop.example"
+const Billing: String = "billing@shop.example"
+const Returns: String = Billing
