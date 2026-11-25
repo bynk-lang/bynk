@@ -72,6 +72,29 @@ agent Warehouse {
 Two `StockKey`s with the same fields are one entry, however they were built, and a `String` or
 `Int`-keyed collection is stored exactly as before. See [Agents](/reference/agents/#storage-kinds-and-their-operations).
 
+## Build a map from computed pairs
+
+`Map.of` takes a list of `MapEntry` values, and you can write one yourself,
+`MapEntry { key: k, value: v }`. The type arguments come from the fields:
+
+```bynk
+commons guide.byid
+
+type User = {
+	id: String,
+	age: Int,
+}
+
+fn byId(users: List[User]) -> Map[String, User] {
+	Map.of(users.map((u) => MapEntry { key: u.id, value: u }))
+}
+```
+
+A later entry for a key replaces the earlier value and keeps the first position. A
+`MapEntry` is built and used in place, so it cannot be a record field, a store field
+or a handler's parameter or result (`bynk.types.map_entry_at_boundary`); declare a
+record of your own with the fields you need, and convert with `map`.
+
 ## What cannot be a key
 
 A key must compare with `==` the way you expect, so a `Float` is out, at any depth

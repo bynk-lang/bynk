@@ -743,14 +743,10 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             | CommonsItem::Const(_) => {}
             CommonsItem::Type(t) => {
                 if let Some(prev) = types.get(&t.name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            t.name.span,
-                            format!("type `{}` is already declared", t.name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(&t.name, prev));
+                } else if crate::prelude_record::is_reserved(t) {
+                    // #4192: `MapEntry[A, B]` is the prelude record, already declared.
+                    errors.push(crate::prelude_record::reserved_error(&t.name));
                 } else if let Some(prev) = fns.get(&t.name.name) {
                     errors.push(
                         CompileError::new(
@@ -778,14 +774,7 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
             CommonsItem::Event(e) => {
                 let t = e.as_type_decl();
                 if let Some(prev) = types.get(&t.name.name) {
-                    errors.push(
-                        CompileError::new(
-                            "bynk.resolve.duplicate_type",
-                            t.name.span,
-                            format!("type `{}` is already declared", t.name.name),
-                        )
-                        .with_label(prev.name.span, "previously declared here"),
-                    );
+                    errors.push(crate::prelude_record::duplicate_error(&t.name, prev));
                 } else if let Some(prev) = fns.get(&t.name.name) {
                     errors.push(
                         CompileError::new(
@@ -3290,7 +3279,7 @@ fn check_type_ref_resolves_in(
         // Validate existence, that the target is generic, and arity; then walk
         // the arguments.
         TypeRef::App { name, args, span } => {
-            match types.get(&name.name) {
+            match crate::prelude_record::lookup(&name.name, types).as_deref() {
                 None if type_params.contains(&name.name) => {
                     // A type parameter applied to arguments (`T[Int]`) — a type
                     // parameter is not itself generic (no higher-kinded types).
@@ -4359,7 +4348,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::RecordConstruction {
             type_name, fields, ..
         } => {
-            match cx.types.get(&type_name.name) {
+            match crate::prelude_record::lookup(&type_name.name, cx.types).as_deref() {
                 Some(decl) => {
                     cx.errors
                         .refs
