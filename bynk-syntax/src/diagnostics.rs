@@ -6065,6 +6065,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   fn first(s: List[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✓\n        _ => 0\n    }\n}",
     },
     Explain {
+        code: "bynk.types.map_entry_at_boundary",
+        blurb: "`MapEntry[K, V]` is the record a map's `entries()` yields and `Map.of` takes: `{ key: K, value: V }`. It is built and used in place, so it has no codec: it is refused as a record, sum or event field, an agent key or store field, a capability operation, or a handler's parameter or result. A helper may take or return one. Where the pair must cross a boundary, declare a record of your own with the fields you need, and convert with `map`.",
+        example: "type Index = {\n    entries: List[MapEntry[String, Int]],   // ✗ a map entry is not boundary data\n}\n\ntype Pair = { key: String, value: Int }\n\ntype Index = {\n    entries: List[Pair],                    // ✓ a record of your own\n}",
+    },
+    Explain {
         code: "bynk.types.match_arm_mismatch",
         blurb: "A `match` is an expression, so its arms must produce one type: the least upper \
                 bound of their types, where a refined type and its base agree at the base. If \
@@ -10657,6 +10662,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.list_pattern_on_non_list",
         "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`).",
         &["list_pattern"],
+    ),
+    d(
+        "bynk.types.map_entry_at_boundary",
+        "A `MapEntry` type appears in a storable or boundary-crossing position: a map entry is built and consumed in place, never persisted or sent.",
     ),
     dg(
         "bynk.types.match_arm_mismatch",
