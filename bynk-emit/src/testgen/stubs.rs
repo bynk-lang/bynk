@@ -421,6 +421,7 @@ pub(super) fn emit_stub_class(
                 &declared,
             ));
         }
+        alias_tested_args(&mut body, rp, clause_idxs, op);
         for &idx in clause_idxs {
             let clause = &rp.clauses[idx];
             let (cl_uses, start) = (
@@ -454,7 +455,7 @@ pub(super) fn emit_stub_class(
                     body.push(const_(vname.clone(), await_expr(iife(value))));
                     cond_parts.push(call(
                         ident("__bynkEq"),
-                        vec![ident(param.name.name.clone()), ident(vname)],
+                        vec![ident(arg_alias(i)), ident(vname)],
                     ));
                 }
             }
@@ -511,6 +512,30 @@ pub(super) fn emit_stub_class(
     );
     class.clear_spans();
     class
+}
+
+/// The call's arguments, aliased ahead of every clause block: a clause binds its suite's
+/// test-only commons, whose names may equal a parameter's, and the match test must compare the
+/// argument, not that name. Only parameters some clause tests by value are aliased.
+fn alias_tested_args(
+    body: &mut Vec<TsStmt>,
+    rp: &ResolvedStub,
+    clause_idxs: &[usize],
+    op: &CapabilityOp,
+) {
+    for (i, param) in op.params.iter().enumerate() {
+        let tested = clause_idxs
+            .iter()
+            .any(|&c| matches!(rp.clauses[c].args.get(i), Some(ArgPattern::Value(_))));
+        if tested {
+            body.push(const_(arg_alias(i), ident(param.name.name.clone())));
+        }
+    }
+}
+
+/// The alias of the call's `i`th argument.
+fn arg_alias(i: usize) -> String {
+    ["__arg_", &i.to_string()].concat()
 }
 
 /// `(async () => { body })()`: a block run in place, for a value that needs its own statements.

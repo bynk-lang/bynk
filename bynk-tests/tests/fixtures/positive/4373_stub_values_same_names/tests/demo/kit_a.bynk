@@ -5,3 +5,5 @@ const Base: Int = 1
 type Row = { n: Int }
 
 fn helper() -> Int { 10 }
+
+fn amount() -> Int { 7 }

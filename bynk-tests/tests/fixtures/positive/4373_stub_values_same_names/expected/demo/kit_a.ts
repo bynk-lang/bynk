@@ -14,3 +14,7 @@ export function Base(): number { return (__const_Base ??= { v: 1 }).v; }
 export function helper(): number {
   return 10;
 }
+
+export function amount(): number {
+  return 7;
+}

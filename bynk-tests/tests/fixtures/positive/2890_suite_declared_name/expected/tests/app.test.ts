@@ -27,10 +27,11 @@ class __Stub_Crypto {
     type Signature = __ns_bynk_crypto.Signature;
     type SigningKey = __ns_bynk_crypto.SigningKey;
     type VerifyKey = __ns_bynk_crypto.VerifyKey;
+    const __arg_0 = algorithm;
     const __pv_0_0 = await (async () => {
       return Digest.Sha256;
     })();
-    if (this.__case === "a case names the adapter type by its declared name" && __bynkEq(algorithm, __pv_0_0)) {
+    if (this.__case === "a case names the adapter type by its declared name" && __bynkEq(__arg_0, __pv_0_0)) {
       return new globalThis.TextEncoder().encode("sha");
     }
     throw new globalThis.Error("bynk: no stub clause matched for Crypto.digest");

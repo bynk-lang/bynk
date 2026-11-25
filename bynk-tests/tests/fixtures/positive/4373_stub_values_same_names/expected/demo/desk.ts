@@ -3,6 +3,7 @@
 
 export interface Meter {
   read(): globalThis.Promise<number>;
+  scale(amount: number): globalThis.Promise<number>;
 }
 
 export const __MeterToken: symbol = globalThis.Symbol("Meter");
@@ -10,6 +11,10 @@ export const __MeterToken: symbol = globalThis.Symbol("Meter");
 export class Fixed implements Meter {
   async read(): globalThis.Promise<number> {
     return 1;
+  }
+
+  async scale(amount: number): globalThis.Promise<number> {
+    return amount;
   }
 }
 
@@ -22,6 +27,12 @@ export const local = {
   },
 };
 
+export const scaled = {
+  async call(n: number, deps: { Meter: Meter }): globalThis.Promise<number> {
+    return deps.Meter.scale(n);
+  },
+};
+
 export interface __DemoDeskDeps {
   readonly Meter: Meter;
 }
@@ -30,6 +41,9 @@ export function __makeSurface(deps: __DemoDeskDeps) {
   return {
     async local(n: number): globalThis.Promise<number> {
       return local.call(n, deps);
+    },
+    async scaled(n: number): globalThis.Promise<number> {
+      return scaled.call(n, deps);
     },
   };
 }
