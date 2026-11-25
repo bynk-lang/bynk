@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A test stubs an agent operation at `unit`: `stub Basket.add(_) faulted` or `unreachable` makes the calls it matches, whatever the key, end as `Faulted` or `Unreachable(None)` in `Basket(k).add.outcome(x)`, and fault a plain call; only an agent of the context under test, only at `unit`, and only those two words (`bynk.stub.agent_stub`)
----
+# 0963 — An agent operation is stubbed at `unit`, by intercepting the agent's own calls
 
-## ADR: agent-operation-stubs
-title: An agent operation is stubbed at `unit`, by intercepting the agent's own calls
-summary: The address, scope, words and interception point of `stub <Agent>.<op>(…) faulted | unreachable`
+- **Status:** Accepted (v0.699)
 
 **Context.** #3933 made `Agent(key).op.outcome(…)` return a `CallOutcome` and left a
 test no way to drive its `Unreachable` (a busy agent) or `Faulted` arms. Its

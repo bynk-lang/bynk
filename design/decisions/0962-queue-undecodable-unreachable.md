@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A pattern of `Undecodable` over a `QueueResult` warns (`bynk.queue.undecodable_unreachable`) outside a `system` case, where the verdict can never be it
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0962 — An `Undecodable` pattern warns where the verdict cannot be it
 
-## ADR: queue-undecodable-unreachable
-title: An `Undecodable` pattern warns where the verdict cannot be it
-summary: A checker warning on `Undecodable` patterns of a `QueueResult` outside a `system` case, so a dead arm does not look meaningful
+- **Status:** Accepted (v0.698)
 
 **Context.** #3878 added `Undecodable` to the verdicts of a `QueueResult` match. A body fails to decode only when a real queue delivers it, so only a `system` case's queue address can yield it. A `unit` or `integration` case calls the consumer with a typed value, and handler or helper code only builds `Ack`, `Retry` or `RetryAfter`. The arm was accepted silently everywhere, leaving a dead arm that reads as if it handled something.
 
