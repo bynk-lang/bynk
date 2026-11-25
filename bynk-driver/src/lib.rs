@@ -2109,6 +2109,24 @@ mod tests {
             ),
             Err(vec!["bynk.env.not_initialiser"])
         );
+        // In a function body it is the same refusal, not an unknown function.
+        assert_eq!(
+            build(
+                "env_in_fn_body",
+                project,
+                "commons config\n\nfn origin() -> String { env(APP_ORIGIN, \"x\") }\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+        // Nested where the default cannot stand in, it is reported once.
+        assert_eq!(
+            build(
+                "env_in_arithmetic",
+                project,
+                "commons config\n\nconst Lines: Int = env(A, 1) + 1\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
     }
 
     /// #3942: a derived capability instance's option takes a constant, and the

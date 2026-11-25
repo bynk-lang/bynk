@@ -4405,6 +4405,11 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         // judgment (and `bynk.resolve.param_as_function` for
                         // non-function-typed values) lives in the checker's
                         // call dispatch. Silent pass.
+                    } else if name.name == "env" {
+                        // #3941: `env(…)` outside a constant's initialiser is not
+                        // an unknown function: say what it is and where it goes.
+                        cx.errors
+                            .push(crate::env_consts::not_initialiser(name.span));
                     } else {
                         cx.errors.push(
                             CompileError::new(
@@ -4417,7 +4422,13 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                     }
                 }
             }
-            for a in args {
+            // #3941: `env(NAME, …)` names a variable bare; it is no reference.
+            let skip = usize::from(
+                name.name == "env"
+                    && !cx.fns.contains_key("env")
+                    && !name_in_scope("env", cx.params, &cx.scopes),
+            );
+            for a in args.iter().skip(skip) {
                 check_expr_references(a, cx);
             }
         }

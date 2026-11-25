@@ -1862,8 +1862,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.env.not_initialiser",
-        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
-        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value",
+        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list, in a function body or in an annotation. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value\n\nfn origin() -> String { env(APP_ORIGIN) }   // ✗ `env` in a function body\n\nfn origin() -> String { Origin }   // ✓ name the constant",
     },
     Explain {
         code: "bynk.env.unsupported_type",

@@ -102,7 +102,7 @@ fn collect_env_calls(e: &Expr, out: &mut Vec<bynk_syntax::span::Span>) {
     }
 }
 
-fn not_initialiser(span: bynk_syntax::span::Span) -> CompileError {
+pub(crate) fn not_initialiser(span: bynk_syntax::span::Span) -> CompileError {
     CompileError::new(
         "bynk.env.not_initialiser",
         span,
