@@ -1,0 +1,10 @@
+{
+  "blurb": "`Events.emit[E]` takes an `event` type. A plain `type` declared in the same context is refused: nothing could subscribe to it, since a `from Events(…)` header names events, so the emission would silently go nowhere. Declare the type with `event` instead, or name the event you meant. A name that is not declared in this context at all is `bynk.event.emit_outside_owner`.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.emit_not_an_event",
+  "constructs": [],
+  "example": "type Receipt = { id: String }\nevent Paid = { id: String }\n\nEvents.emit[Receipt](Receipt { id: id })   // ✗ `Receipt` is a `type`, not an `event`\nEvents.emit[Paid](Paid { id: id })         // ✓ an `event` of this context",
+  "severity": "error",
+  "summary": "`Events.emit[E]` named a type `E` that is declared in this context, but is not itself an `event` — only an `event` type may be emitted."
+}

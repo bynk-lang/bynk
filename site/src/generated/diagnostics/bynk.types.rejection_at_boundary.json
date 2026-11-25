@@ -1,0 +1,10 @@
+{
+  "blurb": "A `BoundaryRejection` is the router's account of a request it refused before any handler ran: a malformed or oversized body, an unsupported media type, a wrong method. `on rejected` reads it to render the answer, and it is accepted only as that handler's parameter. It is refused as a record, sum or event field, an agent store field, a capability operation, or any other handler's parameter or result. Match on it in `on rejected` and keep what you need, such as the detail text, as a `String`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.rejection_at_boundary",
+  "constructs": [],
+  "example": "type Refusal = {\n    why: BoundaryRejection,    // ✗ read by `on rejected`, not kept\n}\n\ntype Refusal = {\n    detail: String,            // ✓ keep what you need from it\n}",
+  "severity": "error",
+  "summary": "`BoundaryRejection` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent."
+}

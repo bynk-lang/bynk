@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.duplicate_compatibility_flag",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`bynk.toml`'s `[workers] compatibility_flags` lists a flag twice, or one every Bynk Worker already has; the duplicate is dropped (warning)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`exports capability { Clock }` lets other contexts depend on `Clock` and have it built for them, so the exporting context must also say how: a `provides Clock = … { … }` declaration. Without one, a consumer would hold a capability that nothing in the project can instantiate. Add the provider. (A derived capability, `capability Name = Kind`, cannot be exported at all; that is `bynk.exports.derived_capability`.)",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.capability_not_provided",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports capability { Clock }       // ✗ nothing provides `Clock`\n\ncapability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed {           // ✓\n    fn now() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "An exported capability has no provider in its context."
+}

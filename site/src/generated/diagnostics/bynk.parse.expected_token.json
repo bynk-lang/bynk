@@ -1,0 +1,10 @@
+{
+  "blurb": "The parser was part-way through a construct and the next token had to be one particular token: a `)` closing a list, a `,` between items, a `:`, `=`, `->` or `=>`, or a `}`. The message says which, and what it found instead. The commonest cause is a missing comma: in `fn add(a: Int b: Int)` it finds `b` where `)` was due. Others are `->` for `=>` in a match arm and `:` for `->` before a return type. A missing `)` or `}` is reported at the next token that cannot continue, often on the line below, so read the line above. If the file ended instead, it is `bynk.parse.unexpected_eof`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_token",
+  "constructs": [],
+  "example": "fn add(a: Int b: Int) -> Int { a + b }    // ✗ no `,` between the parameters\nfn add(a: Int, b: Int) -> Int { a + b }   // ✓",
+  "severity": "error",
+  "summary": "Expected a specific token."
+}

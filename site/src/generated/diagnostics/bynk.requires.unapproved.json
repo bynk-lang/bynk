@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter in a git or registry dependency requires an npm package your project hasn't approved. A dependency's adapters bring their npm packages into your build's `package.json`, and the next `npm install` runs whatever those packages run; so an npm package from someone else's code enters only after you approve it once. The approval is one package at one range, recorded in `bynk.lock` (`approved = true`), so a changed range asks again. Review the package (the note names the dependencies that brought it in), run `bynk approve jose`, and commit `bynk.lock`. Your own adapters and path dependencies need no approval.",
+  "category": "npm requirements",
+  "categoryAnchor": "npm-requirements",
+  "code": "bynk.requires.unapproved",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "# bynk.lock, as a fetch wrote it — the build fails until approved\n[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/money:tokens\"]\n\n# after `bynk approve jose` — the build passes\n[[npm]]\npackage = \"jose\"\nrange = \"^5.2.0\"\nrequired-by = [\"acme/money:tokens\"]\napproved = true",
+  "severity": "error",
+  "summary": "A reached adapter of a git or registry dependency requires an npm package, at a range, that the project hasn't approved in `bynk.lock`; review it and run `bynk approve <package>`."
+}

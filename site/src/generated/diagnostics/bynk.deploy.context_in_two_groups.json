@@ -1,0 +1,10 @@
+{
+  "blurb": "Each `[deploy.workers.<key>]` group becomes one Worker, and a context is deployed in exactly one Worker: its routes, its services and its agents' state belong to one script. A context listed in two groups would be deployed twice, as two copies that share nothing. List it in one group. A context in no group stays its own Worker.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.context_in_two_groups",
+  "constructs": [],
+  "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.orders\"]     // ✗ already in `core`\n\ncontexts = [\"shop.gateway\"]    // ✓",
+  "severity": "error",
+  "summary": "A context is listed in two `[deploy.workers.<key>]` groups; a context is deployed in one Worker only."
+}

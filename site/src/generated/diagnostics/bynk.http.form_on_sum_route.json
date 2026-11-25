@@ -1,0 +1,10 @@
+{
+  "blurb": "A route `by` a sum of actors, such as `User | Visitor`, reads and verifies the request body as JSON itself. `@form` and `@multipart` have the router decode the body in another format, so the two cannot both own it and the pair is refused. Name one actor on the route, or split it into one route per actor. A route with `@form` and a second wire format is `bynk.http.body_kind_conflict`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.form_on_sum_route",
+  "constructs": [],
+  "example": "type UserId = opaque String\ntype Search = { q: String }\n\nactor User { auth = Bearer(secret = \"AUTH_JWT_SECRET\"), identity = UserId }\n\n@form\non POST(\"/search\") (body: Search) -> Effect[HttpResult[String]] by who: User | Visitor { … }   // ✗ a sum of actors\n\n@form\non POST(\"/search\") (body: Search) -> Effect[HttpResult[String]] by who: User { … }             // ✓ one actor",
+  "severity": "error",
+  "summary": "A `@form` handler's `by` clause is a sum of actors, whose wrapper reads the body as JSON itself."
+}

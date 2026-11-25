@@ -1,0 +1,12 @@
+{
+  "blurb": "An argument has a different type from the parameter it is passed to. Bynk compares types exactly and converts nothing implicitly, so a `String` is never read as an `Int`, and a call that passes the wrong type is refused at the call, not left to fail later. The same code covers the arguments of methods, capability operations and constructors. Pass a value of the parameter's type, or convert it first with an explicit conversion such as `Int.parse` (which returns an `Option`, because the text may not be a number).",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.argument_mismatch",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn double(n: Int) -> Int {\n    n * 2\n}\n\nfn run() -> Int {\n    double(\"21\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn run() -> Int {\n    double(21)      // ✓ an `Int`\n}",
+  "severity": "error",
+  "summary": "A call, method, capability, or constructor argument has the wrong type."
+}

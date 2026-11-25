@@ -1,0 +1,10 @@
+{
+  "blurb": "`sortBy`, `sortByDescending`, `min` and `max` order a list, or a storage `Query`, by the value the key function returns, so that value needs a total order. A record or sum is not ordered by accident, because opting in makes field and variant order significant. Return a field that is already orderable, or add `derives Ord` to the type. The operators `<` and `>` on an unordered type are `bynk.types.not_orderable`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.key_not_orderable",
+  "constructs": [],
+  "example": "type Item = { id: Int }\n\nfn byId(items: List[Item]) -> List[Item] {\n    items.sortBy((i) => i)       // ✗ `Item` has no order\n}\n\nfn byId(items: List[Item]) -> List[Item] {\n    items.sortBy((i) => i.id)    // ✓ `Int` does\n}",
+  "severity": "error",
+  "summary": "A `sortBy`/`sortByDescending`/`min`/`max` key function does not return an orderable type. The key must be an `Ord` type, on a `List` and on a storage `Query` alike."
+}

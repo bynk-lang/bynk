@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.redundant_eq_bound",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A type parameter is declared both `Eq` and `Ord` (or `Eq` and `Key`); `Ord` and `Key` imply `Eq`, so the `Eq` is redundant. The diagnostic carries a machine-applicable fix that removes it (constrained-generics slices 1 and 2, warning)."
+}

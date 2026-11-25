@@ -1,0 +1,12 @@
+{
+  "blurb": "An option after the kind in `capability Name = Kind @option(…)` must be one that kind takes: `Service` takes `@worker`, `R2` `@jurisdiction`, `RateLimit` `@limit` and `@period`, `Queue` `@name`, `MySql` `@tls`, and `StoredSecret` `@store` and `@secret`, while `Kv`, `Analytics`, `D1`, `EdgeCache` and `Postgres` take none. One the kind does not take is refused rather than ignored, since it is probably a misspelling or the wrong kind. Drop it, or use one of the options the note lists. An option that is known but has a bad value is `bynk.capability.invalid_option`.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.unknown_option",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "capability Sessions = Kv @ttl          // ✗ `Kv` instances take no options\ncapability Sessions = Kv               // ✓",
+  "severity": "error",
+  "summary": "A derived capability carries an option its base does not take."
+}

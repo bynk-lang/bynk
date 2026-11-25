@@ -1,0 +1,12 @@
+{
+  "blurb": "A typed cookie write is named and encoded as its record's decoder reads it, so the record must be the `cookies` parameter of an `on http` handler in this unit: that decoder is what the write agrees with. For a cookie in no record, write an untyped `Cookie { name, value }`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_field_not_cookie_record",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Other = { theme: Theme = Light }\nOk(\"x\").withCookie(Other.theme.cookie(Dark))   // ✗ no handler decodes `Other` as `cookies`\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))    // ✓ `Prefs` is a handler's `cookies` record",
+  "severity": "error",
+  "summary": "A typed cookie write names a record that is not the `cookies` record of an `on http` handler in this unit."
+}

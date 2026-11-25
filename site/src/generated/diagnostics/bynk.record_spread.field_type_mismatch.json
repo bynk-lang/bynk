@@ -1,0 +1,12 @@
+{
+  "blurb": "An override in a record spread must have the type its field declares. The spread produces a value of the record's type, and a field of another type would break that type, so the mismatch is refused at the override instead of surfacing later. Give the field a value of its declared type, converting explicitly where needed: nothing converts implicitly.",
+  "category": "Record spread",
+  "categoryAnchor": "record-spread",
+  "code": "bynk.record_spread.field_type_mismatch",
+  "constructs": [
+    "record_spread"
+  ],
+  "example": "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: \"no\" }   // ✗ `n` is an `Int`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 1 }   // ✓ an `Int`\n}",
+  "severity": "error",
+  "summary": "A record-spread override has the wrong type for the field."
+}

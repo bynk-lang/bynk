@@ -1,0 +1,10 @@
+{
+  "blurb": "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.duplicate_handler",
+  "constructs": [],
+  "example": "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+  "severity": "error",
+  "summary": "A `from email` service declares more than one `on message` handler; it has exactly one."
+}

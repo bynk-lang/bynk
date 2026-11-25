@@ -1,0 +1,12 @@
+{
+  "blurb": "An `exports` clause lists each type once. Naming one twice is a typo or a pasted name, and the second may have been meant for another type. Delete the repeat, or correct the name. The same type in two separate clauses is `bynk.exports.duplicate_export`.",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.duplicate_in_clause",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports transparent { Order, Order }    // ✗ `Order` listed twice\n\ntype Order = { total: Int }\n\nexports transparent { Order }           // ✓ listed once",
+  "severity": "error",
+  "summary": "A name appears twice in one `exports` clause."
+}

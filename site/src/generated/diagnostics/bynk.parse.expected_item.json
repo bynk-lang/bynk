@@ -1,0 +1,10 @@
+{
+  "blurb": "A unit's body is a list of declarations, and the parser found something else where the next one should begin. The message lists what this kind of unit accepts (a commons, a context and a suite differ). The commonest cause is code at the top level, which holds declarations only: a `let` outside any function (a constant is `const Name: Type = …`) or a call. Others are a misspelt keyword (`function`, `pub fn`) and a stray `}` after a fragment-form unit's last declaration. The position is that token, so look just before it too.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_item",
+  "constructs": [],
+  "example": "let limit = 100                           // ✗ code at the top level of a unit\nconst Limit: Int = 100                    // ✓ a named constant",
+  "severity": "error",
+  "summary": "Expected a declaration."
+}

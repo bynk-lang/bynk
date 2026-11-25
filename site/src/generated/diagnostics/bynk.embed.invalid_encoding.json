@@ -1,0 +1,10 @@
+{
+  "blurb": "An `embed` becomes a `String`, which is Unicode text, so the file must be valid UTF-8. A file saved in another encoding, such as Latin-1, holds bytes that are not UTF-8 and cannot be read as text. Re-save it as UTF-8. A file that holds a NUL byte is binary and is `bynk.embed.binary_content`; a binary file belongs in `assets/`, as an `asset`.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.invalid_encoding",
+  "constructs": [],
+  "example": "embed shell = \"embeds/page.html\"        // ✗ the file is Latin-1, not UTF-8\nembed shell = \"embeds/page.html\"        // ✓ once the file is saved as UTF-8",
+  "severity": "error",
+  "summary": "An `embed` names a file that is not valid UTF-8."
+}

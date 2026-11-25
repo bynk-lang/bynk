@@ -1,0 +1,10 @@
+{
+  "blurb": "A context that writes `exports opaque { T }` lets other contexts hold a `T`, pass it on and call its methods, but not look inside it: they cannot `match` on it, read a field, match a record pattern against it, or name one of its variants. Only the owning context sees the shape, so it can change the representation, or keep an invariant the type's constructors enforce, without breaking a consumer. Ask the owner for what you need instead: a service that returns the answer as a plain value, such as a `Bool`. If the shape is meant to be public, the owner exports it with `exports transparent { T }`.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.opaque_inspection",
+  "constructs": [],
+  "example": "// pay.bynk\ncontext pay\n\nexports opaque { Status }        // the owner hides the shape\n\ntype Status = | Paid | Declined\n\n// shop.bynk\ncontext shop\n\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Bool] by Caller {\n        let s <- pay.charge(1)\n        match s {                      // ✗ `Status` is opaque here, so its variants are hidden\n            Paid => Effect.pure(true)\n            Declined => Effect.pure(false)\n        }\n    }\n}\n\n// pay.bynk\nexports transparent { Status }   // ✓ the owner shares the shape",
+  "severity": "error",
+  "summary": "An opaquely-exported type was inspected from outside its context."
+}

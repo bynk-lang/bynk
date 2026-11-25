@@ -1,0 +1,14 @@
+{
+  "blurb": "The SQL of a `D1`, `Postgres` or `MySql` call must be a string literal, or a `String` constant bound to one, so it is fixed when the program compiles and no request data can become part of the statement: that is how SQL injection happens. An interpolated string, a parameter or a `let` binding is refused. Put the value in the parameter list, as `?1` with `Text(id)`, which is always bound and never spliced in.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.sql_not_literal",
+  "constructs": [
+    "method_call",
+    "record_construction",
+    "record_spread"
+  ],
+  "example": "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = '\\(id)'\", [])         // ✗ built at run time\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1\", [Text(id)])      // ✓ bound",
+  "severity": "error",
+  "summary": "A `D1` or `Postgres` statement's SQL (the first argument of `all`, `first`, `run`, `select` or `firstAs`, or the `sql` of a `SqlStatement` or a `PgStatement`) is neither a string literal nor a bare reference to a `String` constant bound to one, so data could be spliced into it instead of bound as a `SqlValue` or `PgValue` parameter (standard-library P4c, Hyperdrive H1 and H3)."
+}

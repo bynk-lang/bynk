@@ -1,0 +1,10 @@
+{
+  "blurb": "`Cache-Control: max-age` counts whole seconds. A `maxAge` such as `1500.milliseconds` has a remainder that would be dropped, and the header would say `1` for what you wrote as 1.5, so it is refused rather than quietly truncated. Write a whole number of seconds, rounding it yourself. A `maxAge` that is not a positive duration at all is `bynk.http.cache_bad_max_age`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_max_age_fractional_seconds",
+  "constructs": [],
+  "example": "@cache(maxAge: 1500.milliseconds)   // ✗ not a whole number of seconds\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 2.seconds)           // ✓",
+  "severity": "error",
+  "summary": "A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds."
+}

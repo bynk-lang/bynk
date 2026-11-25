@@ -1,0 +1,12 @@
+{
+  "blurb": "`race` hands the side that loses to the execution context, which only a service handler's body, or a function's it calls, has. A WebSocket handler, a provider operation and a test `case` have none. Move the `race` into a service handler or a function, and have the case call that, stubbing a slow side with `stub … after`. In an agent handler the rule is `bynk.race.in_agent_handler`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.race.outside_handler",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ a case has no execution context\n\nlet r <- quotes.call()                           // ✓ the service handler races",
+  "severity": "error",
+  "summary": "`a.race(b)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
+}

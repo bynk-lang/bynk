@@ -1,0 +1,12 @@
+{
+  "blurb": "`svc.event(e)` delivers an event through the handler the service subscribes with, so it takes the one event named in the service's `from Events(E)` header. Delivering a different event would test a path the service does not have. Pass the subscribed event, or test the service that does subscribe to the one you meant.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.event_not_subscribed",
+  "constructs": [
+    "case"
+  ],
+  "example": "// shop/ledger.bynk\nservice OnPlaced from Events(Placed) { … }\n\n// tests/ledger.test.bynk\nlet _ <- OnPlaced.event(Cancelled { id: \"o1\" })   // ✗ it subscribes to `Placed`\nlet _ <- OnPlaced.event(Placed { id: \"o1\" })      // ✓",
+  "severity": "error",
+  "summary": "A test body's `svc.event(e)` delivers an event the `from Events(E)` service does not subscribe to."
+}

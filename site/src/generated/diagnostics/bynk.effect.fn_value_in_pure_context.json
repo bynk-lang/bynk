@@ -1,0 +1,12 @@
+{
+  "blurb": "Calling a function value whose type returns `Effect[T]` is an effect, just as calling a capability is, and effects are only allowed in a body that is itself effectful, one whose return type is an `Effect`. Bynk makes effects explicit so that a function's signature tells you whether it can touch the outside world: a function that returns a plain `Int` is pure and can be reasoned about as such. A call through a parameter would hide an effect behind that signature, so it is refused. Either make the function return `Effect[T]` and bind the call with `<-`, or take a pure function instead. A capability call from a handler that has not declared it is a different mistake, `bynk.given.undeclared_capability`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.fn_value_in_pure_context",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn sneak(f: Int -> Effect[Int], x: Int) -> Int {\n    let y = f(x)                          // ✗ an effect inside a pure function\n    x\n}\n\nfn sneak(f: Int -> Effect[Int], x: Int) -> Effect[Int] {   // ✓ the function is effectful\n    let y <- f(x)\n    Effect.pure(y)\n}",
+  "severity": "error",
+  "summary": "An effectful function value was called in a pure context; like a capability call, it is legal only where the enclosing body is effectful."
+}

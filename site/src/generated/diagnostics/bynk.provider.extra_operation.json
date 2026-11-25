@@ -1,0 +1,12 @@
+{
+  "blurb": "A `provides` block offers the capability's operations and no others. Callers reach a provider only through the capability, so an operation it does not declare could never be called, and it usually means a misspelt name or an operation added to the wrong capability. Remove it, or declare it on the capability. A capability operation the provider omits is `bynk.provider.missing_operation`.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.extra_operation",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed {\n    fn now() -> Effect[Int] { Effect.pure(0) }\n    fn zone() -> Effect[String] { Effect.pure(\"UTC\") }   // ✗ `Clock` declares no `zone`\n}\n\ncapability Clock {\n    fn now() -> Effect[Int]\n    fn zone() -> Effect[String]  // ✓ declared on the capability\n}",
+  "severity": "error",
+  "summary": "A `provides` block implements an operation not in the capability."
+}

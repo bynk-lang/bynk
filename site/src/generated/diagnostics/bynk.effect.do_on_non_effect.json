@@ -1,0 +1,12 @@
+{
+  "blurb": "`do e` performs an effect, so its operand must be an `Effect[T]`: a call to something effectful. A plain value has nothing to run, which usually means the operand is not the call you meant. Call the effectful function you intended. If you wanted the value, bind it with `let`. An effect whose result is a `Result` is `bynk.effect.do_discards_result`, and `<-` on a plain value is `bynk.effect.bind_on_non_effect`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.do_on_non_effect",
+  "constructs": [
+    "do_stmt"
+  ],
+  "example": "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn clear() -> Effect[()] {\n    do 5                         // ✗ `5` is an `Int`, not an `Effect[T]`\n}\n\nfn clear() -> Effect[()] {\n    do ping()                    // ✓ an effect\n}",
+  "severity": "error",
+  "summary": "A `do` statement was applied to a non-`Effect` value."
+}

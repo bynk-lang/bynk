@@ -1,0 +1,12 @@
+{
+  "blurb": "A `service` is a context's entry point: a call, a route, a schedule, a queue consumer, a socket. A `commons` holds only shared types and pure functions, and has no context to serve from. Move the service into a context. Logic it shares can stay in the commons, which the context then `uses`.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.outside_context",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "commons shop\n\nservice probe { … }   // ✗ a commons holds no entry points\n\ncontext shop\n\nservice probe { … }   // ✓",
+  "severity": "error",
+  "summary": "A `service` was declared outside a context."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite's types are used by their bare names in its cases, so a suite declares each name once: a second `type Counted` would leave `Counted` meaning two shapes. Rename one. The same holds for a suite's constants, as `bynk.suite.duplicate_const`, and for helper functions, as `bynk.suite.duplicate_fn`.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.duplicate_type",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type Counted = { n: Int }\ntype Counted = { total: Int }     // ✗ `Counted` again\n\ntype Counted = { n: Int }\ntype Totalled = { total: Int }    // ✓ a name each",
+  "severity": "error",
+  "summary": "A suite declares two `type`s of the same name."
+}

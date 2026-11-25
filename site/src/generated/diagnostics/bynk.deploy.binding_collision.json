@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group folds its members into one Worker, and a Worker has one `wrangler.toml`, so its members share one set of binding names. Two members that declare a binding the same way share it. Two that declare different bindings under one name are refused, because one name cannot bind two things. An agent is the usual case: each agent class is a Durable Object binding named after the class, and a class belongs to the context that declares it, so two members cannot each declare an agent of the same name. Rename one, or put the contexts in different groups.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.binding_collision",
+  "constructs": [],
+  "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nagent Cart { … }\n\n// shop/billing.bynk\nagent Cart { … }     // ✗ `shop.orders` already binds `Cart`\nagent Ledger { … }   // ✓",
+  "severity": "error",
+  "summary": "Two members of one `[deploy.workers.<key>]` group declare different bindings under the same name; members share one `wrangler.toml`, so identical declarations share a binding and differing ones are refused."
+}

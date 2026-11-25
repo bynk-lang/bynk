@@ -1,0 +1,10 @@
+{
+  "blurb": "`RawError` answers with an error status and a body you render yourself, so its first argument must name a 4xx or 5xx `HttpResult` variant, such as `Forbidden` or `ErrorStatus.Conflict`, written as a name. A number, a 2xx name or an expression is refused, so a failure cannot be sent as a success. The diagnostic lists the names. A status name anywhere else is `bynk.http.error_status_position`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.raw_error_status",
+  "constructs": [],
+  "example": "RawError(200, Bytes.empty(), \"text/plain\")        // ✗ the status is a name, not a number\n\nRawError(NotFound, Bytes.empty(), \"text/plain\")   // ✓",
+  "severity": "error",
+  "summary": "`RawError`'s first argument is not an `ErrorStatus` name (a 4xx or 5xx `HttpResult` variant name)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `security { }` section has two fields, `hsts` and `nosniff`, and each becomes a response header. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.security_unknown_field",
+  "constructs": [],
+  "example": "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ `hsts` and `nosniff` only\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A `security { }` policy declares a field outside the closed set."
+}

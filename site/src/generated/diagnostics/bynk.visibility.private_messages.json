@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.visibility.private_messages",
+  "constructs": [
+    "visibility_modifier"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `messages` block in a commons is `private`. A bundle whose `@reference` block is private is never negotiated by a context that uses the commons, and `private` on another block of a bundle whose reference is public has no effect (warning)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "An `exports` clause says how consumers may use what it lists, so it needs a visibility: `exports opaque { … }` keeps a type's shape private to its context, `exports transparent { … }` shows it, and `exports capability { … }` offers a capability. A bare `exports { … }` is refused: the choice decides what other units can rely on, so it is written out. Pick one.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_visibility",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports { P }                           // ✗ no visibility\n\nexports transparent { P }               // ✓",
+  "severity": "error",
+  "summary": "Expected a visibility keyword."
+}

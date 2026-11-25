@@ -1,0 +1,12 @@
+{
+  "blurb": "A WebSocket connection's principal is given once, at `open`, and the connection carries it from there, as the platform recovers it from the socket. So `message` and `close` take no `by`: a case that named one could present a principal production never sees. Drop the `by`. To act as another principal, open a new `TestConnection`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.ws_lifecycle_by",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/room.test.bynk\nlet tc = TestConnection[Frame]()\nlet _ <- Gateway.open(tc, RoomId.unsafe(\"r\")) by Member(UserId.unsafe(\"ann\"))\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" }) by Member(UserId.unsafe(\"ann\"))    // ✗ given at `open`\nlet _ <- Gateway.message(tc, Frame { text: \"hi\" })                                    // ✓",
+  "severity": "error",
+  "summary": "A case's `svc.message(tc, frame)` or `svc.close(tc)` on a `from websocket` service carries a `by` clause; the connection's principal is given once, at `open`, and carried from there."
+}

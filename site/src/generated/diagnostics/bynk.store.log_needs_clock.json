@@ -1,0 +1,10 @@
+{
+  "blurb": "`Log.append` stamps each entry with the time it was written, so it reads the clock and the handler has to declare `given Clock`. The window reads (`since`, `before`, `between`) take explicit `Instant`s and need no clock. Add `given Clock` to the handler that appends.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.log_needs_clock",
+  "constructs": [],
+  "example": "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
+  "severity": "error",
+  "summary": "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`."
+}

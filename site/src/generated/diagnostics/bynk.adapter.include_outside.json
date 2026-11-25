@@ -1,0 +1,12 @@
+{
+  "blurb": "An included module is part of the adapter's own tree, and, for a dependency, of the tree the lock checksums. So each path is relative to the adapter's file and stays inside its directory: no absolute path, and no `..`. Move the module into the adapter's directory, or a subdirectory of it, and name it from there.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.include_outside",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "adapter math {\n    binding \"./math.binding.ts\" includes [\"../shared.wasm\"]    // ✗ leaves the adapter's directory\n}\n\nadapter math {\n    binding \"./math.binding.ts\" includes [\"./adder.wasm\"]       // ✓ inside it\n}",
+  "severity": "error",
+  "summary": "An adapter `binding … includes [ … ]` path is absolute or climbs out of the adapter's directory with `..`."
+}

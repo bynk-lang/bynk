@@ -1,0 +1,10 @@
+{
+  "blurb": "`padStart` and `padEnd` make a string `width` code points wide by repeating `fill` at the start or the end, so a `fill` with no characters has nothing to repeat. When the `fill` is an empty string literal the call is refused here; a `fill` computed at run time that turns out empty faults the call instead. Pass a non-empty `fill` (`\" \"` to pad with spaces, `\"0\"` for a number). A `fill` longer than one character is cut to fit, and the width counts code points, so an emoji in either string is one position.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.string.empty_pad_fill",
+  "constructs": [],
+  "example": "fn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"\")    // ✗ nothing to pad with\n}\n\nfn invoice(n: Int) -> String {\n    n.toString().padStart(6, \"0\")   // ✓ 42 is 000042\n}",
+  "severity": "error",
+  "summary": "The `fill` of `String.padStart` or `String.padEnd` is an empty literal, so there is nothing to pad with."
+}

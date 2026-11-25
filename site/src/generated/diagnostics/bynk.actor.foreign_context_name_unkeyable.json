@@ -1,0 +1,10 @@
+{
+  "blurb": "A foreign caller signs its calls under a key named from the context's name, `BYNK_CALL_TO_<CONTEXT>`. The name must therefore be lower-case letters and digits in dot-separated segments, each starting with a letter, with single underscores between runs: no `__`, and no trailing `_`. Rename the context, or move the foreign actor to one whose name qualifies.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.foreign_context_name_unkeyable",
+  "constructs": [],
+  "example": "context shop.orders_\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✗ no key can be named from `shop.orders_`\n\ncontext shop.orders\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✓",
+  "severity": "error",
+  "summary": "A context declaring a `Foreign` actor has a name no call key can be named from."
+}

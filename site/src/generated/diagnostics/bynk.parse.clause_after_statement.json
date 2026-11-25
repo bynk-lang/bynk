@@ -1,0 +1,10 @@
+{
+  "blurb": "A `stub` or `env` clause sets up the world a test case runs in, so it comes at the start of the case body, before any statement. One after a `let` or other statement is refused, so the setup reads in one place above the steps that depend on it. Move the clause above the first statement of the case.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.clause_after_statement",
+  "constructs": [],
+  "example": "suite demo {\n  case \"x\" {\n    let k = 1\n    stub Clock.now() returns 0       // ✗ after a statement\n    let t <- probe.call()\n    expect t == 0\n  }\n}\n\nsuite demo {\n  case \"x\" {\n    stub Clock.now() returns 0       // ✓ before the statements\n    let k = 1\n    let t <- probe.call()\n    expect t == 0\n  }\n}",
+  "severity": "error",
+  "summary": "A `stub` or `env` clause came after a statement in a test case; they lead the case body."
+}

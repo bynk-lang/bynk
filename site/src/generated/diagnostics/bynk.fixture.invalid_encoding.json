@@ -1,0 +1,12 @@
+{
+  "blurb": "A `fixture` becomes a `String`, which is Unicode text, so its file must be valid UTF-8. A file saved in another encoding, such as Latin-1, holds bytes that cannot be read as text. Re-save it as UTF-8. A file that holds a NUL byte is binary and is `bynk.fixture.binary_content`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.invalid_encoding",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": "fixture note = \"fixtures/note.txt\"    // ✗ the file is Latin-1, not UTF-8\nfixture note = \"fixtures/note.txt\"    // ✓ once the file is saved as UTF-8",
+  "severity": "error",
+  "summary": "A suite's `fixture` names a file that is not valid UTF-8."
+}

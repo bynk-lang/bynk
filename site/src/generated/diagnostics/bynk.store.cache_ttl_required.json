@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Cache` is a keyed store whose entries expire, so it needs `@ttl(<duration>)`, how long an entry lives. Without an expiry it would only be a `Map`. The argument must be a `Duration` literal such as `5.minutes`; a bare number (`@ttl(5)`) or a computed value is refused too, because the lifetime has to be known when the program compiles. Add the annotation, or declare a `Map` if entries should be kept until removed.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.cache_ttl_required",
+  "constructs": [],
+  "example": "store live: Cache[String, Int]   // ✗ no lifetime for the entries\n\nstore live: Cache[String, Int] @ttl(5.minutes)   // ✓\n\nconst Life: Duration = 5.minutes\nstore quick: Cache[String, Int] @ttl(Life)   // ✓ a `Duration` constant bound to a literal",
+  "severity": "error",
+  "summary": "A `Cache` field is missing its required `@ttl(<duration>)` annotation (a keyed store with no expiry is a `Map`)."
+}

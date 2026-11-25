@@ -1,0 +1,10 @@
+{
+  "blurb": "`@form` and `@multipart` read a form post from the request's `body`, so they belong on a `POST`, `PUT` or `PATCH` route with a `body` parameter. On a `GET`, a `DELETE` or a route with no `body` there is nothing to decode. Add a `body` record, or drop the annotation. `@raw` has the same rule: `bynk.http.raw_on_bodyless`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.form_on_bodyless",
+  "constructs": [],
+  "example": "type Signup = { email: String }\n\n@form   // ✗ the route takes no body\non POST(\"/signup\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "A `@form` or `@multipart` annotation is placed on a handler that takes no body."
+}

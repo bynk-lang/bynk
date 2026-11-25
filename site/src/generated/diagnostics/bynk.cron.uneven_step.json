@@ -1,0 +1,12 @@
+{
+  "blurb": "A step such as `*/45` in the minute field counts from the start of the hour, so it fires at minute 0 and 45 and then starts over at 0 in the next hour: the gaps are 45 and 15 minutes, not an even 45. The same is true of an hour step that does not divide 24. Only a step that divides the field's range (`*/5`, `*/15`, `*/30` for minutes; `*/2`, `*/6`, `*/12` for hours) fires evenly. Both forms are valid, so this is only a warning; list the times you mean (`0,45`) or pick a step that divides the range, which silences it.",
+  "category": "Cron",
+  "categoryAnchor": "cron",
+  "code": "bynk.cron.uneven_step",
+  "constructs": [
+    "cron_handler"
+  ],
+  "example": "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
+  "severity": "warning",
+  "summary": "A cron schedule's `*/n` step in the minute or hour field does not divide the field's range, so the last gap is shorter than `n` (warning)."
+}

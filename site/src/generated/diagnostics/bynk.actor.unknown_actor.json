@@ -1,0 +1,10 @@
+{
+  "blurb": "A `by` clause must name an actor the compiler can find: one declared with `actor` in this context, or a prelude actor (`Visitor`, `Caller`, `Scheduler` or `Producer`). Anything else is a misspelling or a missing declaration. The compiler will not guess, because the actor decides how callers are verified. Fix the spelling, or declare the actor first with `actor Name { auth = … }`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.unknown_actor",
+  "constructs": [],
+  "example": "on GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitr {     // ✗ no actor of that name\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor {   // ✓ the prelude actor",
+  "severity": "error",
+  "summary": "A handler's `by` clause names an actor that is not declared."
+}

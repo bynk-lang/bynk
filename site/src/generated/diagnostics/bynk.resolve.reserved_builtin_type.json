@@ -1,0 +1,12 @@
+{
+  "blurb": "The compiler knows a few type names itself, and the type parser reads each one as the built-in wherever it appears in a type. A `type` declaration that reused one would be shadowed at every use, or fail confusingly there, so the declaration is refused. The names are `Asset`, `BoundaryRejection`, `Connection`, `History`, `HttpResult`, `List`, `Map`, `Query`, `QueueResult`, `RequestHeaders`, `RequestQuery`, `Set`, `Stream` and `TokenClaims`. Rename the type. They are reserved in type position only, so a value may still use the word. A constant with such a name is `bynk.resolve.name_conflict` instead, and the base types and words such as `Result` are keywords that the parser refuses earlier.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.reserved_builtin_type",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type Set = { items: List[Int] }   // ✗ `Set` is the built-in set type\n\ntype IntSet = { items: List[Int] }   // ✓",
+  "severity": "error",
+  "summary": "A type declaration reuses a compiler-known built-in type name."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.wasm.strip_failed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "The in-browser compiler could not strip the emitted TypeScript to JavaScript."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `migrate from N` step must account for every change between version `N` and the agent's current shape. A field that is gone has to be read through `old` or discarded on purpose with `drop`, and a field that changed type has to be assigned. Otherwise stored data would be carried over silently incomplete. A `Set`, `Log` or `Cache` field that changed can only be dropped, which starts it afresh. The message lists what the step leaves out. Read each removed field, `drop` the ones you mean to lose, and assign the retyped ones.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_incomplete",
+  "constructs": [],
+  "example": "migrate from 1 (old: CartV1) {      // ✗ the removed `total` is neither read nor dropped\n  ownerName := old.owner\n}\n\nmigrate from 1 (old: CartV1) {\n  ownerName := old.owner\n  drop total                         // ✓ discarded on purpose\n}",
+  "severity": "error",
+  "summary": "A `migrate` step does not account for every change between its version and the current shape: a removed field must be read (`old.f`) or dropped, and a retyped or re-kinded field must be assigned (or dropped, for a `Set`, `Log` or `Cache` field)."
+}

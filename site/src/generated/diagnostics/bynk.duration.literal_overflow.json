@@ -1,0 +1,10 @@
+{
+  "blurb": "`5.minutes` is a `Duration`, which the compiler stores as a whole number of milliseconds, so it multiplies the count by the unit when it reads the literal. A count whose total does not fit in a 64-bit integer is refused rather than wrapped into a wrong or negative span. No real timeout or interval is that large: write a smaller count, or a smaller unit.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.duration.literal_overflow",
+  "constructs": [],
+  "example": "fn forever() -> Duration { 9007199254740991.days }   // ✗ overflows the millisecond range\n\nfn forever() -> Duration { 365.days }                // ✓",
+  "severity": "error",
+  "summary": "A `Duration` literal (`<int>.<unit>`) exceeds the representable millisecond range."
+}

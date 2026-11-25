@@ -1,0 +1,12 @@
+{
+  "blurb": "The type arguments of a generic call do not fit. The checker infers each type parameter from the arguments, and an argument that contradicts what an earlier one settled is refused: `pick(1, \"one\")` cannot make `T` both `Int` and `String`. The same code covers explicit type arguments of the wrong number (`pick[Int, Int](…)`), type arguments given to a function that is not generic, and a type parameter named like a declared type. Make the arguments agree, give the type argument explicitly where the inference is not what you meant, or rename the parameter.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.type_arg_mismatch",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn pick[T](a: T, b: T) -> T {\n    a\n}\n\nlet x = pick(1, \"one\")          // ✗ `T` is `Int` from the first argument\n\npick(1, 2)                      // ✓ both arguments are `Int`",
+  "severity": "error",
+  "summary": "Inferred or explicit type arguments conflict, have the wrong arity, target a non-generic function, or a type parameter shadows a declared type."
+}

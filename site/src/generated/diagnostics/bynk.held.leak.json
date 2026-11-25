@@ -1,0 +1,10 @@
+{
+  "blurb": "A held value such as a `Connection[F]` has one owner, who must dispose of it before its scope ends: close it, store it (in a `Map[K, Connection[F]]` or a `Cell[Option[Connection[F]]]`), or pass it to a function or agent call that takes it. A dropped connection would stay open with nothing able to close it. The error is reported at the binding: a handler or function parameter, or a `let`. The connection `on open` receives is owned; the one `on message` and `on close` receive is only lent, so it carries no such duty. See `bynk.held.use_after_consume` (used after disposal) and `bynk.held.consume_on_borrow` (disposed of while borrowed).",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.held.leak",
+  "constructs": [],
+  "example": "fn ignore(c: Connection[ServerFrame]) -> Effect[()] {   // ✗ `c` is never closed, stored or passed on\n  Effect.pure(())\n}\n\nfn finish(c: Connection[ServerFrame]) -> Effect[()] {   // ✓\n  c.close()\n}",
+  "severity": "error",
+  "summary": "A held value (`Connection[F]`) is still owned at scope exit — it must be disposed (stored, closed, or transferred) before the handler or function returns (§2.9.1, real-time track slice 2)."
+}
