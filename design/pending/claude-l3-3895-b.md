@@ -1,6 +1,6 @@
 ---
 level: minor
-probes: emit_abi_shapes, emit_diagnostics, ts_writes, ts_raw_sites_emit
+probes: emit_abi_shapes, emit_diagnostics, ts_writes
 raises: emit_abi_shapes — the three Logger bindings import `withTraceField` from the runtime to put the request's trace on a structured record, and each is one more name in the bindings' runtime surface
 changelog: Every request now carries a trace id across contexts, and `Logger.log` and the runtime's own log lines write it as `trace`
 breaking: every generated `wrangler.toml` gains the `nodejs_als` compatibility flag, which gives a Worker the `AsyncLocalStorage` the trace is held in; it is left out where the project's `[workers] compatibility_flags` already lists `nodejs_compat`, which provides it. A project that commits its generated `wrangler.toml` or reads its flags sees a diff on the next build. A `Logger.log` record gains `fields.trace` inside a request, replacing a field of that name, and the text of a fault or call log line ends ` trace=<id>`; a log query that matches those lines exactly needs to allow the suffix.
