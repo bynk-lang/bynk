@@ -4113,12 +4113,12 @@ pub fn resolve_type_ref_in(
         // existence/arity are validated in the resolver, so an unknown or
         // mis-applied name simply produces no type here.
         TypeRef::App { name, args, .. } => {
-            let decl = types.get(&name.name)?;
+            let decl = crate::prelude_record::lookup(&name.name, types)?;
             let args: Option<Vec<TyId>> = args
                 .iter()
                 .map(|a| resolve_type_ref_in(a, types, vars, tys))
                 .collect();
-            return Some(named_ty_with_args(decl, args?, tys));
+            return Some(named_ty_with_args(&decl, args?, tys));
         }
         _ => return resolve_type_ref(r, types, tys),
     };
@@ -4585,7 +4585,9 @@ fn first_unresolved_type_name<'a>(
             (!types.contains_key(&id.name) && !vars.contains(&id.name)).then_some(id)
         }
         TypeRef::App { name, args, .. } => {
-            if !types.contains_key(&name.name) && !vars.contains(&name.name) {
+            if crate::prelude_record::lookup(&name.name, types).is_none()
+                && !vars.contains(&name.name)
+            {
                 return Some(name);
             }
             args.iter()
@@ -4704,12 +4706,12 @@ pub fn resolve_type_ref(
         TypeRef::History(_, _) => return None,
         // v0.157 (ADR 0183): `Name[Arg, …]` — a user generic-type application.
         TypeRef::App { name, args, .. } => {
-            let decl = types.get(&name.name)?;
+            let decl = crate::prelude_record::lookup(&name.name, types)?;
             let args: Option<Vec<TyId>> = args
                 .iter()
                 .map(|a| resolve_type_ref(a, types, tys))
                 .collect();
-            return Some(named_ty_with_args(decl, args?, tys));
+            return Some(named_ty_with_args(&decl, args?, tys));
         }
         TypeRef::ValidationError(_) => Ty::ValidationError,
         TypeRef::DecodeError(_) => Ty::DecodeError,

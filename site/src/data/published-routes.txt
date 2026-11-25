@@ -986,6 +986,7 @@
 /book/reference/diagnostics/bynk.types.let_annotation_mismatch/
 /book/reference/diagnostics/bynk.types.list_element_mismatch/
 /book/reference/diagnostics/bynk.types.list_pattern_on_non_list/
+/book/reference/diagnostics/bynk.types.map_entry_at_boundary/
 /book/reference/diagnostics/bynk.types.match_arm_mismatch/
 /book/reference/diagnostics/bynk.types.match_non_sum_discriminant/
 /book/reference/diagnostics/bynk.types.method_arity/
@@ -2136,6 +2137,7 @@
 /reference/diagnostics/bynk.types.let_annotation_mismatch/
 /reference/diagnostics/bynk.types.list_element_mismatch/
 /reference/diagnostics/bynk.types.list_pattern_on_non_list/
+/reference/diagnostics/bynk.types.map_entry_at_boundary/
 /reference/diagnostics/bynk.types.match_arm_mismatch/
 /reference/diagnostics/bynk.types.match_non_sum_discriminant/
 /reference/diagnostics/bynk.types.method_arity/

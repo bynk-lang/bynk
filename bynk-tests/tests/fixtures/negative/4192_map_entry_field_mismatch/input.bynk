@@ -1,0 +1,5 @@
+commons demo.mapentrymismatch
+
+fn wrong() -> MapEntry[String, Int] {
+	MapEntry { key: 1, value: 2 }
+}
