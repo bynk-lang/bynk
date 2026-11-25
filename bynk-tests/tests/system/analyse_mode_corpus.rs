@@ -31,19 +31,61 @@ fn fixture_input(dir: &Path) -> Option<PathBuf> {
     }
 }
 
+/// Copy a project into `dst`, leaving out its snapshots (`expected/`), which `bynk check` never
+/// reads.
+fn copy_project(src: &Path, dst: &Path) {
+    std::fs::create_dir_all(dst).unwrap();
+    for entry in std::fs::read_dir(src).unwrap().flatten() {
+        let (from, to) = (entry.path(), dst.join(entry.file_name()));
+        if from.is_dir() {
+            if entry.file_name() != "expected" {
+                copy_project(&from, &to);
+            }
+        } else {
+            std::fs::copy(&from, &to).unwrap();
+        }
+    }
+}
+
+/// The scratch directory for a project's copy, under `CARGO_TARGET_TMPDIR` like the other system
+/// tests, named by the project's place in the corpus so two never share one.
+fn scratch(input: &Path) -> PathBuf {
+    let name: String = input
+        .strip_prefix(repo().canonicalize().unwrap_or_else(|_| repo()))
+        .unwrap_or(input)
+        .to_string_lossy()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("analyse_mode_corpus")
+        .join(name)
+}
+
 /// A failure line for `input`, or `None` when `bynk check` succeeded cleanly of internal errors.
+///
+/// A project is checked from a scratch copy, not in place: `bynk check` writes a `bynk.lock`
+/// beside a manifest that has dependencies (#4310), and an interrupted run would leave one in the
+/// tracked corpus, where the next run would then read it instead of writing it. The copy is
+/// removed whether or not the check passes. A single file is read, not written, so it is checked
+/// where it is.
 fn check(input: &Path) -> Option<String> {
-    // A project with dependencies gets its `bynk.lock` written beside `bynk.toml`; the corpus is
-    // checked in place, so remove a lock this run created rather than leave the tree dirty.
-    let lock = input.join("bynk.lock");
-    let had_lock = input.is_dir() && lock.exists();
+    let copy = input.is_dir().then(|| scratch(input));
+    let target = match &copy {
+        Some(dir) => {
+            let _ = std::fs::remove_dir_all(dir);
+            copy_project(input, dir);
+            dir.as_path()
+        }
+        None => input,
+    };
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("check")
-        .arg(input)
+        .arg(target)
         .output()
         .expect("run bynk check");
-    if input.is_dir() && !had_lock {
-        let _ = std::fs::remove_file(&lock);
+    if let Some(dir) = &copy {
+        let _ = std::fs::remove_dir_all(dir);
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -124,11 +166,12 @@ fn bynk_check_passes_over_every_example_project() {
 /// The harness reports a failing input rather than passing it by default.
 #[test]
 fn a_failing_input_is_reported() {
-    let dir = std::env::temp_dir().join(format!("bynk-4238-{}", std::process::id()));
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("analyse_mode_corpus_broken");
     std::fs::create_dir_all(&dir).unwrap();
     let broken = dir.join("broken.bynk");
     std::fs::write(&broken, "commons demo\n\nfn f() -> Int {\n  \"x\"\n}\n").unwrap();
-    let failure = check(&broken).expect("a type error must fail the check");
-    assert!(failure.contains("exited"), "{failure}");
+    let failure = check(&broken);
     let _ = std::fs::remove_dir_all(&dir);
+    let failure = failure.expect("a type error must fail the check");
+    assert!(failure.contains("exited"), "{failure}");
 }
