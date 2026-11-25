@@ -10,12 +10,14 @@ export { type InboundEmail };
 
 export const orders = {
   async queue_orders_0(mail: InboundEmail, deps: { identity: { readonly address: string; readonly dmarc: { readonly tag: "DmarcPass" } | { readonly tag: "DmarcFail" } | { readonly tag: "DmarcNone" } } }): globalThis.Promise<EmailVerdict> {
+    if (!(["DmarcPass"].includes(deps.identity.dmarc.tag))) return { tag: "Reject", reason: "sender not authenticated" };
     return (__bynkEq(deps.identity.dmarc, DmarcVerdict.DmarcPass) ? EmailVerdict.Accept : EmailVerdict.Reject("sender not verified"));
   },
 };
 
 export const support = {
-  async queue_support_0(mail: InboundEmail, deps: {}): globalThis.Promise<EmailVerdict> {
+  async queue_support_0(mail: InboundEmail, deps: { identity: { readonly address: string; readonly dmarc: { readonly tag: "DmarcPass" } | { readonly tag: "DmarcFail" } | { readonly tag: "DmarcNone" } } }): globalThis.Promise<EmailVerdict> {
+    if (!(["DmarcPass", "DmarcNone"].includes(deps.identity.dmarc.tag))) return { tag: "Reject", reason: "sender not authenticated" };
     return EmailVerdict.Accept;
   },
 };

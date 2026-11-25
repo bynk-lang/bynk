@@ -1,0 +1,24 @@
+// #3888: a `Sender` refinement at `system`. The real `email()` entry mints the identity from
+// the Authentication-Results header, and mail the refinement does not admit is refused before
+// the handler runs.
+suite shop.support as system {
+  case "mail with no DMARC verdict is refused" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello" })
+    expect r is Reject("sender not authenticated")
+  }
+
+  case "mail that failed DMARC is refused" {
+    let failed: Map[String, String] = Map.empty().insert("authentication-results", "mx.cloudflare.net; dmarc=fail header.from=b.example")
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello", headers: failed })
+    expect r is Reject("sender not authenticated")
+  }
+
+  case "mail Cloudflare authenticated is answered" {
+    let signed: Map[String, String] = Map.empty().insert("authentication-results", "mx.cloudflare.net; dmarc=pass header.from=b.example")
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello", headers: signed })
+    match r {
+      Reply(m) => expect m.text == Some("Thanks, we have your message.")
+      _ => expect false
+    }
+  }
+}

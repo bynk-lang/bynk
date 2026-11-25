@@ -279,6 +279,15 @@ export function dmarcVerdict(headers: readonly { readonly key: string; readonly 
   return { tag: "DmarcNone" };
 }
 
+/**
+ * #3888: the verdict of a message whose headers are already a map (an `InboundEmail` in a case).
+ * The same rule as the Worker's, so a case that sets `authentication-results:
+ * mx.cloudflare.net; dmarc=pass` reads `DmarcPass` at every tier.
+ */
+export function dmarcVerdictOf(headers: ReadonlyMap<string, string>): DmarcVerdict {
+  return dmarcVerdict([...headers].map(([key, value]) => ({ key, value })));
+}
+
 // ------------------------------------------------------------------- parsing
 
 /** The raw message, or `null` when it is over `cap` bytes. Never over-reads. */

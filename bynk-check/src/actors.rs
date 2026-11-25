@@ -505,15 +505,37 @@ pub fn sender_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     if by.is_sum() {
         return None;
     }
-    let binder = by.binder.as_ref()?;
     let name = &by.primary().name;
+    let refined = actors
+        .get(name)
+        .is_some_and(|decl| sender_refinement(decl, actors).is_some());
     // #3888: the prelude `Sender`, or a local refinement over it, mints the same `SenderIdentity`.
-    let is_sender = (name == "Sender" && !actors.contains_key(name))
-        || actors
-            .get(name)
-            .is_some_and(|decl| sender_refinement(decl, actors).is_some());
-    (is_sender && !handler.params.iter().any(|p| p.name.name == binder.name))
-        .then(|| binder.name.clone())
+    let is_sender = (name == "Sender" && !actors.contains_key(name)) || refined;
+    // A refinement checks the identity's verdict before the handler runs, so a binder-less
+    // handler still receives it, under a name no source can write.
+    let binder = match by.binder.as_ref() {
+        Some(b) => b.name.clone(),
+        None if refined => SENDER_REFINEMENT_BINDER.to_string(),
+        None => return None,
+    };
+    (is_sender && !handler.params.iter().any(|p| p.name.name == binder)).then_some(binder)
+}
+
+/// The synthetic binder a binder-less `by <Sender refinement>` handler receives its identity under.
+pub const SENDER_REFINEMENT_BINDER: &str = "__sender";
+
+/// The DMARC verdicts the handler's `Sender` refinement admits, or `None` when its actor is not
+/// one (a plain `by Sender` admits all mail).
+pub fn sender_admits_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<Vec<&'static str>> {
+    let by = handler.by_clause.as_ref()?;
+    if by.is_sum() {
+        return None;
+    }
+    let decl = actors.get(&by.primary().name)?;
+    sender_refinement(decl, actors).map(|p| p.admitted())
 }
 
 /// I3 (#1971): a declared foreign caller, as a `call` handler admits it: the

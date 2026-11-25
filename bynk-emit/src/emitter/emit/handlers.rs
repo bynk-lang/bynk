@@ -246,6 +246,38 @@ pub(super) fn return_undefined_unless(test: bynk_ts::TsExpr) -> Item {
     )))
 }
 
+/// #3888: `if (!(["DmarcPass"].includes(deps.identity.dmarc.tag))) return { tag: "Reject", reason:
+/// "sender not authenticated" };`, the check a `Sender` refinement makes on the minted identity.
+pub(super) fn sender_admission_guard(admits: &[&str]) -> Item {
+    use crate::ts_build::{ident, if_, not_expr, paren, return_, str_lit};
+    let verdicts = bynk_ts::TsExpr::array(admits.iter().map(|v| str_lit(*v)).collect());
+    let tag = bynk_ts::TsExpr::Member {
+        object: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(ident("deps")),
+                property: "identity".to_string(),
+            }),
+            property: "dmarc".to_string(),
+        }),
+        property: "tag".to_string(),
+    };
+    let admitted = bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(verdicts),
+            property: "includes".to_string(),
+        }),
+        args: vec![tag],
+    };
+    let refusal = bynk_ts::TsExpr::object(vec![
+        ("tag".to_string(), str_lit("Reject")),
+        ("reason".to_string(), str_lit("sender not authenticated")),
+    ]);
+    Item::Node(Box::new(if_(
+        not_expr(paren(admitted)),
+        return_(Some(refusal)),
+    )))
+}
+
 /// `if (__events.length > 0) { await deps.__eventsDispatch(__events); }`, with
 /// the call on its own lines in a braced block, or `inline` on one.
 pub(super) fn events_flush_item(inline: bool) -> Item {
