@@ -1,0 +1,9 @@
+---
+#4181: a commons names the `bynk` adapter's transparent types, never its
+capabilities: `Clock` is not a type, and a commons stays pure.
+---
+commons demo
+
+fn tick(c: Clock) -> Int {
+	1
+}

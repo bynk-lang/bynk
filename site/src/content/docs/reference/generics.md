@@ -342,10 +342,35 @@ before the lambdas are checked, so `let o: Option[Int] = none()` works for
 ## Bounds on type declarations
 
 A `type` may bound its parameters as well, `type Pair[T: Eq] = { left: T, right:
-T }`. The bound is checked where the type is applied to a written type argument:
-`Pair[(Int) -> Int]` is rejected. A method of a bounded type sees the bound as
-declared. No construct requires a bound on a type yet, so a bare type parameter
-as the argument (`Pair[U]`) is not checked.
+T }`. A bound on a type is a declaration about every value of it, so it is checked at
+every application of the type:
+
+- a written type argument: `Pair[(Int) -> Int]` is rejected;
+- a type parameter as the argument: `Pair[U]` needs a `U` that carries the bound,
+  whether `U` is a function's parameter, a field's type parameter or an annotation's;
+- an instantiation the compiler infers: `Pair { left: f, right: f }` is rejected
+  where the literal makes `T` a function, as it would be written out.
+
+```bynk
+type Sorted[T: Ord] = { items: List[T] }
+type Index[K: Key, V] = { m: Map[K, V] }
+
+type Wrap[U: Key] = { i: Index[U, Int] }      // U carries Key, which Index needs
+
+fn mkSorted[U: Ord](xs: List[U]) -> Sorted[U] {
+	Sorted { items: xs }
+}
+```
+
+Leave a bound off and the diagnostic is the one a function's missing bound gets
+(`bynk.generics.missing_ord_bound`, `missing_key_bound`, `missing_eq_bound`,
+`missing_codable_bound`), with the same fix, so `bynk check --fix` adds the bounds down a
+chain of generic types and functions in one pass. A concrete type that does not satisfy
+the bound is `bynk.types.not_orderable`, `not_keyable`, `not_comparable` or `not_codable`.
+A bound a type needs is declared on it, never inferred from its fields. A method of a
+bounded type holds the bounds its type declares, so it does not repeat them; a `where`
+clause on a method keeps its meaning, a bound the type does not declare that only that
+method's callers must meet.
 
 ## Capability operations take `Key` and `Codable`
 
@@ -393,8 +418,7 @@ TypeScript (`bynk.provider.generic_op_requires_external`).
 `Eq`, `Ord`, `Key` and `Codable` are the constraints of the constrained-generics track.
 `Eq` replaced the equality requirement the compiler used to infer, so the requirement
 a caller must meet is declared in the callee's signature rather than discovered
-from an error. A codec for a generic type of your own over a type parameter, and typed reads for a
-capability you declare, are the open follow-ups.
+from an error. Typed reads for a capability you declare are the open follow-up.
 
 ## See also
 

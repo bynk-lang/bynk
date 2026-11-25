@@ -354,6 +354,46 @@ impl ParsedFile {
         });
     }
 
+    /// #4181: add `consumes <target> { names }`, a clause the source did not
+    /// write, to a commons that names the `bynk` adapter's transparent types.
+    /// The clause is type-only, so the unit gains no capability and stays pure.
+    /// A no-op for any other unit kind. The declaration carries no source span,
+    /// so nothing reports it.
+    pub fn add_implicit_consumes(&mut self, target: &str, names: &[String]) {
+        use bynk_syntax::ast::{ConsumesItem, Ident, QualifiedName, Trivia};
+        use bynk_syntax::span::Span;
+        let SourceUnit::Commons(c) = &mut self.unit else {
+            return;
+        };
+        if names.is_empty() || c.consumes.iter().any(|d| d.target.joined() == target) {
+            return;
+        }
+        let span = Span::default();
+        let ident = |name: &str| Ident {
+            name: name.to_string(),
+            span,
+        };
+        c.consumes.push(ConsumesDecl {
+            target: QualifiedName {
+                parts: target.split('.').map(ident).collect(),
+                span,
+            },
+            alias: None,
+            selected: Some(
+                names
+                    .iter()
+                    .map(|n| ConsumesItem {
+                        name: ident(n),
+                        alias: None,
+                    })
+                    .collect(),
+            ),
+            span,
+            trivia: Trivia::default(),
+            blank_before: false,
+        });
+    }
+
     pub fn uses(&self) -> &Vec<UsesDecl> {
         match &self.unit {
             SourceUnit::Commons(c) => &c.uses,
@@ -365,7 +405,7 @@ impl ParsedFile {
 
     pub fn consumes(&self) -> &[ConsumesDecl] {
         match &self.unit {
-            SourceUnit::Commons(_) => &[],
+            SourceUnit::Commons(c) => &c.consumes,
             SourceUnit::Context(c) => &c.consumes,
             // v0.18: adapter-to-adapter capability dependencies (spec §4.5).
             SourceUnit::Adapter(a) => &a.consumes,
@@ -468,6 +508,7 @@ impl ParsedFile {
             name,
             items,
             uses,
+            consumes: Vec::new(),
             documentation,
             form,
             span,

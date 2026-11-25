@@ -970,9 +970,21 @@ fn route_indexed_filter(
     cx: &mut LowerCtx,
 ) -> Option<Lowered> {
     let mut pre = Pre::new();
-    if fields.is_empty() {
-        return None;
-    }
+    let (field, value) = index_route(fields, lam)?;
+    let v = pre.lower_node(value, cx);
+    let built = paren(arrow(
+        vec![],
+        call(
+            member(m.node.clone(), "byIndex"),
+            vec![str_lit(field), index_key(cx, map_name, field, v)],
+        ),
+    ));
+    Some(pre.finish(built))
+}
+
+/// The posting-list lookup `lam` is, if it is one: `(p) => p.<field> == <value>` (either order) over
+/// an indexed field, with a value that does not mention `p`. Gives the field and the value.
+fn index_route<'e>(fields: &[String], lam: &'e LambdaExpr) -> Option<(&'e str, &'e Expr)> {
     let [param] = lam.params.as_slice() else {
         return None;
     };
@@ -985,49 +997,17 @@ fn route_indexed_filter(
         Some(f) => (f, rhs.as_ref()),
         None => (as_param_field(pname, rhs)?, lhs.as_ref()),
     };
-    if !fields.iter().any(|f| f == field) || !param_independent(value, pname) {
-        return None;
-    }
-    let v = pre.lower_node(value, cx);
-    let built = {
-        let c = vec![v];
-        let [v] = take(c);
-        paren(arrow(
-            vec![],
-            call(
-                member(m.node.clone(), "byIndex"),
-                vec![
-                    str_lit(field),
-                    if cx.agent_store_index_is_composite(map_name, field) {
-                        call(ident("__bynkKeyEncode"), vec![v])
-                    } else {
-                        string_of(v)
-                    },
-                ],
-            ),
-        ))
-    };
-    Some(pre.finish(built))
+    (fields.iter().any(|f| f == field) && param_independent(value, pname)).then_some((field, value))
 }
 
-/// Whether `route_indexed_filter` would turn `lam` into a posting-list lookup: `(p) => p.<field> ==
-/// <value>` over an indexed field, with a value that does not mention `p`.
-fn routes_to_index(fields: &[String], lam: &LambdaExpr) -> bool {
-    let [param] = lam.params.as_slice() else {
-        return false;
-    };
-    let pname = param.name.name.as_str();
-    let ExprKind::BinOp(BinOp::Eq, lhs, rhs) = &lam.body.kind else {
-        return false;
-    };
-    let (field, value) = match as_param_field(pname, lhs) {
-        Some(f) => (f, rhs.as_ref()),
-        None => match as_param_field(pname, rhs) {
-            Some(f) => (f, lhs.as_ref()),
-            None => return false,
-        },
-    };
-    fields.iter().any(|f| f == field) && param_independent(value, pname)
+/// The posting key of `v` in the `@indexed` field `field` of `map`: `String(v)`, or the canonical
+/// encoding when the field is not a scalar (#4037).
+fn index_key(cx: &LowerCtx, map: &str, field: &str, v: TsExpr) -> TsExpr {
+    if cx.agent_store_index_is_composite(map, field) {
+        call(ident("__bynkKeyEncode"), vec![v])
+    } else {
+        string_of(v)
+    }
 }
 
 /// `e` as `<param>.<field>` → the field name; else `None`.
@@ -1093,6 +1073,8 @@ fn param_independent(e: &Expr, pname: &str) -> bool {
 // a question of order: a `Log`'s pages are in append order, a `Map`'s are in key order while its
 // scan order is insertion order (ADR 0109), so a `Map` stops early only where the answer does not
 // depend on the order, `any` and `all` (Decision D). Every other shape keeps the whole-array scan.
+// An equality `filter` on an `@indexed` field is the source of an `any`/`all`, read from its posting
+// list the same way (#4300).
 
 /// A terminal of the scan, with the argument count it takes.
 fn scan_terminal(name: &str) -> Option<usize> {
@@ -1147,16 +1129,22 @@ fn lower_early_exit_scan(
     if !is_map && !is_log {
         return None;
     }
-    // An equality `filter` on an indexed `Map` field is a posting-list lookup, not a scan.
+    // An equality `filter` on an indexed `Map` field is a posting-list lookup: `any` and `all` read
+    // that list a page at a time, and any other terminal keeps the lookup's whole-list read, since
+    // the posting list is in primary-key order and only a whole read recovers insertion order.
     let (first_stage, first_args) = stages
         .last()
         .map_or((&method.name, args), |(m, a)| (&m.name, a));
-    if is_map
+    let routed = if is_map
         && first_stage == "filter"
         && let [arg] = first_args
         && let ExprKind::Lambda(lam) = &arg.kind
-        && routes_to_index(&cx.agent_store_index_fields(&field.name), lam)
     {
+        index_route(&cx.agent_store_index_fields(&field.name), lam)
+    } else {
+        None
+    };
+    if routed.is_some() && !matches!(method.name.as_str(), "any" | "all") {
         return None;
     }
     let take_count = match (method.name.as_str(), stages.first()) {
@@ -1180,7 +1168,17 @@ fn lower_early_exit_scan(
         return None;
     }
     let var = cx.agent_store_var().to_string();
-    let mut scan = method_call(Receiver::new(&var, &field.name).node, "lazyValues", vec![]);
+    let handle = Receiver::new(&var, &field.name).node;
+    let mut scan = match routed {
+        Some((index, value)) => {
+            // The lookup is the innermost stage: it is the source, not a filter over it.
+            stages.pop();
+            let v = pre.lower_node(value, cx);
+            let key = index_key(cx, &field.name, index, v);
+            method_call(handle, "lazyByIndex", vec![str_lit(index), key])
+        }
+        None => method_call(handle, "lazyValues", vec![]),
+    };
     for (m, a) in stages.iter().rev() {
         let f = pre.lower_node(&a[0], cx);
         scan = match m.name.as_str() {

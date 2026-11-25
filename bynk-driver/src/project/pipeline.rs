@@ -374,6 +374,19 @@ fn reconcile_agents_and_orders(
     versions
 }
 
+/// The rewrites that run right after parsing, before any check: service
+/// defaults (ADR 0147), then #3941's `env(NAME)` constants, which take the
+/// default environment's values.
+fn normalize_parsed(
+    parsed: &mut [ParsedFile],
+    project_root: &Path,
+    overlay: &std::collections::HashMap<PathBuf, String>,
+    errors: &mut ErrorSink,
+) {
+    project_model::normalize_service_defaults(parsed);
+    project_model::resolve_env_consts(parsed, project_root, overlay, errors);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn run_checks(
     // R3.9 (#1113): one `(root, prefix)` pair per `Roots::trees` entry, not a
@@ -534,7 +547,7 @@ pub(super) fn run_checks(
     //        is indexed (not cloned) by later phases, so mutating it here reaches
     //        them all. The parsed AST that `bynk fmt` produces is untouched (it
     //        parses independently), so the terse inheriting source round-trips.
-    project_model::normalize_service_defaults(&mut parsed);
+    normalize_parsed(&mut parsed, project_root, overlay, &mut errors);
     // #1821 (ADR 0147 D3): a deployable build strips every suite, here, right
     // after parsing, so no later pass (the reserved-namespace and
     // function-type checks walk every parsed unit) sees one: never

@@ -1,0 +1,3 @@
+commons config
+
+const MaxLines: Int = env(MAX_LINES)
