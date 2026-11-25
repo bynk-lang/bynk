@@ -64,6 +64,10 @@ contracts = false           # `release` default
 compatibility_flags = []    # extra Cloudflare flags, after the default
 workers_dev = true          # false takes each Worker off workers.dev; left out unless set
 
+[workers.observability]
+enabled = true              # Workers Logs on, so Logger.log's fields are queryable; the default
+head_sampling_rate = 1      # the fraction of invocations whose logs are kept, 0 to 1; the default
+
 [check]
 d1_sql = true               # false stops literal D1 SQL being checked: prepared against the migrations' schema, and its parameter count
 
@@ -595,6 +599,7 @@ checked, and the duplicate warning below still appears.
 |---|---|---|---|
 | `compatibility_flags` | array of strings | `[]` | Extra [compatibility flags](https://developers.cloudflare.com/workers/configuration/compatibility-flags/) for every Worker's `wrangler.toml`, after the default set. |
 | `workers_dev` | boolean | unset | Whether every Worker is served on its `*.workers.dev` URL. Set `false` to turn that off; unset leaves the key out of `wrangler.toml`, so Cloudflare's default (on) applies. |
+| `observability` | table | on, keeping every invocation | Workers Logs; see [Workers Logs](#workers-logs) below. |
 
 Every Worker gets `global_fetch_strictly_public` whatever this list says. In
 Bynk, a `Fetch` to a URL goes over the public internet, and the flag makes
@@ -627,6 +632,31 @@ is an error.
 generated `wrangler.toml`. It must be `true` or `false`; anything else is an
 error. A deployment environment inherits it, so `bynk deploy --env` doesn't
 repeat it.
+
+### Workers Logs
+
+`Logger.log` promises that Workers Logs indexes the keys of its structured
+fields, so `fields.orderId` is queryable (see [Log levels and structured
+fields](/reference/bynk-capabilities/#log-levels-and-structured-fields)). Cloudflare collects a Worker's logs
+only while its configuration enables observability, so Bynk writes the setting
+itself. A project that says nothing gets it on:
+
+```toml
+# workers/<context>/wrangler.toml (generated)
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+```
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `enabled` | boolean | `true` | `false` turns Workers Logs off for every Worker. |
+| `head_sampling_rate` | number, 0 to 1 | `1` | The fraction of invocations whose logs are kept. Lower it for a noisy Worker, to bound log volume and cost. A rate outside 0 to 1 is an error. |
+
+A [worker group](#worker-groups) overrides either key for its own Worker under
+`[deploy.workers.<key>.observability]`, key by key: a group that sets only
+`head_sampling_rate` keeps the project's `enabled`. A deployment environment
+inherits the setting, so `bynk deploy --env` doesn't repeat it.
 
 ## `[deploy]` and `[dev]`
 
@@ -723,6 +753,7 @@ routes = ["pay.example.com/*"]
 | `name` | `[deploy.workers.<key>]` | string | The Worker's script name on Cloudflare: 1 to 63 lowercase letters, digits or `-`. Default: the key. |
 | `routes` | `[deploy.workers.<key>]` | array of strings | Route patterns the Worker is attached to, like `pay.example.com/*`: a host (a leading `*.` is allowed), then `/` and a path, with no scheme. |
 | `custom_domains` | `[deploy.workers.<key>]` | array of strings | Custom domains the Worker is attached to, like `pay.example.com`. No scheme, path or wildcard. |
+| `observability` | `[deploy.workers.<key>]` | table | This Worker's [Workers Logs](#workers-logs) settings, laid over the project's `[workers.observability]` key by key (`enabled`, `head_sampling_rate`). |
 
 The **key** is the group's identity: its entry in `bynk.deploy.lock`, its
 `--worker` selector and its `workers/<key>/` directory. `name` only changes

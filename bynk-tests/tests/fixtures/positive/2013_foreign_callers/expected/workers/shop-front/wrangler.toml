@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "SHOP_ORDERS"
 service = "shop-orders"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

@@ -79,6 +79,7 @@ pub mod contracts;
 pub(crate) mod events_fanout;
 pub(crate) mod harness_names;
 pub mod http_client;
+mod observability;
 pub mod secrets;
 pub mod serialisation;
 pub mod toml_doc;
@@ -98,6 +99,7 @@ pub use compose::{
 };
 pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::{emit_events_fanout_do, emit_group_events_fanout_do};
+pub use observability::observability_block;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers_entry::{
@@ -105,7 +107,7 @@ pub use workers_entry::{
     table_has_plain_json,
 };
 pub use workers_group::{GroupEntry, GroupMember, emit_group_entry};
-pub use wrangler::{ClassTombstones, emit_wrangler_toml, observability_block};
+pub use wrangler::{ClassTombstones, emit_wrangler_toml};
 
 mod boundary;
 mod claim_predicate;

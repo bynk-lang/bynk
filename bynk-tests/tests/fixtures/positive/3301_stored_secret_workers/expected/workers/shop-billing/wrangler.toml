@@ -14,3 +14,7 @@ binding = "SECRET_WEBHOOK_KEY"
 store_id = "payments" # the store's name; its id is set at deploy time
 secret_name = "stripe-webhook"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

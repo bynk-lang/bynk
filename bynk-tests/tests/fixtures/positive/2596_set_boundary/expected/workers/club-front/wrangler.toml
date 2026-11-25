@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "CLUB_ROSTER"
 service = "club-roster"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

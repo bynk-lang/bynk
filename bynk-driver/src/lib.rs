@@ -1896,6 +1896,63 @@ mod tests {
         ));
     }
 
+    /// #4127: Workers Logs is on, keeping every invocation, unless the manifest
+    /// says otherwise; `false` and a sampling rate round-trip; an out-of-range
+    /// rate is refused.
+    #[test]
+    fn manifest_observability_reaches_wrangler_toml() {
+        let dir = workers_project("observability_default", "[project]\nname = \"p\"\n");
+        let (text, _) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
+        assert!(
+            text.contains("[observability]\nenabled = true\nhead_sampling_rate = 1.0\n"),
+            "{text}"
+        );
+        let dir = workers_project(
+            "observability_set",
+            "[workers.observability]\nenabled = false\nhead_sampling_rate = 0.1\n",
+        );
+        for options in [
+            try_project_options(&dir.0).expect("reads"),
+            project_options(&dir.0).expect("reads"),
+        ] {
+            let (text, _) = greet_wrangler(options);
+            assert!(
+                text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.1\n"),
+                "{text}"
+            );
+        }
+        let dir = workers_project(
+            "observability_bad_rate",
+            "[workers.observability]\nhead_sampling_rate = 1.5\n",
+        );
+        assert!(matches!(
+            try_project_options(&dir.0),
+            Err(ProjectOptionsError::Paths(
+                ProjectPathsError::BadObservability { .. }
+            ))
+        ));
+    }
+
+    /// #4127: a worker group's table is laid over the project's, key by key.
+    #[test]
+    fn a_worker_group_overrides_observability_key_by_key() {
+        let dir = workers_project(
+            "observability_group",
+            "[workers.observability]\nhead_sampling_rate = 0.5\n\n[deploy.workers.core]\ncontexts = [\"greet\"]\n\n[deploy.workers.core.observability]\nenabled = false\n",
+        );
+        let options = try_project_options(&dir.0).expect("reads");
+        let out = project::compile_project(&options.target(project::BuildTarget::Workers))
+            .unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+        let text = out.artefacts.docs[Path::new("workers/core/wrangler.toml")].text();
+        assert!(
+            text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.5\n"),
+            "the group sets `enabled`, the project the rate: {text}"
+        );
+    }
+
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.
     #[test]
     fn a_worker_gets_the_default_compatibility_flag_without_a_workers_table() {

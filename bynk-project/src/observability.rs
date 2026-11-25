@@ -133,10 +133,18 @@ mod tests {
 
     #[test]
     fn an_out_of_range_rate_a_wrong_type_and_an_unknown_key_are_refused() {
-        assert!(read("head_sampling_rate = 1.5\n").unwrap_err().contains("0 to 1"));
+        assert!(
+            read("head_sampling_rate = 1.5\n")
+                .unwrap_err()
+                .contains("0 to 1")
+        );
         assert!(read("head_sampling_rate = -0.1\n").is_err());
         assert!(read("head_sampling_rate = \"half\"\n").is_err());
         assert!(read("enabled = \"yes\"\n").is_err());
-        assert!(read("sampling = 1\n").unwrap_err().contains("no key named `sampling`"));
+        assert!(
+            read("sampling = 1\n")
+                .unwrap_err()
+                .contains("no key named `sampling`")
+        );
     }
 }

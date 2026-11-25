@@ -243,7 +243,10 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("paths", &["include", "exclude"]),
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
-    ("workers", &["compatibility_flags", "workers_dev", "observability"]),
+    (
+        "workers",
+        &["compatibility_flags", "workers_dev", "observability"],
+    ),
     (
         "deploy",
         &["hyperdrive", "vectorize", "containers", "workers"],
