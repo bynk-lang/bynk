@@ -1599,10 +1599,13 @@
 /reference/diagnostics/bynk.http.body_on_get_or_delete/
 /reference/diagnostics/bynk.http.cache_bad_immutable/
 /reference/diagnostics/bynk.http.cache_bad_max_age/
+/reference/diagnostics/bynk.http.cache_bad_no_store/
 /reference/diagnostics/bynk.http.cache_bad_scope/
 /reference/diagnostics/bynk.http.cache_duplicate/
 /reference/diagnostics/bynk.http.cache_max_age_fractional_seconds/
+/reference/diagnostics/bynk.http.cache_no_store_conflict/
 /reference/diagnostics/bynk.http.cache_on_non_get/
+/reference/diagnostics/bynk.http.cache_public_authenticated/
 /reference/diagnostics/bynk.http.cache_public_reads_cookies/
 /reference/diagnostics/bynk.http.cache_unknown_arg/
 /reference/diagnostics/bynk.http.cf_wrong_type/
@@ -1658,6 +1661,7 @@
 /reference/diagnostics/bynk.http.limits_invalid_field/
 /reference/diagnostics/bynk.http.limits_not_http/
 /reference/diagnostics/bynk.http.limits_unknown_field/
+/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /reference/diagnostics/bynk.http.multipart_large_cap/
 /reference/diagnostics/bynk.http.path_param_not_stringy/
 /reference/diagnostics/bynk.http.query_field_not_stringy/
@@ -1689,6 +1693,7 @@
 /reference/diagnostics/bynk.index.unknown_key/
 /reference/diagnostics/bynk.index.unused/
 /reference/diagnostics/bynk.internal.missing_checker_fact/
+/reference/diagnostics/bynk.invariant.collection_scan/
 /reference/diagnostics/bynk.invariant.cross_agent_reference/
 /reference/diagnostics/bynk.invariant.duplicate_name/
 /reference/diagnostics/bynk.invariant.impure_predicate/
@@ -2058,6 +2063,7 @@
 /reference/diagnostics/bynk.tier.cross_context_needs_system/
 /reference/diagnostics/bynk.tier.mixed_system_suite/
 /reference/diagnostics/bynk.tier.system_needs_wire/
+/reference/diagnostics/bynk.transition.collection_scan/
 /reference/diagnostics/bynk.transition.cross_agent_reference/
 /reference/diagnostics/bynk.transition.duplicate_name/
 /reference/diagnostics/bynk.transition.impure_predicate/

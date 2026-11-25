@@ -1,0 +1,13 @@
+context shop.orders
+
+consumes bynk.cloudflare { Queue, QueueSend, QueueDelay }
+
+capability OrderEvents = Queue @name("order-events")
+
+const Long: QueueDelay = 2.days
+
+service place {
+  on call(id: String) -> Effect[()] by Caller given OrderEvents {
+    OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(Long) })
+  }
+}

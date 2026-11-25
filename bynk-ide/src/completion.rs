@@ -1229,6 +1229,10 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
         "immutable",
         "`true` promises the response never changes (a content-addressed path) — appends `immutable` to `Cache-Control`; purge it through `EdgeCache` if it can change; default `false`",
     ),
+    (
+        "noStore",
+        "`true` sends `Cache-Control: no-store` and no `ETag`, for data that must never be stored; allowed on any route, and it excludes `maxAge`, `scope` and `immutable`",
+    ),
 ];
 
 /// v0.142 (ADR 0165): the `@limit` handler-annotation arguments, offered at an
@@ -3857,8 +3861,12 @@ pub fn store_field_member_candidates(
     else {
         return Vec::new();
     };
+    // #4034: in an invariant or transition predicate a collection can be asked
+    // its `size()` and nothing else (a `Log` not even that).
+    let in_predicate = crate::symbols::store_field_in_predicate_at(rewritten, recv_offset + 1);
     let mut out: Vec<Completion> = store_ops::ops_for(&kind_head)
         .iter()
+        .filter(|o| !in_predicate || (o.name == "size" && kind_head != "Log"))
         .map(|o| {
             Completion::item(
                 o.name,
@@ -3867,7 +3875,7 @@ pub fn store_field_member_candidates(
             )
         })
         .collect();
-    if kind_head == "Map" && !held {
+    if kind_head == "Map" && !held && !in_predicate {
         out.extend(store_ops::MAP_QUERY_ACCESSORS.iter().map(|a| {
             Completion::item(a.name, CompletionKind::Field, Some(a.signature.to_string()))
         }));
@@ -5084,6 +5092,27 @@ fn Box.size(self) -> Int { 1 }
         assert!(find(&items, "entries", CompletionKind::Field).is_some());
         assert!(find(&items, "keys", CompletionKind::Field).is_some());
         assert!(find(&items, "values", CompletionKind::Field).is_some());
+    }
+
+    #[test]
+    fn store_field_member_candidates_offer_only_size_inside_a_predicate() {
+        // #4034: an invariant may ask a collection its `size()` only, a `Log` not even that.
+        let labels = |doc: &str, marker: &str| {
+            let at = doc.find(marker).unwrap() + marker.len();
+            let (rewritten, recv_offset) = value_receiver_rewrite(doc, at).expect("bare receiver");
+            store_field_member_candidates(&rewritten, recv_offset, &[])
+                .into_iter()
+                .map(|c| c.label)
+                .collect::<Vec<_>>()
+        };
+        let head = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n";
+        let tail = "\n  on call f() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n";
+        let lines = format!("{head}  invariant bounded: lines.\n{tail}");
+        assert_eq!(labels(&lines, "bounded: lines."), vec!["size"]);
+        let notes = format!("{head}  invariant quiet: notes.\n{tail}");
+        assert!(labels(&notes, "quiet: notes.").is_empty());
+        let handler = format!("{head}  on call g() -> Effect[()] {{\n    lines.\n  }}\n}}\n");
+        assert!(labels(&handler, "    lines.").len() > 1);
     }
 
     #[test]

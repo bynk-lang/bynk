@@ -55,6 +55,17 @@ reorders the guard, or a new handler that forgets it, fails at the commit
 boundary rather than silently persisting a negative balance. You do not write a
 test for "available never goes negative"; the invariant *is* that guarantee.
 
+## What an invariant may read of a collection
+
+An invariant is checked at every commit, so whatever it reads is read at every commit.
+A collection is the one thing it may not scan: asking a `Map` or `Set` whether it
+`contains` something, or getting an entry, would read the collection each time. What it
+may ask is `size()`, which the commit already knows, so "an order has at most 100 lines"
+is `lines.size() <= 100` and costs nothing. Anything beyond that, and any read at all of a
+`Log` or a `Cache`, is refused with a message that points you to the handler that writes
+the collection, where the one entry in hand is known. The
+[reference](/reference/agent-invariants/#collection-size) has the rules.
+
 ## What invariants are not
 
 - They are **not** cross-agent. A property like "the sum of reservations across

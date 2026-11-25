@@ -1,0 +1,2 @@
+bynk.transition.collection_scan
+can't read `lines` beyond its `size()`

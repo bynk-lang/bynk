@@ -973,7 +973,11 @@ references the agent's `store` fields by bare name and is a *pure, agent-local
 - it MUST NOT reference another agent (`bynk.invariant.cross_agent_reference`) —
   invariants constrain a single agent's reachable states; a property that spans
   agents belongs in a saga or scenario;
-- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`).
+- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`);
+- it MAY read a `store` `Map` or `Set` field only through `size()`, written on the bare
+  field name, which denotes the staged entry count; any other read of a collection field
+  is refused (`bynk.invariant.collection_scan`), and a `Log` or `Cache` field may not be
+  read at all (a `Cache` counts only its live entries, which a commit has no clock to judge);
 
 The predicate language is ordinary expressions plus `implies` (logical
 implication, `P implies Q` ≡ `!P || Q`) and `is` (pattern-matching as a `Bool`
@@ -999,6 +1003,11 @@ agent-local `Bool` expression* in the same predicate language:
 - it MUST NOT reference another agent (`bynk.transition.cross_agent_reference`);
 - transition names MUST be distinct within an agent
   (`bynk.transition.duplicate_name`);
+- it MAY read a `store` `Map` or `Set` field only through `size()` on `old` or `new`:
+  `new.<field>.size()` is the staged entry count and `old.<field>.size()` the last
+  committed one; any other read of a collection field, a bare field name included, is
+  refused (`bynk.transition.collection_scan`), and a `Log` or `Cache` field may not be
+  read at all;
 - it MUST reference `old` or `new` (`bynk.transition.no_step_reference`) — a
   predicate over neither is a snapshot claim, which is an `invariant`.
 
@@ -2001,8 +2010,9 @@ A `GET` handler MAY carry a single **`@cache`** annotation in handler position
 admits any `@name(args)` before a handler, so a dangling annotation with no
 following `on` is a parse error (`bynk.parse.dangling_handler_annotation`) and any
 name outside the closed set is `bynk.http.unknown_handler_annotation`. `@cache` is
-legal **only on an `on http GET` handler** — on any other method, protocol, or an
-agent handler it is `bynk.http.cache_on_non_get` — and at most once per handler
+legal **only on an `on http GET` handler**, except that `@cache(noStore: true)` is legal on
+any HTTP route — on any other method, protocol, or an agent handler it is
+`bynk.http.cache_on_non_get` — and at most once per handler
 (`bynk.http.cache_duplicate`). Its arguments:
 
 - **`maxAge`** — REQUIRED; a positive `Duration` literal resolving to a whole
@@ -2017,6 +2027,16 @@ agent handler it is `bynk.http.cache_on_non_get` — and at most once per handle
 - **`immutable`** — OPTIONAL; a `Bool` literal (`bynk.http.cache_bad_immutable`),
   defaulting to `false`. `true` appends the RFC 8246 `immutable` directive to the
   `Cache-Control`.
+
+- **`noStore`** — OPTIONAL; a `Bool` literal (`bynk.http.cache_bad_no_store`),
+  defaulting to `false`. `true` sends `Cache-Control: no-store` and no `ETag`, is legal on
+  any route (not only a `GET`), and MUST NOT be combined with `maxAge`, `scope` or
+  `immutable` (`bynk.http.cache_no_store_conflict`); `maxAge` is then not required.
+
+A route guarded by an actor with a `Bearer`, `Oidc`, `SignedCookie` or `Signature` scheme,
+or an actor sum with such a member, sends `Cache-Control: private` on every response that
+carries no `Cache-Control` of its own; `@cache(scope: public)` on such a route is
+`bynk.http.cache_public_authenticated`. A route guarded only by open actors is unchanged.
 
 Any other argument is `bynk.http.cache_unknown_arg`. The annotation governs only
 the opt-in **freshness** half; the conditional **`ETag`/`304`** half is automatic

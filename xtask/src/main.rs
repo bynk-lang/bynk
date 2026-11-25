@@ -1030,7 +1030,10 @@ fn release_notes(args: &[String]) -> ExitCode {
 /// the workspace's current version, before that version is tagged (#3868).
 /// Without `--apply`, says what it would write.
 fn release_page(apply: bool) -> ExitCode {
-    use xtask::release_pages::{INDEX_PAGE, UNRELEASED_PAGE, cut, release_page, today_utc};
+    use xtask::release_pages::{
+        INDEX_PAGE, SHIPPED_CODES, UNRELEASED_PAGE, cut, release_page, today_utc,
+        with_shipped_codes,
+    };
     let root = repo_root();
     let read = |rel: &str| {
         std::fs::read_to_string(root.join(rel)).map_err(|e| format!("cannot read {rel}: {e}"))
@@ -1059,7 +1062,7 @@ fn release_page(apply: bool) -> ExitCode {
         if !apply {
             println!(
                 "Would cut v{version} ({rows} increments): write {page}, empty {UNRELEASED_PAGE} \
-                 and add the release to {INDEX_PAGE}.\nRun again with --apply to write them."
+                 and add the release to {INDEX_PAGE}, and add the registry's codes to {SHIPPED_CODES}.\nRun again with --apply to write them."
             );
             return Ok(());
         }
@@ -1069,6 +1072,14 @@ fn release_page(apply: bool) -> ExitCode {
         write(&page, &cut.release)?;
         write(UNRELEASED_PAGE, &cut.unreleased)?;
         write(INDEX_PAGE, &cut.index)?;
+        let live: Vec<&str> = bynk_syntax::diagnostics::REGISTRY
+            .iter()
+            .map(|d| d.code)
+            .collect();
+        write(
+            SHIPPED_CODES,
+            &with_shipped_codes(&read(SHIPPED_CODES)?, &live),
+        )?;
         println!(
             "Cut v{version} ({rows} increments) into {page}.\n\
              Commit it, merge it, then tag that merge commit v{version}."
