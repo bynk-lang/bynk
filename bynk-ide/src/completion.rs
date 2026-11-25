@@ -348,7 +348,8 @@ fn complete_base(
         return constraint_candidates();
     }
     // 4g'. #3890: `actor A = Caller where <cursor>` — the `Caller` predicate.
-    if is_caller_refinement_where(line_prefix) {
+    // #3899: a `Producer` refinement takes the same predicate.
+    if is_caller_refinement_where(line_prefix) || is_producer_refinement_where(line_prefix) {
         return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
     }
     // 4g''. #3888: `actor A = Sender where <cursor>` — the `Sender` predicate.
@@ -2006,6 +2007,13 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
 fn is_caller_refinement_where(line_prefix: &str) -> bool {
     let t = line_prefix.trim_start();
     t.starts_with("actor ") && t.contains("= Caller where")
+}
+
+/// #3899: the cursor follows `where` in an `actor <Name> = Producer where …`
+/// refinement, which takes `IsContext(…)` like a `Caller` one.
+fn is_producer_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Producer where")
 }
 
 /// #3888: the cursor follows `where` in an `actor <Name> = Sender where …`
@@ -6355,6 +6363,15 @@ mod snapshot_completion_tests {
         assert_eq!(labels("actor A = Sender where "), vec!["Dmarc".to_string()]);
         assert_eq!(
             labels("actor A = Caller where "),
+            vec!["IsContext".to_string()]
+        );
+    }
+
+    /// #3899: a refinement over `Producer` offers `IsContext`, as one over `Caller` does.
+    #[test]
+    fn a_producer_refinement_offers_is_context() {
+        assert_eq!(
+            labels("actor A = Producer where "),
             vec!["IsContext".to_string()]
         );
     }
