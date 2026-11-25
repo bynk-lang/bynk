@@ -34,7 +34,7 @@ suite app.web {
       Retry(why) => expect why.length() == 9
       RetryAfter(_, _) => expect false
       Ack => expect false
-      Undecodable => expect false
+      _ => expect false
     }
   }
 }

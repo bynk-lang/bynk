@@ -31,11 +31,48 @@ export type JsonValue =
   | JsonValue[]
   | { [k: string]: JsonValue };
 
+/** The numeric argument of a rule, of whichever base the refined type has. A `Decimal` is `{ coefficient, scale }`, a `Duration` its milliseconds. */
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+/** The predicate a refinement check enforces, with its argument; `WellFormed` is a value that is not a valid member of its base type at all. */
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 /** A refinement a value broke. */
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
+}
+
+/** A rule as the server's `400` writes it: `kind` where the in-memory form has `tag`, a `Decimal` bound as its text. */
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+/** A violation as the server's `400` carries it: the field, the message and the rule, never the value. */
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
 }
 
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
@@ -50,7 +87,7 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 

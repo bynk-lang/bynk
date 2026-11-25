@@ -9,10 +9,10 @@ export type Money = number & { readonly __brand: "Money" };
 export const Money = {
   of(value: number): Result<Money, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Money", message: "must be a safe integer", value });
+      return Err({ field: "Money", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Money", message: "must be non-negative", value });
+      return Err({ field: "Money", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     return Ok(value as Money);
   },

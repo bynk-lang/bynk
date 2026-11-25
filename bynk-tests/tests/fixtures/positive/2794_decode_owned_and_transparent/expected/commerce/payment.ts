@@ -15,7 +15,7 @@ export type Token = string & { readonly __brand: "commerce.payment.Token" };
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "T-[0-9]+" + ")$", "u").test(value))) {
-      return Err({ field: "Token", message: "must match /T-[0-9]+/", value });
+      return Err({ field: "Token", message: "must match /T-[0-9]+/", rule: { tag: "Matches", pattern: "T-[0-9]+" }, value });
     }
     return Ok(value as Token);
   },

@@ -11,10 +11,10 @@ export type Retries = number & { readonly __brand: "hooks.github.Retries" };
 export const Retries = {
   of(value: number): Result<Retries, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Retries", message: "must be a safe integer", value });
+      return Err({ field: "Retries", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Retries", message: "must be non-negative", value });
+      return Err({ field: "Retries", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     return Ok(value as Retries);
   },

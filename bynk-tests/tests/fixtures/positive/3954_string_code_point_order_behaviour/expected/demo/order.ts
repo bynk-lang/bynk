@@ -18,7 +18,7 @@ export type Pair = string & { readonly __brand: "Pair" };
 export const Pair = {
   of(value: string): Result<Pair, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 2)) {
-      return Err({ field: "Pair", message: "length must be at most 2", value });
+      return Err({ field: "Pair", message: "length must be at most 2", rule: { tag: "MaxLength", limit: 2 }, value });
     }
     return Ok(value as Pair);
   },

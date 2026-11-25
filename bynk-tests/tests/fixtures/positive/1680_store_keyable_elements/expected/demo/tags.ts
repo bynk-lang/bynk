@@ -21,7 +21,7 @@ export type Tag = string & { readonly __brand: "demo.tags.Tag" };
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Tag", message: "must be non-empty", value });
+      return Err({ field: "Tag", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Tag);
   },

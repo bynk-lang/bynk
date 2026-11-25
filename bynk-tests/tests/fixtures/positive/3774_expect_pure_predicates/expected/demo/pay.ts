@@ -21,7 +21,7 @@ export type Day = string & { readonly __brand: "demo.pay.Day" };
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Day", message: "must be non-empty", value });
+      return Err({ field: "Day", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Day);
   },

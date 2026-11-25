@@ -4191,6 +4191,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
     },
     Explain {
+        code: "bynk.queue.undecodable_unreachable",
+        blurb: "`Undecodable` is the verdict a `system` case reads when a message reached a real queue and its body did not decode. Only that path can produce it: a handler builds `Ack`, `Retry` or `RetryAfter`, and a `unit` or `integration` case calls the consumer with a value that is already typed, so no message can fail to decode there. A pattern of `Undecodable` anywhere else is a dead arm that looks as if it handled something. Replace the arm with `_`, since a `match` must still be exhaustive, or, if the decode failure is what you want to test, make the case `as system` and address the queue by its context path. It is only a warning, since the arm does no harm.",
+        example: "case \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false   // ⚠ a unit case never sees this verdict\n      _ => expect false\n    }\n}\n\ncase \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack   // ✓ the verdicts a unit case can see\n}",
+    },
+    Explain {
         code: "bynk.queue.untyped_send",
         blurb: "`send`, `sendWith` and `sendBatch` take JSON text, which the compiler cannot check against the consumer's message type, so a body that does not decode is found only at run time. When a context in the project consumes the queue, they warn and name the typed form: `sendValue`, `sendValueWith` and `sendValueBatch` encode a value at the call site, put exactly the same message on the queue, and are checked against the consumer (`bynk.queue.message_type_mismatch`). The untyped forms stay legal, because they are how to forward a body that is already encoded. A queue no context in the project consumes is not warned about.",
         example: "capability OrderEvents = Queue @name(\"order-events\")\n\nlet _ <- OrderEvents.send(Json.encode(order))   // ⚠ not checked against the consumer\n\nlet _ <- OrderEvents.sendValue(order)   // ✓ checked against the consumer",
@@ -4784,6 +4789,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/meter.test.bynk\n\
                   stub Meter.read() returns 7 after 3           // ✗ no unit\n\
                   stub Meter.read() returns 7 after 3.seconds   // ✓",
+    },
+    Explain {
+        code: "bynk.stub.agent_stub",
+        blurb: "An agent operation can be stubbed with `stub <Agent>.<op>(<args>) faulted` or `unreachable`, which make every matching call to it, whatever the key, end as `Faulted` or `Unreachable(None)` in `Agent(key).op.outcome(…)`, and make a plain call fault. It is limited to what the unit-test runtime can stand in for: an agent the context under test declares (another context's agents are reached through its services, which can be stubbed), in a `unit` suite or case (an `integration` case runs the real agent), and only those two words. There is no `returns <value>`, since a stubbed value would bypass the agent's state and invariants; test those through the real agent.",
+        example: "// demo/basket.bynk\nagent Basket { … on call add(n: Int) -> Effect[Int] { … } }\n\n// tests/basket.test.bynk\nstub Basket.add(_) returns 5    // ✗ an agent is stubbed `faulted` or `unreachable`\n\nstub Basket.add(_) unreachable  // ✓ `Basket(k).add.outcome(x)` is `Unreachable(None)`",
     },
     Explain {
         code: "bynk.stub.at_system",
@@ -9525,6 +9535,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["handler"],
     ),
     warn(d(
+        "bynk.queue.undecodable_unreachable",
+        "An `Undecodable` pattern of a `QueueResult` appears where the value is not a `system` case's queue verdict, so it can never match (warning).",
+    )),
+    warn(d(
         "bynk.queue.untyped_send",
         "`send`, `sendWith` or `sendBatch` sends JSON text to a queue the project consumes, which the compiler cannot check against the consumer (warning).",
     )),
@@ -9991,6 +10005,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.stub.after_type",
         "A test `stub … returns <value> after <d>` latency is not a `Duration`.",
+    ),
+    dg(
+        "bynk.stub.agent_stub",
+        "A test `stub` on an agent operation is not `faulted` or `unreachable`, is in an `integration`-tier case or suite, or names an agent of another context than the one under test.",
+        &["stub_clause"],
     ),
     dg(
         "bynk.stub.at_system",

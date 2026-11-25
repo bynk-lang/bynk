@@ -218,6 +218,7 @@ fn emit_decimal_named_codec(
                                     "message".to_string(),
                                     TsExpr::Lit(TsLit::Raw(format!("\"{msg}\""))),
                                 ),
+                                ("rule".to_string(), bynk_ts::pred_rule_expr(pred)),
                                 ("value".to_string(), ident("json")),
                             ]),
                         ),
@@ -516,7 +517,7 @@ fn emit_inline_refinement_checks(
     // pattern). `TsLit::Raw` (pre-quoted, no further escaping) matches
     // `pred_condition_and_message`'s own contract exactly, and is a no-op
     // for the base-guard arms' own escaping-free text.
-    let violation = |msg: &str| -> TsStmt {
+    let violation = |msg: &str, rule: TsExpr| -> TsStmt {
         ret(call(
             ident("Err"),
             vec![TsExpr::object_entries(vec![
@@ -530,6 +531,7 @@ fn emit_inline_refinement_checks(
                             "message".to_string(),
                             TsExpr::Lit(TsLit::Raw(format!("\"{msg}\""))),
                         ),
+                        ("rule".to_string(), rule),
                         ("value".to_string(), ident("json")),
                     ]),
                 ),
@@ -547,14 +549,20 @@ fn emit_inline_refinement_checks(
                     member(ident("globalThis.Number"), "isSafeInteger"),
                     vec![ident("json")],
                 )),
-                block(vec![violation("must be a safe integer")]),
+                block(vec![violation(
+                    "must be a safe integer",
+                    bynk_ts::well_formed_rule_expr(),
+                )]),
             )),
             BaseGuard::Finite => stmts.push(if_(
                 not_expr(call(
                     member(ident("globalThis.Number"), "isFinite"),
                     vec![ident("json")],
                 )),
-                block(vec![violation("must be a finite number")]),
+                block(vec![violation(
+                    "must be a finite number",
+                    bynk_ts::well_formed_rule_expr(),
+                )]),
             )),
         }
     }
@@ -585,7 +593,7 @@ pub(super) fn emit_field_refinement_checks(
     } else {
         ident(value.clone())
     };
-    let violation = |msg: &str| -> TsStmt {
+    let violation = |msg: &str, rule: TsExpr| -> TsStmt {
         ret(call(
             ident("Err"),
             vec![TsExpr::object(vec![
@@ -599,6 +607,7 @@ pub(super) fn emit_field_refinement_checks(
                             "message".to_string(),
                             TsExpr::Lit(TsLit::Raw(format!("\"{msg}\""))),
                         ),
+                        ("rule".to_string(), rule),
                         ("value".to_string(), shown.clone()),
                     ]),
                 ),
@@ -610,7 +619,7 @@ pub(super) fn emit_field_refinement_checks(
         let (cond, msg) = super::super::pred_condition_and_message_for(pred, &value, base);
         stmts.push(if_(
             not_expr(TsExpr::Paren(Box::new(cond))),
-            block(vec![violation(&msg)]),
+            block(vec![violation(&msg, bynk_ts::pred_rule_expr(pred))]),
         ));
     }
     stmts
@@ -630,11 +639,14 @@ pub(super) fn emit_field_refinement_checks(
 /// to the pre-#1471 output: the wrap was already unconditional (never
 /// derived from `cond`'s own shape), so a real, already-well-formed node
 /// underneath changes nothing about whether the surrounding parens print.
-fn emit_inline_pred_check(pred: &PredKind, violation: &dyn Fn(&str) -> TsStmt) -> Vec<TsStmt> {
+fn emit_inline_pred_check(
+    pred: &PredKind,
+    violation: &dyn Fn(&str, TsExpr) -> TsStmt,
+) -> Vec<TsStmt> {
     let (cond, msg) = super::super::pred_condition_and_message(pred, "json");
     vec![if_(
         not_expr(TsExpr::Paren(Box::new(cond))),
-        block(vec![violation(&msg)]),
+        block(vec![violation(&msg, bynk_ts::pred_rule_expr(pred))]),
     )]
 }
 
@@ -683,7 +695,7 @@ mod emit_inline_refinement_checks_tests {
         let stmts = emit_inline_refinement_checks("name", &[BaseGuard::Finite], &[]);
         assert_eq!(
             render(stmts),
-            "  if (!globalThis.Number.isFinite(json)) {\n    return Err({ kind: \"RefinementViolation\", path, violation: { field: \"name\", message: \"must be a finite number\", value: json } });\n  }\n"
+            "  if (!globalThis.Number.isFinite(json)) {\n    return Err({ kind: \"RefinementViolation\", path, violation: { field: \"name\", message: \"must be a finite number\", rule: { tag: \"WellFormed\" }, value: json } });\n  }\n"
         );
     }
 }

@@ -1,0 +1,2 @@
+bynk.stub.unknown_op `remove` is not a handler of agent `Basket`
+# exact

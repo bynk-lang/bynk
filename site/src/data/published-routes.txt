@@ -834,6 +834,7 @@
 /book/reference/diagnostics/bynk.store.unknown_map_accessor/
 /book/reference/diagnostics/bynk.store.unknown_op/
 /book/reference/diagnostics/bynk.stub.after_type/
+/book/reference/diagnostics/bynk.stub.agent_stub/
 /book/reference/diagnostics/bynk.stub.at_system/
 /book/reference/diagnostics/bynk.stub.bad_sequence/
 /book/reference/diagnostics/bynk.stub.generic_op/
@@ -1888,6 +1889,7 @@
 /reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
+/reference/diagnostics/bynk.queue.undecodable_unreachable/
 /reference/diagnostics/bynk.queue.untyped_send/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/
@@ -1993,6 +1995,7 @@
 /reference/diagnostics/bynk.string.deprecated_function/
 /reference/diagnostics/bynk.string.empty_pad_fill/
 /reference/diagnostics/bynk.stub.after_type/
+/reference/diagnostics/bynk.stub.agent_stub/
 /reference/diagnostics/bynk.stub.at_system/
 /reference/diagnostics/bynk.stub.bad_sequence/
 /reference/diagnostics/bynk.stub.generic_op/
