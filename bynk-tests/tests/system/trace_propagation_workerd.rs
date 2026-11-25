@@ -200,8 +200,14 @@ fn one_request_leaves_one_trace_in_every_context_it_reaches() {
     );
 
     let ports = wrangler::ports::free_ports::<6>();
-    let [web_port, orders_port, audit_port, web_inspector, orders_inspector, audit_inspector] =
-        ports;
+    let [
+        web_port,
+        orders_port,
+        audit_port,
+        web_inspector,
+        orders_inspector,
+        audit_inspector,
+    ] = ports;
     let logs = ["web", "orders", "audit"].map(|n| tmp.join(format!("{n}-wrangler.log")));
     let spawn = |name: &str, port: u16, inspector: u16, log: &Path| {
         let out_log = fs::File::create(log)?;
