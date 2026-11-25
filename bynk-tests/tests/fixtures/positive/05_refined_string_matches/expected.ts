@@ -10,7 +10,7 @@ export type Slug = string & { readonly __brand: "Slug" };
 export const Slug = {
   of(value: string): Result<Slug, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[a-z][a-z0-9-]*" + ")$", "u").test(value))) {
-      return Err({ field: "Slug", message: "must match /[a-z][a-z0-9-]*/", value });
+      return Err({ field: "Slug", message: "must match /[a-z][a-z0-9-]*/", rule: { tag: "Matches", pattern: "[a-z][a-z0-9-]*" }, value });
     }
     return Ok(value as Slug);
   },

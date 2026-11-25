@@ -10,7 +10,7 @@ export type Tweet = string & { readonly __brand: "Tweet" };
 export const Tweet = {
   of(value: string): Result<Tweet, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 280)) {
-      return Err({ field: "Tweet", message: "length must be at most 280", value });
+      return Err({ field: "Tweet", message: "length must be at most 280", rule: { tag: "MaxLength", limit: 280 }, value });
     }
     return Ok(value as Tweet);
   },

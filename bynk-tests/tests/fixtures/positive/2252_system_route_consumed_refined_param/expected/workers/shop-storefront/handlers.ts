@@ -27,7 +27,7 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[a-z0-9]{1,16}/", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value: json } });
   }
   return Ok(json as unknown as shop_catalogue.Sku);
 }

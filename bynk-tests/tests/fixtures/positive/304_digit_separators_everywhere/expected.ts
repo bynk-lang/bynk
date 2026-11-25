@@ -10,10 +10,10 @@ export type Score = number & { readonly __brand: "Score" };
 export const Score = {
   of(value: number): Result<Score, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Score", message: "must be a safe integer", value });
+      return Err({ field: "Score", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= -1000 && value <= 1000000)) {
-      return Err({ field: "Score", message: "must be in range [-1000, 1000000]", value });
+      return Err({ field: "Score", message: "must be in range [-1000, 1000000]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -1000 }, hi: { tag: "IntBound", value: 1000000 } }, value });
     }
     return Ok(value as Score);
   },
@@ -24,10 +24,10 @@ export type Ratio = number & { readonly __brand: "Ratio" };
 export const Ratio = {
   of(value: number): Result<Ratio, ValidationError> {
     if (!globalThis.Number.isFinite(value)) {
-      return Err({ field: "Ratio", message: "must be a finite number", value });
+      return Err({ field: "Ratio", message: "must be a finite number", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0.0 && value <= 1_000.5)) {
-      return Err({ field: "Ratio", message: "must be in range [0.0, 1_000.5]", value });
+      return Err({ field: "Ratio", message: "must be in range [0.0, 1_000.5]", rule: { tag: "InRange", lo: { tag: "FloatBound", value: 0.0 }, hi: { tag: "FloatBound", value: 1_000.5 } }, value });
     }
     return Ok(value as Ratio);
   },
@@ -38,10 +38,10 @@ export type Label = string & { readonly __brand: "Label" };
 export const Label = {
   of(value: string): Result<Label, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 1)) {
-      return Err({ field: "Label", message: "length must be at least 1", value });
+      return Err({ field: "Label", message: "length must be at least 1", rule: { tag: "MinLength", limit: 1 }, value });
     }
     if (!(__bynkCodePointLength(value) <= 1024)) {
-      return Err({ field: "Label", message: "length must be at most 1024", value });
+      return Err({ field: "Label", message: "length must be at most 1024", rule: { tag: "MaxLength", limit: 1024 }, value });
     }
     return Ok(value as Label);
   },

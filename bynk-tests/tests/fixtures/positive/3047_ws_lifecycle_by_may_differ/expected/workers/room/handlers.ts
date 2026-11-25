@@ -16,7 +16,7 @@ export type UserId = string & { readonly __brand: "room.UserId" };
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },
@@ -27,7 +27,7 @@ export type RoomKey = string & { readonly __brand: "room.RoomKey" };
 export const RoomKey = {
   of(value: string): Result<RoomKey, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "^[a-z]+$" + ")$", "u").test(value))) {
-      return Err({ field: "RoomKey", message: "must match /^[a-z]+$/", value });
+      return Err({ field: "RoomKey", message: "must match /^[a-z]+$/", rule: { tag: "Matches", pattern: "^[a-z]+$" }, value });
     }
     return Ok(value as RoomKey);
   },

@@ -1,10 +1,10 @@
 {
-  "blurb": "An index is looked up by equality on its key, so the field has to be a value the store can compare and key on: `Int`, `String`, or a refined or opaque type over one of them. A `Bool`, a record or a list cannot be. Index another field, or add a field of a keyable type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
+  "blurb": "An index is looked up by equality on its key, so the field has to be a `Key` type: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. A `Float` is never a key, at any depth, because `NaN` is not equal to itself. Index another field, or add a field of a key type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
   "category": "Other",
   "categoryAnchor": "other",
   "code": "bynk.index.unkeyable_key",
   "constructs": [],
-  "example": "type Order = { id: String, paid: Bool, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: paid)         // ✗ a `Bool` is not keyable\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
+  "example": "type Order = { id: String, weight: Float, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: weight)       // ✗ a `Float` is not a key\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
   "severity": "error",
   "summary": "An `@indexed(by: k)` field is not value-keyable."
 }

@@ -42,6 +42,7 @@ pub mod documentation_request;
 pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
+pub mod match_to_expect;
 pub use bynk_ide::first_party_docs;
 pub mod fix_all;
 pub use bynk_ide::hover;
@@ -3289,8 +3290,8 @@ impl LanguageServer for Backend {
                 }
             }
         };
-        let label = match resolved_label {
-            Some(l) => Some(l),
+        let labels: Vec<String> = match resolved_label {
+            Some(l) => vec![l],
             // v0.32 slice 2: a value-receiver method (`xs.fold(`) — type the
             // receiver via the rewrite + re-analyse, then the kernel signature.
             None => match crate::signature_help::value_receiver_method(&ctx.callee) {
@@ -3305,31 +3306,43 @@ impl LanguageServer for Backend {
                         && let Some((ty, tys)) =
                             self.type_receiver(&uri, rewritten, recv_offset).await
                     {
-                        crate::signature_help::kernel_method_signature(ty, &tys, method)
+                        crate::signature_help::kernel_method_signatures(ty, &tys, method)
                     } else {
-                        None
+                        Vec::new()
                     }
                 }
-                None => None,
+                None => Vec::new(),
             },
         };
-        let Some(label) = label else { return Ok(None) };
+        if labels.is_empty() {
+            return Ok(None);
+        }
         let active = ctx.active_param as u32;
-        let parameters: Vec<ParameterInformation> = crate::signature_help::param_ranges(&label)
+        // #4262: one signature per arity; the active one fits the arguments
+        // typed so far.
+        let active_signature = crate::signature_help::active_signature(&labels, ctx.active_param);
+        let signatures = labels
             .into_iter()
-            .map(|(s, e)| ParameterInformation {
-                label: ParameterLabel::LabelOffsets([s as u32, e as u32]),
-                documentation: None,
+            .map(|label| {
+                let parameters: Vec<ParameterInformation> =
+                    crate::signature_help::param_ranges(&label)
+                        .into_iter()
+                        .map(|(s, e)| ParameterInformation {
+                            label: ParameterLabel::LabelOffsets([s as u32, e as u32]),
+                            documentation: None,
+                        })
+                        .collect();
+                SignatureInformation {
+                    label,
+                    documentation: None,
+                    parameters: Some(parameters),
+                    active_parameter: Some(active),
+                }
             })
             .collect();
         Ok(Some(SignatureHelp {
-            signatures: vec![SignatureInformation {
-                label,
-                documentation: None,
-                parameters: Some(parameters),
-                active_parameter: Some(active),
-            }],
-            active_signature: Some(0),
+            signatures,
+            active_signature: Some(active_signature as u32),
             active_parameter: Some(active),
         }))
     }
@@ -4327,6 +4340,8 @@ impl LanguageServer for Backend {
             version,
         ));
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
+        // #4252: `match` with an `expect false` arm -> `expect … is`.
+        actions.extend(crate::match_to_expect::quick_fix(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
         let empty_types = Vec::new();

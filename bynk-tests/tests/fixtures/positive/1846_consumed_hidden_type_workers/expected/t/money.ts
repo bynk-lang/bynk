@@ -11,7 +11,7 @@ export type CurrencyCode = string & { readonly __brand: "CurrencyCode" };
 export const CurrencyCode = {
   of(value: string): Result<CurrencyCode, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "CurrencyCode", message: "must be non-empty", value });
+      return Err({ field: "CurrencyCode", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as CurrencyCode);
   },

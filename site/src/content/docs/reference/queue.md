@@ -207,6 +207,10 @@ the consumer's `delivery { }`:
 At the `system` tier the address yields `Undecodable` for such a body
 ([testing](/reference/testing/#cron-queue-system)).
 
+Only a `system` case can see `Undecodable`: a handler, a helper, or a `unit` or `integration` case never
+receives a body that failed to decode. A pattern of it anywhere else is a dead arm and warns
+(`bynk.queue.undecodable_unreachable`); use `_` there.
+
 ## Producers and consumers agree
 
 A queue's name is a string both sides write, so the compiler is the only party that
@@ -244,6 +248,10 @@ service fulfil from queue("order-events") {
   ordinary consumer of its own queue.
 
 Changing a consumer's message type while messages are already queued is not caught.
+
+A send can be written in a function, a service or agent handler, or a provider operation. An
+agent's `transition` predicates and `migrate` steps are pure, so a `Queue` capability is not in
+scope there: naming it is `bynk.resolve.unknown_name`, with a note that it is a capability.
 
 ## Example
 

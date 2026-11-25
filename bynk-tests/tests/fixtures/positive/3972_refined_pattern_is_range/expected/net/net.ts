@@ -16,10 +16,10 @@ export type Percent = number & { readonly __brand: "Percent" };
 export const Percent = {
   of(value: number): Result<Percent, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Percent", message: "must be a safe integer", value });
+      return Err({ field: "Percent", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 100)) {
-      return Err({ field: "Percent", message: "must be in range [0, 100]", value });
+      return Err({ field: "Percent", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Percent);
   },

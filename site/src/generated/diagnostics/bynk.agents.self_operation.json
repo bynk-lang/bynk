@@ -1,0 +1,10 @@
+{
+  "blurb": "Inside an agent's handler, `self` is the agent's key (`self.id`), not a handle to the agent, so `self.add(…)` and `self.add.outcome(…)` do not call the agent's own operation. Call it the way any other code does, on the agent by key: `Counter(self.id).add(…)`, or `.outcome(…)` for a `CallOutcome`. To share work between two handlers, write it as a function and call that from both.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agents.self_operation",
+  "constructs": [],
+  "example": "on call twice() -> Effect[Int] {\n  let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n  a\n}\n\non call twice() -> Effect[Int] {\n  let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n  a\n}",
+  "severity": "error",
+  "summary": "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle."
+}

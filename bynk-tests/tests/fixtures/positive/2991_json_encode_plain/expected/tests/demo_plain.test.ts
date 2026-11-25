@@ -431,10 +431,10 @@ export function __deserialise_Qty(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json > 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be positive", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Qty", message: "must be positive", rule: { tag: "Positive" }, value: json } });
   }
   return Ok(json as unknown as __ns_demo_plain.Qty);
 }

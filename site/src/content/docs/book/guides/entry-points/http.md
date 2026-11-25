@@ -354,6 +354,38 @@ and anyone can send any value. To sign a user in, use a [signed cookie](/book/gu
 (its session cookie cannot be written through a record). See
 [HTTP → Writing a cookie from its record](/reference/http/#typed-cookie-write).
 
+## Add a header to a response
+
+A header the handler owns goes on any `HttpResult` with `withHeader`. The statuses that have a
+standard header take a typed helper instead, which checks the value for you:
+
+```bynk,fragment
+on GET("/report") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("ready").withHeader("X-Request-Id", "abc")
+}
+
+on POST("/things") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+  Created(body).at("/things/1")
+}
+
+on GET("/search") () -> Effect[HttpResult[String]] by v: Visitor {
+  TooManyRequests("slow down").retryAfter(30.seconds)
+}
+```
+
+`.at(url)` writes `Location` on a `Created`, `.retryAfter(delay)` writes `Retry-After` in whole
+seconds on a `TooManyRequests` or `ServiceUnavailable`, and `.download(filename)` writes
+`Content-Disposition: attachment` on a `Raw` result. Write a helper on the variant itself, and
+call it once: a second call replaces the first.
+
+`withHeader` refuses the headers the router writes itself (`Cache-Control`, `Set-Cookie`,
+`Content-Type`, `Location`, the security and CORS headers and the rest), because setting them here
+would undo `@cache`, `security { }` or `cors { }`. A literal that is one, or that is not a valid
+header, is a compile error (`bynk.http.reserved_response_header`,
+`bynk.http.invalid_response_header`); a computed one answers `500` and is logged. In a test,
+`result.headers()` reads the headers a result carries. See
+[HTTP → Response headers](/reference/http/#response-headers).
+
 ## Secure by default (security headers)
 
 You don't have to do anything to get the one security header that matters for a

@@ -1,0 +1,10 @@
+commons demo.nestedgeneric
+
+fn wrap[T](x: T) -> Effect[T] {
+	Effect.pure(x)
+}
+
+fn lift(e: Effect[Int]) -> Int {
+	let w = wrap(e)
+	0
+}

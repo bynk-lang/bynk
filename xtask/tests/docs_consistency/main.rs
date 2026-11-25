@@ -20,4 +20,5 @@ mod grammar_reference;
 mod keywords_reference;
 mod readme_doctests;
 mod readme_layering;
+mod sorted_lists;
 mod textmate_keywords;

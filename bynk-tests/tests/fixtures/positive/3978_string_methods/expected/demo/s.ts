@@ -14,7 +14,7 @@ export type Tag = string & { readonly __brand: "Tag" };
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 1)) {
-      return Err({ field: "Tag", message: "length must be at least 1", value });
+      return Err({ field: "Tag", message: "length must be at least 1", rule: { tag: "MinLength", limit: 1 }, value });
     }
     return Ok(value as Tag);
   },

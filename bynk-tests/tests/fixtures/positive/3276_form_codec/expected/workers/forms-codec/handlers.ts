@@ -13,7 +13,7 @@ export type Email = string & { readonly __brand: "forms.codec.Email" };
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "^[^@]+@[^@]+$" + ")$", "u").test(value))) {
-      return Err({ field: "Email", message: "must match /^[^@]+@[^@]+$/", value });
+      return Err({ field: "Email", message: "must match /^[^@]+@[^@]+$/", rule: { tag: "Matches", pattern: "^[^@]+@[^@]+$" }, value });
     }
     return Ok(value as Email);
   },
@@ -24,10 +24,10 @@ export type Age = number & { readonly __brand: "forms.codec.Age" };
 export const Age = {
   of(value: number): Result<Age, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Age", message: "must be a safe integer", value });
+      return Err({ field: "Age", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 150)) {
-      return Err({ field: "Age", message: "must be in range [0, 150]", value });
+      return Err({ field: "Age", message: "must be in range [0, 150]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 150 } }, value });
     }
     return Ok(value as Age);
   },

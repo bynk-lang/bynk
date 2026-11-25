@@ -9,10 +9,10 @@ export type Root = number & { readonly __brand: "Root" };
 export const Root = {
   of(value: number): Result<Root, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Root", message: "must be a safe integer", value });
+      return Err({ field: "Root", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Root", message: "must be positive", value });
+      return Err({ field: "Root", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Root);
   },

@@ -19,10 +19,10 @@ export type Level = number & { readonly __brand: "lib.Level" };
 export const Level = {
   of(value: number): Result<Level, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Level", message: "must be a safe integer", value });
+      return Err({ field: "Level", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Level", message: "must be non-negative", value });
+      return Err({ field: "Level", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     return Ok(value as Level);
   },
