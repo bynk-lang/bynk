@@ -1228,6 +1228,64 @@ fn an_interpolation_hole_hovers_with_how_it_renders() {
     );
 }
 
+/// #4363 review — the closing `)` (with a call inside the hole), a refined hole
+/// (named in the header, with the sentence about refinements) and a plain scalar
+/// hole (without it), on a scratch project.
+#[test]
+fn interpolation_hole_hover_covers_the_closing_paren_refinements_and_plain_scalars() {
+    let dir = std::env::temp_dir().join(format!("bynk-hole-hover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src/demo")).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"holes\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/demo/holes.bynk"),
+        "commons demo.holes\n\ntype Backoff = Duration where AtLeast(1.second)\ntype Count = Int where AtLeast(0)\n\nfn call(n: Int, b: Backoff, c: Count) -> String {\n\t\"call=\\(n.toString()) backoff=\\(b) count=\\(c) plain=\\(n)\"\n}\n",
+    )
+    .unwrap();
+    let (r, rel, text, root) = analysed(dir.to_str().unwrap(), "src/demo/holes.bynk");
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    // The closing `)` of a hole holding a call: the paren balancing must end the
+    // hole at its own `)`, not the call's.
+    let close = at(text, "call=\\(", "n.toString()") + "n.toString()".len();
+    let h = hover_at(r, rel, text, root, close).expect("the closing `)` hovers");
+    assert!(
+        h.contains("\\(…) : String") && h.contains("the text as it is"),
+        "{h}"
+    );
+    // The call's own parentheses are inside the hole, not its delimiters.
+    let inner = hover_at(r, rel, text, root, close - 1);
+    assert!(
+        inner
+            .as_ref()
+            .is_none_or(|h| !h.contains("An interpolation hole")),
+        "{inner:?}"
+    );
+    // A refinement is named, and says it renders as its base.
+    let h = hover_at(r, rel, text, root, at(text, "backoff=", "\\(") + 1)
+        .expect("a refined `Duration` hole hovers");
+    assert!(h.contains("\\(…) : Backoff (Duration)"), "{h}");
+    assert!(
+        h.contains("A refinement of a scalar renders as its base does."),
+        "{h}"
+    );
+    let h = hover_at(r, rel, text, root, at(text, "count=", "\\(") + 1)
+        .expect("a refined `Int` hole hovers");
+    assert!(h.contains("\\(…) : Count (Int)"), "{h}");
+    // A plain scalar names itself and has no sentence about refinements.
+    let h =
+        hover_at(r, rel, text, root, at(text, "plain=", "\\(") + 1).expect("an `Int` hole hovers");
+    assert!(
+        h.contains("\\(…) : Int") && h.contains("`toString()`"),
+        "{h}"
+    );
+    assert!(!h.contains("A refinement"), "{h}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// #4045: a name a `uses` clause renames or qualifies hovers as the declaration it
 /// is, and says which one: `YStatus` and `Y.describe` are `lib.y`'s, and a bare
 /// name hovers as before.

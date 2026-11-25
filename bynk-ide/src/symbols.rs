@@ -2179,11 +2179,13 @@ fn question_propagation(text: &str, offset: usize) -> Propagation {
     let (Some(unit), _) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, text) else {
         return Propagation::Either;
     };
+    // A suite's helper `fn`s are declarations like any other (#4363).
+    let suite_items = suite_fn_items(&unit);
     let items: &[CommonsItem] = match &unit {
         SourceUnit::Commons(c) => &c.items,
         SourceUnit::Context(c) => &c.items,
         SourceUnit::Adapter(a) => &a.items,
-        SourceUnit::Suite(_) => return Propagation::Either,
+        SourceUnit::Suite(_) => &suite_items,
     };
     let holds =
         |body: &bynk_syntax::ast::Block| body.span.start <= offset && offset <= body.span.end;
@@ -2308,12 +2310,14 @@ pub fn describe_interpolation_hole_at(
     use bynk_check::checker::{NamedKind, Ty};
     let hole = interpolation_hole_at(text, offset)?;
     let ty = bynk_check::expr_types::type_at_span(expr_types, hole)?;
-    let base = match &*tys.get(ty) {
-        Ty::Base(b) => *b,
+    // A refinement is named in the header and renders as its base does.
+    let (base, refined_as) = match &*tys.get(ty) {
+        Ty::Base(b) => (*b, None),
         Ty::Named {
+            name,
             kind: NamedKind::Refined(b),
             ..
-        } => *b,
+        } => (*b, Some(name.clone())),
         _ => return None,
     };
     let rendering = match base {
@@ -2337,9 +2341,15 @@ pub fn describe_interpolation_hole_at(
         BaseType::Duration => "Duration",
         _ => return None,
     };
+    let (shown, note) = match refined_as {
+        Some(name) => (
+            format!("{name} ({base_name})"),
+            " A refinement of a scalar renders as its base does.",
+        ),
+        None => (base_name.to_string(), ""),
+    };
     Some(format!(
-        "```bynk\n\\(…) : {base_name}\n```\n\nAn interpolation hole renders its value as {rendering}. \
-         A refinement of a scalar renders as its base does."
+        "```bynk\n\\(…) : {shown}\n```\n\nAn interpolation hole renders its value as {rendering}.{note}"
     ))
 }
 
@@ -4128,6 +4138,17 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #4363 review: a suite's helper `fn` returning `Option` narrows a `?` too.
+    #[test]
+    fn a_question_in_a_suite_helper_is_decided_by_its_return_type() {
+        let src = "suite shop.opt {\n  fn first(xs: List[Int]) -> Option[Int] {\n    let a = xs.first()?\n    Some(a)\n  }\n  case \"c\" {\n    expect first([1]) == Some(1)\n  }\n}\n";
+        let at = src.find("first()?").unwrap() + "first()".len();
+        assert_eq!(
+            super::question_propagation(src, at),
+            super::Propagation::NoneReturns
+        );
+    }
+
     /// #3458: hover on a typed read says what a reply that does not decode means,
     /// read off the operation's declared policy; any other operation says nothing.
     #[test]
