@@ -13,6 +13,9 @@ use bynk_syntax::ast::{BaseType, TypeBody, TypeDecl};
 use bynk_ts::{TsArrowBody, TsExpr, TsParam};
 use std::sync::Arc;
 
+/// How many levels of a type an element of a collection is drawn through.
+const COLLECTION_ELEM_DEPTH: u32 = 3;
+
 /// `(<params>) => <body>`.
 fn arrow(params: &[&str], body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
@@ -87,12 +90,16 @@ pub(super) fn collection_gen_ts(
     site: FaultSite<'_>,
 ) -> Option<TsExpr> {
     let sh = shape(ty, tys)?;
+    // A collection's elements are drawn a few levels deep at most: the empty collection ends a
+    // type that recurses through one, and a generator inlined at every level of such a type
+    // would otherwise grow with the branching to the power of the depth.
+    let elem_depth = depth.saturating_sub(1).min(COLLECTION_ELEM_DEPTH);
     let elem = |t: checker::TyId| {
         coerce_int_field(
             t,
             types,
             tys,
-            gen_ts_for_ty(t, types, depth.saturating_sub(1), tys, site),
+            gen_ts_for_ty(t, types, elem_depth, tys, site),
         )
     };
     let list = |body: TsExpr| method_call(ident("rng"), "list", vec![arrow(&[], body)]);

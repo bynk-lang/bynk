@@ -1,0 +1,6 @@
+suite demo.d {
+  case "a case" {
+    let xs = Val[List[Int]]([1])
+    expect true
+  }
+}

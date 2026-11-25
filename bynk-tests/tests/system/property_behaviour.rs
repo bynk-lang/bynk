@@ -600,3 +600,57 @@ fn for_all_draws_collections_and_options_and_shrinks_them() {
     // An option shrinks to a `Some` of the smallest payload (`None` satisfies the claim).
     assert_eq!(shown("an option is none"), "o = Some(0)");
 }
+
+/// #4120: a type that recurses through a collection or an option (a tree, a linked node, a JSON-like
+/// sum) is generated, terminates, and its emitted generator stays small: an element is drawn a few
+/// levels deep and the empty collection ends the recursion.
+#[test]
+fn a_type_recursing_through_a_collection_is_generated_and_its_generator_stays_small() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-recursive-collections")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_recursive_collections"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    for name in [
+        "a tree is drawn",
+        "a linked node is drawn",
+        "a json-like sum recursing through a list and a map is drawn",
+        "Val of a recursive type ends at the empty collection",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+    let module =
+        std::fs::read_to_string(out_root.join("tests/demo_m.test.ts")).expect("the module");
+    assert!(
+        module.len() < 100_000,
+        "the test module is {} bytes: a generator inlined at every level of a recursive type",
+        module.len()
+    );
+}

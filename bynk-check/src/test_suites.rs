@@ -4544,12 +4544,15 @@ pub fn prop_binding_generable(
             }
         }
         // #4120: a collection or an option is generable when its elements are.
+        // The empty collection, or `None`, ends a recursion through one (`Tree = { children:
+        // List[Tree] }`), so an element out of depth does not refuse the type.
         checker::Ty::List(t) | checker::Ty::Set(t) | checker::Ty::Option(t) => {
-            prop_binding_generable(*t, types, depth - 1, tys)
+            depth == 1 || prop_binding_generable(*t, types, depth - 1, tys)
         }
         checker::Ty::Map(k, v) => {
-            prop_binding_generable(*k, types, depth - 1, tys)
-                && prop_binding_generable(*v, types, depth - 1, tys)
+            depth == 1
+                || (prop_binding_generable(*k, types, depth - 1, tys)
+                    && prop_binding_generable(*v, types, depth - 1, tys))
         }
         _ => false,
     }

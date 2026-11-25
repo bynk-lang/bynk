@@ -559,7 +559,13 @@ pub(crate) fn check_val(
         }
         // #4120: bare `Val` of a collection or an option is the empty one.
         Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => {
-            if !args.is_empty() {
+            if !is_value_type(ty, tys) {
+                ctx.errors.push(CompileError::new(
+                    "bynk.val.unsupported_kind",
+                    span,
+                    format!("`Val` is not a value type: `{}`", ty.display(tys)),
+                ));
+            } else if !args.is_empty() {
                 ctx.errors.push(
                     CompileError::new(
                         "bynk.val.pin_unsupported",
@@ -665,7 +671,11 @@ fn mock_pin_reason(
         resolve_type_ref(t, types, tys).and_then(|t| mock_pin_reason(t, types, depth - 1, tys))
     };
     let Ty::Named { name, .. } = &*tys.get(ty) else {
-        return None;
+        // A base type and a collection or option always have a value; anything else has none.
+        return match &*tys.get(ty) {
+            Ty::Base(_) | Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => None,
+            _ => Some(format!("`{}` cannot be fabricated", ty.display(tys))),
+        };
     };
     match &types.get(name.as_str())?.body {
         TypeBody::Refined { refinement, .. } => refinement
@@ -687,8 +697,33 @@ fn mock_pin_reason(
                     f.name.name
                 ));
             }
+            // #2686: a named type's `@example` is checked against that type alone, so a field that
+            // narrows it with inline predicates needs a pin.
+            if f.refinement.is_some()
+                && let TypeRef::Named(id) = &f.type_ref
+                && types
+                    .get(&id.name)
+                    .and_then(|d| type_decl_refinement(d))
+                    .is_some_and(refinement_needs_pin)
+            {
+                return Some(format!(
+                    "`{name}.{}` narrows `{}`, whose `@example` was checked against `{}` alone",
+                    f.name.name, id.name, id.name
+                ));
+            }
             component(&f.type_ref).map(|why| format!("`{name}.{}`: {why}", f.name.name))
         }),
+    }
+}
+
+/// #4120: whether `Val` can name `ty`: a base type, a declared type, or a collection or option
+/// of one. Anything else is not a value type (`Val[Result[Int, String]]`).
+fn is_value_type(ty: TyId, tys: &Types) -> bool {
+    match &*tys.get(ty) {
+        Ty::Base(_) | Ty::Named { .. } => true,
+        Ty::List(t) | Ty::Set(t) | Ty::Option(t) => is_value_type(*t, tys),
+        Ty::Map(k, v) => is_value_type(*k, tys) && is_value_type(*v, tys),
+        _ => false,
     }
 }
 

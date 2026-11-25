@@ -1852,7 +1852,7 @@ is led by its all-default value and is not shrunk. A refined `Decimal`, `Float` 
 Widening the draws changed which counterexamples a given seed finds, so a seed
 recorded from an earlier version may now reproduce a different failure (or none).
 
-Records and sums containing these types are generable too. A counterexample prints as it is
+Records and sums containing these types are generable too, including a type that recurses through one (`Tree = { children: List[Tree] }`): the empty collection and `None` end the recursion. A counterexample prints as it is
 written (`[0,0,0]`, `Some(0)`, `Set.of([…])`, `Map.of([…])`). When a binding cannot be generated,
 `bynk.val.needs_pin` names the path to the part that cannot, for example
 ``Order.lines`: `Slug`: `Matches("…")` uses a lookahead``.

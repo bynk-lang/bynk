@@ -109,8 +109,11 @@ function __bynkRng(seed: number) {
       const saved = budget;
       budget = Math.max(1, Math.floor(saved / Math.max(size, 1)));
       const out: any[] = [];
-      for (let i = 0; i < size; i++) out.push(elem());
-      budget = saved;
+      try {
+        for (let i = 0; i < size; i++) out.push(elem());
+      } finally {
+        budget = saved;
+      }
       return out;
     },
     bool(): boolean { return next() < 0.5; },
