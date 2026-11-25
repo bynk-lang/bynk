@@ -361,7 +361,7 @@ pub fn own_accepted<'a>(
 /// The tree twin of `contract::canon_type_in` in `Mode::Contract`. Keep the two
 /// in step: [`ServiceShape::normal_form`] is tested against the real normal
 /// form over every type former, which fails if they drift.
-fn shape_of(
+pub(crate) fn shape_of(
     t: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
     seen: &mut Vec<String>,

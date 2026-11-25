@@ -1,0 +1,18 @@
+[project]
+name = "3879-queue-message-mismatch-worker-group"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+[build]
+target = "workers"
+
+[deploy.workers.front]
+contexts = ["shop.orders"]
+
+[deploy.workers.back]
+contexts = ["shop.fulfil"]
+
+
+[unstable]
+allow = ["bynk.cloudflare.Queue"]

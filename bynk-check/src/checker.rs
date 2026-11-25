@@ -71,6 +71,7 @@ mod list_par;
 mod list_par_with;
 mod par;
 mod query_par;
+mod refined_range;
 mod refinements;
 mod result_more;
 pub(crate) use expressions::empty_range_error;

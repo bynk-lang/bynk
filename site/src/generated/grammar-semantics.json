@@ -1636,6 +1636,10 @@
   ],
   "refined_pattern": [
     {
+      "code": "bynk.match.refined_pattern_is_range",
+      "summary": "A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; quick fix, not applied by `--fix`)."
+    },
+    {
       "code": "bynk.parse.refined_pattern_inner",
       "summary": "A refined pattern's inner form is something other than `_`."
     }

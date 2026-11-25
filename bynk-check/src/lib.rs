@@ -84,6 +84,7 @@ pub(crate) mod prelude_record;
 pub mod project_model;
 pub mod queue_consumers;
 pub mod queue_delivery;
+pub mod queue_producers;
 pub mod recovery;
 pub mod refinement_consts;
 pub mod regex_groups;
@@ -106,6 +107,7 @@ pub mod test_env;
 pub mod test_suites;
 #[cfg(test)]
 pub(crate) mod testkit;
+pub mod ty_ref;
 pub mod unit_signature;
 pub mod websocket;
 pub mod wire;
