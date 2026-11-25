@@ -370,6 +370,18 @@ export interface R2ObjectMeta {
 export interface R2ObjectBody extends R2ObjectMeta {
   readonly body: ReadableStream<Uint8Array>;
   arrayBuffer(): Promise<ArrayBuffer>;
+  /** The bytes the body holds, when the read asked for a range (#4049). */
+  readonly range?: { offset: number; length: number };
+}
+
+/**
+ * #4049: a read's options, as Cloudflare's `get` takes them. A `range` is `{ offset, length? }` or
+ * `{ suffix }`; `onlyIf` gates the read on the etag. A read whose `onlyIf` does not hold resolves the
+ * object's metadata with no `body`, not `null`.
+ */
+export interface R2GetOptions {
+  range?: { offset: number; length?: number } | { suffix: number };
+  onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string };
 }
 
 export interface R2PutOptions {
@@ -393,6 +405,8 @@ export interface R2MultipartUpload {
 
 export interface R2Bucket {
   get(key: string): Promise<R2ObjectBody | null>;
+  // #4049: a ranged or conditional read. A condition that does not hold resolves the metadata alone.
+  get(key: string, options: R2GetOptions): Promise<R2ObjectBody | R2ObjectMeta | null>;
   head(key: string): Promise<R2ObjectMeta | null>;
   // P5b (#2626): a stream is written whole; on Workers it must have a known
   // length (the readable half of a `FixedLengthStream`).
@@ -402,8 +416,9 @@ export interface R2Bucket {
     prefix?: string;
     cursor?: string;
     limit?: number;
+    delimiter?: string;
     include?: ("httpMetadata" | "customMetadata")[];
-  }): Promise<{ objects: R2ObjectMeta[]; truncated: boolean; cursor?: string }>;
+  }): Promise<{ objects: R2ObjectMeta[]; truncated: boolean; cursor?: string; delimitedPrefixes?: string[] }>;
   createMultipartUpload(
     key: string,
     options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> },
