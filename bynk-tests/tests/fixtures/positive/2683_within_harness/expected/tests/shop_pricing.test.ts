@@ -103,6 +103,7 @@ class __Stub_Pricing {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
+    const __arg_0 = id;
     if (this.__case === "a stub slower than the deadline times out") {
       const __after_0 = await (async () => {
         return 3000;
@@ -140,7 +141,7 @@ class __Stub_Pricing {
     const __pv_6_0 = await (async () => {
       return 1;
     })();
-    if (this.__case === "a lambda in the handler bounds each call alone" && __bynkEq(id, __pv_6_0)) {
+    if (this.__case === "a lambda in the handler bounds each call alone" && __bynkEq(__arg_0, __pv_6_0)) {
       const __after_6 = await (async () => {
         return 1000;
       })();
@@ -150,7 +151,7 @@ class __Stub_Pricing {
     const __pv_7_0 = await (async () => {
       return 2;
     })();
-    if (this.__case === "a lambda in the handler bounds each call alone" && __bynkEq(id, __pv_7_0)) {
+    if (this.__case === "a lambda in the handler bounds each call alone" && __bynkEq(__arg_0, __pv_7_0)) {
       const __after_7 = await (async () => {
         return 9000;
       })();
@@ -167,7 +168,7 @@ class __Stub_Pricing {
     const __pv_9_0 = await (async () => {
       return 5;
     })();
-    if (this.__case === "in a par block each within bounds its own effect" && __bynkEq(id, __pv_9_0)) {
+    if (this.__case === "in a par block each within bounds its own effect" && __bynkEq(__arg_0, __pv_9_0)) {
       const __after_9 = await (async () => {
         return 1000;
       })();
@@ -177,7 +178,7 @@ class __Stub_Pricing {
     const __pv_10_0 = await (async () => {
       return 6;
     })();
-    if (this.__case === "in a par block each within bounds its own effect" && __bynkEq(id, __pv_10_0)) {
+    if (this.__case === "in a par block each within bounds its own effect" && __bynkEq(__arg_0, __pv_10_0)) {
       const __after_10 = await (async () => {
         return 9000;
       })();

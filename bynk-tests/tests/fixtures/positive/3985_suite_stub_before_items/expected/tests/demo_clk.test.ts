@@ -12,6 +12,7 @@ import * as __ns_demo_clk from "./../demo/clk.js";
 
 class __Stub_Clock {
   async label(prefix: string): globalThis.Promise<string> {
+    const __arg_0 = prefix;
     const __pv_1_0 = await (async () => {
       interface Pair {
         readonly a: number;
@@ -127,7 +128,7 @@ class __Stub_Clock {
       }
       return Prefix();
     })();
-    if (__bynkEq(prefix, __pv_1_0)) {
+    if (__bynkEq(__arg_0, __pv_1_0)) {
       interface Pair {
         readonly a: number;
       }
@@ -357,7 +358,7 @@ class __Stub_Clock {
       }
       return "j-";
     })();
-    if (__bynkEq(prefix, __pv_2_0)) {
+    if (__bynkEq(__arg_0, __pv_2_0)) {
       interface Pair {
         readonly a: number;
       }
@@ -587,7 +588,7 @@ class __Stub_Clock {
       }
       return "d-";
     })();
-    if (__bynkEq(prefix, __pv_3_0)) {
+    if (__bynkEq(__arg_0, __pv_3_0)) {
       interface Pair {
         readonly a: number;
       }

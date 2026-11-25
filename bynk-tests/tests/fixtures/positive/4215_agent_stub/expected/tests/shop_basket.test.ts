@@ -41,13 +41,14 @@ class __Stub_Basket {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
+    const __arg_0 = n;
     if (this.__case === "a case's own stub wins over the suite's") {
       throw globalThis.Object.assign(new globalThis.Error("bynk: stubbed agent call"), { bynkCallStub: { tag: "Faulted", agent: "Basket" } });
     }
     const __pv_1_0 = await (async () => {
       return 7;
     })();
-    if (this.__case === "an argument pattern stubs only the calls it matches" && __bynkEq(n, __pv_1_0)) {
+    if (this.__case === "an argument pattern stubs only the calls it matches" && __bynkEq(__arg_0, __pv_1_0)) {
       throw globalThis.Object.assign(new globalThis.Error("bynk: stubbed agent call"), { bynkCallStub: { tag: "Faulted", agent: "Basket" } });
     }
     if (true) {

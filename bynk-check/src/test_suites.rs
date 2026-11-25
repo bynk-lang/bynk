@@ -140,6 +140,11 @@ pub struct ResolvedStub {
     /// declaring each clause, which its values may name.
     pub clause_types: Vec<Vec<TypeDecl>>,
     pub clause_consts: Vec<Vec<ConstDecl>>,
+    /// #4348/#4373: parallel to `clauses` — the test file declaring each clause, so a clause's
+    /// value is checked and emitted in its own suite's view.
+    pub clause_paths: Vec<PathBuf>,
+    /// #4373: parallel to `clauses` — what the suite declaring each clause `uses`.
+    pub clause_suite_uses: Vec<Vec<String>>,
     /// The test file declaring the first clause — the recording context for
     /// edges in its value expressions (v0.25).
     ///
@@ -549,14 +554,35 @@ fn resolve_stubs(
             clause_fns: Vec::new(),
             clause_types: Vec::new(),
             clause_consts: Vec::new(),
+            clause_paths: Vec::new(),
+            clause_suite_uses: Vec::new(),
             identity_path: identity_path.clone(),
         });
+        entry.clause_paths.push(identity_path);
         entry.clauses.push(pc);
         entry.clause_scopes.push(scope);
         entry.clause_fixtures.push(fixtures);
         entry.clause_fns.push(fns);
         entry.clause_types.push(types);
         entry.clause_consts.push(consts);
+    }
+    // #4373: what each clause's declaring suite `uses`, for emitting its value in that view.
+    for rp in out.values_mut() {
+        rp.clause_suite_uses = rp
+            .clause_paths
+            .iter()
+            .map(|path| {
+                indices
+                    .iter()
+                    .filter_map(|&i| {
+                        parsed[i]
+                            .test()
+                            .filter(|_| parsed[i].identity_path() == *path)
+                    })
+                    .flat_map(|t| t.uses.iter().map(|u| u.target.joined()))
+                    .collect()
+            })
+            .collect();
     }
     out
 }
@@ -733,8 +759,11 @@ fn resolve_service_stub(
         clause_fns: Vec::new(),
         clause_types: Vec::new(),
         clause_consts: Vec::new(),
+        clause_paths: Vec::new(),
+        clause_suite_uses: Vec::new(),
         identity_path: identity_path.clone(),
     });
+    entry.clause_paths.push(identity_path);
     if !entry
         .cap_decl
         .ops
@@ -2415,7 +2444,7 @@ fn stub_clause_view(
     let declaring = indices
         .iter()
         .copied()
-        .find(|&i| parsed[i].identity_path() == rp.identity_path);
+        .find(|&i| parsed[i].identity_path() == rp.clause_paths[clause_idx]);
     let suite_uses = declaring.map_or_else(
         || unit_uses.clone(),
         |i| suite_view_uses(unit_uses, parsed, i),

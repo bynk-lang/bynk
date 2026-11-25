@@ -1,0 +1,18 @@
+suite demo.desk
+
+uses demo.kit_a
+
+stub Meter.read() returns helper()
+
+// the commons' `amount` must not hide the call's `amount` argument in the match test
+stub Meter.scale(helper()) returns amount()
+
+case "suite a stub value" {
+  let n <- local.call(0)
+  expect n == 10
+}
+
+case "suite a stub matched on an argument pattern" {
+  let n <- scaled.call(10)
+  expect n == 7
+}
