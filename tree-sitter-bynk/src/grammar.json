@@ -8470,10 +8470,61 @@
           ]
         },
         {
-          "type": "STRING",
-          "value": "faults"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "faults"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "violates"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "name",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "violates_name"
+                  }
+                }
+              ]
+            }
+          ]
         }
       ]
+    },
+    "violates_name": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "identifier"
+          },
+          {
+            "type": "REPEAT",
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "."
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                }
+              ]
+            }
+          }
+        ]
+      }
     },
     "snapshot_expr": {
       "type": "SEQ",

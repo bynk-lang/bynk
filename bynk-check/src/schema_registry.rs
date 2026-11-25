@@ -1928,6 +1928,7 @@ mod tests {
                 value: int_lit(n),
                 span: Span::default(),
                 from_const: None,
+                element_consts: Vec::new(),
             }],
             span: Span::default(),
         }

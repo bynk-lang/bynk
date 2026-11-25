@@ -1,0 +1,52 @@
+---
+#4035: `expect <call> violates <name>` holds only when the named invariant, transition or
+`@unique` constraint refused the call's commit.
+---
+context demo.ledger
+
+type Contact = {
+	id: String,
+	email: String,
+}
+
+agent Account {
+	key id: String
+
+	store balance: Cell[Int] = 0
+	store entries: Cell[Int] = 0
+	store contacts: Map[String, Contact] @unique(by: email)
+
+	invariant non_negative:
+		balance >= 0
+
+	invariant few_entries:
+		entries <= 3
+
+	transition entries_only_grow:
+		new.entries >= old.entries
+
+	on call withdraw(n: Int) -> Effect[()] {
+		balance.update((b) => b - n)
+	}
+
+	on call note() -> Effect[()] {
+		entries.update((e) => e + 1)
+	}
+
+	on call forget() -> Effect[()] {
+		entries := 0
+		Effect.pure(())
+	}
+
+	on call crash() -> Effect[()] {
+		unreachable("boom")
+	}
+
+	on call noop() -> Effect[()] {
+		Effect.pure(())
+	}
+
+	on call addContact(id: String, email: String) -> Effect[()] {
+		let _ <- contacts.put(id, Contact { id: id, email: email })
+	}
+}

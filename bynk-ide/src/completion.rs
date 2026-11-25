@@ -192,6 +192,11 @@ fn complete_base(
             })
             .collect();
     }
+    // 0'. #4035: after `violates` in a claim — the invariants, transitions and `@unique`
+    //     constraints the project declares.
+    if let Some(names) = crate::violates::name_candidates(line_prefix, doc_text, files) {
+        return names;
+    }
     // 0a. #3875: inside `on schedule(<cursor>` — the in-scope `String` and
     //     `CronSchedule` constants, which name a schedule.
     if in_schedule_argument(line_prefix) {
@@ -428,7 +433,18 @@ fn is_snapshot_clause_position(line: &str) -> bool {
     ends_a_value
         && !matches!(
             last_word,
-            Some("and" | "or" | "not" | "is" | "if" | "else" | "match" | "faults" | "called")
+            Some(
+                "and"
+                    | "or"
+                    | "not"
+                    | "is"
+                    | "if"
+                    | "else"
+                    | "match"
+                    | "faults"
+                    | "violates"
+                    | "called"
+            )
         )
 }
 

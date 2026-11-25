@@ -19,7 +19,7 @@ async function test_distinct_emails_commit() {
     await __makeDirectory("a").add("c1", "x@e.com", deps);
     await __makeDirectory("a").add("c2", "y@e.com", deps);
     const n = await __makeDirectory("a").size(deps);
-    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/dir.bynk:10:9", 243, 249, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/dir.bynk:11:9", 358, 364, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -37,7 +37,17 @@ async function test_a_duplicate_put_is_refused() {
     const { Customer, Directory, __makeDirectory } = __ns_demo_dir;
     type Customer = __ns_demo_dir.Customer;
     await __makeDirectory("b").add("c1", "x@e.com", deps);
-    await __makeDirectory("b").add("c2", "x@e.com", deps);
+    if (!((await (async () => {
+      try {
+        await (__makeDirectory("b").add("c2", "x@e.com", deps));
+        __bynkViolatesNone("tests/demo/dir.bynk:16:9", 452, 512, "expect Directory(\"b\").add(\"c2\", \"x@e.com\") violates customers.email");
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return __bynkViolates(__e, "customers.email", "tests/demo/dir.bynk:16:9", 452, 512, "expect Directory(\"b\").add(\"c2\", \"x@e.com\") violates customers.email");
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/dir.bynk:16:9", 452, 512, "expect Directory(\"b\").add(\"c2\", \"x@e.com\") violates customers.email\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -54,7 +64,17 @@ async function test_two_puts_of_one_email_in_one_handler_are_refused() {
     const deps = __makeTestDeps();
     const { Customer, Directory, __makeDirectory } = __ns_demo_dir;
     type Customer = __ns_demo_dir.Customer;
-    await __makeDirectory("c").addPair("c1", "c2", "x@e.com", deps);
+    if (!((await (async () => {
+      try {
+        await (__makeDirectory("c").addPair("c1", "c2", "x@e.com", deps));
+        __bynkViolatesNone("tests/demo/dir.bynk:20:9", 582, 652, "expect Directory(\"c\").addPair(\"c1\", \"c2\", \"x@e.com\") violates customers.email");
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return __bynkViolates(__e, "customers.email", "tests/demo/dir.bynk:20:9", 582, 652, "expect Directory(\"c\").addPair(\"c1\", \"c2\", \"x@e.com\") violates customers.email");
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/dir.bynk:20:9", 582, 652, "expect Directory(\"c\").addPair(\"c1\", \"c2\", \"x@e.com\") violates customers.email\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -74,7 +94,7 @@ async function test_overwriting_an_entry_with_its_own_email_is_not_a_duplicate()
     await __makeDirectory("d").add("c1", "x@e.com", deps);
     await __makeDirectory("d").add("c1", "x@e.com", deps);
     const n = await __makeDirectory("d").size(deps);
-    if (!(n === 1)) { throw __bynkExpectFailure("tests/demo/dir.bynk:26:9", 671, 677, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
+    if (!(n === 1)) { throw __bynkExpectFailure("tests/demo/dir.bynk:27:9", 844, 850, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -94,9 +114,9 @@ async function test_a_value_moved_from_one_entry_to_another_in_one_handler_is_al
     await __makeDirectory("e").add("c1", "x@e.com", deps);
     await __makeDirectory("e").move("c1", "c2", "z@e.com", deps);
     const owner = await __makeDirectory("e").owner("x@e.com", deps);
-    if (!((owner.tag === "Some"))) { throw __bynkExpectFailure("tests/demo/dir.bynk:33:9", 897, 911, "expect owner.isSome()"); }
+    if (!((owner.tag === "Some"))) { throw __bynkExpectFailure("tests/demo/dir.bynk:34:9", 1070, 1084, "expect owner.isSome()"); }
     const n = await __makeDirectory("e").size(deps);
-    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/dir.bynk:35:9", 952, 958, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/dir.bynk:36:9", 1125, 1131, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -117,7 +137,7 @@ async function test_a_value_freed_by_a_removal_free_overwrite_can_be_reused() {
     await __makeDirectory("f").add("c1", "y@e.com", deps);
     await __makeDirectory("f").add("c2", "x@e.com", deps);
     const n = await __makeDirectory("f").size(deps);
-    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/dir.bynk:43:9", 1187, 1193, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/dir.bynk:44:9", 1360, 1366, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -138,8 +158,8 @@ async function test_an_equality_filter_routes_through_the_unique_index() {
     await __makeDirectory("g").add("c2", "y@e.com", deps);
     const hit = await __makeDirectory("g").owner("y@e.com", deps);
     const miss = await __makeDirectory("g").owner("q@e.com", deps);
-    if (!((hit.tag === "Some"))) { throw __bynkExpectFailure("tests/demo/dir.bynk:51:9", 1434, 1446, "expect hit.isSome()"); }
-    if (!((miss.tag === "None"))) { throw __bynkExpectFailure("tests/demo/dir.bynk:52:9", 1455, 1468, "expect miss.isNone()"); }
+    if (!((hit.tag === "Some"))) { throw __bynkExpectFailure("tests/demo/dir.bynk:52:9", 1607, 1619, "expect hit.isSome()"); }
+    if (!((miss.tag === "None"))) { throw __bynkExpectFailure("tests/demo/dir.bynk:53:9", 1628, 1641, "expect miss.isNone()"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -160,7 +180,7 @@ async function test_any_number_of_entries_may_have_no_nick() {
     await __makeDirectory("h").nick("b", None, deps);
     await __makeDirectory("h").nick("c", Some("n1"), deps);
     const n = await __makeDirectory("h").nickCount(deps);
-    if (!(n === 3)) { throw __bynkExpectFailure("tests/demo/dir.bynk:60:9", 1676, 1682, "expect n == 3\n  expected: n == 3\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((3))); }
+    if (!(n === 3)) { throw __bynkExpectFailure("tests/demo/dir.bynk:61:9", 1849, 1855, "expect n == 3\n  expected: n == 3\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((3))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -178,7 +198,17 @@ async function test_two_entries_with_the_same_nick_are_refused() {
     const { Customer, Directory, __makeDirectory } = __ns_demo_dir;
     type Customer = __ns_demo_dir.Customer;
     await __makeDirectory("i").nick("a", Some("n"), deps);
-    await __makeDirectory("i").nick("b", Some("n"), deps);
+    if (!((await (async () => {
+      try {
+        await (__makeDirectory("i").nick("b", Some("n"), deps));
+        __bynkViolatesNone("tests/demo/dir.bynk:66:9", 1959, 2015, "expect Directory(\"i\").nick(\"b\", Some(\"n\")) violates byNick.nick");
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return __bynkViolates(__e, "byNick.nick", "tests/demo/dir.bynk:66:9", 1959, 2015, "expect Directory(\"i\").nick(\"b\", Some(\"n\")) violates byNick.nick");
+      }
+    })()))) { throw __bynkExpectFailure("tests/demo/dir.bynk:66:9", 1959, 2015, "expect Directory(\"i\").nick(\"b\", Some(\"n\")) violates byNick.nick\n  the call returned without faulting"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

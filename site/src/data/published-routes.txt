@@ -409,10 +409,12 @@
 /book/reference/diagnostics/bynk.event.unknown_annotation/
 /book/reference/diagnostics/bynk.event.unknown_subscription/
 /book/reference/diagnostics/bynk.exec.unavailable/
+/book/reference/diagnostics/bynk.expect.ambiguous_invariant/
 /book/reference/diagnostics/bynk.expect.faults_not_effect/
 /book/reference/diagnostics/bynk.expect.impure_predicate/
 /book/reference/diagnostics/bynk.expect.not_bool/
 /book/reference/diagnostics/bynk.expect.outside_case/
+/book/reference/diagnostics/bynk.expect.unknown_invariant/
 /book/reference/diagnostics/bynk.exports.capability_not_provided/
 /book/reference/diagnostics/bynk.exports.conflicting_visibility/
 /book/reference/diagnostics/bynk.exports.derived_capability/
@@ -917,6 +919,7 @@
 /book/reference/diagnostics/bynk.test.stale_needs_timestamp/
 /book/reference/diagnostics/bynk.test.system_claims_need_literal/
 /book/reference/diagnostics/bynk.test.unknown_actor/
+/book/reference/diagnostics/bynk.test.violates_needs_in_process/
 /book/reference/diagnostics/bynk.test.wire_http_only/
 /book/reference/diagnostics/bynk.test.wire_needs_system/
 /book/reference/diagnostics/bynk.test.wrong_algorithm_needs_oidc_route/
@@ -1570,10 +1573,12 @@
 /reference/diagnostics/bynk.event.unknown_annotation/
 /reference/diagnostics/bynk.event.unknown_subscription/
 /reference/diagnostics/bynk.exec.unavailable/
+/reference/diagnostics/bynk.expect.ambiguous_invariant/
 /reference/diagnostics/bynk.expect.faults_not_effect/
 /reference/diagnostics/bynk.expect.impure_predicate/
 /reference/diagnostics/bynk.expect.not_bool/
 /reference/diagnostics/bynk.expect.outside_case/
+/reference/diagnostics/bynk.expect.unknown_invariant/
 /reference/diagnostics/bynk.exports.capability_not_provided/
 /reference/diagnostics/bynk.exports.conflicting_visibility/
 /reference/diagnostics/bynk.exports.derived_capability/
@@ -2107,6 +2112,7 @@
 /reference/diagnostics/bynk.test.stale_needs_timestamp/
 /reference/diagnostics/bynk.test.system_claims_need_literal/
 /reference/diagnostics/bynk.test.unknown_actor/
+/reference/diagnostics/bynk.test.violates_needs_in_process/
 /reference/diagnostics/bynk.test.wire_http_only/
 /reference/diagnostics/bynk.test.wire_needs_system/
 /reference/diagnostics/bynk.test.wrong_algorithm_needs_oidc_route/
