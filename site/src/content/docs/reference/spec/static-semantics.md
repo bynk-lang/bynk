@@ -69,7 +69,8 @@ commons name is not a qualifier. A declaration MUST be read by one spelling in a
 (`bynk.uses.second_spelling`), since a type's identity is its name. Two used commons that
 declare one name do not collide at the `uses`: the name MUST NOT be written bare
 (`bynk.uses.ambiguous_name`, which lists the qualified spellings), and a declaration of the
-unit's own wins over a used name. The visibility of types
+unit's own wins over a used name, and a name a braced list selects wins over the same name
+from a whole `uses` (two selections of one name are still ambiguous). The visibility of types
 across context boundaries is governed by `exports` and `consumes`
 ([§5.8](#58-boundaries--cross-context)).
 

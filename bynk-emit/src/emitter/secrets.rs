@@ -130,14 +130,28 @@ pub(crate) fn session_keys(table: &UnitTable) -> Vec<(String, String)> {
 /// Worker, and prints the command that hands it to the foreign Worker.
 pub(crate) fn foreign_callers(table: &UnitTable) -> Vec<bynk_check::actors::ForeignCaller> {
     let mut callers: Vec<bynk_check::actors::ForeignCaller> = Vec::new();
-    for handler in table.services.values().flat_map(|s| s.handlers.iter()) {
-        for f in bynk_check::actors::call_admission_for(handler, &table.actors)
+    let handlers = || {
+        table
+            .services
+            .values()
+            .flat_map(|s| s.handlers.iter().map(move |h| (s, h)))
+    };
+    // `call` admissions first, so an actor admitted on both is listed as a caller (#3899); then the
+    // senders a `from queue` consumer admits, whose secret is minted and set the same way.
+    let admitted = handlers().flat_map(|(_, handler)| {
+        bynk_check::actors::call_admission_for(handler, &table.actors)
             .map(|a| a.foreign)
             .unwrap_or_default()
-        {
-            if !callers.iter().any(|g| g.actor == f.actor) {
-                callers.push(f);
-            }
+    });
+    let queued = handlers().flat_map(|(service, handler)| {
+        bynk_check::actors::queue_admission_for(handler, &service.protocol, &table.actors)
+            .map(|a| a.foreign)
+            .unwrap_or_default()
+    });
+    for f in admitted.chain(queued) {
+        // A sender with no secret (a malformed declaration) has nothing to mint.
+        if !f.secret.is_empty() && !callers.iter().any(|g| g.actor == f.actor) {
+            callers.push(f);
         }
     }
     callers.sort_by(|a, b| a.actor.cmp(&b.actor));
@@ -299,8 +313,10 @@ fn render(
                     .as_ref()
                     .map(|w| format!(", \"worker\": {}", json_string(w)))
                     .unwrap_or_default();
+                // #3899: additive, so a manifest of callers alone stays byte-identical.
+                let queue = if f.queue { ", \"queue\": true" } else { "" };
                 format!(
-                    "    {{ \"actor\": {}, \"secret\": {}{worker} }}",
+                    "    {{ \"actor\": {}, \"secret\": {}{worker}{queue} }}",
                     json_string(&f.actor),
                     json_string(&f.secret)
                 )
@@ -423,11 +439,13 @@ mod tests {
                 actor: "Ledger".into(),
                 secret: "LEDGER_CALL_KEY".into(),
                 worker: Some("ledger-svc".into()),
+                queue: false,
             },
             bynk_check::actors::ForeignCaller {
                 actor: "Legacy".into(),
                 secret: "LEGACY_CALL_KEY".into(),
                 worker: None,
+                queue: false,
             },
         ];
         assert_eq!(
@@ -435,6 +453,24 @@ mod tests {
             "{\n  \"version\": 2,\n  \"declared\": [],\n  \"read\": [],\n  \"read_complete\": true,\n  \
              \"foreign\": [\n    { \"actor\": \"Ledger\", \"secret\": \"LEDGER_CALL_KEY\", \"worker\": \"ledger-svc\" },\n    \
              { \"actor\": \"Legacy\", \"secret\": \"LEGACY_CALL_KEY\" }\n  ]\n}\n",
+        );
+    }
+
+    /// #3899: a sender of queue messages is marked, and a manifest of callers alone is unchanged.
+    #[test]
+    fn a_queue_sender_is_marked_in_the_manifest() {
+        let foreign = vec![bynk_check::actors::ForeignCaller {
+            actor: "Legacy".into(),
+            secret: "LEGACY_QUEUE_KEY".into(),
+            worker: None,
+            queue: true,
+        }];
+        assert!(
+            render(&set(&[]), &reads(&[], true), &foreign, &[])
+                .expect("a queue sender renders")
+                .contains(
+                    "{ \"actor\": \"Legacy\", \"secret\": \"LEGACY_QUEUE_KEY\", \"queue\": true }"
+                ),
         );
     }
 

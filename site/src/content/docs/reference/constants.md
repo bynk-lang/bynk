@@ -192,8 +192,11 @@ case) keeps its own name and meaning.
   lists every `env(…)` constant with its resolved value and where it came from
   (`[env.<name>.vars]`, `[vars]` or the constant's default). A named environment
   that leaves a constant to `[vars]` or its default would use another
-  environment's setting, so the plan says so, and `--strict-environments`
-  refuses it.
+  environment's setting, so the plan lists it as `shared with default`, as it
+  does a `Service @worker` or `Email @to` / `@allowedRecipients` whose value
+  equals `default`'s, in text and in `--format json`. Setting the variable under
+  `[env.<name>.vars]`, even to the same value, records the sharing as deliberate.
+  `--strict-environments` refuses it.
 - A package consumed as a dependency cannot declare an `env(…)` constant
   (`bynk.env.in_dependency`): reading deployment configuration is the
   application's business, and a library takes values as parameters.

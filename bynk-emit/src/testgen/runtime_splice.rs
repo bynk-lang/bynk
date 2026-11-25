@@ -52,6 +52,8 @@ pub(super) enum TestRuntimeModule {
     OidcIssuer,
     /// The value-property runtime (seeded generation and shrinking).
     Property,
+    /// #3899: the test-only producer of a signed queue message (`__bynkSysQueueBody`).
+    QueueSigner,
     /// A remote build's Service Bindings (`--against`).
     Remote,
     /// #2138: `__bynkRunId`, the value `run.id` reads in a remote build.
@@ -74,7 +76,7 @@ pub(super) enum TestRuntimeModule {
 
 impl TestRuntimeModule {
     /// Every module, in the table's order.
-    pub(super) const ALL: [TestRuntimeModule; 21] = [
+    pub(super) const ALL: [TestRuntimeModule; 22] = [
         TestRuntimeModule::AssetGet,
         TestRuntimeModule::CaseTiming,
         TestRuntimeModule::Clock,
@@ -87,6 +89,7 @@ impl TestRuntimeModule {
         TestRuntimeModule::Observation,
         TestRuntimeModule::OidcIssuer,
         TestRuntimeModule::Property,
+        TestRuntimeModule::QueueSigner,
         TestRuntimeModule::Remote,
         TestRuntimeModule::RunId,
         TestRuntimeModule::Send,
@@ -113,6 +116,7 @@ impl TestRuntimeModule {
             TestRuntimeModule::Observation => "observation",
             TestRuntimeModule::OidcIssuer => "oidc_issuer",
             TestRuntimeModule::Property => "property",
+            TestRuntimeModule::QueueSigner => "queue_signer",
             TestRuntimeModule::Remote => "remote",
             TestRuntimeModule::RunId => "run_id",
             TestRuntimeModule::Send => "send",

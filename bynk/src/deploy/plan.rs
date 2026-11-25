@@ -15,6 +15,7 @@ mod keys;
 mod messages;
 mod model;
 mod run;
+mod shared;
 mod skew;
 #[cfg(test)]
 pub(crate) mod tests;

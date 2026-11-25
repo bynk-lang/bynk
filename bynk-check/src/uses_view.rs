@@ -40,6 +40,26 @@ pub struct UseEntry {
     pub qualified: Vec<QualifiedRef>,
     /// Index of the file the clause is in, for attributing a diagnostic.
     pub file: usize,
+    /// Where the clause names its commons, for a fix that edits the clause.
+    pub target_span: bynk_syntax::span::Span,
+}
+
+/// One commons that declares a bare name two used commons share, with what a fix
+/// needs: the spelling that picks it, and where the plain clause that brought it in
+/// can be edited.
+#[derive(Debug, Clone)]
+pub struct AmbiguousProvider {
+    /// The qualified spelling, `lib.y.Status` or `Y.Status`.
+    pub form: String,
+    /// The commons' name.
+    pub target: String,
+    /// An alias that would name it, `Y` for `lib.y`.
+    pub alias: String,
+    /// The name as the commons declares it.
+    pub name: String,
+    /// The end of the commons' name in a clause that brings in the whole commons,
+    /// where `as Y` or `{ Status }` would go; `None` for any other clause.
+    pub clause_end: Option<bynk_syntax::span::Span>,
 }
 
 impl UseEntry {
@@ -51,6 +71,7 @@ impl UseEntry {
             selected: u.selected.clone(),
             qualified: u.qualified_refs.clone(),
             file,
+            target_span: u.target.span,
         }
     }
 
@@ -63,7 +84,7 @@ impl UseEntry {
 #[derive(Default)]
 pub struct UnitViews {
     pub views: BTreeMap<String, UnitTable>,
-    pub ambiguous: BTreeMap<String, Vec<String>>,
+    pub ambiguous: BTreeMap<String, Vec<AmbiguousProvider>>,
     /// `(file index, error)`.
     pub errors: Vec<(usize, CompileError)>,
 }
@@ -113,6 +134,10 @@ pub fn build_unit_views<'a>(
     // The bare names each clause brings in: key, declared name.
     let mut bare: BTreeMap<String, Vec<(String, String)>> = BTreeMap::new();
     let mut bare_of: HashMap<&str, Vec<(String, String)>> = HashMap::new();
+    // The (bare name, commons) pairs a braced list selects. A name a selection
+    // brings in outranks the same name from a whole-commons clause, so `uses lib.y
+    // { Status }` is the way to say which `Status` is meant.
+    let mut selected_by: HashSet<(String, String)> = HashSet::new();
     for t in &targets {
         let Some(used) = table_of(t) else { continue };
         let used = used.importable();
@@ -128,6 +153,7 @@ pub fn build_unit_views<'a>(
                             continue;
                         }
                         let key = item.alias.as_ref().unwrap_or(&item.name).name.clone();
+                        selected_by.insert((key.clone(), t.to_string()));
                         mine.push((key, item.name.name.clone()));
                     }
                 }
@@ -156,7 +182,18 @@ pub fn build_unit_views<'a>(
         })
     };
     let mut winners: HashMap<(String, bool), (String, String)> = HashMap::new();
-    for (key, providers) in &bare {
+    for (key, all_providers) in &bare {
+        // Where a braced list selects the name, only the selections compete for it.
+        let selecting: Vec<(String, String)> = all_providers
+            .iter()
+            .filter(|(t, _)| selected_by.contains(&(key.clone(), t.clone())))
+            .cloned()
+            .collect();
+        let providers = if selecting.is_empty() {
+            all_providers
+        } else {
+            &selecting
+        };
         for p in providers {
             if as_type(&p.0, &p.1) {
                 winners
@@ -178,13 +215,24 @@ pub fn build_unit_views<'a>(
             .filter(|(t, o)| (as_type(t, o) && !hides_types) || (as_value(t, o) && !hides_values))
             .count();
         if effective > 1 {
-            let forms = providers
-                .iter()
-                .map(|(t, o)| {
-                    let es: Vec<&UseEntry> = entries.iter().filter(|e| e.target == *t).collect();
-                    qualified_key(t, &es, o)
-                })
-                .collect();
+            // A suggested alias must not itself clash: with an alias the unit already
+            // writes, a name it declares, a name the clauses bring in bare, or the
+            // alias suggested for another provider of this name.
+            let taken = |c: &str| {
+                entries.iter().any(|e| e.alias.as_deref() == Some(c))
+                    || local.types.contains_key(c)
+                    || local.fns.contains_key(c)
+                    || local_value_kind(local, c).is_some()
+                    || bare.contains_key(c)
+            };
+            let mut forms: Vec<AmbiguousProvider> = Vec::new();
+            for (t, o) in providers {
+                let es: Vec<&UseEntry> = entries.iter().filter(|e| e.target == *t).collect();
+                let chosen: Vec<&str> = forms.iter().map(|f| f.alias.as_str()).collect();
+                forms.push(ambiguous_provider(t, o, &es, &|c| {
+                    taken(c) || chosen.contains(&c)
+                }));
+            }
             out.ambiguous.insert(key.clone(), forms);
         }
     }
@@ -232,6 +280,55 @@ pub fn build_unit_views<'a>(
     out
 }
 
+/// The alias to suggest for `target`: its last segment capitalised (`lib.y` →
+/// `Y`), then the segments before it joined on (`LibY`), then a number, taking the
+/// first that `taken` does not refuse.
+fn suggested_alias(target: &str, taken: &dyn Fn(&str) -> bool) -> String {
+    let capitalised = |seg: &str| {
+        let mut chars = seg.chars();
+        chars.next().map_or(String::new(), |c| {
+            c.to_uppercase().collect::<String>() + chars.as_str()
+        })
+    };
+    let segments: Vec<&str> = target.split('.').collect();
+    for from in (0..segments.len()).rev() {
+        let candidate: String = segments[from..].iter().map(|s| capitalised(s)).collect();
+        if !taken(&candidate) {
+            return candidate;
+        }
+    }
+    let base: String = segments.iter().map(|s| capitalised(s)).collect();
+    (2..)
+        .map(|n| format!("{base}{n}"))
+        .find(|c| !taken(c))
+        .unwrap_or(base)
+}
+
+fn ambiguous_provider(
+    target: &str,
+    name: &str,
+    entries: &[&UseEntry],
+    taken: &dyn Fn(&str) -> bool,
+) -> AmbiguousProvider {
+    let alias = suggested_alias(target, taken);
+    AmbiguousProvider {
+        form: qualified_key(target, entries, name),
+        target: target.to_string(),
+        alias,
+        name: name.to_string(),
+        clause_end: entries
+            .iter()
+            .find(|e| e.alias.is_none() && e.selected.is_none())
+            .map(|e| {
+                bynk_syntax::span::Span::new_in(
+                    e.target_span.file,
+                    e.target_span.end,
+                    e.target_span.end,
+                )
+            }),
+    }
+}
+
 /// `bynk.uses.unknown_name`.
 fn unknown_name(target: &str, name: &Ident) -> CompileError {
     CompileError::new(
@@ -250,7 +347,7 @@ fn build_view(
     used: &UnitTable,
     entries: &[&UseEntry],
     bare: &[(String, String)],
-    ambiguous: &BTreeMap<String, Vec<String>>,
+    ambiguous: &BTreeMap<String, Vec<AmbiguousProvider>>,
 ) -> (UnitTable, Vec<(usize, CompileError)>) {
     let mut errors: Vec<(usize, CompileError)> = Vec::new();
     // Qualified names read: declared name -> its qualified spelling, checked.
@@ -538,16 +635,17 @@ pub fn add_ambiguous_imports(
 ) {
     for (name, forms) in &table.ambiguous_uses {
         let is_type = table.use_views.values().any(|v| v.types.contains_key(name));
+        let forms = forms.clone();
         // The ambiguity is the better answer where a local value also hides one of
         // the imports: the reference is unresolved either way.
         out.insert(
             name.clone(),
             crate::resolver::ShadowedImport {
-                unit: forms.first().cloned().unwrap_or_default(),
+                unit: forms.first().map(|f| f.target.clone()).unwrap_or_default(),
                 imported: if is_type { "type" } else { "ambiguous" },
                 local: "ambiguous",
                 local_span: bynk_syntax::span::Span::default(),
-                ambiguous: forms.clone(),
+                ambiguous: forms,
             },
         );
     }
@@ -702,6 +800,166 @@ mod tests {
             refs_in_app("lib.x", "Status"),
             1,
             "the bare name still reaches lib.x's"
+        );
+    }
+
+    const Z: (&str, &str) = ("lib/w.bynk", "commons lib.w\n\ntype Status = | Up | Down\n");
+
+    fn categories_of(a: &crate::testkit::Analysed) -> Vec<String> {
+        a.analysis
+            .errors
+            .iter()
+            .map(|e| e.error.category.to_string())
+            .collect()
+    }
+
+    /// The suggestions on the first `bynk.uses.ambiguous_name` of `a`, as (title,
+    /// edits).
+    fn fixes_of(
+        a: &crate::testkit::Analysed,
+    ) -> Vec<(String, Vec<(bynk_syntax::span::Span, String)>)> {
+        let err = a
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.uses.ambiguous_name")
+            .expect("the ambiguity is reported");
+        assert!(
+            err.error
+                .suggestions
+                .iter()
+                .all(|s| { s.applicability == bynk_syntax::error::Applicability::MaybeIncorrect }),
+            "each fix may change what other names mean"
+        );
+        err.error
+            .suggestions
+            .iter()
+            .map(|s| (s.message.clone(), s.edits.clone()))
+            .collect()
+    }
+
+    /// `src` with `edits` applied, last first so the offsets stay true.
+    fn apply(src: &str, edits: &[(bynk_syntax::span::Span, String)]) -> String {
+        let mut edits = edits.to_vec();
+        edits.sort_by_key(|(span, _)| std::cmp::Reverse(span.start));
+        let mut out = src.to_string();
+        for (span, text) in edits {
+            out.replace_range(span.start..span.end, &text);
+        }
+        out
+    }
+
+    /// Apply every fix offered for `body` to the unit and analyse the result with
+    /// `others`, asserting each one leaves no `bynk.uses.ambiguous_name`.
+    fn every_fix_resolves(body: &str, others: &[(&str, &str)]) -> Vec<String> {
+        let src = format!("commons app.z\n\n{body}");
+        let mut files: Vec<(&str, &str)> = others.to_vec();
+        files.push(("app/z.bynk", &src));
+        let a = analyse(&files);
+        let fixes = fixes_of(&a);
+        assert!(!fixes.is_empty(), "no fix offered");
+        let mut titles = Vec::new();
+        for (title, edits) in fixes {
+            let fixed = apply(&src, &edits);
+            let mut files: Vec<(&str, &str)> = others.to_vec();
+            files.push(("app/z.bynk", &fixed));
+            let after = analyse(&files);
+            assert!(
+                !categories_of(&after)
+                    .iter()
+                    .any(|c| c == "bynk.uses.ambiguous_name"),
+                "`{title}` leaves the name ambiguous:\n{fixed}\n{}",
+                after.render()
+            );
+            titles.push(title);
+        }
+        titles
+    }
+
+    /// #4045: the fixes on `bynk.uses.ambiguous_name`, which are edits of the plain
+    /// `uses` clause that brought a commons in. None is applied by `--fix`, since
+    /// each changes what the file's other names mean; each, applied, settles the name.
+    #[test]
+    fn the_ambiguity_offers_fixes_that_settle_it() {
+        let titles = every_fix_resolves(
+            "uses lib.x\nuses lib.y\n\nfn f(s: Status) -> Int {\n  1\n}\n",
+            &[X, Y],
+        );
+        for want in ["alias `lib.x` as `X`", "alias `lib.y` as `Y`"] {
+            assert!(titles.iter().any(|t| t == want), "{want}: {titles:?}");
+        }
+        assert!(
+            titles
+                .iter()
+                .any(|t| t.starts_with("select `Status` from `lib.x`"))
+                && titles
+                    .iter()
+                    .any(|t| t.starts_with("select `Status` from `lib.y`")),
+            "{titles:?}"
+        );
+    }
+
+    /// With three commons declaring the name, aliasing one leaves two, so only the
+    /// selections are offered, and they settle it.
+    #[test]
+    fn three_providers_are_settled_by_selecting_not_by_aliasing_one() {
+        let titles = every_fix_resolves(
+            "uses lib.x\nuses lib.y\nuses lib.w\n\nfn f(s: Status) -> Int {\n  1\n}\n",
+            &[X, Y, Z],
+        );
+        assert!(titles.iter().all(|t| t.starts_with("select")), "{titles:?}");
+        assert_eq!(titles.len(), 3, "{titles:?}");
+    }
+
+    /// A provider whose clause is already a selection has nothing to edit, so it
+    /// gets no fix; two selections of one name are still ambiguous.
+    #[test]
+    fn a_provider_that_is_already_a_selection_gets_no_fix() {
+        let a = app(
+            "uses lib.x { Status }\nuses lib.y { Status }\n\nfn f(s: Status) -> Int {\n  1\n}\n",
+        );
+        a.assert_reports("bynk.uses.ambiguous_name");
+        let err = a
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.uses.ambiguous_name")
+            .expect("reported");
+        assert!(
+            err.error.suggestions.is_empty(),
+            "{:?}",
+            err.error.suggestions
+        );
+        // Beside a whole `uses`, one selection settles it.
+        app("uses lib.x { Status }\nuses lib.y\n\nfn f(s: Status) -> Int {\n  1\n}\n")
+            .assert_clean();
+    }
+
+    /// A suggested alias never clashes with an alias the unit writes or a name it
+    /// declares, nor repeats for the other provider.
+    #[test]
+    fn a_suggested_alias_avoids_the_names_already_taken() {
+        let a = analyse(&[
+            X,
+            (
+                "app/y.bynk",
+                "commons app.y\n\ntype Status = | Hot | Cold\n",
+            ),
+            (
+                "app/z.bynk",
+                "commons app.z\n\nuses lib.x\nuses app.y\nuses lib.w as Y\n\ntype X = Int\n\nfn f(s: Status) -> Int {\n  1\n}\n",
+            ),
+            Z,
+        ]);
+        let titles: Vec<String> = fixes_of(&a).into_iter().map(|(t, _)| t).collect();
+        // `X` is a local type and `Y` an alias already in use.
+        assert!(
+            titles.iter().any(|t| t == "alias `lib.x` as `LibX`"),
+            "{titles:?}"
+        );
+        assert!(
+            titles.iter().any(|t| t == "alias `app.y` as `AppY`"),
+            "{titles:?}"
         );
     }
 

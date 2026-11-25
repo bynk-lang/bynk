@@ -21,6 +21,12 @@ export function compose(env: Env) {
     async http_GET_ticks() {
       return handlers.routes.http_GET_ticks(deps);
     },
+    async http_GET_events() {
+      return handlers.routes.http_GET_events(deps);
+    },
+    async http_GET_bad_event() {
+      return handlers.routes.http_GET_bad_event(deps);
+    },
     async http_GET_logo() {
       return handlers.routes.http_GET_logo(deps);
     },
