@@ -870,6 +870,43 @@ fn capability_op_call(
     call(callee, nodes)
 }
 
+/// #3938: `Actor.expire()` on a `sessions = true` actor: end the verified session in the identity's
+/// session agent (when the handler is guarded by the actor, so the seam threaded one), then return
+/// the deleting cookie. A handler the actor does not guard has no session to end, so only the
+/// cookie is returned.
+fn lower_session_expire(
+    seam: &bynk_check::actors::SignedCookieSeam,
+    expire: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsExpr {
+    use crate::ts_build::{as_expr, await_expr, if_, strict_neq};
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    cx.record_agent_call(&agent, "remove");
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let current = ident("__current");
+    let identity = as_expr(
+        member(current.clone(), "sub"),
+        TsType::named(seam.identity_type.clone()),
+    );
+    let instance = cx.agent_construct_node(&agent, identity);
+    let body = vec![
+        crate::ts_build::const_(
+            "__current",
+            call(ident("__currentSession"), vec![deps_node.clone()]),
+        ),
+        if_(
+            strict_neq(current.clone(), crate::ts_build::null_lit()),
+            expr_stmt(await_expr(method_call(
+                instance,
+                "remove",
+                vec![member(current, "sid"), deps_node],
+            ))),
+        ),
+        ret(expire),
+    ];
+    call(paren(block_arrow(vec![], true, body)), vec![])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -998,41 +1035,4 @@ mod tests {
             assert_eq!(used.iter().any(|n| n == "__traceStep"), traced);
         }
     }
-}
-
-/// #3938: `Actor.expire()` on a `sessions = true` actor: end the verified session in the identity's
-/// session agent (when the handler is guarded by the actor, so the seam threaded one), then return
-/// the deleting cookie. A handler the actor does not guard has no session to end, so only the
-/// cookie is returned.
-fn lower_session_expire(
-    seam: &bynk_check::actors::SignedCookieSeam,
-    expire: bynk_ts::TsExpr,
-    cx: &mut LowerCtx,
-) -> bynk_ts::TsExpr {
-    use crate::ts_build::{as_expr, await_expr, if_, strict_neq};
-    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
-    cx.record_agent_call(&agent, "remove");
-    let deps_node = deps_receiver(cx.in_test_case(), cx);
-    let current = ident("__current");
-    let identity = as_expr(
-        member(current.clone(), "sub"),
-        TsType::named(seam.identity_type.clone()),
-    );
-    let instance = cx.agent_construct_node(&agent, identity);
-    let body = vec![
-        crate::ts_build::const_(
-            "__current",
-            call(ident("__currentSession"), vec![deps_node.clone()]),
-        ),
-        if_(
-            strict_neq(current.clone(), crate::ts_build::null_lit()),
-            expr_stmt(await_expr(method_call(
-                instance,
-                "remove",
-                vec![member(current, "sid"), deps_node],
-            ))),
-        ),
-        ret(expire),
-    ];
-    call(paren(block_arrow(vec![], true, body)), vec![])
 }
