@@ -46,7 +46,10 @@ pub(crate) fn enter_trace(entries: Vec<TsObjectEntry>) -> Vec<TsObjectEntry> {
                 )))],
                 span,
             },
-            other => other,
+            other @ (TsObjectEntry::Prop { .. }
+            | TsObjectEntry::Shorthand(_)
+            | TsObjectEntry::Method { .. }
+            | TsObjectEntry::Spread(_)) => other,
         })
         .collect()
 }
