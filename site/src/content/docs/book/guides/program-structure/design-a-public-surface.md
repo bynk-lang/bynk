@@ -87,6 +87,29 @@ Two used commons that declare one name are fine until the file writes it bare; t
 one spelling in a unit (`bynk.uses.second_spelling`), and a name the commons does not export
 publicly cannot be listed (`bynk.uses.unknown_name`).
 
+## Name an adapter's types in a commons
+
+A commons can `consumes` the types an adapter exports, in braces, and nothing
+else, so a shared helper can take or return one:
+
+```bynk,ignore
+commons app.errors
+
+consumes bynk { TimedOut }
+
+fn describe(t: TimedOut) -> String {
+  "timed out after \(t.after)"
+}
+```
+
+A unit that `uses` `app.errors` can call `describe`, and a public signature that
+mentions `TimedOut` is fine. That unit does not get `TimedOut` in scope through the
+commons: it names the type only with its own `consumes bynk { TimedOut }`. A
+whole-unit or aliased `consumes`, a capability, and a context are refused in a
+commons (`bynk.commons.consumes_not_types`). `bynk`'s own data types are reached
+without the clause, see
+[Naming `bynk`'s types in a commons](/reference/bynk-capabilities/#naming-bynks-types-in-a-commons).
+
 ## Keep private types out of public signatures
 
 A public function, method, record field, variant payload or constant's type

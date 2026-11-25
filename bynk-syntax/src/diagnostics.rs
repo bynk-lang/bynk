@@ -210,6 +210,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "context shop\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n\x20   total\n\x20 }\n}\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n\x20   total\n\x20 }\n}",
     },
     Explain {
+        code: "bynk.actor.missing_by_on_email",
+        blurb: "Inbound mail comes from the internet, and the platform reports a DMARC verdict on it that can be a pass, a fail or absent. Whether a handler acts on mail that failed authentication is a decision, so an email `on message` handler states its actor with a `by` clause instead of inheriting one. `by Sender` is the explicit \"any mail\", which is what an email handler meant before the clause was required, and `s.identity.dmarc` carries the verdict for a handler that wants to check it. The error's fix inserts `by Sender`, and `bynk check --fix=bynk.actor.missing_by_on_email` migrates a whole project. A header default, `service support from email(\"support@shop.example\") by Sender`, covers a handler without its own `by`.",
+        example: "context shop\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✗ what mail does this act on?\n    Accept\n  }\n}\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓ any mail, said outright\n    Accept\n  }\n}",
+    },
+    Explain {
         code: "bynk.actor.missing_by_on_http",
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
@@ -1194,6 +1199,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
     },
     Explain {
+        code: "bynk.commons.consumes_not_types",
+        blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
+        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+    },
+    Explain {
         code: "bynk.consumes.alias_conflict",
         blurb: "`consumes payment as Pay` gives a context one name to call a unit by, and a name for one unit. Two clauses with the same alias, a unit consumed under two aliases, or an alias that is also a type, function, capability, service or agent of this context, would leave a call such as `Pay.charge(…)` with no single meaning. Give each clause its own alias, or drop it. The same clause in another file of the context is fine.",
         example: "// shop.bynk\ncontext shop\n\nconsumes payment as Pay\nconsumes shipping as Pay     // ✗ `Pay` already names `payment`\n\nconsumes payment as Pay\nconsumes shipping as Ship    // ✓ one name each",
@@ -1754,7 +1764,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.bad_params",
         blurb: "An email `on message` handler takes the message as one `InboundEmail` parameter: inbound email delivers one message per call, so the handler is `on message(mail: InboundEmail) -> Effect[EmailVerdict]`. A parameter of another type, or none, or more than one, is refused. Import `InboundEmail` and `EmailVerdict` from `bynk.cloudflare`.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n        Accept\n    }\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] by Sender {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n        Accept\n    }\n}",
     },
     Explain {
         code: "bynk.email.duplicate_address",
@@ -1764,7 +1774,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.duplicate_handler",
         blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
     },
     Explain {
         code: "bynk.email.invalid_address",
@@ -1774,7 +1784,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.return_not_email_verdict",
         blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
-        example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+        example: "on message(mail: InboundEmail) -> Effect[String] by Sender {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n    Accept\n}",
     },
     Explain {
         code: "bynk.embed.binary_content",
@@ -2627,6 +2637,16 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.form_unknown_arg",
         blurb: "`@form` takes no arguments. A form body is always `application/x-www-form-urlencoded`, so there is no media type to name, and a size ceiling belongs to `@limit` or a `limits { }` section, not to the annotation. An argument is refused rather than ignored, which would leave the route behaving otherwise than you wrote. Write `@form` bare. `@multipart` takes none either. `@raw` takes `contentType:`: `bynk.http.raw_unknown_arg`.",
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.headers_field_consumed",
+        blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
+        example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
+    },
+    Explain {
+        code: "bynk.http.headers_field_consumed_optional",
+        blurb: "A `headers` field reads a header the route's actor consumes (`authorization` on a `Bearer` or `Oidc` route, the signature header, the session cookie out of `cookie`), so the router hides it from the record and the field is always `None` or empty. It does no harm, but it never carries anything, which is rarely what the author meant. Read the value through the actor's principal, or drop the field. A required field is the error `bynk.http.headers_field_consumed`.",
+        example: "type Auth = { authorization: Option[String] }   // ⚠ always `None` on a `Bearer` route",
     },
     Explain {
         code: "bynk.http.headers_field_not_stringy",
@@ -6255,7 +6275,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.nested_effect",
-        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic type that holds its parameter directly under an `Effect` (`type Wrap[T] = { v: Effect[T] }`) cannot be given an effect either: `Wrap[Effect[Int]]` has a field `Effect[Effect[Int]]`. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
         example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
     },
     Explain {
@@ -7157,6 +7177,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `on call` handler lacks the required `by` actor clause.",
     ),
     d(
+        "bynk.actor.missing_by_on_email",
+        "An email `on message` handler lacks the required `by` actor clause.",
+    ),
+    d(
         "bynk.actor.missing_by_on_http",
         "An HTTP handler lacks the required `by` actor clause.",
     ),
@@ -7662,6 +7686,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.codegen.tsc_failed",
         "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
+    ),
+    dg(
+        "bynk.commons.consumes_not_types",
+        "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context.",
+        &["consumes_decl"],
     ),
     dg(
         "bynk.consumes.alias_conflict",
@@ -8709,6 +8738,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
+    )),
+    dg(
+        "bynk.http.headers_field_consumed",
+        "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.headers_field_consumed_optional",
+        "An `Option` or `List` `headers` field reads a header the route's actor consumes, so it is always `None` or empty (warning).",
+        &["http_handler"],
     )),
     dg(
         "bynk.http.headers_field_not_stringy",

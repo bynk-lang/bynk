@@ -1,0 +1,12 @@
+{
+  "blurb": "A `headers` field reads a header the route's actor consumes (`authorization` on a `Bearer` or `Oidc` route, the signature header, the session cookie out of `cookie`), so the router hides it from the record and the field is always `None` or empty. It does no harm, but it never carries anything, which is rarely what the author meant. Read the value through the actor's principal, or drop the field. A required field is the error `bynk.http.headers_field_consumed`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.headers_field_consumed_optional",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Auth = { authorization: Option[String] }   // ⚠ always `None` on a `Bearer` route",
+  "severity": "warning",
+  "summary": "An `Option` or `List` `headers` field reads a header the route's actor consumes, so it is always `None` or empty (warning)."
+}

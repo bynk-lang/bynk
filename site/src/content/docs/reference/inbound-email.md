@@ -14,7 +14,7 @@ Inbound email is **experimental** ([#3328](https://github.com/bynk-lang/bynk/iss
 
 ```bynk,ignore
 service <Name> from email("<address>") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     …
   }
 }
@@ -118,7 +118,7 @@ is `DmarcPass`, `DmarcFail` or `DmarcNone` for the opposite reason: a bare
 
 ## The sender
 
-A handler runs as the **`Sender`** actor unless it names another with `by`. Its
+A handler names its actor with `by`, and `by Sender` is the **`Sender`** actor. Omitting it is `bynk.actor.missing_by_on_email`, and `bynk check --fix=bynk.actor.missing_by_on_email` inserts `by Sender`. Its
 scheme is the platform's own (`Internal`): Email Routing delivers and
 authenticates the mail before the handler runs. Its identity is a
 `SenderIdentity`, the envelope `address` and a `DmarcVerdict`, read only from

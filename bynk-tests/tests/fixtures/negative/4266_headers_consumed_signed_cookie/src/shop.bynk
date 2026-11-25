@@ -1,0 +1,16 @@
+context shop
+
+type UserId = String where NonEmpty
+
+actor User {
+  auth = SignedCookie(cookie = "__Host-session", secret = "SESSION_KEY", ttl = 12.hours, sameSite = Lax),
+  identity = UserId
+}
+
+type Raw = { cookie: String }
+
+service api from http {
+  on GET("/me") (headers: Raw) -> Effect[HttpResult[String]] by u: User {
+    Ok("me")
+  }
+}
