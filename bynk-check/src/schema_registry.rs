@@ -2110,6 +2110,7 @@ mod tests {
         UnitTable {
             exec_plan: Default::default(),
             kind: None,
+            test_only: false,
             removed_agents: Vec::new(),
             types: StdHashMap::new(),
             fns: StdHashMap::new(),

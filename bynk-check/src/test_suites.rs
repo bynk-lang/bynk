@@ -2042,35 +2042,12 @@ fn check_test_bodies(
                 else {
                     continue;
                 };
-                // #2850/#2907: the declaring suite's fixtures and helpers are
-                // in scope in its clauses' values.
-                let clause_view = if rp.clause_fixtures[clause_idx].is_empty()
-                    && rp.clause_fns[clause_idx].is_empty()
-                    && rp.clause_types[clause_idx].is_empty()
-                    && rp.clause_consts[clause_idx].is_empty()
-                {
-                    None
-                } else {
-                    build_privileged_resolved(
-                        target_name,
-                        unit_tables,
-                        unit_uses,
-                        unit_consumes,
-                        unit_consumes_aliases,
-                    )
-                    .map(|(mut view, _)| {
-                        add_suite_fns(
-                            &mut view,
-                            SuiteItems {
-                                fns: &rp.clause_fns[clause_idx],
-                                fixtures: &rp.clause_fixtures[clause_idx],
-                                types: &rp.clause_types[clause_idx],
-                                consts: &rp.clause_consts[clause_idx],
-                            },
-                        );
-                        view
-                    })
-                };
+                let clause_view = stub_clause_view(
+                    rp,
+                    clause_idx,
+                    (target_name, parsed, indices),
+                    (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases),
+                );
                 let resolved = clause_view.as_ref().unwrap_or(resolved);
                 let check_value = |e: &Expr, errors: &mut Vec<CompileError>| {
                     let errs = stub_value_errors(e, op, resolved, tys);
@@ -2322,6 +2299,54 @@ fn check_test_bodies(
     }
 
     errors
+}
+
+/// #2850/#2907/#4348: the view a `stub` clause's value is checked in when it needs more than the
+/// target's own: the declaring suite's fixtures, helpers, types and constants, and the test-only
+/// commons that suite `uses`. `None` when the target's view will do.
+fn stub_clause_view(
+    rp: &ResolvedStub,
+    clause_idx: usize,
+    suites: (&str, &[ParsedFile], &[usize]),
+    maps: ProjectMaps<'_>,
+) -> Option<ResolvedCommons> {
+    let (target_name, parsed, indices) = suites;
+    let (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases) = maps;
+    let declaring = indices
+        .iter()
+        .copied()
+        .find(|&i| parsed[i].identity_path() == rp.identity_path);
+    let suite_uses = declaring.map_or_else(
+        || unit_uses.clone(),
+        |i| suite_view_uses(unit_uses, parsed, i),
+    );
+    if rp.clause_fixtures[clause_idx].is_empty()
+        && rp.clause_fns[clause_idx].is_empty()
+        && rp.clause_types[clause_idx].is_empty()
+        && rp.clause_consts[clause_idx].is_empty()
+        && suite_uses == *unit_uses
+    {
+        return None;
+    }
+    build_privileged_resolved(
+        target_name,
+        unit_tables,
+        &suite_uses,
+        unit_consumes,
+        unit_consumes_aliases,
+    )
+    .map(|(mut view, _)| {
+        add_suite_fns(
+            &mut view,
+            SuiteItems {
+                fns: &rp.clause_fns[clause_idx],
+                fixtures: &rp.clause_fixtures[clause_idx],
+                types: &rp.clause_types[clause_idx],
+                consts: &rp.clause_consts[clause_idx],
+            },
+        );
+        view
+    })
 }
 
 /// #4348: the `uses` map suite `i` is checked against: a test-only commons is in scope only

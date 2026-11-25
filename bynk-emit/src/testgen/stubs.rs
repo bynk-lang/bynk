@@ -21,6 +21,24 @@ use bynk_ts::{
 };
 use std::sync::Arc;
 
+/// Whether a stub method binds the `uses` commons' names: for a helper inlined ahead of a value
+/// (#2947), and (#4348) for a target whose suites `uses` a test-only commons, whose names a value
+/// may spell.
+fn binds_used_commons(
+    rp: &ResolvedStub,
+    clause_idxs: &[usize],
+    unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+) -> bool {
+    clause_idxs.iter().any(|&i| !rp.clause_fns[i].is_empty())
+        || unit_uses
+            .get(unit)
+            .into_iter()
+            .flatten()
+            .any(|u| unit_tables.get(u).is_some_and(|t| t.test_only))
+}
+
 /// v0.118: emit the `__Stub_<Cap>` stub class for a capability seam
 /// overridden by `stub` clauses (testing track slice 6). One async method
 /// per overridden operation renders its clauses as a first-match-wins if-chain
@@ -246,7 +264,7 @@ pub(super) fn emit_stub_class(
         // signature's types unqualified, as in a case runner, so a method with
         // one binds the same `uses` commons' names `emit_test_scope_setup`
         // does (assets and embeds included). A method without one is unchanged.
-        if clause_idxs.iter().any(|&i| !rp.clause_fns[i].is_empty()) {
+        if binds_used_commons(rp, clause_idxs, &owning_unit, unit_tables, unit_uses) {
             for (ns, names, types) in
                 used_commons_destructures(&owning_unit, unit_tables, unit_uses, &mut HashSet::new())
             {
