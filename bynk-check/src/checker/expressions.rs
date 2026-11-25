@@ -6252,3 +6252,24 @@ fn unknown_record_field_error(name: &str, field: &Ident, ctx: &Ctx) -> CompileEr
     // table — see resolver.rs:1029 for the full rationale.
     .with_note("type declared here")
 }
+
+/// The error for a method a receiver type lacks. #4291: `self` in an agent handler is a synthetic
+/// record, so it names the agent, never that record.
+pub(super) fn method_not_found_error(type_name: &str, method: &Ident, ctx: &Ctx) -> CompileError {
+    if let Some(agent) = self_record_agent(type_name) {
+        return agent_self_member_error(
+            agent,
+            method,
+            ("bynk.types.method_not_found", "method"),
+            ctx,
+        );
+    }
+    CompileError::new(
+        "bynk.types.method_not_found",
+        method.span,
+        format!(
+            "type `{type_name}` has no instance method named `{}`",
+            method.name
+        ),
+    )
+}
