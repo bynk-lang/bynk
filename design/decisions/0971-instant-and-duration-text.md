@@ -1,12 +1,6 @@
----
-level: minor
-changelog: `Instant.toString()` is RFC 3339 text, `Duration.toString()` is units (`1h30m`), `Duration.toIso()` is ISO 8601, and both types interpolate
-breaking: `Instant.toString()` and `Duration.toString()` no longer give the bare millisecond count. They give RFC 3339 UTC text (`2026-11-22T10:00:00.000Z`) and unit text (`1h30m`). Code that read the old text back as a number should call `toEpochMillis()` or `toMillis()`. No diagnostic marks it, because the new text names its units and cannot be mistaken for the old number.
----
+# 0971 — Instant and Duration get real string forms and interpolate
 
-## ADR: instant-and-duration-text
-title: Instant and Duration get real string forms and interpolate
-summary: Instant.toString is RFC 3339, Duration.toString is units, Duration.toIso is ISO 8601; both fill an interpolation hole
+- **Status:** Accepted (v0.706)
 
 **Context.** Interpolation refused `Instant` and `Duration` (ADR 0075, enforced by #2799) because their string form was "a choice, not a default". Their `toString()` methods had already made a choice, and a bad one: an `Instant` gave its epoch milliseconds and a `Duration` lowered to `String(d)`, so `5.minutes.toString()` was `"300000"` with no unit. An author refused at `"\(t)"` reached for `toString()`, the usual fix, and got "expires at 1767225600000".
 
