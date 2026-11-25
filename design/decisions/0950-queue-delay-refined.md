@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A `Queue` send delay is a refined `QueueDelay` (0 seconds to 24 hours): a literal out of range is a compile error and a computed span goes through `QueueDelay.of`; the documented maximum is 24 hours, not 12 (a part second still rounds up); a literal delay between 12 and 24 hours, a run-time fault before, is now accepted
-breaking: `QueueSend.delay` is an `Option[QueueDelay]` instead of an `Option[Duration]`, so a computed `Duration` is refused with `bynk.types.some_value_mismatch` until it goes through `QueueDelay.of(d)`
----
+# 0950 — A Queue send delay is a refined QueueDelay, a part second still rounds up, and the maximum is 24 hours
 
-## ADR: queue-delay-refined
-title: A Queue send delay is a refined QueueDelay, a part second still rounds up, and the maximum is 24 hours
-summary: QueueSend.delay takes `QueueDelay = Duration where InRange(0.seconds, 24.hours)`, checked at compile time for a literal, and a part second rounds up so a message is never early
+- **Status:** Accepted (v0.688)
 
 **Context.** `QueueSend.delay` was an `Option[Duration]` checked at run time, rounding a part second up and refusing more than 12 hours. #3948 settled that a platform floor or ceiling on a span of time is a refined `Duration` (`KvTtl`), so an out-of-range literal is a compile error, and that a part second rounds towards zero everywhere. The book said the maximum was 12 hours while #3877 and the durable events track said 24.
 
