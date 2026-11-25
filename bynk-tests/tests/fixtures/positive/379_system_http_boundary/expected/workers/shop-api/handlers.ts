@@ -139,11 +139,11 @@ export function __makeCart(key: UserId, env?: { CART?: __DurableObjectNamespace 
 }
 
 export const api = {
-  async http_POST_cart(body: Item, deps: { env: { CART: __DurableObjectNamespace }; identity: UserId }): globalThis.Promise<HttpResult<Item>> {
+  async http_POST_cart(body: Item, deps: { env: { CART: __DurableObjectNamespace }; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Item>> {
     const item = await __makeCart(deps.identity, deps.env).add(body.sku, deps);
     return HttpResult.Created(item);
   },
-  async http_GET_cart_size(deps: { env: { CART: __DurableObjectNamespace }; identity: UserId }): globalThis.Promise<HttpResult<number>> {
+  async http_GET_cart_size(deps: { env: { CART: __DurableObjectNamespace }; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<number>> {
     const n = await __makeCart(deps.identity, deps.env).size(deps);
     return HttpResult.Ok(n);
   },

@@ -2454,6 +2454,16 @@ fail-closed, but no identity is captured (anonymous / verify-and-discard). `_`
 MUST NOT be used as the binder (omit it instead). A named binder MUST NOT collide
 with a handler parameter (`bynk.actor.binder_shadows_param`).
 
+The binder of an `http` handler whose `by` clause names one `Oidc` or `Bearer` actor, or a
+refinement of a `Bearer` one (#2380, #3937), also exposes the verified token's claims as
+`<binder>.claims`, of type `TokenClaims` (`get(name)`, `has(name)`). The seam reads them from the
+token it already verified, so a refinement's binder reads its base's. The binder of any other scheme,
+a binder-less `by`, and a sum's binder (which is the resolved arm) have no `.claims`
+(`bynk.types.unknown_field`). A `TokenClaims` MUST NOT be a field, nor cross a call, a message or an
+agent (`bynk.types.claims_at_boundary`). A test supplies them as the principal's second argument,
+`by User("ada", TokenClaims.of([…]))`, for an `Oidc` or `Bearer` actor and no other
+(`bynk.test.principal_claims_not_oidc`).
+
 ### §5.7a.1 Multi-actor sum dispatch (v0.52)
 
 A `by` clause MAY name an **ordered sum of peer actors**
@@ -2784,7 +2794,8 @@ as the consumer acknowledged or retried it. The scheduled time, an `Instant`, is
 required when the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` presents the acting actor's
-credential: a signed token for a Bearer actor, a signature for a `Signature`
+credential: a signed token for a Bearer actor (#3937: carrying the principal's literal
+`TokenClaims.of(…)` lines when the handler's binder reads them, beside a refinement's witness claims), a signature for a `Signature`
 actor (#2135), and on an actor sum the credential of the member the principal
 names (#2155). For an `Oidc` actor (#3052) the driver is the issuer: it signs the
 token with a key pair generated for the test process, serves the matching JWKS in

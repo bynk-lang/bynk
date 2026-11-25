@@ -1001,12 +1001,12 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #2380 (L5): whether the addressed http handler binds an `Oidc` actor,
+    /// #2380 (L5), #3937: whether the addressed http handler binds an `Oidc` or `Bearer` actor,
     /// so an in-process call passes it `deps.claims`.
-    pub(crate) fn is_oidc_handler(&self, service: &str, key: &str) -> bool {
+    pub(crate) fn is_claims_handler(&self, service: &str, key: &str) -> bool {
         match &self.mode {
             BodyMode::TestCase { sum_handlers, .. } => {
-                sum_handlers.contains(&(service.to_string(), format!("oidc:{key}")))
+                sum_handlers.contains(&(service.to_string(), format!("claims:{key}")))
             }
             BodyMode::Method
             | BodyMode::FreeFn
@@ -1241,7 +1241,29 @@ impl<'a> LowerCtx<'a> {
                     .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
                 Some({
                     let c = vec![lines];
-                    call(ident("__bynkOidcClaims"), c)
+                    call(ident("__bynkClaimLines"), c)
+                })
+            }
+            // #3937: a `Bearer` route whose binder reads `.claims` signs the principal's own lines
+            // beside a refinement's witness claims (which the lines override), or just the witness
+            // claims, or none, when it gives no lines.
+            BodyMode::IntegrationCase {
+                system_http_claims, ..
+            } if system_http_claims.bearer_claim_routes.contains(route) => {
+                let witness = system_http_claims
+                    .witness_on(route, self.call_site_actor.as_ref())
+                    .map(witness_claims_node);
+                let presented = self.call_site_claim_lines.clone().map(|lines| {
+                    let c = vec![lines];
+                    call(ident("__bynkClaimLines"), c)
+                });
+                Some(match (witness, presented) {
+                    (Some(w), Some(p)) => bynk_ts::TsExpr::object_entries(vec![
+                        bynk_ts::TsObjectEntry::Spread(w),
+                        bynk_ts::TsObjectEntry::Spread(p),
+                    ]),
+                    (Some(only), None) | (None, Some(only)) => only,
+                    (None, None) => bynk_ts::TsExpr::object(vec![]),
                 })
             }
             BodyMode::IntegrationCase {
@@ -1273,13 +1295,14 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #3052: whether this body is a `system` case on a target with an
-    /// `Oidc` route, whose calls mint their claims from `TokenClaims.of` lines.
-    pub(crate) fn is_system_oidc_body(&self) -> bool {
+    /// #3052, #3937: whether this body is a `system` case on a target with a route that mints
+    /// its token's claims from `TokenClaims.of` lines (`Oidc`, or a `Bearer` whose binder reads them).
+    pub(crate) fn is_system_claims_body(&self) -> bool {
         matches!(
             &self.mode,
             BodyMode::IntegrationCase { system_http_claims, .. }
                 if !system_http_claims.oidc_routes.is_empty()
+                    || !system_http_claims.bearer_claim_routes.is_empty()
         )
     }
 

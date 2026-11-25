@@ -222,6 +222,7 @@ pub fn describe_member_at(
     crate::symbols::describe_effect_method_at(text, offset, expr_types, tys)
         .or_else(|| describe_outcome_at(text, offset, expr_types, tys))
         .or_else(|| crate::agent_busy::describe_busy_after_at(text, offset))
+        .or_else(|| crate::token_claims::describe_claims_at(text, offset, expr_types, tys))
 }
 
 /// Hover on the `outcome` of `<context>.<service>.outcome(args)` or `Agent(key).op.outcome(args)`:
