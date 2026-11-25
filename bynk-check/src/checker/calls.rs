@@ -3078,7 +3078,9 @@ fn check_method_call_inner(
     ) {
         return r;
     }
-    if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx) {
+    if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx)
+        .or_else(|| super::erase::check_erase_call(receiver, method, args, span, expr_id, ctx))
+    {
         return r;
     }
     // v0.25 / v0.178: a test body invokes the target's service as

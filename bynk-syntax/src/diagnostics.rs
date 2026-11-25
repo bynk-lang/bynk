@@ -805,6 +805,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
     },
     Explain {
+        code: "bynk.agent.write_after_erase",
+        blurb: "`self.erase()` marks the instance for deletion, and the handler's commit then deletes everything stored for the key instead of writing the handler's state. A `:=` after it in the same block has nothing to write to, so it is dropped. Remove the write. A write before `self.erase()` is dropped the same way. If something should outlive the erasure, emit an event first: events emitted in the handler are still released at the commit, so a subscriber can keep what it needs.",
+        example: "on call close() -> Effect[()] {\n\x20 self.erase()\n\x20 closed := true    // ✗ the commit deletes the instance, so nothing is written\n}\n\non call close() -> Effect[()] given Events {\n\x20 do Events.emit[AccountClosed](AccountClosed { id: self.id })\n\x20 self.erase()    // ✓ the event records it; the state goes\n}",
+    },
+    Explain {
         code: "bynk.agents.bad_state_initialiser",
         blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
         example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
@@ -7356,6 +7361,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.agent.version_without_path",
         "A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning).",
+    )),
+    warn(d(
+        "bynk.agent.write_after_erase",
+        "A `:=` follows `self.erase()` in the same block, so the commit drops it (warning).",
     )),
     dg(
         "bynk.agents.bad_state_initialiser",

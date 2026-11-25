@@ -11,7 +11,7 @@ use bynk_syntax::ast::{Expr, ExprKind, Ident, TypeBody, TypeRef};
 
 use super::super::internal_fault::unnameable_receiver_type_arg;
 use super::super::lower_call::agents::{
-    lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
+    lower_agent_erase_call, lower_agent_init, lower_inline_agent_call, lower_let_bound_agent_call,
 };
 use super::super::lower_call::cross_context::{
     cross_context_lowering_prefix, lower_cross_context_service_call,
@@ -127,7 +127,9 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_events_emit_call(e, receiver, type_args, args, cx, &mut pre) {
         return pre.finish(built);
     }
-    if let Some(built) = lower_signed_cookie_call(e, args, cx, &mut pre) {
+    if let Some(built) =
+        lower_signed_cookie_call(e, args, cx, &mut pre).or_else(|| lower_agent_erase_call(e, cx))
+    {
         return pre.finish(built);
     }
     if let Some(built) = lower_cookie_field_call(e, args, cx, &mut pre) {

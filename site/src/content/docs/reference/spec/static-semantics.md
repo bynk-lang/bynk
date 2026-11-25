@@ -1268,6 +1268,18 @@ between its `store` fields and its handlers.
 - **Everything else is refused.** A recorded class that disappears with neither
   declaration is `bynk.agent.class_removed`.
 
+### §5.4.4 Erasing an instance (#3931) {#erase}
+
+`self.erase()` is legal in an agent `on call` handler (not in `migrate`, an invariant, a `transition` or
+a function). It has type `Effect[()]` and is valid only in an effectful body. A handler that calls it,
+on any path, **erases its instance when it commits**: the commit deletes every stored field, entry,
+index posting and marker for the key **instead of** writing the handler's state, and the next call to
+the key starts from the agent's initial state, as a key never seen does. Everything the handler wrote
+before or after the call is discarded. No invariant or `transition` predicate is checked against the
+initial state it returns to. The erasure is part of the atomic commit: a handler that faults commits
+nothing, so erases nothing. Events the handler emitted are released as at any commit. A `:=` after a
+`do self.erase()` in the same block is `bynk.agent.write_after_erase` (a warning).
+
 ## §5.5 Effects, capabilities & providers
 
 Bynk separates **pure** from **effectful** code. An `<-` bind MUST occur in an

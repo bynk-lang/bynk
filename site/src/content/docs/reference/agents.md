@@ -513,6 +513,43 @@ project deploys to. Raising it drops the lock's snapshots below it.
 See [Change stored state safely](/book/guides/agents-and-state/stateful-agent/#change-stored-state-safely)
 and [§5.4.3 of the specification](/reference/spec/static-semantics/#543-rehydration-validation-v097).
 
+## Erasing an instance {#erase}
+
+A handler deletes its own instance's stored state with `self.erase()`:
+
+```bynk,fragment
+agent Account {
+	key id: String
+	store email: Cell[Option[String]]
+	store orders: Map[String, Order]
+
+	on call close() -> Effect[()] given Events {
+		do Events.emit[AccountClosed](AccountClosed { id: self.id })
+		self.erase()
+	}
+}
+```
+
+When the handler commits, everything stored for the key is deleted: every field, every `Map`, `Set`,
+`Cache` and `Log` entry, every `@indexed` posting, and the schema markers. The next call to the key
+starts from the agent's **initial state**, as a key never seen does: each field reads its initialiser
+or its zero. Nothing is left, so a closed account's data is gone and a finished order stops costing
+storage.
+
+- **The erasure is the commit.** The handler's other writes, before or after the call, are discarded,
+  and a `:=` after `do self.erase()` in the same block is a warning (`bynk.agent.write_after_erase`),
+  since it has nothing to write to.
+- **It is atomic with the handler.** A handler that faults commits nothing, so it erases nothing, even
+  if it called `self.erase()` first.
+- **No invariant is checked** against the initial state the instance returns to. It is the state every
+  new key starts in.
+- **Events are still released.** Emit one first, as above, so a subscriber learns of the erasure and
+  the erasure can be audited.
+- **Only in an `on call` handler.** Not in a `migrate` step, an invariant or a function. To remove
+  every instance of a class, see [Renaming and removing an agent](#renaming-and-removing-an-agent).
+- **Tests** observe the reset by calling a read handler, as a user of the agent would
+  ([guide](/book/guides/agents-and-state/delete-a-users-data/)).
+
 ## Renaming and removing an agent
 
 Once `bynk.schema.lock` records an agent class, it can't simply disappear from

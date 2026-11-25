@@ -278,6 +278,7 @@ fn self_call_args<'e>(
         | Callee::CrossCap { .. }
         | Callee::Cross { .. }
         | Callee::AgentInit(_)
+        | Callee::AgentErase
         | Callee::Agent { .. }
         | Callee::TestService { .. }
         | Callee::TestAssetFetch { .. }
