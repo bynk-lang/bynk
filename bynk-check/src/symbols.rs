@@ -3168,6 +3168,7 @@ mod detect_context_message_bundle_tests {
                     .map(|t| UsesDecl {
                         alias: None,
                         selected: None,
+                        qualified_refs: Vec::new(),
                         target: qualified(t),
                         span: Span::default(),
                         trivia: Trivia::default(),

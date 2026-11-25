@@ -337,6 +337,7 @@ impl ParsedFile {
         uses.push(UsesDecl {
             alias: None,
             selected: None,
+            qualified_refs: Vec::new(),
             target: QualifiedName {
                 parts: target
                     .split('.')

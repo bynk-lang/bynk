@@ -178,6 +178,11 @@ pub struct UsesDecl {
     /// renaming a type leaves its variants' names as they are. `None` for the
     /// whole-commons forms; `Some` (possibly empty) for the braced form.
     pub selected: Option<Vec<ConsumesItem>>,
+    /// #4045: the names the unit reads through this clause qualified — the
+    /// `Status` of `Y.Status` (alias `Y`) or of `lib.y.Status` — sorted, each
+    /// once. Set by the parser at the end of the unit, so the compiler knows
+    /// which of the commons' names to bring in under their qualified spelling.
+    pub qualified_refs: Vec<String>,
     pub span: Span,
     pub trivia: Trivia,
     /// A blank line separated this header line's leading comment from the

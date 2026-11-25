@@ -26,6 +26,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Commons(c))
             }
             Some(TokenKind::Context) => {
@@ -42,6 +43,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Context(c))
             }
             Some(TokenKind::Adapter) => {
@@ -58,6 +60,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut a.uses);
                 Ok(SourceUnit::Adapter(a))
             }
             Some(TokenKind::Suite) => {
@@ -84,6 +87,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut t.uses);
                 Ok(SourceUnit::Suite(t))
             }
             Some(_) => {
@@ -476,6 +480,25 @@ impl<'a> Parser<'a> {
         })
     }
 
+    /// #4045: hand each qualified name the unit read to the `uses` clause that
+    /// introduced its qualifier, then clear the parser's record for the next unit.
+    fn distribute_qualified_refs(&mut self, uses: &mut [UsesDecl]) {
+        for full in std::mem::take(&mut self.qualified_refs) {
+            let Some((prefix, name)) = full.rsplit_once('.') else {
+                continue;
+            };
+            for u in uses.iter_mut() {
+                let by_alias = u.alias.as_ref().is_some_and(|a| a.name == prefix);
+                if (by_alias || u.target.joined() == prefix)
+                    && !u.qualified_refs.iter().any(|n| n == name)
+                {
+                    u.qualified_refs.push(name.to_string());
+                }
+            }
+        }
+        self.use_prefixes.clear();
+    }
+
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {
         let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Uses, "to start a `uses` declaration")?;
@@ -513,10 +536,16 @@ impl<'a> Parser<'a> {
             }
             _ => {}
         }
+        // #4045: the names a qualified reference may start with from here on.
+        if let Some(a) = &alias {
+            self.use_prefixes.push(a.name.clone());
+        }
+        self.use_prefixes.push(target.joined());
         Ok(UsesDecl {
             target,
             alias,
             selected,
+            qualified_refs: Vec::new(),
             span,
             trivia: Trivia::default(),
             blank_before,

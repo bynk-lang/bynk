@@ -994,10 +994,17 @@ impl<'a> Parser<'a> {
             | TokenKind::Messages
             | TokenKind::On
             | TokenKind::Suite => {
-                self.bump();
-                let ident = Ident {
-                    name: self.slice(t.span).to_string(),
-                    span: t.span,
+                // #4045: `Y.f` / `lib.y.f` — a name qualified by a `uses` clause
+                // is one identifier, written as it is.
+                let ident = match self.qualified_name_len().filter(|_| t.kind == TokenKind::Ident) {
+                    Some(len) => self.bump_qualified_name(len),
+                    None => {
+                        self.bump();
+                        Ident {
+                            name: self.slice(t.span).to_string(),
+                            span: t.span,
+                        }
+                    }
                 };
                 // v0.9.4: `Val[T]` / `Val[T](args)` — test-context construction.
                 if ident.name == "Val" && self.peek_kind() == Some(TokenKind::LBracket) {
