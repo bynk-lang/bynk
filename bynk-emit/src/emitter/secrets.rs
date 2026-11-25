@@ -149,7 +149,8 @@ pub(crate) fn foreign_callers(table: &UnitTable) -> Vec<bynk_check::actors::Fore
             .unwrap_or_default()
     });
     for f in admitted.chain(queued) {
-        if !callers.iter().any(|g| g.actor == f.actor) {
+        // A sender with no secret (a malformed declaration) has nothing to mint.
+        if !f.secret.is_empty() && !callers.iter().any(|g| g.actor == f.actor) {
             callers.push(f);
         }
     }

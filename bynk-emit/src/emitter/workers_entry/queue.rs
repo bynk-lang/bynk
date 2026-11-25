@@ -328,7 +328,7 @@ fn admission_stmts(route: &QueueRoute) -> Vec<TsStmt> {
                         vec![
                             ident("ctx"),
                             str_lit(route.name.clone()),
-                            member(ident("__a"), "reason"),
+                            ident("__a"),
                             ident("msg"),
                         ],
                     )),

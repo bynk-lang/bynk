@@ -55,9 +55,14 @@ function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds
   msg.retry({ delaySeconds: seconds });
 }
 
-function __bynkQueueRefused(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, queue: string, reason: string, msg: { ack(): void }): void {
-  globalThis.console.error(`queue ${queue} refused`, reason);
-  __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} refused a message: ${reason}`));
+function __bynkQueueRefused(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, queue: string, refusal: { readonly reason: string; readonly retryAfterSeconds?: number }, msg: { ack(): void; retry(options?: { delaySeconds: number }): void }): void {
+  if (refusal.reason === "in_flight") {
+    globalThis.console.error(`queue ${queue} deferred`, "its id is held by a delivery still being handled");
+    msg.retry({ delaySeconds: globalThis.Math.min(86400, refusal.retryAfterSeconds ?? 1) });
+    return;
+  }
+  globalThis.console.error(`queue ${queue} refused`, refusal.reason);
+  __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} refused a message: ${refusal.reason}`));
   msg.ack();
 }
 
@@ -99,7 +104,7 @@ export default {
           let __s: { settle(handled: boolean): globalThis.Promise<void> } | undefined;
           try {
             const __a = await __bynkQueueAdmit(msg.body, "orders", [], env, { Legacy: "LEGACY_QUEUE_KEY" });
-            if (!__a.ok) { __bynkQueueRefused(ctx, "orders", __a.reason, msg); continue; }
+            if (!__a.ok) { __bynkQueueRefused(ctx, "orders", __a, msg); continue; }
             __s = __a;
             const __r = handlers.__deserialise_Order((__a.body as __JsonValue), "$");
             if (__r.tag === "Err") { await __bynkUndecodable(ctx, env, undefined, "orders", "Order", __r.error, msg); await __a.settle(false); continue; }

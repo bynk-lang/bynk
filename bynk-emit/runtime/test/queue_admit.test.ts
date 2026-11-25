@@ -24,11 +24,12 @@ function ports(keys: Record<string, string[]>, now = NOW): Fake {
     calls,
     now: () => now,
     keysFor: (from) => keys[from] ?? [],
+    // The fake's value is how long the claim holds: the lease when taken, the window once confirmed.
     claim: async (key, ttl) => {
-      if (claimed.has(key)) return false;
+      if (claimed.has(key)) return { claimed: false, remainingSeconds: claimed.get(key)! };
       claimed.set(key, ttl);
       calls.push("claim");
-      return true;
+      return { claimed: true };
     },
     confirm: async (key, ttl) => {
       claimed.set(key, ttl);
@@ -110,12 +111,27 @@ test("a message that was handled is kept for the window, and a replay is refused
   assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "replayed" });
 });
 
+test("a redelivery that arrives while the lease is held is retried after it, never acknowledged as a replay", async () => {
+  // The instance died (or its settle failed) mid-handler: nothing settled, and the platform redelivers at once.
+  const p = ports({ "shop.orders": ["k1"] });
+  const envelope = wire(await signQueueMessage("k1", parts));
+  admitted(await queueAdmit(envelope, "fulfil", "orders", p));
+  const early = await queueAdmit(envelope, "fulfil", "orders", p);
+  assert.deepEqual(early, { ok: false, reason: "in_flight", retryAfterSeconds: QUEUE_CLAIM_LEASE_SECONDS });
+  // A lease with 90.2 seconds left is retried after 91 seconds, and at least one second.
+  p.claimed.set([...p.claimed.keys()][0]!, 90.2);
+  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "in_flight", retryAfterSeconds: 91 });
+  p.claimed.set([...p.claimed.keys()][0]!, 0);
+  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "in_flight", retryAfterSeconds: 1 });
+  assert.equal(p.claimed.size, 1);
+});
+
 test("a message whose handler failed is admitted again when the platform redelivers it", async () => {
   const p = ports({ "shop.orders": ["k1"] });
   const envelope = wire(await signQueueMessage("k1", parts));
-  // While the handler runs, a second delivery of the same id is refused.
+  // While the handler runs, a second delivery of the same id waits: it is retried after the lease, not dropped.
   const first = admitted(await queueAdmit(envelope, "fulfil", "orders", p));
-  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "replayed" });
+  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "in_flight", retryAfterSeconds: QUEUE_CLAIM_LEASE_SECONDS });
   // The handler asked for a retry, or threw: the claim is released, and the redelivery is admitted.
   await first.settle(false);
   assert.equal(p.claimed.size, 0);
@@ -139,7 +155,7 @@ test("a dead-letter consumer verifies a message under the source queue's name", 
 });
 
 test("every refusal has a distinct fault text naming the consumer", () => {
-  const reasons = ["unsigned", "malformed", "version", "unknown_sender", "bad_signature", "replayed", "stale"] as const;
+  const reasons = ["unsigned", "malformed", "version", "unknown_sender", "bad_signature", "replayed", "stale", "in_flight"] as const;
   const texts = new Set(reasons.map((r) => queueRefusalDetail("fulfil", r)));
   assert.equal(texts.size, reasons.length);
   for (const t of texts) assert.ok(t.includes("fulfil"));
@@ -162,12 +178,11 @@ const claimDb = () => {
         return [{ meta: { changes: 1 } }];
       }
       const now = Date.now();
-      const live = (held.get(key) ?? 0) > now;
       if (first.sql.includes("WHERE idempotency_claims.expires_at")) {
-        // The claim: only when the key is absent or lapsed.
-        if (live) return [{ meta: { changes: 0 } }, { meta: { changes: 0 } }];
-        held.set(key, Number(first.values[1]));
-        return [{ meta: { changes: 1 } }, { meta: { changes: 0 } }];
+        // The claim: only when the key is absent or lapsed; the SELECT after it reads the holder's expiry.
+        const live = (held.get(key) ?? 0) > now;
+        if (!live) held.set(key, Number(first.values[1]));
+        return [{ meta: { changes: live ? 0 : 1 } }, { meta: { changes: 0 }, results: [{ expires_at: held.get(key) }] }, { meta: { changes: 0 } }];
       }
       held.set(key, Number(first.values[1])); // the confirm
       return [{ meta: { changes: 1 } }];
@@ -199,7 +214,9 @@ test("a signed message is admitted through env's secret, leased, and kept for th
   const envelope = wire(await legacy());
   const first = admitted(await admitQueueBody(envelope, "orders", [], env, secrets));
   assert.deepEqual([first.from, first.id, first.body], ["Legacy", "m-1", { total: 5 }]);
-  assert.deepEqual(await admitQueueBody(envelope, "orders", [], env, secrets), { ok: false, reason: "replayed" });
+  // While it is being handled, the redelivery waits for the lease rather than being dropped.
+  const early = await admitQueueBody(envelope, "orders", [], env, secrets);
+  assert.equal(early.ok === false && early.reason, "in_flight");
   await first.settle(true);
   const [until] = [...db.held.values()];
   assert.ok(until! > Date.now() + (QUEUE_DEDUP_WINDOW_SECONDS - 60) * 1000, "kept for the replay window");

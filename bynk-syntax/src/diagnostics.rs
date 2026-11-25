@@ -4269,6 +4269,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
     },
     Explain {
+        code: "bynk.queue.dead_letter_signing_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, so a signed queue's dead letters are still the signed envelope and an unsigned queue's are the bare body. The dead-letter queue's consumer must therefore be signed exactly when the source consumer is, in the same context, and a signed one must admit every sender the source does; otherwise it could not verify or decode a single dead letter, and each would be dropped. Make the dead-letter consumer admit the same `Foreign` actors, or point `deadLetter` at a queue whose consumer does.",
+        example: "actor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer admits unsigned messages\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }   // ✓ the same sender\n}",
+    },
+    Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
         blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }   // ✓ the same type\n}",
@@ -9856,6 +9861,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.queue.bad_params",
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
+    ),
+    d(
+        "bynk.queue.dead_letter_signing_mismatch",
+        "A signed queue's dead-letter consumer is not signed, is in another context, or does not admit the same senders (or the reverse).",
     ),
     dg(
         "bynk.queue.dead_letter_type_mismatch",

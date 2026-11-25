@@ -740,9 +740,21 @@ pub fn queue_admission_for(
     let mut foreign = Vec::new();
     for actor in &handler.by_clause.as_ref()?.actors {
         // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
+        let decl = actors.get(&actor.name)?;
+        if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
+            return None;
+        }
+        // Classified by scheme, not by whether the declaration is whole, as `call_admission_for`
+        // does: a malformed `Foreign` actor (the checker reports it) is still a signed sender, with
+        // an empty secret that no environment supplies, so the consumer refuses every message.
         foreign.push(ForeignCaller {
             queue: true,
-            ..foreign_caller_of(actors.get(&actor.name)?)?
+            ..foreign_caller_of(decl).unwrap_or_else(|| ForeignCaller {
+                actor: decl.name.name.clone(),
+                secret: String::new(),
+                worker: None,
+                queue: true,
+            })
         });
     }
     (!foreign.is_empty()).then_some(QueueAdmission { foreign })
@@ -1077,8 +1089,9 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // external network request, so no external auth scheme applies.
         // I3 (#1971): a `call` also admits a declared foreign caller.
         ServiceProtocol::Call => matches!(scheme, Scheme::Internal | Scheme::Foreign),
-        // #3899: a queue consumer may name a `Foreign` producer; the checker
-        // refuses it as not yet enforced (`queue_actor_not_enforced`).
+        // #3899: a queue consumer may name a `Foreign` producer, whose messages it admits only when
+        // signed under its secret; the checker refuses the forms not yet enforced
+        // (`queue_actor_not_enforced`).
         ServiceProtocol::Queue { .. } => matches!(scheme, Scheme::Internal | Scheme::Foreign),
         ServiceProtocol::Cron | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)

@@ -122,13 +122,20 @@ pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ct
 }
 ";
 
-/// #3899: settles one message a signed consumer refused (unsigned, wrongly signed, from a sender it
-/// does not admit, or replayed). It is acknowledged, so it is never retried or dead-lettered and the
-/// dead-letter consumer never sees an injected message, and reported as a fault. The record names the
-/// queue and the reason, never the body (#3437).
-pub(super) const QUEUE_REFUSED_HELPER: &str = "function __bynkQueueRefused(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, queue: string, reason: string, msg: { ack(): void }): void {
-  globalThis.console.error(`queue ${queue} refused`, reason);
-  __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} refused a message: ${reason}`));
+/// #3899: settles one message a signed consumer did not admit. One whose id is held by a delivery
+/// still being handled (`in_flight`) is retried after that lease, never dropped, so a message whose
+/// instance died, or whose settle failed, is handled by its redelivery. Any other refusal
+/// (unsigned, wrongly signed, from a sender it does not admit, stale or replayed) is acknowledged,
+/// so it is never retried or dead-lettered and the dead-letter consumer never sees an injected
+/// message, and reported as a fault. The record names the queue and the reason, never the body (#3437).
+pub(super) const QUEUE_REFUSED_HELPER: &str = "function __bynkQueueRefused(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, queue: string, refusal: { readonly reason: string; readonly retryAfterSeconds?: number }, msg: { ack(): void; retry(options?: { delaySeconds: number }): void }): void {
+  if (refusal.reason === \"in_flight\") {
+    globalThis.console.error(`queue ${queue} deferred`, \"its id is held by a delivery still being handled\");
+    msg.retry({ delaySeconds: globalThis.Math.min(86400, refusal.retryAfterSeconds ?? 1) });
+    return;
+  }
+  globalThis.console.error(`queue ${queue} refused`, refusal.reason);
+  __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} refused a message: ${refusal.reason}`));
   msg.ack();
 }
 ";

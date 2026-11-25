@@ -2214,10 +2214,10 @@ fn check_by_clause_contracts(
                     ),
                 )
                 .with_note(match protocol {
-                    // I3 (#1971): a foreign caller calls a service, and only
-                    // by `call`.
+                    // I3 (#1971): a foreign caller calls a service, and (#3899) a foreign
+                    // producer sends to a queue consumer.
                     _ if contract.scheme == Scheme::Foreign => {
-                        "a `Foreign` actor is admitted only on an `on call` handler"
+                        "a `Foreign` actor is admitted only on an `on call` handler or a queue consumer's `on message`"
                     }
                     ServiceProtocol::Http => {
                         "public HTTP routes take an anonymous actor — write `by v: Visitor`"

@@ -624,6 +624,7 @@ fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> 
                 .unwrap_or_default();
             call.into_iter().chain(queue).map(|f| f.secret)
         })
+        .filter(|secret| !secret.is_empty())
         .collect();
     secrets.sort();
     secrets.dedup();
