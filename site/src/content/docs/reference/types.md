@@ -291,6 +291,7 @@ which work on the UTF-8 bytes.
 | `s.containsRegex(pattern)` | `Bool` | a match occurs anywhere |
 | `s.findRegex(pattern)` | `Option[List[Option[String]]]` | the first match and its groups |
 | `s.findAllRegex(pattern)` | `List[List[Option[String]]]` | every match and its groups |
+| `s.findRegexNamed(pattern)` | `Option[Map[String, Option[String]]]` | the first match's **named** groups, by name; see [Regular expressions](#regular-expressions) (#3979) |
 | `s.replaceRegex(pattern, with: String)` | `String` | every match replaced; `with` reads `$1`, `$<name>`, `$&` and `$$` |
 | `s.splitRegex(pattern)` | `List[String]` | the pieces between each match |
 
@@ -1708,7 +1709,7 @@ A base type plus a predicate. See the [refined-type reference](/reference/refine
 ## Regular expressions
 
 A refined `String where Matches("…")` checks a whole string against a pattern.
-Six `String` methods use the same patterns to look inside one (the full set of
+Seven `String` methods use the same patterns to look inside one (the full set of
 `String` methods is in [String](#string)):
 
 ```bynk,fragment
@@ -1730,6 +1731,28 @@ pattern, and the compiler checks them identically.
   would escape that check, so it is refused (`bynk.types.regex_not_literal`).
 - **Captures** come back as a list: element 0 is the whole match, then each
   group, `None` for a group that did not take part.
+- **Named groups** are read by name with `findRegexNamed`, so a group added to the
+  pattern later does not shift what a name means:
+
+  ```bynk,fragment
+  fn version(s: String) -> String {
+    match s.findRegexNamed(r"v(?<major>\d+)\.(?<minor>\d+)") {
+      None => "no match",
+      Some(v) => match v.get("major") {
+        Some(Some(major)) => major,
+        _ => "no major",
+      },
+    }
+  }
+  ```
+
+  The result is a `Map` keyed by the pattern's group names, each value `None` for a
+  group that did not take part. The whole match and unnamed groups are not in it. The
+  names come from the literal pattern, so a pattern with none is
+  `bynk.types.regex_no_named_groups`, which points at `findRegex`. A name used
+  by two groups, even across alternatives, is `bynk.types.regex_duplicate_group_name`,
+  because the runtimes refuse it when the pattern is built. There is no
+  `findAllRegexNamed` yet.
 - **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
   `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
 - **Semantics** are JavaScript's `RegExp` in Unicode mode (`u`), as `Matches`

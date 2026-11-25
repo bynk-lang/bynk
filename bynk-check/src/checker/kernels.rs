@@ -2597,6 +2597,14 @@ pub(crate) fn check_string_kernel_method(
             vec![tys.intern(s.clone())],
             Ty::List(tys.intern(Ty::List(tys.intern(Ty::Option(tys.intern(s.clone())))))),
         )),
+        // #3979: the named groups of the first match, by name.
+        Some(StringOp::FindRegexNamed) => {
+            let group = tys.intern(Ty::Option(tys.intern(s.clone())));
+            Some((
+                vec![tys.intern(s.clone())],
+                Ty::Option(tys.intern(Ty::Map(tys.intern(s.clone()), group))),
+            ))
+        }
         Some(StringOp::ReplaceRegex) => Some((
             vec![tys.intern(s.clone()), tys.intern(s.clone())],
             s.clone(),
@@ -2638,7 +2646,7 @@ pub(crate) fn check_string_kernel_method(
                  `length`, `split`, `trim`, `contains`, `startsWith`, `endsWith`, \
                  `replace`, `slice`, `indexOf`, `toUpper`, `toLower`, `chars`, `concat`, \
                  `percentEncode`, `percentDecode`, `matchesRegex`, `containsRegex`, `findRegex`, \
-                 `findAllRegex`, `replaceRegex`, `splitRegex`, `isEmpty`, `trimStart`, `trimEnd`, \
+                 `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`, `isEmpty`, `trimStart`, `trimEnd`, \
                  `padStart`, `padEnd`, `repeat`, `lines`, `lastIndexOf`, `replaceFirst`",
                 method.name
             ),
@@ -2679,13 +2687,19 @@ pub(crate) fn check_string_kernel_method(
     // K6c (#2600): a regex method's pattern must be a string literal, so the
     // compile-time ReDoS checks can see it; then it is checked as a `Matches`
     // pattern is.
-    if method.name.ends_with("Regex")
+    if (method.name.ends_with("Regex") || matches!(op, Some(StringOp::FindRegexNamed)))
         && let Some(pattern) = args.first()
     {
         match &pattern.kind {
             ExprKind::StrLit(literal) => {
                 if let Err(e) = super::refinements::check_regex_literal(literal, pattern.span) {
                     ctx.errors.push(e);
+                } else if matches!(op, Some(StringOp::FindRegexNamed)) {
+                    if let Some(name) = crate::regex_groups::duplicate_group_name(literal) {
+                        ctx.errors.push(duplicate_group_name(&name, pattern.span));
+                    } else if crate::regex_groups::group_names(literal).is_empty() {
+                        ctx.errors.push(no_named_groups(pattern.span));
+                    }
                 }
             }
             _ => ctx.errors.push(
@@ -2705,6 +2719,30 @@ pub(crate) fn check_string_kernel_method(
         }
     }
     Some(tys.intern(ret))
+}
+
+/// #3979: a group name used twice is refused by the runtimes, even across
+/// alternatives, so the pattern would throw when it is built.
+fn duplicate_group_name(name: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.types.regex_duplicate_group_name",
+        span,
+        format!("the pattern of `String.findRegexNamed` names the group `{name}` more than once"),
+    )
+    .with_note("give each group its own name; a repeated name is refused when the pattern is built")
+}
+
+/// #3979: `findRegexNamed` reads a pattern's named groups, so a pattern with
+/// none has nothing to key the result by.
+fn no_named_groups(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.types.regex_no_named_groups",
+        span,
+        "the pattern of `String.findRegexNamed` has no named capture group",
+    )
+    .with_note(
+        "name a group with `(?<name>…)`, or use `findRegex`, which returns the groups by position",
+    )
 }
 
 /// #2683, #2711: the execution-context check shared by `e.within(d)` and
