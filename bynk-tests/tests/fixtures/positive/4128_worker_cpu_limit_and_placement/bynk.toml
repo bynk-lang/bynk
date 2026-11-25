@@ -1,0 +1,12 @@
+[project]
+name = "worker-cpu-limit-and-placement"
+version = "0.1.0"
+
+# #4128, #4127: a CPU limit, Smart Placement and a sampled log rate reach every
+# Worker's wrangler.toml.
+[workers]
+cpu_ms = 50
+placement = "smart"
+
+[workers.observability]
+head_sampling_rate = 0.5
