@@ -1,11 +1,6 @@
----
-level: patch
-changelog: A queue send in an agent's transition predicate or migrate step is refused as an unknown name, and the diagnostic now says the name is a capability
----
+# 0966 — A queue send in a transition or migrate body is refused, with a note naming the capability
 
-## ADR: queue-send-in-pure-agent-bodies
-title: A queue send in a transition or migrate body is refused, with a note naming the capability
-summary: The producer check does not walk transitions or migrate steps because a capability is not in scope there; the refusal is pinned and made clearer
+- **Status:** Accepted (v0.702.1)
 
 **Context.** The producer check (#3879) walks functions, service and agent handlers and provider operations, and not an agent's `transition` predicates or `migrate` steps. Whether a send there is legal decides whether the walk must widen.
 

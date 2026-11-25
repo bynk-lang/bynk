@@ -7,6 +7,9 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.703.0** | A store `Map`, `Set` or `Cache` takes any `Key` type as its key (a record, a sum, an `Option`, a `Decimal`, `Bytes`), held under the canonical key encoding; `String` and `Int` keys are stored exactly as before |
+| **v0.702.1** | A queue send in an agent's transition predicate or migrate step is refused as an unknown name, and the diagnostic now says the name is a capability |
+| **v0.702.0** | A quick fix rewrites a two-arm `match` ending a test case, with an `expect false` fallback, into `expect … is` |
 | **v0.701.0** | An `Effect` can no longer wrap another `Effect`, as written or through a call's instantiation: `bynk.types.nested_effect` |
 | **v0.700.2** | `self.op(…)` inside an agent handler is refused as `bynk.agents.self_operation`, naming the agent and the operation and showing `Agent(key).op(…)`, where it reported a field of the internal `__<Agent>Self` record (#4291) |
 | **v0.700.1** | Signature help shows one signature per arity for `min`, `max`, `count` and `List.join`, and highlights the form that fits the arguments typed |

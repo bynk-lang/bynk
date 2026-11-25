@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A store `Map`, `Set` or `Cache` takes any `Key` type as its key (a record, a sum, an `Option`, a `Decimal`, `Bytes`), held under the canonical key encoding; `String` and `Int` keys are stored exactly as before
----
+# 0967 — Store collections take any Key type, held under the canonical key encoding
 
-## ADR: store-composite-keys
-title: Store collections take any Key type, held under the canonical key encoding
-summary: The store key rule becomes the Key rule; a non-scalar key is stored under its canonical encoding, and a scalar key keeps its current stored form
+- **Status:** Accepted (v0.703)
 
 **Context.** A `store Map`/`Cache` key and a `store Set` element had to be `String`, `Int` or a refined or opaque type over one (`bynk.store.unkeyable_key`), while a value `Map` or `Set` already takes any `Key` type, held under a canonical encoding (`__bynkKeyEncode`). A model keyed naturally by `(region, sku)` or by a sum had to invent a string key and parse it back.
 
