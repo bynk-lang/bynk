@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service jobs {
+  @rateLimit(SignupLimit, key: clientIp)
+  on call(n: Int) -> Effect[Int] by Caller {
+    Effect.pure(1)
+  }
+}

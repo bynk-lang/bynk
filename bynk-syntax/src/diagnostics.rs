@@ -2764,6 +2764,31 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"/items\") (query: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `query` is a record or `RequestQuery`\n\ntype Filter = { tag: Option[String] }\non GET(\"/items\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.rate_limit_bad_args",
+        blurb: "`@rateLimit` takes a limiter and a key, and the key is a word the router knows: `@rateLimit(SignupLimit, key: clientIp)`. A missing key, a key that is not `clientIp` or `identity`, extra arguments or a literal where the limiter's name goes leaves the router nothing to count by, so the annotation is refused. A limit keyed on something only the handler knows stays a call to the limiter's `allow(key)` in the handler. `identity` is `bynk.http.rate_limit_key_unavailable`.",
+        example: "@rateLimit(SignupLimit, key: region)       // ✗ not a key\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_duplicate",
+        blurb: "A route carries at most one `@rateLimit`, because the router asks one limiter, by one key, before it reads the body. Two annotations would leave it two answers, and neither could be said to win. Keep one. A limiter shared by several routes counts across all of them by key, so to limit two routes together, name the same limiter on each.",
+        example: "@rateLimit(SignupLimit, key: clientIp)\n@rateLimit(SignupLimit, key: clientIp)   // ✗ already set above\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓ one limiter, one key",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_key_unavailable",
+        blurb: "`key: identity` counts requests by the verified caller, checked after the router has authenticated the request and before it reads the body. The router does not authenticate before it reads the body yet, so `identity` is refused, rather than accepted and counted late. Use `key: clientIp`, which is checked before everything else and so also protects the authentication step, or call the limiter's `allow(key)` in the handler for a limit keyed on the caller. `identity` is planned for routes whose actor has an identity (a `Bearer`, `Oidc` or signed-cookie actor): it will stay refused on a `Visitor` or `Signature` route, which has none.",
+        example: "@rateLimit(SignupLimit, key: identity)   // ✗ not available yet\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_not_http",
+        blurb: "`@rateLimit` makes the router ask a rate limiter before it reads a request body, and only an `on http` route has a router and a request body. On a `call`, an event or a schedule handler it has nothing to act on, so it is refused rather than ignored. Remove it, or call the limiter yourself with `allow(key)` in a handler that is given it.",
+        example: "service jobs {\n    @rateLimit(SignupLimit, key: clientIp)   // ✗ a `call` has no router step\n    on call(n: Int) -> Effect[Int] by Caller { … }\n}\n\nservice jobs {\n    on call(n: Int) -> Effect[Int] by Caller given SignupLimit {   // ✓ ask the limiter\n        let ok <- SignupLimit.allow(\"jobs\")\n        Effect.pure(if ok { 1 } else { 0 })\n    }\n}",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_unknown_limiter",
+        blurb: "`@rateLimit` names the limiter that counts the route's requests, and the limiter is a `RateLimit` capability the route's own context declares: `capability SignupLimit = RateLimit @limit(10) @period(60.seconds)`. A name that is not declared there, or that names something that is not a `RateLimit` (a constant, another capability), leaves the router with nothing to ask. Declare the limiter in the context, or fix the name. The annotation needs no `given` on the handler.",
+        example: "@rateLimit(NoSuchLimit, key: clientIp)   // ✗ not declared in this context\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ declared above",
+    },
+    Explain {
         code: "bynk.http.raw_bad_content_type",
         blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`, or a non-empty list of them. Write `\"image/png\"`, `[\"image/png\", \"image/jpeg\"]` to accept either, or `\"*/*\"` alone to accept any type; the wildcard cannot be one of several, since it would make the others pointless.",
         example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: [\"image/png\", \"*/*\"])   // ✗ `\"*/*\"` is only valid alone\n\n@raw(contentType: \"image/png\")   // ✓\n\n@raw(contentType: [\"image/png\", \"image/jpeg\"])   // ✓ either type\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -2868,7 +2893,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.unknown_handler_annotation",
-        blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
+        blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
         example: "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
     },
     Explain {
@@ -8871,6 +8896,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.query_wrong_type",
         "An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.rate_limit_bad_args",
+        "A `@rateLimit` is malformed: not a limiter and a `key:` the router knows.",
+    ),
+    d(
+        "bynk.http.rate_limit_duplicate",
+        "A route carries more than one `@rateLimit`.",
+    ),
+    d(
+        "bynk.http.rate_limit_key_unavailable",
+        "A `@rateLimit` uses `key: identity`, which the router cannot yet count by.",
+    ),
+    d(
+        "bynk.http.rate_limit_not_http",
+        "A `@rateLimit` annotates a handler that is not `on http`.",
+    ),
+    d(
+        "bynk.http.rate_limit_unknown_limiter",
+        "A `@rateLimit` names something that is not a `RateLimit` the context declares.",
     ),
     d(
         "bynk.http.raw_bad_content_type",

@@ -3629,6 +3629,7 @@ fn check_service_decls(
             validate_handler_annotations(handler, service_cap, kinds, errors);
         }
     }
+    crate::http_rate_limit::validate_rate_limits(table, errors);
     note_defaulted_body_caps(table, errors);
     for agent in table.agents.values() {
         crate::agent_busy::validate_agent_annotations(agent, errors);
@@ -7085,13 +7086,15 @@ fn validate_handler_annotations(
                     continue;
                 }
             }
+            // #3926: validated by `http_rate_limit`, which sees the context's limiters.
+            "rateLimit" => {}
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json` and `@errors`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),

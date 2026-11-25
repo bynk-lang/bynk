@@ -57,6 +57,8 @@ import {
   type CookieValue,
   queryObject,
   queryString,
+  rateLimitAllows,
+  rateLimitedResponse,
   renderRejection,
   responseToHttpResult,
   type CorsPolicy,
@@ -1884,4 +1886,40 @@ test("headerPairs: repeated Wire lines combine; a list item with a comma or quot
   assert.throws(() => headerPairs({ tags: ['say "x"'] }), /does not survive/);
   // A non-list value may hold a comma (a `Date`).
   assert.deepEqual(headerPairs({ date: "Tue, 15 Nov 1994" }), { date: "Tue, 15 Nov 1994" });
+});
+
+test("rateLimitAllows: counts by CF-Connecting-IP, and shares `unknown` without one (#3926)", async () => {
+  const seen: string[] = [];
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      seen.push(key);
+      return { success: key !== "9.9.9.9" };
+    },
+  };
+  const from = (ip?: string) => new Request("https://x.test/", ip ? { headers: { "cf-connecting-ip": ip } } : {});
+  assert.equal(await rateLimitAllows(limiter, from("1.2.3.4")), true);
+  assert.equal(await rateLimitAllows(limiter, from("9.9.9.9")), false);
+  assert.equal(await rateLimitAllows(limiter, from()), true);
+  assert.deepEqual(seen, ["1.2.3.4", "9.9.9.9", "unknown"]);
+});
+
+test("rateLimitedResponse: a 429 with Retry-After and the RateLimited rejection (#3926)", async () => {
+  const res = rateLimitedResponse(60);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  const body = (await res.json()) as { kind: string; details: string };
+  assert.equal(body.kind, "RateLimited");
+  assert.match(body.details, /60 seconds/);
+});
+
+test("responseToHttpOutcome: the router's 429 is Rejected(RateLimited); a handler's TooManyRequests stays Handled (#3926)", async () => {
+  const deser = (v: JsonValue) => ({ tag: "Ok", value: v }) as never;
+  const routed = await responseToHttpOutcome(rateLimitedResponse(10), deser);
+  assert.equal(routed.tag, "Rejected");
+  assert.equal((routed as { value: { tag: string } }).value.tag, "RateLimited");
+  const handled = await responseToHttpOutcome(
+    new Response(JSON.stringify({ error: "slow down" }), { status: 429, headers: { "content-type": "application/json" } }),
+    deser,
+  );
+  assert.equal(handled.tag, "Handled");
 });

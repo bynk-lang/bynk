@@ -67,6 +67,7 @@ pub mod firstparty;
 pub mod fixtures;
 pub mod group_triggers;
 pub mod hints;
+pub mod http_rate_limit;
 pub mod icu;
 mod implicit_uses;
 pub mod index;

@@ -917,6 +917,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
     case "MalformedPath":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
+    case "RateLimited":
       return str(body.details);
     case "StructuralMismatch":
       return `${str(body.path)}: expected ${str(body.expected)}, got ${str(body.actual)}`;
@@ -939,7 +940,14 @@ async function rejectionOf(
 ): Promise<{ readonly tag: string; readonly detail: string } | null> {
   if (response.status === 401) return { tag: "Unauthorized", detail: "" };
   if (response.status === 405) return { tag: "MethodNotAllowed", detail: "" };
-  if (response.status !== 400 && response.status !== 413 && response.status !== 415) return null;
+  if (
+    response.status !== 400 &&
+    response.status !== 413 &&
+    response.status !== 415 &&
+    response.status !== 429
+  ) {
+    return null;
+  }
   let body: Record<string, unknown> | null = null;
   try {
     body = (await response.clone().json()) as Record<string, unknown>;
@@ -1930,14 +1938,21 @@ export async function responseToHttpOutcome<T>(
   // A capped route's `413` and a raw route's `415` are the router's own
   // synthesised refusals, told from a handler's `PayloadTooLarge`/
   // `UnsupportedMediaType` (whose body is `{ error }`) by the `kind` they carry.
-  if (response.status === 413 || response.status === 415) {
+  // #3926: and a `@rateLimit` route's `429`, told from a handler's `TooManyRequests`
+  // (whose body is `{ error }`) the same way.
+  if (response.status === 413 || response.status === 415 || response.status === 429) {
     let body: { kind?: unknown } | null = null;
     try {
       body = (await response.clone().json()) as { kind?: unknown };
     } catch {
       body = null;
     }
-    if (body && (body.kind === "PayloadTooLarge" || body.kind === "UnsupportedMediaType")) {
+    if (
+      body &&
+      (body.kind === "PayloadTooLarge" ||
+        body.kind === "UnsupportedMediaType" ||
+        body.kind === "RateLimited")
+    ) {
       const fields = body as Record<string, unknown>;
       return {
         tag: "Rejected",
@@ -2002,6 +2017,35 @@ function corsResolveOrigin(policy: CorsPolicy, requestOrigin: string | null): st
   if (policy.origins.length === 1 && policy.origins[0] === "*") return "*";
   if (requestOrigin !== null && policy.origins.includes(requestOrigin)) return requestOrigin;
   return null;
+}
+
+// #3926: `@rateLimit(Limiter, key: clientIp)`. The router asks the limiter, before it reads
+// the request body, whether this client may have another request in the window.
+// Cloudflare's `CF-Connecting-IP` is the client's address and is reliable only behind
+// Cloudflare's edge; a request without it (`bynk dev`, a test that sets none) shares the
+// one `unknown` key rather than going uncounted.
+export async function rateLimitAllows(
+  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
+  request: Request,
+): Promise<boolean> {
+  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  return (await limiter.limit({ key })).success;
+}
+
+// #3926: the router's `429` to a client over its limit: `Retry-After` is the limiter's window
+// in seconds, and the body is the `RateLimited` rejection, so `on rejected` can render it and
+// a system test can assert `Rejected(RateLimited)`.
+export function rateLimitedResponse(periodSecs: number): Response {
+  return new Response(
+    JSON.stringify({
+      kind: "RateLimited",
+      details: `too many requests: try again in ${periodSecs} seconds`,
+    }),
+    {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": String(periodSecs) },
+    },
+  );
 }
 
 // Stamp the CORS response headers onto an already-built `Response`, in place.
@@ -2294,5 +2338,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };
