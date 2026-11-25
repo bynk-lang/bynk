@@ -4,7 +4,7 @@
 import * as app from "./app.js";
 
 export function composeApp() {
-  const appDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => {
+  const appDeps = { __eventsDispatch: async (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => {
     for (const ev of events) {
       switch (ev.type) {
       }

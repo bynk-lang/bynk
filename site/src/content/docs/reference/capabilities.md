@@ -380,12 +380,18 @@ on it unchanged.
 - The base must be a capability the context selects with `consumes U { K }`
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
+  `Kv`, `Service`, `R2`, `D1`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
   `StoredSecret`, `Email`, `Postgres` and `MySql`. `Version` is not: a Worker has one Version metadata binding, so it is used
   bare, with `given Version`.
 - Options follow the base as `@annotations`, from the kind's own set
   (`bynk.capability.unknown_option`), each one literal of the option's kind,
-  given once (`bynk.capability.invalid_option`). `Kv` takes none. `Service`
+  given once (`bynk.capability.invalid_option`). An option also takes a
+  [constant](/reference/constants/) declared exactly the option's type and bound
+  to a literal, or to another such constant (`@worker(BillingWorker)`); a list
+  option such as `@allowedRecipients` takes constants for its string elements.
+  The constant is replaced by its literal before the option is checked, so every
+  rule below applies to its value, and a constant that does not qualify keeps the
+  option's own error. `Kv` takes none. `Service`
   requires `@worker("name")`, the Worker it reaches
   (`bynk.capability.missing_option`), which must not be one of the project's own
   contexts' Workers. `R2` takes an optional `@jurisdiction("eu")`. `RateLimit`

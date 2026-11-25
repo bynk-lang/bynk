@@ -685,6 +685,9 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 ("publisherId", str_lit(&owner)),
                 ("emittedAt", call(member(global("Date"), "now"), vec![])),
                 ("schemaVersion", num_lit(schema_version)),
+                // #3895: the trace this emission happened in; `undefined` outside
+                // one, which `JSON.stringify` leaves off the wire.
+                ("trace", call(ident("__currentTraceId"), vec![])),
             ]);
             let entry = object(vec![
                 ("type", str_lit(&event_name)),

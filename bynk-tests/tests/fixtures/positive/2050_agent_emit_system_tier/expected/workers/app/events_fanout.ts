@@ -8,7 +8,7 @@ import { __deliverEvent } from "../../__bynk_runtime/boundary.js";
 interface FanoutEvent {
   type: string;
   payload: unknown;
-  envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number };
+  envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string };
 }
 
 const __eventRoutes: globalThis.Record<string, globalThis.Array<{ binding: string; context: string; service: string }>> = {

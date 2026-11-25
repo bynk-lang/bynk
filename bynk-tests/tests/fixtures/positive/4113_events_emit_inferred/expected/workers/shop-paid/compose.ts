@@ -15,7 +15,7 @@ type __DurableObjectNamespace = { idFromName(name: string): { toString(): string
 
 export function compose(env: Env) {
   const Idempotency = new bynk__binding.IdempotencyProvider({ Clock: new bynk__binding.ClockProvider() }, env);
-  const deps = { Idempotency, __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT, events) };
+  const deps = { Idempotency, __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT, events) };
   return {
     async http_POST_paid() {
       return handlers.api.http_POST_paid(deps);
