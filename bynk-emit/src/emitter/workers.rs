@@ -1525,7 +1525,7 @@ fn push_session_check(stmts: &mut Vec<TsStmt>, seam: &bynk_check::actors::Signed
             "isLive",
             vec![
                 sid,
-                method_call(ident("Date"), "now", vec![]),
+                method_call(member(ident("globalThis"), "Date"), "now", vec![]),
                 ident("deps"),
             ],
         )),

@@ -25,7 +25,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_GET_me({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
@@ -37,7 +37,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_GET_theme(cookies, { ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
@@ -49,7 +49,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_GET_cookie_header(headers, { ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
@@ -61,7 +61,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_GET_jar(cookies, { ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
@@ -74,7 +74,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_POST_rename({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
@@ -90,7 +90,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_POST_logout({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
@@ -103,7 +103,7 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__session.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       if (__session.value.sid === undefined) return HttpResult.Unauthorized;
-      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, Date.now(), deps);
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_DELETE_session({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } } });
     },
