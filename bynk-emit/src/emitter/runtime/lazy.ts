@@ -36,12 +36,12 @@ interface Meta {
   skew: number | undefined;
 }
 
-// Every key of a range, in key order, in pages (a list returns everything it matches).
-async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptions): Promise<Array<[string, T]>> {
-  const out: Array<[string, T]> = [];
+// The pages of a range, in key order, one storage read each. A scan that can stop early takes a
+// page at a time; `listAll` takes them all (a list returns everything it matches).
+async function* pagesOf<T>(overlay: EntryOverlay, options: DurableObjectListOptions): AsyncGenerator<Array<[string, T]>> {
   if (options.reverse === true) {
-    const all = await overlay.list<T>(options);
-    return [...all];
+    yield [...(await overlay.list<T>(options))];
+    return;
   }
   // Storage rejects `start` with `startAfter` (#3747): the first page keeps the range's own lower
   // bound, and each later page replaces it with the cursor, which already lies beyond it.
@@ -49,11 +49,18 @@ async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptio
   let after: string | undefined;
   for (;;) {
     const bound = after === undefined ? (start === undefined ? {} : { start }) : { startAfter: after };
-    const page = await overlay.list<T>({ ...rest, ...bound, limit: SCAN_PAGE });
-    for (const [k, v] of page) out.push([k, v]);
-    if (page.size < SCAN_PAGE) return out;
-    after = out[out.length - 1]![0];
+    const page = [...(await overlay.list<T>({ ...rest, ...bound, limit: SCAN_PAGE }))];
+    yield page;
+    if (page.length < SCAN_PAGE) return;
+    after = page[page.length - 1]![0];
   }
+}
+
+// Every key of a range, in key order, in pages (a list returns everything it matches).
+async function listAll<T>(overlay: EntryOverlay, options: DurableObjectListOptions): Promise<Array<[string, T]>> {
+  const out: Array<[string, T]> = [];
+  for await (const page of pagesOf<T>(overlay, options)) out.push(...page);
+  return out;
 }
 
 // Runs the steps of one key one after another. A step reads what it is about to change, so two on the
@@ -256,6 +263,20 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
 
   async values(): Promise<readonly V[]> {
     return (await this.scan()).map(([, e]) => this.env(e));
+  }
+
+  /**
+   * The values a page of storage at a time, in **key** order (not insertion order: that exists only once
+   * every page is read), for a scan whose answer does not depend on the order (#4036).
+   */
+  async *lazyValues(): AsyncGenerator<V> {
+    const prefix = mapPrefix(this.field);
+    for await (const page of pagesOf<Envelope>(this.overlay, { prefix })) {
+      for (const [k, e] of page) {
+        if (this.keyCheck !== undefined) this.keyCheck(decodeKeyPart(k.slice(prefix.length)));
+        yield this.env(e);
+      }
+    }
   }
 
   async entries(): Promise<ReadonlyArray<readonly [string, V]>> {
@@ -485,6 +506,13 @@ export class LazyStoreLog<V> implements StoreLogHandle<V> {
 
   async values(): Promise<readonly V[]> {
     return (await this.entries()).map((e) => e.v);
+  }
+
+  /** The values oldest first, a page of storage at a time: the keys are append times (#4036). */
+  async *lazyValues(): AsyncGenerator<V> {
+    for await (const page of pagesOf<StoredLogEntry>(this.overlay, this.range(undefined, undefined))) {
+      for (const [, e] of page) yield this.entry(e).v;
+    }
   }
 
   async since(t: number): Promise<readonly V[]> {

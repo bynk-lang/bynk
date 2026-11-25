@@ -1522,6 +1522,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "on schedule(\"*/45 * * * *\") () -> Effect[Result[(), String]] { … }   // ⚠ fires at :00 and :45, then :00 again\n\non schedule(\"0,45 * * * *\") () -> Effect[Result[(), String]] { … }   // ✓ says so explicitly",
     },
     Explain {
+        code: "bynk.d1.decimal_numeric_affinity",
+        blurb: "A `Decimal` is exact only as text. A `Json.decodeSql` or `select` row may hold a `Decimal`, read from a SQLite `TEXT` column, which keeps its digits. A column declared `DECIMAL`, `NUMERIC`, `REAL` or an integer type has numeric affinity, so SQLite hands the value back as a number, and a number does not decode as a `Decimal`. Declare the column `TEXT` (the compiler stores a `Decimal` as its canonical text), or read the column into a `Float`. Only a column read straight from a table has a declared type, so this is a warning on the common case, not a proof.",
+        example: "CREATE TABLE prices (id TEXT PRIMARY KEY, amount NUMERIC NOT NULL);   // ⚠ read as a `Decimal`, it arrives as a number\n\nCREATE TABLE prices (id TEXT PRIMARY KEY, amount TEXT NOT NULL);      // ✓ the digits stay exact",
+    },
+    Explain {
         code: "bynk.d1.migration_name",
         blurb: "A `D1` database's migrations are the SQL files in `migrations/<database>/`, applied in number order, each once. So a file's name must give its place in that order: `NNNN_<name>.sql`, four digits, an underscore, then letters, digits, `_` or `-`, directly in its database's directory. A file named any other way, one in a nested folder, or one whose number another migration of the same database already has could not be put in order, so the build refuses it rather than skip it. Rename the file, or give it the next free number.",
         example: "migrations/shop-orders/1_create_orders.sql      // ✗ not four digits\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0002_add_total.sql     // ✗ `0002` is taken\n\nmigrations/shop-orders/0001_create_orders.sql   // ✓\nmigrations/shop-orders/0002_add_note.sql\nmigrations/shop-orders/0003_add_total.sql       // ✓ the next free number",
@@ -7641,6 +7646,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.cron.uneven_step",
         "A cron schedule's `*/n` step in the minute or hour field does not divide the field's range, so the last gap is shorter than `n` (warning).",
         &["cron_handler"],
+    )),
+    warn(d(
+        "bynk.d1.decimal_numeric_affinity",
+        "A `Decimal` row field is read from a SQLite column declared with numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`), which hands the value back as a number that does not decode; declare the column `TEXT` (warning).",
     )),
     warn(d(
         "bynk.d1.migration_invalid",
