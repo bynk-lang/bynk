@@ -77,8 +77,9 @@ case "a forged session cookie is refused" {
 }
 ```
 
-A bare `by Forged` is accepted only when exactly one member can refuse it; when more than one could, the
-compiler reports `bynk.test.bad_principal_needs_arm` and asks you to name the member. `by Expired` and
+A bare `by Forged` is accepted only when exactly one member can refuse it, and then it is presented to that
+member; when more than one could, the compiler reports `bynk.test.bad_principal_needs_arm` and asks you to name
+the member. `by Expired` and
 `by Stale` work the same way, and `by Revoked(User)` tests a `sessions = true` cookie. A bad credential takes no
 identity.
 

@@ -1,0 +1,31 @@
+suite shop.api as system {
+	case "a valid session cookie is admitted" {
+		let r <- api.POST("/session", Event { id: "e1" }) by Browser("ada")
+		expect r is Ok("browser ada")
+	}
+
+	case "an expired session cookie is refused without naming the member" {
+		let r <- api.POST("/session", Event { id: "e1" }) by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a revoked session cookie is refused without naming the member" {
+		let r <- api.POST("/session", Event { id: "e1" }) by Revoked
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired OIDC token is refused without naming the member" {
+		let r <- api.POST("/token", Event { id: "e1" }) by Expired
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a stale signature is refused without naming the member" {
+		let r <- api.POST("/token", Event { id: "e1" }) by Stale
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "naming the member still works" {
+		let r <- api.POST("/session", Event { id: "e1" }) by Expired(Browser)
+		expect r is Rejected(Unauthorized)
+	}
+}

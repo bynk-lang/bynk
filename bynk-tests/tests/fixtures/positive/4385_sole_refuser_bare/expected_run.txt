@@ -1,0 +1,2 @@
+# #4385: a bare bad credential on a sum with one refusing Oidc or cookie member drives that member.
+passed=6 failed=0
