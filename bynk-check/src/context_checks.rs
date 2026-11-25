@@ -2849,7 +2849,10 @@ fn actor_narrowing_refusal(
 fn by_mixes_signed(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &str) -> bool {
     use crate::actors::Scheme;
     let signed = |name: &str| {
-        table.actors.get(name).is_some_and(|a| is_producer_refinement(a, table))
+        table
+            .actors
+            .get(name)
+            .is_some_and(|a| is_producer_refinement(a, table))
             || by_actor_contract(name, table.actors.get(name), table)
                 .is_some_and(|c| c.scheme == Scheme::Foreign)
     };

@@ -381,7 +381,8 @@ fn signed_queues(
         .iter()
         .filter(|(_, d)| d.base_cap == "Queue")
         .filter_map(|(cap, d)| {
-            let consumer = bynk_check::queue_producers::signed_consumer_of(d.queue()?, unit, unit_tables)?;
+            let consumer =
+                bynk_check::queue_producers::signed_consumer_of(d.queue()?, unit, unit_tables)?;
             Some((cap.clone(), consumer))
         })
         .collect()

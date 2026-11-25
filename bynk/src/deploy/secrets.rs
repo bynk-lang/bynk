@@ -1477,6 +1477,31 @@ WITH_EQUALS=a=b
     }
 
     #[test]
+    fn a_queue_producer_signing_for_a_consumer_holds_an_edge_key_with_it() {
+        // #3899: no Service Binding joins them, yet the producer signs under the key of its edge
+        // to the consumer, which verifies under the same one.
+        let mut resources = BTreeMap::new();
+        resources.insert(
+            "shop-orders".to_string(),
+            Resources {
+                signs_queue_to: vec!["shop-fulfil".to_string(), "elsewhere".to_string()],
+                ..Resources::default()
+            },
+        );
+        resources.insert("shop-fulfil".to_string(), Resources::default());
+        let edges = project_edges(&resources);
+        assert_eq!(edges.len(), 1, "{edges:?}");
+        assert_eq!(
+            edge_keys_of("shop-orders", &edges),
+            ["BYNK_CALL_TO_SHOP__FULFIL"]
+        );
+        assert_eq!(
+            edge_keys_of("shop-fulfil", &edges),
+            ["BYNK_CALL_FROM_SHOP__ORDERS"]
+        );
+    }
+
+    #[test]
     fn the_project_edges_are_its_bindings_between_its_own_workers() {
         let mut resources = BTreeMap::new();
         resources.insert(

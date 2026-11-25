@@ -416,16 +416,16 @@ fn signer_stmt(signed: &SignedRoute) -> Option<TsStmt> {
                     ("identity".to_string(), from()),
                 ])
             };
-            let context =
-                rest.iter()
-                    .rev()
-                    .fold(member_of(last), |otherwise, (actor, pred)| {
-                        cond_expr(
-                            paren(caller_predicate_expr(pred, &from())),
-                            member_of(actor),
-                            otherwise,
-                        )
-                    });
+            let context = rest
+                .iter()
+                .rev()
+                .fold(member_of(last), |otherwise, (actor, pred)| {
+                    cond_expr(
+                        paren(caller_predicate_expr(pred, &from())),
+                        member_of(actor),
+                        otherwise,
+                    )
+                });
             if signed.secrets.is_empty() {
                 context
             } else {

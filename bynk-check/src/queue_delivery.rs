@@ -269,7 +269,11 @@ fn signed_senders(
             a.foreign
                 .into_iter()
                 .map(|f| (f.actor, f.secret))
-                .chain(a.producers.into_iter().map(|(actor, _)| (actor, String::new())))
+                .chain(
+                    a.producers
+                        .into_iter()
+                        .map(|(actor, _)| (actor, String::new())),
+                )
                 .collect()
         })
 }
