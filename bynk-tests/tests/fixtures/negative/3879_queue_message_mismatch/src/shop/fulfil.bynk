@@ -1,0 +1,8 @@
+context shop.fulfil
+
+type Order = { id: String, qty: Int }
+
+service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] { Ack }
+}
