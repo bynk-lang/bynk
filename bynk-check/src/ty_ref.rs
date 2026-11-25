@@ -1,8 +1,6 @@
 //! A checker `Ty` rendered back to a `TypeRef` (moved from `bynk-emit`'s boundary
 //! module, #3879, so the project-level queue check can name a send's type).
 
-use std::sync::Arc;
-
 use bynk_syntax::ast::{Ident, TypeRef};
 
 use crate::checker::{Ty, TyId, Types};
@@ -10,7 +8,7 @@ use crate::checker::{Ty, TyId, Types};
 /// v0.22b: a checker `Ty` rendered back to a `TypeRef` for the codec
 /// machinery (which is `TypeRef`-driven). `None` for types the codec
 /// rejects anyway (functions, effects, type variables).
-pub fn ty_to_type_ref(t: TyId, tys: &Arc<Types>) -> Option<TypeRef> {
+pub fn ty_to_type_ref(t: TyId, tys: &Types) -> Option<TypeRef> {
     let sp = bynk_syntax::span::Span::new(0, 0);
     Some(match &*tys.get(t) {
         Ty::Base(b) => TypeRef::Base(*b, sp),

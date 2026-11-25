@@ -289,24 +289,41 @@ pub fn send_value_label(
     if !["sendValue", "sendValueWith", "sendValueBatch"].contains(&op) {
         return None;
     }
-    let mut queue = None;
-    for_each_unit(doc_text, files, |unit| {
+    // A capability name is scoped to its context, so the instance is looked up in the
+    // document's own unit first; only when it is declared elsewhere does the project's
+    // other units answer.
+    let from_unit = |unit: &SourceUnit| -> Option<String> {
         let SourceUnit::Context(c) = unit else {
-            return;
+            return None;
         };
-        for item in &c.items {
-            if let CommonsItem::Capability(cap) = item
-                && cap.name.name == instance
-                && let Some(d) = &cap.derived
-                && d.base.name == "Queue"
-                && let Some(ann) = d.annotations.iter().find(|a| a.name.name == "name")
-                && let Some(arg) = ann.args.first()
-                && let bynk_syntax::ast::ExprKind::StrLit(q) = &arg.value.kind
-            {
-                queue = Some(q.clone());
+        c.items.iter().find_map(|item| {
+            let CommonsItem::Capability(cap) = item else {
+                return None;
+            };
+            let d = cap.derived.as_ref()?;
+            let ann = d.annotations.iter().find(|a| a.name.name == "name")?;
+            match &ann.args.first()?.value.kind {
+                bynk_syntax::ast::ExprKind::StrLit(q)
+                    if cap.name.name == instance && d.base.name == "Queue" =>
+                {
+                    Some(q.clone())
+                }
+                _ => None,
             }
-        }
-    });
+        })
+    };
+    let own = tokenize(doc_text)
+        .ok()
+        .and_then(|tokens| bynk_syntax::parser::parse_unit_with_recovery(&tokens, doc_text).0)
+        .and_then(|unit| from_unit(&unit));
+    let mut queue = own;
+    if queue.is_none() {
+        for_each_unit(doc_text, files, |unit| {
+            if queue.is_none() {
+                queue = from_unit(unit);
+            }
+        });
+    }
     let (_, ty) = consumer_of(&queue?, doc_text, files)?;
     Some(match op {
         "sendValue" => format!("{instance}.sendValue(message: {ty}) -> Effect[()]"),
@@ -455,6 +472,19 @@ mod tests {
         assert_eq!(
             describe_retry_after_at(src, src.find("Effect").unwrap() + 1),
             None
+        );
+    }
+
+    #[test]
+    fn send_value_signature_prefers_the_documents_own_instance() {
+        let other = "context shop.billing\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"billing-events\")\n\nservice pay from queue(\"billing-events\") {\n  on message(invoice: Invoice) -> Effect[QueueResult] { Ack }\n}\n";
+        let dir = std::env::temp_dir().join("bynk-sigdoc-4281");
+        let mut files = HashMap::new();
+        files.insert(dir.join("billing.bynk"), other.to_string());
+        // The document's own `OrderEvents` names `order-events`, whatever another context's names.
+        assert_eq!(
+            send_value_label("OrderEvents", "sendValue", PROJECT, Some(&files)).as_deref(),
+            Some("OrderEvents.sendValue(message: Order) -> Effect[()]")
         );
     }
 }

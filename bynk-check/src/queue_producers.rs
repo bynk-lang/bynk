@@ -61,7 +61,7 @@ pub struct Consumer<'a> {
 
 /// The consumer of each queue the project reads, by queue name. A queue with
 /// two consumers is reported elsewhere (`bynk.queue.duplicate_consumer`); the
-/// first, in source order, is the one a producer is compared with.
+/// first by context name (then file order) is the one a producer is compared with.
 pub fn consumers_of<'a>(
     parsed: &'a [ParsedFile],
     groups: &'a BTreeMap<String, Vec<usize>>,
@@ -313,6 +313,9 @@ fn mismatch(
     }
     err.with_note(
         "the consumer decodes each message as its own type, so a message it cannot decode would be retried, then dead-lettered or dropped",
+    )
+    .with_note(
+        "send a value of the type the consumer takes, or change the consumer's `on message` parameter",
     )
 }
 
