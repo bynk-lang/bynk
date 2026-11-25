@@ -17,6 +17,46 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
+/// #4045: per unit, a name a `uses` clause renames or qualifies, to the commons it
+/// comes from and the name that commons declares it as.
+fn use_renames_of(
+    unit_tables: &HashMap<String, UnitTable>,
+) -> HashMap<String, HashMap<String, (String, String)>> {
+    unit_tables
+        .iter()
+        .map(|(unit, t)| {
+            let renames = t
+                .use_views
+                .iter()
+                .flat_map(|(target, view)| {
+                    view.use_origin
+                        .iter()
+                        .map(move |(key, orig)| (key.clone(), (target.clone(), orig.clone())))
+                })
+                .collect::<HashMap<_, _>>();
+            (unit.clone(), renames)
+        })
+        .filter(|(_, r)| !r.is_empty())
+        .collect()
+}
+
+/// #2887: only the aliases `phase_resolve_consumes` accepted, per unit, as
+/// alias -> (consumed unit, declared name).
+fn type_aliases_of(
+    unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
+) -> HashMap<String, HashMap<String, (String, String)>> {
+    unit_type_aliases
+        .iter()
+        .map(|(unit, aliases)| {
+            let aliases = aliases
+                .iter()
+                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
+                .collect();
+            (unit.clone(), aliases)
+        })
+        .collect()
+}
+
 /// v0.25 (ADR 0053): walk every parsed file's top-level declarations into
 /// the def table (synthetic first-party units and test files excluded —
 /// neither declares user-editable symbols), then qualify and attach the
@@ -27,25 +67,16 @@ pub fn assemble_index(
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
+    unit_tables: &HashMap<String, UnitTable>,
     refs: RefSink,
 ) -> ProjectIndex {
     let mut builder = IndexBuilder::default();
+    builder.set_use_renames(use_renames_of(unit_tables));
     let mut uses = unit_uses.clone();
     uses.extend(refs.extra_uses);
     builder.set_uses(uses);
     builder.set_consumes(unit_consumes.clone());
-    // #2887: only the aliases `phase_resolve_consumes` accepted.
-    let type_aliases = unit_type_aliases
-        .iter()
-        .map(|(unit, aliases)| {
-            let aliases = aliases
-                .iter()
-                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
-                .collect();
-            (unit.clone(), aliases)
-        })
-        .collect();
-    builder.set_type_aliases(type_aliases);
+    builder.set_type_aliases(type_aliases_of(unit_type_aliases));
     for pf in parsed {
         // #2834: a suite's helper `fn`s are definitions in the suite's own
         // namespace (`test_suites::suite_helper_namespace`); its cases are
@@ -577,6 +608,20 @@ pub struct UnitTable {
     /// [`UnitTable::capabilities`], with its base's operations, so `given`,
     /// calls and test views treat it as an ordinary capability.
     pub derived: HashMap<String, DerivedInstance>,
+    /// #4045: for each commons this unit `uses` through a braced list, an alias,
+    /// a qualified name or a name another used commons also declares, the table
+    /// as this unit sees it: public names only, selected and renamed as the
+    /// clauses say, and each type's references renamed to match
+    /// ([`crate::uses_view`]). A commons not listed is seen as its own table.
+    /// Filled by [`crate::uses_view::attach_use_views`].
+    pub use_views: std::collections::BTreeMap<String, UnitTable>,
+    /// #4045: a bare name two used commons both bring in, with the qualified
+    /// spelling of each, for `bynk.uses.ambiguous_name` where it is referenced.
+    pub ambiguous_uses: std::collections::BTreeMap<String, Vec<String>>,
+    /// #4045: on a [`UnitTable::use_views`] entry, each name the view files
+    /// under a spelling other than the declared one, by its declared name, for
+    /// the emitter's import.
+    pub use_origin: HashMap<String, String>,
 }
 
 /// One type's methods: its name, then its instance and static methods in key order.
@@ -606,6 +651,14 @@ pub(crate) fn sorted_methods(
 }
 
 impl UnitTable {
+    /// #4045: the table of used commons `target` as this unit sees it: its
+    /// [`UnitTable::use_views`] entry when the clauses select, rename or qualify
+    /// its names, else `plain` (the commons' own table, whose `private`
+    /// declarations the caller still leaves out).
+    pub fn seen_through<'a>(&'a self, target: &str, plain: &'a UnitTable) -> &'a UnitTable {
+        self.use_views.get(target).unwrap_or(plain)
+    }
+
     /// #3536: [`UnitTable::unselected_consumed_types`] as a set.
     pub fn unselected_names(&self) -> std::collections::HashSet<String> {
         self.unselected_consumed_types.iter().cloned().collect()
@@ -670,6 +723,9 @@ impl UnitTable {
             unselected_consumed_types,
             unlisted_consumed_types,
             derived,
+            use_views,
+            ambiguous_uses,
+            use_origin: _,
         } = self;
         (
             *kind,
@@ -678,6 +734,13 @@ impl UnitTable {
             unselected_consumed_types,
             unlisted_consumed_types,
             sorted(derived),
+            // A view is a function of the used commons' public surface and of
+            // this unit's clauses: its names are what a change to either shows.
+            use_views
+                .iter()
+                .map(|(t, v)| (t, v.types.keys().collect::<std::collections::BTreeSet<_>>()))
+                .collect::<Vec<_>>(),
+            ambiguous_uses,
         )
     }
 
@@ -3176,6 +3239,9 @@ mod detect_context_message_bundle_tests {
                 uses: targets
                     .iter()
                     .map(|t| UsesDecl {
+                        alias: None,
+                        selected: None,
+                        qualified_refs: Vec::new(),
                         target: qualified(t),
                         span: Span::default(),
                         trivia: Trivia::default(),

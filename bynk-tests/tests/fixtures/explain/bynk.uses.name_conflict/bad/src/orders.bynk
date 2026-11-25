@@ -1,6 +1,0 @@
-commons orders
-
-uses billing
-uses shipping
-
-type Order = { id: Int }

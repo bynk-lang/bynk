@@ -57,8 +57,9 @@ and a NUL byte is `bynk.embed.binary_content`. A binary file belongs in
 
 The text is not interpreted. `\(` and `{{ }}` mean nothing to the language, so
 substituting into a template is ordinary `String` code, and nothing is
-escaped for you. Escape every value you substitute into markup, and check a
-rendered page for a placeholder you forgot to fill:
+escaped for you. Escape every value you substitute into markup, with
+[`escapeText` and `escapeAttr`](/reference/bynk-capabilities/#html-escaping-bynkhtml) from
+`bynk.html`, and check a rendered page for a placeholder you forgot to fill:
 
 ```bynk,fragment
 expect page("Home", "hi").contains("{{") == false

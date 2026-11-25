@@ -348,6 +348,10 @@
             "link": "/book/guides/entry-points/branch-on-the-callers-country/"
           },
           {
+            "label": "Map a domain error to a status once",
+            "link": "/book/guides/entry-points/map-a-domain-error-to-a-status/"
+          },
+          {
             "label": "Serve a page from an HTML file",
             "link": "/book/guides/entry-points/serve-a-page/"
           },

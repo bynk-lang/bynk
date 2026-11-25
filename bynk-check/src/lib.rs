@@ -110,6 +110,7 @@ pub mod test_suites;
 pub(crate) mod testkit;
 pub mod ty_ref;
 pub mod unit_signature;
+pub mod uses_view;
 pub mod websocket;
 pub mod wire;
 pub mod wire_default;

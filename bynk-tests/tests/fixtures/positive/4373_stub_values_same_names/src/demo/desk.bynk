@@ -1,0 +1,24 @@
+context demo.desk
+
+capability Meter {
+  fn read() -> Effect[Int]
+  fn scale(amount: Int) -> Effect[Int]
+}
+
+provides Meter = Fixed {
+  fn read() -> Effect[Int] { Effect.pure(1) }
+  fn scale(amount: Int) -> Effect[Int] { Effect.pure(amount) }
+}
+
+service local {
+  on call(n: Int) -> Effect[Int] by Caller given Meter {
+    let m <- Meter.read()
+    Effect.pure(n + m)
+  }
+}
+
+service scaled {
+  on call(n: Int) -> Effect[Int] by Caller given Meter {
+    Meter.scale(n)
+  }
+}

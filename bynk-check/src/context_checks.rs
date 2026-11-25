@@ -2147,7 +2147,11 @@ fn check_by_clause_contracts(
         // A refinement actor (`actor A = B where …`) is never a peer: every `A`
         // is a `B`, so the arm is dead (Q3/Q4).
         if by.is_sum()
-            && local.is_some_and(|a| a.refinement.is_some() && !is_caller_refinement(a, table))
+            && local.is_some_and(|a| {
+                a.refinement.is_some()
+                    && !is_caller_refinement(a, table)
+                    && !is_sender_refinement(a, table)
+            })
         {
             errors.push(
                 CompileError::new(
@@ -2165,35 +2169,10 @@ fn check_by_clause_contracts(
             );
             continue;
         }
-        let contract = if let Some(a) = local {
+        if local.is_some() {
             refs.record(actor_ref.span, SymbolKind::Actor, &actor_ref.name);
-            // v0.53: a refinement actor's contract is its base's scheme
-            // (refinement elimination — an `Admin` is-a `User`); the invariant
-            // rides the seam, not the scheme. A malformed refinement already
-            // errored at its decl (pass 1).
-            let scheme_actor = match &a.refinement {
-                Some(r) => table.actors.get(&r.base.name),
-                None => Some(a),
-            };
-            if is_caller_refinement(a, table) {
-                // #3890: a refinement over `Caller` inherits its scheme and identity.
-                actors::prelude_actor("Caller")
-            } else if is_producer_refinement(a, table) {
-                // #3899: a refinement over `Producer` inherits its contract.
-                actors::prelude_actor("Producer")
-            } else {
-                scheme_actor
-                    .and_then(|sa| sa.auth.as_ref())
-                    .and_then(|au| Scheme::from_name(&au.name))
-                    .filter(|s| s.admitted())
-                    .map(|scheme| actors::Contract {
-                        scheme,
-                        identity: actors::Identity::Unit,
-                    })
-            }
-        } else {
-            actors::prelude_actor(&actor_ref.name)
-        };
+        }
+        let contract = by_actor_contract(&actor_ref.name, local, table);
         let Some(contract) = contract else {
             if local.is_none() {
                 errors.push(
@@ -2210,10 +2189,15 @@ fn check_by_clause_contracts(
             }
             continue;
         };
-        errors.extend(queue_actor_narrowing(
+        errors.extend(actor_narrowing_refusal(
             protocol,
             by,
-            local.is_some_and(|a| is_producer_refinement(a, table)),
+            local.map(|a| {
+                (
+                    is_producer_refinement(a, table),
+                    is_sender_refinement(a, table),
+                )
+            }),
             contract.scheme,
         ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
@@ -2261,44 +2245,6 @@ fn check_by_clause_contracts(
                 .with_note(
                     "`Caller` carries the calling context's identity — it is only \
                      admissible on `on call`; cron takes `Scheduler`, queue takes `Producer`",
-                ),
-            );
-        }
-        // v0.151: `Oidc` is single-actor only this slice — a multi-actor sum owns
-        // the whole boundary and reads the body once, a shape the OIDC seam (JWKS
-        // fetch + async key import) does not yet fit. Reject it as a peer.
-        if by.is_sum() && contract.scheme == actors::Scheme::Oidc {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.oidc_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `Oidc` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "OIDC is single-actor this slice — give the route a single \
-                     `by user: <OidcActor>` clause",
-                ),
-            );
-        }
-        // #3386: `SignedCookie` is single-actor only in its first slice, as
-        // `Oidc` was: the per-arm CSRF rule is the part that gets harder in a
-        // sum, so a route guarded by one takes a single `by u: <Actor>`.
-        if by.is_sum() && contract.scheme == actors::Scheme::SignedCookie {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.signed_cookie_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `SignedCookie` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "a signed cookie is single-actor in this slice — give the route a single \
-                     `by user: <SignedCookieActor>` clause",
                 ),
             );
         }
@@ -2755,6 +2701,51 @@ pub(crate) fn is_caller_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &
         .is_some_and(|r| r.base.name == "Caller" && !table.actors.contains_key("Caller"))
 }
 
+/// The contract a `by` clause's actor resolves to: a local declaration (a refinement's contract is
+/// its base's scheme, refinement elimination, v0.53; the invariant rides the seam, not the scheme;
+/// a malformed refinement already errored at its decl) or a prelude actor. A refinement over a
+/// prelude actor (`Caller` #3890, `Sender` #3888, `Producer` #3899) has that actor's contract.
+fn by_actor_contract(
+    name: &str,
+    local: Option<&bynk_syntax::ast::ActorDecl>,
+    table: &UnitTable,
+) -> Option<crate::actors::Contract> {
+    use crate::actors::{self, Scheme};
+    let Some(a) = local else {
+        return actors::prelude_actor(name);
+    };
+    if is_caller_refinement(a, table) {
+        return actors::prelude_actor("Caller");
+    }
+    if is_sender_refinement(a, table) {
+        return actors::prelude_actor("Sender");
+    }
+    if is_producer_refinement(a, table) {
+        return actors::prelude_actor("Producer");
+    }
+    let scheme_actor = match &a.refinement {
+        Some(r) => table.actors.get(&r.base.name),
+        None => Some(a),
+    };
+    scheme_actor
+        .and_then(|sa| sa.auth.as_ref())
+        .and_then(|au| Scheme::from_name(&au.name))
+        .filter(|s| s.admitted())
+        .map(|scheme| actors::Contract {
+            scheme,
+            identity: actors::Identity::Unit,
+        })
+}
+
+/// #3888: whether an actor declaration refines the prelude `Sender` (no local
+/// actor named `Sender` shadows it).
+pub(crate) fn is_sender_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &UnitTable) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Sender" && !table.actors.contains_key("Sender"))
+}
+
 /// #3899: whether an actor declaration refines the prelude `Producer` (no local
 /// actor named `Producer` shadows it).
 pub(crate) fn is_producer_refinement(
@@ -2771,13 +2762,32 @@ pub(crate) fn is_producer_refinement(
 /// actor, but nothing yet enforces either on delivery (the signed message
 /// format is a later part of #3899), so naming one is refused rather than
 /// accepted unenforced.
-fn queue_actor_narrowing(
+fn actor_narrowing_refusal(
     protocol: &ServiceProtocol,
     by: &bynk_syntax::ast::ByClause,
-    producer_refinement: bool,
+    refinement: Option<(bool, bool)>,
     scheme: crate::actors::Scheme,
 ) -> Option<CompileError> {
     use crate::actors::Scheme;
+    let (producer_refinement, sender_refinement) = refinement.unwrap_or_default();
+    // #3888: likewise a refinement over `Sender` narrows inbound mail, and only an email
+    // handler can name one: elsewhere its `Dmarc(…)` is never checked.
+    if sender_refinement && !matches!(protocol, ServiceProtocol::Email { .. }) {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Sender` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Sender` refinements narrow which mail an email handler acts on — name one \
+                 only on `on message` of a `from email` service",
+            ),
+        );
+    }
     let on_queue = matches!(protocol, ServiceProtocol::Queue { .. });
     // A refinement over `Producer` narrows a queue's senders, and only a queue
     // consumer can name one; elsewhere nothing would enforce its `IsContext(…)`,
@@ -2993,6 +3003,41 @@ fn check_refinement_actor(
     // an authorisation invariant. Its base MUST be a declared `Bearer` actor
     // (only Bearer carries claims to authorise against), and its `where`
     // predicate MUST be in the closed claim-predicate set.
+    if let Some(r) = &actor.refinement
+        && is_sender_refinement(actor, table)
+    {
+        // #3888: a refinement over `Sender` narrows which mail is admitted, by
+        // the closed `Dmarc(…)` vocabulary.
+        match actors::parse_sender_predicate(&r.predicate) {
+            Ok(pred) if pred.admitted().is_empty() => errors.push(
+                CompileError::new(
+                    "bynk.actor.sender_admits_nothing",
+                    r.predicate.span,
+                    format!(
+                        "the refinement `{}` admits no DMARC verdict, so every message would be refused",
+                        actor.name.name
+                    ),
+                )
+                .with_note(
+                    "the predicate is false for `DmarcPass`, `DmarcFail` and `DmarcNone` alike — \
+                     check the `&&` and `!` it combines",
+                ),
+            ),
+            Ok(_) => {}
+            Err(span) => errors.push(
+                CompileError::new(
+                    "bynk.actor.refinement_predicate_unsupported",
+                    span,
+                    "a refinement over `Sender` must be `Dmarc(<DmarcVerdict>, …)`, composed with `&&`, `||`, `!`",
+                )
+                .with_note(
+                    "the DMARC verdict is the only thing a `Sender` refinement tests: name \
+                     `DmarcPass`, `DmarcFail` or `DmarcNone`",
+                ),
+            ),
+        }
+        return;
+    }
     if let Some(r) = &actor.refinement
         && (is_caller_refinement(actor, table) || is_producer_refinement(actor, table))
     {
@@ -3947,6 +3992,10 @@ fn actor_identity_ty_guarded<'a>(
             if is_caller_refinement(local, table) {
                 return tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String));
             }
+            // #3888: a refinement over the prelude `Sender` yields its identity.
+            if is_sender_refinement(local, table) {
+                return actor_identity_ty_guarded("Sender", table, resolved, seen, tys);
+            }
             return tys.intern(checker::Ty::Unit);
         }
         return match &local.identity {
@@ -4006,6 +4055,12 @@ const ANNOTATIONS: &[AnnotationSpec] = &[
     },
     AnnotationSpec {
         name: "indexed",
+        kinds: &["Map"],
+        functional: true,
+    },
+    // #4038: a value may appear on at most one entry; implies `@indexed(by:)` on the same field.
+    AnnotationSpec {
+        name: "unique",
         kinds: &["Map"],
         functional: true,
     },
@@ -4081,7 +4136,7 @@ fn validate_store_annotations(
         // v0.93 (ADR 0118): `@indexed(by: k, …)` — each `by:` names a
         // **value-keyable field of the map's value type** to maintain a secondary
         // index on. Validate the keys here, now the kind/value type are known.
-        if name == "indexed" {
+        if name == "indexed" || name == "unique" {
             validate_indexed_keys(f, types, ann, errors);
         }
     }
@@ -4097,6 +4152,7 @@ fn validate_indexed_keys(
     ann: &Annotation,
     errors: &mut Vec<CompileError>,
 ) {
+    let name = ann.name.name.as_str();
     // The map's value type is the second kind argument (`Map[K, V]`).
     let value_fields: Option<&[RecordField]> = f
         .kind
@@ -4110,13 +4166,33 @@ fn validate_indexed_keys(
             TypeBody::Record(r) => Some(r.fields.as_slice()),
             _ => None,
         });
+    // #4038: `@unique` is a constraint, so a form that would silently enforce nothing, or something other
+    // than what it reads as, is refused: a bare one has no field, and a second `by:` would make each
+    // field unique alone, not the pair.
+    if name == "unique" && ann.args.is_empty() {
+        errors.push(CompileError::new(
+            "bynk.index.bad_argument",
+            ann.span,
+            "`@unique` needs a field: `@unique(by: <field>)`",
+        ));
+    }
+    if name == "unique" && ann.args.len() > 1 {
+        errors.push(
+            CompileError::new(
+                "bynk.index.bad_argument",
+                ann.args[1].span,
+                "`@unique` takes one `by:` field",
+            )
+            .with_note("each `by:` would make its field unique on its own, not the pair; a constraint over several fields is not supported"),
+        );
+    }
     for arg in &ann.args {
-        // Only `by:` labels are admitted on `@indexed`.
+        // Only `by:` labels are admitted on `@indexed` and `@unique`.
         let Some(label) = &arg.label else {
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.span,
-                "`@indexed` arguments are `by: <field>` labels naming a field to index on",
+                format!("`@{name}` arguments are `by: <field>` labels naming a field to index on"),
             ));
             continue;
         };
@@ -4124,7 +4200,7 @@ fn validate_indexed_keys(
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.span,
-                format!("`@indexed` takes `by:` arguments, not `{}:`", label.name),
+                format!("`@{name}` takes `by:` arguments, not `{}:`", label.name),
             ));
             continue;
         }
@@ -4132,7 +4208,7 @@ fn validate_indexed_keys(
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.value.span,
-                "`@indexed(by: …)` names a field of the map's value type",
+                format!("`@{name}(by: …)` names a field of the map's value type"),
             ));
             continue;
         };
@@ -4143,7 +4219,7 @@ fn validate_indexed_keys(
                     "bynk.index.unknown_key",
                     arg.value.span,
                     format!(
-                        "`@indexed(by: {0})` — the map's value type has no field `{0}`",
+                        "`@{name}(by: {0})` — the map's value type has no field `{0}`",
                         key.name
                     ),
                 ));
@@ -4158,7 +4234,7 @@ fn validate_indexed_keys(
                         "bynk.index.unkeyable_key",
                         arg.value.span,
                         format!(
-                            "`@indexed(by: {0})` — field `{0}` is not `Key`, and `{1}` is not",
+                            "`@{name}(by: {0})` — field `{0}` is not `Key`, and `{1}` is not",
                             key.name, blocker.part
                         ),
                     )
@@ -4238,6 +4314,8 @@ fn validate_index_hygiene(
     let mut declared: HashMap<String, Vec<(String, Span)>> = HashMap::new();
     // map → the value type's record fields (for the keyability check)
     let mut value_fields: HashMap<String, Vec<RecordField>> = HashMap::new();
+    // #4038: the (map, field) pairs under `@unique(by:)`, which maintains its index itself.
+    let mut unique: HashSet<(String, String)> = HashSet::new();
     for f in &agent.store_fields {
         if f.kind.head.name != "Map" || f.kind.args.len() != 2 {
             continue;
@@ -4254,6 +4332,16 @@ fn validate_index_hygiene(
             .map(|d| &d.body)
         {
             value_fields.insert(f.name.name.clone(), r.fields.clone());
+        }
+        for arg in f
+            .annotations
+            .iter()
+            .filter(|a| a.name.name == "unique")
+            .flat_map(|a| &a.args)
+        {
+            if let ExprKind::Ident(k) = &arg.value.kind {
+                unique.insert((f.name.name.clone(), k.name.clone()));
+            }
         }
         for an in f.annotations.iter().filter(|a| a.name.name == "indexed") {
             for arg in &an.args {
@@ -4281,7 +4369,8 @@ fn validate_index_hygiene(
             used.insert((map.to_string(), field.to_string()));
             let is_declared = declared
                 .get(map)
-                .is_some_and(|v| v.iter().any(|(f, _)| f == field));
+                .is_some_and(|v| v.iter().any(|(f, _)| f == field))
+                || unique.contains(&(map.to_string(), field.to_string()));
             if is_declared {
                 return;
             }
@@ -4307,6 +4396,19 @@ fn validate_index_hygiene(
     // A declared index no equality filter routes through is dead maintenance.
     for (map, fields) in &declared {
         for (field, span) in fields {
+            if unique.contains(&(map.clone(), field.clone())) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.store.unique_implies_indexed",
+                        *span,
+                        format!(
+                            "`@unique(by: {field})` on `{map}` already maintains the index `@indexed(by: {field})` declares"
+                        ),
+                    )
+                    .with_note("remove the `@indexed`: a unique field is indexed, and its equality filters route through the unique index"),
+                );
+                continue;
+            }
             if !used.contains(&(map.clone(), field.clone())) {
                 errors.push(
                     CompileError::new(

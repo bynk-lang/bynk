@@ -366,6 +366,13 @@ pub const PRELUDE_TYPES: &[PreludeType] = &[
 /// `compare` and `sortWith` use, with `then` and `reverse`.
 pub const BYNK_ORDERING_SRC: &str = include_str!("../lib/core/bynk.ordering.bynk");
 
+/// Inside the reserved `bynk.*` prefix; injected when `uses`-imported.
+pub const HTML_UNIT: &str = "bynk.html";
+
+/// `bynk.html` (#3924) — `escapeText` and `escapeAttr`, the two HTML escapes by context, pure and
+/// available on every target, written in Bynk over `String.replace`.
+pub const BYNK_HTML_SRC: &str = include_str!("../lib/core/bynk.html.bynk");
+
 /// `bynk.validation` — `ValidationRule` and `Bound`.
 pub const BYNK_VALIDATION_SRC: &str = include_str!("../lib/core/bynk.validation.bynk");
 
@@ -1414,6 +1421,22 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    Unit {
+        name: HTML_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/html.bynk",
+        source: BYNK_HTML_SRC,
+        binding: Binding::None,
+        // 13: `bynk.validation` takes 12.
+        id_block: 13,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
     #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
@@ -2220,6 +2243,7 @@ mod tests {
                 ("bynk.set", 9),
                 ("bynk.ordering", 11),
                 ("bynk.validation", 12),
+                ("bynk.html", 13),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2253,6 +2277,7 @@ mod tests {
                 "bynk.set",
                 "bynk.ordering",
                 "bynk.validation",
+                "bynk.html",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

@@ -4,7 +4,7 @@
 # below 300 (or gone) must be removed. Prefer splitting a function to raising its
 # ceiling; a raise needs its justification in review. `cargo xtask fn-lengths --apply`
 # rewrites this file from the tree (lowering ceilings after a function shrinks).
-bynk-emit/src/testgen/system_support.rs::emit_system_http_support = 1059
+bynk-emit/src/testgen/system_support.rs::emit_system_http_support = 1025
 bynk-emit/src/emitter/workers_entry.rs::emit_worker_entry = 488
 bynk-driver/src/project/pipeline.rs::run_checks = 934
 bynk-emit/src/testgen/test_module.rs::emit_test_module = 921
@@ -52,7 +52,6 @@ bynk-syntax/src/parser/declarations.rs::parse_commons_body = 342
 bynk-emit/src/testgen/stubs.rs::emit_stub_class = 331
 bynk-project/src/packages.rs::resolve_graph = 337
 bynk-check/src/checker/expressions.rs::check_http_variant = 335
-bynk-emit/src/emitter/workers.rs::emit_http_sum_wrapper = 335
 bynk-check/src/context_checks.rs::check_service_decls = 327
 bynk-check/src/test_suites.rs::check_test_bodies = 327
 bynk-ide/src/hover.rs::hover_content = 324

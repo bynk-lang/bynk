@@ -14,7 +14,7 @@ import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStateme
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
-import { commitStored, committedSize, eraseStored, markErased, newErasure, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
+import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
@@ -76,6 +76,7 @@ export {
   scanMap as __scanMap,
   scanSkip as __scanSkip,
   scanTake as __scanTake,
+  checkUnique as __checkUnique,
   committedSize as __committedSize,
   storeKey as __bynkStoreKey,
   checkStoredLayout as __checkStoredLayout,

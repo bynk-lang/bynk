@@ -89,6 +89,7 @@
 /book/guides/entry-points/call-from-a-front-end/
 /book/guides/entry-points/cron/
 /book/guides/entry-points/http/
+/book/guides/entry-points/map-a-domain-error-to-a-status/
 /book/guides/entry-points/queue/
 /book/guides/entry-points/receive-email/
 /book/guides/entry-points/serve-a-page/
@@ -836,6 +837,7 @@
 /book/reference/diagnostics/bynk.store.log_needs_clock/
 /book/reference/diagnostics/bynk.store.unkeyable_key/
 /book/reference/diagnostics/bynk.store.unknown_annotation/
+/book/reference/diagnostics/bynk.store.unique_implies_indexed/
 /book/reference/diagnostics/bynk.store.unknown_kind/
 /book/reference/diagnostics/bynk.store.unknown_map_accessor/
 /book/reference/diagnostics/bynk.store.unknown_op/
@@ -1058,11 +1060,14 @@
 /book/reference/diagnostics/bynk.types.variant_arity/
 /book/reference/diagnostics/bynk.types.variant_missing_payload/
 /book/reference/diagnostics/bynk.types.variant_payload_mismatch/
+/book/reference/diagnostics/bynk.uses.ambiguous_name/
 /book/reference/diagnostics/bynk.uses.name_conflict/
+/book/reference/diagnostics/bynk.uses.second_spelling/
 /book/reference/diagnostics/bynk.uses.self_reference/
 /book/reference/diagnostics/bynk.uses.target_is_context/
 /book/reference/diagnostics/bynk.uses.test_only_commons/
 /book/reference/diagnostics/bynk.uses.unknown_commons/
+/book/reference/diagnostics/bynk.uses.unknown_name/
 /book/reference/diagnostics/bynk.val.agent_not_generable/
 /book/reference/diagnostics/bynk.val.arity/
 /book/reference/diagnostics/bynk.val.generic_type/
@@ -1339,6 +1344,7 @@
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
 /reference/diagnostics/bynk.actor.scheme_arg_kind/
 /reference/diagnostics/bynk.actor.scheme_not_admissible/
+/reference/diagnostics/bynk.actor.sender_admits_nothing/
 /reference/diagnostics/bynk.actor.signature_identity_unsupported/
 /reference/diagnostics/bynk.actor.signature_missing_header/
 /reference/diagnostics/bynk.actor.signature_missing_secret/
@@ -2018,6 +2024,7 @@
 /reference/diagnostics/bynk.store.log_needs_clock/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/
+/reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unknown_kind/
 /reference/diagnostics/bynk.store.unknown_map_accessor/
 /reference/diagnostics/bynk.store.unknown_op/
@@ -2246,11 +2253,14 @@
 /reference/diagnostics/bynk.types.variant_arity/
 /reference/diagnostics/bynk.types.variant_missing_payload/
 /reference/diagnostics/bynk.types.variant_payload_mismatch/
+/reference/diagnostics/bynk.uses.ambiguous_name/
 /reference/diagnostics/bynk.uses.name_conflict/
+/reference/diagnostics/bynk.uses.second_spelling/
 /reference/diagnostics/bynk.uses.self_reference/
 /reference/diagnostics/bynk.uses.target_is_context/
 /reference/diagnostics/bynk.uses.test_only_commons/
 /reference/diagnostics/bynk.uses.unknown_commons/
+/reference/diagnostics/bynk.uses.unknown_name/
 /reference/diagnostics/bynk.val.agent_not_generable/
 /reference/diagnostics/bynk.val.arity/
 /reference/diagnostics/bynk.val.generic_type/

@@ -947,8 +947,9 @@ pub fn compose_unit_assets(
             continue;
         };
         // #2618: a used commons' `private` assets stay in it.
-        for (asset_name, decl) in used_info
+        for (asset_name, decl) in info
             .table
+            .seen_through(used, &used_info.table)
             .assets
             .iter()
             .filter(|(_, d)| d.private.is_none())
@@ -1103,7 +1104,7 @@ mod tests {
                 "context app.web\n\nuses lib.a\nuses lib.b\n\nfn f() -> String {\n  style.url\n}\n",
             ),
         ]);
-        a.assert_reports("bynk.uses.name_conflict");
+        a.assert_reports("bynk.uses.ambiguous_name");
     }
 
     /// A unit split across files has one asset namespace: a second
@@ -1148,7 +1149,7 @@ mod tests {
                 "context app.web\n\nuses lib.a\nuses lib.b\n\nasset Style = \"assets/a.css\"\n\ntype Page = { s: Style }\n",
             ),
         ]);
-        a.assert_reports("bynk.uses.name_conflict");
+        a.assert_reports("bynk.uses.ambiguous_name");
     }
 
     #[test]

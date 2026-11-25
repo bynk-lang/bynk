@@ -48,6 +48,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -701,6 +705,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -1513,6 +1521,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -1590,6 +1602,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -1993,6 +2009,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -2362,6 +2382,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -2907,6 +2931,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -3297,6 +3325,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -4350,6 +4382,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -5168,6 +5204,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -5424,6 +5464,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -5476,6 +5520,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -5507,6 +5555,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -5547,6 +5599,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -5706,6 +5762,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -6457,6 +6517,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -6668,6 +6732,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -6949,6 +7017,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -8309,6 +8381,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -8392,6 +8468,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -8712,6 +8792,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -9016,6 +9100,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -9395,6 +9483,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -9429,6 +9521,32 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "qualified_type_ref",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "qualifier": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -9626,6 +9744,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -9892,6 +10014,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -10302,6 +10428,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -10937,6 +11067,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -10968,6 +11102,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -11012,6 +11150,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -11842,6 +11984,10 @@
           "named": true
         },
         {
+          "type": "qualified_type_ref",
+          "named": true
+        },
+        {
           "type": "unit_type",
           "named": true
         },
@@ -12527,6 +12673,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -12778,6 +12928,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -13265,6 +13419,16 @@
     "type": "uses_decl",
     "named": true,
     "fields": {
+      "alias": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "target": {
         "multiple": false,
         "required": true,
@@ -13275,6 +13439,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "consumes_item",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -13466,6 +13640,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -13581,6 +13759,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {
@@ -13840,6 +14022,10 @@
             "named": true
           },
           {
+            "type": "qualified_type_ref",
+            "named": true
+          },
+          {
             "type": "unit_type",
             "named": true
           },
@@ -13917,6 +14103,10 @@
           },
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           },
           {

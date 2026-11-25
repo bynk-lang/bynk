@@ -1,0 +1,6 @@
+commons orders
+
+uses billing
+uses shipping as S
+
+type Order = { total: Amount, postage: S.Amount }
