@@ -89,6 +89,7 @@
 /book/guides/entry-points/call-from-a-front-end/
 /book/guides/entry-points/cron/
 /book/guides/entry-points/http/
+/book/guides/entry-points/map-a-domain-error-to-a-status/
 /book/guides/entry-points/queue/
 /book/guides/entry-points/receive-email/
 /book/guides/entry-points/serve-a-page/
