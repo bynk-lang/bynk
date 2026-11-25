@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.693.1** | Releases build both macOS binaries again, `aarch64-apple-darwin` cross-compiled on the Intel runner, and `install.sh` installs on macOS |
 | **v0.693.0** | `MapEntry` is a nameable prelude record, so `Map.of([MapEntry { key: k, value: v }])` builds a map from entries written in source |
 | **v0.692.0** | An HTML response gets `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy: strict-origin-when-cross-origin` by default, and `security { }` gains `frameAncestors`, `referrerPolicy` and an opt-in verbatim `csp`; a JSON response is unchanged |
 | **v0.691.0** | `String.findRegexNamed(pattern)` reads the named capture groups of a regex literal by name, as an `Option[Map[String, Option[String]]]` |
