@@ -591,6 +591,72 @@ export function __streamed(route: __Route, response: globalThis.Response): unkno
   return reply;
 }
 
+/**
+ * #3918: a `Streaming` route read through the browser's own `EventSource`, which reconnects by
+ * itself and sends the last event's `id` back as `Last-Event-ID`. The arguments are encoded as for a
+ * call, and the URL is the one a call would fetch. An `EventSource` can send no header of its
+ * own, so no `Authorization`, no `x-bynk-contract` and no typed `headers`: a route that needs
+ * one is read through the call's `events` instead. `credentials: "include"` makes it send cookies
+ * to another origin. Returns the `EventSource`, or the `CallFailure` that stopped it being made.
+ */
+export function __eventSource(
+  options: ClientOptions,
+  route: __Route,
+  build: () => Result<__Request, BoundaryError>,
+): unknown {
+  let request: __Request;
+  try {
+    const built = build();
+    if (built.tag === "Err") return { kind: "Invalid", error: built.error } satisfies CallFailure;
+    request = built.value;
+  } catch (e) {
+    return __invalid(e);
+  }
+  for (const [name, value] of globalThis.Object.entries(request.params ?? {})) {
+    if (value === "." || value === "..") {
+      return {
+        kind: "Invalid",
+        error: { kind: "StructuralMismatch", path: `path.${name}`, expected: "a path segment", actual: value },
+      } satisfies CallFailure;
+    }
+  }
+  // A header the caller set cannot reach the wire through an `EventSource`; refuse it rather than drop it.
+  const headerNames = globalThis.Object.keys(request.headers ?? {});
+  if (headerNames.length > 0) {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: `headers.${headerNames[0]}`,
+        expected: "no typed headers: an EventSource sends none (read the route through `events` instead)",
+        actual: (request.headers ?? {})[headerNames[0]!] ?? "",
+      },
+    } satisfies CallFailure;
+  }
+  // A browser sends its own cookies and an `EventSource` cannot add to them: refuse typed cookies as a
+  // call does, never lose them silently.
+  if (request.cookies !== undefined && request.cookies !== "") {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: "cookies",
+        expected: "no typed cookies: an EventSource sends the browser's own (pass `credentials: \"include\"`)",
+        actual: request.cookies,
+      },
+    } satisfies CallFailure;
+  }
+  const make = (globalThis as { readonly EventSource?: typeof globalThis.EventSource }).EventSource;
+  if (make === undefined) {
+    return { kind: "Transport", cause: new globalThis.Error("this environment has no EventSource") } satisfies CallFailure;
+  }
+  try {
+    return new make(__url(options, route, request), { withCredentials: options.credentials === "include" });
+  } catch (cause) {
+    return { kind: "Transport", cause } satisfies CallFailure;
+  }
+}
+
 /** Make one call: encode, send, classify. Returns the route's reply, or the `CallFailure`. */
 export async function __call(
   options: ClientOptions,
@@ -663,6 +729,22 @@ export async function __call(
 /** The wire format version this client was generated for. */
 export const WIRE_VERSION = "1";
 
+export interface ResumeHeaders {
+  readonly lastId: string | null;
+}
+
+export interface WatchCookies {
+  readonly watcher: string;
+}
+
+export interface __Wire_ResumeHeaders {
+  readonly lastId: Option<string>;
+}
+
+export interface __Wire_WatchCookies {
+  readonly watcher: string;
+}
+
 /**
  * What `PUT /blob/:name` answers, by `status`.
  */
@@ -715,6 +797,40 @@ export type PostMadeByNameResponse =
  */
 export type GetTicksResponse =
     { readonly status: 200; readonly kind: "Streaming"; readonly events: globalThis.AsyncIterable<string> };
+
+/**
+ * What `GET /resume` answers, by `status`.
+ */
+export type GetResumeResponse =
+    { readonly status: 200; readonly kind: "Streaming"; readonly events: globalThis.AsyncIterable<string> }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
+/**
+ * The `headers` of the call, sent as request headers: a field left out is absent. A
+ * browser sets some headers itself (`Content-Length`, `Host`, …) and drops one a
+ * script writes, so a route that reads one of those is for a server-side call.
+ */
+export interface GetResumeHeaders {
+  readonly lastId?: string | null;
+}
+
+/**
+ * What `GET /watch` answers, by `status`.
+ */
+export type GetWatchResponse =
+    { readonly status: 200; readonly kind: "Streaming"; readonly events: globalThis.AsyncIterable<string> }
+  | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
+
+/**
+ * The `cookies` of the call, sent as its `Cookie` header: a field left out is
+ * absent. **For a server-side call** (a framework's server, a Worker, Node). A
+ * browser sets its own `Cookie` header and drops one a script writes, so a call
+ * made where `document` exists with cookies given returns `CallFailure` `Invalid`
+ * rather than lose them; a page uses `credentials: "include"` instead.
+ */
+export interface GetWatchCookies {
+  readonly watcher: string;
+}
 
 /**
  * What `GET /cr` answers, by `status`.
@@ -774,6 +890,81 @@ export type GetContractResponse =
     { readonly status: 200; readonly kind: "Ok"; readonly body: string }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError };
 
+export function __serialise_ResumeHeaders(value: __Wire_ResumeHeaders): __JsonValue {
+  return {
+    lastId: __serialise_Option_String(value.lastId),
+  };
+}
+
+export function __deserialise_ResumeHeaders(json: __JsonValue, path: string = "$"): Result<__Wire_ResumeHeaders, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_lastId = __deserialise_Option_String(obj["lastId"], `${path}.lastId`);
+  if (__r_lastId.tag === "Err") return __r_lastId;
+  const __lastId = __r_lastId.value;
+  return Ok({ lastId: __lastId } as __Wire_ResumeHeaders);
+}
+
+export function __serialise_WatchCookies(value: __Wire_WatchCookies): __JsonValue {
+  return {
+    watcher: value.watcher as __JsonValue,
+  };
+}
+
+export function __deserialise_WatchCookies(json: __JsonValue, path: string = "$"): Result<__Wire_WatchCookies, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["watcher"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.watcher`, expected: "string", actual: typeof obj["watcher"] });
+  }
+  const __watcher = obj["watcher"];
+  return Ok({ watcher: __watcher } as __Wire_WatchCookies);
+}
+
+export function __serialise_Option_String(value: Option<string>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: value.value as __JsonValue };
+  return { kind: "None" };
+}
+
+function __option_value_String(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  if (typeof raw !== "string") {
+    return Err({ kind: "StructuralMismatch", path: at, expected: "string", actual: typeof raw });
+  }
+  const __v = raw;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_String(json: __JsonValue, path: string = "$"): Result<Option<string>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<string>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<string>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_String(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as string) as Option<string>);
+    }
+  }
+  const __b = __option_value_String(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as string) as Option<string>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
 
 const __route_api_putBlobByName: __Route = {
   method: "PUT",
@@ -850,6 +1041,28 @@ const __route_api_getTicks: __Route = {
   contract: "51500504e77fb16f",
   replies: {
     200: [{ kind: "Streaming", body: "events" }],
+  },
+  streamed: __streamed,
+};
+
+const __route_api_getResume: __Route = {
+  method: "GET",
+  path: "/resume",
+  contract: "06b497c9098c65eb",
+  replies: {
+    200: [{ kind: "Streaming", body: "events" }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
+  },
+  streamed: __streamed,
+};
+
+const __route_api_getWatch: __Route = {
+  method: "GET",
+  path: "/watch",
+  contract: "91f0a5da9c6164d6",
+  replies: {
+    200: [{ kind: "Streaming", body: "events" }],
+    400: [{ kind: "StructuralMismatch", body: "boundary" }],
   },
   streamed: __streamed,
 };
@@ -947,7 +1160,7 @@ const __route_api_getContract: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "73ecc554947a7b23",
+    service: "6e32557c05535c1f",
     routes: {
       putBlobByName: "2e5adccd6e203411",
       postAny: "b3916c13802b3413",
@@ -956,6 +1169,8 @@ export const API_CONTRACTS = {
       getChunks: "d892f3cb141268b3",
       postMadeByName: "8a1328cba5042d24",
       getTicks: "51500504e77fb16f",
+      getResume: "06b497c9098c65eb",
+      getWatch: "91f0a5da9c6164d6",
       getCr: "a0d7949e54f72c42",
       getFeedByMode: "80ff3ff70fff834c",
       getOrigin: "9b5bc1bd95601bb9",
@@ -998,12 +1213,64 @@ export function createClient(options: ClientOptions = {}) {
       getTicks: (init?: globalThis.RequestInit): globalThis.Promise<GetTicksResponse | CallFailure> => __call(options, init, __route_api_getTicks, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetTicksResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getTicksEventSource: (): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getTicks, () => {
+        return Ok({ params: {} });
+      }) as globalThis.EventSource | CallFailure,
+      getResume: (headers: GetResumeHeaders = {}, init?: globalThis.RequestInit): globalThis.Promise<GetResumeResponse | CallFailure> => __call(options, init, __route_api_getResume, () => {
+        const __w_headers: { [k: string]: JsonValue } = {};
+        if (headers.lastId !== undefined) __w_headers["lastId"] = __serialise_Option_String(__nullToOpt(headers.lastId, (x0) => x0));
+        const __c_headers = __checked(__w_headers, __deserialise_ResumeHeaders, "headers");
+        if (__c_headers.tag === "Err") return __c_headers;
+        return Ok({ params: {}, headers: __headerRecord(__w_headers, [{ name: "lastId", wire: "last-event-id" }]) });
+      }) as globalThis.Promise<GetResumeResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getResumeEventSource: (headers: GetResumeHeaders = {}): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getResume, () => {
+        const __w_headers: { [k: string]: JsonValue } = {};
+        if (headers.lastId !== undefined) __w_headers["lastId"] = __serialise_Option_String(__nullToOpt(headers.lastId, (x0) => x0));
+        const __c_headers = __checked(__w_headers, __deserialise_ResumeHeaders, "headers");
+        if (__c_headers.tag === "Err") return __c_headers;
+        return Ok({ params: {}, headers: __headerRecord(__w_headers, [{ name: "lastId", wire: "last-event-id" }]) });
+      }) as globalThis.EventSource | CallFailure,
+      getWatch: (cookies: GetWatchCookies, init?: globalThis.RequestInit): globalThis.Promise<GetWatchResponse | CallFailure> => __call(options, init, __route_api_getWatch, () => {
+        const __w_cookies: { [k: string]: JsonValue } = {};
+        __w_cookies["watcher"] = cookies.watcher as __JsonValue;
+        const __c_cookies = __checked(__w_cookies, __deserialise_WatchCookies, "cookies");
+        if (__c_cookies.tag === "Err") return __c_cookies;
+        return Ok({ params: {}, cookies: __cookieString(__w_cookies, [{ name: "watcher" }]) });
+      }) as globalThis.Promise<GetWatchResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getWatchEventSource: (cookies: GetWatchCookies): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getWatch, () => {
+        const __w_cookies: { [k: string]: JsonValue } = {};
+        __w_cookies["watcher"] = cookies.watcher as __JsonValue;
+        const __c_cookies = __checked(__w_cookies, __deserialise_WatchCookies, "cookies");
+        if (__c_cookies.tag === "Err") return __c_cookies;
+        return Ok({ params: {}, cookies: __cookieString(__w_cookies, [{ name: "watcher" }]) });
+      }) as globalThis.EventSource | CallFailure,
       getCr: (init?: globalThis.RequestInit): globalThis.Promise<GetCrResponse | CallFailure> => __call(options, init, __route_api_getCr, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetCrResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getCrEventSource: (): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getCr, () => {
+        return Ok({ params: {} });
+      }) as globalThis.EventSource | CallFailure,
       getFeedByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetFeedByModeResponse | CallFailure> => __call(options, init, __route_api_getFeedByMode, () => {
         return Ok({ params: { "mode": globalThis.String(mode) } });
       }) as globalThis.Promise<GetFeedByModeResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getFeedByModeEventSource: (mode: string): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getFeedByMode, () => {
+        return Ok({ params: { "mode": globalThis.String(mode) } });
+      }) as globalThis.EventSource | CallFailure,
       getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> => __call(options, init, __route_api_getOrigin, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetOriginResponse | CallFailure>,

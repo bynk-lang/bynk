@@ -701,6 +701,7 @@ bynk.test.advance_not_clock
 bynk.test.advance_not_duration
 bynk.test.advance_outside_case
 bynk.test.asset_address_method
+bynk.test.bad_principal_needs_arm
 bynk.test.call_needs_in_process
 bynk.test.credential_needs_system
 bynk.test.event_needs_in_process

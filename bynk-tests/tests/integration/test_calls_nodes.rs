@@ -426,7 +426,7 @@ service api from http {
 
 /// The system principal's claims and acting actor reach the signing drivers: a refinement actor's
 /// witness claims (a table built in `bynk-driver`, kept as text), an `Oidc` call's claims lines, and
-/// an actor-sum route's actor name; the no-auth and forged drivers sign nothing.
+/// an actor-sum route's actor name (a bad credential on a sum names its member, #4385); the no-auth and forged drivers sign nothing.
 #[test]
 fn a_system_call_passes_its_claims_and_its_acting_actor() {
     let refinement = emit("2019_system_refinement_actor_principal", &[]);
@@ -454,7 +454,7 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
     );
     assert_line(
         &sum,
-        r#"const forged = await __sysdrive_forged_api_http_POST_notify("hi", undefined, "");"#,
+        r#"const forged = await __sysdrive_sumbad_api_http_POST_notify("hi", undefined, "forged", "", "Processor");"#,
     );
 }
 

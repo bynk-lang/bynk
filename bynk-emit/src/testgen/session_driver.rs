@@ -207,6 +207,45 @@ pub(super) struct SessionDriver {
 }
 
 impl SessionDriver {
+    /// #4385: `__auth["cookie"] = <bad session cookie>` for each of `by Forged` (signed with a key
+    /// the seam does not hold), `by Expired` (issued before the cookie's `ttl`) and, with
+    /// `sessions = true`, `by Revoked` (a registered session, then revoked), guarded by `is(<bad>)`.
+    pub(super) fn bad_cookie_stmts(&self, is: &dyn Fn(&str) -> TsExpr) -> Vec<TsStmt> {
+        use crate::ts_build::{assign, if_, index};
+        let cookie = || index(ident("__auth"), str_lit("cookie"));
+        let sub = || str_lit("bynk-test");
+        let forged_keys = TsExpr::object(vec![(
+            "secret".to_string(),
+            call(ident("__newSessionKey"), Vec::new()),
+        )]);
+        let before_ttl = binary(
+            TsBinaryOp::Sub,
+            binary(
+                TsBinaryOp::Sub,
+                call(ident("__bynkNow"), Vec::new()),
+                num_lit(self.ttl_secs),
+            ),
+            num_lit(3600),
+        );
+        let now = || call(ident("__bynkNow"), Vec::new());
+        let mut out = vec![
+            if_(
+                is("forged"),
+                assign(cookie(), self.pair(&forged_keys, sub(), now())),
+            ),
+            if_(
+                is("expired"),
+                assign(cookie(), self.pair(&self.keys, sub(), before_ttl)),
+            ),
+        ];
+        if let Some(agent) = &self.sessions {
+            let mut revoked = vec![assign(cookie(), self.pair(&self.keys, sub(), now()))];
+            revoked.extend(agent.revoke(sub()));
+            out.push(if_(is("revoked"), crate::ts_build::block(revoked)));
+        }
+        out
+    }
+
     /// The pair the acting principal sends: for a `sessions = true` actor, the case's one session
     /// for that principal (see `SessionAgentRef::principal_pair`); otherwise a fresh signed cookie.
     pub(super) fn principal_pair(&self, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {

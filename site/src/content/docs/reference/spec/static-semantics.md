@@ -2020,7 +2020,12 @@ clamped to that range when the verdict is settled. A `match` over a `QueueResult
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is
 `bynk.email.invalid_address`. Two services of a context MUST NOT claim the same
-address, compared without regard to case (`bynk.email.duplicate_address`); a literal
+address, compared without regard to case (`bynk.email.duplicate_address`); the
+address, written as the name of a constant (#3889), MUST name a constant declared
+exactly `String` and bound, through any chain of such constants, to a string literal,
+the literal being the address, checked as a literal address is
+(`bynk.email.invalid_address` otherwise), and duplicate detection, the route table and
+`wrangler.toml` read it; a literal
 address and the catch-all of its domain MAY both be claimed, the literal address
 winning. The service MUST declare exactly one handler, `on message(mail:
 InboundEmail) -> Effect[EmailVerdict]`: one parameter of the first-party

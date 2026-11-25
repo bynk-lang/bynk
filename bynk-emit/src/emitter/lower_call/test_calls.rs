@@ -23,6 +23,14 @@ use super::super::{Expr, ExprKind, Ident, TypeRef};
 use crate::ts_build::{arrow, call, ident, member, num_lit, paren, str_lit};
 use bynk_ts::TsParam;
 
+/// #2135, #4385: the bad-credential principal a `system` call drives: the driver's name (`"forged"`,
+/// `"expired"`, …) and, on an actor sum, the member it names (`by Forged(Session)`).
+#[derive(Clone)]
+pub(crate) struct BadDriver {
+    pub(crate) driver: &'static str,
+    pub(crate) arm: Option<String>,
+}
+
 // ---- Names ----
 
 /// The module's event-delivery helper for a service (#2052).
@@ -332,8 +340,10 @@ fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::
 /// to an `HttpOutcome`). #821: the two axes are independent. #2135: `by Forged` / `by Stale`
 /// drive the signing driver that sends a wrong or a stale signature.
 fn system_driver(cx: &LowerCtx, has_wire: bool) -> SysdriveKind<'static> {
-    let kind = match (cx.call_site_bad_signature, cx.call_site_no_credential) {
-        (Some(bad), _) => bad,
+    let kind = match (&cx.call_site_bad_signature, cx.call_site_no_credential) {
+        // #4385: a bad credential naming an actor sum's member drives the sum's bad-credential driver.
+        (Some(BadDriver { arm: Some(_), .. }), _) => "sumbad",
+        (Some(bad), _) => bad.driver,
         (None, true) => "noauth",
         (None, false) => "",
     };
@@ -547,7 +557,14 @@ pub(in crate::emitter) fn lower_system_http_call(
         let slot = extra_arg.unwrap_or_else(undefined_node);
         all.push(slot);
     }
+    // #4385: the sum's bad-credential driver takes the credential kind before `sub`, the member after.
+    let bad_arm = cx
+        .call_site_bad_signature
+        .as_ref()
+        .and_then(|b| b.arm.as_ref().map(|a| (b.driver, a)));
+    all.extend(bad_arm.map(|(driver, _)| str_lit(driver)));
     all.push(sub);
+    all.extend(bad_arm.map(|(_, arm)| str_lit(arm)));
     // #2019: a refinement-guarded route's signing drivers take the claims the acting actor
     // presents; the no-auth drivers sign nothing. #2155: an actor-sum route's signing drivers
     // take the actor the call acts as, which picks its credential.

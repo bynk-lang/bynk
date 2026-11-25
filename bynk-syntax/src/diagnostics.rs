@@ -1773,7 +1773,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.email.invalid_address",
-        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address. The address may be written as the name of a constant declared exactly `String` and bound to such a literal; a constant of any other type, refined or not, is this error with a note naming it.",
         example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
     },
     Explain {
@@ -5222,6 +5222,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.test.asset_address_method",
         blurb: "An asset is served by the platform before the Worker runs, and only to `GET`: it answers every other method with `405`. A case fetches one with `api.GET(asset)`, and a different method is refused, since the answer would be the platform's `405` and nothing your code decides. Use `GET`, and pass the asset alone. A `by` clause on the fetch is `bynk.test.principal_on_asset`.",
         example: "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.POST(style)    // ✗ only `GET` fetches an asset\nlet r <- api.GET(style)     // ✓",
+    },
+    Explain {
+        code: "bynk.test.bad_principal_needs_arm",
+        blurb: "A bad credential is presented to one member's seam, so on an actor sum \
+                `by Forged`, `by Expired`, `by Stale` and `by Revoked` must say which \
+                member's refusal the case checks, when more than one member could \
+                refuse it. Name the member in parentheses, as `by Forged(Browser)`. \
+                The name is a bare member name of the handler's `by` sum, not a value: \
+                an actor's identity is a value (`by Browser(\"ada\")`), a bad credential \
+                carries none. A member that cannot refuse the credential is refused \
+                with the principal's own error.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/me\") () -> Effect[HttpResult[String]] by who: Browser | Partner { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Forged            // ✗ the cookie's or the token's?\n\
+                  let r <- api.GET(\"/me\") by Forged(Browser)   // ✓",
     },
     Explain {
         code: "bynk.test.call_needs_in_process",
@@ -10532,6 +10548,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.asset_address_method",
         "A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.bad_principal_needs_arm",
+        "A case drives `by Forged`, `by Expired`, `by Stale` or `by Revoked` at an actor sum with more than one member that could refuse it, without naming the member (`by Forged(Browser)`).",
         &["case"],
     ),
     dg(

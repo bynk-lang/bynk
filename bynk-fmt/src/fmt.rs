@@ -2145,7 +2145,13 @@ impl<'a> Formatter<'a> {
             ServiceProtocol::Queue { name } => {
                 format!(" from queue(\"{}\")", escape_string(name))
             }
-            ServiceProtocol::Email { address } => {
+            // #3889: a constant names the address; print the name, not the literal the
+            // resolution pass filled in.
+            ServiceProtocol::Email {
+                address_const: Some(c),
+                ..
+            } => format!(" from email({})", c.name.name),
+            ServiceProtocol::Email { address, .. } => {
                 format!(" from email(\"{}\")", escape_string(address))
             }
             ServiceProtocol::WebSocket { in_type, out_type } => {
