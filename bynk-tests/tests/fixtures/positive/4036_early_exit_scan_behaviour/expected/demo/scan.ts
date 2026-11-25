@@ -322,6 +322,16 @@ export class Tally {
     return __scanAll(__state.orders.lazyByIndex("status", String(status)), (__x) => ((o: Order) => o.total > n)(__x));
   }
 
+  async anyDoubledWithStatus(status: string, n: number, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __scanAny(__scanMap(__state.orders.lazyByIndex("status", String(status)), (__x) => ((o: Order) => o.total * 2)(__x)), (__x) => ((t: number) => t > n)(__x));
+  }
+
+  async anyBigWithStatus(status: string, n: number, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __scanAny(__scanFilter(__state.orders.lazyByIndex("status", String(status)), (__x) => ((o: Order) => o.total > n)(__x)), (__x) => ((o: Order) => o.total > 0)(__x));
+  }
+
   async firstWithStatus(status: string, deps: {}): globalThis.Promise<Option<Order>> {
     const __state = await this.loadState();
     return __bynkThen(((() => __state.orders.byIndex("status", String(status))))(), (__q) => (() => {

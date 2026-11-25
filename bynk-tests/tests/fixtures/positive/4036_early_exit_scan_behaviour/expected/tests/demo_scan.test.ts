@@ -293,15 +293,46 @@ async function test_any_and_all_over_an_indexed_equality_filter_agree_with_the_d
     const anyBig = await __makeTally("p").anyWithStatus("open", deps);
     const none = await __makeTally("p").anyWithStatus("void", deps);
     const allOver = await __makeTally("p").allWithStatus("open", 4, deps);
-    const allOverFifty = await __makeTally("p").allWithStatus("open", 10, deps);
+    const allOverTen = await __makeTally("p").allWithStatus("open", 10, deps);
     const allNone = await __makeTally("p").allWithStatus("void", 10, deps);
-    if (!(anyBig)) { throw __bynkExpectFailure("tests/demo/scan.bynk:155:9", 4413, 4419, "expect anyBig"); }
-    if (!(!none)) { throw __bynkExpectFailure("tests/demo/scan.bynk:156:9", 4428, 4433, "expect !none"); }
-    if (!(allOver)) { throw __bynkExpectFailure("tests/demo/scan.bynk:157:9", 4442, 4449, "expect allOver"); }
-    if (!(!allOverFifty)) { throw __bynkExpectFailure("tests/demo/scan.bynk:158:9", 4458, 4471, "expect !allOverFifty"); }
-    if (!(allNone)) { throw __bynkExpectFailure("tests/demo/scan.bynk:159:9", 4480, 4487, "expect allNone"); }
+    if (!(anyBig)) { throw __bynkExpectFailure("tests/demo/scan.bynk:155:9", 4411, 4417, "expect anyBig"); }
+    if (!(!none)) { throw __bynkExpectFailure("tests/demo/scan.bynk:156:9", 4426, 4431, "expect !none"); }
+    if (!(allOver)) { throw __bynkExpectFailure("tests/demo/scan.bynk:157:9", 4440, 4447, "expect allOver"); }
+    if (!(!allOverTen)) { throw __bynkExpectFailure("tests/demo/scan.bynk:158:9", 4456, 4467, "expect !allOverTen"); }
+    if (!(allNone)) { throw __bynkExpectFailure("tests/demo/scan.bynk:159:9", 4476, 4483, "expect allNone"); }
     const first = await __makeTally("p").firstWithStatus("open", deps);
-    if (!(__bynkEq(first, Some({ status: "open", total: 5 })))) { throw __bynkExpectFailure("tests/demo/scan.bynk:161:9", 4545, 4594, "expect first == Some(Order { status: \"open\", total: 5 })\n  expected: first == Some(Order { status: \"open\", total: 5 })\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((Some({ status: "open", total: 5 })))); }
+    if (!(__bynkEq(first, Some({ status: "open", total: 5 })))) { throw __bynkExpectFailure("tests/demo/scan.bynk:161:9", 4541, 4590, "expect first == Some(Order { status: \"open\", total: 5 })\n  expected: first == Some(Order { status: \"open\", total: 5 })\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((Some({ status: "open", total: 5 })))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_stage_after_an_indexed_equality_filter_keeps_its_place() {
+  try {
+    __ns_demo_scan.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
+    await __makeTally("q").order("a", "open", 5, deps);
+    await __makeTally("q").order("b", "open", 50, deps);
+    await __makeTally("q").order("c", "closed", 500, deps);
+    const doubled = await __makeTally("q").anyDoubledWithStatus("open", 90, deps);
+    const notDoubled = await __makeTally("q").anyDoubledWithStatus("open", 100, deps);
+    const wrongStatus = await __makeTally("q").anyDoubledWithStatus("closed", 900, deps);
+    const filtered = await __makeTally("q").anyBigWithStatus("open", 10, deps);
+    const filteredNone = await __makeTally("q").anyBigWithStatus("open", 60, deps);
+    const filteredOther = await __makeTally("q").anyBigWithStatus("void", 0, deps);
+    if (!(doubled)) { throw __bynkExpectFailure("tests/demo/scan.bynk:174:9", 5154, 5161, "expect doubled"); }
+    if (!(!notDoubled)) { throw __bynkExpectFailure("tests/demo/scan.bynk:175:9", 5170, 5181, "expect !notDoubled"); }
+    if (!(wrongStatus)) { throw __bynkExpectFailure("tests/demo/scan.bynk:176:9", 5190, 5201, "expect wrongStatus"); }
+    if (!(filtered)) { throw __bynkExpectFailure("tests/demo/scan.bynk:177:9", 5210, 5218, "expect filtered"); }
+    if (!(!filteredNone)) { throw __bynkExpectFailure("tests/demo/scan.bynk:178:9", 5227, 5240, "expect !filteredNone"); }
+    if (!(!filteredOther)) { throw __bynkExpectFailure("tests/demo/scan.bynk:179:9", 5249, 5263, "expect !filteredOther"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -313,7 +344,7 @@ async function test_any_and_all_over_an_indexed_equality_filter_agree_with_the_d
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["any and all over a Map agree with the whole read", "filter and map stages ahead of any agree with the whole read", "an empty Map: any is false, all is true", "any, all, first and firstOrElse over a Log agree with the whole read", "an empty Log: first is None", "take and skip over a Log agree with the whole read, oldest first", "the whole-read shapes keep insertion order on a Map", "sortBy before first reads the whole Log", "a flatMap stage ahead of any", "an indexed equality filter and an unindexed one agree with the data", "any and all over an indexed equality filter agree with the data, and first keeps insertion order"];
+export const __bynkCases: readonly string[] = ["any and all over a Map agree with the whole read", "filter and map stages ahead of any agree with the whole read", "an empty Map: any is false, all is true", "any, all, first and firstOrElse over a Log agree with the whole read", "an empty Log: first is None", "take and skip over a Log agree with the whole read, oldest first", "the whole-read shapes keep insertion order on a Map", "sortBy before first reads the whole Log", "a flatMap stage ahead of any", "an indexed equality filter and an unindexed one agree with the data", "any and all over an indexed equality filter agree with the data, and first keeps insertion order", "a stage after an indexed equality filter keeps its place"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -381,6 +412,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("any and all over an indexed equality filter agree with the data, and first keeps insertion order")) {
     const started = __bynkCaseNow();
     const r = { name: "any and all over an indexed equality filter agree with the data, and first keeps insertion order", ...(await test_any_and_all_over_an_indexed_equality_filter_agree_with_the_data__and_first_keeps_insertion_order()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stage after an indexed equality filter keeps its place")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stage after an indexed equality filter keeps its place", ...(await test_a_stage_after_an_indexed_equality_filter_keeps_its_place()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
