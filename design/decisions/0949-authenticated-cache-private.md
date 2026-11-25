@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: A route guarded by a `Bearer`, `Oidc`, `SignedCookie` or `Signature` actor now sends `Cache-Control: private` on every response that has no `@cache` of its own, and `@cache(scope: public)` on such a route is refused with `bynk.http.cache_public_authenticated`; move a response that is the same for everyone to a `Visitor` route, or use `scope: private`.
-changelog: A route guarded by a credential-carrying actor (`Bearer`, `Oidc`, `SignedCookie`, `Signature`, or a sum with one) sends `Cache-Control: private` on every response by default, `@cache(scope: public)` on it is refused, and `@cache(noStore: true)` sends `no-store` with no `ETag` on any route
----
+# 0949 — Authenticated responses are Cache-Control private by default, with noStore opt-in
 
-## ADR: authenticated-cache-private
-title: Authenticated responses are Cache-Control private by default, with noStore opt-in
-summary: A route whose actor carries a credential sends private on every response, refuses public, and @cache(noStore: true) sends no-store
+- **Status:** Accepted (v0.687)
 
 **Context.** A `GET` with no `@cache` sent no `Cache-Control`. Responses on routes guarded by `Bearer`, `Oidc`, `SignedCookie` or `Signature` carry one caller's data, but only a response that set a cookie was forced `private`. A shared cache in front of the service, such as a corporate proxy or a CDN the operator adds, had nothing telling it not to store them, which matters most for cookie-authenticated requests because they carry no `Authorization` header to make a cache cautious (RFC 9111 §3.5). `@cache(scope: public)` was refused only on a handler that read `cookies`, not on one whose actor is a credential.
 

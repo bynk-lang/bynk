@@ -1,11 +1,6 @@
----
-level: minor
-changelog: `bynk explain` on a retired diagnostic code says when it was retired, why, and what replaced it, and the diagnostics reference lists retired codes
----
+# 0948 — Retired diagnostic codes are tombstoned, not forgotten
 
-## ADR: retired-diagnostic-tombstones
-title: Retired diagnostic codes are tombstoned, not forgotten
-summary: A RETIRED table answers `bynk explain`, a shipped-codes list makes removal without a tombstone fail CI
+- **Status:** Accepted (v0.686)
 
 **Context.** Removing a diagnostic code made `bynk explain <code>` report it as unknown, so a user upgrading, or reading an old CI log or issue, got no explanation.
 
