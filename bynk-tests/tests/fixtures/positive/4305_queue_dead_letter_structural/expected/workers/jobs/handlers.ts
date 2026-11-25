@@ -25,10 +25,10 @@ export type Small = number & { readonly __brand: "jobs.Small" };
 export const Small = {
   of(value: number): Result<Small, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Small", message: "must be a safe integer", value });
+      return Err({ field: "Small", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 10)) {
-      return Err({ field: "Small", message: "must be in range [1, 10]", value });
+      return Err({ field: "Small", message: "must be in range [1, 10]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 10 } }, value });
     }
     return Ok(value as Small);
   },
@@ -39,10 +39,10 @@ export type Wide = number & { readonly __brand: "jobs.Wide" };
 export const Wide = {
   of(value: number): Result<Wide, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Wide", message: "must be a safe integer", value });
+      return Err({ field: "Wide", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 100)) {
-      return Err({ field: "Wide", message: "must be in range [1, 100]", value });
+      return Err({ field: "Wide", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Wide);
   },
