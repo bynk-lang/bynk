@@ -116,7 +116,7 @@ actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "id
 scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_duration ::= number_literal "." identifier
-scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier)
+scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier | boolean_literal)
 by_clause ::= "by" (identifier ":")? identifier ("|" identifier)*
 stub_clause ::= "stub" identifier "." (identifier ".")* identifier ("[" type_ref ("," type_ref)* "]")? "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never" | "rejected" identifier | "faulted" | "unreachable")
 env_clause ::= "env" "{" (env_entry ","?)* "}"
