@@ -15,20 +15,25 @@
 //! statements, unindented into the case block.
 //!
 //! Declines when:
-//! - either arm has a guard, or the `expect false` arm comes first and is
-//!   irrefutable (it would shadow the other arm);
+//! - either arm has a guard, or the `expect false` arm comes first and the two
+//!   patterns are not two different variants (`expect … is P2` would pass on a
+//!   value `P1` sent to `expect false`: record, list and range patterns
+//!   overlap);
 //! - the kept pattern binds a name below the first level (`Some(Ok(x))`):
 //!   `expect … is` binds only a payload's direct names (ADR 0169);
 //! - the kept pattern is a bare name or `_`, or the pattern is an `|`
 //!   alternative or refined pattern that binds a name;
 //! - the subject is not a plain name, call, field access or method call (it
 //!   would need parentheses the formatter might not keep);
-//! - a name the pattern binds is already declared by a `let` in the case;
+//! - a name the pattern binds is already declared in the case: by a `let`, an
+//!   earlier `is` test (including another rewrite of this kind) or a `par`
+//!   block;
 //! - a comment sits in the `match` outside the kept arm's body (the rewrite
 //!   would drop it).
 
 use bynk_syntax::ast::{
-    Block, Expr, ExprKind, MatchArm, MatchBody, Pattern, SourceUnit, Statement,
+    Block, Expr, ExprKind, MatchArm, MatchBody, Pattern, SourceUnit, Statement, expr_children,
+    statement_exprs,
 };
 use bynk_syntax::lexer::tokenize;
 use bynk_syntax::parser::parse_unit_with_recovery;
@@ -124,7 +129,7 @@ fn rewrite_of(
     }
     let kept = if is_expect_false(&second.body) {
         first
-    } else if is_expect_false(&first.body) && !first.pattern.is_irrefutable() {
+    } else if is_expect_false(&first.body) && disjoint_variants(&first.pattern, &second.pattern) {
         second
     } else {
         return None;
@@ -142,11 +147,13 @@ fn rewrite_of(
     ) {
         return None;
     }
-    let names = kept.pattern.bound_names();
-    if case_body.statements.iter().any(|s| match s {
-        Statement::Let(l) | Statement::EffectLet(l) => names.iter().any(|n| n.name == l.name.name),
-        _ => false,
-    }) {
+    let declared = declared_names(&case_body.statements);
+    if kept
+        .pattern
+        .bound_names()
+        .iter()
+        .any(|n| declared.contains(&n.name))
+    {
         return None;
     }
     let body = body_text(text, &kept.body)?;
@@ -171,6 +178,54 @@ fn rewrite_of(
         }
     }
     Some(out)
+}
+
+/// When the `expect false` arm comes first, `expect s is P2` matches the
+/// original only if `P1` and `P2` can never match the same value. That is
+/// provable here only for two variant patterns naming different variants:
+/// record and list patterns are open and range patterns overlap, so any other
+/// pair is declined.
+fn disjoint_variants(first: &Pattern, second: &Pattern) -> bool {
+    matches!(
+        (first, second),
+        (
+            Pattern::Variant { variant: a, .. },
+            Pattern::Variant { variant: b, .. }
+        ) if a.name != b.name
+    )
+}
+
+/// Every name an earlier statement of the case declares: a `let`, a name an
+/// `is` test binds (a statement-form `expect x is Ok(v)` keeps it for the rest
+/// of the case), at any depth, and the same inside a `par` block.
+fn declared_names(statements: &[Statement]) -> std::collections::HashSet<String> {
+    fn is_names(e: &Expr, out: &mut std::collections::HashSet<String>) {
+        if let ExprKind::Is { pattern, .. } = &e.kind {
+            out.extend(pattern.bound_names().iter().map(|n| n.name.clone()));
+        }
+        for child in expr_children(e) {
+            is_names(child, out);
+        }
+    }
+    fn walk(statements: &[Statement], out: &mut std::collections::HashSet<String>) {
+        for s in statements {
+            match s {
+                Statement::Let(l) | Statement::EffectLet(l) => {
+                    out.insert(l.name.name.clone());
+                }
+                Statement::Par(p) => walk(&p.statements, out),
+                _ => {}
+            }
+            let mut exprs = Vec::new();
+            statement_exprs(s, &mut exprs);
+            for e in exprs {
+                is_names(e, out);
+            }
+        }
+    }
+    let mut out = std::collections::HashSet::new();
+    walk(statements, &mut out);
+    out
 }
 
 /// An arm body that is exactly `expect false`: `=> expect false` or

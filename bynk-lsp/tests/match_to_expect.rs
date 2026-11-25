@@ -105,7 +105,70 @@ fn refuses_a_name_already_declared_in_the_case() {
 #[test]
 fn refuses_when_a_comment_would_be_dropped() {
     // The formatter cannot hold a comment there, so the file is written raw.
-    let src = "suite shop\n\ncase \"c\" {\n  let r = Order.parse(\"x\")\n  match r {\n    Ok(v) => { expect v.id == 1 }\n    // fail otherwise\n    _ => { expect false }\n  }\n}\n".to_string();
+    let with = "suite shop\n\ncase \"c\" {\n  let r = Order.parse(\"x\")\n  match r {\n    Ok(v) => { expect v.id == 1 }\n    // fail otherwise\n    _ => { expect false }\n  }\n}\n";
+    assert!(apply(with, "match r").is_none());
+    // The same source without the comment is offered, so the refusal above is
+    // the comment's and not a parse failure's.
+    let without = with.replace("    // fail otherwise\n", "");
+    assert!(apply(&without, "match r").is_some());
+}
+
+#[test]
+fn a_non_canonical_file_gets_the_hand_indented_rewrite() {
+    // Four-space indent is not what `bynk-fmt` prints, so the edit is the raw
+    // text, indented to the match.
+    let src = "suite shop\n\ncase \"c\" {\n    let r = Order.parse(\"x\")\n    match r {\n        Ok(v) => {\n            expect v.id == 1\n            expect v.total == 2\n        }\n        _ => { expect false }\n    }\n}\n";
+    assert_ne!(canon(src), src, "the fixture is deliberately non-canonical");
+    let out = apply(src, "match r").expect("offered");
+    assert_eq!(
+        out,
+        "suite shop\n\ncase \"c\" {\n    let r = Order.parse(\"x\")\n    expect r is Ok(v)\n    expect v.id == 1\n    expect v.total == 2\n}\n"
+    );
+}
+
+#[test]
+fn refuses_a_first_arm_fallback_whose_pattern_overlaps_the_kept_one() {
+    // Open record, list and range patterns can match the same value as the
+    // kept arm, so `expect p is Point { x, .. }` would pass where the original
+    // failed; the same variant twice overlaps too.
+    for (first, second) in [
+        (
+            "Point { x: 0, .. } => expect false",
+            "Point { x, .. } => { expect x == 1 }",
+        ),
+        ("[0, ..] => expect false", "[a, ..] => { expect a == 1 }"),
+        ("..0 => expect false", "0.. => { expect true }"),
+        ("Some(_) => expect false", "Some(v) => { expect v == 1 }"),
+    ] {
+        let src = suite(&format!(
+            "let p = Order.parse(\"x\")\nmatch p {{\n{first}\n{second}\n}}"
+        ));
+        assert!(apply(&src, "match p").is_none(), "{first} / {second}");
+    }
+}
+
+#[test]
+fn offers_a_first_arm_fallback_for_a_different_variant() {
+    let src = suite(
+        "let p = Order.parse(\"x\")\nmatch p {\nNone => expect false\nSome(v) => { expect v == 1 }\n}",
+    );
+    assert!(apply(&src, "match p").is_some());
+}
+
+#[test]
+fn refuses_a_subject_that_is_not_a_plain_name_or_call() {
+    let src = suite(
+        "let a = 1\nlet b = 2\nmatch a + b {\nOk(v) => { expect v == 1 }\n_ => { expect false }\n}",
+    );
+    assert!(apply(&src, "match a + b").is_none());
+}
+
+#[test]
+fn refuses_a_name_an_earlier_is_already_binds() {
+    // A second rewrite in one case would collide with the first's `v`.
+    let src = suite(
+        "let r = Order.parse(\"x\")\nexpect r is Ok(v)\nmatch r {\nOk(v) => { expect v.id == 1 }\n_ => { expect false }\n}",
+    );
     assert!(apply(&src, "match r").is_none());
 }
 
