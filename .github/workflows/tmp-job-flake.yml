@@ -1,0 +1,31 @@
+# TEMPORARY (#4314): runs the one job test 20 times on Windows, as evidence for the fix.
+# Reverted before the PR is marked ready.
+name: tmp-job-flake
+on:
+  push:
+    branches: [claude/l16-4314]
+permissions:
+  contents: read
+jobs:
+  repeat:
+    name: job test x20 (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
+      - name: Build the test binary once
+        run: cargo test -p bynk --lib --no-run
+      - name: Run the test 20 times, no retries
+        shell: pwsh
+        run: |
+          $failed = 0
+          1..20 | ForEach-Object {
+            cargo test -p bynk --lib -- job::tests::a_killed_wrappers_orphans_are_stopped_with_the_job --exact 2>&1 | Select-String -Pattern "test result"
+            if ($LASTEXITCODE -ne 0) { $failed++; Write-Host "::error::run $_ failed" }
+          }
+          Write-Host "failed runs: $failed of 20"
+          if ($failed -ne 0) { exit 1 }
