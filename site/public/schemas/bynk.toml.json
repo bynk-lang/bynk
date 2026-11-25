@@ -392,6 +392,50 @@
         }
       }
     },
+    "env": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "One environment's settings.",
+        "properties": {
+          "vars": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ],
+              "description": "A build-time variable's value: what an `env(NAME)` constant is declared as."
+            },
+            "description": "This environment's build-time variables, over `[vars]`.",
+            "propertyNames": {
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "description": "Per-environment settings, keyed by the environment's name (the `--env`\nvalue).",
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#env"
+        }
+      }
+    },
     "fmt": {
       "additionalProperties": false,
       "description": "Formatter settings, read by format-on-save in the editor and by `bynk fmt`, through one shared reader. A flag passed to `fmt` overrides the key it names.",
@@ -735,6 +779,39 @@
       "x-taplo": {
         "links": {
           "key": "https://bynk-lang.org/reference/tooling/manifest/#unstable"
+        }
+      }
+    },
+    "vars": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "format": "int64",
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ],
+        "description": "A build-time variable's value: what an `env(NAME)` constant is declared as."
+      },
+      "description": "Build-time variables, by name (`[A-Z][A-Z0-9_]*`): the values the project's\n`const X: T = env(NAME[, default])` constants take, in every environment\n(`default` included). They are resolved when the project is built, from this\ncommitted file only, and are not Wrangler's run-time `[vars]`. A name no\n`env(…)` constant reads is an error, so a typo cannot leave a default in\nforce.",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#vars"
         }
       }
     },
