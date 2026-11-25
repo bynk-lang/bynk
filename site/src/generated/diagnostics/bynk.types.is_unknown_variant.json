@@ -1,0 +1,12 @@
+{
+  "blurb": "`l is Amber` asks whether a `Light` is its `Amber` variant, which only means something if `Light` has one. A name that is not a variant of the sum is usually a typo or a variant left over from an earlier version of the type. Use one the type declares. On a value that is not a sum at all, the error is `bynk.types.is_non_sum`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.is_unknown_variant",
+  "constructs": [
+    "is_expr"
+  ],
+  "example": "type Light = | Red | Green\n\nfn ready(l: Light) -> Bool {\n    l is Amber        // ✗ `Light` has no variant `Amber`\n}\n\nfn ready(l: Light) -> Bool {\n    l is Green        // ✓\n}",
+  "severity": "error",
+  "summary": "`is` names a variant the type does not have."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Bearer` actor's identity is minted from the token's `sub` claim, which is a string, so the identity type must be one a string can become: a refined or opaque `String`. Any other type has no way to be built from the claim, and an actor with no `identity` at all is refused for the same reason. Declare a type over `String`, such as `type UserId = String where NonEmpty`, and name it as the `identity`. An `Oidc` actor has the same rule under `bynk.actor.oidc_identity_not_string_constructible`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.bearer_identity_not_string_constructible",
+  "constructs": [],
+  "example": "type Age = Int where NonNegative\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = Age }      // ✗ a token's `sub` is a string, not an `Int`\n\ntype UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }   // ✓ minted from `sub`",
+  "severity": "error",
+  "summary": "A `Bearer` actor's identity is not a string-constructible type."
+}

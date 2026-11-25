@@ -1,0 +1,12 @@
+{
+  "blurb": "The bindings in a `par { … }` block run together, so none can read the result of another: there is no order in which one could be given the other's value. A binding that mentions a name a sibling binds is refused, even where an outer binding of that name exists, so a stale value is never picked up silently. Binding one name twice in a block is refused as well, since later code could not tell which result is meant. Move the dependent binding after the block, where every name is in scope, or rename.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.par.sibling_name",
+  "constructs": [
+    "par_stmt"
+  ],
+  "example": "par {\n    let a <- Effect.pure(1)\n    let b <- Effect.pure(a + 1)   // ✗ `a` is bound by a sibling\n}\n\npar {\n    let a <- Effect.pure(1)\n    let c <- Effect.pure(2)\n}\nlet b <- Effect.pure(a + 1)   // ✓ after the block, `a` is in scope",
+  "severity": "error",
+  "summary": "A `par { … }` binding mentions a name another binding in the same block binds, or binds a name twice. The bindings run together, so none can read a sibling's result; the rule holds even where the name would resolve to an outer binding."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A case supplies an identity only when the actor has one to give. An actor that declares no `identity`, and the failure principals `Nobody`, `Forged`, `Stale` and `Expired`, which present a missing or bad credential and so no verified caller, take no argument. Write `by Nobody`, not `by Nobody(\"bob\")`. For an actor that does declare an identity and is given none, see `bynk.test.actor_identity_required`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.actor_no_identity",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\nlet r <- api.GET(\"/a\") by Nobody(\"bob\")   // ✗ no credential, so no identity\nlet r <- api.GET(\"/a\") by Nobody          // ✓",
+  "severity": "error",
+  "summary": "A call-site `by <Actor>(x)` supplies an identity to an actor that takes none — a unit-identity actor (e.g. `Visitor`) or `Nobody`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`@form` says the route's one `body` is an HTML form post, and `@multipart` says it is a browser upload. A handler has a single body, so it carries one of the two, once: a second would restate the encoding or contradict it, and the second is refused. Delete the repeat. Pairing `@form` with `@raw` is `bynk.http.body_kind_conflict`, and a repeated `@raw` is `bynk.http.raw_duplicate`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.form_duplicate",
+  "constructs": [],
+  "example": "type Signup = { email: String }\n\n@form\n@form    // ✗ a second `@form`\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries more than one `@form` annotation."
+}

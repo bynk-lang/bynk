@@ -2,7 +2,7 @@
 // Worker entry point for context `r.api`.
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches, __renderRejection } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
@@ -30,7 +30,7 @@ export default {
         const __body = await __verifyCall(request, env, "r.api");
         if (typeof __body !== "string") return __body;
         const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
+        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
           default:
@@ -52,7 +52,7 @@ export default {
           try {
             __bytes = await __readBodyCapped(request, 64);
           } catch {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (__bytes === undefined) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -66,10 +66,10 @@ export default {
           try {
             __body_json = globalThis.JSON.parse(__raw) as __JsonValue;
           } catch {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           const __r_body = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__body_json);
-          if (__r_body.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+          if (__r_body.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           const body = __r_body.value;
           const result = await surface.http_POST_signed(body);
           return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"r.api\", header=\"X-Sig\""]), __security_api);
@@ -89,7 +89,7 @@ export default {
           try {
             __bytes = await __readBodyCapped(request, 64);
           } catch {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (__bytes === undefined) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -104,11 +104,11 @@ export default {
         if ((method === "GET" || method === "HEAD") && __m) {
           __route = "GET /codes/:code";
           if (__m.malformed) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           const __raw_code = __m.params["code"];
           const __r_code = handlers.Code.of(__raw_code);
-          if (__r_code.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+          if (__r_code.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.code", violation: __r_code.error })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           const code = __r_code.value;
           const result = await surface.http_GET_codes_Param_code(code);
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"r.api\""]), __security_api);
@@ -120,7 +120,7 @@ export default {
         if (method === "PUT" && __m) {
           __route = "PUT /items/:id";
           if (__m.malformed) {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedPath", details: __m.malformed }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -135,7 +135,7 @@ export default {
           try {
             __bytes = await __readBodyCapped(request, 64);
           } catch {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           if (__bytes === undefined) {
             return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
@@ -144,10 +144,10 @@ export default {
           try {
             __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
           } catch {
-            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+            return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           }
           const __r_body = handlers.__deserialise_Item(__body_json, "$");
-          if (__r_body.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__r_body.error), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
+          if (__r_body.tag === "Err") return __applySecurityHeaders(await __renderRejection(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_body.error)), { status: 400, headers: { "content-type": "application/json" } }), (why) => surface.rejected_api(why)), __security_api);
           const body = __r_body.value;
           const result = await surface.http_PUT_items_Param_id(id, body);
           return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk realm=\"r.api\""]), __security_api);

@@ -1,0 +1,12 @@
+{
+  "blurb": "`HttpResult` is a built-in type with a fixed set of variants, the HTTP statuses a handler can answer with, such as `Ok`, `Created`, `NotFound` and `ServerError`. `HttpResult.Nope` names one that does not exist, usually a misspelling or a status the set does not include. Pick one of the listed variants. A type you declared yourself is checked by `bynk.resolve.unknown_static_member`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.unknown_static_member",
+  "constructs": [
+    "field_access"
+  ],
+  "example": "HttpResult.Nope        // ✗ no such variant\n\nHttpResult.NotFound    // ✓",
+  "severity": "error",
+  "summary": "A name after `HttpResult.` that is not one of its variants. An unknown member of a type you declared is `bynk.resolve.unknown_static_member`."
+}

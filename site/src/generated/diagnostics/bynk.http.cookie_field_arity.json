@@ -1,0 +1,12 @@
+{
+  "blurb": "`Record.field.cookie(value)` writes a typed cookie from a record's field, so it takes exactly the value to write, and `Record.field.expire()` takes nothing: the field is named by the path, not by an argument. Write `Prefs.theme.cookie(Dark)` to set it and `Prefs.theme.expire()` to remove it.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_field_arity",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Ok(\"x\").withCookie(Prefs.theme.cookie())       // ✗ the value to write is missing\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))   // ✓",
+  "severity": "error",
+  "summary": "A typed cookie write or deletion (`Record.field.cookie(v)`, `Record.field.expire()`) is given the wrong number of arguments."
+}

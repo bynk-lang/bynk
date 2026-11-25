@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability body is a list of operations, each a signature that starts with `fn`: the capability says what can be done, and a provider supplies how. The parser found something else where the next operation should begin. The commonest cause is leaving off the `fn`. An `on` handler, a `type` or a `let` does not belong in a capability either. The message names the token it found, and the position is where the operation should have started. A provider body has the same rule: `bynk.parse.expected_provider_op`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_capability_op",
+  "constructs": [
+    "capability_op"
+  ],
+  "example": "capability Clock {\n    now() -> Effect[Int]                  // ✗ an operation starts with `fn`\n}\n\ncapability Clock {\n    fn now() -> Effect[Int]               // ✓\n}",
+  "severity": "error",
+  "summary": "Expected a capability operation."
+}

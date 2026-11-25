@@ -1,0 +1,10 @@
+{
+  "blurb": "A `security { }` section sets the security headers, `Strict-Transport-Security` and `X-Content-Type-Options`, stamped on a service's HTTP responses. Only a `from http` service sends them, so on a `cron` or other service the section is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `limits` and `json` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.limits_not_http`, `bynk.http.json_not_http`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.security_not_http",
+  "constructs": [],
+  "example": "service jobs from cron {\n    security { hsts: 180.days }   // ✗ a schedule sends no response headers\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A `security { }` policy appears on a service that is not `from http`."
+}

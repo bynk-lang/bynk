@@ -1,0 +1,12 @@
+{
+  "blurb": "`race` hands the side that loses to the execution context, and an agent handler has none. Call it from the service handler that calls the agent, so the race is run from outside. The same rule holds for `bynk.within.in_agent_handler`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.race.in_agent_handler",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "agent Feed {\n    key id: String\n\n    on call quote() -> Effect[Int] {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✗ an agent handler has no execution context\n    }\n}\n\nservice quotes {\n    on call() -> Effect[Int] by Caller {\n        Slow(\"a\").get().race(Slow(\"b\").get())   // ✓ the service handler has\n    }\n}",
+  "severity": "error",
+  "summary": "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to."
+}

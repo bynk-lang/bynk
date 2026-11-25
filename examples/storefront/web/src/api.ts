@@ -54,6 +54,38 @@ export function __bynkRegExp(source: string, flags: string): RegExp {
   return re;
 }
 
+/**
+ * `String.padStart` / `padEnd` (#3978). The width counts code points, not UTF-16 units,
+ * so an astral character is one position; `fill` is cut to fit (by code points too).
+ * An empty `fill` has nothing to repeat and faults.
+ */
+export function __bynkPad(s: string, width: number, fill: string, atStart: boolean): string {
+  const unit = [...fill];
+  if (unit.length === 0) throw new Error("String.padStart/padEnd: `fill` is empty");
+  const need = width - [...s].length;
+  if (need <= 0) return s;
+  let pad = "";
+  for (let i = 0; i < need; i += 1) pad += unit[i % unit.length];
+  return atStart ? pad + s : s + pad;
+}
+
+/** `String.repeat` (#3978): `n` copies; a negative `n` faults. */
+export function __bynkRepeat(s: string, n: number): string {
+  if (n < 0) throw new Error(`String.repeat: a negative count (${n})`);
+  return s.repeat(n);
+}
+
+/**
+ * `String.lines` (#3978): split on `\n` and `\r\n` (not a lone `\r`); a trailing line
+ * break gives no empty last element, and the empty string gives `[]`.
+ */
+export function __bynkLines(s: string): string[] {
+  if (s === "") return [];
+  const parts = s.split(/\r?\n/);
+  if (parts[parts.length - 1] === "") parts.pop();
+  return parts;
+}
+
 // The browser-safe runtime `bynk client` inlines into the module it generates.
 // No signing, no Web Crypto, no secret and no Workers types: only `fetch`, which
 // the caller may replace. The `Result`/`Option` helpers, the `Bytes` and

@@ -1,0 +1,12 @@
+{
+  "blurb": "At `system` the driver mints an `Oidc` actor's token itself, writing its claims from the `\"name: value\"` lines of the `TokenClaims.of([…])` in the `by` clause. A `TokenClaims` held in a variable is opaque: it can be read with `get` and `has`, but its lines cannot be recovered, so the driver has nothing to mint from and the case is refused rather than sent with no claims. Write `TokenClaims.of([…])` in the principal, or move the case to `integration`, where the handler is given the value as it is.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.system_claims_need_literal",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\nlet claims = TokenClaims.of([\"repository: acme/money\"])\nlet r <- api.GET(\"/who\") by Workload(\"wid\", claims)    // ✗ the claims are in a variable\nlet r <- api.GET(\"/who\") by Workload(\"wid\", TokenClaims.of([\"repository: acme/money\"]))    // ✓",
+  "severity": "error",
+  "summary": "A `system`-tier case passes token claims to a call-site principal other than as a literal `TokenClaims.of([…])`; the driver mints the `Oidc` token's claims from those lines, which a `TokenClaims` value does not expose."
+}

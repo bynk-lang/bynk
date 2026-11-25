@@ -1,0 +1,5 @@
+commons demo.fm
+
+fn bad(xs: List[Int]) -> List[Int] {
+  xs.filterMap((x: Int) => x + 1)
+}

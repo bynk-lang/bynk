@@ -1,0 +1,10 @@
+{
+  "blurb": "A context that `uses` a commons gets its sum types by name, but not their variant constructors, so `Circle(1.0)` is refused there: the context re-exports the type under its own name, without the constructors. Build the value in the commons, in a function that returns it, and call that function from the context.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.rebrand_construction",
+  "constructs": [],
+  "example": "// geo/shapes.bynk\ncommons geo.shapes\n\ntype Shape = | Circle(radius: Float) | Square(side: Float)\n\n// app/main.bynk\ncontext app.main\n\nuses geo.shapes\n\nfn unit() -> Shape {\n    Circle(1.0)                          // ✗ constructors are not in scope here\n}\n\n// geo/shapes.bynk\nfn unitCircle() -> Shape { Circle(1.0) } // ✓ built in the commons\n\n// app/main.bynk\nfn unit() -> Shape {\n    unitCircle()                         // ✓ called from the context\n}",
+  "severity": "error",
+  "summary": "A variant of a `uses`-sourced commons sum type was constructed directly inside a context, where the emitter's per-context rebrand leaves its constructors out of scope."
+}

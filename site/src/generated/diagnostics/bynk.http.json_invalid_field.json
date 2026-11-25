@@ -1,0 +1,10 @@
+{
+  "blurb": "The `options` field of a `json { }` section says how response bodies write an `Option`, and it is read at compile time, so its value is the bare word `tagged` (the default, `{\"kind\": \"Some\", …}`) or `plain` (`Some(v)` as `v`, `None` as `null`). Any other word, a string or a computed value is refused. Write one of the two. The route-level form is `@json(options: …)`, checked by `bynk.http.json_invalid_arg`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.json_invalid_field",
+  "constructs": [],
+  "example": "service api from http {\n    json { options: compact }   // ✗ `tagged` or `plain`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    json { options: plain }     // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A `json { }` policy's `options` is not `tagged` or `plain`."
+}

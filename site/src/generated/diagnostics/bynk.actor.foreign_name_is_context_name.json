@@ -1,0 +1,10 @@
+{
+  "blurb": "A foreign caller sends its actor's name as its caller, and a Bynk context's name is lower case. An actor named like a context could pass for one. Start the actor's name with a capital letter.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.foreign_name_is_context_name",
+  "constructs": [],
+  "example": "actor legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✗ reads as a context name\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_CALL_KEY\") }   // ✓ capitalised",
+  "severity": "error",
+  "summary": "A `Foreign` actor's name could be read as a context's name."
+}

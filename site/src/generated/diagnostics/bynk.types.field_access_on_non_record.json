@@ -1,0 +1,12 @@
+{
+  "blurb": "`.name` reads a field, and only a record has fields. A `String`, an `Int` or a `List` has methods instead, called with parentheses, so `name.length` is not a field read but `name.length()` is a call. A refined type is already its base type, so there is nothing to unwrap. To get at a sum type's payload, use `match`. A field a record lacks is `bynk.types.unknown_field`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_access_on_non_record",
+  "constructs": [
+    "field_access"
+  ],
+  "example": "fn size(name: String) -> Int {\n    name.length    // ✗ `String` is not a record; `length` is a method\n}\n\nfn size(name: String) -> Int {\n    name.length()    // ✓\n}",
+  "severity": "error",
+  "summary": "Field access on a value that is not a record."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `SignedCookie` config names each key once. A repeated `secret` or `ttl` would have the first value win and the second ignored without a word, in the scheme that guards a session. Keep the one you mean.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_duplicate_key",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"A\", secret = \"B\", ttl = 12.hours), identity = UserId }   // ✗ two secrets\n\nactor User { auth = SignedCookie(secret = \"A\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` config repeats a key."
+}

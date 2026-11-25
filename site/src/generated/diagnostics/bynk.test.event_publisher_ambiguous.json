@@ -1,0 +1,12 @@
+{
+  "blurb": "`svc.event(e)` delivers an event in a default envelope, whose `publisherId` is the context that publishes the event to the target: its own, or the one context it consumes that declares it. When two consumed contexts both declare the event there is no single publisher to name, so the case must build the envelope itself. Pass `svc.event(e, env)`, with an `EventEnvelope` whose `publisherId` names the one you mean; the target must consume `EventEnvelope` from `bynk`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.event_publisher_ambiguous",
+  "constructs": [
+    "case"
+  ],
+  "example": "// shop/ledger.bynk\nconsumes shop.order\nconsumes shop.archive\nconsumes bynk { EventEnvelope }\n\n// tests/ledger.test.bynk\nlet _ <- OnPlaced.event(Placed { id: \"o1\" })         // ✗ `shop.order` or `shop.archive`?\nlet env = EventEnvelope { eventId: \"e1\", publisherId: \"shop.order\", …\nlet _ <- OnPlaced.event(Placed { id: \"o1\" }, env)    // ✓ the envelope names it",
+  "severity": "error",
+  "summary": "A test body's `svc.event(e)` omits the envelope, but the event's publisher, which the default envelope names, is not one context the target declares or consumes."
+}

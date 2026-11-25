@@ -1,0 +1,13 @@
+{
+  "blurb": "`else` after a `let` says what the block does when the pattern does not match. A plain name matches every value, so this `else` could never run, and it is refused rather than ignored. To handle a failure, bind a pattern that can fail: `Ok(x)`, `Some(x)`, or a qualified variant such as `Status.Pending`. Otherwise drop the `else`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.let_else_on_binding",
+  "constructs": [
+    "let_stmt",
+    "effect_let_stmt"
+  ],
+  "example": "fn count(r: Result[Int, String]) -> Int {\n    let n = r else { 0 }              // ✗ a name always matches\n    n\n}\n\nfn count(r: Result[Int, String]) -> Int {\n    let Ok(n) = r else { 0 }          // ✓ an `Err` takes the `else`\n    n\n}",
+  "severity": "error",
+  "summary": "An `else` follows a plain `let name = …` binding, which matches every value, so the `else` could never run."
+}

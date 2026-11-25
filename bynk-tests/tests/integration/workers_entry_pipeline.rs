@@ -132,7 +132,7 @@ fn a_call_whose_contract_hash_differs_is_refused_with_409() {
 fn a_call_argument_that_fails_to_decode_is_a_400() {
     let ts = shop_index();
     assert!(
-            ts.contains("if (__r_n.tag === \"Err\") return new globalThis.Response(globalThis.JSON.stringify(__r_n.error), { status: 400,"),
+            ts.contains("if (__r_n.tag === \"Err\") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_n.error)), { status: 400,"),
             "{ts}"
         );
 }

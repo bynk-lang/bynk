@@ -1,0 +1,10 @@
+{
+  "blurb": "A fixed asset path names one file, and a Worker serves one file at it, so two assets cannot both claim `/legal.txt`. One path cannot be a folder of another either, as `/logo` and `/logo/icon.png` would be: a name cannot be both a file and a directory. Give each asset its own path. Two assets for the same file at the same path are no conflict. A route at an asset's path is `bynk.asset.shadows_route`.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.path_conflict",
+  "constructs": [],
+  "example": "asset terms = \"assets/a.txt\" at \"/legal.txt\"\nasset privacy = \"assets/b.txt\" at \"/legal.txt\"    // ✗ a second file at `/legal.txt`\n\nasset terms = \"assets/a.txt\" at \"/terms.txt\"\nasset privacy = \"assets/b.txt\" at \"/privacy.txt\"    // ✓",
+  "severity": "error",
+  "summary": "Two different asset files would be served at one fixed path by the same Worker."
+}

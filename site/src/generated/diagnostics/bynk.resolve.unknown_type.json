@@ -1,0 +1,10 @@
+{
+  "blurb": "A type name was referenced that does not exist. Types must be declared (with `type`), be one of Bynk's built-in types, or be brought into scope from another module before they can be named. An unknown type is usually a typo or a missing declaration/import.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.unknown_type",
+  "constructs": [],
+  "example": "fn greet(u: Usr) -> String { … }   // ✗ no type `Usr`\nfn greet(u: User) -> String { … }  // ✓ the declared type",
+  "severity": "error",
+  "summary": "Referenced a type that does not exist."
+}

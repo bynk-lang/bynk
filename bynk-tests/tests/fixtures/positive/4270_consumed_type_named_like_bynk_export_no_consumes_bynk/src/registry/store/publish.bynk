@@ -1,0 +1,15 @@
+context registry.store
+
+consumes registry.admission { Refusal }
+
+fn refuse(message: String) -> Refusal {
+  Refusal { code: "taken", message: message }
+}
+
+fn describe(r: Refusal) -> String {
+  r.code
+}
+
+fn explain(message: String) -> String {
+  describe(refuse(message))
+}

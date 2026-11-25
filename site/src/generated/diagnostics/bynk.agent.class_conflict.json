@@ -1,0 +1,10 @@
+{
+  "blurb": "An agent class that bynk.schema.lock records can't just disappear from source: it must be given one fate, either `agent New replaces Old` (its data moves) or `removed agent Old` (its data is deleted). Giving a name two fates is a conflict: renamed twice, renamed and removed, or removed twice. A rename onto a class that already has recorded history of its own is also refused, since it would merge two histories and Cloudflare refuses a rename onto an existing namespace. Decide what becomes of the old class, and declare that once.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.class_conflict",
+  "constructs": [],
+  "example": "agent Basket replaces Cart {\n  key id: String\n}\n\nagent Trolley replaces Cart {   // ✗ `Cart` is already renamed to `Basket`\n\nagent Trolley {                 // ✓ a class of its own",
+  "severity": "error",
+  "summary": "An agent class has more than one fate: it is renamed twice, both renamed and removed, or renamed onto a class that already has its own recorded history in `bynk.schema.lock`."
+}

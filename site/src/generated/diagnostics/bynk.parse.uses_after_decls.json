@@ -1,0 +1,12 @@
+{
+  "blurb": "In the fragment form of a `commons` or `context` (the header with no braces), the `uses` clauses come straight after the header, before any `type` or `fn`. Move the `uses` line up. `consumes` and `exports` clauses follow the same rule, as `bynk.parse.consumes_after_decls` and `bynk.parse.exports_after_decls`: `consumes` after the `uses` lines, `exports` after the `consumes` lines.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.uses_after_decls",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "commons demo\ntype Id = String\nuses util              // ✗ a declaration comes first\n\ncommons demo\nuses util              // ✓ clauses straight after the header\ntype Id = String",
+  "severity": "error",
+  "summary": "`uses` appears after other declarations."
+}

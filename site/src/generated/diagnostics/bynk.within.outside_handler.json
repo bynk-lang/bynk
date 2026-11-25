@@ -1,0 +1,12 @@
+{
+  "blurb": "`within` hands the effect it abandons on a timeout to the execution context, which only a service handler's body, or a function's it calls, has. A WebSocket handler, a provider operation and a test `case` have none. Move the `within` into a service handler or a function, and have the case call that, simulating a slow call with `stub … after`. In an agent handler the rule is `bynk.within.in_agent_handler`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.within.outside_handler",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "// tests/t.test.bynk\nlet r <- Slow(\"a\").get().within(1.second)   // ✗ a case has no execution context\n\nlet r <- quotes.call()                      // ✓ the service handler bounds it",
+  "severity": "error",
+  "summary": "`e.within(d)` was used outside a service handler's body and outside a function (in a provider operation, a WebSocket handler or a test `case` body), where no execution context exists."
+}

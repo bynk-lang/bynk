@@ -1,0 +1,10 @@
+{
+  "blurb": "Some standard-library items are experimental: they may change or disappear in any release, and the compatibility promise does not cover them. Using one is an error until the project opts in, so that relying on it is a choice someone made and can find. Add the item's path, as the error gives it, to `allow` under `[unstable]` in `bynk.toml`, or avoid the item. An entry that names no standard-library item is `bynk.project.unstable_unknown_item`.",
+  "category": "Stability",
+  "categoryAnchor": "stability",
+  "code": "bynk.stability.experimental",
+  "constructs": [],
+  "example": "// demo.bynk\nconsumes bynk.cloudflare { Version }    // ✗ experimental\n\n// bynk.toml\n[unstable]\nallow = [\"bynk.cloudflare.Version\"]     // ✓",
+  "severity": "error",
+  "summary": "An experimental standard-library item is used without an `[unstable] allow` entry in `bynk.toml` covering it."
+}

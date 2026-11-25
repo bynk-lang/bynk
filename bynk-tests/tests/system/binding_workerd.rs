@@ -20,7 +20,7 @@
 //! objects a page. P5b (#2626) adds the streamed reads and writes (a wrong
 //! declared size faulting, nothing stored) and multipart uploads (completed
 //! from the handle in a later request; R2's minimum part size) to the same
-//! smoke, so it keeps band 1.
+//! smoke.
 //!
 //! The same toolchain skip and `BYNK_REQUIRE_WORKERD` gate as the events smokes;
 //! see `events_ordering_workerd.rs` for why each exists. Teardown is the shared
@@ -129,11 +129,6 @@ service api from http {
 }
 ";
 
-/// A `band` that asks [`run_smoke_with`] for ports the operating system says
-/// are free, for a smoke that has no band of its own: every one below port
-/// 65_536 is taken (the last, 10, by the D1 migrations smoke, #2608).
-const FREE_PORTS: u16 = u16::MAX;
-
 fn skip(reason: &str) -> bool {
     if require::is_required(REQUIRE_ENV) {
         panic!("{REQUIRE_ENV} is set but {reason}");
@@ -195,18 +190,17 @@ fn check_steps(port: u16, steps: &[(&str, u16, &str)]) -> Vec<String> {
 /// One Worker under `wrangler dev`, driven over HTTP. `source` is a context
 /// named `<ctx>.smoke` in the project `<project>`, which must answer `GET
 /// <boot>` once up; `drive` talks to it on its port and returns what the
-/// platform answered differently from the contract. `band` offsets the port
-/// within this file's own range so that two smokes can run at once. The
+/// platform answered differently from the contract. The Worker and its
+/// inspector take ports the operating system says are free. The
 /// disagreements with the wrangler log, or `None` when the smoke was skipped.
 fn run_smoke(
     project: &str,
     ctx: &str,
     source: &str,
     boot: &str,
-    band: u16,
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
-    run_smoke_with(project, ctx, source, &[], &|_| None, boot, band, &[], drive)
+    run_smoke_with(project, ctx, source, &[], &|_| None, boot, &[], drive)
 }
 
 /// [`run_smoke`] with `files` (project-relative path, content) written into
@@ -214,8 +208,7 @@ fn run_smoke(
 /// directory before `wrangler dev` starts; a `Some` from it is a failure that
 /// stops the smoke. `env` is set on `wrangler dev`'s own environment (and
 /// nowhere else), as `bynk dev` sets a Hyperdrive binding's local connection
-/// string (#3319). A `band` of [`FREE_PORTS`] takes two ports the operating
-/// system says are free instead of a band of its own.
+/// string (#3319).
 #[allow(clippy::too_many_arguments)]
 fn run_smoke_with(
     project: &str,
@@ -224,7 +217,6 @@ fn run_smoke_with(
     files: &[(&str, &str)],
     prepare: &dyn Fn(&std::path::Path) -> Option<String>,
     boot: &str,
-    band: u16,
     env: &[(&str, &str)],
     drive: &dyn Fn(u16) -> Vec<String>,
 ) -> Option<(Vec<String>, String)> {
@@ -276,18 +268,7 @@ fn run_smoke_with(
         return Some((vec![failure], String::new()));
     }
 
-    // Its own band, clear of the events smokes' (30_000 + 4·pid, 40_000 + 2·pid,
-    // 55_000 + 2·pid, each mod 4_000), so they can all run at once. Bands 5
-    // and 6 (40_000 to 48_000) share a port with the events smokes for half
-    // of all pids, so the Fetch smokes use 8 and 9 (#2604), and the D1
-    // migrations smoke 10, the last band below port 65_536 (#2608).
-    let (port, inspector_port) = if band == FREE_PORTS {
-        let [port, inspector_port] = wrangler::ports::free_ports();
-        (port, inspector_port)
-    } else {
-        let port = 20_000 + 2 * (std::process::id() % 2_000) as u16 + 4_000 * band;
-        (port, port + 1)
-    };
+    let [port, inspector_port] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let out_log = fs::File::create(&log_path).unwrap();
     let err_log = out_log.try_clone().unwrap();
@@ -364,7 +345,7 @@ fn workers_kv_round_trips_on_workerd() {
         // user:2, user:3 (TTL'd) and user:4 (expiring): two pages.
         ("/pages/user:", 200, r#""2 true 1 false 1""#),
     ];
-    let Some((failures, log)) = run_smoke("kv-smoke", "kv", SOURCE, "/get/boot", 0, &|port| {
+    let Some((failures, log)) = run_smoke("kv-smoke", "kv", SOURCE, "/get/boot", &|port| {
         check_steps(port, steps)
     }) else {
         return;
@@ -624,7 +605,7 @@ fn workers_r2_round_trips_on_workerd() {
         ("/mp/abort/ab", 200, r#""aborted""#),
         ("/get/ab", 404, ""),
     ];
-    let Some((failures, log)) = run_smoke("r2-smoke", "r2", R2_SOURCE, "/get/boot", 1, &|port| {
+    let Some((failures, log)) = run_smoke("r2-smoke", "r2", R2_SOURCE, "/get/boot", &|port| {
         let mut failures = check_steps(port, steps);
         // Compare-and-swap on the etag R2 minted: it swaps once, and the same
         // etag is then stale.
@@ -755,14 +736,11 @@ fn workers_ratelimit_counts_on_workerd() {
         ("/reads/a", 200, "true"),
         ("/reads/a", 200, "false"),
     ];
-    let Some((failures, log)) = run_smoke(
-        "rl-smoke",
-        "rl",
-        RATELIMIT_SOURCE,
-        "/reads/boot",
-        2,
-        &|port| check_steps(port, steps),
-    ) else {
+    let Some((failures, log)) =
+        run_smoke("rl-smoke", "rl", RATELIMIT_SOURCE, "/reads/boot", &|port| {
+            check_steps(port, steps)
+        })
+    else {
         return;
     };
     assert!(
@@ -876,7 +854,6 @@ fn workers_queue_delivers_to_a_bynk_consumer_on_workerd() {
         &[],
         &install_npm_dependencies,
         "/seen/boot",
-        3,
         &[],
         &|port| {
             let mut failures = check_steps(
@@ -1222,7 +1199,6 @@ fn workers_analytics_writes_on_workerd() {
         &[],
         &seed_local_secret,
         "/bare",
-        4,
         &[],
         &|port| {
             check_steps(
@@ -1342,7 +1318,7 @@ fn workers_d1_round_trips_on_workerd() {
     // blob column decodes as `Bytes` (so the binding reads D1's blob shape), a
     // UNIQUE or CHECK breach is `Constraint`, a batch that breaks one rolls
     // back, and a syntax error is `Failed`.
-    let Some((failures, log)) = run_smoke("d-smoke", "d", D1_SOURCE, "/setup", 7, &|port| {
+    let Some((failures, log)) = run_smoke("d-smoke", "d", D1_SOURCE, "/setup", &|port| {
         check_steps(
             port,
             &[
@@ -1444,7 +1420,6 @@ fn d1_migrations_apply_to_the_emitted_config_on_workerd() {
         &files,
         &apply,
         "/items",
-        10,
         &[],
         &|port| {
             check_steps(
@@ -1531,7 +1506,7 @@ fn fetch_send_with_times_out_and_returns_a_manual_redirect_on_workerd() {
     // `302`, and an upstream that never answers is `Err(Timeout)`.
     let upstream = upstream();
     let source = fetch_source(upstream);
-    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", 9, &|port| {
+    let Some((failures, log)) = run_smoke("f-smoke", "f", &source, "/ready", &|port| {
         check_steps(
             port,
             &[
@@ -1847,7 +1822,7 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
     // `fetch`: bytes 0–255 come down and go back up unchanged, and the
     // upload's Content-Type is the one the request set.
     //
-    // K5c (#2627), in the same Worker (the port bands are all taken):
+    // K5c (#2627), in the same Worker (no new smoke is needed):
     // `receiveStream` hands out a platform stream that outlasts its head
     // timeout, `sendStream` pipes it upstream chunked with no content-length,
     // `RawStreamed` re-serves one, and a second read of one faults.
@@ -1856,7 +1831,7 @@ fn fetch_bytes_round_trip_every_byte_on_workerd() {
     let source = fetch_bytes_source(upstream, streams);
     let expected = format!(r#""{ALL_BYTES_BASE64} {ALL_BYTES_BASE64} application/octet-stream""#);
     let streamed = format!(r#""{ALL_BYTES_BASE64} chunked none""#);
-    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", 8, &|port| {
+    let Some((failures, log)) = run_smoke("fb-smoke", "fb", &source, "/ready", &|port| {
         let mut failures = check_steps(
             port,
             &[
@@ -2174,7 +2149,6 @@ fn workers_postgres_runs_through_hyperdrive_on_workerd() {
         // imports must resolve under the emitted compatibility date.
         &install_npm_dependencies,
         "/ready",
-        FREE_PORTS,
         &env,
         &|port| {
             // A handler's `String` is a JSON string on the wire.
@@ -2554,7 +2528,6 @@ fn workers_mysql_runs_through_hyperdrive_on_workerd() {
         // must be enough for workerd.
         &install_npm_dependencies,
         "/ready",
-        FREE_PORTS,
         &env,
         &|port| {
             let q = |text: &str| serde_json::to_string(text).unwrap();
@@ -2790,7 +2763,6 @@ fn workers_ai_stream_decodes_and_cancels_on_workerd() {
         &[],
         &fake_ai,
         "/ready",
-        FREE_PORTS,
         &[],
         &|port| {
             let mut failures = Vec::new();

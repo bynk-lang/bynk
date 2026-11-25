@@ -1,0 +1,5 @@
+commons demo.p
+
+fn bad(s: String) -> String {
+  s.padEnd(8, "")
+}

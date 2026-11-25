@@ -2898,6 +2898,14 @@ pub(crate) fn describe_type(t: &TypeDecl) -> String {
         out.push_str(&format!(" derives {}", names.join(" + ")));
     }
     out.push_str("\n```\n");
+    // #3956: the order a `derives Ord` type sorts by, which `bynk.schema.lock`
+    // records and a reorder must accept.
+    if let Some(order) = bynk_check::ord_order::signature(t) {
+        out.push_str(&format!(
+            "\nSorts by: {}\n",
+            bynk_check::ord_order::describe(&order)
+        ));
+    }
     if let Some(doc) = &t.documentation {
         out.push('\n');
         out.push_str(doc);

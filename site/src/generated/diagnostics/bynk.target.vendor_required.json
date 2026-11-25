@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.target.vendor_required",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A deployment unit uses a platform-native capability but the build selects another `--platform`."
+}

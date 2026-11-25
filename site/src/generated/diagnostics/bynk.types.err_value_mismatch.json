@@ -1,0 +1,12 @@
+{
+  "blurb": "`Err(e)` takes its error type from the surrounding `Result[T, E]`, the annotation or the function's return type, so `Err(404)` where `E` is `String` is refused at the value, with no conversion. Pass an `E`, or change the declared error type. The success half is `bynk.types.ok_value_mismatch`; with nothing to fix the `Result`, it is `bynk.types.cannot_infer_result_type_params`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.err_value_mismatch",
+  "constructs": [
+    "err_expr"
+  ],
+  "example": "fn total() -> Result[Int, String] {\n    Err(404)    // ✗ an `Int`, where the error type is `String`\n}\n\nfn total() -> Result[Int, String] {\n    Err(\"not found\")    // ✓\n}",
+  "severity": "error",
+  "summary": "An `Err` payload has the wrong type."
+}

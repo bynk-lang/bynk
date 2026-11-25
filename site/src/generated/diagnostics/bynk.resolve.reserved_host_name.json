@@ -1,0 +1,15 @@
+{
+  "blurb": "The generated TypeScript reaches the host's built-in objects as `globalThis.<name>`, so a top-level declaration called `globalThis` (a type, function, agent, provider and so on) would hide all of them in its module. Rename the declaration. Parameters and local bindings may use the name: the compiler renames those itself.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.reserved_host_name",
+  "constructs": [
+    "type_decl",
+    "fn_decl",
+    "agent_decl",
+    "provider_decl"
+  ],
+  "example": "type globalThis = { n: Int }   // ✗ the name is reserved\n\ntype Counter = { n: Int }      // ✓ any other name",
+  "severity": "error",
+  "summary": "A declaration is named `globalThis`, which the generated TypeScript uses to reach host globals."
+}

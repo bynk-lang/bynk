@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.version_conflict",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "One package is reached at two different git revisions (or from git and a path); a build, or a workspace, holds one copy of each package."
+}

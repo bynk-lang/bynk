@@ -145,7 +145,10 @@ const REQUESTS: [&str; 3] = ["/square/3", "/square/4", "/square/100000000"];
 
 /// Build the project (traced or not), serve both Workers, send [`REQUESTS`], and
 /// return the answers and logs. `None` when the toolchain is unavailable.
-fn serve(tmp: &Path, traced: bool, base: u16) -> Option<Run> {
+fn serve(tmp: &Path, traced: bool) -> Option<Run> {
+    // Two servers and two inspectors, free when asked for and distinct per run.
+    let [callee_port, caller_port, callee_inspector, caller_inspector] =
+        wrangler::ports::free_ports();
     let proj = tmp.join("proj/tr");
     fs::create_dir_all(&proj).unwrap();
     fs::write(proj.join("callee.bynk"), SOURCE_CALLEE).unwrap();
@@ -190,8 +193,8 @@ fn serve(tmp: &Path, traced: bool, base: u16) -> Option<Run> {
             &tmp.join("registry"),
         )
     };
-    let callee = spawn(&callee_dir, base, base + 2, &callee_log);
-    let caller = spawn(&caller_dir, base + 1, base + 3, &caller_log);
+    let callee = spawn(&callee_dir, callee_port, callee_inspector, &callee_log);
+    let caller = spawn(&caller_dir, caller_port, caller_inspector, &caller_log);
     let wranglers = match (callee, caller) {
         (Ok(a), Ok(b)) => Wranglers(vec![a, b]),
         (a, b) => {
@@ -204,7 +207,7 @@ fn serve(tmp: &Path, traced: bool, base: u16) -> Option<Run> {
     // probe's answer is not one of the compared ones.
     let deadline = Instant::now() + Duration::from_secs(180);
     loop {
-        if let Ok((200, _)) = get(base + 1, "/square/2") {
+        if let Ok((200, _)) = get(caller_port, "/square/2") {
             break;
         }
         if Instant::now() > deadline {
@@ -215,7 +218,7 @@ fn serve(tmp: &Path, traced: bool, base: u16) -> Option<Run> {
     }
     let answers = REQUESTS
         .iter()
-        .map(|p| get(base + 1, p).expect("the request answers"))
+        .map(|p| get(caller_port, p).expect("the request answers"))
         .collect();
     // Trace lines reach the log file after the response; give them a moment.
     std::thread::sleep(Duration::from_secs(2));
@@ -261,18 +264,14 @@ fn recording_changes_no_outcome_and_prints_one_spanned_trace_per_request() {
     }
     let tmp = std::env::temp_dir().join(format!("bynk-trace-requests-{}", std::process::id()));
     let _ = fs::remove_dir_all(&tmp);
-    // Eight ports (two runs of two servers and two inspectors). 53_000..55_000 is
-    // the span the other workerd tests' bands (20_000 to 52_999 and 55_000 up)
-    // leave free; as with theirs, a pid-derived offset keeps parallel runs apart.
-    let base = 53_000 + 8 * (std::process::id() % 250) as u16;
-    let plain = match serve(&tmp.join("plain"), false, base) {
+    let plain = match serve(&tmp.join("plain"), false) {
         Some(r) => r,
         None if skip("the plain run did not answer (likely no network to provision wrangler)") => {
             return;
         }
         None => unreachable!(),
     };
-    let traced = match serve(&tmp.join("traced"), true, base + 4) {
+    let traced = match serve(&tmp.join("traced"), true) {
         Some(r) => r,
         None if skip("the traced run did not answer (likely no network to provision wrangler)") => {
             return;

@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.form_bool_without_default",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `Bool` field of a `@form` body has no default, so an unchecked checkbox (which a browser sends as nothing) is a `400` (warning)."
+}

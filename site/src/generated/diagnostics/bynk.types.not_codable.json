@@ -1,0 +1,10 @@
+{
+  "blurb": "A type parameter declared `T: Codable`, on a generic `fn` or a capability operation, accepts only the types `Json.decode` can read. A call that makes `T` a function, an `Effect`, a `Stream` or a type carrying one, a `bynk.crypto` key or `()` is refused, because such a value has no wire form. Pass a plain value, or use a function whose parameter is not `Codable`. Calling `Json.encode` or `Json.decode` on such a type directly is `bynk.types.json_uncodable`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.not_codable",
+  "constructs": [],
+  "example": "fn keep[T: Codable](x: T) -> T { x }\n\nfn run(f: Int -> Int) -> Int {\n    let _ = keep(f)    // ✗ a function has no wire form\n    1\n}\n\nfn run(n: Int) -> Int {\n    keep(n)    // ✓ an `Int` does\n}",
+  "severity": "error",
+  "summary": "A type is instantiated at a `Codable`-bounded parameter (of a generic function, or of a capability operation) but is outside the domain `Json.decode` accepts: top-level `()`, a function, `Effect`, `Query`, a `Stream` or a type that carries one, a connection, the HTTP and queue result types, `Asset`, request headers, token claims, or an actor (constrained-generics slice 3)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.unsafe_source",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A git dependency's URL or revision looks like a command-line option, or uses a transport other than `https`, `ssh` (or `file`, from the project's own manifests)."
+}

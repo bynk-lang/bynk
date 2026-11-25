@@ -1,0 +1,10 @@
+{
+  "blurb": "A transition is checked inside one agent's commit, between that agent's own old and new states. Reading another agent would mean a call out to it, whose value could change before the commit lands, so the claim could not be held. A property that spans agents belongs in a saga or a scenario. Keep the transition to this agent's `old` and `new`. The mirror rule for states is `bynk.invariant.cross_agent_reference`.",
+  "category": "Transitions (step invariants)",
+  "categoryAnchor": "transitions-step-invariants",
+  "code": "bynk.transition.cross_agent_reference",
+  "constructs": [],
+  "example": "transition within_total: new.count <= Total(\"all\").get()   // ✗ reads another agent\n\ntransition grows: new.count >= old.count                   // ✓ this agent's own step",
+  "severity": "error",
+  "summary": "A transition predicate references another agent; step invariants are per-agent."
+}

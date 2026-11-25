@@ -1,0 +1,10 @@
+{
+  "blurb": "A `messages` block holds the templates for one locale, and `render(tag, msg)` picks the block by its tag. Two blocks for one tag leave it two sets of templates to choose from, so the second is refused. Merge them into one block, or correct the tag of the one meant for another language. A code repeated inside a block is `bynk.resolve.duplicate_message_code`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_message_locale",
+  "constructs": [],
+  "example": "messages \"en\" @reference { … }\nmessages \"en\" { … }                 // ✗ `en` is already declared\n\nmessages \"en\" @reference { … }\nmessages \"fr\" { … }                 // ✓ one block for each locale",
+  "severity": "error",
+  "summary": "Two `messages` blocks in one bundle declare the same locale tag."
+}

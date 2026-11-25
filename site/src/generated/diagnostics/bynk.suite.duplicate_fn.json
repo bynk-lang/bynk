@@ -1,0 +1,12 @@
+{
+  "blurb": "A case calls a suite helper by its bare name, so two helpers of one suite with one name would leave the call ambiguous. Give each a distinct name; the error is on the repeat. The same holds for a suite's types and constants: see `bynk.suite.duplicate_type` and `bynk.suite.duplicate_const`.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.duplicate_fn",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "// tests/desk.test.bynk\nfn twice(n: Int) -> Int { n * 2 }\nfn twice(n: Int) -> Int { n + n }     // ✗ `twice` again\nfn thrice(n: Int) -> Int { n * 3 }    // ✓",
+  "severity": "error",
+  "summary": "A suite declares two helper `fn`s of the same name."
+}

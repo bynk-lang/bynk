@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_unit_header",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "Expected a `commons` or `context` header."
+}

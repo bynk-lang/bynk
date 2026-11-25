@@ -1,0 +1,10 @@
+{
+  "blurb": "A project compiles the `.bynk` files under its include roots: `src/` (and `tests/`) by default, or the trees that `[paths] include` names. Finding none means there is nothing to build, which almost always means the sources are somewhere the project does not look, or the command was pointed at the wrong directory. Hidden directories, `out/` and `node_modules/` are never searched. Point `[paths] include` at the sources, or run the command from the project's root.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.no_sources",
+  "constructs": [],
+  "example": "# the sources are in lib/, and src/ is empty\n[project]\nname = \"shop\"           // ✗ nothing under src/\n\n[paths]\ninclude = [\"lib\"]       // ✓",
+  "severity": "error",
+  "summary": "The project contains no source files."
+}

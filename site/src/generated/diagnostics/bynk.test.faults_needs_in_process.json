@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect <call> faults` claims that a handler throws. At `system` a fault reaches the case as an error response from the deployed Worker, not a throw, so claim it at `unit` or `integration`, or assert the response. A claim driven `by Nobody`, `Forged` or `Stale` fails at every tier: only a `system` case reaches the auth seam that refuses the request. Assert `Rejected(Unauthorized)` in a `system` case instead.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.faults_needs_in_process",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\nexpect api.GET(\"/a\") by Nobody faults     // ✗ a seam rejects, nothing throws\n\ncase \"no token is refused\" as system {    // ✓\n    let r <- api.GET(\"/a\") by Nobody\n    expect r is Rejected(Unauthorized)\n}",
+  "severity": "error",
+  "summary": "A `system`-tier case claims a fault with `expect <call> faults`, or a fault claim at any tier is driven `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject`; at `system` a fault reaches the case as an error response from the deployed Worker, never a throw, so the claim belongs at `unit` or `integration`."
+}

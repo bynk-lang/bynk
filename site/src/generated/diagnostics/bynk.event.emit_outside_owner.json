@@ -1,0 +1,10 @@
+{
+  "blurb": "Only the context that declares an event may emit it. A consumer can see the event through `consumes`, to subscribe to it with `from Events(…)`, but being able to name a type does not make it yours to forge: other contexts then could not trust that an event came from its owner. Emit an event of your own, or call a service of the owning context and let it emit.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.emit_outside_owner",
+  "constructs": [],
+  "example": "// orders.bynk\ncontext orders\n\nexports transparent { Paid }\n\nevent Paid = { id: String }\n\n// mailer.bynk\ncontext mailer\n\nconsumes orders\nconsumes bynk { Events }\n\nevent Sent = { id: String }\n\nEvents.emit[Paid](Paid { id: \"x\" })   // ✗ `Paid` belongs to `orders`\nEvents.emit[Sent](Sent { id: \"x\" })   // ✓ `Sent` is declared here",
+  "severity": "error",
+  "summary": "`Events.emit[E]` named an event `E` not declared in the emitting context — only an event's declaring context may emit it."
+}

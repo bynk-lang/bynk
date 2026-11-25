@@ -1,0 +1,12 @@
+{
+  "blurb": "A range pattern `lo..hi` matches an `Int` by comparing it with two bounds. It is not offered for a `Float`, because `NaN` is neither inside nor outside a range, nor for a `String`; both are left out on purpose. Compare with `<` and `>=` in an `if` instead. An empty range is `bynk.types.empty_range_pattern`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.range_pattern_on_non_int",
+  "constructs": [
+    "int_range"
+  ],
+  "example": "fn band(x: Float) -> String {\n    match x {\n        1..3 => \"low\"             // ✗ a range pattern matches an `Int`\n        _ => \"high\"\n    }\n}\n\nfn band(x: Float) -> String {\n    if x < 3.0 { \"low\" } else { \"high\" }    // ✓ compare in an `if`\n}",
+  "severity": "error",
+  "summary": "A range pattern (`lo..hi`) was matched against a scrutinee that is not an `Int`."
+}

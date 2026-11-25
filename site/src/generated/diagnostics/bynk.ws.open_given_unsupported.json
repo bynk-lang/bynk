@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket `on open` cannot declare `given` capabilities. It only accepts the upgrade and hands the connection to an agent; on Workers it runs inside the Durable Object that holds the connection, where there is no composition root to supply capabilities. Put the work that needs a capability in the agent handler the connection is transferred to, which carries its own `given`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.open_given_unsupported",
+  "constructs": [],
+  "example": "service gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member given Clock { … }   // ✗ no capabilities on `on open`\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✓ the agent's handler takes the `given`\n}",
+  "severity": "error",
+  "summary": "A WebSocket `on open` handler declares `given` capabilities — unsupported at v1, since on Workers the handler runs inside the connection-hosting Durable Object, which has no composition root to supply them (real-time track slice 3b)."
+}

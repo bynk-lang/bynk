@@ -1,0 +1,10 @@
+{
+  "blurb": "A route guarded by a session cookie answers one user, so a shared cache must not store its response, or it would serve one user's answer to another. Use `scope: private`, which lets only the browser keep it, or drop `@cache`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_public_cache",
+  "constructs": [],
+  "example": "@cache(maxAge: 5.minutes, scope: public)   // ✗ a shared cache would replay it\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
+  "severity": "error",
+  "summary": "A `@cache(scope: public)` route is guarded by a `SignedCookie` actor."
+}

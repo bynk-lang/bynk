@@ -1,0 +1,12 @@
+{
+  "blurb": "`within` returns `Result[_, TimedOut]`, and `TimedOut` is declared in `bynk`, so a unit that wants `within` has to consume it. Without that the result type names a type the unit cannot see. Add `consumes bynk { TimedOut }` to the unit, or add `TimedOut` to its existing `consumes bynk { … }` list.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.within.timed_out_not_in_scope",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "let r <- Pricing.quote(id).within(2.seconds)   // ✗ `TimedOut` is not in scope\n\nconsumes bynk { TimedOut }                     // ✓ in the unit's header\nlet r <- Pricing.quote(id).within(2.seconds)",
+  "severity": "error",
+  "summary": "`e.within(d)` yields `Result[_, TimedOut]`, but the unit does not consume `bynk`, so `TimedOut` is not in scope."
+}

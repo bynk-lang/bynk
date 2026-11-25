@@ -1,0 +1,12 @@
+{
+  "blurb": "`D1.peek` reads a D1 database, so it names a capability derived from `D1` (`capability Orders = D1`). A capability on another binding, such as `Kv`, has no database for it to read.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.peek_not_a_database",
+  "constructs": [
+    "case"
+  ],
+  "example": "// shop/orders.bynk\ncapability Orders = D1\ncapability Sessions = Kv\n\n// tests/orders.test.bynk\nsuite shop.orders as system {\n  case \"peeks\" {\n    let db = D1.peek(shop.orders.Sessions)   // ✗ a `Kv`, not a `D1`\n    let ok = D1.peek(shop.orders.Orders)     // ✓\n    expect true\n  }\n}",
+  "severity": "error",
+  "summary": "`D1.peek` names a capability that is not derived from `D1`; only a D1 binding has a test database to read."
+}

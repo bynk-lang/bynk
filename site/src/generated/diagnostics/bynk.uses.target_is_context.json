@@ -1,0 +1,12 @@
+{
+  "blurb": "`uses` is for shared types and functions, and those live in a commons. A context is something to depend on: it has services to call and capabilities to use, and that is `consumes`. Replace `uses` with `consumes`. The mirror of this is `bynk.consumes.target_is_commons`.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.target_is_context",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nuses pay                         // ✗ `pay` is a context\nconsumes pay                     // ✓ depend on a context with `consumes`",
+  "severity": "error",
+  "summary": "`uses` targets a context instead of a commons."
+}
