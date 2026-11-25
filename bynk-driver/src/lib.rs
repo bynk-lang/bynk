@@ -1957,6 +1957,74 @@ mod tests {
         );
     }
 
+    /// #3941 review: the pass's edges. A secret-looking name warns and still
+    /// builds; a negative default repeated is not a conflict; a default of the
+    /// wrong kind is refused even when `bynk.toml` supplies the value; an
+    /// `Int` beyond the safe range and a doubly nested `env` are refused.
+    #[test]
+    fn env_constants_edges_report_precisely() {
+        let build = |name: &str, manifest: &str, source: &str| {
+            let dir = scratch_dir(name);
+            fs::write(dir.0.join("bynk.toml"), manifest).unwrap();
+            fs::create_dir_all(dir.0.join("src")).unwrap();
+            fs::write(dir.0.join("src/config.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0).expect("reads");
+            match project::compile_project(&options) {
+                Ok(out) => Ok(out
+                    .warnings
+                    .iter()
+                    .map(|w| w.error.category)
+                    .collect::<Vec<_>>()),
+                Err(f) => Err(f
+                    .errors
+                    .iter()
+                    .map(|e| e.error.category)
+                    .collect::<Vec<_>>()),
+            }
+        };
+        let project = "[project]\nname = \"p\"\n\n";
+        assert_eq!(
+            build(
+                "env_secret_like",
+                &format!("{project}[vars]\nAPI_TOKEN = \"t\"\n"),
+                "commons config\n\nconst Token: String = env(API_TOKEN)\n"
+            ),
+            Ok(vec!["bynk.env.secret_like_name"])
+        );
+        assert_eq!(
+            build(
+                "env_negative_defaults",
+                project,
+                "commons config\n\nconst A: Int = env(RETRIES, -1)\nconst B: Int = env(RETRIES, -1)\n"
+            ),
+            Ok(vec![])
+        );
+        assert_eq!(
+            build(
+                "env_bad_default_with_value",
+                &format!("{project}[vars]\nMAX_LINES = 5\n"),
+                "commons config\n\nconst Lines: Int = env(MAX_LINES, \"oops\")\n"
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_out_of_range",
+                &format!("{project}[vars]\nMAX_LINES = 9007199254740993\n"),
+                "commons config\n\nconst Lines: Int = env(MAX_LINES, 1)\n"
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_nested_in_env",
+                project,
+                "commons config\n\nconst Lines: String = env(A, env(B, \"x\"))\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+    }
+
     /// #3941 decision I: a package consumed as a dependency cannot read the
     /// consuming project's variables.
     #[test]

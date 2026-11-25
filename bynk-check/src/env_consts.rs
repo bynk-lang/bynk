@@ -27,9 +27,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use bynk_project::ParsedFile;
 use bynk_project::vars::{ProjectVars, VarValue, is_var_name};
 use bynk_syntax::ast::{
-    BaseType, CommonsItem, ConstDecl, Expr, ExprKind, SourceUnit, TypeBody, TypeRef, expr_children,
+    BaseType, CommonsItem, ConstDecl, Expr, ExprKind, SourceUnit, TypeBody, TypeRef, UnaryOp,
+    expr_children,
 };
 use bynk_syntax::error::CompileError;
+use bynk_syntax::lexer::MAX_SAFE_INT;
 
 /// What the pass found: errors and warnings in the sources, and errors that
 /// belong to `bynk.toml` itself.
@@ -45,6 +47,11 @@ const SECRET_SUFFIXES: &[&str] = &["_KEY", "_SECRET", "_TOKEN", "_PASSWORD"];
 /// Whether `e` is a call of `env`.
 fn is_env_call(e: &Expr) -> bool {
     matches!(&e.kind, ExprKind::Call { name, .. } if name.name == "env")
+}
+
+/// Whether `e` is, or contains, a call of `env`.
+fn has_env_call(e: &Expr) -> bool {
+    is_env_call(e) || expr_children(e).into_iter().any(has_env_call)
 }
 
 /// Report every `env(…)` nested inside `e` (not `e` itself), and, where the
@@ -155,10 +162,12 @@ fn literal(value: &VarValue, kind: Kind, at: &Expr) -> Option<Expr> {
     };
     Some(match (kind, value) {
         (Kind::Str, VarValue::Str(s)) => mk(ExprKind::StrLit(s.clone())),
-        (Kind::Int, VarValue::Int(n)) => mk(ExprKind::IntLit {
-            value: *n,
-            lexeme: n.to_string(),
-        }),
+        (Kind::Int, VarValue::Int(n)) if n.unsigned_abs() <= MAX_SAFE_INT as u64 => {
+            mk(ExprKind::IntLit {
+                value: *n,
+                lexeme: n.to_string(),
+            })
+        }
         (Kind::Bool, VarValue::Bool(b)) => mk(ExprKind::BoolLit(*b)),
         (Kind::Strings, VarValue::List(items)) => mk(ExprKind::ListLit(
             items.iter().map(|s| str_lit(s)).collect(),
@@ -194,8 +203,19 @@ pub fn resolve(parsed: &mut [ParsedFile], vars: &ProjectVars, environment: &str)
             SourceUnit::Adapter(a) => &mut a.items,
             SourceUnit::Suite(_) => continue,
         };
-        // The unit's declarations, for a refined type a constant names.
-        let snapshot: Vec<CommonsItem> = items.clone();
+        // Nothing to do for a unit with no `env(…)` anywhere in a constant.
+        if !items
+            .iter()
+            .any(|i| matches!(i, CommonsItem::Const(c) if has_env_call(&c.init)))
+        {
+            continue;
+        }
+        // The unit's type declarations, for a refined type a constant names.
+        let snapshot: Vec<CommonsItem> = items
+            .iter()
+            .filter(|i| matches!(i, CommonsItem::Type(_)))
+            .cloned()
+            .collect();
         for item in items.iter_mut() {
             if let CommonsItem::Const(c) = item {
                 if in_dependency {
@@ -233,26 +253,33 @@ pub fn resolve(parsed: &mut [ParsedFile], vars: &ProjectVars, environment: &str)
 /// there is one) stands in so the refusal does not cascade.
 fn refuse_in_dependency(c: &mut ConstDecl, out: &mut Outcome) {
     if !is_env_call(&c.init) {
+        // A nested call is just as much a read of the consumer's configuration.
+        let mut calls = Vec::new();
+        collect_env_calls(&c.init, &mut calls);
+        for span in calls {
+            out.source.push(in_dependency(&c.name.name, span));
+        }
         return;
     }
-    out.source.push(
-        CompileError::new(
-            "bynk.env.in_dependency",
-            c.init.span,
-            format!(
-                "constant `{}` reads a `bynk.toml` variable, but a package consumed as a dependency cannot",
-                c.name.name
-            ),
-        )
-        .with_note(
-            "reading deployment configuration is the application's business: take the value as a parameter, and let the application read it with its own `env(…)` constant",
-        ),
-    );
+    out.source.push(in_dependency(&c.name.name, c.init.span));
     if let ExprKind::Call { args, .. } = &c.init.kind
         && let Some(default) = args.get(1).cloned()
     {
         c.init = default;
     }
+}
+
+fn in_dependency(name: &str, span: bynk_syntax::span::Span) -> CompileError {
+    CompileError::new(
+        "bynk.env.in_dependency",
+        span,
+        format!(
+            "constant `{name}` reads a `bynk.toml` variable, but a package consumed as a dependency cannot"
+        ),
+    )
+    .with_note(
+        "reading deployment configuration is the application's business: take the value as a parameter, and let the application read it with its own `env(…)` constant",
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -269,6 +296,9 @@ fn resolve_const(
     if is_env_call(&c.init) {
         if let ExprKind::Call { args, .. } = &mut c.init.kind {
             for a in args.iter_mut() {
+                if is_env_call(a) {
+                    out.source.push(not_initialiser(a.span));
+                }
                 refuse_nested(a, &mut out.source);
             }
         }
@@ -309,22 +339,7 @@ fn resolve_const(
     }
     let default = args.get(1).cloned();
     if let Some(d) = &default {
-        // The text of the default, for the cross-constant comparison.
-        let key = format!("{:?}", literal_text(d));
-        match defaults.get(&var) {
-            Some(first) if *first != key => out.source.push(
-                CompileError::new(
-                    "bynk.env.conflicting_default",
-                    d.span,
-                    format!("`{var}` is given a different default here than by another constant"),
-                )
-                .with_note("two constants reading one variable must agree on its default, or neither has one"),
-            ),
-            Some(_) => {}
-            None => {
-                defaults.insert(var.clone(), key);
-            }
-        }
+        compare_defaults(&var, d, defaults, &mut out.source);
     }
     let Some(kind) = kind_of(&c.ty, items) else {
         out.source.push(
@@ -339,6 +354,22 @@ fn resolve_const(
         );
         return;
     };
+    // The default is checked every time, not only when it is the value used:
+    // otherwise its type error would surface only in an environment that
+    // leaves the variable unset.
+    if let Some(d) = &default
+        && let Some(found) = default_mismatch(d, kind)
+    {
+        out.source.push(CompileError::new(
+            "bynk.env.bad_value",
+            d.span,
+            format!(
+                "the default of `env({var})` is {found}, but constant `{}` needs {}",
+                c.name.name,
+                expected(kind)
+            ),
+        ));
+    }
     match vars.resolve(environment, &var) {
         Some((value, origin)) => match literal(value, kind, &c.init) {
             Some(lit) => c.init = lit,
@@ -346,13 +377,20 @@ fn resolve_const(
                 CompileError::new(
                     "bynk.env.bad_value",
                     c.init.span,
-                    format!(
-                        "`{var}` is {} in {}, but constant `{}` needs {}",
-                        value.kind(),
-                        origin.table(),
-                        c.name.name,
-                        expected(kind)
-                    ),
+                    if kind == Kind::Int && matches!(value, VarValue::Int(_)) {
+                        format!(
+                            "`{var}` in {} is outside the range of an `Int` (±{MAX_SAFE_INT}), the largest a JavaScript number holds exactly",
+                            origin.table()
+                        )
+                    } else {
+                        format!(
+                            "`{var}` is {} in {}, but constant `{}` needs {}",
+                            value.kind(),
+                            origin.table(),
+                            c.name.name,
+                            expected(kind)
+                        )
+                    },
                 ),
             ),
         },
@@ -376,17 +414,75 @@ fn resolve_const(
     }
 }
 
-/// A default's literal text, for comparing two defaults.
-fn literal_text(e: &Expr) -> String {
-    match &e.kind {
+/// Record `d` as `var`'s default, or report it when another constant gave a
+/// different one. Only defaults that can be compared are: a literal, a negated
+/// integer, or a list of those. Anything else is left to the ordinary check.
+fn compare_defaults(
+    var: &str,
+    d: &Expr,
+    defaults: &mut BTreeMap<String, String>,
+    out: &mut Vec<CompileError>,
+) {
+    let Some(key) = literal_text(d) else {
+        return;
+    };
+    match defaults.get(var) {
+        Some(first) if *first != key => out.push(
+            CompileError::new(
+                "bynk.env.conflicting_default",
+                d.span,
+                format!("`{var}` is given a different default here than by another constant"),
+            )
+            .with_note(
+                "two constants reading one variable must agree on its default, or neither has one",
+            ),
+        ),
+        Some(_) => {}
+        None => {
+            defaults.insert(var.to_string(), key);
+        }
+    }
+}
+
+/// A default's literal text, for comparing two defaults, or `None` when it is
+/// not a literal.
+fn literal_text(e: &Expr) -> Option<String> {
+    Some(match &e.kind {
         ExprKind::StrLit(s) => format!("s:{s}"),
         ExprKind::IntLit { value, .. } => format!("i:{value}"),
         ExprKind::BoolLit(b) => format!("b:{b}"),
+        ExprKind::UnaryOp(UnaryOp::Neg, inner) => match &inner.kind {
+            ExprKind::IntLit { value, .. } => format!("i:-{value}"),
+            _ => return None,
+        },
         ExprKind::ListLit(items, ..) => {
-            let parts: Vec<String> = items.iter().map(literal_text).collect();
-            format!("l:[{}]", parts.join(","))
+            let parts: Option<Vec<String>> = items.iter().map(literal_text).collect();
+            format!("l:[{}]", parts?.join(","))
         }
-        ExprKind::Paren(inner) => literal_text(inner),
-        _ => format!("?:{}", e.span.start),
-    }
+        ExprKind::Paren(inner) => return literal_text(inner),
+        _ => return None,
+    })
+}
+
+/// What a default is when it is a literal of the wrong kind for `kind`
+/// (`"a string"`, …), or `None` when it fits or is not a literal (the ordinary
+/// check then sees it, as the initialiser, when it is the value in use).
+fn default_mismatch(d: &Expr, kind: Kind) -> Option<&'static str> {
+    let found = match &d.kind {
+        ExprKind::StrLit(_) => "a string",
+        ExprKind::IntLit { .. } => "an integer",
+        ExprKind::UnaryOp(UnaryOp::Neg, inner) if matches!(inner.kind, ExprKind::IntLit { .. }) => {
+            "an integer"
+        }
+        ExprKind::BoolLit(_) => "a boolean",
+        ExprKind::ListLit(items, ..) => {
+            if items.iter().all(|i| matches!(i.kind, ExprKind::StrLit(_))) {
+                "a list of strings"
+            } else {
+                "a list"
+            }
+        }
+        _ => return None,
+    };
+    (found != expected(kind)).then_some(found)
 }
