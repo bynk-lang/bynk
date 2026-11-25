@@ -1,9 +1,14 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use super::model::GroupNames;
 use super::model::account_name_problem;
 use super::model::confirm;
 use super::model::confirm_destructive;
 use super::model::derive_plan;
 use super::model::recreate_refusal;
+use super::shared::{
+    SharedWithDefault, shared_bindings, shared_constants, strict_refusal, without_deliberate,
+};
 use crate::cloudflare::Wrangler;
 use crate::deploy::LOCK_FILE;
 use crate::deploy::agent_move::checked_agent_moves;
@@ -44,7 +49,6 @@ use crate::probe::Toolbox;
 use crate::workers;
 use bynk_driver::colour;
 use bynk_driver::emsg;
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -410,9 +414,10 @@ fn deploy(
         Lives::for_plan(&hyperdrive_wants),
     )
     .checked_against_account();
-    if report_env_constants(project_root, opts).is_err() {
+    let Ok(shared) = shared_with_default(project_root, opts, &model, &resources) else {
         return Err(ExitCode::FAILURE);
-    }
+    };
+    let plan = plan.with_shared(shared);
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return Ok(());
@@ -561,69 +566,16 @@ fn select_workers(
 
 /// #3941 decision H: each `env(…)` constant with its resolved value and where it
 /// came from, ahead of the plan, on stderr (the plan's own stdout, `--format
-/// json` included, is untouched). For a named environment, a constant that takes
-/// a `[vars]` or default value rather than the environment's own is called out,
-/// since that Worker would use another environment's setting; `--strict-environments`
-/// refuses it.
-fn report_env_constants(project_root: &Path, opts: &DeployOptions) -> Result<(), ()> {
-    let Ok(options) = bynk_driver::try_project_options(project_root) else {
-        return Ok(());
-    };
-    let options = options.environment(opts.environment.as_str());
-    let facts = bynk_driver::project::env_const_report(&options);
-    let Some(report) = env_constant_report(&facts, &opts.environment, opts.strict_environments)
-    else {
-        return Ok(());
-    };
-    for line in &report.lines {
-        emsg!("{line}");
-    }
-    match report.verdict {
-        EnvVerdict::Fine => Ok(()),
-        EnvVerdict::Note(note) => {
-            emsg!("{note}");
-            Ok(())
-        }
-        EnvVerdict::Refuse(error) => {
-            emsg!("{error}");
-            Err(())
-        }
-    }
-}
-
-/// What the deploy plan says about a build's `env(…)` constants.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct EnvReport {
-    /// The header and one line per constant.
-    pub(crate) lines: Vec<String>,
-    pub(crate) verdict: EnvVerdict,
-}
-
-/// Whether a named environment takes another environment's values.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum EnvVerdict {
-    /// `default`, or every constant has the environment's own value.
-    Fine,
-    /// Some constants fall back; the deploy goes on.
-    Note(String),
-    /// Some constants fall back and `--strict-environments` refuses.
-    Refuse(String),
-}
-
-/// The plan's lines for `facts` under `environment` (an empty name is
-/// `default`), and what to do about a named environment that takes a `[vars]`
-/// or default value: `None` when there are no `env(…)` constants.
-pub(crate) fn env_constant_report(
+/// json` included, is untouched by these lines). Empty when there are none.
+pub(crate) fn env_constant_lines(
     facts: &[bynk_project::vars::ResolvedConst],
     environment: &str,
-    strict: bool,
-) -> Option<EnvReport> {
-    use bynk_project::vars::{DEFAULT_ENVIRONMENT, ValueSource};
+) -> Vec<String> {
     if facts.is_empty() {
-        return None;
+        return Vec::new();
     }
     let environment = if environment.is_empty() {
-        DEFAULT_ENVIRONMENT
+        bynk_project::vars::DEFAULT_ENVIRONMENT
     } else {
         environment
     };
@@ -637,25 +589,66 @@ pub(crate) fn env_constant_report(
             f.source.label()
         ));
     }
-    let own = ValueSource::EnvVars(environment.to_string());
-    let shared: Vec<&str> = facts
-        .iter()
-        .filter(|f| f.source != own)
-        .map(|f| f.constant.as_str())
-        .collect();
-    let verdict = if environment == DEFAULT_ENVIRONMENT || shared.is_empty() {
-        EnvVerdict::Fine
-    } else {
-        let names = shared.join(", ");
-        if strict {
-            EnvVerdict::Refuse(format!(
-                "bynk: error: `{environment}` takes the value of another environment for {names}; set them under `[env.{environment}.vars]` (`--strict-environments`)"
-            ))
-        } else {
-            EnvVerdict::Note(format!(
-                "bynk: note: `{environment}` takes the value of another environment for {names}; set them under `[env.{environment}.vars]`, or pass `--strict-environments` to refuse this"
-            ))
-        }
+    lines
+}
+
+/// #3941, #3943: what a named environment takes from `default`: the `env(…)`
+/// constants it leaves to `[vars]` or their default, and the `Service @worker`
+/// and `Email @to` / `@allowedRecipients` values equal to `default`'s. Prints the
+/// constants' lines; the sharing itself goes into the plan (text and JSON). `Err`
+/// when `--strict-environments` refuses it, with the reason printed.
+fn shared_with_default(
+    project_root: &Path,
+    opts: &DeployOptions,
+    model: &bynk_emit::emit_model::WorkersBuild,
+    resources: &BTreeMap<String, Resources>,
+) -> Result<Vec<SharedWithDefault>, ()> {
+    use bynk_project::vars::DEFAULT_ENVIRONMENT;
+    let Ok(options) = bynk_driver::try_project_options(project_root) else {
+        return Ok(Vec::new());
     };
-    Some(EnvReport { lines, verdict })
+    let environment = if opts.environment.is_empty() {
+        DEFAULT_ENVIRONMENT
+    } else {
+        opts.environment.as_str()
+    };
+    let facts = bynk_driver::project::env_const_report(&options.clone().environment(environment));
+    for line in env_constant_lines(&facts, environment) {
+        emsg!("{line}");
+    }
+    let mut shared = shared_constants(&facts, environment);
+    if environment != DEFAULT_ENVIRONMENT {
+        // The same build for `default`, in memory: its bindings are what the
+        // environment's are compared with. When `default` cannot be built (a
+        // required variable it does not set), there is nothing to compare.
+        let default_build = options
+            .environment(DEFAULT_ENVIRONMENT)
+            .target(bynk_driver::project::BuildTarget::Workers)
+            .tests(false);
+        if let Some(default_model) = bynk_driver::project::compile_project(&default_build)
+            .ok()
+            .and_then(|out| out.workers)
+        {
+            let foreign: BTreeSet<String> = resources
+                .values()
+                .flat_map(|r| r.foreign_services.iter().map(|f| f.binding.clone()))
+                .collect();
+            shared.extend(without_deliberate(
+                shared_bindings(
+                    model.bindings.by_context(),
+                    default_model.bindings.by_context(),
+                    &foreign,
+                ),
+                &facts,
+                environment,
+            ));
+        }
+    }
+    if opts.strict_environments
+        && let Some(refusal) = strict_refusal(&shared, environment)
+    {
+        emsg!("{refusal}");
+        return Err(());
+    }
+    Ok(shared)
 }
