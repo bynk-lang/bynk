@@ -44,6 +44,13 @@ export const Level = {
   },
 };
 
+export interface Box<T> {
+  readonly value: T;
+}
+
+export const Box = {
+};
+
 export type IoError =
     { readonly tag: "Disk" };
 

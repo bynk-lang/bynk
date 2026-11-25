@@ -26,3 +26,10 @@ service reserve {
     }
   }
 }
+
+// #4382: `stamp` has no `Codable` parameter and its `T` is inferred from the argument.
+service stamped {
+  on call() -> Effect[Int] by Caller given Idempotency {
+    Idempotency.stamp(5)
+  }
+}
