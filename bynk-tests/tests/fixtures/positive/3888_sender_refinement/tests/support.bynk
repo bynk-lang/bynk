@@ -1,0 +1,9 @@
+suite shop.support {
+  consumes bynk.cloudflare { EmailVerdict, InboundEmail }
+  // The route's `admits` list refuses mail in the Worker; a unit case calls the handler
+  // directly, so it still binds `SenderIdentity` through the refinement.
+  case "a refined handler runs in a case" {
+    let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example" })
+    expect r is Accept
+  }
+}

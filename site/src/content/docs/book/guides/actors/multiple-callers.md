@@ -69,6 +69,50 @@ case "a user sees their own view" {
 
 See [acting as an actor](/reference/testing/#call-site-by).
 
+## A browser session or an API token
+
+The most common real arrangement for an API is a web app signed in with a session cookie, plus CLI,
+mobile or partner clients sending a token, all against the same routes. Declare both and name them in one
+`by` clause:
+
+```bynk
+context shop.api
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+actor ApiClient {
+	auth = Oidc(
+		issuer = "https://id.example",
+		audience = "api",
+		jwks = "https://id.example/jwks"
+	),
+	identity = UserId
+}
+
+service api from http {
+	cors {
+		origins: ["https://app.example.com"],
+		credentials: true,
+	}
+
+	on POST("/orders") () -> Effect[HttpResult[String]] by who: ApiClient | User {
+		match who {
+			ApiClient(c) => Ok("token \(c)"),
+			User(u) => Ok("cookie \(u)"),
+		}
+	}
+}
+```
+
+The members are tried in the order written. The cookie's cross-site check belongs to the cookie arm: it
+runs only when a session cookie is present, so a token client never meets it, while a cross-site page that
+sends only the user's cookie is refused (`403`). A request carrying both a cookie and a token is resolved
+by the order, which is why the example lists the token first: an explicit token wins over an ambient
+cookie. A test acts as either member (`by User("ada")`, `by ApiClient("ci")`), and `by Nobody` is the
+request with no credential, which is `401`.
+
 ## Mixing a header and a body member
 
 Members can verify different ways — a header (`Bearer`) and a body

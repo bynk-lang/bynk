@@ -404,8 +404,9 @@ pub fn compose_unit_embeds(
             continue;
         };
         // #2618: a used commons' `private` embeds stay in it.
-        for (embed_name, decl) in used_info
+        for (embed_name, decl) in info
             .table
+            .seen_through(used, &used_info.table)
             .embeds
             .iter()
             .filter(|(_, d)| d.private.is_none())

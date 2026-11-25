@@ -1,0 +1,9 @@
+commons lib.x
+
+type Status = | Open | Shut
+
+fn describe(s: Status) -> String {
+  "x"
+}
+
+const Limit: Int = 1
