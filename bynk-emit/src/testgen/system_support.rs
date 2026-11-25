@@ -2,6 +2,7 @@
 //!
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
+use super::session_driver::{SessionAgentRef, SessionDriver};
 use super::*;
 use crate::emitter::RuntimeUse;
 // #1759: every namespace a test module imports, from one definition.
@@ -1673,46 +1674,6 @@ fn push_two_token_principals(routes: &mut Vec<TsStmt>, sname: &str, key: &str, h
     }
 }
 
-/// #3386: what a `system` driver needs to mint a `SignedCookie` actor's session cookie.
-pub(super) struct SessionDriver {
-    /// The `{ secret: … }` keys expression the cookie is signed with.
-    pub(super) keys: TsExpr,
-    /// The declaring actor's name: the cookie's `aud`.
-    pub(super) actor: String,
-    /// The cookie's name.
-    pub(super) cookie: String,
-    /// How long an issued cookie is valid, in seconds.
-    pub(super) ttl_secs: i64,
-    /// #3938: for a `sessions = true` actor, how the acting principal's session is recorded in
-    /// its session agent, as `issue` records one, so the seam finds it live.
-    pub(super) sessions: Option<super::session_driver::SessionAgentRef>,
-}
-
-impl SessionDriver {
-    /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
-    /// (an expression, in seconds) after the epoch.
-    pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
-        use crate::ts_build::{await_expr, binary, call, num_lit, paren, str_lit};
-        if let Some(agent) = &self.sessions {
-            return agent.pair(keys, sub, issued_secs);
-        }
-        let signed = await_expr(call(
-            ident("__signSessionCookie"),
-            vec![
-                keys.clone(),
-                str_lit(self.actor.clone()),
-                sub,
-                num_lit(self.ttl_secs),
-                binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
-            ],
-        ));
-        TsExpr::template_lit(
-            vec![format!("{}=", self.cookie), String::new()],
-            vec![signed],
-        )
-    }
-}
-
 /// #3386: a route's session driver, if its `by` is a `SignedCookie` actor, and the `Cookie`
 /// header texts its typed and raw drivers send (the session cookie joined to any `cookies`
 /// param's), and the default `Sec-Fetch-Site` header.
@@ -1737,7 +1698,7 @@ fn session_route(
         actor: seam.actor.clone(),
         cookie: seam.cookie.clone(),
         ttl_secs: seam.ttl_secs,
-        sessions: super::session_driver::SessionAgentRef::of(&seam, ns),
+        sessions: SessionAgentRef::of(&seam, ns),
     };
     let pair = session.pair(&session.keys, ident("__sub"), now_secs());
     (
@@ -1822,7 +1783,7 @@ fn push_session_refusal_drivers(
         ),
         crate::ts_build::num_lit(3600),
     );
-    let variants = [
+    let mut variants = vec![
         (
             "forged",
             session.pair(
@@ -1840,8 +1801,17 @@ fn push_session_refusal_drivers(
             ),
         ),
     ];
+    // #3938: `by Revoked`, a session issued and then revoked in its agent.
+    if let Some(agent) = &session.sessions {
+        let valid = agent.pair(&session.keys, str_lit("bynk-test"), now_secs());
+        variants.push(("revoked", valid));
+    }
     for (name, pair) in variants {
-        let sign_stmt = const_("__cookie", pair);
+        let mut sign_stmts = vec![const_("__cookie", pair)];
+        if let (Some(agent), "revoked") = (&session.sessions, name) {
+            sign_stmts.push(agent.revoke(str_lit("bynk-test")));
+        }
+        let sign_stmt = sign_stmts;
         routes.push(sysdrive_driver(
             SysdriveKind::typed(name),
             sname,
@@ -1854,7 +1824,7 @@ fn push_session_refusal_drivers(
             "__responseToUnauthOutcome",
             payload.clone(),
             false,
-            vec![sign_stmt.clone()],
+            sign_stmt.clone(),
             false,
         ));
         if req.has_params {
@@ -1870,7 +1840,7 @@ fn push_session_refusal_drivers(
                 "__responseToUnauthOutcome",
                 payload.clone(),
                 false,
-                vec![sign_stmt],
+                sign_stmt,
                 false,
             ));
         }

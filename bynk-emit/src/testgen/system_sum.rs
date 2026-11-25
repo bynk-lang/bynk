@@ -2,6 +2,7 @@
 //! call by the actor the call acts as (#2155), including an `Oidc` token and a session cookie
 //! (#3936).
 
+use super::session_driver::{SessionAgentRef, SessionDriver};
 use super::*;
 use bynk_ts::{TsBinaryOp, TsExpr, TsStmt, TsType};
 
@@ -150,7 +151,7 @@ pub(super) fn sum_auth_for(
                         actor: seam.actor.clone(),
                         cookie: seam.cookie.clone(),
                         ttl_secs: seam.ttl_secs,
-                        sessions: super::session_driver::SessionAgentRef::of(&seam, ns),
+                        sessions: SessionAgentRef::of(&seam, ns),
                     })
                 }
             };

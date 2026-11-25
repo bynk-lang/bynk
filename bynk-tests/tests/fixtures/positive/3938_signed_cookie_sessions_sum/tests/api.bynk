@@ -66,4 +66,14 @@ suite shop.api as system {
 		let r <- api.POST("/orders", RequestHeaders.of(["Cookie: theme=dark"])) by User("ada")
 		expect r is Ok("cookie ada")
 	}
+
+	case "expire ends the session from a sum handler" {
+		let r <- api.POST("/logout") by User("ada")
+		expect r is NoContent
+	}
+
+	case "revokeAll answers for the acting identity in a sum handler" {
+		let r <- api.POST("/revoke-all") by User("ada")
+		expect r is NoContent
+	}
 }

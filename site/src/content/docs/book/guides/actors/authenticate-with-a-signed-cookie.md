@@ -62,6 +62,44 @@ on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
 Check the user's credentials before you issue the cookie; the scheme proves *who the cookie was issued
 to*, not that they should have it.
 
+## Log out everywhere
+
+A stateless cookie cannot be revoked: a copy a user already took keeps working until `ttl`. If you need to
+log a user out everywhere, or end every session after a password change or an account compromise, ask the
+actor to keep its sessions on the server with `sessions = true`:
+
+```bynk,fragment
+actor User {
+  auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours, sessions = true),
+  identity = UserId
+}
+```
+
+The compiler generates an agent that holds each identity's live sessions, and the seam checks it on every
+request, after the signature. `User.issue(identity)` adds a session, `User.expire()` ends the current one
+(it is then an `Effect[Cookie]`, so bind it with `<-`), and `User.revokeAll(identity)` ends every session
+for an identity:
+
+```bynk,fragment
+on POST("/logout") () -> Effect[HttpResult[()]] by u: User {
+  let c <- User.expire()                 // this session, on the server too
+  NoContent.withCookie(c)
+}
+
+on POST("/password") (body: NewPassword) -> Effect[HttpResult[()]] by u: User given Accounts {
+  let _ <- Accounts.setPassword(u.identity, body)
+  let _ <- User.revokeAll(u.identity)    // every session for this user
+  NoContent
+}
+```
+
+A revoked or expired session is refused with `401` on the next request. The price is one agent call on
+every authenticated request, which is why the option is off by default; one hot identity is one user's own
+sessions, so contention is unlikely. Switching `sessions` on logs everyone out once, because a cookie signed
+before it carries no session id. In a test, `by Revoked` presents a cookie for a session that was issued and
+then revoked, and the seam must refuse it. See
+[the reference](/reference/actors/#revocable-sessions) for the details.
+
 ## The key
 
 `secret` names a variable, not a key. `bynk deploy` mints a strong key the first time and sets it on the
@@ -78,8 +116,8 @@ under either key verify; new ones use the new key.
 
 A `SignedCookie` is **signed, not encrypted**: the holder can read the identity inside it, so never
 put a secret in an identity. It cannot be revoked before `ttl`: `expire()` clears the browser's copy but
-does not invalidate one a user already took, so keep `ttl` short, or keep the session on the server (see
-`examples/sessions`) if you must log out everywhere. See
+does not invalidate one a user already took, so keep `ttl` short, or set `sessions = true` (see
+[Log out everywhere](#log-out-everywhere)) if you must log out everywhere. See
 [the reference](/reference/actors/#what-a-signed-cookie-does-and-does-not-protect-against) for
 the full list.
 

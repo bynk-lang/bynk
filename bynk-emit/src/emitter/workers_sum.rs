@@ -147,6 +147,18 @@ pub(super) fn emit_http_sum_wrapper(
         Some(ident("undefined")),
         None,
     ));
+    let sessions = members
+        .iter()
+        .any(|m| matches!(&m.seam, SumMemberSeam::SignedCookie(s) if s.sessions));
+    if sessions {
+        // #3938: the verified session of a `sessions = true` cookie member, for `Actor.expire()`.
+        stmts.push(TsStmt::let_stmt(
+            TsBindingName::Ident("__sess".to_string()),
+            Some(TsType::named("unknown")),
+            Some(ident("undefined")),
+            None,
+        ));
+    }
     if sum_has_csrf_check(members, method) {
         stmts.push(TsStmt::let_stmt(
             TsBindingName::Ident("__csrfRefused".to_string()),
@@ -256,7 +268,11 @@ pub(super) fn emit_http_sum_wrapper(
             }
         })
         .collect();
-    call_args.push(deps_spread_with("who", ident("__who")));
+    call_args.push(if sessions {
+        session_deps_with_who()
+    } else {
+        deps_spread_with("who", ident("__who"))
+    });
     stmts.push(return_(Some(call(
         member_chain(ident("handlers"), &[sname, &method_key]),
         call_args,
@@ -536,6 +552,48 @@ fn session_live_guard(seam: &bynk_check::actors::SignedCookieSeam, ok: TsExpr) -
 /// (`csrf_origins` is `Some`) must pass the CSRF check (fetch metadata, then `Origin`), else the
 /// arm sets `__csrfRefused` and does not resolve; then the cookie is verified and its `sub`
 /// constructs the identity.
+/// The statements that resolve a verified cookie member: `__who = { tag, identity }`, and, for a
+/// `sessions = true` actor, `__sess = { sid, sub }` (#3938).
+fn session_resolved(seam: &bynk_check::actors::SignedCookieSeam, tag: &str) -> Vec<TsStmt> {
+    let mut out = vec![TsStmt::assign(
+        ident("__who"),
+        TsExpr::object(vec![
+            ("tag".to_string(), str_lit(tag)),
+            ("identity".to_string(), member(ident("__id"), "value")),
+        ]),
+        None,
+    )];
+    if seam.sessions {
+        let verified = member(ident("__session"), "value");
+        out.push(TsStmt::assign(
+            ident("__sess"),
+            TsExpr::object(vec![
+                ("sid".to_string(), member(verified.clone(), "sid")),
+                ("sub".to_string(), member(verified, "sub")),
+            ]),
+            None,
+        ));
+    }
+    out
+}
+
+/// #3938: `{ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who }`, the
+/// handler's deps with the verified cookie session threaded in for `Actor.expire()`.
+fn session_deps_with_who() -> TsExpr {
+    TsExpr::object_entries(vec![
+        TsObjectEntry::Spread(ident("deps")),
+        TsObjectEntry::Spread(TsExpr::Paren(Box::new(TsExpr::Conditional {
+            test: Box::new(strict_eq(ident("__sess"), ident("undefined"))),
+            consequent: Box::new(TsExpr::object(Vec::new())),
+            alternate: Box::new(TsExpr::object(vec![(
+                "__sessionOf".to_string(),
+                ident("__sess"),
+            )])),
+        }))),
+        TsObjectEntry::prop("who".to_string(), ident("__who")),
+    ])
+}
+
 fn sum_cookie_arm(
     tag: &str,
     seam: &bynk_check::actors::SignedCookieSeam,
@@ -580,14 +638,7 @@ fn sum_cookie_arm(
                         seam,
                         strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
                     ),
-                    TsStmt::assign(
-                        ident("__who"),
-                        TsExpr::object(vec![
-                            ("tag".to_string(), str_lit(tag)),
-                            ("identity".to_string(), member(ident("__id"), "value")),
-                        ]),
-                        None,
-                    ),
+                    block(session_resolved(seam, tag)),
                 ),
             ]),
         ),

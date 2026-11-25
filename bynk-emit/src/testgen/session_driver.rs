@@ -2,11 +2,11 @@
 //! principal's session is recorded in the actor's generated session agent by the same
 //! `issueSessionCookie` the handlers' `Actor.issue` runs, so the seam finds it live.
 
-use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsType};
+use bynk_ts::{TsBinaryOp, TsExpr, TsParam, TsStmt, TsType};
 
 use crate::ts_build::{
-    arrow_with, as_expr, await_expr, binary, call, ident, member, method_call, num_lit, paren,
-    str_lit,
+    arrow_with, as_expr, await_expr, binary, call, expr_stmt, ident, member, method_call, num_lit,
+    paren, str_lit,
 };
 
 /// How a driver reaches a `sessions = true` actor's session agent: the participant's handlers
@@ -36,6 +36,22 @@ impl SessionAgentRef {
             same_site: seam.same_site.clone(),
             ttl_secs: seam.ttl_secs,
         })
+    }
+
+    /// `await <agent>.revokeAll()`: end every session of `sub` in the agent, as `by Revoked` does
+    /// after its cookie is issued, so the seam must refuse the cookie.
+    pub(super) fn revoke(&self, sub: TsExpr) -> TsStmt {
+        expr_stmt(await_expr(method_call(
+            call(
+                member(ident(self.handlers_ns.clone()), self.factory.clone()),
+                vec![
+                    as_expr(sub, TsType::named("never")),
+                    member(call(ident("__makeHarness"), Vec::new()), self.env.clone()),
+                ],
+            ),
+            "revokeAll",
+            vec![TsExpr::object(Vec::new())],
+        )))
     }
 
     /// The `name=value` template literal of `sub`'s session cookie, issued `issued_secs` after the
@@ -82,6 +98,46 @@ impl SessionAgentRef {
         TsExpr::template_lit(
             vec![self.cookie.clone() + "=", String::new()],
             vec![member(paren(issued), "value")],
+        )
+    }
+}
+
+/// #3386: what a `system` driver needs to mint a `SignedCookie` actor's session cookie.
+pub(super) struct SessionDriver {
+    /// The `{ secret: … }` keys expression the cookie is signed with.
+    pub(super) keys: TsExpr,
+    /// The declaring actor's name: the cookie's `aud`.
+    pub(super) actor: String,
+    /// The cookie's name.
+    pub(super) cookie: String,
+    /// How long an issued cookie is valid, in seconds.
+    pub(super) ttl_secs: i64,
+    /// #3938: for a `sessions = true` actor, how the acting principal's session is recorded in
+    /// its session agent, as `issue` records one, so the seam finds it live.
+    pub(super) sessions: Option<SessionAgentRef>,
+}
+
+impl SessionDriver {
+    /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
+    /// (an expression, in seconds) after the epoch.
+    pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        use crate::ts_build::{await_expr, binary, call, num_lit, paren, str_lit};
+        if let Some(agent) = &self.sessions {
+            return agent.pair(keys, sub, issued_secs);
+        }
+        let signed = await_expr(call(
+            ident("__signSessionCookie"),
+            vec![
+                keys.clone(),
+                str_lit(self.actor.clone()),
+                sub,
+                num_lit(self.ttl_secs),
+                binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
+            ],
+        ));
+        TsExpr::template_lit(
+            vec![format!("{}=", self.cookie), String::new()],
+            vec![signed],
         )
     }
 }

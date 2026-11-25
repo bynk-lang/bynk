@@ -108,8 +108,8 @@ context owns, as for `Bearer`. A `SignedCookie` secret may not be any other acto
 
 ## Issuing and deleting the cookie
 
-Inside the context that declares it, a `SignedCookie` actor has two members, so no other context can
-mint its identity:
+Inside the context that declares it, a `SignedCookie` actor has two members (three with `sessions = true`:
+`revokeAll`, below), so no other context can mint its identity:
 
 ```bynk,fragment
 on POST("/login") (body: LoginRequest) -> Effect[HttpResult[String]] by v: Visitor given Clock {
@@ -157,15 +157,32 @@ Because every authenticated request makes one agent call, `sessions` is opt-in a
 the default. A hot identity is one user's own sessions, so contention is unlikely. A cookie signed before
 `sessions` was switched on carries no session id and is refused (`401`): switching it on logs everyone out.
 
-Revocation takes effect on the next request, not on the response that ends it, and an agent that cannot
-answer faults the request (`500`) rather than admitting it. Ending every session of an identity at once
-(`revokeAll`) is the next increment.
+`User.revokeAll(identity)` ends **every** session of one identity: an `Effect[()]` that takes the actor's
+identity type and, like `issue`, can only be called in a service handler. Use it to log out everywhere and
+after a password change or an account compromise; another identity's sessions are untouched. It exists only
+with `sessions = true` (a stateless actor has no sessions to revoke: `bynk.types.method_not_found`).
+
+```bynk,fragment
+on POST("/password") (body: NewPassword) -> Effect[HttpResult[()]] by u: User given Accounts {
+  let _ <- Accounts.setPassword(u.identity, body)
+  let _ <- User.revokeAll(u.identity)   // every session for this user, this one included
+  NoContent
+}
+```
+
+In a handler guarded by an [actor sum](/book/guides/actors/multiple-callers/) that has a cookie member, the
+cookie arm checks the session the same way and `expire()` ends the verified session, so a sum route logs out
+like a single-actor route.
+
+Revocation takes effect on the next request, not on the response that ends it: a request already past the
+seam finishes. An agent that cannot answer faults the request (`500`) rather than admitting it.
 
 The handler never sees the credential: the router leaves the session cookie out of the handler's
 `cookies` record and raw `RequestCookies` view, and a record that names it is refused
 (`bynk.actor.signed_cookie_read_directly`). `bynk deploy` mints the `secret` variable when it is unset (see [Signed cookies](/book/guides/projects-build-and-deployment/deploy-to-cloudflare/#session-keys)).
 A `system` suite signs in as `by User("ada")` and probes the seam with `by Nobody`, `by Forged` and
-`by Expired` (see [the failure principals](/reference/testing/#failure-principals)); a case's own
+`by Expired`, and, with `sessions = true`, `by Revoked` (see
+[the failure principals](/reference/testing/#failure-principals)); a case's own
 `Sec-Fetch-Site` and `Origin` headers probe the CSRF check.
 
 `bynk openapi` documents a route a `SignedCookie` actor guards with an `apiKey` security scheme

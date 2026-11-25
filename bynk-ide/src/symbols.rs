@@ -305,10 +305,14 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
         "NoSubject",
         "Sends an `Oidc` route two tokens that are correctly signed by the test issuer and unexpired, one with an empty `sub` and one with no `sub` claim, so the real seam refuses both before the handler runs (`Rejected(Unauthorized)`), whatever the identity's refinement. Needs an `Oidc` actor. `system` tier only.",
     ),
+    (
+        "Revoked",
+        "Sends a `SignedCookie` route a cookie correctly signed for a session that was issued and then revoked in the actor's session agent (`revokeAll`), so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `SignedCookie` actor declared with `sessions = true`. `system` tier only.",
+    ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`, `Revoked`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {

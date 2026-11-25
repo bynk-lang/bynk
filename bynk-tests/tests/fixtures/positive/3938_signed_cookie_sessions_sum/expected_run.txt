@@ -1,2 +1,3 @@
-# #3938: a `sessions = true` SignedCookie actor in a sum: the cookie arm checks the session agent.
-passed=12 failed=0
+# #3938: a `sessions = true` SignedCookie actor in a sum: the cookie arm checks the session agent,
+# and expire() and revokeAll() run from a sum handler.
+passed=14 failed=0

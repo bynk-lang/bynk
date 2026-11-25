@@ -442,6 +442,9 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
     cx: &mut LowerCtx,
     pre: &mut Pre,
 ) -> Option<bynk_ts::TsExpr> {
+    if let Some(Callee::SessionRevokeAll { actor }) = cx.commons().callees.get(&e.id).cloned() {
+        return lower_session_revoke_all(&actor, args.first()?, cx, pre);
+    }
     let Some(Callee::SignedCookie { actor, issue }) = cx.commons().callees.get(&e.id).cloned()
     else {
         return None;
@@ -905,6 +908,38 @@ fn lower_session_expire(
         ret(expire),
     ];
     call(paren(block_arrow(vec![], true, body)), vec![])
+}
+
+/// #3938: `Actor.revokeAll(identity)`: end every session of `identity` in its session agent. An
+/// effect, like `issue`: an async arrow applied to the identity, whose agent call is awaited.
+fn lower_session_revoke_all(
+    actor: &str,
+    identity: &Expr,
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let seam = cx.commons().commons.items.iter().find_map(|i| {
+        i.as_actor()
+            .filter(|a| a.name.name == actor)
+            .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
+    })?;
+    let key = pre.lower_node(identity, cx);
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let agent = bynk_check::actors::sessions_agent_name(actor);
+    cx.record_agent_call(&agent, "revokeAll");
+    let instance = cx.agent_construct_node(&agent, ident("__sub"));
+    let revoke = crate::ts_build::await_expr(method_call(instance, "revokeAll", vec![deps_node]));
+    Some(call(
+        paren(block_arrow(
+            vec![TsParam::new(
+                "__sub".to_string(),
+                Some(TsType::named(seam.identity_type)),
+            )],
+            true,
+            vec![expr_stmt(revoke)],
+        )),
+        vec![key],
+    ))
 }
 
 #[cfg(test)]

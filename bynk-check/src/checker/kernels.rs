@@ -1990,13 +1990,16 @@ pub(crate) fn check_signed_cookie_call(
     let decl = signed_cookie_actor(&actor.name, ctx)?;
     let tys = ctx.tys;
     ctx.refs.record(actor.span, SymbolKind::Actor, &actor.name);
+    if method.name == "revokeAll" {
+        return super::session_calls::check_revoke_all(decl, actor, args, span, expr_id, ctx);
+    }
     let issue = method.name == "issue";
     if !issue && method.name != "expire" {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "a `SignedCookie` actor has no member `{}`: it has `issue(identity)` and `expire()`",
+                "a `SignedCookie` actor has no member `{}`: it has `issue(identity)`, `expire()` and, with `sessions = true`, `revokeAll(identity)`",
                 method.name
             ),
         ));

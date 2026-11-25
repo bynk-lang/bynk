@@ -134,4 +134,12 @@ suite shop.api as system {
 		let r <- api.POST("/logout") by User("ada")
 		expect r is NoContent
 	}
+	case "a revoked session is refused" {
+		let r <- api.GET("/me") by Revoked
+		expect r is Rejected(Unauthorized)
+	}
+	case "revokeAll answers for the acting identity" {
+		let r <- api.POST("/password") by User("ada")
+		expect r is NoContent
+	}
 }
