@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.701.0
+
+a program that writes `Effect[Effect[T]]`, or that instantiates a generic function so it wraps one effect in another (`wrap(e)` with `e: Effect[_]`, or `Effect.pure(e)`), now gets `bynk.types.nested_effect`; such a program type-checked before but failed at run time when a method was called on the flattened value. Sequence the effects with `andThen` or `<-` instead.
+
 ## v0.694.0
 
 A project that sends a type its own consumer cannot accept now fails to compile (`bynk.queue.message_type_mismatch`); it already failed at run time as a message the consumer could not decode

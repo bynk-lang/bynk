@@ -259,6 +259,7 @@
 /book/reference/diagnostics/bynk.agent.version_without_path/
 /book/reference/diagnostics/bynk.agents.bad_state_initialiser/
 /book/reference/diagnostics/bynk.agents.non_zeroable_state_field/
+/book/reference/diagnostics/bynk.agents.self_operation/
 /book/reference/diagnostics/bynk.asset.duplicate/
 /book/reference/diagnostics/bynk.asset.invalid_at_path/
 /book/reference/diagnostics/bynk.asset.may_shadow_route/
@@ -997,6 +998,7 @@
 /book/reference/diagnostics/bynk.types.method_on_non_named_type/
 /book/reference/diagnostics/bynk.types.mixed_pattern_bindings/
 /book/reference/diagnostics/bynk.types.negative_length/
+/book/reference/diagnostics/bynk.types.nested_effect/
 /book/reference/diagnostics/bynk.types.never_inferred/
 /book/reference/diagnostics/bynk.types.no_numeric_coercion/
 /book/reference/diagnostics/bynk.types.non_exhaustive_match/
@@ -1388,6 +1390,7 @@
 /reference/diagnostics/bynk.agent.version_without_path/
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
+/reference/diagnostics/bynk.agents.self_operation/
 /reference/diagnostics/bynk.asset.duplicate/
 /reference/diagnostics/bynk.asset.invalid_at_path/
 /reference/diagnostics/bynk.asset.may_shadow_route/
@@ -2164,6 +2167,7 @@
 /reference/diagnostics/bynk.types.method_on_non_named_type/
 /reference/diagnostics/bynk.types.mixed_pattern_bindings/
 /reference/diagnostics/bynk.types.negative_length/
+/reference/diagnostics/bynk.types.nested_effect/
 /reference/diagnostics/bynk.types.never_inferred/
 /reference/diagnostics/bynk.types.no_numeric_coercion/
 /reference/diagnostics/bynk.types.non_exhaustive_match/

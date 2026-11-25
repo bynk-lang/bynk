@@ -1,5 +1,5 @@
 commons demo.mapreturnseffect
 
-fn wrap(e: Effect[Int]) -> Effect[Effect[Int]] {
+fn wrap(e: Effect[Int]) -> Effect[Int] {
 	e.map((n) => Effect.pure(n))
 }

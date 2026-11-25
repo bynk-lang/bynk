@@ -99,7 +99,17 @@ fn agent_zero_entries(
             Vec::new()
         } else {
             vec![bynk_ts::TsExpr::array(
-                indexed.into_iter().map(|f| map_indexer(f)).collect(),
+                indexed
+                    .into_iter()
+                    .map(|f| {
+                        map_indexer(
+                            f,
+                            layout
+                                .composite_indexes
+                                .contains(&(name.name.clone(), f.clone())),
+                        )
+                    })
+                    .collect(),
             )]
         };
         entries.push(bynk_ts::TsObjectEntry::prop(
@@ -184,8 +194,8 @@ fn store_handle_init(
 }
 
 /// `{ index: "<field>", of: (__v) => String(__v.<field>) }`: how a `Map` handle derives the posting
-/// key of one `@indexed(by:)` field.
-fn map_indexer(field: &str) -> bynk_ts::TsExpr {
+/// key of one `@indexed(by:)` field (its canonical encoding when the field is not a scalar, #4037).
+fn map_indexer(field: &str, composite: bool) -> bynk_ts::TsExpr {
     bynk_ts::TsExpr::object(vec![
         ("index".to_string(), str_lit(field)),
         (
@@ -196,7 +206,11 @@ fn map_indexer(field: &str) -> bynk_ts::TsExpr {
                 generics: Vec::new(),
                 return_type: None,
                 body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(call(
-                    ident("String"),
+                    ident(if composite {
+                        "__bynkKeyEncode"
+                    } else {
+                        "String"
+                    }),
                     vec![member(ident("__v"), field)],
                 )))),
             },

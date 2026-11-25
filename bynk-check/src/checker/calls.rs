@@ -1566,12 +1566,11 @@ fn check_generic_call(
     if !witnesses.is_empty() {
         ctx.last_witness = Some(witnesses);
     }
-    let ret = substitute(ret_pattern, &subst, tys);
     // v0.20b: the return is ground *up to the caller's rigid type
     // parameters* — a generic fn calling another generic fn (bynk.list's
     // `map` calling `reverse`) legitimately instantiates the callee at its
     // own rigid vars, which flow through `compatible` by name-equality.
-    Some(ret)
+    super::nested_effect::instantiated(ret_pattern, &subst, args, &var_params, name.span, ctx)
 }
 
 fn check_call_against_fn(
@@ -3011,8 +3010,27 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
         })
 }
 
+/// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
+/// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    span: Span,
+    expected: Option<TyId>,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let r = check_method_call_inner(
+        receiver, method, type_args, args, span, expected, expr_id, ctx,
+    );
+    super::nested_effect::method_result(r, span, ctx)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_method_call_inner(
     receiver: &Expr,
     method: &Ident,
     type_args: &[TypeRef],
@@ -3770,14 +3788,8 @@ pub(crate) fn check_method_call(
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
         }
-        ctx.errors.push(CompileError::new(
-            "bynk.types.method_not_found",
-            method.span,
-            format!(
-                "type `{}` has no instance method named `{}`",
-                type_name, method.name
-            ),
-        ));
+        ctx.errors
+            .push(expressions::method_not_found_error(&type_name, method, ctx));
         return None;
     };
     // v0.36 (ADR 0069): the method is a first-class index symbol, keyed by the
@@ -4215,7 +4227,7 @@ fn check_generic_method_call(
                 .record(method.span, format!("[{}]", parts.join(", ")));
         }
     }
-    Some(substitute(ret_pattern, &subst, tys))
+    super::nested_effect::instantiated(ret_pattern, &subst, args, &var_params, method.span, ctx)
 }
 
 /// v0.178 (#662) / v0.182 (#664): resolve a test-body service invocation against
