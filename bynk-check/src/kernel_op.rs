@@ -342,7 +342,9 @@ kernel_ops! {
         ToMinutes = "toMinutes", "toMinutes() -> Int (whole minutes, rounding towards zero)";
         ToHours = "toHours", "toHours() -> Int (whole hours, rounding towards zero)";
         ToDays = "toDays", "toDays() -> Int (whole days, rounding towards zero)";
+        // #3977: `toString` is units largest first (`1h30m`); `toIso` is ISO 8601 (`PT1H30M`).
         ToString = "toString", "toString() -> String";
+        ToIso = "toIso", "toIso() -> String";
     }
 /// The `Instant` kernel (v0.90, ADR 0114). Comparison/arithmetic are operators
 /// (D3); the kernel is the explicit escape to raw epoch milliseconds (D6).

@@ -379,6 +379,8 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__bynkDetach", "settle"),
     ("__bynkDistinct", "keys"),
     ("__bynkDistinctBy", "keys"),
+    ("__bynkDurationToIso", "time"),
+    ("__bynkDurationToString", "time"),
     ("__bynkEq", "equality"),
     ("__bynkGroupBy", "keys"),
     ("__bynkInstantFromIso", "time"),

@@ -5954,13 +5954,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.interpolation_non_scalar",
         blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
-                `Decimal`, or a refined type over one of them, and nothing else. A record or \
+                `Decimal`, `Instant`, `Duration`, or a refined type over one of them, and \
+                nothing else. An `Instant` prints as RFC 3339 UTC and a `Duration` as units, \
+                largest first (`1h30m`), the text their `toString()` gives. A record or \
                 sum has no canonical text, and Bynk will not print an unreadable stand-in \
                 such as `[object Object]`. An opaque type hides its base, so use `.raw` \
                 first. Turn other values into a `String` yourself: `toHex()` or `toBase64()` \
-                on `Bytes`, `toString()` on a `Duration`, `toIso()` or `toString()` on an \
-                `Instant`, or interpolate the fields of a record, a `ValidationError` or a \
-                `DecodeError`.",
+                on `Bytes` (hex or base64 is a real choice), or interpolate the fields of a \
+                record, a `ValidationError` or a `DecodeError`.",
         example: "type User = { name: String }\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u)\"         // ✗ a record has no string form\n}\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u.name)\"    // ✓ interpolate the field\n}",

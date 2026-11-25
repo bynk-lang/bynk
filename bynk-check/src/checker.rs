@@ -4012,7 +4012,7 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
             "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
         }
         _ => {
-            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
+            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal, Duration, Instant) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`"
         }
     }
 }
@@ -5446,16 +5446,23 @@ fn maybe_auto_lift(ty: Option<TyId>, expected: Option<TyId>, tys: &Types) -> Opt
 }
 
 /// Whether a value of type `ty` may fill an interpolation hole (v0.43, ADR
-/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, or `Decimal` (ADR
-/// 0698: its canonical text) — or a refinement of one (which widens to its base
-/// for display). `Bytes`, `Duration` and `Instant` have no implicit string form
-/// — each has an explicit rendering method — and opaque types are excluded,
-/// their base being hidden (`.raw` it first).
+/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, `Decimal` (ADR
+/// 0698: its canonical text), or (#3977) `Instant` (RFC 3339 UTC) and `Duration`
+/// (`1h30m`), the text their `toString()` gives — or a refinement of one (which
+/// widens to its base for display). `Bytes` has no implicit string form (hex or
+/// base64 is a real choice), and opaque types are excluded, their base being
+/// hidden (`.raw` it first).
 fn interpolable(ty: TyId, tys: &Types) -> bool {
     let scalar = |b: BaseType| {
         matches!(
             b,
-            BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool | BaseType::Decimal
+            BaseType::String
+                | BaseType::Int
+                | BaseType::Float
+                | BaseType::Bool
+                | BaseType::Decimal
+                | BaseType::Duration
+                | BaseType::Instant
         )
     };
     match &*tys.get(ty) {
