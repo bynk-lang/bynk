@@ -43,6 +43,29 @@ export const Level = {
   },
 };
 
+export interface Box<T> {
+  readonly item: T;
+}
+
+export const Box = {
+};
+
+export type IoError =
+    { readonly tag: "Net" };
+
+export const IoError = {
+  Net: { tag: "Net" } as IoError,
+};
+
+export type AppError =
+    { readonly tag: "Io"; readonly reason: IoError }
+  | { readonly tag: "Other" };
+
+export const AppError = {
+  Io: (reason: IoError): AppError => ({ tag: "Io", reason }),
+  Other: { tag: "Other" } as AppError,
+};
+
 var __const_Limit: { v: number } | undefined;
 export function Limit(): number { return (__const_Limit ??= { v: 2 }).v; }
 

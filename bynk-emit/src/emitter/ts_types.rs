@@ -391,7 +391,8 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
             {
                 format!("{ns}.{}", name.name)
             } else {
-                name.name.clone()
+                bynk_check::emitted_names::use_qualified_name(&name.name)
+                    .unwrap_or_else(|| name.name.clone())
             };
             let rendered: Vec<TsType> = args
                 .iter()

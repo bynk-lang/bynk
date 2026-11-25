@@ -11,6 +11,17 @@ type Point = {
 
 type Level = Int where Positive
 
+type Box[T] = {
+  value: T,
+}
+
+type IoError = enum { Disk }
+
+type AppError =
+  | Io(reason: IoError)
+  | Other
+  embeds IoError as Io
+
 fn describe(s: Status) -> String {
   "x"
 }
