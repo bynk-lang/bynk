@@ -2165,7 +2165,6 @@ fn check_test_bodies(
             );
         }
         for case in &test_decl.cases {
-            let from = errors.len();
             let case_callees = check_test_case_body(
                 target_name,
                 target_kind,
@@ -2189,7 +2188,6 @@ fn check_test_bodies(
                 &mut errors,
             );
             let tier = case_effective_tier(case, test_decl);
-            keep_undecodable_at_system(&mut errors, from, tier);
             check_extra_headers_tier(case, tier, &case_callees, &mut errors);
             check_extra_headers_let(case, &case_callees, &mut errors);
             check_faults_tier(case, tier, &mut errors);
@@ -6620,7 +6618,7 @@ service intake from queue(\"orders\") {
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack")
             .assert_clean();
-        case("    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Retry(why) => expect why.length() > 0\n      RetryAfter(_, _) => expect false\n      Ack => expect true\n      Undecodable => expect false\n    }")
+        case("    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Retry(why) => expect why.length() > 0\n      RetryAfter(_, _) => expect false\n      Ack => expect true\n      _ => expect false\n    }")
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ok(_)")
             .assert_reports("bynk.types.is_unknown_variant");
