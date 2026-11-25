@@ -4902,13 +4902,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.suite.fn_effectful",
-        blurb: "A suite helper is a pure function that builds a value for a \
-                case: a request, a fixture, an expected result. Returning an \
-                `Effect` would hide a step of the test inside a helper. Build \
-                the value in the helper and run the effect in the `case`, \
+        blurb: "A suite helper that returns an `Effect` must say which capabilities it \
+                uses, with `given`, so a case's dependency on it is visible where it \
+                is called: `fn seed() -> Effect[()] given Stock { … }`. Without \
+                `given` it is a pure function that builds a value for a case, so \
+                build the value in the helper and run the effect in the `case`, \
                 where each step is visible with `<-`.",
         example: "// tests/desk.test.bynk\n\
-                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`, with no `given`\n\
                   fn start() -> Int { 1 }                            // ✓ build the value\n\
                   let n <- local.call(start())                       // ✓ run it in the case",
     },
@@ -5167,6 +5168,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
                   \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
                   }",
+    },
+    Explain {
+        code: "bynk.test.helper_given_at_system",
+        blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
+        example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
     },
     Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
@@ -10139,6 +10145,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.forged_needs_system",
         "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
         &["case"],
+    ),
+    d(
+        "bynk.test.helper_given_at_system",
+        "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
     ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",

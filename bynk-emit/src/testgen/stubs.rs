@@ -602,10 +602,13 @@ pub(super) fn lower_stub_value_block(
         // #2907: and its helpers, declared ahead of the value like the fixtures.
         let mut errs: Vec<CompileError> = Vec::new();
         if !items.fns.is_empty() {
+            let caps =
+                test_suites::target_capability_map(&owning_unit, unit_tables, &resolved, tys);
             let (expr_types, callees) = test_suites::check_suite_fns(
                 items.fns,
                 &mut resolved,
                 unit_tables.get(&owning_unit),
+                Some(&caps),
                 &mut errs,
                 &mut RefSink::new(),
                 &mut LocalsSink::new(),
@@ -614,6 +617,11 @@ pub(super) fn lower_stub_value_block(
             typed.expr_types.extend(expr_types);
             typed.callees.extend(callees);
             test_suites::add_suite_fns_to_typed(&mut typed, items.fns);
+            helpers.extend(super::test_cases::suite_given_aliases(
+                items.fns,
+                &owning_unit,
+                &resolved.cross_context,
+            ));
             for f in items.fns {
                 let stmts = emitter::emit_suite_fn(f, &typed, runtime_use);
                 helpers.extend(stmts);

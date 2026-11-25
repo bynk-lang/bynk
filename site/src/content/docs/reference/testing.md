@@ -1359,9 +1359,12 @@ case "an issue event is recorded" {
   test module alone. The deployable output is the same with or without it, and a
   helper adds nothing to the target's surface. So a helper may use what a test
   body may, such as [`Val[T]`](#val), `RequestHeaders.of`, `RequestQuery.of` and `TokenClaims.of`.
-- **Pure.** A helper returns a value. One that returns an `Effect` is
+- **Pure, or effectful with `given`.** A helper returns a value. One that returns
+  an `Effect` declares the capabilities it uses, as a context function does:
+  `fn seed() -> Effect[()] given Stock { … }`. Without `given` it is
   `bynk.suite.fn_effectful`: build the value in the helper and run the effect in
-  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`.
+  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`. See
+  [Effectful helpers](#helpers-effectful).
 - **Private to its suite.** Another suite, even one targeting the same unit,
   cannot call it, and may declare a helper of the same name. A suite split across
   files is, as for [`stub`](#stub) and [`env`](#env), one suite per file.
@@ -1370,6 +1373,43 @@ case "an issue event is recorded" {
   it `uses`) is `bynk.suite.fn_name_clash`. Two helpers of one suite with one
   name are `bynk.suite.duplicate_fn`.
 - **Not exported.** There is no way to share helpers across suites.
+
+### Effectful helpers {#helpers-effectful}
+
+Setup that runs effects (create a table, seed rows, open a session) is a helper
+that declares `given`:
+
+```bynk,fragment
+suite shop.stock
+
+fn freshTable() -> Effect[()] given Stock {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT, qty INTEGER)", [])
+	Effect.pure(())
+}
+
+case "an empty table counts zero" {
+	do freshTable()
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+- **Where it is called.** From a `case` or `property` body and from another
+  helper, which declares the capabilities it passes on, as a context function
+  does (`bynk.given.missing_for_call`). Each case calls its setup by name, so the
+  dependency is visible where it is used. A `stub … returns` value cannot call
+  one: a stub supplies a value and never runs logic
+  (`bynk.given.missing_for_call`).
+- **Capabilities.** `given` names the target's capabilities (its own, and those
+  of the adapters and services it consumes). A case already has them, so it does
+  not declare them to call the helper. The case's `stub`s and call recording
+  apply inside the helper, so `expect Stock.run called` sees the helper's calls.
+- **Tiers.** At `unit` and `integration` a helper may declare `given`. A `system`
+  case names no capability, so a `given` helper in a `system` suite is
+  `bynk.test.helper_given_at_system`.
+- **Faults and `expect`.** A fault in a helper fails the case as it would inline.
+  `expect` stays case-only (`bynk.expect.outside_case`): a helper returns values
+  for the case to check.
 
 ## Types and constants in a suite {#suite-types-consts}
 

@@ -2707,7 +2707,10 @@ The text follows an `embed`'s (§5.12a): a leading byte-order mark dropped, line
 endings normalised to `\n`. A fixture is emitted into test output only.
 
 A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
-that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
+(`bynk.suite.fn_method`) that either does not return an `Effect` or declares `given`,
+naming capabilities of the suite's target (`bynk.suite.fn_effectful`; a `given` helper
+in a `system` suite is `bynk.test.helper_given_at_system`, and a `stub` value MUST NOT
+call one),
 MUST NOT repeat the name of another helper of its suite or of any value in scope in
 its cases (`bynk.suite.duplicate_fn`, `bynk.suite.fn_name_clash`), and is visible to
 the `case`s, `property` bodies and other helpers of the suite that declares it,

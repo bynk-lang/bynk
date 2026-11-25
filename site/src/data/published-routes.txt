@@ -869,6 +869,7 @@
 /book/reference/diagnostics/bynk.test.faults_needs_in_process/
 /book/reference/diagnostics/bynk.test.forged_needs_signature_route/
 /book/reference/diagnostics/bynk.test.forged_needs_system/
+/book/reference/diagnostics/bynk.test.helper_given_at_system/
 /book/reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /book/reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /book/reference/diagnostics/bynk.test.peek_not_a_database/
@@ -2023,6 +2024,7 @@
 /reference/diagnostics/bynk.test.faults_needs_in_process/
 /reference/diagnostics/bynk.test.forged_needs_signature_route/
 /reference/diagnostics/bynk.test.forged_needs_system/
+/reference/diagnostics/bynk.test.helper_given_at_system/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /reference/diagnostics/bynk.test.peek_not_a_database/
