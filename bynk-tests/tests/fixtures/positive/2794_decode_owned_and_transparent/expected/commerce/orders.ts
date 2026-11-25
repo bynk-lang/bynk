@@ -61,7 +61,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
   }
   const __minorUnits = obj["minorUnits"];
   if (!(__minorUnits >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.minorUnits`, violation: { field: "minorUnits", message: "must be non-negative", value: __minorUnits } });
+    return Err({ kind: "RefinementViolation", path: `${path}.minorUnits`, violation: { field: "minorUnits", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __minorUnits } });
   }
   return Ok({ minorUnits: __minorUnits } as Money);
 }

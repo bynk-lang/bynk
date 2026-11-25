@@ -12,7 +12,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
+      return Err({ field: "Price", message: "must be positive", rule: { tag: "Positive" }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -96,7 +96,7 @@ export function __deserialise_Quote(json: __JsonValue, path: string = "$"): Resu
   }
   const __total = __b_total.value;
   if (!((__total).coefficient >= 0n)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.total`, violation: { field: "total", message: "must be non-negative", value: __bynkDecimalToString(__total) } });
+    return Err({ kind: "RefinementViolation", path: `${path}.total`, violation: { field: "total", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __bynkDecimalToString(__total) } });
   }
   return Ok({ sku: __sku, unit: __unit, total: __total } as Quote);
 }

@@ -64,6 +64,35 @@ case "a payment outage is a fault" {
 itself, and `returns each` answers successive calls differently. `after` and `never`
 delay or withhold the answer, as for a capability.
 
+## Drive a busy or faulting agent
+
+A handler that calls an agent with `.outcome` has two arms a unit test cannot otherwise reach:
+`Unreachable`, when the agent is busy, and `Faulted`. A `stub` on the agent's operation produces
+them on demand, with `faulted` or `unreachable`:
+
+```bynk,fragment
+suite shop.basket {
+	stub Basket.add(_) unreachable
+
+	case "a busy basket is undone" {
+		let r <- place.call("a", 2)
+		expect r is Err("busy")
+	}
+
+	case "a faulting basket is undone" {
+		stub Basket.add(7) faulted
+		let r <- place.call("a", 7)
+		expect r is Err("faulted")
+	}
+}
+```
+
+The clause names the agent of the context under test and one of its `on call` handlers. It
+matches every key, so `Basket.add(_)` is about the operation and not one instance, and a call no
+clause matches runs the real agent. Only `faulted` and `unreachable` are allowed, since a stubbed
+answer would skip the agent's state and invariants, and only at `unit`: an `integration` case runs
+the real agents. To test another context's agent, stub the service that reaches it, as above.
+
 ## What a stub does not hide
 
 - A service the case reaches **without** a stub is still
@@ -78,4 +107,5 @@ delay or withhold the answer, as for a capability.
   [Test tiers](/book/guides/testing/integration/).
 
 **See also:** [Reference — `stub`](/reference/testing/#stub-services),
+[Reference — stubbing an agent operation](/reference/testing/#stub-agents),
 [Reference — observation](/reference/testing/#observation).

@@ -1,0 +1,45 @@
+---
+#3972: on an `Int`, `_ where InRange(a, b)`, `Positive` and `NonNegative` are
+range patterns, which count towards exhaustiveness; the warning names the range.
+A String refined pattern stays as it is.
+---
+commons net
+
+fn class(status: Int) -> String {
+  match status {
+    _ where InRange(200, 299) => "success"
+    _ where InRange(400, 499) => "client error"
+    _ => "other"
+  }
+}
+
+fn sign(n: Int) -> String {
+  match n {
+    _ where Positive => "positive"
+    _ where NonNegative => "zero"
+    _ => "negative"
+  }
+}
+
+fn small(n: Int) -> String {
+  match n {
+    _ where Positive && InRange(1, 10) => "small"
+    _ => "other"
+  }
+}
+
+type Percent = Int where InRange(0, 100)
+
+fn refined(p: Percent) -> String {
+  match p {
+    _ where InRange(0, 9) => "low"
+    _ => "high"
+  }
+}
+
+fn code(s: String) -> String {
+  match s {
+    _ where MinLength(3) => "long"
+    _ => "short"
+  }
+}

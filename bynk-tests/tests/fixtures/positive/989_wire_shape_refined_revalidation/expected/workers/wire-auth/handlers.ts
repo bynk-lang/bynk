@@ -23,10 +23,10 @@ export type ClientId = string & { readonly __brand: "wire.auth.ClientId" };
 export const ClientId = {
   of(value: string): Result<ClientId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "ClientId", message: "must be non-empty", value });
+      return Err({ field: "ClientId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     if (!(__bynkCodePointLength(value) <= 20)) {
-      return Err({ field: "ClientId", message: "length must be at most 20", value });
+      return Err({ field: "ClientId", message: "length must be at most 20", rule: { tag: "MaxLength", limit: 20 }, value });
     }
     return Ok(value as ClientId);
   },
@@ -37,7 +37,7 @@ export type AuthId = string & { readonly __brand: "wire.auth.AuthId" };
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "AuthId", message: "must be non-empty", value });
+      return Err({ field: "AuthId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as AuthId);
   },

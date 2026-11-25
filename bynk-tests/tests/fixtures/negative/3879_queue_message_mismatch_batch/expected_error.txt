@@ -1,0 +1,2 @@
+bynk.queue.message_type_mismatch `sendValueBatch` sends `Refund` to queue `order-events`, but its consumer in `shop.fulfil` takes `Order`
+# exact

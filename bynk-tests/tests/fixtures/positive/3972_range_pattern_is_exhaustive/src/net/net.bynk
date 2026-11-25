@@ -1,0 +1,13 @@
+---
+#3972: the range patterns the warning's fix writes count towards exhaustiveness, so
+a match covered by ranges needs no `_` arm, and no warning is raised.
+---
+commons net
+
+fn class(status: Int) -> String {
+  match status {
+    ..199 => "informational"
+    200..299 => "success"
+    300.. => "other"
+  }
+}

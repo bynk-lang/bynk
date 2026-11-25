@@ -18,10 +18,10 @@ export type Days = number & { readonly __brand: "who.Days" };
 export const Days = {
   of(value: number): Result<Days, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Days", message: "must be a safe integer", value });
+      return Err({ field: "Days", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 90)) {
-      return Err({ field: "Days", message: "must be in range [1, 90]", value });
+      return Err({ field: "Days", message: "must be in range [1, 90]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 90 } }, value });
     }
     return Ok(value as Days);
   },

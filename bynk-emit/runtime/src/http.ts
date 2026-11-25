@@ -323,10 +323,13 @@ const REASON_PHRASES: Readonly<Record<number, string>> = {
 
 function problemResponse(
   status: number,
-  fields: { readonly detail?: string; readonly kind?: string; readonly path?: string },
+  fields: { readonly detail?: string; readonly kind?: string; readonly extra?: Record<string, unknown> },
   headers?: Headers,
 ): Response {
+  // A rejection's own structured members (`path`, `expected`, `actual`, a refinement's `violation`)
+  // ride as extension members; the members RFC 9457 defines are written after, so they always win.
   const body: Record<string, unknown> = {
+    ...fields.extra,
     type:
       fields.kind === undefined
         ? "about:blank"
@@ -336,7 +339,6 @@ function problemResponse(
   };
   if (fields.detail !== undefined && fields.detail !== "") body.detail = fields.detail;
   if (fields.kind !== undefined) body.kind = fields.kind;
-  if (fields.path !== undefined) body.path = fields.path;
   const out = new Headers(headers);
   out.delete("content-length");
   out.set("content-type", "application/problem+json");
@@ -360,10 +362,12 @@ export async function problemRejection(response: Response): Promise<Response> {
     return response;
   }
   if (typeof body.kind !== "string") return response;
-  const path = typeof body.path === "string" ? body.path : undefined;
+  // `details` becomes `detail`, and `kind` is written by the writer; everything else the router put in
+  // the body (`path`, `expected`, `actual`, a refinement's `violation`) is carried as it was written.
+  const { kind: _kind, details: _details, error: _error, type: _type, title: _title, status: _status, detail: _detail, ...extra } = body;
   return problemResponse(
     response.status,
-    { detail: rejectionDetail(body), kind: body.kind, ...(path === undefined ? {} : { path }) },
+    { detail: rejectionDetail(body), kind: body.kind, extra },
     response.headers,
   );
 }

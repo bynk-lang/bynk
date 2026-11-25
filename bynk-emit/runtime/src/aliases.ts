@@ -5,7 +5,7 @@
 // `type JsonValue` beside an import of `JsonValue` would not compile).
 // The plain names stay exported for the runtime's own tests.
 import { containerClass } from "./container.ts";
-import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
+import { AGENT_WIRE_PASS, StateRegistry, agentBusyAfter, agentBusyResponse, callAgentOutcome, decodeAgentArgs, decodeAgentKey, dispatchToEventsFanout, encodeAgentResult, makeAgent, serialiseAgentClass, serialiseAgentKey, stubAgents, sweepAgentInstances, wakeForMigration, type AgentWire, type DurableObjectNamespace } from "./agent.ts";
 import { oidcTrust, tokenClaims, verifyBearerJwtHs256, verifyOidcJwt, verifySignatureHmacSha256 } from "./auth.ts";
 import { expireSessionCookie, issueSessionCookie, newSessionKey, sessionKeysOf, signSessionCookie, verifySignedCookie } from "./session.ts";
 import { boundaryError, callOutcome, callService, callServiceOutcome, checkStoredLayout, checkStoredSchemaVersion, deliverEvent, deserialiseEventEnvelope, faultResponse, migrationFailed, readCapped, rehydrationViolation, reportUnknownStoredKeys, verifyCall, wireRefusal, type BoundaryError, type JsonValue, type ServiceBinding } from "./boundary.ts";
@@ -16,6 +16,7 @@ import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { commitStored, committedSize, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
+import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
 import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
@@ -63,6 +64,15 @@ export {
   callServiceOutcome as __callServiceOutcome,
   attachLazy as __attachLazy,
   commitStored as __commitStored,
+  scanAll as __scanAll,
+  scanAny as __scanAny,
+  scanFilter as __scanFilter,
+  scanFirst as __scanFirst,
+  scanFirstOrElse as __scanFirstOrElse,
+  scanFlatMap as __scanFlatMap,
+  scanMap as __scanMap,
+  scanSkip as __scanSkip,
+  scanTake as __scanTake,
   committedSize as __committedSize,
   checkStoredLayout as __checkStoredLayout,
   checkStoredSchemaVersion as __checkStoredSchemaVersion,
@@ -155,6 +165,7 @@ export {
   agentBusyAfter as __agentBusyAfter,
   agentBusyResponse as __agentBusyResponse,
   callAgentOutcome as __callAgentOutcome,
+  stubAgents as __stubAgents,
   serialiseAgentClass as __serialiseAgentClass,
   containerClass as __containerClass,
   sweepAgentInstances as __sweepAgentInstances,

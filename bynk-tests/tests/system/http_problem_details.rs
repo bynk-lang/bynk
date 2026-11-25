@@ -105,6 +105,17 @@ async function main(): Promise<void> {
   assert(b.kind === "RefinementViolation", `kind (got ${b.kind})`);
   assert(typeof b.path === "string" && b.path.includes("qty"), `path names the field (got ${b.path})`);
   assert(typeof b.detail === "string" && b.detail.length > 0, "detail is the violation message");
+  const violation = b.violation as { field?: unknown; message?: unknown } | undefined;
+  assert(violation !== undefined && typeof violation.field === "string" && typeof violation.message === "string", `the violation (field and message) is carried (got ${JSON.stringify(b.violation)})`);
+  assert("rule" in (b.violation as object), `the violated rule is carried (got ${JSON.stringify(b.violation)})`);
+  assert(!("value" in (b.violation as object)), "the rejected value is never echoed");
+
+  // A structural mismatch carries what it expected and what it got.
+  r = await send("/widgets", "POST", JSON.stringify({ qty: "many" }));
+  assert(r.status === 400, `structural mismatch is 400 (got ${r.status})`);
+  b = (await r.json()) as Record<string, unknown>;
+  assert(b.kind === "StructuralMismatch", `kind (got ${b.kind})`);
+  assert(typeof b.expected === "string" && typeof b.actual === "string", "expected and actual are carried");
 
   r = await send("/widgets", "POST", "{not json");
   assert(r.status === 400, `malformed JSON is 400 (got ${r.status})`);

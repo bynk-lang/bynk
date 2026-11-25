@@ -1264,6 +1264,51 @@ suite shop.orders {
   accepted inside `returns each`. A plain call to such a stub, written without
   `.outcome`, faults as a real failed call does.
 
+### Stubbing an agent operation {#stub-agents}
+
+An agent call goes through the agent's own factory, not through `deps`, so nothing else makes an
+agent busy or fault on demand at `unit`. `stub <Agent>.<op>(<args>)` with `faulted` or
+`unreachable` (#4215) makes the calls it matches end as that outcome:
+
+```bynk,fragment
+suite shop.basket {
+	stub Basket.add(_) unreachable  // every call to `add`, whatever the key, is busy
+
+	case "a busy basket is undone" {
+		let r <- place.call("a", 2)  // `Basket(id).add.outcome(n)` is `Unreachable(None)`
+		expect r is Err("busy")
+	}
+
+	case "a faulting basket is undone" {
+		stub Basket.add(7) faulted  // case-scoped, and only for the argument `7`
+		let r <- place.call("a", 7)
+		expect r is Err("faulted")
+	}
+}
+```
+
+- **The address matches every instance.** `stub Basket.add(_)` is about the operation, not a key.
+  Argument patterns are the usual ones: `_`, or a value the argument must equal, and the first
+  matching clause wins, a case's before the suite's. A call no clause matches runs the real agent,
+  as does every operation no clause names.
+  A handler's call to its own instance (`Basket`'s `add` calling its sibling) runs the real
+  operation, since that call goes to the instance itself, not through the agent's queue.
+- **The words:** `unreachable` is what `Basket(id).add.outcome(…)` reports for a busy agent,
+  `Unreachable(None)`, and `faulted` is `Faulted`. A plain call to a stubbed operation, written
+  without `.outcome`, faults, as a busy or faulting agent would. A `faulted` call is logged once
+  as `AgentFaulted <Agent>.<op>`, as a real fault is.
+- **There is no `returns <value>`:** a stubbed answer would bypass the agent's state and its
+  invariants. Test those through the real agent.
+- **Only an agent of the context under test, and only at `unit`.** Another context's agents are
+  reached through its services, which [stub](#stub-services) as any service does. An agent stub
+  in an `integration` case or suite, which runs the real agent, is refused, as one at `system` is
+  (`bynk.stub.at_system`). Both, an agent of another context, and a word other than `faulted` and
+  `unreachable`, are `bynk.stub.agent_stub`. An operation the agent does not declare is
+  `bynk.stub.unknown_op`.
+- **A stub lasts one case.** The agent registries are reset before each case, and the stubs with
+  them. A `History[…]` property keeps them across its driven sequences, so a suite-scoped stub
+  applies in each.
+
 ### Sequenced `stub` — `returns each`
 
 A single value cannot express a collaborator whose successive calls differ — an
@@ -1410,9 +1455,10 @@ case "a count reads back as a typed row" {
   target or of a commons it `uses`, or a sum variant) is
   `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`. A name repeated
   in the suite is `bynk.suite.duplicate_type` or `bynk.suite.duplicate_const`.
-- **Not yet in a suite-scoped `stub` value.** The value of a `stub … returns` is
-  emitted outside the runner, so it cannot name a suite type or constant. Build
-  the value in a case, or use a helper `fn`.
+- **In a suite-level `stub` value too.** The value and the argument patterns of a
+  `stub … returns` may name the suite's types and constants, whether the stub is
+  written before or after them (the order of a suite's items does not matter), and
+  for a stub of a consumed service as for one of a capability.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 

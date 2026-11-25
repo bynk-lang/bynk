@@ -994,8 +994,8 @@ impl Components {
             json!({
                 "description": "An error as RFC 9457 problem details. An error variant has \
                                 `type` `about:blank`; a router rejection has a \
-                                `https://bynk-lang.org/problems/<kind>` type and its `kind` \
-                                and `path`.",
+                                `https://bynk-lang.org/problems/<kind>` type and its own \
+                                members (`kind`, `path`, `expected`, `actual`, `violation`).",
                 "type": "object",
                 "required": ["type", "title", "status"],
                 "properties": {
@@ -1005,6 +1005,17 @@ impl Components {
                     "detail": { "type": "string" },
                     "kind": { "type": "string" },
                     "path": { "type": "string" },
+                    "expected": { "type": "string" },
+                    "actual": { "type": "string" },
+                    "violation": {
+                        "type": "object",
+                        "required": ["field", "message", "rule"],
+                        "properties": {
+                            "field": { "type": "string" },
+                            "message": { "type": "string" },
+                            "rule": { "type": "object" },
+                        },
+                    },
                 },
             })
         });
@@ -1043,18 +1054,79 @@ impl Components {
                         "properties": {
                             "kind": { "const": "RefinementViolation" },
                             "path": { "type": "string" },
-                            "violation": {
-                                "description": "The refinement a value broke. The offending value \
-                                                is never echoed.",
-                                "type": "object",
-                                "required": ["field", "message"],
-                                "properties": {
-                                    "field": { "type": "string" },
-                                    "message": { "type": "string" },
-                                },
-                            },
+                            "violation": { "$ref": "#/components/schemas/ValidationViolation" },
                         },
                     },
+                ],
+            })
+        });
+        self.validation_violation();
+    }
+
+    /// #3952: the `violation` of a `RefinementViolation`: the field, the message
+    /// and the rule that failed. The offending value is never part of it.
+    fn validation_violation(&mut self) {
+        self.put("ValidationViolation".to_string(), || {
+            json!({
+                "description": "The refinement a value broke. The offending value is never echoed.",
+                "type": "object",
+                "required": ["field", "message", "rule"],
+                "properties": {
+                    "field": { "type": "string" },
+                    "message": { "type": "string" },
+                    "rule": { "$ref": "#/components/schemas/ValidationRule" },
+                },
+            })
+        });
+        self.put("ValidationBound".to_string(), || {
+            let bound = |kind: &str, value: Value| {
+                json!({
+                    "type": "object",
+                    "required": ["kind", "value"],
+                    "properties": { "kind": { "const": kind }, "value": value },
+                })
+            };
+            json!({
+                "description": "A numeric argument of a rule, of the refined type's own base. \
+                                A `Decimal` is its canonical text and a `Duration` its milliseconds.",
+                "oneOf": [
+                    bound("IntBound", json!({ "type": "integer" })),
+                    bound("FloatBound", json!({ "type": "number" })),
+                    bound("DecimalBound", json!({ "type": "string" })),
+                    bound("DurationBound", json!({ "type": "integer" })),
+                ],
+            })
+        });
+        self.put("ValidationRule".to_string(), || {
+            let rule = |kind: &str, fields: &[(&str, Value)]| {
+                let mut properties = serde_json::Map::new();
+                properties.insert("kind".to_string(), json!({ "const": kind }));
+                let mut required = vec![json!("kind")];
+                for (name, schema) in fields {
+                    properties.insert((*name).to_string(), schema.clone());
+                    required.push(json!(name));
+                }
+                json!({ "type": "object", "required": required, "properties": properties })
+            };
+            let bound = json!({ "$ref": "#/components/schemas/ValidationBound" });
+            let limit = json!({ "type": "integer" });
+            json!({
+                "description": "The predicate a refinement enforces, with its argument. `WellFormed` is \
+                                a value that is not a valid member of its base type at all.",
+                "oneOf": [
+                    rule("NonNegative", &[]),
+                    rule("Positive", &[]),
+                    rule("InRange", &[("lo", bound.clone()), ("hi", bound.clone())]),
+                    rule("AtLeast", &[("bound", bound.clone())]),
+                    rule("AtMost", &[("bound", bound)]),
+                    rule("NonEmpty", &[]),
+                    rule("MinLength", &[("limit", limit.clone())]),
+                    rule("MaxLength", &[("limit", limit.clone())]),
+                    rule("Length", &[("limit", limit)]),
+                    rule("Matches", &[("pattern", json!({ "type": "string" }))]),
+                    rule("IsoDate", &[]),
+                    rule("Cron", &[]),
+                    rule("WellFormed", &[]),
                 ],
             })
         });

@@ -13,10 +13,10 @@ export type Amount = number & { readonly __brand: "demo.wallet.Amount" };
 export const Amount = {
   of(value: number): Result<Amount, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Amount", message: "must be a safe integer", value });
+      return Err({ field: "Amount", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Amount", message: "must be positive", value });
+      return Err({ field: "Amount", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Amount);
   },
@@ -99,7 +99,7 @@ export function __makeWallet(key: string, env?: { WALLET?: __DurableObjectNamesp
 }
 
 export async function __bynkDriveHistory_Wallet(seq: globalThis.Array<{ h: number; args: unknown[] }>, deps: any): globalThis.Promise<globalThis.Array<{ call: any; accepted: boolean; old: WalletState; new: WalletState; refusal?: unknown }>> {
-  __WalletRegistry.reset();
+  __WalletRegistry.reset(true);
   const __inst = __makeWallet("") as any;
   const __load = async (): globalThis.Promise<WalletState> => { let __s = await __inst.state.storage.get("state"); if (__s === undefined) return __zeroOfWalletState(); __checkStoredLayout("Wallet", __s); __s = await __readStored(__inst, __inst.state.storage, __s); const __m = { ...__zeroOfWalletState(), ...__s }; __rehydrateWalletState(__m, __s); return __m; };
   const __rej = (e: unknown) => !!e && (e as { invariantViolation?: unknown }).invariantViolation !== undefined;

@@ -10,7 +10,7 @@ export type Tag = string & { readonly __brand: "Tag" };
 export const Tag = {
   of(value: string): Result<Tag, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
-      return Err({ field: "Tag", message: "must match /[A-Z]{3}/", value });
+      return Err({ field: "Tag", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as Tag);
   },

@@ -16,7 +16,7 @@ export type Uuid = string & { readonly __brand: "Uuid" };
 export const Uuid = {
   of(value: string): Result<Uuid, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" + ")$", "u").test(value))) {
-      return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", value });
+      return Err({ field: "Uuid", message: "must match /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/", rule: { tag: "Matches", pattern: "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" }, value });
     }
     return Ok(value as Uuid);
   },
@@ -32,7 +32,7 @@ export type CronSchedule = string & { readonly __brand: "CronSchedule" };
 export const CronSchedule = {
   of(value: string): Result<CronSchedule, ValidationError> {
     if (!(__bynkIsCron(value))) {
-      return Err({ field: "CronSchedule", message: "must be a valid cron schedule", value });
+      return Err({ field: "CronSchedule", message: "must be a valid cron schedule", rule: { tag: "Cron" }, value });
     }
     return Ok(value as CronSchedule);
   },

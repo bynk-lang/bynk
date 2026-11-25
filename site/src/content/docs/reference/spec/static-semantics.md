@@ -619,18 +619,23 @@ intervening `<-` peel and `match`:
 chains a further effectful-fallible step on success (keeping the single error
 type `E`, exactly as `?` does); `flatMapErr` attempts an effectful recovery on
 error (its recovery MUST produce the receiver's success type `T`). The naming is
-verb-first, matching `map`/`mapErr` on `Result`. A method outside the four is
-`bynk.types.method_not_found`; a `flatMapOk`/`flatMapErr` argument that does not
+verb-first, matching `map`/`mapErr` on `Result`. A method outside the four, and
+outside the methods every `Effect` has (`map`, `andThen`, `within`, `race`,
+`detach`), is `bynk.types.method_not_found`; a `flatMapOk`/`flatMapErr` argument that does not
 return `Effect[Result[…]]`, or whose error/success side does not line up, is
 `bynk.types.combinator_return_mismatch`. Only an `Effect` wrapping a
-`Result` carries these — any other `Effect[_]` has no kernel methods. Unlike the
+`Result` carries these. Unlike the
 eager `List.forEach`/`traverseTry` iterators, these **produce** an `Effect`
 rather than running one, so they are **not** effectful-context-confined: a pure
 helper may reshape an `Effect[Result[…]]` it was handed and return it. `.map`
-and `.flatMap` on such a receiver remain Effect's own (operating on the whole
+and `.andThen` on such a receiver are Effect's own (#3965; operating on the whole
 `Result`); the four named methods remove the "which `.map`?" ambiguity. Other
 `Effect`-of-X shapes (`Effect[Option[T]]`, `Effect[List[T]]`) have no synthesised
-methods — write `e.map((r) => …)` explicitly.
+methods — write `e.map((r) => …)` explicitly. Every `Effect[T]` has `e.map(f: T -> U)`, returning
+`Effect[U]`, and `e.andThen(f: T -> Effect[U])`, also returning `Effect[U]`; like the four, they
+produce an `Effect` rather than run one, so a pure helper may use them. A `map` function
+that returns an `Effect`, or an `andThen` function that does not, is
+`bynk.types.combinator_return_mismatch`.
 
 **Declared error embeddings and `?` conversion** (v0.154, ADR 0178). A sum type
 MAY declare error embeddings — `type OrderError = … embeds PaymentError as
@@ -1936,6 +1941,14 @@ of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
 receives from (`bynk.queue.dead_letter_type_mismatch`).
 
+A `sendValue`, `sendValueWith` or `sendValueBatch` call on a `Queue` instance whose queue some
+context of the project consumes (`from queue("q")`) MUST send a type, or for a batch an element
+type, that the consumer's `on message` parameter admits under the cross-context boundary
+comparison (ADR 0714), a stronger refinement being admitted where a weaker one is expected;
+otherwise it is `bynk.queue.message_type_mismatch`. The check is skipped where the type is still
+an abstract type parameter. A `send`, `sendWith` or `sendBatch` to such a queue warns
+(`bynk.queue.untyped_send`). A queue no context of the project consumes is not checked.
+
 `RetryAfter(reason, delay)` (#3881) is a `QueueResult` variant taking a `String` reason and a
 `Duration` delay. A `delay` written as a `Duration` literal MUST be from 1 second to 24 hours
 (`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up to whole seconds and
@@ -2303,8 +2316,8 @@ else `bynk`. In `bynk` format an error variant with a message answers
 exactly as before. In `problem` format each of them answers an RFC 9457
 `application/problem+json` body with `type`, `title`, `status` and, where there is one,
 `detail`. A variant's `type` is `about:blank`; a router rejection's `type` is
-`https://bynk-lang.org/problems/<kind>` (the kind in kebab case), and its `kind` and `path` ride as
-extension members. A `RawError` body, an `on rejected` handler's body and a status that has
+`https://bynk-lang.org/problems/<kind>` (the kind in kebab case), and the rejection's own members
+(`kind`, `path`, `expected`, `actual`, a refinement's `violation`) ride as extension members. A `RawError` body, an `on rejected` handler's body and a status that has
 no body (`401`, `403`, `404`, `405`) are unchanged, as are success bodies and the `500`
 a fault answers.
 

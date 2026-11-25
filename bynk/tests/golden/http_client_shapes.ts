@@ -337,25 +337,48 @@ export type JsonValue =
   | JsonValue[]
   | { [k: string]: JsonValue };
 
+/** The numeric argument of a rule, of whichever base the refined type has. A `Decimal` is `{ coefficient, scale }`, a `Duration` its milliseconds. */
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+/** The predicate a refinement check enforces, with its argument; `WellFormed` is a value that is not a valid member of its base type at all. */
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 /** A refinement a value broke. */
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
 }
 
-/**
- * An error answered as RFC 9457 problem details (a service with `errors { format: problem }`): an error
- * variant has `type` `about:blank`; a router rejection has a `https://bynk-lang.org/problems/<kind>` type
- * and its `kind` and `path`.
- */
-export interface Problem {
-  readonly type: string;
-  readonly title: string;
-  readonly status: number;
-  readonly detail?: string;
-  readonly kind?: string;
-  readonly path?: string;
+/** A rule as the server's `400` writes it: `kind` where the in-memory form has `tag`, a `Decimal` bound as its text. */
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+/** A violation as the server's `400` carries it: the field, the message and the rule, never the value. */
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
 }
 
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
@@ -370,7 +393,7 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
@@ -451,8 +474,8 @@ export function viaBinding(
 /** What one reply of a route is. */
 export interface __Reply {
   readonly kind: string;
-  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, problem details, or nothing. */
-  readonly body: "value" | "message" | "location" | "boundary" | "problem" | "raw" | "events" | "none";
+  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, or nothing. */
+  readonly body: "value" | "message" | "location" | "boundary" | "raw" | "events" | "none";
   /** A `raw` reply's `ETag`: `maybe` when the server may leave it out, `required` when it always sends one. */
   readonly etag?: "maybe" | "required";
   readonly decode?: (json: JsonValue) => Result<unknown, BoundaryError>;
@@ -721,11 +744,6 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
       case "boundary":
         if (parsed && __isObject(json) && typeof json.kind === "string") {
           return { status, kind: reply.kind, error: json };
-        }
-        break;
-      case "problem":
-        if (parsed && __isObject(json) && typeof json.type === "string" && typeof json.title === "string") {
-          return { status, kind: reply.kind, problem: json };
         }
         break;
       case "value": {
@@ -1013,7 +1031,7 @@ export function __deserialise_Day(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkIsIsoDate(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Day", message: "must be a calendar date (YYYY-MM-DD)", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Day", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value: json } });
   }
   return Ok(json as unknown as __Wire_Day);
 }
@@ -1027,10 +1045,10 @@ export function __deserialise_Handle(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkCodePointLength(json) >= 2)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at least 2", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at least 2", rule: { tag: "MinLength", limit: 2 }, value: json } });
   }
   if (!(__bynkCodePointLength(json) <= 32)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at most 32", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Handle", message: "length must be at most 32", rule: { tag: "MaxLength", limit: 32 }, value: json } });
   }
   return Ok(json as unknown as __Wire_Handle);
 }
@@ -1081,10 +1099,10 @@ export function __deserialise_Quantity(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 1 && json <= 100)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be in range [1, 100]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Quantity", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value: json } });
   }
   return Ok(json as unknown as __Wire_Quantity);
 }
@@ -1161,10 +1179,10 @@ export function __deserialise_Sku(json: __JsonValue, path: string = "$"): Result
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkCodePointLength(json) === 5)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "length must be exactly 5", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "length must be exactly 5", rule: { tag: "Length", limit: 5 }, value: json } });
   }
   if (!(__bynkRegExp("^(?:" + "[A-Z]{3}[0-9]{2}" + ")$", "u").test(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[A-Z]{3}[0-9]{2}/", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Sku", message: "must match /[A-Z]{3}[0-9]{2}/", rule: { tag: "Matches", pattern: "[A-Z]{3}[0-9]{2}" }, value: json } });
   }
   return Ok(json as unknown as __Wire_Sku);
 }
@@ -1178,10 +1196,10 @@ export function __deserialise_Weight(json: __JsonValue, path: string = "$"): Res
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isFinite(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be a finite number", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be a finite number", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 0.5 && json <= 250.0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be in range [0.5, 250.0]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Weight", message: "must be in range [0.5, 250.0]", rule: { tag: "InRange", lo: { tag: "FloatBound", value: 0.5 }, hi: { tag: "FloatBound", value: 250.0 } }, value: json } });
   }
   return Ok(json as unknown as __Wire_Weight);
 }

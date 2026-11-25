@@ -310,6 +310,19 @@ on GET("/activity") (query: ActivityFilter) -> Effect[HttpResult[List[Activity]]
 `RefinementViolation` or `StructuralMismatch` body a bad `body` gets (the `path`
 names the field, `query.limit`).
 
+A `RefinementViolation` body names the field, the message and the rule that failed, and
+never the value that was rejected, so a rejected password is not echoed back:
+
+```json
+{ "kind": "RefinementViolation", "path": "body.note",
+  "violation": { "field": "Note", "message": "length must be at most 280",
+                 "rule": { "kind": "MaxLength", "limit": 280 } } }
+```
+
+`rule` is the `ValidationRule` of `e.rule` ([types](/reference/types/#validationerror)),
+written as every sum is on the wire; a `Decimal` bound is its canonical text and a `Duration`
+bound its milliseconds. A client that read `violation.value` from an earlier body must stop.
+
 A field of `T` is a value a query string can carry:
 
 - a `String`, `Int`, `Bool` or `Decimal`, a refined or opaque type over one of
@@ -497,11 +510,12 @@ service api from http {
 ```
 
 A request the router refuses before the handler runs answers the same way, with a stable `type`
-and the rejection's `kind` and `path` as extension members:
+and the rejection's own members (`kind`, `path`, and a refinement's `violation`) as extension members:
 
 ```json
 { "type": "https://bynk-lang.org/problems/refinement-violation", "title": "Bad Request", "status": 400,
-  "detail": "body.qty: must be positive", "kind": "RefinementViolation", "path": "body.qty" }
+  "detail": "body.qty: must be positive", "kind": "RefinementViolation", "path": "body.qty",
+  "violation": { "field": "qty", "message": "must be positive", "rule": { … } } }
 ```
 
 | Field | Holds |
@@ -510,7 +524,7 @@ and the rejection's `kind` and `path` as extension members:
 | `title` | the status's reason phrase |
 | `detail` | the variant's message, or the rejection's detail; absent when there is none |
 | `type` | `about:blank` for an error variant (RFC 9457 §4.2.1); `https://bynk-lang.org/problems/<kind>` for a router rejection |
-| `kind`, `path` | a router rejection's kind, and the field it names, when it names one |
+| `kind` and the rejection's other members | a router rejection's kind, and what it carries: `path`; `expected` and `actual` of a structural mismatch; `violation` (the `field`, `message` and `rule`, never the rejected value) of a refinement |
 
 The rejection types are stable, and new kinds are additive. The URI is an identifier, listed
 here once:

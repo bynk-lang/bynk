@@ -453,10 +453,54 @@ export function __bynkDecimalShow(v: unknown): string {
   }
 }
 
+// #3952: the numeric argument of a rule, of whichever base the refined type has
+// (`bynk.validation`'s `Bound`). A `Decimal` is the runtime's `{ coefficient, scale }`
+// and a `Duration` its milliseconds, as those types erase everywhere else.
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+// #3952: the predicate a refinement check enforces, with its argument
+// (`bynk.validation`'s `ValidationRule`); `WellFormed` is a value that is not a
+// valid member of its base type at all. A plain tagged object, as the compiler
+// shapes every sum, so a `match` on `e.rule` reads it with no conversion.
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
+}
+
+// #3952: a rule as a `400` body writes it: `kind` where the in-memory form has `tag`
+// (every sum is `{"kind": …}` on the wire), a `Decimal` bound as its text.
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+// #3952: a violation as the `400` body carries it: the field, the message and the rule,
+// never the value (#4278). What a client reads back from a server's refusal.
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
 }
 
 // v0.22b: the JSON-decode error (ADR 0047) — BoundaryError's information
@@ -957,18 +1001,44 @@ export type BoundaryError =
   | {
       readonly kind: "RefinementViolation";
       readonly path: string;
-      readonly violation: ValidationError;
+      readonly violation: ValidationError | WireViolation;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
-// #4278: a refinement violation as it goes on the wire in a `400`: the field and the message,
-// never the offending value. A rejected password failing `MinLength` must not be echoed back, so
-// `value` stays runtime-only. Applied to the body of every JSON `400` the generated handlers
-// answer; any body that is not a `RefinementViolation` passes through untouched.
+// #3952 (Decision D): a refinement violation as it goes on the wire in a `400`: the field,
+// the message and the rule, never the offending value. A rejected password failing
+// `MinLength` must not be echoed back, so `value` stays runtime-only. Applied to the body of
+// every `RefinementViolation` answer; any other body passes through untouched.
+//
+// The rule is written as every sum is on the wire, with `kind` in place of the in-memory
+// `tag`; a `Decimal` bound is its canonical text and a `Duration` its milliseconds.
+function wireBound(b: ValidationBound): Record<string, unknown> {
+  return b.tag === "DecimalBound"
+    ? { kind: b.tag, value: __bynkDecimalToString(b.value) }
+    : { kind: b.tag, value: b.value };
+}
+
+function wireRule(r: ValidationRule): Record<string, unknown> {
+  switch (r.tag) {
+    case "InRange":
+      return { kind: r.tag, lo: wireBound(r.lo), hi: wireBound(r.hi) };
+    case "AtLeast":
+    case "AtMost":
+      return { kind: r.tag, bound: wireBound(r.bound) };
+    default: {
+      const { tag, ...rest } = r;
+      return { kind: tag, ...rest };
+    }
+  }
+}
+
 export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
   const violation = body.violation as ValidationError | undefined;
   if (body.kind !== "RefinementViolation" || violation === undefined) return body;
-  return { ...body, violation: { field: violation.field, message: violation.message } };
+  return {
+    ...body,
+    violation: { field: violation.field, message: violation.message, rule: wireRule(violation.rule) },
+  };
 }
 
 // v0.177 (#643): the deployed callee's compiled contract is not the one this

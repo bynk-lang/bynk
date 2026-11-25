@@ -605,7 +605,7 @@ export function __deserialise_Email(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkCodePointLength(json) >= 3)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Email", message: "length must be at least 3", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Email", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value: json } });
   }
   return Ok(json as unknown as __ns_demo_gen.Email);
 }
