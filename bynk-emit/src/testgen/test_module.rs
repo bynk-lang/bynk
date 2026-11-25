@@ -1233,6 +1233,8 @@ pub(super) fn event_delivery_helpers(
                                 "schemaVersion".to_string(),
                                 crate::ts_build::num_lit(version),
                             ),
+                            // #3895: a test emission is outside any trace.
+                            ("trace".to_string(), ident("None")),
                         ]),
                     )
                 }

@@ -7,6 +7,7 @@ import type { ValidationError } from "../../__bynk_runtime/errors.js";
 import type { __DurableObjectState } from "../../__bynk_runtime/storage.js";
 import { __StoreMap, __fillHeld, __wireEntries, __wireHeld, __wireHeldOrder } from "../../__bynk_runtime/store.js";
 import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult, __AGENT_WIRE_PASS, __dispatchToEventsFanout } from "../../__bynk_runtime/agent.js";
 import { type Connection, __resolveConnection, __connIdOf, __acceptHibernatableConnection, __newWebSocketPair, __webSocketUpgradeResponse, __WorkersConnection } from "../../__bynk_runtime/connection.js";
@@ -129,12 +130,12 @@ export class Room {
     return __result;
   }
 
-  async say(text: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+  async say(text: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
     const __state = await this.loadState();
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       const __r0 = await (async () => {
-        __events.push({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "Said", payload: { text: text }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "room", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
       return undefined;
     })();
@@ -147,7 +148,7 @@ export class Room {
     return undefined;
   }
 
-  async __wsMessage_chat(connection: Connection<Frame>, room: RoomKey, frame: Frame, deps: { identity: UserId; __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+  async __wsMessage_chat(connection: Connection<Frame>, room: RoomKey, frame: Frame, deps: { identity: UserId; __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
     const __r0 = await this.say(frame.text, deps);
     return undefined;
   }
@@ -159,7 +160,7 @@ export class Room {
       const __payload = globalThis.JSON.parse(request.headers.get("X-Bynk-Ws-Open") ?? "{}") as { args: unknown[]; identity: string };
       const connection = __acceptHibernatableConnection<Frame>(this.state, __pair.server, { identity: __payload.identity, args: __payload.args });
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
-      const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
+      const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
       await this.__wsOpen_chat(connection, __payload.args[0] as RoomKey, { identity: __payload.identity as UserId, ...__eventsDeps, ...{ env: env as never } });
       return __webSocketUpgradeResponse(__pair.client);
     }
@@ -167,7 +168,7 @@ export class Room {
       const methodName = url.pathname.slice("/_bynk/agent/".length);
       const { args, deps } = (await request.json()) as { args: unknown[]; deps: unknown };
       const env = this.__env as unknown as globalThis.Record<string, unknown>;
-      const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
+      const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
       const result = await (this as unknown as globalThis.Record<string, (...bynkArgs: unknown[]) => unknown>)[methodName](...__decodeAgentArgs(__RoomWire, methodName, args), { ...((deps ?? {}) as globalThis.Record<string, unknown>), ...__eventsDeps });
       return new globalThis.Response(globalThis.JSON.stringify(__encodeAgentResult(__RoomWire, methodName, result)), { headers: { "content-type": "application/json" } });
     }
@@ -179,7 +180,7 @@ export class Room {
     if (__att === null) { ws.close(1011, "no session"); return; }
     const connection = new __WorkersConnection<Frame>(ws, __att.connId);
     const env = this.__env as unknown as globalThis.Record<string, unknown>;
-    const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
+    const __eventsDeps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT as __DurableObjectNamespace, events) };
     let __raw: string;
     try {
       __raw = typeof message === "string" ? message : new globalThis.TextDecoder().decode(message);
