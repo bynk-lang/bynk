@@ -3505,7 +3505,7 @@ pub(crate) fn check_method_call(
         // #3277: an `HttpResult[T]` — `withCookie`, `clearCookie`, `cookies`.
         Ty::HttpResult(_) => {
             let kop = HttpResultOp::from_name(&method.name);
-            let r = check_http_result_method(method, kop, recv_ty, args, span, ctx);
+            let r = check_http_result_method(method, kop, receiver, recv_ty, args, span, ctx);
             return record_kernel(
                 ctx,
                 expr_id,

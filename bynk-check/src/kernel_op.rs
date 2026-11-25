@@ -392,6 +392,11 @@ kernel_ops! {
         WithCookie = "withCookie", "withCookie(c: Cookie) -> HttpResult[T]";
         ClearCookie = "clearCookie", "clearCookie(c: Cookie) -> HttpResult[T]";
         Cookies = "cookies", "cookies() -> List[Cookie]";
+        WithHeader = "withHeader", "withHeader(name: String, value: String) -> HttpResult[T]";
+        RetryAfter = "retryAfter", "retryAfter(delay: Duration) -> HttpResult[T]";
+        At = "at", "at(url: String) -> HttpResult[T]";
+        Download = "download", "download(filename: String) -> HttpResult[T]";
+        Headers = "headers", "headers() -> Map[String, List[String]]";
     }
 /// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's
 /// query string.

@@ -584,6 +584,9 @@ fn lower_http_result(
             ))
         };
     }
+    if let Some(helper) = response_header_helper(op) {
+        return lower_response_header(helper, op, recv, lowered);
+    }
     // The cookie argument; absent only for a program that failed checking.
     let arg = lowered.into_iter().next().unwrap_or_else(|| {
         cx.missing_fact(receiver.span, "cookie argument of an `HttpResult` call")
@@ -632,6 +635,31 @@ fn lower_http_result(
             vec![recv],
         )
     }
+}
+
+/// The runtime helper (#3915) a response-header method lowers to.
+fn response_header_helper(op: HttpResultOp) -> Option<&'static str> {
+    match op {
+        HttpResultOp::WithHeader => Some("__withResponseHeader"),
+        HttpResultOp::RetryAfter => Some("__withRetryAfter"),
+        HttpResultOp::At => Some("__withLocation"),
+        HttpResultOp::Download => Some("__withDownload"),
+        HttpResultOp::Headers => Some("__resultHeaders"),
+        HttpResultOp::WithCookie | HttpResultOp::ClearCookie | HttpResultOp::Cookies => None,
+    }
+}
+
+/// `__helper(recv, args…)`; `Duration` erases to milliseconds, which `__withRetryAfter` rounds up
+/// to whole seconds.
+fn lower_response_header(
+    helper: &str,
+    _op: HttpResultOp,
+    recv: bynk_ts::TsExpr,
+    args: Vec<bynk_ts::TsExpr>,
+) -> bynk_ts::TsExpr {
+    let mut all = vec![recv];
+    all.extend(args);
+    call(ident(helper), all)
 }
 
 #[cfg(test)]

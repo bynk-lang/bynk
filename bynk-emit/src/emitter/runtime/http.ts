@@ -312,7 +312,127 @@ export function httpResultToResponse<T>(
     // route is `@cache` (which also forces `private`, below).
     if (!response.headers.has("cache-control")) response.headers.set("cache-control", "private");
   }
+  appendResultHeaders(response, result);
   return response;
+}
+
+// #3915: response headers a handler adds to an `HttpResult` with `withHeader`,
+// `retryAfter`, `at` and `download`. A result carries them as `[name, value, own?]`
+// triples in a `headers` list (the way it carries `cookies`), and the router appends
+// one header line per triple when it builds the response. `own` marks one of the
+// typed helpers, which may write a header `withHeader` may not (`Location`,
+// `Content-Disposition`).
+type HeaderTriple = readonly [name: string, value: string, own?: boolean];
+
+// The headers the router owns, which `withHeader` may not set, lower case. The
+// checker holds the same list for a literal name (`RESERVED` in
+// `response_headers.rs`); `access-control-*` is a prefix.
+export const RESERVED_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "allow",
+  "cache-control",
+  "connection",
+  "content-length",
+  "content-security-policy",
+  "content-type",
+  "etag",
+  "keep-alive",
+  "location",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "referrer-policy",
+  "set-cookie",
+  "strict-transport-security",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "vary",
+  "www-authenticate",
+  "x-content-type-options",
+]);
+
+const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function headersOf(result: object): readonly HeaderTriple[] {
+  return (result as { readonly headers?: readonly HeaderTriple[] }).headers ?? [];
+}
+
+function withHeaderTriple<R extends object>(result: R, triple: HeaderTriple): R {
+  return { ...result, headers: [...headersOf(result), triple] };
+}
+
+/** `result.withHeader(name, value)`: one more header line on the response. */
+export function withResponseHeader<R extends object>(result: R, name: string, value: string): R {
+  return withHeaderTriple(result, [name, value]);
+}
+
+/** `result.retryAfter(delay)`: `Retry-After` in whole seconds, rounded up. */
+export function withRetryAfter<R extends object>(result: R, delayMillis: number): R {
+  return withHeaderTriple(result, ["retry-after", String(Math.max(0, Math.ceil(delayMillis / 1000))), true]);
+}
+
+/** `result.at(url)`: the `Location` of a created resource. */
+export function withLocation<R extends object>(result: R, url: string): R {
+  return withHeaderTriple(result, ["location", url, true]);
+}
+
+/** `result.download(filename)`: `Content-Disposition: attachment` for `filename`. */
+export function withDownload<R extends object>(result: R, filename: string): R {
+  return withHeaderTriple(result, ["content-disposition", contentDisposition(filename), true]);
+}
+
+// An RFC 8187 `value-chars` encoding: every octet outside `attr-char` is `%XX`.
+function encodeExtValue(text: string): string {
+  return encodeURIComponent(text).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/**
+ * RFC 6266 `Content-Disposition: attachment` for a download: an ASCII `filename` fallback
+ * for old clients (each character outside printable ASCII, and `"`, `\`, `%` and path
+ * separators, becomes `_`) and the exact name as an RFC 8187 `filename*`. A name with a
+ * control character, or an empty one, is refused.
+ */
+export function contentDisposition(filename: string): string {
+  if (filename === "") throw new Error("download: the filename is empty");
+  if (/[\x00-\x1f\x7f]/.test(filename)) {
+    throw new Error(`download: ${JSON.stringify(filename)} contains a control character`);
+  }
+  const fallback = filename.replace(/[^\x20-\x7e]|["\\%/]/g, "_");
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeExtValue(filename)}`;
+}
+
+/**
+ * The headers a result carries, as a test reads them: lower-case names, each with its
+ * values in the order they were added. The headers the router owns are not here.
+ */
+export function resultHeaders(result: object): ReadonlyMap<string, readonly string[]> {
+  const out = new Map<string, string[]>();
+  for (const [name, value] of headersOf(result)) {
+    const key = name.toLowerCase();
+    const held = out.get(key);
+    if (held === undefined) out.set(key, [value]);
+    else held.push(value);
+  }
+  return out;
+}
+
+// Append a result's headers to its response. A name that is not a token, a router-owned
+// one set with `withHeader`, or a value with a control character throws, so the
+// dispatch answers `500` and logs the route: a malformed header never reaches the wire.
+function appendResultHeaders(response: Response, result: object): void {
+  for (const [name, value, own] of headersOf(result)) {
+    if (!HEADER_NAME.test(name)) {
+      throw new Error(`withHeader: ${JSON.stringify(name)} is not a valid header name (an RFC 9110 token)`);
+    }
+    const lower = name.toLowerCase();
+    if (own !== true && (RESERVED_RESPONSE_HEADERS.has(lower) || lower.startsWith("access-control-"))) {
+      throw new Error(`withHeader: ${lower} is a header the router owns`);
+    }
+    if (/[\x00-\x1f\x7f]/.test(value)) {
+      throw new Error(`withHeader: the value of ${lower} contains a control character`);
+    }
+    response.headers.append(name, value);
+  }
 }
 
 function baseHttpResultToResponse<T>(
@@ -2053,5 +2173,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

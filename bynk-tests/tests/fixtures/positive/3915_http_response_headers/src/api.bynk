@@ -1,0 +1,33 @@
+context api
+
+// #3915: response headers. `withHeader` adds a header line, `retryAfter` writes
+// `Retry-After` in whole seconds, `at` writes `Location` on a created resource, and
+// `download` writes an RFC 6266 `Content-Disposition`. Drives the
+// `http_response_headers` behaviour test.
+service api from http {
+  on GET("/custom") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("ok").withHeader("X-Request-Id", "abc").withHeader("X-Trace", "t1").withHeader("X-Trace", "t2")
+  }
+
+  on GET("/limited") () -> Effect[HttpResult[String]] by v: Visitor {
+    TooManyRequests("slow down").retryAfter(30.seconds)
+  }
+
+  on GET("/busy") () -> Effect[HttpResult[String]] by v: Visitor {
+    ServiceUnavailable("back soon").withHeader("X-Reason", "deploy").retryAfter(90.seconds)
+  }
+
+  on POST("/things") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Created(body).at("/things/1")
+  }
+
+  on GET("/export") () -> Effect[HttpResult[String]] by v: Visitor {
+    Raw(Bytes.fromUtf8("a,b"), "text/csv").download("rep\u{f6}rt 1.csv")
+  }
+
+  on GET("/bad-name") () -> Effect[HttpResult[String]] by v: Visitor {
+    let kind = "Type"
+    let name = "Content-\(kind)"
+    Ok("x").withHeader(name, "text/evil")
+  }
+}

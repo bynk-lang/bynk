@@ -513,7 +513,9 @@
 /book/reference/diagnostics/bynk.http.header_question_not_found/
 /book/reference/diagnostics/bynk.http.headers_wrong_type/
 /book/reference/diagnostics/bynk.http.invalid_path/
-/book/reference/diagnostics/bynk.http.json_duplicate/
+/book/reference/diagnostics/bynk.http.invalid_response_header/
+/book/reference/diagnostics/bynk.http.invalid_response_header/
+/reference/diagnostics/bynk.http.json_duplicate/
 /book/reference/diagnostics/bynk.http.json_invalid_arg/
 /book/reference/diagnostics/bynk.http.json_invalid_field/
 /book/reference/diagnostics/bynk.http.json_not_http/
@@ -543,7 +545,9 @@
 /book/reference/diagnostics/bynk.http.raw_unknown_arg/
 /book/reference/diagnostics/bynk.http.rejected_signature/
 /book/reference/diagnostics/bynk.http.reserved_prefix/
-/book/reference/diagnostics/bynk.http.reserved_route_syntax/
+/book/reference/diagnostics/bynk.http.reserved_response_header/
+/book/reference/diagnostics/bynk.http.reserved_response_header/
+/reference/diagnostics/bynk.http.reserved_route_syntax/
 /book/reference/diagnostics/bynk.http.return_not_effect_http_result/
 /book/reference/diagnostics/bynk.http.security_invalid_field/
 /book/reference/diagnostics/bynk.http.security_not_http/

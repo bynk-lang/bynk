@@ -17,7 +17,7 @@ import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.t
 import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withDownload, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
@@ -82,6 +82,11 @@ export {
   headerPairs as __headerPairs,
   headersObject as __headersObject,
   withPlainJson as __withPlainJson,
+  withResponseHeader as __withResponseHeader,
+  withRetryAfter as __withRetryAfter,
+  withLocation as __withLocation,
+  withDownload as __withDownload,
+  resultHeaders as __resultHeaders,
   httpResultToResponse as __httpResultToResponse,
   untilBodyTooLarge as __untilBodyTooLarge,
   invariantViolation as __invariantViolation,
