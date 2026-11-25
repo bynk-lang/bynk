@@ -1361,6 +1361,49 @@ impl Backend {
             .collect()
     }
 
+    /// #4227: where the text names the type a value is expected to have (the
+    /// right of `lhs ==`/`!=`, an annotated `let`, a call argument), that
+    /// type's variants, ranked ahead of everything else the position offers.
+    async fn expected_type_completions(
+        &self,
+        uri: &Url,
+        text: &str,
+        offset: usize,
+        line_prefix: &str,
+    ) -> Vec<CompletionItem> {
+        if !completion::is_expression_position(line_prefix) {
+            return Vec::new();
+        }
+        let files = self.project_content(uri).await;
+        let mut variants = if let Some(lhs_end) =
+            bynk_ide::expected_type::comparison_lhs_end(text, offset)
+        {
+            // The buffer with `== <partial>` dropped parses, so the left
+            // operand keeps its recorded type (the value-member trick).
+            let lhs_len = text[lhs_end..].chars().next().map_or(1, char::len_utf8);
+            let rewritten = format!("{}{}", &text[..lhs_end + lhs_len], &text[offset..]);
+            match self.type_receiver(uri, rewritten, lhs_end).await {
+                Some((ty, tys)) => completion::variants_for_ty(ty, &tys, text, files.as_deref()),
+                None => Vec::new(),
+            }
+        } else {
+            let ty = bynk_ide::expected_type::let_annotation_type(line_prefix)
+                .or_else(|| bynk_ide::expected_type::argument_type(text, offset, files.as_deref()));
+            ty.map(|t| bynk_ide::expected_type::variants_of_type_text(&t, text, files.as_deref()))
+                .unwrap_or_default()
+        };
+        variants
+            .drain(..)
+            .map(|c| {
+                let mut item = to_completion_item(c);
+                // Sorts ahead of every other candidate (labels start with a
+                // letter or `_`, never `0`).
+                item.sort_text = Some(format!("0_{}", item.label));
+                item
+            })
+            .collect()
+    }
+
     /// v0.145 (ADR 0169): at `OuterVariant(‸` inside a match arm-pattern, the
     /// payload field type's variants — e.g. `Ok`/`Err` inside `Some(‸)` on an
     /// `Option[Result[…]]` scrutinee. `match_scrutinee_offset` deliberately bails
@@ -3860,6 +3903,14 @@ impl LanguageServer for Backend {
             || completion::is_expression_position(&line_prefix)
         {
             items.extend(self.locals_completions(&uri, pos).await);
+        }
+        // #4227: the expected type's variants, ranked first.
+        let mut expected = self
+            .expected_type_completions(&uri, &text, offset, &line_prefix)
+            .await;
+        if !expected.is_empty() {
+            expected.append(&mut items);
+            items = expected;
         }
         // v0.124 (slice 3): inside a `requires`/`ensures` predicate, offer the
         // enclosing function's parameters (and `result` in an `ensures`),
@@ -11147,6 +11198,46 @@ mod tests {
         assert!(
             labels.contains(&"entries".to_string()),
             "the Map query accessors: {labels:?}"
+        );
+    }
+
+    /// #4227: where the text names the expected type (the right of `lhs ==`,
+    /// an annotated `let`, a call argument), that type's variants lead the
+    /// list; elsewhere a value position gets no such ranking.
+    #[tokio::test]
+    async fn expected_type_variants_lead_in_comparison_let_and_argument() {
+        let src = "context shop\n\ntype Level = | Low | High\n\nfn pick(n: Int, l: Level) -> Int { n }\n\nfn cmp(e: Level) -> Bool {\n  e == \n}\n\nfn ann() -> Int {\n  let x: Level = \n  0\n}\n\nfn arg() -> Int {\n  pick(1, \n}\n\nfn plain() -> Int {\n  let y = \n  0\n}\n";
+        let s = scratch_project(
+            "expected_type_variants",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/shop.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/shop.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        for needle in ["  e == ", "let x: Level = ", "pick(1, "] {
+            let items = complete_items(&backend, &uri, src, needle, None).await;
+            let mut ranked: Vec<&CompletionItem> = items
+                .iter()
+                .filter(|i| i.sort_text.as_deref().is_some_and(|s| s.starts_with("0_")))
+                .collect();
+            ranked.sort_by(|a, b| a.sort_text.cmp(&b.sort_text));
+            let labels: Vec<&str> = ranked.iter().map(|i| i.label.as_str()).collect();
+            assert_eq!(labels, ["High", "Low"], "after `{needle}`");
+            assert_eq!(
+                items.first().map(|i| i.label.as_str()),
+                Some("Low"),
+                "the variants lead the list after `{needle}`"
+            );
+        }
+        let plain = complete_items(&backend, &uri, src, "let y = ", None).await;
+        assert!(
+            plain.iter().all(|i| i.sort_text.is_none()),
+            "an unannotated `let` has no expected type"
         );
     }
 
