@@ -121,7 +121,7 @@ agent Held {
   key id: String
   store conns: Map[String, Connection[Frame]]
 
-  on call sweep() -> Effect[()] { conns.parTraverse((c) => Effect.pure(())) }
+  on call sweep() -> Effect[()] { conns.parForEach((c) => Effect.pure(())) }
 }
 ";
 
@@ -152,7 +152,7 @@ agent Bag {
   store n: Cell[Int] = 0
   store seen: Set[String]
 
-  on call each() -> Effect[()] { items.parTraverse((i) => Effect.pure(())) }
+  on call each() -> Effect[()] { items.parForEach((i) => Effect.pure(())) }
   on call bump() -> Effect[()] { let _ <- n.update((c) => match c { 0 => 1, _ => c + 1 })\n Effect.pure(()) }
   on call bumpText(k: String) -> Effect[()] { let _ <- n.update((c) => c + k.splitRegex(\",\").firstOrElse(k).length())\n Effect.pure(()) }
   on call keysOf() -> Effect[List[String]] { items.keys.collect() }

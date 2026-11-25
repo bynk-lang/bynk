@@ -444,6 +444,12 @@ pub(crate) fn check_refinement(
     check_refinement_annotations(base, refinement, errors);
 
     for pred in &refinement.predicates {
+        // #3951: a constant that did not resolve to a literal is reported
+        // here; the predicate's own kind is a placeholder until it does.
+        if pred.pending.is_some() {
+            errors.extend(crate::refinement_consts::pending_errors(pred, base));
+            continue;
+        }
         if !pred_applies_to(&pred.kind, base) {
             // v0.21: `InRange` bounds must match the numeric base type —
             // `Float where InRange(0, 1)` is the no-coercion rule applied

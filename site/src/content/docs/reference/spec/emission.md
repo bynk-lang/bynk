@@ -968,7 +968,7 @@ before the argument, as written; `insert` copies
 ones) — iteration is the kernel's, so no user-visible recursion or stack growth
 exists. `forEach` (v0.146) is the `for…await` analogue of the `Query.forEach`
 terminal, awaiting each step **in sequence**; `parForEach` (v0.147) is the
-`await __bynkSettleAll(xs.map((x) => () => f(x)))` analogue of `Query.parTraverse`
+`await __bynkSettleAll(xs.map((x) => () => f(x)))` analogue of `Query.parForEach`
 (§7.4 `settleAll`; it was `Promise.all` until #2662), issuing every element's effect
 **concurrently**, in input order, and waiting for all of them to settle before it
 raises the first fault in input order — both yield `Promise<void>`. The **collect-all**
@@ -1149,7 +1149,7 @@ frame, `close` ends the socket. The `from websocket` protocol lowers per target:
   Object, which accepts the socket via the **hibernatable-WebSocket** API
   (`acceptWebSocket`/`serializeAttachment`/`getWebSockets`). A held
   `Map[K, Connection]` cannot be JSON-persisted (a live socket), so it lives in an
-  in-memory side-table split out of the durable record. `parTraverse` over the map
+  in-memory side-table split out of the durable record. `parForEach` over the map
   lowers to `await Promise.all(xs.map(f))`. Only modules that use streams or
   WebSockets emit this machinery.
 

@@ -3,9 +3,12 @@
 
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
 import * as __ns_shop_orders from "./../shop/orders.js";
 import * as __ns_shop_pay from "./../shop/pay.js";
 import * as __ns_shop_stock from "./../shop/stock.js";
+import * as shop_pay__wire from "../workers/shop-pay/handlers.js";
+import * as shop_stock__wire from "../workers/shop-stock/handlers.js";
 
 <<bynk-shared: testing/expectation>>
 <<bynk-shared: testing/observation>>
@@ -104,9 +107,16 @@ class __Stub_shop_stock {
 
 <<bynk-shared: testing/stub_overlay>>
 
+<<bynk-shared: testing/stub_wire>>
+
 function __makeTestDeps(__case?: string, __suite?: number) {
   const __svc_Pay = __bynkOverlay(undefined as unknown as globalThis.ReturnType<typeof __ns_shop_pay.__makeSurface>, new __Stub_Pay(__case), "Pay") as globalThis.ReturnType<typeof __ns_shop_pay.__makeSurface>;
   const __svc_stock = __bynkOverlay(undefined as unknown as globalThis.ReturnType<typeof __ns_shop_stock.__makeSurface>, new __Stub_shop_stock(__case, __suite), "shop.stock") as globalThis.ReturnType<typeof __ns_shop_stock.__makeSurface>;
+  return { Pay: __svc_Pay, stock: __svc_stock, surface: { Pay: __svc_Pay, stock: __svc_stock } };
+}
+function __makeIntegrationDeps(__case?: string, __suite?: number) {
+  const __svc_Pay = __bynkWireStub(__bynkOverlay(undefined as unknown as globalThis.ReturnType<typeof __ns_shop_pay.__makeSurface>, new __Stub_Pay(__case), "Pay") as globalThis.ReturnType<typeof __ns_shop_pay.__makeSurface>, { authorise: { args: [[(__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j)]], ret: [shop_pay__wire.__serialise_Result_Receipt_PaymentError, shop_pay__wire.__deserialise_Result_Receipt_PaymentError] } });
+  const __svc_stock = __bynkWireStub(__bynkOverlay(undefined as unknown as globalThis.ReturnType<typeof __ns_shop_stock.__makeSurface>, new __Stub_shop_stock(__case, __suite), "shop.stock") as globalThis.ReturnType<typeof __ns_shop_stock.__makeSurface>, { reserve: { args: [[(__v: string) => __v as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j)]], ret: [shop_stock__wire.__serialise_Result_Unit_String, shop_stock__wire.__deserialise_Result_Unit_String] } });
   return { Pay: __svc_Pay, stock: __svc_stock, surface: { Pay: __svc_Pay, stock: __svc_stock } };
 }
 
@@ -276,7 +286,7 @@ async function test_a_wrong_call_count_fails_the_case() {
 async function test_an_integration_case_stubs_a_consumed_service_too() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("an integration case stubs a consumed service too", 1), { Pay: ["authorise"], stock: ["reserve"] }, __obs);
+    const deps = __bynkRecordDeps(__makeIntegrationDeps("an integration case stubs a consumed service too", 1), { Pay: ["authorise"], stock: ["reserve"] }, __obs);
     const { placeOrder } = __ns_shop_orders;
     const { PaymentError, Receipt } = __ns_shop_pay;
     type PaymentError = __ns_shop_pay.PaymentError;

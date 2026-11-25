@@ -1,0 +1,9 @@
+# 0943 — At integration a service stub's values cross the consumed context's wire codecs
+
+- **Status:** Accepted (v0.681)
+
+**Context.** A consumed context's service is a `stub` seam at `unit` and `integration` (#3892), and the stub's values reached the handler directly at both tiers. A value the wire would not carry therefore passed an `integration` case that a real call would fail (#4190).
+
+**Decision.** The maintainer accepted: Decision A, the codecs are imported from the consumed context's emitted boundary module, one codec per type; Decision B, a value that fails the wire fails the case with the codec's error, as a real call's fault does. The `integration` deps factory wraps each stubbed service double in `__bynkWireStub`, with the serialiser and deserialiser of each argument and of the result, imported from `workers/<context>/handlers`. At `unit` the factory is unchanged, so the tiers differ only there. Every argument and result crosses its codec, a base type's included, since the wire refuses a non-finite `Float` and an out-of-range `Int` there. `bynk test` builds the `workers` output when a test module imports it, as it already does for an `integration_` suite.
+
+**Consequences.** A stub value is statically checked against the declared type, refinements included, so a refinement violation cannot be written in a stub; the values the wire rejects are the ones the type system allows, such as a non-finite `Float`, which the issue's refinement example could not exercise. An `integration` run that stubs a service now compiles the `workers` output as well, which costs a second compile.

@@ -44,6 +44,31 @@ commons people {
 `\d` stay ASCII in JavaScript; use `\p{L}` and `\p{Nd}` for the Unicode forms. A leading
 `(?i)` makes the match case-insensitive.
 
+## Write a bound once
+
+A limit often matters in more than one place: the type, an error message, a
+test. Declare it as a constant and name it in the predicate; the compiler
+replaces the name with the literal before it reads the refinement, so the type
+admits and rejects exactly what the literal form would:
+
+```bynk
+commons shop {
+	const MaxQty: Int = 100
+
+	const SlugPattern: String = "^[a-z]+$"
+
+	type Qty = Int where InRange(1, MaxQty)
+
+	type Slug = String where Matches(SlugPattern)
+}
+```
+
+The constant is declared exactly the argument's type (`Int` for `InRange(1, MaxQty)`
+and the length predicates, `String` for `Matches`) and bound to a literal or to another
+such constant, and may come from a commons the unit `uses`. A computed bound such as
+`MaxQty + 1` is not supported, and a constant that does not meet the rule is
+`bynk.refine.bound_not_literal`. See [constants](/reference/constants/).
+
 ## Validate with `.of`
 
 Untrusted input must be checked at runtime. Every refined type has an `.of`

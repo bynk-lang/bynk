@@ -1,0 +1,18 @@
+context demo
+
+// #3933: `.outcome` in a context that does not `consume bynk { CallOutcome }`.
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call add(by: Int) -> Effect[Int] {
+    n
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] by Caller {
+    let o <- Counter("a").add.outcome(1)
+    Effect.pure(0)
+  }
+}

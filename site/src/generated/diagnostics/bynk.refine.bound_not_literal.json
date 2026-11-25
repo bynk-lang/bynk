@@ -1,0 +1,12 @@
+{
+  "blurb": "An argument of a refinement predicate (`InRange`, `AtLeast`, `AtMost`, `MinLength`, `MaxLength`, `Length`, `Matches`) can be a constant, and the compiler replaces it with the literal it is bound to before the refinement is read, so `InRange(1, MaxQty)` means what `InRange(1, 100)` means. This one cannot be replaced: the constant is declared a type other than exactly the argument's (a refined constant is not a plain `Int`), is not bound to a literal or to another such constant, or is not a constant in scope. Declare it with the argument's own type and bind it to a literal, or write the literal in the predicate. A constant declared the refined type whose bound it is reports `bynk.resolve.const_cycle`.",
+  "category": "Refinement",
+  "categoryAnchor": "refinement",
+  "code": "bynk.refine.bound_not_literal",
+  "constructs": [
+    "refined_type"
+  ],
+  "example": "type Count = Int where Positive\nconst MaxQty: Count = 100\n\ntype Qty = Int where InRange(1, MaxQty)   // ✗ `MaxQty` is a `Count`, not an `Int`\n\nconst MaxQty: Int = 100\ntype Qty = Int where InRange(1, MaxQty)   // ✓ declared exactly `Int`",
+  "severity": "error",
+  "summary": "A constant in a refinement predicate's argument is not a literal of the argument's type."
+}

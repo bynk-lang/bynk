@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provides": {
+    "place": "b0f476747ccc4828",
+    "placeBound": "58b50b4a23eb5c51"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "place": "Svc(\"place\",P(\"id\",B(\"String\")),P(\"n\",B(\"Int\")),Ret(R(B(\"Int\"),B(\"String\"))))",
+    "placeBound": "Svc(\"placeBound\",P(\"id\",B(\"String\")),Ret(R(B(\"Int\"),B(\"String\"))))"
+  }
+}
