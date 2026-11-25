@@ -1308,8 +1308,13 @@ variable is instantiated with an `Effect` where the signature wraps it in anothe
 the call is refused at the argument whose parameter mentions that type variable; so is
 a kernel method that builds one (`q.fold(e0, f)` with `e0: Effect[Int]`), at the call. A generic signature such as
 `fn mapE[T, U](e: Effect[T], f: T -> U) -> Effect[U]` stays legal; only an instantiation that
-nests is refused. A `List[Effect[T]]` or an `Option[Effect[T]]` is not a nested effect and
-is unaffected. To sequence effects, use `andThen` or `<-`.
+nests is refused. A generic type that holds its parameter directly under an `Effect`, such as
+`type Wrap[T] = { v: Effect[T] }`, refuses an `Effect` for that parameter in the same way (#4364):
+`Wrap[Effect[Int]]` has the field `Effect[Effect[Int]]`, whether it is written or a generic call
+returns it, and a type that applies such a type to its own parameter (`type Outer[U] = { w: Wrap[U] }`)
+refuses it too. A parameter held directly (`type Box[T] = { v: T }`) takes an effect, like a
+`List[Effect[T]]` or an `Option[Effect[T]]`, which are not nested effects. To sequence effects, use
+`andThen` or `<-`.
 
 A **detached effect** (`e.detach()`, #3437) stops waiting for an effect that is already
 running. `detach` is a kernel method on every `Effect[T]` that returns `Effect[()]`, so it is an

@@ -113,7 +113,13 @@ pub(super) fn instantiated(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let ret = substitute(pattern, subst, tys);
-    if !has_nested_effect(ret, tys) || has_nested_effect(pattern, tys) {
+    // #4364: a generic type that holds its parameter under an `Effect` nests too, once its
+    // argument is an effect.
+    let nests = |t: TyId| {
+        has_nested_effect(t, tys)
+            || super::nested_wrapper::nests_through_wrapper(t, tys, &ctx.input.types)
+    };
+    if !nests(ret) || nests(pattern) {
         return Some(ret);
     }
     let mut carriers = Vec::new();
