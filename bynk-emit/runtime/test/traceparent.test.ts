@@ -225,3 +225,9 @@ test("withTrace and withTraceField: a log line names the trace inside one, and i
   });
 });
 
+
+test("enterTrace: an entry inside an entry joins its trace, as a group member does", async () => {
+  const [outer, inner] = await enterTrace(async () => [currentTraceId(), await enterTrace(async () => currentTraceId())]);
+  assert.ok(isTraceId(outer));
+  assert.equal(inner, outer);
+});

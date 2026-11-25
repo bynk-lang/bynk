@@ -1121,6 +1121,10 @@ async function platformTraceId(): Promise<TraceId | undefined> {
 export async function enterTrace<R>(fn: () => Promise<R>): Promise<R> {
   const s = traceScope();
   if (s === undefined) return fn();
+  // A Worker group's dispatcher and the member it hands the request to are both
+  // entries; the member joins the dispatcher's trace, which a signed call may
+  // already have replaced.
+  if (s.getStore() !== undefined) return fn();
   return s.run({ trace: (await platformTraceId()) ?? mintTraceId() }, fn);
 }
 

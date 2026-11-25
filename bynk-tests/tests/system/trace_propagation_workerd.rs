@@ -265,6 +265,24 @@ fn one_request_leaves_one_trace_in_every_context_it_reaches() {
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    // An event emitted before the orders Worker's Service Binding to the audit
+    // Worker has connected is not retried, so the probe is sent until the audit
+    // Worker has logged one.
+    let deadline = Instant::now() + Duration::from_secs(120);
+    while trace_of(&read_log(&logs[2]), "probe").is_none() {
+        if Instant::now() > deadline {
+            panic!(
+                "the audit Worker never received an event\n{}",
+                logs.iter()
+                    .map(|l| format!("--- {l:?} ---\n{}", read_log(l)))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+        }
+        let _ = get(web_port, "/order/probe", &[]);
+        std::thread::sleep(Duration::from_millis(1000));
+    }
+
     let all_logs = || {
         logs.iter()
             .map(|l| format!("--- {l:?} ---\n{}", read_log(l)))
