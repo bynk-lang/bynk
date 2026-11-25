@@ -1,0 +1,12 @@
+{
+  "blurb": "A fixture is test input, and it may come only from the project's `fixtures/` folder. If any path were allowed, a declaration could read `.env` or a source file just by naming it. Move the file into `fixtures/` and name it there. A path that is empty, absolute or contains `..` is `bynk.fixture.unsafe_path` instead.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.outside_fixtures_dir",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": "fixture note = \"data/note.txt\"        // ✗ not in the fixtures/ folder\n\nfixture note = \"fixtures/note.txt\"    // ✓",
+  "severity": "error",
+  "summary": "A suite's `fixture` names a file outside the project's `fixtures/` folder."
+}

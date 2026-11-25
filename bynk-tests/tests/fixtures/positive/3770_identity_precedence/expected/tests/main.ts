@@ -11,45 +11,7 @@ async function main() {
   const modules = [
     { name: "ident.ops", names: test_0.__bynkCases, run: test_0.run },
   ];
-  let passed = 0;
-  let failed = 0;
-  const PREFIX = "system \u00b7 ";
-  const active = modules.filter((m) => selected(m.name.startsWith(PREFIX) ? m.name.slice(PREFIX.length) : m.name));
-  if (process.env.BYNK_TEST_FORMAT === "ndjson") {
-    const emit = (o: unknown) => globalThis.console.log(globalThis.JSON.stringify(o));
-    emit({ type: "run-begin", suites: active.length });
-    for (const m of active) {
-      const integration = m.name.startsWith(PREFIX);
-      const suite = integration ? m.name.slice(PREFIX.length) : m.name;
-      const kind = integration ? "integration" : "unit";
-      emit({ type: "suite-begin", name: suite, kind, tests: planned(m.names) });
-      function report(r: Result) {
-        if (r.pass) {
-          passed++;
-          emit({ type: "case", suite, name: r.name, outcome: "pass", durationMs: r.durationMs });
-        } else {
-          failed++;
-          emit({ type: "case", suite, name: r.name, outcome: "fail", message: r.error && r.error.message, location: r.error && r.error.location, violation: r.error && r.error.violation, refusals: r.error && r.error.refusals, actual: r.error && r.error.actual, durationMs: r.durationMs });
-        }
-      }
-      await runSelected(m.run, report);
-      emit({ type: "suite-end", name: suite });
-    }
-    emit({ type: "run-end", passed, failed, unmatched: unmatched() });
-  } else {
-    globalThis.console.log("Running tests...\n");
-    for (const m of active) {
-      globalThis.console.log(`${m.name}:`);
-      function report(r: Result) {
-        if (r.pass) { passed++; globalThis.console.log(`  \u2713 ${r.name}`); } else { failed++; globalThis.console.log(`  \u2717 ${r.name}`); if (r.error) globalThis.console.log(`    ${r.error.message}`); }
-      }
-      await runSelected(m.run, report);
-      globalThis.console.log("");
-    }
-    globalThis.console.log(`${passed} passed, ${failed} failed.`);
-    reportUnmatched();
-  }
-  if (failed > 0 || unmatched() !== undefined) process.exit(1);
+<<bynk-shared: test-runner#base>>
 }
 
 main();

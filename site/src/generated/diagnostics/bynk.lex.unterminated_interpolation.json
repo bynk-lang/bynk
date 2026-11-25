@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.unterminated_interpolation",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "An interpolation hole `\\(…)` is not closed on its line."
+}

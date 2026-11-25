@@ -1,0 +1,12 @@
+{
+  "blurb": "A derived capability, `capability Name = Kind`, takes its configuration from options after the kind, and some kinds cannot work without them: a `Service` needs the Worker it reaches, `@worker(…)`, a `Queue` its `@name(…)`, a `RateLimit` its `@limit(…)` and `@period(…)`, and a `StoredSecret` its `@store(…)` and `@secret(…)`. There is no default. Write the options the note shows. A value the platform would refuse is `bynk.capability.invalid_option`; an option the kind does not take is `bynk.capability.unknown_option`.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.missing_option",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "// bynk.toml\n[unstable]\nallow = [\"bynk.cloudflare.Queue\"]\n\n// orders.bynk\ncontext orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue                        // ✗ a queue must be named\ncapability OrderEvents = Queue @name(\"order-events\")  // ✓",
+  "severity": "error",
+  "summary": "A derived capability lacks an option its base requires, such as a `Service` instance's `@worker`."
+}

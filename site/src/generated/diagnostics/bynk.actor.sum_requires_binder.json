@@ -1,0 +1,10 @@
+{
+  "blurb": "`by A | B` tries the actors in order and the first that verifies the caller wins. Which one that was is only known when a request arrives, so the handler learns it through the binder and `match`es on it. With no binder the answer would be thrown away and the sum would do nothing a single actor does not. Add one, `by who: A | B`, and match `who` in the body. A single actor needs no binder.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.sum_requires_binder",
+  "constructs": [],
+  "example": "on GET(\"/x\") () -> Effect[HttpResult[String]] by User | Visitor {       // ✗ which one was it?\n\non GET(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✓ `who` is the resolved actor",
+  "severity": "error",
+  "summary": "A multi-actor sum `by` clause has no binder to match the resolved actor."
+}

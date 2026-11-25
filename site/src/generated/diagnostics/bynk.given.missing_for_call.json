@@ -1,0 +1,12 @@
+{
+  "blurb": "A free function in a context may declare `given`, and then uses those capabilities as a handler does. Because a `given` clause is the honest statement of everything a body can reach, a caller has to account for what its callee reaches: a call to, or a reference to, such a function must occur in a body whose own `given` includes every one of the callee's. Otherwise a handler's signature would hide capabilities it uses in effect. The rule is checked at every call, so it holds along a whole chain of calls, and the call counts as a use of the callee's capabilities. Add the missing capabilities to the caller's `given`; the error names which ones. Using a capability directly, without declaring it, is `bynk.given.undeclared_capability`.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.missing_for_call",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "fn warn(what: String) -> Effect[()] given Logger { … }\n\non call(sku: String) -> Effect[()] by Caller {\n    warn(sku)                           // ✗ `warn` needs `given Logger`\n}\n\non call(sku: String) -> Effect[()] by Caller given Logger {   // ✓ declared on the caller\n    warn(sku)\n}",
+  "severity": "error",
+  "summary": "A call to a function that declares `given` from a body that does not declare those capabilities."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.orphan_doc_block",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A documentation block is not attached to a declaration (warning)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A `fixture` reads a file into a `String` for the suite's cases, so the file must exist as a regular file in the project's `fixtures/` folder. A misspelt name, a file not yet added, or a symbolic link (which is not followed) leaves the suite without its input. Add the file or correct the path. A path outside that folder is `bynk.fixture.outside_fixtures_dir`; an empty, absolute or `..` path is `bynk.fixture.unsafe_path`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.missing_file",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": "// tests/desk.test.bynk\nfixture note = \"fixtures/absent.txt\"    // ✗ no such file in `fixtures/`\nfixture note = \"fixtures/note.txt\"      // ✓",
+  "severity": "error",
+  "summary": "A suite's `fixture` names a file that is not in the project's `fixtures/` folder."
+}

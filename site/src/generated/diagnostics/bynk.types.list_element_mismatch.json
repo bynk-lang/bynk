@@ -1,0 +1,12 @@
+{
+  "blurb": "A list has one element type, taken from the context if there is one and otherwise from the first element, and every element must have it. `[1, 2, \"3\"]` mixes `Int` and `String`, and the error is on the element that disagrees. Make the elements one type, or wrap them in a sum type if the list really holds more than one kind of value. An empty `[]` with no context is `bynk.types.uninferable_element_type`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.list_element_mismatch",
+  "constructs": [
+    "list_literal"
+  ],
+  "example": "fn scores() -> List[Int] {\n    [1, 2, \"3\"]    // ✗ a `String` in a `List[Int]`\n}\n\nfn scores() -> List[Int] {\n    [1, 2, 3]    // ✓\n}",
+  "severity": "error",
+  "summary": "A list-literal element has a different type from the list's element type."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A call to a generic function leaves a type parameter undetermined. Bynk fixes a type parameter from the arguments and, failing that, from the type the call is expected to have; it never guesses. `none()` has no argument that mentions `T`, and `let x = none()` gives it no expected type, so there is nothing to choose `T` from. The error also fires when a lambda's parameter types depend on a parameter that the other arguments leave open. Give the type argument explicitly with `none[Int]()`, or annotate the binding so the expected type supplies it: `let x: Option[Int] = none()`.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.uninferable_type_arg",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn none[T]() -> Option[T] {\n    None\n}\n\nlet x = none()                    // ✗ nothing says what `T` is\n\nlet x = none[Int]()               // ✓ given explicitly",
+  "severity": "error",
+  "summary": "A generic function's type parameter could not be inferred from the arguments and was not given explicitly (`name[T](…)`); a bare generic function also cannot be passed as a value."
+}

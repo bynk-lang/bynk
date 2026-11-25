@@ -1,0 +1,10 @@
+{
+  "blurb": "Each Worker on Cloudflare is one script with one name. A group's Worker is named by its `name`, or by its key when it has none, and a context in no group is a Worker of its own, named after the context with each `.` as `-` (`shop.billing` is `shop-billing`). Two Workers with one name would overwrite each other on deploy. So a group's key or `name` may not be another group's Worker name, nor the Worker of a context in no group. Choose another key or `name`, or put that context in the group.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.group_name_conflict",
+  "constructs": [],
+  "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.billing\"]\nname = \"core\"         // ✗ `core` is already a Worker's name\n\nname = \"shop-edge\"    // ✓",
+  "severity": "error",
+  "summary": "A `[deploy.workers.<key>]` group's key or script name is another group's, or is the Worker of a context in no group."
+}

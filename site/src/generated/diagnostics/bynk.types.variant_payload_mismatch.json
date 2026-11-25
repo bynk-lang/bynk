@@ -1,0 +1,10 @@
+{
+  "blurb": "A variant's payload fields have declared types and are checked like function parameters: `Circle(\"big\")` for `radius: Int` is refused at the argument, with no conversion. Pass a value of the field's type. For a generic sum the type argument is inferred from the arguments first, and the check applies to the result. The wrong number of arguments is `bynk.types.variant_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.variant_payload_mismatch",
+  "constructs": [],
+  "example": "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
+  "severity": "error",
+  "summary": "A variant payload has the wrong type."
+}

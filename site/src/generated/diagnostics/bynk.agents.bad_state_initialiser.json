@@ -1,0 +1,12 @@
+{
+  "blurb": "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agents.bad_state_initialiser",
+  "constructs": [
+    "store_field"
+  ],
+  "example": "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
+  "severity": "error",
+  "summary": "An agent `store` field initialiser is not a static value of the field's type."
+}

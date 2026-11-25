@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability operation is carried out by its provider, written in TypeScript, so it has no Bynk body for a bound to serve; an `Ord` bound would also add a hidden comparator argument. Only `Key` and `Codable` are accepted, and both are handled at the call site. Remove the bound, and compare in the code that calls the operation.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.bound_on_capability_op",
+  "constructs": [
+    "capability_op"
+  ],
+  "example": "capability Registry {\n    fn lookup[K: Key + Ord](key: K) -> Effect[Option[String]]   // ✗ only `Key` and `Codable`\n}\n\ncapability Registry {\n    fn lookup[K: Key](key: K) -> Effect[Option[String]]         // ✓\n}",
+  "severity": "error",
+  "summary": "A generic capability operation's type parameter carries a bound other than `Key` or `Codable`; operations take only those two (constrained-generics slices 2 and 3)."
+}

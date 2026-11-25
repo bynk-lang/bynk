@@ -178,10 +178,9 @@ fn an_aliased_context_service_runs_across_workers() {
         );
     }
 
-    // Six ports (three servers, three inspectors) in a band clear of the other
-    // workerd tests' (20_000 + 2·pid, 30_000 + 4·pid, 40_000 + 2·pid,
-    // 45_000 + 4·pid, 55_000 + 2·pid and 63_000 + 4·pid, each pid bounded).
-    let base = 50_000 + 6 * (std::process::id() % 600) as u16;
+    // Six ports: three servers and three inspectors.
+    let [p0, p1, p2, i0, i1, i2] = wrangler::ports::free_ports();
+    let (ports, inspector_ports) = ([p0, p1, p2], [i0, i1, i2]);
     let logs_paths: Vec<_> = names
         .iter()
         .map(|n| tmp.join(format!("{n}-wrangler.log")))
@@ -200,9 +199,9 @@ fn an_aliased_context_service_runs_across_workers() {
                 ]))
                 .args([
                     "--port",
-                    &(base + i as u16).to_string(),
+                    &ports[i].to_string(),
                     "--inspector-port",
-                    &(base + 3 + i as u16).to_string(),
+                    &inspector_ports[i].to_string(),
                 ])
                 .current_dir(&dirs[i])
                 .stdout(Stdio::from(out_log))
@@ -231,8 +230,8 @@ fn an_aliased_context_service_runs_across_workers() {
         text
     };
 
-    let app_port = base + 1;
-    let edge_port = base + 2;
+    let app_port = ports[1];
+    let edge_port = ports[2];
 
     // The first hop (`app` -> `lib`) answers once the Workers are up and the
     // Service Binding has connected, so it doubles as the readiness probe.

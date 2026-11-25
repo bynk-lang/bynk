@@ -1,0 +1,12 @@
+{
+  "blurb": "A service or agent body is its handlers, each starting with `on`, beside its own clauses (a service's policies, an agent's `key` and `store` fields). The parser found something else where a handler should begin. The commonest cause is a helper `fn`, or a `let`, written inside the body: declare a helper beside the service, in the context, and its handlers can call it. Another is a handler with its `on` left off (`GET(\"/a\") …`, `call get() …`). The position is the first token of the item that is not a handler.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_handler",
+  "constructs": [
+    "handler"
+  ],
+  "example": "service api from http {\n    fn double(n: Int) -> Int { n * 2 }    // ✗ only handlers go in a service\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nfn double(n: Int) -> Int { n * 2 }        // ✓ beside the service\n\nservice api from http {\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+  "severity": "error",
+  "summary": "Expected a handler."
+}

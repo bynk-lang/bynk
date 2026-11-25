@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.nesting_too_deep",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An expression or type nests deeper than the parser's fixed limit."
+}

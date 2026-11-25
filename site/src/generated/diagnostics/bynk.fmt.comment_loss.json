@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fmt.comment_loss",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "The formatter would drop a comment, so it leaves the file unchanged."
+}

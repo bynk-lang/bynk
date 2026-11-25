@@ -1,0 +1,12 @@
+{
+  "blurb": "A service's `json` policy sets whether its response bodies use plain or tagged JSON, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@json` on its handler. The same rule holds for `cors`, `security` and `limits`, as `bynk.parse.duplicate_cors` shows.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.duplicate_json",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service api from http {\n    json { options: plain }\n    json { options: tagged }                         // ✗ a second `json`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    json { options: plain }                          // ✓ one setting\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `json { }` policy."
+}

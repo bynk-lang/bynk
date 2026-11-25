@@ -1,0 +1,12 @@
+{
+  "blurb": "`SameSite=None` lets a cookie travel on cross-site requests, and browsers accept it only with `Secure`, so it is sent over HTTPS alone. Without it the browser drops the cookie and the login or session quietly fails, so Bynk refuses the literal. Remove `secure: false`, since the default is `secure: true`, or choose `Lax` or `Strict` if the cookie need not cross sites.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_samesite_none_insecure",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted, secure: false })   // ✗\n\nCreated(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", sameSite: SameSite.Unrestricted })                  // ✓",
+  "severity": "error",
+  "summary": "A cookie literal with `sameSite: SameSite.Unrestricted` is not `secure`."
+}

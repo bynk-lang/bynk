@@ -1,0 +1,10 @@
+{
+  "blurb": "Each protocol admits only the schemes that can be verified on it. HTTP takes `None` (`Visitor`), `Bearer`, `Signature` and `Oidc`; a WebSocket takes `None` and `Bearer`; `call` takes `Internal` and `Foreign`; cron and queue take `Internal`. A `Visitor` on cron is wrong because nothing public calls a cron handler: the platform does. Use the actor made for the protocol: `Scheduler` for cron, `Producer` for queue, `Caller` for `on call`. `Caller` is admitted on `on call` only.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.scheme_not_admissible",
+  "constructs": [],
+  "example": "service jobs from cron {\n  on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by v: Visitor {   // ✗ cron takes an `Internal` actor\n    Ok(())\n  }\n}\n\nservice jobs from cron {\n  on schedule(\"* * * * *\") () -> Effect[Result[(), String]] by s: Scheduler {   // ✓ the cron actor\n    Ok(())\n  }\n}",
+  "severity": "error",
+  "summary": "An actor's scheme is not admissible on this handler's protocol."
+}

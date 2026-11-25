@@ -1,0 +1,12 @@
+{
+  "blurb": "An opaque type hides its representation so that nothing outside its own checks can produce a value of it, and a record literal `T { value: … }` would go round them. Build one with `T.of(value)`, which validates and returns a `Result`, or, inside the commons that defines the type, with `T.unsafe(value)`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.opaque_record_construction",
+  "constructs": [
+    "record_construction"
+  ],
+  "example": "type Timestamp = opaque Int\n\nfn Timestamp.fromMillis(n: Int) -> Timestamp {\n    Timestamp { value: n }       // ✗ record syntax on an opaque type\n}\n\nfn Timestamp.fromMillis(n: Int) -> Timestamp {\n    Timestamp.unsafe(n)          // ✓ inside the defining commons\n}",
+  "severity": "error",
+  "summary": "An opaque type was constructed with record syntax."
+}

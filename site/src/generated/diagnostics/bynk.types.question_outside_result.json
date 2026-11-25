@@ -1,0 +1,12 @@
+{
+  "blurb": "`?` returns early with the `Err`, so the function around it must be able to return one: its return type has to be a `Result`, or an `Effect` of one. In a function returning `Int` the error has nowhere to go. Change the return type to `Result[T, E]` and wrap the final value in `Ok`, or deal with the `Result` where it arises, with a `match` or `.getOrElse(…)`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.question_outside_result",
+  "constructs": [
+    "question_expr"
+  ],
+  "example": "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Int {\n    let v = checked(n)?    // ✗ `run` does not return a `Result`\n    v + 1\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = checked(n)?    // ✓\n    Ok(v + 1)\n}",
+  "severity": "error",
+  "summary": "`?` used in a function that does not return a `Result`."
+}

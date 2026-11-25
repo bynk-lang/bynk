@@ -1,0 +1,12 @@
+{
+  "blurb": "A service you call may take or return a type declared in a third context. The value crosses the call as that context's type, so your context has to state the dependency itself: it does not inherit it from the service's context. Add `consumes` for the context the error names.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.signature_type_unconsumed",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop/ledger.bynk\nconsumes shop.order\n\nservice domestic {\n    on call(id: String) -> Effect[Order] by Caller { … }\n}\n\n// shop/front.bynk\nconsumes shop.ledger\n\n    let o <- shop.ledger.domestic(id)    // ✗ returns `Order`, from `shop.order`\n\nconsumes shop.ledger\nconsumes shop.order                      // ✓ the dependency is stated",
+  "severity": "error",
+  "summary": "A cross-context call reaches a service whose signature names a type the consumed context itself consumes from a third context, which the caller does not consume."
+}

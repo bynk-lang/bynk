@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.multipart_large_cap",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `@multipart` route's body cap is over 32 MiB; the body is buffered with a parsed copy beside it, in a Worker's 128 MB (warning)."
+}

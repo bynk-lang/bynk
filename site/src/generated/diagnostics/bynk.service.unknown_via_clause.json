@@ -1,0 +1,10 @@
+{
+  "blurb": "A `via` clause narrows which events an `Events` subscriber receives, and the only form is `via schema(N)`, which selects by the event's schema version. The set of `via` clauses is closed, so any other word after `via` is refused. Use `via schema(N)` or drop the clause. A malformed argument to `schema` itself is `bynk.event.bad_schema_dispatch`.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.unknown_via_clause",
+  "constructs": [],
+  "example": "service OnPaid from Events(Paid) via nope(1) {   // ✗ only `schema` follows `via`\n    on event(e: Paid) -> Effect[()] { … }\n}\n\nservice OnPaid from Events(Paid) via schema(1) {   // ✓ dispatch on the schema version\n    on event(e: Paid) -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "A `via <name>(...)` clause on a `from Events(...)` header named something other than `schema` — `via` clauses are a closed set, and only `via schema(...)` exists today."
+}

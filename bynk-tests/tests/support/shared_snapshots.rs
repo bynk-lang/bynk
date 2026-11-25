@@ -23,6 +23,10 @@
 //!   `// bynk…`). The *variant* is the sorted set of `__bynk_runtime/*` modules the file
 //!   imports, because the emitter prunes imports and serialisers per project. Adding or
 //!   removing a runtime import in a std module therefore renames its variant.
+//! - **The runner's `main()`** (`tests/main.ts`) is delimited by comments the emitter writes
+//!   (`bynk:shared-begin test-runner#<variant>` to `bynk:shared-end`); the variant names which
+//!   optional parts it carries (`detach`, `generative`, `pg`, `remote`), or `base`. A build whose
+//!   fixed part holds something of its own (a snapshot report) is not delimited.
 //! - **Test-runtime fragments** are spliced verbatim with no emitter-written delimiter. They
 //!   are found by exact match of the current `testgen/test_runtime/<name>.ts` text. A fixture
 //!   carrying a changed or partial copy is not elided, so it fails the byte comparison.
@@ -141,6 +145,11 @@ pub fn elide(rel: &Path, text: &str) -> Elided {
     }
     let mut out = text.to_string();
     let mut regions = Vec::new();
+    if rel == Path::new("tests/main.ts")
+        && let Some(found) = take_runner_region(&mut out)
+    {
+        regions.push(found);
+    }
     let is_test_module = rel.starts_with("tests") && rel.extension().is_some_and(|e| e == "ts");
     if is_test_module {
         for (id, frag) in fragments() {
@@ -155,6 +164,24 @@ pub fn elide(rel: &Path, text: &str) -> Elided {
         }
     }
     Elided { text: out, regions }
+}
+
+/// The emitter delimits the fixed part of `main()` in `tests/main.ts` itself (#4268):
+/// `// bynk:shared-begin test-runner#<variant>` to `// bynk:shared-end`, each on its own line
+/// inside the function. Replaces that span, whole lines, with its marker. A runner whose fixed
+/// part holds something particular to the build is not delimited, and is left alone.
+fn take_runner_region(out: &mut String) -> Option<(String, String)> {
+    const BEGIN: &str = "\n  // bynk:shared-begin test-runner#";
+    const END: &str = "\n  // bynk:shared-end\n";
+    let start = out.find(BEGIN)? + 1;
+    let after = start + BEGIN.len() - 1;
+    let variant_end = after + out[after..].find('\n')?;
+    let variant = out[after..variant_end].to_string();
+    let end = variant_end + out[variant_end..].find(END)? + END.len();
+    let region = out[start..end].to_string();
+    let id = format!("test-runner#{variant}");
+    out.replace_range(start..end, &format!("{}\n", marker(&id)));
+    Some((id, region))
 }
 
 /// Check each region a fixture emitted against its shared snapshot, byte for byte. Returns one

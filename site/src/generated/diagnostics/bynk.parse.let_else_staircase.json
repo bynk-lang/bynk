@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.let_else_staircase",
+  "constructs": [],
+  "example": null,
+  "severity": "hint",
+  "summary": "Nested `match`es on `Option`/`Result` that each carry on in one arm and give up in the other, which `let … else` writes flat. A hint with a machine-applicable rewrite; never fails a build and is hidden from the terminal (hint)."
+}

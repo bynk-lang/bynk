@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.migration_invalid",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `D1` migration does not apply to an empty in-memory SQLite, so the binding's literal SQL is not checked against its schema (warning)."
+}

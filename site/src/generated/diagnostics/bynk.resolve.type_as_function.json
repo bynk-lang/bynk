@@ -1,0 +1,12 @@
+{
+  "blurb": "A type's name is not a function. A refined type is built with `.of(value)`, which checks the value and returns a `Result`, and a record with a literal such as `Order { … }`, so `Amount(5)` has no meaning to fall back on. A sum variant with a payload is the one exception: `Placed(at, total)` constructs it. A name that is not a type at all is `bynk.resolve.unknown_function`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.type_as_function",
+  "constructs": [
+    "call"
+  ],
+  "example": "type Amount = Int where NonNegative\n\nfn price() -> Amount {\n    Amount(5)                    // ✗ a type is not a function\n}\n\nfn price() -> Result[Amount, ValidationError] {\n    Amount.of(5)                 // ✓ checked construction\n}",
+  "severity": "error",
+  "summary": "A type name was called as if it were a function."
+}

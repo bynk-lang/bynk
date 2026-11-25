@@ -1,0 +1,12 @@
+{
+  "blurb": "A `match` must cover every value its subject can take, so it can never fall off its end. The compiler names a case that no arm covers: add an arm for it, or end the `match` with a wildcard `_` arm. Listing every variant a type has today is not a substitute for `_` where the compiler says one is needed, and where a `match` is too complex for it to prove exhaustive it asks for `_` too.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.non_exhaustive_match",
+  "constructs": [
+    "match_expr"
+  ],
+  "example": "type Status = enum { Pending, Active, Done }\n\nmatch s {                // ✗ `Done` is not covered\n    Pending => \"p\"\n    Active => \"a\"\n}\n\nmatch s {\n    Pending => \"p\"\n    Active => \"a\"\n    Done => \"d\"        // ✓ every variant covered\n}",
+  "severity": "error",
+  "summary": "A `match` does not cover every value."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "An `exports` clause lists types this context declares, to make them visible to the contexts that consume it. A name the context does not declare has nothing to export: it is usually a misspelling, or a type that is declared elsewhere. Correct the name, or declare the type in this context. A name in `exports capability` that is not declared is `bynk.exports.undeclared_capability`.",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.undeclared_type",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports opaque { Ordr }          // ✗ no type `Ordr` in this context\n\ntype Order = { total: Int }\n\nexports opaque { Order }         // ✓ the declared name",
+  "severity": "error",
+  "summary": "`exports` names a type that is not declared."
+}

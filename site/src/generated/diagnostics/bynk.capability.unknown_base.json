@@ -1,0 +1,12 @@
+{
+  "blurb": "`capability Sessions = Kv` makes a separate instance of a platform capability, so the base has to be one the context has selected: `consumes bynk.cloudflare { Kv }`. A name that is not selected is a misspelling, or a `consumes` that was left out. Correct the name, or select the capability.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.unknown_base",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "consumes bynk.cloudflare { Kv }\n\ncapability Sessions = Kvv   // ✗ no capability `Kvv` is selected\n\ncapability Sessions = Kv    // ✓ the one that is",
+  "severity": "error",
+  "summary": "A derived capability's base is not a capability the context consumes."
+}

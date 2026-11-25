@@ -1,0 +1,10 @@
+{
+  "blurb": "A stored record carries the schema version it was written at, and is loaded through the one `migrate from N` step for that version. Two steps for the same `N` would leave the compiler to choose between them, so the second is refused. Merge them into one step that assigns every field the move from version `N` needs. A step that assigns one field twice is `bynk.agent.migrate_duplicate_assignment`.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_duplicate",
+  "constructs": [],
+  "example": "type CartV1 = { owner: String, total: Int }\n\nmigrate from 1 (old: CartV1) {\n    ownerName := old.owner\n}\nmigrate from 1 (old: CartV1) {    // ✗ version 1 again\n    totalCents := old.total * 100\n}\n\nmigrate from 1 (old: CartV1) {\n    ownerName := old.owner\n    totalCents := old.total * 100    // ✓ one step does both\n}",
+  "severity": "error",
+  "summary": "Two `migrate` steps in one agent read the same schema version."
+}

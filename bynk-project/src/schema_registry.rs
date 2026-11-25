@@ -37,12 +37,18 @@ pub fn lock_version() -> u32 {
     2
 }
 
+/// #3956: the lock version a document carries once it records `[orders]`. A
+/// lock with no ordered type stays at [`lock_version`], byte for byte, so only a
+/// project that has a `derives Ord` type changes; an older toolchain refuses the
+/// newer version rather than dropping the table it does not know.
+pub const ORDERS_LOCK_VERSION: u32 = 3;
+
 /// The last lock version without `[agents]`. [`parse`] reads it as the
 /// current version with an empty agent table; the next build writes it back
 /// at [`lock_version`]. `check`/`test` read it and never write (ADR 0493).
 const LEGACY_EVENTS_ONLY_VERSION: u32 = 1;
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SchemaRegistry {
     // No serde `default`: a registry with no `version` is not a fresh
     // project, it is corruption (a truncated write), and must fail the read
@@ -57,6 +63,33 @@ pub struct SchemaRegistry {
     /// from the version line.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     agents: BTreeMap<String, AgentEntry>,
+    /// #3956: the order of each of the project's `derives Ord` types, keyed
+    /// `<unit>.<Type>`. Skipped when empty, so a project with none writes the
+    /// document it always did.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    orders: BTreeMap<String, OrderEntry>,
+}
+
+/// One `derives Ord` type's recorded order (#3956): the field names of a record
+/// in declaration order, or the variants of a sum or enum in declaration order,
+/// each with its payload field names in order. Type names are not recorded: a
+/// field's type changing is a separate, type-checked change.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OrderEntry {
+    /// `"record"` or `"sum"`.
+    pub kind: String,
+    /// The fields (a record) or variants (a sum), in order.
+    pub members: Vec<OrderMember>,
+}
+
+/// A record's field or a sum's variant, with the field names of its payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OrderMember {
+    pub name: String,
+    /// A variant's payload field names, in order. Empty for a record's field and
+    /// for a payloadless variant.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<String>,
 }
 
 impl SchemaRegistry {
@@ -71,6 +104,7 @@ impl SchemaRegistry {
             version: lock_version(),
             events: BTreeMap::new(),
             agents: BTreeMap::new(),
+            orders: BTreeMap::new(),
         }
     }
 
@@ -94,6 +128,23 @@ impl SchemaRegistry {
     /// Record agent class `entry` under `key`, overwriting any prior entry.
     pub fn insert_agent(&mut self, key: String, entry: AgentEntry) {
         self.agents.insert(key, entry);
+    }
+
+    /// The recorded order of `derives Ord` type `key` (`<unit>.<Type>`).
+    pub fn get_order(&self, key: &str) -> Option<&OrderEntry> {
+        self.orders.get(key)
+    }
+
+    /// Record `entry` under `key`, overwriting any prior entry. The document is at
+    /// [`ORDERS_LOCK_VERSION`] from the first one.
+    pub fn insert_order(&mut self, key: String, entry: OrderEntry) {
+        self.orders.insert(key, entry);
+        self.version = ORDERS_LOCK_VERSION;
+    }
+
+    /// Every recorded order, in key order.
+    pub fn orders(&self) -> impl Iterator<Item = (&String, &OrderEntry)> {
+        self.orders.iter()
     }
 
     /// Raise agent class `key`'s floor to `floor`, dropping the snapshots
@@ -312,7 +363,12 @@ pub fn parse(existing: Option<&str>, project_root: &Path) -> Result<SchemaRegist
     if reg.version == LEGACY_EVENTS_ONLY_VERSION && reg.agents.is_empty() {
         reg.version = lock_version();
     }
-    if reg.version != lock_version() {
+    // #3956: a version-3 document is the one that records `[orders]`; one with
+    // none is read as the base version, which is what it writes back.
+    if reg.version == ORDERS_LOCK_VERSION && reg.orders.is_empty() {
+        reg.version = lock_version();
+    }
+    if reg.version != lock_version() && reg.version != ORDERS_LOCK_VERSION {
         return Err(format!(
             "unsupported schema registry version {} (`{}`)",
             reg.version,

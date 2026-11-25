@@ -44,7 +44,7 @@ fn report_query_par_traverse(method: &Ident, ctx: &mut Ctx) {
             "`Query.parTraverse` is now `parForEach`: it runs the steps concurrently and returns `()`",
         )
         .with_note(
-            "`parTraverse` names the traversal that returns the steps' values, as on a `List` (#3967); a step that runs only for its effect is `parForEach`",
+            "`parTraverse` names the traversal that returns the steps' values, as on a `List` (#3967); a step that runs only for its effect is `parForEach`. To get the values back, `collect()` the query, then `parTraverse` the list",
         )
         .with_suggestion(
             "rename to `parForEach`",

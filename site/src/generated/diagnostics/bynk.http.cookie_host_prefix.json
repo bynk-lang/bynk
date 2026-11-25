@@ -1,0 +1,12 @@
+{
+  "blurb": "A cookie named `__Host-…` asks the browser to keep it only if it is `Secure`, has no `Domain` and has `Path=/`. That ties it to this exact host, so a sibling subdomain or an insecure page cannot set or overwrite it. A browser drops one that breaks any of the three, so a literal that does is refused. Remove `secure: false`, the `domain` and any `path` other than `\"/\"`, or rename the cookie.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_host_prefix",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Created(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\", path: \"/app\" })   // ✗ must be `/`\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                 // ✓",
+  "severity": "error",
+  "summary": "A `__Host-` cookie literal is not `secure`, sets a `domain`, or uses a `path` other than `/`."
+}

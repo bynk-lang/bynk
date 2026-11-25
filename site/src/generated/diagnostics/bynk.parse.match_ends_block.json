@@ -1,0 +1,12 @@
+{
+  "blurb": "A block has no expression statements, so a `match` is its final value and nothing can follow it; a second `match` straight after the first is refused. Bind the first with `let _ = match …`. If the steps are fallible and each depends on the one before, `let … else` flattens them without nesting.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.match_ends_block",
+  "constructs": [
+    "block"
+  ],
+  "example": "fn grade(a: Int, b: Int) -> Int {\n    match a { … }\n    match b { … }              // ✗ a `match` ends its block\n}\n\nfn grade(a: Int, b: Int) -> Int {\n    let _ = match a { … }      // ✓ bound, so the block goes on\n    match b { … }\n}",
+  "severity": "error",
+  "summary": "A `match` ends the block it is in, because a block has no expression statements; a second `match` straight after it cannot follow."
+}

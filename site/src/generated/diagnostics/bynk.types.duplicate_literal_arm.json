@@ -1,0 +1,12 @@
+{
+  "blurb": "A `match` takes the first arm whose pattern fits, so a literal that an earlier unguarded arm already has can never reach a second arm. Bynk refuses the dead arm rather than let it hide a mistake, usually a mistyped value. Change the literal or delete the arm. An or-pattern is checked alternative by alternative, so `1 | 2` followed by `2` is caught as well. The same for a variant is `bynk.types.duplicate_variant_arm`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.duplicate_literal_arm",
+  "constructs": [
+    "match_arm"
+  ],
+  "example": "fn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        1 => \"uno\"    // ✗ `1` is already matched above\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"one\"\n        2 => \"two\"    // ✓\n        _ => \"other\"\n    }\n}",
+  "severity": "error",
+  "summary": "A `match` has two arms for the same literal value."
+}

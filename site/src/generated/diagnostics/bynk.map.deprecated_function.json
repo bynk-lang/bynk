@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.map.deprecated_function",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `bynk.map` free function is deprecated in favour of the `Map` method form (warning; auto-fixable)."
+}

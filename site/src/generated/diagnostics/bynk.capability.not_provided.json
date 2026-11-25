@@ -1,0 +1,12 @@
+{
+  "blurb": "On the Workers target, each context is its own Worker, and a Worker builds every capability its handlers are given. A handler's `given Mailer` therefore needs a `provides Mailer = …` in the same context, which says what the capability does there. Without one the Worker has nothing to hand the handler, so the compiler refuses it here and does not leave it to fail in the generated TypeScript. The bundle target (the default) asks only when the program has a composition root (`composeApp`), which it has once a context consumes another context's service or capability, emits events, or derives a capability: `composeApp` builds every context itself, so nothing else can supply the capability, and a test `stub` covers only the cases that stub it. Without a root, the host program can supply the capability when it builds the surface. A capability declared in another context is that context's to provide, and an exported capability with no provider has its own `bynk.exports.capability_not_provided`. Add a provider to the context, or, on Workers, build for `--target bundle` when the bundle has no composition root.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.not_provided",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "service notify {\n  on call(to: String) -> Effect[()] by Caller given Mailer {   // ✗ no `provides Mailer` in this context\n    Mailer.send(to)\n  }\n}\n\nprovides Mailer = Smtp {                              // ✓ a provider, so the Worker can build it\n  fn send(to: String) -> Effect[()] {\n    Effect.pure(())\n  }\n}",
+  "severity": "error",
+  "summary": "A capability a context requires has no provider in it, on the Workers target or in a bundle with a composition root."
+}

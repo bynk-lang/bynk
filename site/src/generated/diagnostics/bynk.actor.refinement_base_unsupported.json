@@ -1,0 +1,10 @@
+{
+  "blurb": "`actor Admin = User where …` adds an authorisation check on a token's claims, and only a `Bearer` actor carries claims. So the base must be a declared `Bearer` actor: not `Visitor`, `Internal` or `Signature`, and not another refinement. Name a `Bearer` actor as the base, declaring it if need be.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.refinement_base_unsupported",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = Visitor where hasClaim(\"admin\")   // ✗ `Visitor` carries no claims\n\nactor Admin = User where hasClaim(\"admin\")   // ✓ a `Bearer` actor",
+  "severity": "error",
+  "summary": "A refinement actor's base is not a `Bearer` actor (no claims to authorise against)."
+}

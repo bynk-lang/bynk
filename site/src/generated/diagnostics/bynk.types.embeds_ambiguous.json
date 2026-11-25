@@ -1,0 +1,10 @@
+{
+  "blurb": "`embeds E as V` lets `?` wrap an `E` error in the variant `V`. It picks the variant by the error's type, so a type may be embedded once: with two variants wrapping `PayError`, `?` could not tell which one an error belongs to. Embed the type in one variant, and build the other by hand where you want it.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.embeds_ambiguous",
+  "constructs": [],
+  "example": "type OrderError =\n    | Payment(reason: PayError)\n    | Refund(reason: PayError)\n    embeds PayError as Payment, PayError as Refund    // ✗ `PayError` twice\n\ntype OrderError =\n    | Payment(reason: PayError)\n    | Refund(reason: PayError)\n    embeds PayError as Payment    // ✓ once",
+  "severity": "error",
+  "summary": "A type is embedded by more than one variant of a sum, so `?`'s conversion would be ambiguous."
+}

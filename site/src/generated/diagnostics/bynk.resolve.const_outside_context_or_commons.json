@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter is the program's boundary with the host: it declares capabilities and the providers a binding supplies, not values for the program to share, so a `const` is refused there. Declare the constant in a commons, which a unit reads by `uses`, or in the context that needs it, and move it out of the adapter.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.const_outside_context_or_commons",
+  "constructs": [
+    "const_decl"
+  ],
+  "example": "// tokens.bynk\nconst Lifetime: Int = 3600     // ✗ an adapter declares no constants\n\n// limits.bynk\ncommons limits\nconst Lifetime: Int = 3600     // ✓ in a commons",
+  "severity": "error",
+  "summary": "A `const` declaration appears outside a context or commons."
+}

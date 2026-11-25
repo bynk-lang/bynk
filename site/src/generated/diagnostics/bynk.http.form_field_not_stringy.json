@@ -1,0 +1,12 @@
+{
+  "blurb": "A form body is a flat set of keys with text values, so each field of a `@form` or `@multipart` body record must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key). A multipart body may also have `File` fields. A nested record, or any other type, is refused; flatten it. A `query` record follows the same rule: `bynk.http.query_field_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.form_field_not_stringy",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Address = { city: String }\ntype SignupForm = { email: String, address: Address }   // ✗ a form has no nesting\n\ntype SignupForm = { email: String, city: String }       // ✓ flat keys",
+  "severity": "error",
+  "summary": "A field of a `@form` body record has a type a form cannot carry."
+}

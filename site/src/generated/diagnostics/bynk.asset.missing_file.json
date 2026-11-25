@@ -1,0 +1,10 @@
+{
+  "blurb": "An `asset` is a file the build ships, and the compiler reads it to hash its contents into the asset's URL, so the file must exist when the project is built. The path is relative to the project root and must name a regular file; a symbolic link is not followed. Create the file under `assets/`, or correct the path. A file that exists but cannot be read is `bynk.asset.unreadable_file`.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.missing_file",
+  "constructs": [],
+  "example": "asset style = \"assets/board.css\"        // ✗ no such file in the project\nasset style = \"assets/board.css\"        // ✓ once assets/board.css exists",
+  "severity": "error",
+  "summary": "An `asset` names a file that is not in the project's `assets/` folder."
+}

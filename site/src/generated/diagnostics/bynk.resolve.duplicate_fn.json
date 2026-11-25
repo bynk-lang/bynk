@@ -1,0 +1,12 @@
+{
+  "blurb": "A function is called by its name, and Bynk has no overloading: two functions of one name in a unit, even with different parameters, would leave a call unable to say which it means. So a unit declares each function name once. Rename one of them. A suite's helpers repeat as `bynk.suite.duplicate_fn`, and a type's methods as `bynk.resolve.duplicate_method`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_fn",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "fn total(a: Int, b: Int) -> Int { … }\nfn total(a: Int, b: Int, c: Int) -> Int { … }    // ✗ `total` is already declared\n\nfn total3(a: Int, b: Int, c: Int) -> Int { … }   // ✓",
+  "severity": "error",
+  "summary": "Two functions share a name."
+}

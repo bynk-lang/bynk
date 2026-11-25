@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unexpected_adapter",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An `adapter` appeared where it is not allowed."
+}

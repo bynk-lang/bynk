@@ -1,0 +1,10 @@
+{
+  "blurb": "Each storage annotation is for one kind of store: `@ttl` for a `Cache`, `@retain` for a `Log` and `@indexed` for a `Map`. On any other kind it has nothing to act on: a `Map` has no expiry, for one. Move the annotation to a field of the kind it belongs to, or change the field's kind if that is what you meant.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.annotation_kind_mismatch",
+  "constructs": [],
+  "example": "store sessions: Map[String, Int] @ttl(30.minutes)     // ✗ `@ttl` is for a `Cache`\n\nstore sessions: Cache[String, Int] @ttl(30.minutes)   // ✓",
+  "severity": "error",
+  "summary": "A storage annotation is used on a kind it does not apply to (e.g. `@ttl` on a `Map`)."
+}

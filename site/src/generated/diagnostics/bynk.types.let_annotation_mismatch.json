@@ -1,0 +1,12 @@
+{
+  "blurb": "A `let` with a type annotation declares what the binding is, and its value must have exactly that type. The annotation is the contract that later code reads, so a value of another type is refused at the `let`, not where it is later used. Nothing is converted for you: change the value, convert it explicitly, or correct the annotation if the value is what you meant. The same rule governs a function's declared return, which is `bynk.types.return_mismatch`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.let_annotation_mismatch",
+  "constructs": [
+    "let_stmt"
+  ],
+  "example": "fn run() -> Int {\n    let n: Int = \"three\"    // ✗ a `String`, annotated `Int`\n    n\n}\n\nfn run() -> Int {\n    let n: Int = 3          // ✓\n    n\n}",
+  "severity": "error",
+  "summary": "A `let` value does not match its type annotation."
+}

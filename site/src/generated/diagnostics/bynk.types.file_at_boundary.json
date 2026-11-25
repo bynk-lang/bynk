@@ -1,0 +1,10 @@
+{
+  "blurb": "A `File` is one uploaded part of a `@multipart` request, held in memory for the handler that receives it. A record may have a `File` field, alone, in an `Option` or in a `List`, which is how a `@multipart` `body` names its parts. But a `File`, or a record carrying one, is refused as an agent store field or key, an event field, a handler result, or any handler parameter but that `body`. Take the part's `bytes`, and the `filename` and `contentType` you need, in the handler, and keep those.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.file_at_boundary",
+  "constructs": [],
+  "example": "consumes bynk { File }\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[File]]     // ✗ an upload is not kept as a `File`\n}\n\nagent Gallery {\n    key id: String\n    store photo: Cell[Option[Bytes]]    // ✓ keep its bytes\n}",
+  "severity": "error",
+  "summary": "A `File` (a file part of a multipart request), or a type carrying one, is used where it would be persisted, sent across a boundary or returned."
+}

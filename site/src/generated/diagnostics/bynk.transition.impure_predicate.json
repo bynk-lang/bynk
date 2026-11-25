@@ -1,0 +1,10 @@
+{
+  "blurb": "A transition is checked at each commit, over the old and new states, so it may only read: `old`, `new`, operators and pure value methods. `Effect.pure`, `?`, `expect`, `Val` and the other test-only forms are refused, as is anything that performs an effect. Rewrite the predicate as a plain `Bool` expression. The mirror rule for states is `bynk.invariant.impure_predicate`.",
+  "category": "Transitions (step invariants)",
+  "categoryAnchor": "transitions-step-invariants",
+  "code": "bynk.transition.impure_predicate",
+  "constructs": [],
+  "example": "transition grows: Effect.pure(new.count >= old.count)   // ✗ an effect, not a pure predicate\n\ntransition grows: new.count >= old.count                // ✓ a plain `Bool` expression",
+  "severity": "error",
+  "summary": "A transition predicate uses an effectful or test-only construct; a step invariant must be pure."
+}

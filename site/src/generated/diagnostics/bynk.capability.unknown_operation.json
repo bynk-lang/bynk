@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability is an interface: its operations are exactly the `fn` signatures in its declaration, and a provider supplies nothing more. Calling `Clock.nope()` asks for an operation the capability does not declare, which usually means a misspelt name. Call one of the declared operations, or add the new operation to the capability and to each provider of it.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.unknown_operation",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "capability Clock {\n  fn now() -> Effect[Int]\n}\n\nClock.nope()                            // ✗ `Clock` declares no `nope`\nClock.now()                             // ✓",
+  "severity": "error",
+  "summary": "Referenced an operation the capability does not declare."
+}

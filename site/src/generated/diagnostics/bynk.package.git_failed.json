@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.git_failed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`git` couldn't clone, fetch or check out a git dependency, or the revision it names doesn't exist."
+}

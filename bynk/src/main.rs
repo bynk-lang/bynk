@@ -283,18 +283,7 @@ fn run() -> ExitCode {
         }
         Command::Eval { args, lock } => run_eval(args, lock),
         Command::Fetch { path, lock, format } => run_fetch(&path, lock, format),
-        Command::Update { names, path } => {
-            let opts = bynk::fetch::FetchOptions {
-                locked: false,
-                offline: false,
-                update: Some(names),
-            };
-            if prepare_offering_approval(&path, opts) {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::FAILURE
-            }
-        }
+        Command::Update { names, path } => run_update(names, &path),
         Command::Revert {
             path,
             context,
@@ -320,6 +309,7 @@ fn run() -> ExitCode {
                 accept_secret_changes,
             },
         ),
+        Command::Lock { command } => run_lock_command(command),
         Command::Migrate { command } => match command {
             bynk::cli::MigrateCommand::Status { path, lock, format } => {
                 if !prepare(&path, lock.options()) {
@@ -622,6 +612,31 @@ fn project_root(input: &Path, lock: bynk::fetch::FetchOptions) -> Option<PathBuf
         );
     }
     root
+}
+
+/// `bynk update`: re-resolve the named dependencies (all when none are named).
+fn run_update(names: Vec<String>, path: &Path) -> ExitCode {
+    let opts = bynk::fetch::FetchOptions {
+        locked: false,
+        offline: false,
+        update: Some(names),
+    };
+    if prepare_offering_approval(path, opts) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `bynk lock` (#3956).
+fn run_lock_command(command: bynk::cli::LockCommand) -> ExitCode {
+    match command {
+        bynk::cli::LockCommand::AcceptOrder {
+            type_name,
+            all,
+            path,
+        } => bynk::lock::accept_order(&path, if all { None } else { type_name.as_deref() }),
+    }
 }
 
 /// `bynk fetch`: the lock file, as JSON when asked.

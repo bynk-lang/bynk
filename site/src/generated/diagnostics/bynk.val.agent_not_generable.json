@@ -1,0 +1,12 @@
+{
+  "blurb": "A `for all` over a declared type draws values from it, but an agent is not a value: a state that satisfies every invariant need not be one the agent can reach. So an agent cannot be a `for all` binding. To test an agent over generated input, bind a `History` of it, which drives real handler calls and so reaches only real states.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.agent_not_generable",
+  "constructs": [
+    "for_all"
+  ],
+  "example": "// tests/t.test.bynk\nfor all w: Wallet { … }              // ✗ an agent is not generated\nfor all run: History[Wallet] { … }   // ✓ a run of its handlers",
+  "severity": "error",
+  "summary": "A `for all`/`Val` cannot generate an agent — fabricated agent states need not be reachable."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A generic type is applied to exactly as many type arguments as it declares parameters: `Box[T]` takes one. Too many, too few, arguments on a type that is not generic, and a generic type named with no arguments at all are all refused, since each argument fills one parameter. A type parameter such as `T` is not itself generic, so `T[Int]` is refused too. Give the arguments the declaration asks for.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.type_arg_count",
+  "constructs": [
+    "applied_type_ref"
+  ],
+  "example": "type Box[T] = { value: T }\n\nfn open(b: Box[Int, String]) -> Int {   // ✗ `Box` takes one type argument\n    0\n}\n\nfn open(b: Box[Int]) -> Int {           // ✓\n    0\n}",
+  "severity": "error",
+  "summary": "A user-declared generic type is applied to the wrong number of type arguments, or a generic type is named without its `[…]` arguments (v0.157, ADR 0183)."
+}

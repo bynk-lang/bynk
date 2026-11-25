@@ -1,0 +1,10 @@
+{
+  "blurb": "A name was referenced that is not in scope. Every name in Bynk must be introduced before use — as a `let` binding, a parameter, a `fn`, a type, or a member brought in through `uses`/`consumes`. An unknown name is typically a typo, a missing declaration, or a reference to something defined in a module that has not been brought into scope.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.unknown_name",
+  "constructs": [],
+  "example": "let greeting = \"hi\"\ngreetng          // ✗ no name `greetng` in scope\ngreeting         // ✓ the bound name",
+  "severity": "error",
+  "summary": "Referenced a name that is not in scope."
+}

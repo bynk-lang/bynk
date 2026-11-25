@@ -156,13 +156,9 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
         );
     }
 
-    // Four ports (two servers, two inspectors) in a band clear of the other
-    // workerd tests' (20_000 + 2·pid, 30_000 + 4·pid, 40_000 + 2·pid,
-    // 45_000 + 4·pid and 55_000 + 2·pid, each pid bounded), so they can all
-    // run at once.
-    let base = 63_000 + 4 * (std::process::id() % 600) as u16;
-    let callee_port = base;
-    let caller_port = base + 1;
+    // Four ports: two servers and two inspectors.
+    let [callee_port, caller_port, callee_inspector, caller_inspector] =
+        wrangler::ports::free_ports();
     let callee_log = tmp.join("callee-wrangler.log");
     let caller_log = tmp.join("caller-wrangler.log");
     let spawn = |dir: &Path,
@@ -194,8 +190,8 @@ fn a_callee_fault_reaches_the_caller_as_callee_faulted() {
         )
     };
 
-    let callee = spawn(&callee_dir, callee_port, base + 2, &callee_log);
-    let caller = spawn(&caller_dir, caller_port, base + 3, &caller_log);
+    let callee = spawn(&callee_dir, callee_port, callee_inspector, &callee_log);
+    let caller = spawn(&caller_dir, caller_port, caller_inspector, &caller_log);
     let wranglers = match (callee, caller) {
         (Ok(a), Ok(b)) => Wranglers(vec![a, b]),
         (a, b) => {
