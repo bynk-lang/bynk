@@ -1,0 +1,10 @@
+{
+  "blurb": "A `CallOutcome` or `CallFailure` says what a call came to, and only the compiled call knows that: whether the callee's handler ran, was refused, faulted, or could not be reached. So a program matches on one, and `.outcome(…)` and a test `stub` make them. Writing `Handled(…)`, `Faulted` or `CallFailure.Unreachable(…)` as a value would invent an outcome no call produced. To test a caller of a failing service, `stub` the service (`rejected NotAdmitted`, `faulted`, `unreachable`); to pass a failure along, use `handled()` and `?`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.call.outcome_construction",
+  "constructs": [],
+  "example": "// shop/orders.bynk\nlet o: CallOutcome[Int] = Faulted   // ✗ no call produced this\n\nlet paid = o.handled()?               // ✓ its failure, as a `Result`",
+  "severity": "error",
+  "summary": "A `CallOutcome` or `CallFailure` variant was written as a value in a context; only `.outcome(…)` and a test `stub` make them."
+}

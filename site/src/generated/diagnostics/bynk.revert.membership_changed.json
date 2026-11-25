@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group is one Worker script, so `bynk revert` puts every member back together. It refuses to go back to a version that held other contexts than the live one: a context that has moved into or out of the group since, or a version deployed before groups. Rolling back would take a member's code out from under its traffic. Redeploy forward instead.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.membership_changed",
+  "constructs": [],
+  "example": "bynk revert --dry-run --worker core\n  members   core  refused: the live version holds [shop.a, shop.b] and the target holds [shop.a]\n\nbynk deploy   # redeploy forward",
+  "severity": "error",
+  "summary": "`bynk revert` refused because a `[deploy.workers.<key>]` group's target version held other contexts than the live one (a context moved into or out of the group since, or the version predates groups), so a rollback would take a member's code out of the Worker."
+}

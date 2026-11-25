@@ -1,0 +1,12 @@
+{
+  "blurb": "A provider operation must have the signature its capability declares: the same number of parameters, the same parameter types and the same return type. Callers are checked against the capability, so a provider that returns something else would hand them a value of the wrong type. The error points at the parameter or return type that differs, or at the operation when the counts differ. Change the provider to match, or change the capability, and with it every provider of it.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.signature_mismatch",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "capability Clock {\n    fn now() -> Effect[Int]\n}\n\nprovides Clock = Fixed {\n    fn now() -> Effect[String] { Effect.pure(\"0\") }   // ✗ the capability returns `Effect[Int]`\n}\n\nprovides Clock = Fixed {\n    fn now() -> Effect[Int] { Effect.pure(0) }        // ✓ same signature\n}",
+  "severity": "error",
+  "summary": "A `provides` operation's signature does not match the capability."
+}

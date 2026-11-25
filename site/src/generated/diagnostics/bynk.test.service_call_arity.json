@@ -1,0 +1,12 @@
+{
+  "blurb": "`svc.call(…)` in a test runs the service's `on call` handler, so it takes that handler's parameters, and the number of arguments is checked as for any call. Add or remove arguments to match the handler. The asset address, `svc.GET(asset)`, takes the asset alone, and this code covers extra arguments there too.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.service_call_arity",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/svc.bynk\nservice echo { … }\n\n// tests/svc.test.bynk\nlet r <- echo.call(1, 2)   // ✗ the handler takes one\nlet r <- echo.call(1)      // ✓",
+  "severity": "error",
+  "summary": "A test body's `svc.call(...)` passes the wrong number of arguments for the service's `on call` handler."
+}

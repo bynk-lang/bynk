@@ -1,0 +1,10 @@
+{
+  "blurb": "A `:=` writes a `Cell` store field, and its right-hand side may not read the cell it is writing. Computing the new value from the old one is a hidden read-modify-write; Bynk asks for `.update(fn)` instead, so the dependency on the prior value is written down where a reader (and a retry) can see it. A `:=` is for a value that does not depend on what the cell held.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.cell.self_reference",
+  "constructs": [],
+  "example": "count := count + 1                       // ✗ reads `count` while writing it\n\nlet _ <- count.update((c) => c + 1)      // ✓ awaited, as an effect; the combiner gets the old value",
+  "severity": "error",
+  "summary": "A `:=` right-hand side reads the cell being written (a read-modify-write); use `.update`."
+}

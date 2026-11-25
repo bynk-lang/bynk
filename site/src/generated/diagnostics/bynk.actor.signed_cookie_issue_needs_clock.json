@@ -1,0 +1,10 @@
+{
+  "blurb": "`User.issue(identity)` signs a cookie that expires, so it reads the current time from the `Clock` capability, and a handler's dependencies are always visible in its `given` clause (and a test can stub the clock to know exactly the cookie it gets). Add `consumes bynk { Clock }` to the context and `given Clock` to the handler.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_issue_needs_clock",
+  "constructs": [],
+  "example": "let c <- User.issue(body)   // ✗ the handler lists no `given Clock`\n\nlet c <- User.issue(body)   // ✓ with `given Clock` on the handler",
+  "severity": "error",
+  "summary": "`Actor.issue(identity)` on a `SignedCookie` actor is called where the handler does not list `Clock` in `given`."
+}

@@ -11,7 +11,7 @@
 //!   3. every rule's target is a page in `dist/`. For a `/*` splat, every page
 //!      under the target folder is mapped back to its old path (with and without
 //!      its trailing slash), and that old path must land on a page; for a
-//!      `:code` placeholder, a few codes from `src/generated/diagnostics.json`
+//!      `:code` placeholder, a few codes from `src/generated/diagnostics/`
 //!      are tried.
 //!
 //! `/reference/api/` (the rustdoc, built only in the deploy workflow) is exempt
@@ -391,12 +391,15 @@ export function checkRedirects(rules, routes, options = {}) {
 /**
  * A few diagnostic codes to try for `:code`: the first, one from the middle and
  * the last of the registry.
- * @param {string} file
+ * @param {string} dir the per-code files, `<code>.json`
  */
-export function sampleCodes(file) {
-  /** @type {{ code: string }[]} */
-  const entries = JSON.parse(fs.readFileSync(file, "utf8"));
-  const codes = entries.map((e) => e.code);
+export function sampleCodes(dir) {
+  // One file per code, named for it (#4286); sorted, the first, middle and last.
+  const codes = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .map((f) => f.slice(0, -".json".length))
+    .sort();
   return [...new Set([codes[0], codes[Math.floor(codes.length / 2)], codes[codes.length - 1]])];
 }
 
@@ -409,7 +412,7 @@ function main() {
   const dist = opt("--dist", path.join(HERE, "../dist"));
   const redirectsFile = opt("--redirects", path.join(HERE, "../public/_redirects"));
   const publishedFile = opt("--published", path.join(HERE, "../src/data/published-routes.txt"));
-  const diagnostics = path.join(HERE, "../src/generated/diagnostics.json");
+  const diagnostics = path.join(HERE, "../src/generated/diagnostics");
 
   if (!fs.existsSync(dist)) {
     console.error(`check-redirects: no built site at ${dist}; run \`npm run build\` first.`);

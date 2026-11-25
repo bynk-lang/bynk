@@ -1,0 +1,12 @@
+{
+  "blurb": "`?` returns the `Err` from the enclosing function as it is, so its error type must be one the function declares: a `String` error cannot escape a function whose errors are `Int`. The only automatic conversion is a declared embedding, where the function's error is a sum type with an `embeds` clause for the inner one. Otherwise convert the error before the `?` with `.mapErr(…)`, or change the function's error type.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.question_error_mismatch",
+  "constructs": [
+    "question_expr"
+  ],
+  "example": "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Result[Int, Int] {\n    let v = checked(n)?    // ✗ propagates a `String` error, but `run` returns `Int` errors\n    Ok(v + 1)\n}\n\nfn run(n: Int) -> Result[Int, Int] {\n    let v = checked(n).mapErr((e) => e.length())?    // ✓ the error is converted first\n    Ok(v + 1)\n}",
+  "severity": "error",
+  "summary": "`?` propagates an error type incompatible with the function's."
+}

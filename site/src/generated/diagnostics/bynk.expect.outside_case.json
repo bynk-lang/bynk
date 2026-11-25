@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect` is a test claim, checked when a `case` runs. Production code has no test runner to report a failure to, so an `expect` in a function, a handler or anywhere else outside a `case` body is refused. To check a condition in running code, return a `Bool` or a `Result`; to check it in a test, move the `expect` into a case. A `requires` or `ensures` contract is the always-on form.",
+  "category": "Expectations",
+  "categoryAnchor": "expectations",
+  "code": "bynk.expect.outside_case",
+  "constructs": [
+    "expect_expr"
+  ],
+  "example": "// demo/rules.bynk\nfn positive(n: Int) -> Bool {\n    expect n > 0           // ✗ not in a case\n    n > 0\n}\n\n// tests/rules.test.bynk\nexpect positive(1)       // ✓ in a case",
+  "severity": "error",
+  "summary": "`expect` was used outside a `case` body."
+}

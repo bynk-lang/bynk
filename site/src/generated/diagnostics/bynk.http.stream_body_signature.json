@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Signature` actor checks an HMAC over the whole request body before the handler runs, so the body has to be held in full. A streamed `body` is read by the handler afterwards, a chunk at a time, and could not have been verified. Take `body: Bytes` on a signed route (a webhook, say), or sign the head (a header or the path) and verify the content another way.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.stream_body_signature",
+  "constructs": [],
+  "example": "actor Hook { auth = Signature(secret = \"HOOK_SECRET\", header = \"X-Signature\") }\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non POST(\"/hook\") (body: Stream[Bytes]) -> Effect[HttpResult[()]] by h: Hook { … }   // ✗ unverifiable\n\n@raw(contentType: \"application/octet-stream\")\n@limit(maxBody: 1_000_000)\non POST(\"/hook\") (body: Bytes) -> Effect[HttpResult[()]] by h: Hook { … }          // ✓",
+  "severity": "error",
+  "summary": "A route with a streamed `body` has a `Signature` actor, which verifies an HMAC over the whole body first."
+}

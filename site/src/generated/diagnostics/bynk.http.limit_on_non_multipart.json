@@ -1,0 +1,10 @@
+{
+  "blurb": "`maxFile` and `maxParts` cap the parts of a multipart body: the size of one file and the number of parts. A route that is not `@multipart` has no parts, so naming either in `@limit` is refused. Remove the argument and keep `maxBody`, which caps any body, or mark the route `@multipart` if it takes an upload. A `@limit` on a route with no body at all is `bynk.http.limit_on_bodyless`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.limit_on_non_multipart",
+  "constructs": [],
+  "example": "type Signup = { email: String }\n\n@form\n@limit(maxBody: 100_000, maxFile: 10_000)   // ✗ a form has no file parts\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@form\n@limit(maxBody: 100_000)                    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@limit` `maxFile` or `maxParts` is placed on a route that is not `@multipart`."
+}

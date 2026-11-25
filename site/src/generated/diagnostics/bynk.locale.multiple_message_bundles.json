@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.locale.multiple_message_bundles",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A context consumes `Locale` but its direct `uses` reaches two or more message-bundle commons — there is no single bundle to negotiate against."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.remote_clock_dependent",
+  "constructs": [
+    "case"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "Under `bynk test --against`, a `system` case's `expect` compares an `Instant` that isn't derived from the run (a constant such as `Instant.fromEpochMillis(0)`); in process the clock starts at the epoch, but a real runtime's Workers read wall-clock time."
+}

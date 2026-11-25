@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite's cases see the target's own declarations and those of the commons it `uses`, and the suite's types are used by bare name beside them. A suite type with one of those names would silently change which type a mention reaches, so it is refused instead of shadowing. The same goes for a variant of a suite's own sum type. Rename it. A constant clashing is `bynk.suite.const_name_clash`.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.type_name_clash",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "// demo/desk.bynk\ntype Item = { sku: String }\n\n// tests/desk.test.bynk\ntype Item = { n: Int }       // ✗ the target already has an `Item`\ntype Counted = { n: Int }    // ✓ a name of its own",
+  "severity": "error",
+  "summary": "A suite `type`, or a variant of one, has the name of a declaration or sum variant already in scope in the suite's cases, or of another suite item."
+}

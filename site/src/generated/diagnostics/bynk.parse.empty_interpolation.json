@@ -1,0 +1,10 @@
+{
+  "blurb": "An interpolation hole, `\\(…)`, holds one expression, whose value is written into the text. An empty `\\()` has nothing to write. Put an expression in the hole. To write the characters `\\(` themselves, escape the backslash: `\\\\(`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.empty_interpolation",
+  "constructs": [],
+  "example": "fn label(n: Int) -> String {\n    \"total: \\()\"                   // ✗ nothing to interpolate\n}\n\nfn label(n: Int) -> String {\n    \"total: \\(n)\"                  // ✓\n}",
+  "severity": "error",
+  "summary": "An interpolation hole `\\(…)` contains no expression."
+}

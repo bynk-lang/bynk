@@ -1,0 +1,12 @@
+{
+  "blurb": "On a record field, `@example` pins the field's own value, which exists only where the field has a base type. A field of a named type takes its value from that type, so an example on the field would have no effect and is refused. Put the `@example` on the named type's declaration, where `Val` reads it.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.example_on_named_field",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = String where Matches(\"[A-Z]{3}\")\ntype Ticket = { code: Code where Matches(\"[A-Z]+\") @example(\"ABC\") }    // ✗ `Code` is a named type\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")    // ✓ pin it on the type\ntype Ticket = { code: Code }",
+  "severity": "error",
+  "summary": "An `@example` on a field whose type is a named type (it belongs on the named type)."
+}

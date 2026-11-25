@@ -1,0 +1,10 @@
+{
+  "blurb": "A handler has one `@cache`, which says how long the response to that route may be reused. Two would give it two freshness windows, and neither could be said to win, so the second is refused. Delete the one you do not want. A handler may likewise carry only one `@limit` (`bynk.http.limit_duplicate`), `@raw` or `@json`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_duplicate",
+  "constructs": [],
+  "example": "@cache(maxAge: 1.minute)\n@cache(maxAge: 5.minutes)   // ✗ already cached above\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ one window\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries more than one `@cache` annotation."
+}

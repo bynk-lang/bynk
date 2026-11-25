@@ -1,0 +1,10 @@
+{
+  "blurb": "A `///` is not a doc comment in Bynk. A doc is written with dashes: `--- text` for one line, or a block between two `---` lines for more. A plain comment is `//`. The fix to `---` is machine-applicable: `bynk check --fix` applies it. A run of four or more slashes is an ordinary comment.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.slash_doc",
+  "constructs": [],
+  "example": "/// Doubles a number.                  // ✗ a comment, not a doc\nfn double(n: Int) -> Int { n * 2 }\n\n--- Doubles a number.                  // ✓\nfn double(n: Int) -> Int { n * 2 }",
+  "severity": "error",
+  "summary": "A `///` doc comment first on its line; a Bynk doc is `--- text` or a `---` block (auto-fixable)."
+}

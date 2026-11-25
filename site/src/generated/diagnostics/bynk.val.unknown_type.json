@@ -1,0 +1,12 @@
+{
+  "blurb": "`Val[T]` fabricates a value of the type it names, so the name must resolve to a type the suite can see. A misspelt name stops here, before anything else about the value can be checked. Fix the spelling, or declare the type in the target unit or the suite. The same code covers a `for all` binder whose type does not resolve.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.unknown_type",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// demo/ages.bynk\ntype Age = Int where InRange(0, 150)\n\n// tests/ages.test.bynk\nlet a = Val[Agee]      // ✗ no such type\nlet a = Val[Age]       // ✓ the declared type",
+  "severity": "error",
+  "summary": "`Val[T]` names a type that does not resolve."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A project installs one version of each npm package, so every adapter that `requires` a package must give the same range for it. Two adapters that ask for `jose` at `^4` and `^5` leave the build with no version that satisfies both, so the second is refused and names the first. Ranges are compared as written, so `^5` and `^5.0.0` conflict too. The same code reports one adapter that lists a package twice at different ranges. Give both the same range. A package the toolchain itself pins, such as the one its own bindings use, must be required at that exact version.",
+  "category": "npm requirements",
+  "categoryAnchor": "npm-requirements",
+  "code": "bynk.requires.conflicting_range",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "// auth.bynk\nbinding \"./auth.binding.ts\" requires { \"jose\": \"^5\" }\n\n// tokens.bynk\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^4\" }   // ✗ `auth` already requires `^5`\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5\" }   // ✓ one range",
+  "severity": "error",
+  "summary": "Two adapter `binding … requires { … }` entries give different version ranges for one npm package."
+}

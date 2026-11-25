@@ -1,0 +1,10 @@
+{
+  "blurb": "A transition constrains a step, so it has to compare the state before the commit (`old`) with the state after (`new`). One that mentions neither is a claim about a single state, which an `invariant` states more plainly and checks the same way. Use `old` and `new`, or write it as an `invariant`.",
+  "category": "Transitions (step invariants)",
+  "categoryAnchor": "transitions-step-invariants",
+  "code": "bynk.transition.no_step_reference",
+  "constructs": [],
+  "example": "transition grows: count >= 0               // ✗ names neither `old` nor `new`\n\ntransition grows: new.count >= old.count   // ✓ compares the two states",
+  "severity": "error",
+  "summary": "A transition references neither `old` nor `new`; it constrains one state, so it is an `invariant`, not a step."
+}

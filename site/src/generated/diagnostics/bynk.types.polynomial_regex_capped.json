@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.polynomial_regex_capped",
+  "constructs": [
+    "refinement"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `Matches` pattern's matching time grows polynomially with input length, but a `MaxLength` or `Length` predicate bounds the input small enough for its degree (warning)."
+}

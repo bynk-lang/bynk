@@ -1,0 +1,10 @@
+{
+  "blurb": "`parTraverse` on a store or held `Map` is now `parForEach`. On a `List`, `parTraverse` runs the steps concurrently and returns their values; the query form returns `()`, so it takes the `parForEach` name, which means the same on both receivers. Rename the call: the fix is machine-applicable. A step whose results you want back is a `List`: `collect()` the query, then `parTraverse` the list.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.query.par_traverse_renamed",
+  "constructs": [],
+  "example": "agent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parTraverse((c) => c.send(Frame { text: text }))   // ✗ renamed\n    }\n}\n\nagent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parForEach((c) => c.send(Frame { text: text }))    // ✓ runs for effect\n    }\n}",
+  "severity": "error",
+  "summary": "`Query.parTraverse` (a store or held `Map`'s concurrent step) is now `parForEach` (auto-fixable)."
+}

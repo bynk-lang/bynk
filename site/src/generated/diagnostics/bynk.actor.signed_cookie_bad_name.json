@@ -1,0 +1,10 @@
+{
+  "blurb": "A cookie name is an RFC 6265 token: letters, digits and a few punctuation characters, with no space, `=`, `;`, `,` or quote. A browser would drop or misread anything else. The default, `__Host-session`, is always legal.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_bad_name",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, cookie = \"my session\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` `cookie` is not a legal cookie name."
+}

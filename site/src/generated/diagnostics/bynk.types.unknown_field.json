@@ -1,0 +1,12 @@
+{
+  "blurb": "A field access names a field the value's type does not declare. A record's fields are fixed by its type declaration, so `p.z` on a `Point` of `x` and `y` is refused. This is usually a typo, or a value of a different type from the one intended. Building a record with a field it lacks is the sibling code `bynk.resolve.unknown_field`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.unknown_field",
+  "constructs": [
+    "field_access"
+  ],
+  "example": "type Point = { x: Int, y: Int }\n\nfn height(p: Point) -> Int {\n    p.z    // ✗ `Point` has no field `z`\n}\n\nfn height(p: Point) -> Int {\n    p.y    // ✓\n}",
+  "severity": "error",
+  "summary": "Referenced a field the record type does not declare."
+}

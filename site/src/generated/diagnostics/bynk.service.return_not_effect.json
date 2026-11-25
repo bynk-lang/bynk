@@ -1,0 +1,12 @@
+{
+  "blurb": "Every service handler returns an `Effect[T]`, whatever its protocol. A handler runs as the context answers a call, route, schedule, message or frame, and its effects and `given` capabilities are the runtime's to run, so a bare `Int` is refused. Wrap the result: `Effect.pure(x)` for a value you already hold. An `on event` handler that returns an `Effect` of anything but `()` is `bynk.event.return_not_effect_unit`.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.return_not_effect",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service probe {\n    on call() -> Int by Caller { … }            // ✗ not an `Effect`\n    on call() -> Effect[Int] by Caller { … }    // ✓\n}",
+  "severity": "error",
+  "summary": "A service handler's return type is not an `Effect`."
+}

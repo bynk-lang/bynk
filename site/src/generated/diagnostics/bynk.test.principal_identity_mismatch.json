@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler guarded by an actor runs as that actor, so a case must act as it, with the identity type it declares. `by Visitor` carries no identity, so it cannot stand in for `User`, and an actor outside the handler's `by` sum is no member of it. Act as the actor the handler names. To exercise an unauthenticated request instead, use `by Nobody` in a `system` case.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.principal_identity_mismatch",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nactor User { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/a\") by Visitor        // ✗ the handler is `by u: User`\nlet r <- api.GET(\"/a\") by User(\"bob\")    // ✓",
+  "severity": "error",
+  "summary": "A call-site `by <Actor>` acts as an actor whose identity is incompatible with the addressed handler's actor, or names no member of the handler's actor sum."
+}

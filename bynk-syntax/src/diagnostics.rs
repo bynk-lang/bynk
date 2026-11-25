@@ -1,9 +1,9 @@
 //! Central registry of diagnostic codes.
 //!
 //! This is the single source of truth for the `bynk.*` codes the compiler can
-//! emit. The reference page `site/src/content/docs/reference/diagnostics.md` is generated
-//! from [`render_markdown`], and the test `tests/diagnostics_registry.rs`
-//! asserts that this table matches exactly the set of codes used across the
+//! emit. The reference index `site/src/content/docs/reference/diagnostics.md` is assembled at site
+//! build time from the per-code files [`render_json_per_code`] writes (#4286), and the test
+//! `tests/diagnostics_registry.rs` asserts that this table matches exactly the set of codes used across the
 //! compiler source — so a new code cannot be introduced without documenting it
 //! here, and a removed code cannot linger in the docs.
 //!
@@ -55,7 +55,7 @@ pub const D_PATH: &str = "/d/";
 /// A curated, offline-complete explanation of a diagnostic code (#853).
 ///
 /// The `blurb`/`example` are the offline answer `bynk explain` prints, and the
-/// text of the code's page on the site ([`render_json`]). Where that page
+/// text of the code's page on the site ([`render_json_per_code`]). Where that page
 /// lives, and which reference sections it links to, belong to the docs
 /// (`site/src/data/diagnostic-links.json`), not to this table (#3876): the
 /// toolchain links every code as [`href`], so a docs reorganisation never
@@ -2285,7 +2285,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.held.query_accessor_on_held_map",
         blurb: "A held `Map[K, Connection]` is iterated with the broadcast operations, `forEach` (one at a time) or `parTraverse` (in parallel), not with a key query. `.entries`, `.keys` and `.values` would lift the connections out into a query, which the single-owner rules for held values do not allow. To send to every connection, broadcast over the map; to learn who is connected, keep a separate `Set` of their keys.",
-        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
     },
     Explain {
         code: "bynk.held.unsupported_map_op",
@@ -4081,6 +4081,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Order = { customerId: String, region: Int }\ntype Customer = { code: String, region: Int }\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.region, (o, c) => c.region).count()   // ✗ `String` against `Int`\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.code, (o, c) => c.region).count()     // ✓ both `String`",
     },
     Explain {
+        code: "bynk.query.par_traverse_renamed",
+        blurb: "`parTraverse` on a store or held `Map` is now `parForEach`. On a `List`, `parTraverse` runs the steps concurrently and returns their values; the query form returns `()`, so it takes the `parForEach` name, which means the same on both receivers. Rename the call: the fix is machine-applicable. A step whose results you want back is a `List`: `collect()` the query, then `parTraverse` the list.",
+        example: "agent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parTraverse((c) => c.send(Frame { text: text }))   // ✗ renamed\n    }\n}\n\nagent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parForEach((c) => c.send(Frame { text: text }))    // ✓ runs for effect\n    }\n}",
+    },
+    Explain {
         code: "bynk.query.sum_needs_numeric",
         blurb: "`sum` and `average` add the values the key function returns, so the key must be numeric: `Int`, `Float` or `Duration`, or a refined type over one of them. A `String` or a record cannot be added. Return a numeric field. `sum` also adds a `Decimal` key, exactly, on a `List` and on a `Query`. `average` does not take one: a mean is a division, and a `Decimal` division needs a scale and a rounding mode, so sum the key, then `div(Decimal.fromInt(n), scale, mode)` by the count. To pick by an ordering rather than add, `min`, `max` and `sortBy` accept any orderable key.",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
@@ -4121,8 +4126,13 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
+        code: "bynk.queue.retry_delay_out_of_range",
+        blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
+        example: "on message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
+    },
+    Explain {
         code: "bynk.queue.return_not_queue_result",
-        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled) and `Retry(reason)` (deliver it again). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
+        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled), `Retry(reason)` (deliver it again) and `RetryAfter(reason, delay)` (deliver it again after a delay). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
         example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
     },
     Explain {
@@ -8099,7 +8109,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.held.query_accessor_on_held_map",
-        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query.",
+        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`), not a key query.",
     ),
     d(
         "bynk.held.unsupported_map_op",
@@ -9284,6 +9294,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.query.join_key_mismatch",
         "A `joinOn`/`leftJoin` left and right key function return different types.",
     ),
+    d(
+        "bynk.query.par_traverse_renamed",
+        "`Query.parTraverse` (a store or held `Map`'s concurrent step) is now `parForEach` (auto-fixable).",
+    ),
     dg(
         "bynk.query.sum_needs_numeric",
         "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).",
@@ -9324,6 +9338,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
         &["delivery_policy"],
     )),
+    d(
+        "bynk.queue.retry_delay_out_of_range",
+        "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.",
+    ),
     dg(
         "bynk.queue.return_not_queue_result",
         "An `on message` handler does not return `Effect[QueueResult]`.",
@@ -11059,86 +11077,24 @@ fn category_title(cat: &str) -> &'static str {
     }
 }
 
-/// Render the diagnostic index as a Markdown reference page, grouped by
-/// category. This is the generator behind
-/// `site/src/content/docs/reference/diagnostics.md`.
-pub fn render_markdown() -> String {
-    use std::collections::BTreeMap;
-
-    // Group codes by their category title, preserving sorted code order.
-    let mut by_category: BTreeMap<&str, Vec<&DiagnosticInfo>> = BTreeMap::new();
-    for info in REGISTRY {
-        by_category
-            .entry(category_title(category(info.code)))
-            .or_default()
-            .push(info);
-    }
-
-    let mut out = String::new();
-    out.push_str("# Diagnostic index\n\n");
-    out.push_str(
-        "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: bynk-syntax/src/diagnostics.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry:: -->\n\n",
-    );
-    out.push_str(
-        "Every diagnostic code the compiler can emit, with a one-line summary of \
-         the cause, grouped by category. Each code links to its own page: what the \
-         code means, how to fix it and an example where an explanation is written, \
-         the grammar rules it governs, and the Book pages that explain it. \
-         `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
-         **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
-    );
-    out.push_str(&format!(
-        "There are **{}** codes in total. Every code is an error unless it is marked \
-         **Warning** or **Hint**.\n",
-        REGISTRY.len()
-    ));
-    // The site's filter box (`site/public/diagnostic-filter.js`) adds itself
-    // here, above the first category, and narrows the lists as you type.
-    out.push_str("\n<script type=\"module\" src=\"/diagnostic-filter.js\"></script>\n");
-
-    for (title, infos) in &by_category {
-        out.push_str(&format!("\n## {title}\n\n"));
-        // One list item per code, not a table row: nearly 900 codes in a
-        // table overflowed the content column (#3876 review), and the
-        // category heading already groups them. A code's grammar constructs
-        // are on its own page.
-        for info in infos {
-            // Every code links to its own page (#3876), which the site
-            // generates from `render_json` for every registry code.
-            let code = format!("[`{0}`]({INDEX_PATH}{0}/)", info.code);
-            // ADR 0117/finding #50: every code's severity, straight from the
-            // registry. Errors are the overwhelming majority and go unmarked;
-            // a `warn`-built entry carries a "Warning" badge, a hint "Hint".
-            let severity = match info.severity {
-                Severity::Error => "",
-                Severity::Warning => "<span class=\"diagnostic-severity\">Warning</span> ",
-                Severity::Hint => "<span class=\"diagnostic-severity\">Hint</span> ",
-            };
-            out.push_str(&format!("- {code} — {severity}{}\n", info.summary));
-        }
-    }
-
-    out
-}
-
-/// Every registry code as JSON, for the site's page per code (#3876): its
-/// summary, severity, category (title and the index anchor of its heading),
-/// grammar constructs, and the curated `blurb` and `example` where the code
-/// has one (else `null`). Sorted by code. This is the generator behind
-/// `site/src/generated/diagnostics.json`, which the route
-/// `site/src/pages/reference/diagnostics/[code].astro` renders; the
-/// docs-consistency test keeps the committed file current.
-pub fn render_json() -> String {
+/// Every registry code as JSON, one document per code, for the site's page per code (#3876): its
+/// summary, severity, category (title and the index anchor of its heading), grammar constructs,
+/// and the curated `blurb` and `example` where the code has one (else `null`). Returned as
+/// `(code, json)`, sorted by code. This is the generator behind
+/// `site/src/generated/diagnostics/<code>.json`, one committed file per code so two changes that
+/// add different codes never touch the same file (#4286). The route
+/// `site/src/pages/reference/diagnostics/[code].astro` renders them, and
+/// `site/scripts/build-diagnostics-index.mjs` assembles the index page from them at build time;
+/// the docs-consistency test keeps the committed files current.
+pub fn render_json_per_code() -> Vec<(String, String)> {
     let mut infos: Vec<&DiagnosticInfo> = REGISTRY.iter().collect();
     infos.sort_by_key(|i| i.code);
-    let codes: Vec<serde_json::Value> = infos
+    infos
         .iter()
         .map(|info| {
             let cat = category(info.code);
             let explained = explain(info.code);
-            serde_json::json!({
+            let doc = serde_json::json!({
                 "code": info.code,
                 "summary": info.summary,
                 "severity": match info.severity {
@@ -11151,12 +11107,12 @@ pub fn render_json() -> String {
                 "constructs": info.grammar_symbol,
                 "blurb": explained.map(|e| e.blurb),
                 "example": explained.map(|e| e.example),
-            })
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("diagnostic serialises");
+            out.push('\n');
+            (info.code.to_string(), out)
         })
-        .collect();
-    let mut out = serde_json::to_string_pretty(&codes).expect("diagnostics serialise");
-    out.push('\n');
-    out
+        .collect()
 }
 
 /// Invert the registry into a `{ "<rule>": [ { code, summary }, … ], … }` map,

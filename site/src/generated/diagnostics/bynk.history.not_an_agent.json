@@ -1,0 +1,10 @@
+{
+  "blurb": "`for all run: History[T]` generates a run of calls to an agent's handlers and drives them against a fresh instance. Only an agent has handlers to sequence, so `T` must be one declared in scope. For a value, a plain `for all x: T` generates the value. Name the agent.",
+  "category": "History properties",
+  "categoryAnchor": "history-properties",
+  "code": "bynk.history.not_an_agent",
+  "constructs": [],
+  "example": "// tests/t.test.bynk\nfor all run: History[Amount] { … }   // ✗ `Amount` is a value type\nfor all run: History[Wallet] { … }   // ✓ an agent",
+  "severity": "error",
+  "summary": "A `for all run: History[T]` names a `T` that is not an agent — only an agent has handlers to sequence and reachable states to observe (testing track slice 7, ADR 0155)."
+}

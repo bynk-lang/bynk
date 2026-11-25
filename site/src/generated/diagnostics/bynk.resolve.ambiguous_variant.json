@@ -1,0 +1,10 @@
+{
+  "blurb": "A bare variant name such as `Failed(\"down\")` builds a value of the sum that declares it. When two sums in scope declare the name (two of your own, or two that a consumed unit exports, like an adapter's error enums), the compiler reads the expected type: an annotated `let`, a parameter, a return type, or a `stub`'s operation. It builds the sum that type names. With nothing expecting either sum it cannot know which you meant, and it never picks one, so the name is refused. Qualify it as `TypeName.Variant`, or give the value a type. A `match` arm needs neither, because it reads its scrutinee's sum.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.ambiguous_variant",
+  "constructs": [],
+  "example": "type DbError = | Constraint(message: String) | Failed(message: String)\ntype MailError = | RateLimited | Failed(message: String)\n\nlet e = Failed(\"down\")       // ✗ `DbError` or `MailError`?\n\nfn mail() -> Result[Int, MailError] {\n    Err(Failed(\"down\"))          // ✓ the return type picks `MailError`\n}\n\nDbError.Failed(\"down\")       // ✓ qualified",
+  "severity": "error",
+  "summary": "A bare variant name is declared by several sum types in scope, and no expected type picks one."
+}

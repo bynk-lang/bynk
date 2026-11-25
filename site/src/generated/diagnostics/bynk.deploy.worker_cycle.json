@@ -1,0 +1,10 @@
+{
+  "blurb": "`bynk deploy` uploads each Worker after the Workers it binds to, since a Service Binding must name a script that already exists. So the Workers' bindings must run one way: a cycle has no order to deploy in. Contexts cannot consume each other in a cycle (that is `bynk.context.consumes_cycle`), but a `[deploy.workers.<key>]` group folds its members into one Worker, and that can close a cycle among contexts that have none: if a member of `front` calls a member of `back`, and another member of `back` calls a member of `front`, the two Workers bind to each other. Move a context out of its group, or into the other, so the calls between Workers run one way. A publisher's Worker also binds to its subscribers, so a subscriber that calls its publisher can close a cycle too.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.worker_cycle",
+  "constructs": [],
+  "example": "// bynk.toml\n[deploy.workers.front]\ncontexts = [\"shop.web\", \"shop.prices\"]\n\n[deploy.workers.back]\ncontexts = [\"shop.stock\", \"shop.reports\"]\n\n// shop/web.bynk\nconsumes shop.stock\n\n// shop/reports.bynk\ncontext shop.reports   // ✗ `back` binds to `front`, and `front` to `back`\nconsumes shop.prices\n\n// bynk.toml\n[deploy.workers.front]\ncontexts = [\"shop.web\"]                                    // ✓\n\n[deploy.workers.back]\ncontexts = [\"shop.stock\", \"shop.reports\", \"shop.prices\"]   // ✓ calls run from `front` to `back` only",
+  "severity": "error",
+  "summary": "Workers bind to each other in a cycle that involves a `[deploy.workers.<key>]` group: a group folds its members into one Worker, which can close a cycle among contexts that are themselves acyclic. A Worker is uploaded after the Workers it binds to, so the cycle cannot be deployed."
+}

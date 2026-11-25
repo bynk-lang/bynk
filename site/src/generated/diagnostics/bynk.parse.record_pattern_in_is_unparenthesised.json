@@ -1,0 +1,12 @@
+{
+  "blurb": "After `is`, a record pattern is written in parentheses. Bare, the `{` that opens its fields could equally open the block of the `if`, and the reader could not tell which. Write `x is (Type { field, .. })`. The fix is machine-applicable, so `bynk check --fix` applies it. A `match` arm needs no parentheses.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.record_pattern_in_is_unparenthesised",
+  "constructs": [
+    "record_pattern"
+  ],
+  "example": "fn isPaid(o: Order) -> Bool {\n    if o is Order { status: Paid, .. } { true } else { false }       // ✗ `{` is ambiguous\n}\n\nfn isPaid(o: Order) -> Bool {\n    if o is (Order { status: Paid, .. }) { true } else { false }     // ✓\n}",
+  "severity": "error",
+  "summary": "A record pattern after `is` is not parenthesised — write `x is (T { f, .. })`."
+}

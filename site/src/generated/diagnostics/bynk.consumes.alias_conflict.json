@@ -1,0 +1,12 @@
+{
+  "blurb": "`consumes payment as Pay` gives a context one name to call a unit by, and a name for one unit. Two clauses with the same alias, a unit consumed under two aliases, or an alias that is also a type, function, capability, service or agent of this context, would leave a call such as `Pay.charge(…)` with no single meaning. Give each clause its own alias, or drop it. The same clause in another file of the context is fine.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.alias_conflict",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop.bynk\ncontext shop\n\nconsumes payment as Pay\nconsumes shipping as Pay     // ✗ `Pay` already names `payment`\n\nconsumes payment as Pay\nconsumes shipping as Ship    // ✓ one name each",
+  "severity": "error",
+  "summary": "Two `consumes` aliases collide."
+}

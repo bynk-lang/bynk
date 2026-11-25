@@ -1,0 +1,10 @@
+{
+  "blurb": "`RequestCookies` is the raw view of one request's cookies, the `cookies` parameter of a handler that needs a name a record field cannot spell, such as `__Host-sid`. Cookies often carry session credentials, so the view is read where the request arrives and never kept. It is accepted only as an HTTP handler's `cookies` parameter, and refused as a record, sum or event field, an agent key or store field, a capability operation, or any other handler parameter or result. Read the cookie you need (`cookies.get(\"sid\")`) and keep that `String`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.request_cookies_at_boundary",
+  "constructs": [],
+  "example": "type Session = {\n    cookies: RequestCookies,    // ✗ a request's cookies are not data to keep\n}\n\ntype Session = {\n    sid: String,                // ✓ keep the value you read\n}",
+  "severity": "error",
+  "summary": "`RequestCookies` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent."
+}

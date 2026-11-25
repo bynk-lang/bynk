@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler call is checked against the handler's declaration, as a function call is: it must pass one argument for each parameter, no more and no fewer. The agent's key is not one of them, since it was given when the agent was constructed. Match the call to the parameter list. If the handler is missing a parameter it needs, add it to the declaration and update every caller.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.handler_arity",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Counter {\n  key id: String\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n\nlet v <- Counter(\"a\").get(1)   // ✗ `get` takes no arguments\nlet v <- Counter(\"a\").get()    // ✓",
+  "severity": "error",
+  "summary": "An agent handler was called with the wrong number of arguments."
+}

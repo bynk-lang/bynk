@@ -1,0 +1,12 @@
+{
+  "blurb": "A record pattern, `Order { total, .. }`, takes a record apart by its fields, so the name before the braces must be a record type. A sum, an enum, a refined or opaque type and a built-in have no fields to name. Match a sum or an enum by its variants, and read an opaque or built-in value through its methods.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.record_pattern_on_non_record",
+  "constructs": [
+    "record_pattern"
+  ],
+  "example": "type Status = enum { Open, Paid }\n\nfn code(s: Status) -> Int {\n    match s {\n        Status { .. } => 1    // ✗ `Status` is an enum, not a record\n        _ => 2\n    }\n}\n\nfn code(s: Status) -> Int {\n    match s {\n        Open => 1             // ✓ name the variants\n        Paid => 2\n    }\n}",
+  "severity": "error",
+  "summary": "A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in)."
+}

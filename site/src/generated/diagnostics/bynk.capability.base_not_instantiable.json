@@ -1,0 +1,12 @@
+{
+  "blurb": "A derived capability is another instance of a platform resource, with a namespace, bucket or limiter of its own. Only a platform resource kind, such as `Kv` or `R2`, has instances. A capability such as `Clock` has no resource to separate, so there is nothing to derive; use it bare, with `given Clock`.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.base_not_instantiable",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "consumes bynk { Clock }\n\ncapability Ticks = Clock   // ✗ `Clock` has no named instances\n\nservice probe {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✓ use it bare\n        Clock.now()\n    }\n}",
+  "severity": "error",
+  "summary": "A derived capability's base is not a platform resource that can be instantiated."
+}

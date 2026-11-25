@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.registry.key_mismatch",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A registry's keys don't lead from the key trusted for it (pinned in `[registries]`, or recorded in `bynk.lock`), or it now declares a different `id`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A variant is built like a call, with one argument for each payload field it declares, so `Circle(radius: Int)` takes one and a variant with no payload is written bare. A different number of arguments is refused at the construction. Pass one value for each declared field, or change the type declaration if the variant should carry more. The same code covers the built-in `QueueResult` and `HttpResult` constructors. A `match` arm with the wrong number of bindings is the separate code `bynk.types.pattern_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.variant_arity",
+  "constructs": [],
+  "example": "type Shape =\n  | Circle(radius: Int)\n  | Square(side: Int)\n\nfn make() -> Shape {\n    Circle(1, 2)    // ✗ `Circle` takes 1 argument\n}\n\nfn make() -> Shape {\n    Circle(1)       // ✓\n}",
+  "severity": "error",
+  "summary": "A variant constructor got the wrong number of arguments for its payload fields (a pattern with the wrong number of bindings is `bynk.types.pattern_arity`)."
+}

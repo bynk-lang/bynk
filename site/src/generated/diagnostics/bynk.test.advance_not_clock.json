@@ -1,0 +1,12 @@
+{
+  "blurb": "`advance` moves the harness clock, the single time source a test owns, so it names `Clock` and nothing else. No other capability has virtual time to move. To shape what another capability returns, use a `stub`. The clock only moves forward.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.advance_not_clock",
+  "constructs": [
+    "advance_stmt"
+  ],
+  "example": "// demo/clock.bynk\nconsumes bynk { Clock }\n\n// tests/clock.test.bynk\nadvance Random by 5.minutes   // ✗ only the Clock moves\nadvance Clock by 5.minutes    // ✓",
+  "severity": "error",
+  "summary": "An `advance` statement names a capability other than `Clock`; the test harness owns one time source, the first-party `Clock`."
+}

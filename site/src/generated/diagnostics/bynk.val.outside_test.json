@@ -1,0 +1,12 @@
+{
+  "blurb": "`Val[T]` fabricates a value that merely satisfies `T`. That is what a test wants and what running code must not do, so `Val` is allowed only in test code. In a function or handler, take the value as a parameter or build it properly, for instance with `Age.of(20)`. See `bynk.val.needs_pin` for a bare `Val` that a test cannot generate.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.outside_test",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// demo/ages.bynk\ntype Age = Int where InRange(0, 150)\n\nfn sample() -> Age { Val[Age] }   // ✗ not test code\n\n// tests/ages.test.bynk\nlet a = Val[Age]                  // ✓ in a case",
+  "severity": "error",
+  "summary": "`Val[T]` was used outside a test case body."
+}

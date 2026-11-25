@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability is a set of operations that a unit asks for with `given` and that a provider supplies. With no operations there is nothing to call or to provide, so an empty one is refused. Declare at least one operation, or remove the capability.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.empty_capability",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "capability Clock {                 // ✗ no operations\n}\n\ncapability Clock {\n    fn now() -> Effect[Int]        // ✓\n}",
+  "severity": "error",
+  "summary": "A `capability` body is empty."
+}

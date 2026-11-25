@@ -1,0 +1,10 @@
+{
+  "blurb": "The `browser` platform builds a module that runs in a web page: one in-process bundle, with nothing to deploy. The `workers` target lays a project out as one Cloudflare Worker per context, joined by Service Bindings, which a browser cannot run. So the two do not combine. Build for the browser with the `bundle` target, which is the default, or build Workers for the `cloudflare` platform.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.target.browser_bundle_only",
+  "constructs": [],
+  "example": "bynk build --target workers --platform browser   // ✗ Workers are not a browser build\n\nbynk build --target bundle --platform browser    // ✓",
+  "severity": "error",
+  "summary": "The `browser` platform builds only the in-process `Bundle` topology; `--target workers` is not a browser build."
+}

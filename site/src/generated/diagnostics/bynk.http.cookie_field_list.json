@@ -1,0 +1,12 @@
+{
+  "blurb": "A `List` field of a `cookies` record is a cookie name sent several times, so writing one would be several `Set-Cookie` lines, which one `Cookie` cannot be. The typed write is refused for it. Write each cookie with an untyped `Cookie { name, value }` and `withCookie`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_field_list",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Ok(\"x\").withCookie(Prefs.tags.cookie(\"a\"))   // ✗ `tags` is a `List` field\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))   // ✓ a scalar field",
+  "severity": "error",
+  "summary": "A typed cookie write names a `List` field of the cookie record."
+}

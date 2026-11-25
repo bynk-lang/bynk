@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite helper is called by bare name from the suite's cases, which also see the target's declarations (services and agents included) and those of the commons it `uses`. A helper with one of those names would silently change which function a call reaches, so it is refused instead of shadowing. A fixture of the suite counts too, and `deps` and names beginning `__` are reserved for the runner. Rename the helper. A type or constant clashing is `bynk.suite.type_name_clash` or `bynk.suite.const_name_clash`.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.fn_name_clash",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "// demo/desk.bynk\nfn double(n: Int) -> Int { n * 2 }\n\n// tests/desk.test.bynk\nfn double(n: Int) -> Int { n * 3 }    // ✗ the target has a `double`\nfn triple(n: Int) -> Int { n * 3 }    // ✓",
+  "severity": "error",
+  "summary": "A suite helper `fn` has the name of a declaration already in scope in the suite's cases."
+}

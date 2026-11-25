@@ -1,0 +1,12 @@
+{
+  "blurb": "A cookie is a single text value, so each field of the `cookies` record must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` (a cookie that may be absent) or a `List` (a name sent twice). A nested record or any other type is refused. Flatten the record, or keep structured data in a `String` and decode it yourself. `query` and `@form` records follow the same rule: `bynk.http.query_field_not_stringy`, `bynk.http.form_field_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookies_field_not_stringy",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Prefs = { dark: Bool }\n\ntype Session = { prefs: Prefs }   // ✗ a cookie is one value, not a record\n\ntype Session = { dark: Bool }     // ✓\n\non GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A field of an HTTP handler's `cookies` record has a type a cookie cannot carry."
+}

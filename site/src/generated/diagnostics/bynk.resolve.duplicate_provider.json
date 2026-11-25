@@ -1,0 +1,12 @@
+{
+  "blurb": "`provides Clock = …` is the one implementation a context supplies for `Clock`, and a handler that is `given Clock` is given that one. Two providers for the same capability leave it nothing to choose between, so the second is refused. Delete the one you do not want, or merge them into one provider. Declaring the capability itself twice is `bynk.resolve.duplicate_capability`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_provider",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "provides Clock = FixedClock { … }\nprovides Clock = OtherClock { … }          // ✗ `Clock` already has a provider\n\nprovides Clock = FixedClock { … }\nprovides Calendar = FixedCalendar { … }    // ✓ one provider for each capability",
+  "severity": "error",
+  "summary": "A capability is provided more than once."
+}

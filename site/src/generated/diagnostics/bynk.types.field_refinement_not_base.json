@@ -1,0 +1,12 @@
+{
+  "blurb": "An inline refinement, `price: Money where Positive`, applies predicates to a value of a base type, or of a refined type over one. A record or a sum has no such value for a predicate to test. Put the refinement on the field that holds the number, inside the record, or declare a refined type and use its name.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_refinement_not_base",
+  "constructs": [
+    "record_field"
+  ],
+  "example": "type Money = { cents: Int }\ntype Line = { price: Money where Positive }    // ✗ `Money` is a record, which no predicate fits\n\ntype Money = { cents: Int where Positive }     // ✓ refine the field that holds the number\ntype Line = { price: Money }",
+  "severity": "error",
+  "summary": "An inline field refinement requires a base or refined type."
+}

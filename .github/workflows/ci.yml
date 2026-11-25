@@ -1548,6 +1548,10 @@ jobs:
       # highlight Bynk differently.
       - name: Check the grammar matches the theme's
         run: cmp src/grammars/bynk.tmLanguage.json node_modules/@bynk-lang/site-theme/grammars/bynk.tmLanguage.json
+      # The diagnostic index is assembled from the per-code files, not committed
+      # (#4286), and the sidebar check below needs the page to exist.
+      - name: Assemble the diagnostic index
+        run: node scripts/build-diagnostics-index.mjs
       # The sidebars are generated from site/src/SUMMARY.md (the Book) and
       # site/src/REFERENCE.md (the Reference); fail if either committed sidebar
       # drifts, or if a page is in no contents.
@@ -1557,6 +1561,9 @@ jobs:
       # Books (web presence track, slice 3).
       - name: Test the sidebar generator
         run: node --test scripts/generate-sidebar.test.mjs
+      # The index assembler's own tests (#4286).
+      - name: Test the diagnostic index assembler
+        run: node --test scripts/build-diagnostics-index.test.mjs
       # The _redirects checker's own tests: the first-match rule matcher and
       # each check, on small in-memory sites.
       - name: Test the redirects checker

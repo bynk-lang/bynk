@@ -167,13 +167,16 @@ pairs into the record's JSON form by the rules of the static semantics.
 
 `QueueResult` (v0.44) is the analogous built-in for the queue protocol: a
 non-generic `tag`-discriminated sum with a constructor namespace, variants `Ack`
-(confirm the message) and `Retry` (redeliver, carrying a `String` reason). A
+(confirm the message), `Retry` (redeliver, carrying a `String` reason) and
+`RetryAfter` (#3881: redeliver after a `Duration`, carrying a `String` reason). A
 queue handler returns `Effect[QueueResult]`; the runtime routes `Ack` →
-`msg.ack()` and `Retry` → log the reason + `msg.retry()`.
+`msg.ack()`, `Retry` → log the reason + `msg.retry()` and `RetryAfter` → log the
+reason + `msg.retry({ delaySeconds })`, the delay rounded up to whole seconds and
+clamped to 1 second to 24 hours (a clamp is logged).
 
 | Export | Role |
 |---|---|
-| `QueueResult` | the verdict type and its `Ack` / `Retry(reason)` constructor namespace |
+| `QueueResult` | the verdict type and its `Ack` / `Retry(reason)` / `RetryAfter(reason, delay)` constructor namespace |
 
 `EmailVerdict` (#3328) is the verdict of the email protocol, by the same agency
 rule, but declared in `bynk.cloudflare` as an ordinary sum rather than built in:

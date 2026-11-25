@@ -1056,7 +1056,7 @@ enforces (ADR 0130):
 - **Consistent disposal across branches.** Every branch of an `if`/`match` MUST
   leave a held binding in the same ownership state (`bynk.held.branch_divergence`).
 - **Borrows are non-consuming.** A borrowed held binding — e.g. the closure
-  parameter of a `forEach`/`parTraverse` over a `Map[K, Connection]` — admits only
+  parameter of a `forEach`/`parForEach` over a `Map[K, Connection]` — admits only
   non-consuming operations; a consuming op on a borrow is
   `bynk.held.consume_on_borrow`.
 - **Guards borrow.** A `match` arm's `if` guard runs before its arm is chosen, so
@@ -1918,6 +1918,12 @@ of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 (`bynk.queue.no_dead_letter`; `deadLetter: None` silences it). The dead-letter queue MUST NOT be
 the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
 receives from (`bynk.queue.dead_letter_type_mismatch`).
+
+`RetryAfter(reason, delay)` (#3881) is a `QueueResult` variant taking a `String` reason and a
+`Duration` delay. A `delay` written as a `Duration` literal MUST be from 1 second to 24 hours
+(`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up to whole seconds and
+clamped to that range when the verdict is settled. A `match` over a `QueueResult` names
+`RetryAfter` or has a wildcard.
 
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is
@@ -3155,7 +3161,7 @@ effectful function value, so calling one in a pure context is
 is the `Query.forEach` terminal over an eager list — the effect-per-element loop,
 **sequential** (each element awaited in order). `parForEach(f: T -> Effect[()])`
 (v0.147, named `parTraverse` until #3967; [ADR 0171](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0171-list-partraverse.md))
-is its **concurrent** sibling — the `Query.parTraverse` fan-out over an eager
+is its **concurrent** sibling — the `Query.parForEach` fan-out (named `parTraverse` on a query until #4177) over an eager
 list, issuing every element's effect at once and awaiting them together, so a
 slow element does not head-of-line-block the rest; the order in which side
 effects interleave is unspecified. Unlike the sequential `forEach` (which

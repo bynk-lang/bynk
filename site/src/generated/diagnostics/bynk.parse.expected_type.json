@@ -1,0 +1,10 @@
+{
+  "blurb": "A type was expected here, and the next token cannot start one. The message says which position wanted it (`as the return type`, `as the parameter type`). The commonest cause is a type left out: a `->` with nothing before the `{`, or a `:` with nothing after it. A trailing comma in a type-argument list (`Map[String, ]`) and a value where a type belongs (`n: 5`) land here too. The position is the token after the gap, so look just before it.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_type",
+  "constructs": [],
+  "example": "fn double(n: Int) -> {                    // ✗ no return type after `->`\n    n * 2\n}\n\nfn double(n: Int) -> Int {                // ✓\n    n * 2\n}",
+  "severity": "error",
+  "summary": "Expected a type."
+}

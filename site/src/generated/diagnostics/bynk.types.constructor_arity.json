@@ -1,0 +1,10 @@
+{
+  "blurb": "`T.of(value)` takes exactly one argument, the base value to check, and so does `T.unsafe(value)` on an opaque type: a refined or opaque type wraps a single value. None gives it nothing to check, and two have no meaning. Pass the one value. Building a sum variant with the wrong number of arguments is `bynk.types.variant_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.constructor_arity",
+  "constructs": [],
+  "example": "type Age = Int where InRange(0, 150)\n\nfn parse(n: Int) -> Result[Age, ValidationError] {\n    Age.of(n, 1)    // ✗ `of` takes 1 argument\n}\n\nfn parse(n: Int) -> Result[Age, ValidationError] {\n    Age.of(n)    // ✓\n}",
+  "severity": "error",
+  "summary": "`T.of` (or `T.unsafe`) on a refined or opaque type got the wrong number of arguments."
+}

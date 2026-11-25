@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.migrations_unused",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A directory in the project's `migrations/` folder matches no `D1` instance's database name, so its migrations are never applied, usually because the capability was renamed (warning)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A recursive generic type, a record or sum that contains itself, declares and works inside a context, but it has no codec yet. So it is refused wherever a codec is required: a service or agent handler signature, an agent `store` field or key, an event field, an actor identity type, a `Json.encode` or `Json.decode` target, or a `Codable` witness. The error fires once per use, and when the type is reached through another type, its note names the field path. To cross a boundary today, use a concrete recursive type, or keep the generic one inside the context.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.recursive_generic_at_boundary",
+  "constructs": [],
+  "example": "type Tree[A] =\n    | Leaf\n    | Node(left: Tree[A], value: A, right: Tree[A])\n\nservice s {\n    on call(t: Tree[Int]) -> Effect[Int] by Caller { … }   // ✗ no codec for a recursive generic\n}\n\ntype IntTree =\n    | Leaf\n    | Node(left: IntTree, value: Int, right: IntTree)\n\nservice s {\n    on call(t: IntTree) -> Effect[Int] by Caller { … }     // ✓ a concrete recursive type\n}",
+  "severity": "error",
+  "summary": "A recursive generic type (a record or sum that transitively contains itself, through any wrapper or generic argument) is used where a codec is required: a service or agent handler signature, an agent store field or key, an event field, an actor identity type, a `Json.encode`/`decode` target or a `Codable` witness. It declares and works inside a context, but has no codec yet, so it cannot cross a boundary; when it is reached through another type, the note names the field path (#3192, ADR 0197)."
+}

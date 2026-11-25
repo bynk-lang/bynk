@@ -1,0 +1,10 @@
+{
+  "blurb": "A dependency is reached as `alias.unit`, where the unit is a commons or adapter the package declares. A name after the alias that matches none of them is refused, most often because it is misspelt. The diagnostic's note lists the units the package shares. A unit that exists but is not exported is `bynk.package.unit_not_exported`.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.unknown_unit",
+  "constructs": [],
+  "example": "commons notify          // in the package `acme/lib`\n\nuses lib.notifiy      // ✗ the package declares no `notifiy`\n\nuses lib.notify       // ✓",
+  "severity": "error",
+  "summary": "A `uses` or `consumes` names, through a dependency alias, a unit the dependency doesn't declare."
+}

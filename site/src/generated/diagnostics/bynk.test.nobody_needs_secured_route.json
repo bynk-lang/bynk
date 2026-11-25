@@ -1,0 +1,12 @@
+{
+  "blurb": "`by Nobody` sends no credential so that a route's auth seam answers `401`. A public route, guarded by `Visitor`, has no seam that refuses anyone, so the case would test nothing and is refused. Use `by Nobody` on a route guarded by a `Bearer`, `Oidc` or `Signature` actor, and act as `Visitor` on a public one. For the other failure principals, see `bynk.test.expired_needs_bearer_route`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.nobody_needs_secured_route",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\non GET(\"/health\") () -> Effect[HttpResult[Int]] by v: Visitor { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/health\") by Nobody     // ✗ a public route has no seam\nlet r <- api.GET(\"/health\") by Visitor    // ✓",
+  "severity": "error",
+  "summary": "A case drives `by Nobody` at a route with no Bearer, `Oidc` or Signature actor (alone, or as a member of an actor sum) (e.g. a public `Visitor` route) — there is no auth seam to reject the missing credential."
+}

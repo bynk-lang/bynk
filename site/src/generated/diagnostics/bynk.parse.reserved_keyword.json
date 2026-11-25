@@ -1,0 +1,12 @@
+{
+  "blurb": "A hard keyword (`type`, `fn`, `match`, `Int` and so on) was written where a name is expected: a parameter, a `let` binding, an operation name. Hard keywords are reserved everywhere, so none can be a name. Rename it. A keyword is still allowed as a field label when a `:` follows it (`{ type: String }`); the shorthand without the `:` is `bynk.parse.keyword_field_shorthand`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.reserved_keyword",
+  "constructs": [
+    "identifier"
+  ],
+  "example": "fn describe(type: String) -> String {   // ✗ `type` is a reserved word\n    type\n}\n\nfn describe(kind: String) -> String {   // ✓ any other name\n    kind\n}",
+  "severity": "error",
+  "summary": "A reserved keyword was used as an identifier."
+}

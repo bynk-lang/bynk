@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.too_large",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An `embed` names a file over 256 KiB, or the project's embedded files total over 1 MiB."
+}
