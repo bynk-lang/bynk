@@ -515,7 +515,7 @@ pub(in crate::emitter) fn lower_query_method(
         (QueryOp::Min | QueryOp::Max, 1) => arm.min_max(op == QueryOp::Min),
         (QueryOp::Average, 1) => arm.average(),
         (QueryOp::ForEach, 1) => arm.for_each(),
-        (QueryOp::ParTraverse, 1) => arm.par_traverse(),
+        (QueryOp::ParForEach, 1) => arm.par_for_each(),
         (QueryOp::TraverseAll, 1) => arm.traverse_all(),
         (QueryOp::ParTraverseAll, 1) => arm.par_traverse_all(),
         (QueryOp::TraverseTry, 1) => arm.traverse_try(),
@@ -885,7 +885,7 @@ impl Arm<'_> {
     // v0.107 (slice 4): the parallel broadcast form — issue the effectful fn over every
     // element concurrently and await them together, so one slow element does not
     // head-of-line-block the rest.
-    fn par_traverse(self) -> bynk_ts::TsExpr {
+    fn par_for_each(self) -> bynk_ts::TsExpr {
         self.built(|o, [f]| {
             let body = vec![expr_stmt(settled(f))];
             terminal_node(o, iife_over_q(true, body))
@@ -1012,7 +1012,7 @@ mod tests {
         (QueryOp::Max, &["key"], false),
         (QueryOp::Average, &["key"], false),
         (QueryOp::ForEach, &["f"], false),
-        (QueryOp::ParTraverse, &["f"], false),
+        (QueryOp::ParForEach, &["f"], false),
         (QueryOp::TraverseAll, &["f"], false),
         (QueryOp::ParTraverseAll, &["f"], false),
         (QueryOp::TraverseTry, &["f"], false),
@@ -1097,6 +1097,7 @@ mod tests {
             | QueryOp::Max
             | QueryOp::Average
             | QueryOp::ForEach
+            | QueryOp::ParForEach
             | QueryOp::ParTraverse
             | QueryOp::ParTraverseAll => None,
         }

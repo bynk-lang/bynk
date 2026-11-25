@@ -216,6 +216,7 @@ const WORKER_ORDER: &[&str] = &[
     "__serialiseAgentClass",
     "__agentBusyAfter",
     "__agentBusyResponse",
+    "__callAgentOutcome",
     "__serialiseAgentKey",
     "__dispatchToEventsFanout",
     "__sessionCookieOf",

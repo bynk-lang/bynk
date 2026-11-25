@@ -129,6 +129,22 @@ pub fn describe_delivery_at(source: &str, offset: usize) -> Option<String> {
     Some(format!("```bynk\ndelivery {{ {key}: … }}\n```\n\n{doc}"))
 }
 
+/// What `RetryAfter` hovers as (#3881).
+const RETRY_AFTER_DOC: &str = "```bynk\nRetryAfter(reason: String, delay: Duration) -> QueueResult\n```\n\nRetries the message after `delay`, which overrides the consumer's `retryDelay` for this message. Cloudflare retries after a whole number of seconds, 1 second to 24 hours: a delay written as a literal outside that range is `bynk.queue.retry_delay_out_of_range`, and a computed one is rounded up and clamped, with the clamp logged. `Retry(reason)` retries after the consumer's `retryDelay`, or at once when it has none. With `attempts` from a `QueueDelivery`, a handler can back off: `RetryAfter(\"unavailable\", 30.seconds * delivery.attempts)`.";
+
+/// Hover on a `RetryAfter` verdict. `None` anywhere else, so a user's own name
+/// `RetryAfter` (a declared variant, a binding) keeps its own hover, which
+/// resolves first.
+pub fn describe_retry_after_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let word = source.get(tokens[idx].span.start..tokens[idx].span.end)?;
+    (tokens[idx].kind == TokenKind::Ident && word == "RetryAfter")
+        .then(|| RETRY_AFTER_DOC.to_string())
+}
+
 /// The signature label of a queue service's test address, `svc.message(…)`: the
 /// message, and, when the handler declares a `QueueDelivery`, the optional
 /// delivery that follows it. `None` when `service` is not a queue consumer.
@@ -274,5 +290,18 @@ mod tests {
         assert!(in_message_param_name_position(t2, t2.len()));
         let t3 = "service w from queue(\"q\") {\n  on message(job: ";
         assert!(!in_message_param_name_position(t3, t3.len()));
+    }
+
+    #[test]
+    fn retry_after_hovers_with_its_payload_and_range() {
+        let src = "on message(m: String) -> Effect[QueueResult] { RetryAfter(\"x\", 30.seconds) }";
+        let at = src.find("RetryAfter").unwrap() + 2;
+        let hover = describe_retry_after_at(src, at).unwrap();
+        assert!(hover.contains("RetryAfter(reason: String, delay: Duration)"));
+        assert!(hover.contains("1 second to 24 hours"));
+        assert_eq!(
+            describe_retry_after_at(src, src.find("Effect").unwrap() + 1),
+            None
+        );
     }
 }

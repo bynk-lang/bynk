@@ -142,6 +142,7 @@ const TEST_MODULES = [
   "settle",
   "snapshot",
   "stub_overlay",
+  "stub_wire",
   "test_filter",
   "virtual_time",
 ];

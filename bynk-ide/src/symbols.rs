@@ -977,10 +977,11 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
 }
 
 /// The hover of a contextual word that only means something in its own shape: `advance`
-/// (#2137) and the `delivery` section of a queue consumer with its keys (#3877).
+/// (#2137) and the `delivery` section of a queue consumer with its keys (#3877) and a queue verdict's `RetryAfter` (#3881).
 pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String> {
     describe_advance_at(source, offset)
         .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
+        .or_else(|| crate::queue_delivery::describe_retry_after_at(source, offset))
 }
 
 /// #3191 (ADR 0161): hover for the contextual `by` where it is a clause word —

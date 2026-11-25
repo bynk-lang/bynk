@@ -32,6 +32,7 @@ suite app.web {
     let r <- intake.message(Item { sku: "" })
     match r {
       Retry(why) => expect why.length() == 9
+      RetryAfter(_, _) => expect false
       Ack => expect false
       Undecodable => expect false
     }

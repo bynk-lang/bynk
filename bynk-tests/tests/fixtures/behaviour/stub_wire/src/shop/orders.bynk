@@ -1,0 +1,20 @@
+context shop.orders
+
+consumes shop.pay as Pay
+
+service placeOrder {
+  on call(total: Int) -> Effect[Result[String, String]] by Caller {
+    let p <- Pay.authorise(total, 5)
+    match p {
+      Ok(receipt) => Effect.pure(Ok(receipt.id))
+      Err(e) => Effect.pure(Err(e))
+    }
+  }
+}
+
+service quote {
+  on call(base: Float) -> Effect[Float] by Caller {
+    let r <- Pay.rate(base)
+    Effect.pure(r)
+  }
+}

@@ -165,6 +165,35 @@ fn compile_fixture(
     }
 }
 
+/// #4190: a test module that stubs a consumed service at `integration` imports that context's
+/// wire codecs from the `workers` output, which `bynk test` overlays on the bundle output. Stage
+/// the same overlay (everything but the `tests/` tree) so the module's imports resolve.
+fn overlay_wire_workers(
+    dir: &Path,
+    compiled: &bynk_driver::project::ProjectOutput,
+    root: &Path,
+) -> Result<(), String> {
+    let imports_wire = compiled.artefacts.docs.iter().any(|(path, doc)| {
+        path.starts_with("tests") && doc.text().contains(bynk_emit::testgen::WIRE_IMPORT_MARK)
+    });
+    if !imports_wire {
+        return Ok(());
+    }
+    let workers = compile_fixture(dir, bynk_driver::project::BuildTarget::Workers)
+        .map_err(|e| bynk_driver::render::render_project_errors(&e))?;
+    for (path, doc) in &workers.artefacts.docs {
+        if path.starts_with("tests") {
+            continue;
+        }
+        let target = root.join(path);
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(&target, doc.text()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn write_outputs(out: &bynk_driver::project::ProjectOutput, root: &Path) -> std::io::Result<()> {
     for (path, doc) in &out.artefacts.docs {
         let target = root.join(path);
@@ -393,6 +422,9 @@ fn emitted_typescript_passes_tsc_strict() {
                 dir.display(),
                 fixture_root.display(),
             ));
+        }
+        if let Err(e) = overlay_wire_workers(dir, &compiled, &fixture_root) {
+            return Staging::Failed(format!("\n=== {} ===\n{e}", dir.display()));
         }
         Staging::Staged(name)
     });

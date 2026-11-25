@@ -1490,6 +1490,9 @@ into the storage capability the `store` fields already carry (no new `given`):
 | `.any(p)` / `.all(p)` | `Effect[Bool]` |
 | `.fold(init, f)` | `Effect[acc]` |
 | `.forEach(f)` | `Effect[()]` |
+| `.parForEach(f)` | `Effect[()]`, running the steps concurrently |
+
+On a `Query`, and so on a store or held `Map`, the concurrent step that returns `()` is `parForEach`, the name it has on a `List`. Before #4177 it was `parTraverse`; that spelling is now the error `bynk.query.par_traverse_renamed`, whose fix (`bynk check --fix`) renames the call. A `Query` has no value-returning `parTraverse`: `collect()` it, then `parTraverse` the list.
 
 ### Which terminals stop reading early
 
