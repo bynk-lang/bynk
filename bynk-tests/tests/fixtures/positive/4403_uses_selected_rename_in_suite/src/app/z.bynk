@@ -1,0 +1,7 @@
+commons app.z
+
+// #4403: a braced `uses` list that renames a name (`Status as XStatus`) is the spelling a
+// suite for this commons writes too, and a name the list leaves out (`Point`) still reaches it.
+uses lib.x { Status as XStatus }
+
+fn open() -> XStatus { Open }

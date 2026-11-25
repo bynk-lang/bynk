@@ -204,7 +204,10 @@ pub(super) fn emit_field_deserialise_wire(
             const_(
                 format!("__r_{name}"),
                 call(
-                    ident(format!("__deserialise_{type_name}")),
+                    ident(format!(
+                        "__deserialise_{}",
+                        bynk_check::emitted_names::codec_key(type_name)
+                    )),
                     [json.clone(), path.clone()]
                         .into_iter()
                         .chain(depth_arg(depth, type_name))
@@ -384,7 +387,10 @@ pub(super) fn serialise_field_expr_wire(
         // serialise through its own `serialise_<key>`. #2656: a codec on a
         // type cycle passes the nesting depth on to a callee on one.
         WireRef::Named { name: key } | WireRef::Inst { key } => call(
-            ident(format!("{ns}__serialise_{key}")),
+            ident(format!(
+                "{ns}__serialise_{}",
+                bynk_check::emitted_names::codec_key(key)
+            )),
             std::iter::once(value.clone())
                 .chain(depth_arg(depth, key))
                 .collect(),
