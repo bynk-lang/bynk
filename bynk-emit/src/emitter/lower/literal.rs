@@ -96,7 +96,7 @@ pub(super) fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lower
     // an empty chunk between adjacent holes.
     let mut chunks: Vec<String> = vec![String::new()];
     let mut holes: Vec<bynk_ts::TsExpr> = Vec::new();
-    let mut decimal_holes: Vec<bool> = Vec::new();
+    let mut wrappers: Vec<&str> = Vec::new();
     for part in parts {
         match part {
             InterpPart::Chunk(text) => {
@@ -107,35 +107,33 @@ pub(super) fn lower_interp_str(parts: &[InterpPart], cx: &mut LowerCtx) -> Lower
             InterpPart::Hole(hole) => {
                 holes.push(pre.lower_node(hole, cx));
                 // #2622: a `Decimal` prints as its canonical text, not as the
-                // host's `[object Object]`.
-                let decimal = cx
+                // host's `[object Object]`. #3977: an `Instant` and a `Duration` print as
+                // their `toString()` does.
+                let base = cx
                     .commons()
                     .expr_types
                     .get(&hole.id)
-                    .and_then(|te| te.ty.base(cx.commons().tys()))
-                    == Some(BaseType::Decimal);
-                if decimal {
+                    .and_then(|te| te.ty.base(cx.commons().tys()));
+                if base == Some(BaseType::Decimal) {
                     cx.note_decimal("__bynkDecimalToString");
                 }
-                decimal_holes.push(decimal);
+                wrappers.push(match base {
+                    Some(BaseType::Decimal) => "__bynkDecimalToString",
+                    Some(BaseType::Instant) => "__bynkInstantToIso",
+                    Some(BaseType::Duration) => "__bynkDurationToString",
+                    _ => "String",
+                });
                 chunks.push(String::new());
             }
         }
     }
-    let wrapper = |decimal: bool| {
-        if decimal {
-            "__bynkDecimalToString"
-        } else {
-            "String"
-        }
-    };
     let built = {
         let nodes = holes;
         let exprs = nodes
             .into_iter()
-            .zip(&decimal_holes)
-            .map(|(hole, d)| bynk_ts::TsExpr::Call {
-                callee: Box::new(ident(wrapper(*d))),
+            .zip(&wrappers)
+            .map(|(hole, w)| bynk_ts::TsExpr::Call {
+                callee: Box::new(ident(*w)),
                 args: vec![hole],
             })
             .collect();

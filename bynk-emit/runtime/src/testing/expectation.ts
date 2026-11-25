@@ -58,7 +58,16 @@ export function __bynkShow(v: unknown): string {
     const leaf = __bynkShowLeaf(v);
     if (typeof leaf === "string" && leaf !== v) return leaf;
     if (Array.isArray(v)) return "[" + v.map((e) => __bynkShow(e)).join(",") + "]";
+    // #4120: a set and a map print as the `Set.of` and `Map.of` that builds them.
+    if (v instanceof Set) return "Set.of([" + [...v].map((e) => __bynkShow(e)).join(",") + "])";
+    if (v instanceof Map) {
+      return "Map.of([" + [...v].map(([k, x]) => "{\"key\":" + __bynkShow(k) + ",\"value\":" + __bynkShow(x) + "}").join(",") + "])";
+    }
     if (v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype) {
+      // An `Option` prints as it is written.
+      const keys = Object.keys(v);
+      if ((v as any).tag === "None" && keys.length === 1) return "None";
+      if ((v as any).tag === "Some" && keys.length === 2 && keys.includes("value")) return "Some(" + __bynkShow((v as any).value) + ")";
       return "{" + Object.keys(v).map((k) => JSON.stringify(k) + ":" + __bynkShow((v as any)[k])).join(",") + "}";
     }
     return JSON.stringify(v) ?? String(v);
@@ -99,7 +108,10 @@ export function __bynkShowTyped(v: unknown, shape: any): string {
       const obj = v as any;
       switch (shape[0]) {
         case "l": if (Array.isArray(v)) return "[" + v.map((e) => __bynkShowTyped(e, shape[1])).join(",") + "]"; break;
-        case "o": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1] }); break;
+        case "o":
+          if (obj !== null && typeof obj === "object" && obj.tag === "None") return "None";
+          if (obj !== null && typeof obj === "object" && obj.tag === "Some") return "Some(" + __bynkShowTyped(obj.value, shape[1]) + ")";
+          break;
         case "res": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, { value: shape[1], error: shape[2] }); break;
         case "r": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1]); break;
         case "s": if (obj !== null && typeof obj === "object") return __bynkShowFields(obj, shape[1][obj.tag] ?? {}); break;

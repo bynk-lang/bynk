@@ -2,3 +2,5 @@ User-agent: *
 Allow: /
 
 Sitemap: https://bynk-lang.org/sitemap-index.xml
+# The blog is its own site, served at /blog/ (bynk-lang/blog).
+Sitemap: https://bynk-lang.org/blog/sitemap-index.xml

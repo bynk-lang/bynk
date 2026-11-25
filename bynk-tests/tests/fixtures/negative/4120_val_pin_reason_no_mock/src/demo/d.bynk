@@ -1,0 +1,3 @@
+commons demo.d
+
+type Order = { id: String, r: Result[Int, String] }

@@ -72,7 +72,7 @@ service sweeper from cron {
 
 // Queue wrapper: the message param binds as const __id_class.
 service outbox from queue("jobs") {
-  on message(class: String) -> Effect[QueueResult] {
+  on message(class: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

@@ -268,7 +268,7 @@ fn inferred(id: Int) -> Effect[Result[String, String]] { fetch(id).mapOk((n) => 
 /// `Retry("x")` instead of `Ack` prints as the `QueueResult.Retry(...)` call.
 #[test]
 fn a_queue_result_variant_call_is_a_node() {
-    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] {\n\t\tRetry(\"x\")\n\t}\n}\n";
+    let src = "context ops.jobs\n\nservice inbox from queue(\"jobs\") {\n\ton message(n: Int) -> Effect[QueueResult] by Producer {\n\t\tRetry(\"x\")\n\t}\n}\n";
     let text = mem(src);
     assert!(text.contains("QueueResult.Retry(\"x\")"), "{text}");
 }

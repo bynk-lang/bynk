@@ -1750,6 +1750,10 @@
       "summary": "A service declares more than one `delivery { }` policy."
     },
     {
+      "code": "bynk.parse.duplicate_errors",
+      "summary": "A service declares more than one `errors { }` policy."
+    },
+    {
       "code": "bynk.parse.duplicate_json",
       "summary": "A service declares more than one `json { }` policy."
     },
@@ -1978,6 +1982,10 @@
     {
       "code": "bynk.uses.target_is_context",
       "summary": "`uses` targets a context instead of a commons."
+    },
+    {
+      "code": "bynk.uses.test_only_commons",
+      "summary": "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`."
     },
     {
       "code": "bynk.uses.unknown_commons",

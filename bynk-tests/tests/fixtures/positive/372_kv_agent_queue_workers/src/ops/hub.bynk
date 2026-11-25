@@ -20,7 +20,7 @@ agent JobLedger {
 }
 
 service intake from queue("job-intake") {
-  on message(message: Job) -> Effect[QueueResult] given Kv {
+  on message(message: Job) -> Effect[QueueResult] by Producer given Kv {
     let _ <- Kv.put(message.id, message.payload)
     Ack
   }

@@ -565,11 +565,36 @@ pub(crate) fn check_val(
                     CompileError::new(
                         "bynk.val.needs_pin",
                         span,
-                        format!(
-                            "bare `Val[{name}]` cannot generate a value — it (transitively) needs a `Matches` refinement or is recursively unbounded"
-                        ),
+                        match mock_pin_reason(ty, &ctx.input.types, MOCK_DEPTH, tys) {
+                            Some(why) => format!("bare `Val[{name}]` cannot generate a value: {why}"),
+                            None => format!(
+                                "bare `Val[{name}]` cannot generate a value: it is recursively unbounded"
+                            ),
+                        },
                     )
                     .with_note("provide an explicit value in the test instead"),
+                );
+            }
+        }
+        // #4120: bare `Val` of a collection or an option is the empty one.
+        Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => {
+            if !is_value_type(ty, tys) {
+                ctx.errors.push(CompileError::new(
+                    "bynk.val.unsupported_kind",
+                    span,
+                    format!("`Val` is not a value type: `{}`", ty.display(tys)),
+                ));
+            } else if !args.is_empty() {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.val.pin_unsupported",
+                        span,
+                        format!(
+                            "pinned `Val[{}](...)` is not supported for a collection or an option — use bare `Val`",
+                            ty.display(tys)
+                        ),
+                    )
+                    .with_note("a bare `Val` of one is the empty collection, or `None`"),
                 );
             }
         }
@@ -643,6 +668,80 @@ fn can_mock_bare(
                 }),
             }
         }
+        // #4120: `Val`'s fixed choice for a collection or an option is the empty one (`[]`, an empty
+        // set or map, `None`), which needs nothing of the elements.
+        Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => true,
+        _ => false,
+    }
+}
+
+/// #4120: why a bare `Val` cannot be built for `ty`, as the path to the part that cannot
+/// (`Order.code: Code: needs a pin`), or `None` when the cause is recursion or unknown.
+fn mock_pin_reason(
+    ty: TyId,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    depth: u32,
+    tys: &Types,
+) -> Option<String> {
+    if depth == 0 {
+        return None;
+    }
+    let component = |t: &TypeRef| {
+        resolve_type_ref(t, types, tys).and_then(|t| mock_pin_reason(t, types, depth - 1, tys))
+    };
+    let Ty::Named { name, .. } = &*tys.get(ty) else {
+        // A base type and a collection or option always have a value; anything else has none.
+        return match &*tys.get(ty) {
+            Ty::Base(_) | Ty::List(_) | Ty::Set(_) | Ty::Map(..) | Ty::Option(_) => None,
+            _ => Some(format!("`{}` cannot be fabricated", ty.display(tys))),
+        };
+    };
+    match &types.get(name.as_str())?.body {
+        TypeBody::Refined { refinement, .. } => refinement
+            .as_ref()
+            .is_some_and(refinement_needs_pin_without_example)
+            .then(|| format!("`{name}` has a `Matches`, `IsoDate` or `Cron` refinement")),
+        TypeBody::Opaque { .. } => None,
+        TypeBody::Sum(s) => s
+            .variants
+            .first()
+            .and_then(|v| v.payload.iter().find_map(|f| component(&f.type_ref))),
+        TypeBody::Record(r) => r.fields.iter().find_map(|f| {
+            if f.refinement
+                .as_ref()
+                .is_some_and(refinement_needs_pin_without_example)
+            {
+                return Some(format!(
+                    "`{name}.{}` has a `Matches`, `IsoDate` or `Cron` refinement",
+                    f.name.name
+                ));
+            }
+            // #2686: a named type's `@example` is checked against that type alone, so a field that
+            // narrows it with inline predicates needs a pin.
+            if f.refinement.is_some()
+                && let TypeRef::Named(id) = &f.type_ref
+                && types
+                    .get(&id.name)
+                    .and_then(|d| type_decl_refinement(d))
+                    .is_some_and(refinement_needs_pin)
+            {
+                return Some(format!(
+                    "`{name}.{}` narrows `{}`, whose `@example` was checked against `{}` alone",
+                    f.name.name, id.name, id.name
+                ));
+            }
+            component(&f.type_ref).map(|why| format!("`{name}.{}`: {why}", f.name.name))
+        }),
+    }
+}
+
+/// #4120: whether `Val` can name `ty`: a base type, a declared type, or a collection or option
+/// of one. Anything else is not a value type (`Val[Result[Int, String]]`).
+fn is_value_type(ty: TyId, tys: &Types) -> bool {
+    match &*tys.get(ty) {
+        Ty::Base(_) | Ty::Named { .. } => true,
+        Ty::List(t) | Ty::Set(t) | Ty::Option(t) => is_value_type(*t, tys),
+        Ty::Map(k, v) => is_value_type(*k, tys) && is_value_type(*v, tys),
         _ => false,
     }
 }
@@ -6175,7 +6274,7 @@ mod retry_after_tests {
 
     fn verdict(expr: &str) -> Vec<&'static str> {
         let source = format!(
-            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] {{ {expr} }}\n}}\n"
+            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] by Producer {{ {expr} }}\n}}\n"
         );
         analyse(&[("t/q.bynk", &source)]).categories()
     }

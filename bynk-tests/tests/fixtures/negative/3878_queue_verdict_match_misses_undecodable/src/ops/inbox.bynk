@@ -5,7 +5,7 @@ type Job = { id: String }
 service inbox from queue("jobs") {
   delivery { deadLetter: None }
 
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

@@ -318,6 +318,10 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
     if let Some(content) = crate::symbols::describe_private_at(text, span.start) {
         return Some(content);
     }
+    // 5a'''. #3984: the `tests` of a `commons x.y for tests` header.
+    if let Some(content) = crate::symbols::describe_test_only_at(text, span.start) {
+        return Some(content);
+    }
     // 5a''. #2841: the contextual `fixture` of a suite `fixture` declaration.
     if let Some(content) = crate::symbols::describe_fixture_at(text, span.start) {
         return Some(content);
@@ -1086,6 +1090,14 @@ mod tests {
                 "{h}"
             );
         }
+    }
+
+    /// #3984: the `tests` of a test-only commons' header hovers with what the marker means.
+    #[test]
+    fn a_test_only_commons_marker_hovers() {
+        let src = "commons shop.kit for tests\n\nconst Start: Int = 1\n";
+        let h = hover_at(src, "tests", 0).expect("`tests` hovers");
+        assert!(h.contains("test-only commons"), "{h}");
     }
 
     /// #2620: the ambient fault built-ins hover with their signature and doc; a

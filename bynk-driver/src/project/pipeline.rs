@@ -547,6 +547,7 @@ pub(super) fn run_checks(
     if !tests {
         parsed.retain(|pf| !matches!(pf.kind(), UnitKind::Test | UnitKind::Integration));
     }
+    project_model::phase_test_only_commons(&mut parsed, tests, &mut errors); // #3984
     // #3243: `parsed` is final here. Register its files once, so the per-unit
     // attribution in `check_unit_files` does not re-register every file for every unit.
     errors.register_parsed(&parsed);
@@ -1142,6 +1143,8 @@ pub(super) fn run_checks(
     // (K4): its binding is Web Crypto over the test's own bytes, deterministic and
     // I/O-free, so a test runs it for real and a fake would check nothing.
     let test_binding_modules = test_binding_modules(&adapter_bindings);
+    // #3984: a suite's test-only commons are reached through its target's view.
+    let test_uses = project_model::unit_uses_with_suite_uses(&unit_uses, &parsed);
     let (test_outputs, runnable_tests) = process_tests(
         &test_groups,
         &parsed,
@@ -1150,7 +1153,7 @@ pub(super) fn run_checks(
         &exports_visibility,
         &unit_consumes,
         &unit_consumes_aliases,
-        &unit_uses,
+        &test_uses,
         &broken,
         &unit_flattened,
         &groups,

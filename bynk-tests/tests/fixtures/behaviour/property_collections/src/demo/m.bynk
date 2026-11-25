@@ -1,0 +1,4 @@
+commons demo.m
+
+type Order = { id: String, lines: List[Int], note: Option[String] }
+type Tagged = { tags: Set[String], counts: Map[String, Int] }

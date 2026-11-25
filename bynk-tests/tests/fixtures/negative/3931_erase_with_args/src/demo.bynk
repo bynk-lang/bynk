@@ -1,0 +1,11 @@
+context demo
+
+// #3931: `self.erase` takes no arguments.
+agent Session {
+  key id: String
+  store n: Cell[Int]
+
+  on call drop() -> Effect[()] {
+    self.erase(1)
+  }
+}

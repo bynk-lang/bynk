@@ -4,7 +4,7 @@
   "categoryAnchor": "queue",
   "code": "bynk.queue.retry_delay_out_of_range",
   "constructs": [],
-  "example": "on message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
+  "example": "on message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
   "severity": "error",
   "summary": "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours."
 }
