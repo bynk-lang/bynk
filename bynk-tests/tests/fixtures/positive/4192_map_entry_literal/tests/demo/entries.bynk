@@ -1,0 +1,33 @@
+suite demo.entries
+
+case "a MapEntry literal builds a map" {
+	let m = single()
+	expect m.length() == 1
+	expect m.get("a") == Some(1)
+}
+
+case "entries built from computed pairs, a later entry replacing an earlier one" {
+	let m = fromEntries([
+		MapEntry { key: "x", value: 1 },
+		MapEntry { key: "y", value: 2 },
+		MapEntry { key: "x", value: 3 },
+	])
+	expect m.keys() == ["x", "y"]
+	expect m.get("x") == Some(3)
+}
+
+case "entries computed from a list of records" {
+	let m = byId([User { id: "u1", age: 30 }, User { id: "u2", age: 41 }])
+	expect m.keys() == ["u1", "u2"]
+	expect m.getOrElse("u2", User { id: "?", age: 0 }).age == 41
+}
+
+case "a MapEntry is a nameable type with key and value fields" {
+	expect keyOf(MapEntry { key: "k", value: 9 }) == "k"
+}
+
+case "entries of one map rebuilt with new values" {
+	let m = doubled(Map.of([MapEntry { key: "a", value: 1 }, MapEntry { key: "b", value: 5 }]))
+	expect m.get("a") == Some(2)
+	expect m.get("b") == Some(10)
+}

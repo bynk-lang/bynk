@@ -3385,7 +3385,7 @@ pub(crate) fn check_record_construction(
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
-    let decl = ctx.input.types.get(&type_name.name)?.clone();
+    let decl = crate::prelude_record::lookup(&type_name.name, &ctx.input.types)?;
     ctx.refs
         .record(type_name.span, SymbolKind::Type, &type_name.name);
     // An opaque type built with record-literal syntax is reported by the

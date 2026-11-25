@@ -353,6 +353,20 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         // v0.157 (ADR 0183): `Name[Arg, …]` lowers to the erased TS generic
         // `Name<Arg, …>` — the generic record's interface is emitted with the
         // same type parameters (like a generic function's erased `<A, B>`).
+        // #4192: the prelude `MapEntry[K, V]` has no declaration to name, so a written
+        // `MapEntry[K, V]` renders as its own shape, as the checked type does below.
+        TypeRef::App { name, args, .. } if name.name == MAP_ENTRY && args.len() == 2 => {
+            TsType::Object(vec![
+                bynk_ts::TsTypeMember::readonly_prop(
+                    "key",
+                    ts_type_ref_to_ts_type(&args[0], qualify),
+                ),
+                bynk_ts::TsTypeMember::readonly_prop(
+                    "value",
+                    ts_type_ref_to_ts_type(&args[1], qualify),
+                ),
+            ])
+        }
         TypeRef::App { name, args, .. } => {
             // Review of #1315/#1316: pre-slice this arm interpolated `head`
             // unconditionally, so a hypothetical empty-args `App` rendered

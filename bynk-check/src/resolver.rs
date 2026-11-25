@@ -3290,7 +3290,7 @@ fn check_type_ref_resolves_in(
         // Validate existence, that the target is generic, and arity; then walk
         // the arguments.
         TypeRef::App { name, args, span } => {
-            match types.get(&name.name) {
+            match crate::prelude_record::lookup(&name.name, types).as_deref() {
                 None if type_params.contains(&name.name) => {
                     // A type parameter applied to arguments (`T[Int]`) — a type
                     // parameter is not itself generic (no higher-kinded types).
@@ -4359,7 +4359,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::RecordConstruction {
             type_name, fields, ..
         } => {
-            match cx.types.get(&type_name.name) {
+            match crate::prelude_record::lookup(&type_name.name, cx.types).as_deref() {
                 Some(decl) => {
                     cx.errors
                         .refs
