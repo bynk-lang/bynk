@@ -641,25 +641,54 @@ pub struct ShadowedImport {
     pub local_span: Span,
     /// #4045: for a name two used commons both declare (`imported` is
     /// `"ambiguous"`), the qualified spelling of each, which the diagnostic lists.
-    pub ambiguous: Vec<String>,
+    pub ambiguous: Vec<crate::uses_view::AmbiguousProvider>,
 }
 
 /// #4045: `bynk.uses.ambiguous_name` for a bare reference to `name`, which
 /// more than one used commons declares.
-fn ambiguous_name_error(name: &str, span: Span, forms: &[String]) -> CompileError {
-    let listed = forms
+fn ambiguous_name_error(
+    name: &str,
+    span: Span,
+    providers: &[crate::uses_view::AmbiguousProvider],
+) -> CompileError {
+    let listed = providers
         .iter()
-        .map(|f| format!("`{f}`"))
+        .map(|p| format!("`{}`", p.form))
         .collect::<Vec<_>>()
         .join(" or ");
-    CompileError::new(
+    let mut err = CompileError::new(
         "bynk.uses.ambiguous_name",
         span,
         format!("`{name}` is declared by more than one used commons: write {listed}"),
     )
     .with_note(format!(
         "alias one commons (`uses lib.y as Y`, then `Y.{name}`), or select the one you mean (`uses lib.y {{ {name} }}`)"
-    ))
+    ));
+    // A fix edits the clause that brings the whole commons in, so it only offers
+    // itself where that clause is in the file the reference is in. Selecting the
+    // name from one commons outranks the rest, whatever their number; aliasing one
+    // commons settles it only when exactly two declare the name.
+    for p in providers {
+        let Some(at) = p.clause_end.filter(|at| at.file == span.file) else {
+            continue;
+        };
+        if providers.len() == 2 {
+            err = err.with_suggestion(
+                format!("alias `{}` as `{}`", p.target, p.alias),
+                vec![(at, format!(" as {}", p.alias))],
+                Applicability::MaybeIncorrect,
+            );
+        }
+        err = err.with_suggestion(
+            format!(
+                "select `{name}` from `{}` (only the names you list stay in scope)",
+                p.target
+            ),
+            vec![(at, format!(" {{ {} }}", p.name))],
+            Applicability::MaybeIncorrect,
+        );
+    }
+    err
 }
 
 /// `bynk.uses.name_conflict` for a reference to `name`, a shadowed import.

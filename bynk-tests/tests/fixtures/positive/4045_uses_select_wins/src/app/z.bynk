@@ -1,0 +1,10 @@
+commons app.z
+
+// #4045: a name a braced list selects outranks the same name from a whole `uses`, so
+// `Status` here is lib.y's, while lib.x's own functions still read its `Status`.
+uses lib.x
+uses lib.y { Status, level }
+
+fn f(s: Status) -> Int { level(s) }
+
+fn g(s: lib.x.Status) -> String { describe(s) }
