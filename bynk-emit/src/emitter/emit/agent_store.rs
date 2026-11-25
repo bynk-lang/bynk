@@ -511,7 +511,7 @@ pub(super) fn composite_store_keys(
         for arg in f
             .annotations
             .iter()
-            .filter(|an| an.name.name == "indexed")
+            .filter(|an| matches!(an.name.name.as_str(), "indexed" | "unique"))
             .flat_map(|an| &an.args)
         {
             if let ExprKind::Ident(by) = &arg.value.kind
@@ -523,6 +523,61 @@ pub(super) fn composite_store_keys(
         }
     }
     (keys, indexes)
+}
+
+/// #4038: one `@unique(by: field)` of the `Map` `map`: the index is enforced at commit.
+#[derive(Debug, Clone)]
+pub(crate) struct UniqueIndex {
+    pub(crate) map: String,
+    pub(crate) field: String,
+    /// `Some(inner_composite)` when the field is an `Option`: a `None` is not indexed, and the
+    /// posting is keyed by the `Some` payload (its canonical encoding when `inner_composite`).
+    pub(crate) optional: Option<bool>,
+    /// The annotation's `by:` argument, for the violation's location.
+    pub(crate) span: bynk_syntax::span::Span,
+}
+
+/// #4038: the `@unique(by:)` indexes of `a`, in declaration order.
+pub(super) fn unique_store_indexes(
+    a: &AgentDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> Vec<UniqueIndex> {
+    let scalar = |t: &TypeRef| bynk_check::context_checks::type_ref_is_scalar_store_key(t, types);
+    let mut out = Vec::new();
+    for f in a.store_fields.iter().filter(|f| f.kind.head.name == "Map") {
+        let record = if let Some(TypeRef::Named(v)) = f.kind.args.get(1)
+            && let Some(TypeBody::Record(r)) = types.get(&v.name).map(|d| &d.body)
+        {
+            r
+        } else {
+            continue;
+        };
+        for arg in f
+            .annotations
+            .iter()
+            .filter(|an| an.name.name == "unique")
+            .flat_map(|an| &an.args)
+        {
+            let ExprKind::Ident(by) = &arg.value.kind else {
+                continue;
+            };
+            let Some(rf) = record.fields.iter().find(|rf| rf.name.name == by.name) else {
+                continue;
+            };
+            let optional = if let TypeRef::Option(inner, _) = &rf.type_ref {
+                Some(!scalar(inner))
+            } else {
+                None
+            };
+            out.push(UniqueIndex {
+                map: f.name.name.clone(),
+                field: by.name.clone(),
+                optional,
+                span: arg.value.span,
+            });
+        }
+    }
+    out
 }
 
 /// True when a type's base is `String` — directly, or through a named refined /
@@ -792,6 +847,8 @@ pub(crate) struct AgentStoreLayout<'a> {
     /// field (see [`composite_store_keys`]).
     pub(crate) composite_keys: HashSet<String>,
     pub(crate) composite_indexes: HashSet<(String, String)>,
+    /// #4038: the `@unique(by:)` indexes, enforced at commit.
+    pub(crate) unique_indexes: Vec<UniqueIndex>,
 }
 
 /// Classify an agent's `store` fields (see [`AgentStoreLayout`]).
@@ -1076,6 +1133,7 @@ pub(super) fn classify_agent_store<'a>(
         })
         .collect();
     let (composite_keys, composite_indexes) = composite_store_keys(a, &commons.types);
+    let unique_indexes = unique_store_indexes(a, &commons.types);
     AgentStoreLayout {
         state,
         all_held_maps,
@@ -1098,5 +1156,6 @@ pub(super) fn classify_agent_store<'a>(
         log_value_ts,
         composite_keys,
         composite_indexes,
+        unique_indexes,
     }
 }

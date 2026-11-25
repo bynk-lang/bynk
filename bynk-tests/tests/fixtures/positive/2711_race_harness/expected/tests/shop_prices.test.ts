@@ -94,10 +94,12 @@ class __Stub_Prices {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
+    const __arg_0 = region;
+    const __arg_1 = sku;
     const __pv_0_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "the faster mirror wins" && __bynkEq(region, __pv_0_0)) {
+    if (this.__case === "the faster mirror wins" && __bynkEq(__arg_0, __pv_0_0)) {
       const __after_0 = await (async () => {
         return 2000;
       })();
@@ -107,7 +109,7 @@ class __Stub_Prices {
     const __pv_1_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "the faster mirror wins" && __bynkEq(region, __pv_1_0)) {
+    if (this.__case === "the faster mirror wins" && __bynkEq(__arg_0, __pv_1_0)) {
       const __after_1 = await (async () => {
         return 1000;
       })();
@@ -117,7 +119,7 @@ class __Stub_Prices {
     const __pv_2_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "the receiver wins when it is faster" && __bynkEq(region, __pv_2_0)) {
+    if (this.__case === "the receiver wins when it is faster" && __bynkEq(__arg_0, __pv_2_0)) {
       const __after_2 = await (async () => {
         return 1000;
       })();
@@ -127,7 +129,7 @@ class __Stub_Prices {
     const __pv_3_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "the receiver wins when it is faster" && __bynkEq(region, __pv_3_0)) {
+    if (this.__case === "the receiver wins when it is faster" && __bynkEq(__arg_0, __pv_3_0)) {
       const __after_3 = await (async () => {
         return 2000;
       })();
@@ -137,13 +139,13 @@ class __Stub_Prices {
     const __pv_4_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "a fast fault loses to a slower success" && __bynkEq(region, __pv_4_0)) {
+    if (this.__case === "a fast fault loses to a slower success" && __bynkEq(__arg_0, __pv_4_0)) {
       throw new globalThis.Error("bynk: injected capability fault (stubs … fails)");
     }
     const __pv_5_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "a fast fault loses to a slower success" && __bynkEq(region, __pv_5_0)) {
+    if (this.__case === "a fast fault loses to a slower success" && __bynkEq(__arg_0, __pv_5_0)) {
       const __after_5 = await (async () => {
         return 3000;
       })();
@@ -153,13 +155,13 @@ class __Stub_Prices {
     const __pv_6_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "a fast fault in the receiver loses to a slower success too" && __bynkEq(region, __pv_6_0)) {
+    if (this.__case === "a fast fault in the receiver loses to a slower success too" && __bynkEq(__arg_0, __pv_6_0)) {
       throw new globalThis.Error("bynk: injected capability fault (stubs … fails)");
     }
     const __pv_7_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "a fast fault in the receiver loses to a slower success too" && __bynkEq(region, __pv_7_0)) {
+    if (this.__case === "a fast fault in the receiver loses to a slower success too" && __bynkEq(__arg_0, __pv_7_0)) {
       const __after_7 = await (async () => {
         return 3000;
       })();
@@ -172,7 +174,7 @@ class __Stub_Prices {
     const __pv_9_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "a same-instant tie goes to the receiver" && __bynkEq(region, __pv_9_0)) {
+    if (this.__case === "a same-instant tie goes to the receiver" && __bynkEq(__arg_0, __pv_9_0)) {
       const __after_9 = await (async () => {
         return 1000;
       })();
@@ -182,7 +184,7 @@ class __Stub_Prices {
     const __pv_10_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "a same-instant tie goes to the receiver" && __bynkEq(region, __pv_10_0)) {
+    if (this.__case === "a same-instant tie goes to the receiver" && __bynkEq(__arg_0, __pv_10_0)) {
       const __after_10 = await (async () => {
         return 1000;
       })();
@@ -192,7 +194,7 @@ class __Stub_Prices {
     const __pv_11_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "a same-instant tie in a chain goes to the earliest side" && __bynkEq(region, __pv_11_0)) {
+    if (this.__case === "a same-instant tie in a chain goes to the earliest side" && __bynkEq(__arg_0, __pv_11_0)) {
       const __after_11 = await (async () => {
         return 1000;
       })();
@@ -202,7 +204,7 @@ class __Stub_Prices {
     const __pv_12_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "a same-instant tie in a chain goes to the earliest side" && __bynkEq(region, __pv_12_0)) {
+    if (this.__case === "a same-instant tie in a chain goes to the earliest side" && __bynkEq(__arg_0, __pv_12_0)) {
       const __after_12 = await (async () => {
         return 5000;
       })();
@@ -212,7 +214,7 @@ class __Stub_Prices {
     const __pv_13_0 = await (async () => {
       return "north";
     })();
-    if (this.__case === "a same-instant tie in a chain goes to the earliest side" && __bynkEq(region, __pv_13_0)) {
+    if (this.__case === "a same-instant tie in a chain goes to the earliest side" && __bynkEq(__arg_0, __pv_13_0)) {
       const __after_13 = await (async () => {
         return 1000;
       })();
@@ -222,7 +224,7 @@ class __Stub_Prices {
     const __pv_14_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "the third of a chain can win" && __bynkEq(region, __pv_14_0)) {
+    if (this.__case === "the third of a chain can win" && __bynkEq(__arg_0, __pv_14_0)) {
       const __after_14 = await (async () => {
         return 5000;
       })();
@@ -232,7 +234,7 @@ class __Stub_Prices {
     const __pv_15_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "the third of a chain can win" && __bynkEq(region, __pv_15_0)) {
+    if (this.__case === "the third of a chain can win" && __bynkEq(__arg_0, __pv_15_0)) {
       const __after_15 = await (async () => {
         return 4000;
       })();
@@ -242,7 +244,7 @@ class __Stub_Prices {
     const __pv_16_0 = await (async () => {
       return "north";
     })();
-    if (this.__case === "the third of a chain can win" && __bynkEq(region, __pv_16_0)) {
+    if (this.__case === "the third of a chain can win" && __bynkEq(__arg_0, __pv_16_0)) {
       const __after_16 = await (async () => {
         return 1000;
       })();
@@ -252,7 +254,7 @@ class __Stub_Prices {
     const __pv_17_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "the loser is still recorded" && __bynkEq(region, __pv_17_0)) {
+    if (this.__case === "the loser is still recorded" && __bynkEq(__arg_0, __pv_17_0)) {
       const __after_17 = await (async () => {
         return 9000;
       })();
@@ -262,7 +264,7 @@ class __Stub_Prices {
     const __pv_18_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "the loser is still recorded" && __bynkEq(region, __pv_18_0)) {
+    if (this.__case === "the loser is still recorded" && __bynkEq(__arg_0, __pv_18_0)) {
       const __after_18 = await (async () => {
         return 1000;
       })();
@@ -272,7 +274,7 @@ class __Stub_Prices {
     const __pv_19_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "race then within: the race wins inside the deadline" && __bynkEq(region, __pv_19_0)) {
+    if (this.__case === "race then within: the race wins inside the deadline" && __bynkEq(__arg_0, __pv_19_0)) {
       const __after_19 = await (async () => {
         return 5000;
       })();
@@ -282,7 +284,7 @@ class __Stub_Prices {
     const __pv_20_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "race then within: the race wins inside the deadline" && __bynkEq(region, __pv_20_0)) {
+    if (this.__case === "race then within: the race wins inside the deadline" && __bynkEq(__arg_0, __pv_20_0)) {
       const __after_20 = await (async () => {
         return 1000;
       })();
@@ -298,7 +300,7 @@ class __Stub_Prices {
     const __pv_22_1 = await (async () => {
       return 1;
     })();
-    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(region, __pv_22_0) && __bynkEq(sku, __pv_22_1)) {
+    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(__arg_0, __pv_22_0) && __bynkEq(__arg_1, __pv_22_1)) {
       const __after_22 = await (async () => {
         return 2000;
       })();
@@ -311,7 +313,7 @@ class __Stub_Prices {
     const __pv_23_1 = await (async () => {
       return 1;
     })();
-    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(region, __pv_23_0) && __bynkEq(sku, __pv_23_1)) {
+    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(__arg_0, __pv_23_0) && __bynkEq(__arg_1, __pv_23_1)) {
       const __after_23 = await (async () => {
         return 1000;
       })();
@@ -324,7 +326,7 @@ class __Stub_Prices {
     const __pv_24_1 = await (async () => {
       return 2;
     })();
-    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(region, __pv_24_0) && __bynkEq(sku, __pv_24_1)) {
+    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(__arg_0, __pv_24_0) && __bynkEq(__arg_1, __pv_24_1)) {
       const __after_24 = await (async () => {
         return 1000;
       })();
@@ -337,7 +339,7 @@ class __Stub_Prices {
     const __pv_25_1 = await (async () => {
       return 2;
     })();
-    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(region, __pv_25_0) && __bynkEq(sku, __pv_25_1)) {
+    if (this.__case === "a lambda in the handler races each element alone" && __bynkEq(__arg_0, __pv_25_0) && __bynkEq(__arg_1, __pv_25_1)) {
       const __after_25 = await (async () => {
         return 2000;
       })();
@@ -347,7 +349,7 @@ class __Stub_Prices {
     const __pv_26_0 = await (async () => {
       return "east";
     })();
-    if (this.__case === "a latency stub decides the race at integration" && __bynkEq(region, __pv_26_0)) {
+    if (this.__case === "a latency stub decides the race at integration" && __bynkEq(__arg_0, __pv_26_0)) {
       const __after_26 = await (async () => {
         return 2000;
       })();
@@ -357,7 +359,7 @@ class __Stub_Prices {
     const __pv_27_0 = await (async () => {
       return "west";
     })();
-    if (this.__case === "a latency stub decides the race at integration" && __bynkEq(region, __pv_27_0)) {
+    if (this.__case === "a latency stub decides the race at integration" && __bynkEq(__arg_0, __pv_27_0)) {
       const __after_27 = await (async () => {
         return 1000;
       })();

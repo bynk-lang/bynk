@@ -36,10 +36,11 @@ class __Stub_Clock {
 
 class __Stub_Rates {
   async lookup(code: string): globalThis.Promise<number> {
+    const __arg_0 = code;
     const __pv_0_0 = await (async () => {
       return "GBP";
     })();
-    if (__bynkEq(code, __pv_0_0)) {
+    if (__bynkEq(__arg_0, __pv_0_0)) {
       return 125;
     }
     if (true) {
