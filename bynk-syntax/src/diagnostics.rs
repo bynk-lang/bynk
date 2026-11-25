@@ -2309,8 +2309,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.history.not_generable",
-        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
-        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
+        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern with a lookahead, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
+        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"(?=[A-Z])[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
     },
     Explain {
         code: "bynk.history.outside_property",
@@ -2321,6 +2321,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.history.restates_invariant",
         blurb: "Every state a driven run reaches has already passed the agent's `invariant` and `transition` checks, so a history property that only asserts the same thing over `run` cannot fail. The compiler flags it, and the check is deliberately narrow, so a near-copy may pass. Assert something the per-state rules do not say, such as a protocol across steps: a spend is accepted only after a top-up.",
         example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
+    },
+    Explain {
+        code: "bynk.http.body_cap_defaulted",
+        blurb: "Every body-taking HTTP route has a request-body cap, 1 MiB (1,048,576 bytes) unless the route's `@limit(maxBody: …)` or the service's `limits { maxBody: … }` says otherwise. This hint lists, once per service, the routes that take the default, so a service that used to accept larger bodies finds out at build and not in production: a larger body is answered `413`, and its `details` say that `@limit(maxBody: …)` raises the cap. It is a hint, not an error: if 1 MiB is what you want, leave it, or state it with `limits { maxBody: 1_048_576 }` to silence the hint. A `@raw` route has no default and must declare its cap (`bynk.http.raw_body_unbounded`).",
+        example: "type Import = { rows: List[String] }\n\nservice api from http {\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }   // hint: takes the default 1 MiB cap\n}\n\nservice api from http {\n    @limit(maxBody: 26_214_400)   // ✓ the cap is stated\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.body_kind_conflict",
@@ -2627,11 +2632,6 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.limits_unknown_field",
         blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
-    },
-    Explain {
-        code: "bynk.http.multipart_body_unbounded",
-        blurb: "A `@multipart` body is buffered whole, with its parsed parts held beside it, so an upload with no ceiling lets one client use up the Worker's memory. A `@multipart` route therefore needs a cap, as a `@raw` one does (`bynk.http.raw_body_unbounded`): `@limit(maxBody: …)` on the handler, or `limits { maxBody: … }` on the service. Choose the largest upload you mean to accept.",
-        example: "type Upload = { title: String }\n\n@multipart   // ✗ no cap on the handler or the service\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 1_000_000)   // ✓ capped\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.path_param_not_stringy",
@@ -4164,6 +4164,24 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.record_spread.unknown_field",
         blurb: "A record spread, `T { ...base, field: value }`, copies every field of `base` and replaces the ones you list. Each listed field has to be one the record declares: a misspelt or invented name would otherwise be dropped silently, or build a value that is not a `T`. Check the field name against the type's declaration. To add a field, declare it on the type first.",
         example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
+    },
+    Explain {
+        code: "bynk.refine.bound_not_literal",
+        blurb: "An argument of a refinement predicate (`InRange`, `AtLeast`, `AtMost`, \
+                `MinLength`, `MaxLength`, `Length`, `Matches`) can be a constant, and \
+                the compiler replaces it with the literal it is bound to before the \
+                refinement is read, so `InRange(1, MaxQty)` means what `InRange(1, 100)` \
+                means. This one cannot be replaced: the constant is declared a type \
+                other than exactly the argument's (a refined constant is not a plain \
+                `Int`), is not bound to a literal or to another such constant, or is not \
+                a constant in scope. Declare it with the argument's own type and bind it \
+                to a literal, or write the literal in the predicate. A constant declared \
+                the refined type whose bound it is reports `bynk.resolve.const_cycle`.",
+        example: "type Count = Int where Positive\n\
+                  const MaxQty: Count = 100\n\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✗ `MaxQty` is a `Count`, not an `Int`\n\n\
+                  const MaxQty: Int = 100\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✓ declared exactly `Int`",
     },
     Explain {
         code: "bynk.refine.literal_violates",
@@ -8124,7 +8142,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.history.not_generable",
-        "A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155).",
+        "A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` pattern with a lookahead), so its call-history cannot be driven (testing track slice 7, ADR 0155).",
     ),
     d(
         "bynk.history.outside_property",
@@ -8134,6 +8152,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    hint(d(
+        "bynk.http.body_cap_defaulted",
+        "A service's body-taking routes rely on the default 1 MiB request-body cap (hint).",
+    )),
     d(
         "bynk.http.body_kind_conflict",
         "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.",
@@ -8412,10 +8434,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.limits_unknown_field",
         "A `limits { }` policy declares a field outside the closed set.",
-    ),
-    d(
-        "bynk.http.multipart_body_unbounded",
-        "A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).",
     ),
     warn(d(
         "bynk.http.multipart_large_cap",
@@ -9371,6 +9389,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.record_spread.unknown_field",
         "A record spread overrides a field the record does not have.",
         &["record_spread"],
+    ),
+    dg(
+        "bynk.refine.bound_not_literal",
+        "A constant in a refinement predicate's argument is not a literal of the argument's type.",
+        &["refined_type"],
     ),
     dg(
         "bynk.refine.literal_violates",

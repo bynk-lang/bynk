@@ -32,6 +32,8 @@ export async function placeOrder(shop: Shop, sku: string, qty: number): Promise<
       return `Sorry: ${res.error}`;
     case "StructuralMismatch":
       return "The server refused that order.";
+    case "PayloadTooLarge":
+      return "That order is too large to send.";
     case "Invalid":
       return "Check the SKU and quantity (1 to 99); nothing was sent.";
     case "Transport":

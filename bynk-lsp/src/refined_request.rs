@@ -295,6 +295,8 @@ fn clause(kind: &PredKind) -> Clause {
             predicates: vec![bynk_syntax::ast::RefinementPred {
                 kind: kind.clone(),
                 arg_text: None,
+                pending: None,
+                from_const: Vec::new(),
                 span: bynk_syntax::span::Span::default(),
             }],
             annotations: Vec::new(),

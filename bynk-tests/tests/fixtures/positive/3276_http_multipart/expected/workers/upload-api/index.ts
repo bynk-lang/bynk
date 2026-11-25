@@ -44,7 +44,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -53,7 +53,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           let __body_json: __JsonValue;
           try {
@@ -76,7 +76,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -85,7 +85,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __f = await __multipartObject(__bytes, request.headers.get("content-type") ?? "", [{ name: "title", kind: "string", list: false, option: false }, { name: "caption", kind: "string", list: false, option: true }, { name: "age", kind: "int", list: false, option: true }, { name: "tags", kind: "string", list: true, option: false }, { name: "photo", kind: "file", list: false, option: false }, { name: "cover", kind: "file", list: false, option: true }, { name: "extras", kind: "file", list: true, option: false }], { maxFile: 4, maxParts: 2 });
           if (!__f.ok) {
@@ -106,7 +106,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 4096) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -115,7 +115,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 4096 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __f = await __multipartObject(__bytes, request.headers.get("content-type") ?? "", [{ name: "title", kind: "string", list: false, option: false }, { name: "caption", kind: "string", list: false, option: true }, { name: "age", kind: "int", list: false, option: true }, { name: "tags", kind: "string", list: true, option: false }, { name: "photo", kind: "file", list: false, option: false }, { name: "cover", kind: "file", list: false, option: true }, { name: "extras", kind: "file", list: true, option: false }], { maxFile: 64, maxParts: 12 });
           if (!__f.ok) {

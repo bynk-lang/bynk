@@ -1153,6 +1153,13 @@ const EXCLUDED_PARSE_TIME_CATEGORIES: &[(&str, &str)] = &[
 /// category stays checked. Dropping an entry is a visible, deliberate act.
 const EXCLUDED_PARSE_TIME_FIXTURES: &[(&str, &str)] = &[
     (
+        "3951_bound_arity",
+        "declined: the grammar's `pred_call` takes any number of arguments for every \
+         predicate, as it does for a literal `MaxLength(1, 2)`; the compiler's \
+         per-predicate argument count is the parser's, and one `pred_call` rule per \
+         predicate would duplicate that table (#3951)",
+    ),
+    (
         "2654_parse_let_record_pattern_without_else",
         "inexpressible: whether a record pattern's field is a binding (irrefutable) \
          or a variant (refutable) is a matter of capitalisation, which the \
