@@ -713,6 +713,14 @@ fn long(s: String) -> String {
         err.contains("bynk.match.refined_pattern_is_range"),
         "the warning stays: {err}"
     );
+    // The shapes where applying the rewrite would leave a later arm unreachable
+    // (refined arms never cover, range arms do) are left alone by `--fix` too.
+    let shapes = "commons net\n\nfn sign(n: Int) -> String {\n  match n {\n    _ where Positive => \"pos\"\n    _ where Positive => \"again\"\n    _ where NonNegative => \"zero\"\n    _ => \"neg\"\n  }\n}\n";
+    write(&root.join("net.bynk"), shapes);
+    let (code, err) = run(&bynk(), &root, &["check", "--fix", "net.bynk"], &[]);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(read(&root.join("net.bynk")), shapes, "--fix leaves it");
+    assert!(!err.contains("unreachable_arm"), "{err}");
     // Ranges count towards exhaustiveness: no `_` arm is needed once they cover.
     write(
         &root.join("net.bynk"),
