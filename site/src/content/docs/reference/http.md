@@ -2015,18 +2015,20 @@ flowchart TD
   rl -->|no| m429["429 + Retry-After"]
   rl -->|yes| ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
   ctype -->|no| m415["415"]
-  ctype -->|yes| actor{"by actor admitted?"}
-  actor -->|no| m401["401 / 403"]
-  actor -->|yes| body{"body valid?"}
-  body -->|over the cap| m413["413"]
+  ctype -->|yes| len{"declared length over the cap?"}
+  len -->|yes| m413["413"]
+  len -->|no| body{"body read under its cap and valid?"}
+  body -->|over the cap| m413
   body -->|no| bad["400 at the boundary"]
+  body -->|yes| actor{"by actor admitted?"}
+  actor -->|no| m401["401 / 403"]
   m401 -.-> hook
   m405 -.-> hook["on rejected renders the body, if declared"]
   m415 -.-> hook
   m429 -.-> hook
   m413 -.-> hook
   bad -.-> hook
-  body -->|yes| handler["handler runs — returns Effect"]
+  actor -->|yes| handler["handler runs — returns Effect"]
   handler --> result["HttpResult[T]"]
   result --> status["HTTP status + JSON body"]
 ```
@@ -2038,9 +2040,11 @@ on method **and** path. On a match, path parameters are bound (a path that is no
 `400 MalformedPath`, never a `500`) and a typed
 [`query`](#query-strings) is decoded and validated (`400` on a violation); a `@rateLimit` route's limiter is asked first of all (`429`, [below](#rate-limiting)); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
-then the handler's `by` actor is checked (`401` or `403`, see [Actors](/reference/actors/)),
-before any body is read; then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
-`400` at the boundary, before the handler runs. The handler then runs as an
+then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
+`400` at the boundary, before the handler runs; then the handler's `by` actor is checked (`401` or `403`, see
+[Actors](/reference/actors/)) by the handler's wrapper. (A multi-actor `by` and a `Signature` route's wrapper read the
+body themselves, verifying over the raw bytes first.) So a rate limit is the only check that runs ahead of the body read
+on every route. The handler then runs as an
 `Effect` and returns an `HttpResult[T]`, which is mapped to an HTTP status and
 JSON body per the table above. When no route matches, a request to a *live* path
 under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain

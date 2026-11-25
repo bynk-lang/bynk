@@ -82,12 +82,13 @@ fn parse_args(ann: &Annotation) -> Result<(String, String), &'static str> {
     Ok((limiter, key))
 }
 
-/// Validate every `@rateLimit` of the context's services.
+/// Validate every `@rateLimit` of the context's services and agents (an agent's handler is
+/// never `on http`, so one there is `bynk.http.rate_limit_not_http`, not ignored).
 pub(crate) fn validate_rate_limits(table: &UnitTable, errors: &mut Vec<CompileError>) {
-    for service in table.services.values() {
-        for handler in &service.handlers {
-            validate_handler(handler, table, errors);
-        }
+    let service_handlers = table.services.values().flat_map(|s| s.handlers.iter());
+    let agent_handlers = table.agents.values().flat_map(|a| a.handlers.iter());
+    for handler in service_handlers.chain(agent_handlers) {
+        validate_handler(handler, table, errors);
     }
 }
 

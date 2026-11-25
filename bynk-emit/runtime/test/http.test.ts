@@ -57,6 +57,7 @@ import {
   type CookieValue,
   queryObject,
   queryString,
+  problemRejection,
   rateLimitAllows,
   rateLimitedResponse,
   renderRejection,
@@ -1922,4 +1923,39 @@ test("responseToHttpOutcome: the router's 429 is Rejected(RateLimited); a handle
     deser,
   );
   assert.equal(handled.tag, "Handled");
+});
+
+test("problemRejection: the 429 keeps Retry-After and becomes problem details of type rate-limited (#3926)", async () => {
+  const res = await problemRejection(rateLimitedResponse(60));
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "application/problem+json");
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body.type, "https://bynk-lang.org/problems/rate-limited");
+  assert.equal(body.title, "Too Many Requests");
+  assert.equal(body.kind, "RateLimited");
+  assert.match(String(body.detail), /60 seconds/);
+});
+
+test("renderRejection: `on rejected` receives RateLimited(detail) and its RawError keeps Retry-After (#3926)", async () => {
+  const seen: { tag: string; detail: string }[] = [];
+  const hook = async (why: { tag: string; detail: string }) => {
+    seen.push(why);
+    return HttpResult.RawError(429, new TextEncoder().encode("slow down"), "text/plain");
+  };
+  const res = await renderRejection(rateLimitedResponse(60), hook as never);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].tag, "RateLimited");
+  assert.match(seen[0].detail, /60 seconds/);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(await res.text(), "slow down");
+});
+
+test("a rate-limited 429 stamped with the CORS policy carries the grant and Retry-After (#3926)", async () => {
+  const res = applyCors(rateLimitedResponse(10), listPolicy, "https://app.example.com");
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("access-control-allow-origin"), "https://app.example.com");
+  assert.equal(res.headers.get("retry-after"), "10");
 });
