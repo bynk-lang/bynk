@@ -1,1 +1,1 @@
-bynk.uses.name_conflict `c` uses two commons that both declare `shell`: `a` and `b`
+bynk.uses.ambiguous_name `shell` is declared by more than one used commons

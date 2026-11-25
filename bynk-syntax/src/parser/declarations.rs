@@ -544,7 +544,11 @@ impl<'a> Parser<'a> {
         if let Some(a) = &alias {
             self.use_prefixes.push(a.name.clone());
         }
-        self.use_prefixes.push(target.joined());
+        // A one-segment commons name (`uses keys`) is no qualifier: it is as likely a
+        // local of that name (`keys.map(…)`), which only an alias is explicit about.
+        if target.parts.len() > 1 {
+            self.use_prefixes.push(target.joined());
+        }
         Ok(UsesDecl {
             target,
             alias,

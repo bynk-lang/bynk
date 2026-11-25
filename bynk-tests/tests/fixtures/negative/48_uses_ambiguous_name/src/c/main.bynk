@@ -3,4 +3,4 @@ commons c
 uses a
 uses b
 
-type X = Int
+type X = { c: Conflict }
