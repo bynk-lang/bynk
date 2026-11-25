@@ -184,7 +184,10 @@ fn rewrite_instance_options(
                 OptionKind::StrList => {
                     if let ExprKind::ListLit(items, ..) = &mut arg.value.kind {
                         for item in items {
-                            changed |= resolve_element(item, BaseType::String, scope, refs);
+                            if let Some(c) = resolve_element(item, BaseType::String, scope, refs) {
+                                arg.element_consts.push(c);
+                                changed = true;
+                            }
                         }
                     }
                 }
@@ -194,25 +197,28 @@ fn rewrite_instance_options(
     changed
 }
 
-/// [`resolve_arg`] for a list element, which has no argument to record the
-/// constant on: the reference is still recorded as a use.
+/// [`resolve_arg`] for a list element, which has no argument of its own to carry
+/// the constant: the reference is recorded as a use, and returned for the list
+/// argument's [`bynk_syntax::ast::AnnotationArg::element_consts`].
 fn resolve_element(
     item: &mut bynk_syntax::ast::Expr,
     base: BaseType,
     scope: &Scope,
     refs: &mut RefSink,
-) -> bool {
+) -> Option<ConstRef> {
     let ExprKind::Ident(id) = &item.kind else {
-        return false;
+        return None;
     };
-    let Some(found) =
-        crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, base)
-    else {
-        return false;
+    let found =
+        crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, base)?;
+    let same_file = found.owner.is_none() && scope.file_consts.contains(&id.name);
+    let reference = ConstRef {
+        name: id.clone(),
+        decl_span: same_file.then_some(found.decl.name.span),
     };
     refs.record(id.span, SymbolKind::Const, &id.name);
     item.kind = found.literal.kind.clone();
-    true
+    Some(reference)
 }
 
 const DELIVERY_KEYS: &[(&str, BaseType)] = &[
@@ -475,8 +481,24 @@ pub fn resolve_annotation_consts(
 /// Attach the constant's declaration to `err` as a related span, when the
 /// argument was a reference to a constant in the same file.
 pub fn with_const_origin(err: CompileError, arg: &bynk_syntax::ast::AnnotationArg) -> CompileError {
-    let Some(c) = &arg.from_const else {
-        return err;
+    // A list argument's element is found by the reference's span, which the
+    // resolved element keeps (#3942).
+    let Some(c) = arg
+        .from_const
+        .as_ref()
+        .or_else(|| arg.element_consts.iter().find(|c| c.name.span == err.span))
+    else {
+        // A check that reports on the whole list, not an element: say which
+        // constants the list took values from.
+        if arg.element_consts.is_empty() {
+            return err;
+        }
+        let names: Vec<String> = arg
+            .element_consts
+            .iter()
+            .map(|c| format!("`const {}`", c.name.name))
+            .collect();
+        return err.with_note(format!("some of the values come from {}", names.join(", ")));
     };
     let err = match c.decl_span {
         Some(span) => err.with_label(span, format!("`{}` is declared here", c.name.name)),

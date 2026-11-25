@@ -243,6 +243,15 @@ impl ErrorSink {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    /// Rewrite each error-severity diagnostic pushed since the sink held `from`
+    /// of them (see [`Self::len`]), for a check that wraps another's errors with
+    /// where its input came from (#3942).
+    pub fn map_errors_from(&mut self, from: usize, f: impl Fn(CompileError) -> CompileError) {
+        for entry in self.entries.iter_mut().skip(from) {
+            entry.error = f(entry.error.clone());
+        }
+    }
 }
 
 /// #3431: offer `signed_cookie_unprefixed`'s rename to `__Host-…` only when no
@@ -884,9 +893,23 @@ pub fn phase_resolve_derived(
                                 )
                                 .with_note("an instance takes each option once"),
                             );
-                        } else if let Some(value) =
-                            instance_option_value(ann, option_kind, &d.base.name, &path, errors)
-                        {
+                        } else if let Some(value) = {
+                            // #3942: an error about a value a constant gave says so.
+                            let mark = errors.len();
+                            let value = instance_option_value(
+                                ann,
+                                option_kind,
+                                &d.base.name,
+                                &path,
+                                errors,
+                            );
+                            if let Some(arg) = ann.args.first() {
+                                errors.map_errors_from(mark, |e| {
+                                    crate::annotation_consts::with_const_origin(e, arg)
+                                });
+                            }
+                            value
+                        } {
                             // A Worker the build itself makes is a Bynk
                             // context: deploy and dev read any build Worker
                             // as a project edge, never a foreign one, so it
@@ -1350,6 +1373,11 @@ fn vectorize_metric_error(
 fn bare_name_arg(ann: &bynk_syntax::ast::Annotation) -> Option<String> {
     ann.args.first().and_then(|a| match &a.value.kind {
         ExprKind::Ident(id) => Some(id.name.clone()),
+        // A list option's element that did not resolve (`@allowedRecipients([Ops])`).
+        ExprKind::ListLit(items, ..) => items.iter().find_map(|i| match &i.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        }),
         _ => None,
     })
 }
