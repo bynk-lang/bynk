@@ -123,6 +123,13 @@ fn used_name_note(a: &HoverAnalysis<'_>, key: &bynk_check::index::SymbolKey) -> 
         .then(|| format!("`{written}` is `{}` of `{}`", key.name, key.unit))
 }
 
+/// #4035: the name after `violates` in a refusal claim: the declaration that refuses, with its
+/// predicate. Read ahead of the locals rung, which would take it for a name in scope.
+fn violates_hover(a: &HoverAnalysis<'_>) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    crate::violates::describe_at(text, a.offset, Some(a.snapshots))
+}
+
 /// The hover Markdown for the cursor, or `None` when no rung resolves it.
 ///
 /// The rung order is the contract; see the module doc. Each rung is tried in
@@ -190,7 +197,7 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         //    terminal of a `Map`/`Log` pipeline. A structural match on the enclosing agent's
         //    declared field, so it outranks the locals rung below, which guesses by name in
         //    scope; a local shadowing the field makes this an ordinary value method.
-        if let Some(content) = store_op_hover(a) {
+        if let Some(content) = store_op_hover(a).or_else(|| violates_hover(a)) {
             return Some(content);
         }
         // 2b. #2839: the `?` of an `Option` — `None` answers `404 NotFound`. Ahead of the locals rung, which

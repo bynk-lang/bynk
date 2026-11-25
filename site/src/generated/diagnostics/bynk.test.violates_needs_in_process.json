@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect <call> violates <name>` claims that a commit was refused by a named invariant, transition or `@unique` constraint. At `system` a refused commit reaches the case as a `500` with no payload from the deployed Worker, not a throw that names the declaration, so claim it at `unit` or `integration`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.violates_needs_in_process",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/ledger.test.bynk\ncase \"an overdraft is refused\" as system {\n    expect api.GET(\"/a\") by User(\"bob\") violates non_negative   // ✗ a `system` refusal is a `500`\n}\n\ncase \"an overdraft is refused\" {                           // ✓\n    expect Account(\"a\").withdraw(5) violates non_negative\n}",
+  "severity": "error",
+  "summary": "A `system`-tier case claims a refused commit with `expect <call> violates <name>`; at `system` a refusal reaches the case as an error response from the deployed Worker, never a throw that names the declaration, so the claim belongs at `unit` or `integration`."
+}
