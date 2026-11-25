@@ -70,7 +70,9 @@ fn build_dir_for(
 /// The rebuild after recording older contracts: the same build as the first,
 /// so `--no-install` and `--dry-run` apply to it as well (#3350).
 pub(crate) fn rebuild(project_root: &Path, build_dir: &Path, opts: &DeployOptions) -> bool {
-    let build = workers::Build::new(true, opts.dry_run).no_install(opts.no_install);
+    let build = workers::Build::new(true, opts.dry_run)
+        .no_install(opts.no_install)
+        .environment(&opts.environment);
     workers::compile_once_reporting(project_root, build_dir, build, None)
 }
 
@@ -283,7 +285,9 @@ fn deploy(
     let Some(model) = workers::compile_built(
         project_root,
         &build_dir,
-        workers::Build::new(true, opts.dry_run).no_install(opts.no_install),
+        workers::Build::new(true, opts.dry_run)
+            .no_install(opts.no_install)
+            .environment(&opts.environment),
         bynk_driver::progress::terminal_sink(),
     ) else {
         return Err(ExitCode::FAILURE);

@@ -1961,6 +1961,51 @@ mod tests {
         );
     }
 
+    /// #3941 slice 2: a build for a named environment resolves `env(…)` constants
+    /// from `[env.<name>.vars]` first, then `[vars]`, then the default; a required
+    /// variable unset for that environment is `bynk.env.missing`.
+    #[test]
+    fn env_constants_resolve_per_named_environment() {
+        let dir = scratch_dir("env_named_environment");
+        fs::write(
+            dir.0.join("bynk.toml"),
+            "[project]\nname = \"p\"\n\n[vars]\nBILLING = \"live\"\nAPP = \"prod\"\n\n[env.staging.vars]\nBILLING = \"staging\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.0.join("src")).unwrap();
+        fs::write(
+            dir.0.join("src/config.bynk"),
+            "commons config\n\nconst Billing: String = env(BILLING)\nconst App: String = env(APP)\n",
+        )
+        .unwrap();
+        let build = |environment: &str| {
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .environment(environment);
+            let out = project::compile_project(&options).unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+            out.artefacts
+                .docs
+                .values()
+                .map(|d| d.text().to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let default = build("default");
+        assert!(
+            default.contains("\"live\"") && default.contains("\"prod\""),
+            "{default}"
+        );
+        let staging = build("staging");
+        assert!(
+            staging.contains("\"staging\"") && staging.contains("\"prod\""),
+            "{staging}"
+        );
+        assert!(!staging.contains("\"live\""), "{staging}");
+    }
+
     /// #3941 review: the pass's edges. A secret-looking name warns and still
     /// builds; a negative default repeated is not a conflict; a default of the
     /// wrong kind is refused even when `bynk.toml` supplies the value; an

@@ -380,10 +380,11 @@ fn normalize_parsed(
     parsed: &mut [ParsedFile],
     project_root: &Path,
     overlay: &std::collections::HashMap<PathBuf, String>,
+    environment: &str,
     errors: &mut ErrorSink,
 ) {
     project_model::normalize_service_defaults(parsed);
-    project_model::resolve_env_consts(parsed, project_root, overlay, errors);
+    project_model::resolve_env_consts(parsed, project_root, overlay, environment, errors);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -422,7 +423,9 @@ pub(super) fn run_checks(
     // #1085 review: only for `schema_registry::parse`'s corruption message —
     // naming *which* project's lock file is corrupt, now that #1078 made
     // `bynk-emit` disk-free (and so path-blind) for this file.
-    project_root: &Path,
+    // The project's directory, and the environment whose `bynk.toml` values the
+    // build resolves `env(…)` constants from (#3941).
+    (project_root, environment): (&Path, &str),
     // #1883, slice 1b: the listed `assets/` folder
     // (`CompileOptions::asset_files`). `None` when no filesystem was
     // consulted: a check then skips the existence check, a build treats it as
@@ -546,7 +549,7 @@ pub(super) fn run_checks(
     //        is indexed (not cloned) by later phases, so mutating it here reaches
     //        them all. The parsed AST that `bynk fmt` produces is untouched (it
     //        parses independently), so the terse inheriting source round-trips.
-    normalize_parsed(&mut parsed, project_root, overlay, &mut errors);
+    normalize_parsed(&mut parsed, project_root, overlay, environment, &mut errors);
     // #1821 (ADR 0147 D3): a deployable build strips every suite, here, right
     // after parsing, so no later pass (the reserved-namespace and
     // function-type checks walk every parsed unit) sees one: never

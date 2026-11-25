@@ -129,6 +129,10 @@ pub struct CompileOptions {
     /// `bynk.toml`'s `[workers]` `cpu_ms` and `placement` (#4128), which a
     /// worker group may override.
     pub tuning: bynk_project::worker_tuning::WorkerTuning,
+    /// #3941: the environment whose `[env.<name>.vars]` the build resolves
+    /// `env(…)` constants from, then `[vars]`, then each constant's default.
+    /// `default` for every build that does not name one.
+    pub environment: String,
     /// #1883, slice 1b: the project's `assets/` folder — its files, keyed by
     /// normalised project-relative path (`assets/board.css`), listed by the
     /// caller, and a reader for their bytes
@@ -206,6 +210,7 @@ impl CompileOptions {
             workers_dev: None,
             observability: Default::default(),
             tuning: Default::default(),
+            environment: bynk_project::vars::DEFAULT_ENVIRONMENT.to_string(),
             asset_files: None,
             embed_files: None,
             fixture_files: None,
@@ -241,6 +246,7 @@ impl CompileOptions {
             workers_dev: None,
             observability: Default::default(),
             tuning: Default::default(),
+            environment: bynk_project::vars::DEFAULT_ENVIRONMENT.to_string(),
             asset_files: None,
             embed_files: None,
             fixture_files: None,
@@ -368,6 +374,12 @@ impl CompileOptions {
     }
 
     /// #4128: the project's CPU limit and placement. See the field's own doc.
+    /// Build for the named environment's `env(…)` values (#3941).
+    pub fn environment(mut self, name: impl Into<String>) -> Self {
+        self.environment = name.into();
+        self
+    }
+
     pub fn tuning(mut self, tuning: bynk_project::worker_tuning::WorkerTuning) -> Self {
         self.tuning = tuning;
         self
