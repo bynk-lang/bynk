@@ -245,6 +245,14 @@ fn complete_base(
             })
             .collect();
     }
+    // 1b. #4045: inside `uses U { … <cursor>` — the public names U declares. After `X as`
+    //     the next word is the alias, a name of the user's own: nothing to suggest.
+    if let Some(unit) = uses_brace_unit(line_prefix) {
+        if names_a_brace_alias(line_prefix) {
+            return Vec::new();
+        }
+        return public_names_of_commons(&unit, doc_text, &split());
+    }
     // 2. After `consumes <prefix>` — consumable unit names.
     if is_consumes_target(line_prefix) {
         return consumable_units(doc_text, &split());
@@ -426,6 +434,63 @@ fn is_snapshot_clause_position(line: &str) -> bool {
             last_word,
             Some("and" | "or" | "not" | "is" | "if" | "else" | "match" | "faults" | "called")
         )
+}
+
+/// #4045: `uses U { … ` with the brace still open at the cursor → `Some(U)`.
+fn uses_brace_unit(line: &str) -> Option<String> {
+    let after = line.trim_start().strip_prefix("uses")?;
+    if !after.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let open = after.find('{')?;
+    if after[open + 1..].contains('}') {
+        return None;
+    }
+    let unit = after[..open].trim();
+    (!unit.is_empty() && is_qualified_name(unit)).then(|| unit.to_string())
+}
+
+/// #4045: the names the commons `unit` declares and does not mark `private`, as
+/// completion items kinded by what they are: a type, a function, or a constant,
+/// asset or embed. Empty when `unit` is not a commons the project knows.
+fn public_names_of_commons(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
+    let mut out: Vec<Completion> = Vec::new();
+    let mut found = false;
+    let mut visit = |u: &SourceUnit| {
+        let SourceUnit::Commons(c) = u else { return };
+        if found || c.name.joined() != unit {
+            return;
+        }
+        found = true;
+        for item in &c.items {
+            let (name, kind, what, private) = match item {
+                CommonsItem::Type(t) => (&t.name, CompletionKind::Type, "type", t.private),
+                CommonsItem::Fn(f) if f.name.type_name().is_none() => (
+                    f.name.ident(),
+                    CompletionKind::Function,
+                    "function",
+                    f.private,
+                ),
+                CommonsItem::Const(k) => (&k.name, CompletionKind::Constant, "constant", k.private),
+                CommonsItem::Asset(a) => (&a.name, CompletionKind::Constant, "asset", a.private),
+                CommonsItem::Embed(e) => (&e.name, CompletionKind::Constant, "embed", e.private),
+                _ => continue,
+            };
+            if private.is_none() {
+                out.push(Completion::item(
+                    name.name.clone(),
+                    kind,
+                    Some(format!("{what} declared by `{unit}`")),
+                ));
+            }
+        }
+    };
+    if let Some((_, dep)) = split.deps.iter().find(|(label, _)| label == unit) {
+        visit(dep);
+    } else {
+        for_each_unit(doc_text, split.own(), visit);
+    }
+    out
 }
 
 /// `consumes U { … ` with the brace still open at the cursor → `Some(U)`.
@@ -4688,6 +4753,47 @@ mod tests {
             !labels("  consumes bynk { Clock, ", "context a.b\n").is_empty(),
             "capabilities still complete after a comma"
         );
+    }
+
+    /// #4045: a braced `uses` list completes the commons' public names, kinded, and
+    /// leaves out what it marks `private`, methods, and the name after `as`.
+    #[test]
+    fn uses_brace_suggests_the_commons_public_names() {
+        let doc = "commons lib.money {\n  type Money = Int where NonNegative\n  private type Cents = Int\n  fn format(m: Money) -> String { \"m\" }\n  fn Money.double(self) -> Money { self }\n  const Limit: Int = 1\n}\n";
+        let files = HashMap::from([(synthetic_path("money"), doc.to_string())]);
+        let got = complete("uses lib.money { ", "commons app.z\n", Some(&files));
+        assert!(
+            find(&got, "Money", CompletionKind::Type).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        assert!(
+            find(&got, "format", CompletionKind::Function).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        assert!(
+            find(&got, "Limit", CompletionKind::Constant).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            !labels.contains(&"Cents") && !labels.contains(&"double"),
+            "{labels:?}"
+        );
+        // After a comma it still completes; after `as` the name is the user's own.
+        assert!(!complete("uses lib.money { Money, ", "commons app.z\n", Some(&files)).is_empty());
+        assert!(
+            complete(
+                "uses lib.money { Money as ",
+                "commons app.z\n",
+                Some(&files)
+            )
+            .is_empty()
+        );
+        // The whole-commons form still completes commons names, not these.
+        assert!(!is_uses_target("uses lib.money { "));
     }
 
     #[test]
