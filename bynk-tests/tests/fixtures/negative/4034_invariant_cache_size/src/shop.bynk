@@ -1,0 +1,13 @@
+context shop
+
+agent Sessions {
+  key id: String
+  store live: Cache[String, Int] @ttl(5.minutes)
+
+  invariant bounded:
+    live.size() <= 100
+
+  on call touch(k: String, n: Int) -> Effect[()] {
+    live.put(k, n)
+  }
+}

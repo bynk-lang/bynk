@@ -1054,12 +1054,12 @@ t("WorkersQueue.sendWith: a delay goes as whole seconds, a part second rounded u
   ]);
 });
 
-t("WorkersQueue.sendWith: a delay over 12 hours or below zero faults", async () => {
+t("WorkersQueue.sendWith: a delay over 24 hours or below zero faults", async () => {
   const q = fakeQueue();
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
-  await assert.rejects(queue.sendWith("1", { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
-  await assert.rejects(queue.sendWith("1", { delay: Some(-1_000) }), /between 0 seconds and 12 hours/);
-  await assert.rejects(queue.sendWith("1", { delay: Some(-500) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(86_401_000) }), /between 0 seconds and 24 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-1_000) }), /between 0 seconds and 24 hours/);
+  await assert.rejects(queue.sendWith("1", { delay: Some(-500) }), /between 0 seconds and 24 hours/);
   assert.equal(q.sends.length, 0);
 });
 
@@ -1074,11 +1074,11 @@ t("WorkersQueue.sendValueWith: puts on the wire exactly what sendWith(Json.encod
   }
 });
 
-t("WorkersQueue.sendValueWith: a delay over 12 hours or below zero faults, and a missing binding names it", async () => {
+t("WorkersQueue.sendValueWith: a delay over 24 hours or below zero faults, and a missing binding names it", async () => {
   const q = fakeQueue();
   const queue = new WorkersQueue({ QUEUE_ORDERS: q }, "QUEUE_ORDERS");
-  await assert.rejects(queue.sendValueWith(1, { delay: Some(43_201_000) }), /between 0 seconds and 12 hours/);
-  await assert.rejects(queue.sendValueWith(1, { delay: Some(-500) }), /between 0 seconds and 12 hours/);
+  await assert.rejects(queue.sendValueWith(1, { delay: Some(86_401_000) }), /between 0 seconds and 24 hours/);
+  await assert.rejects(queue.sendValueWith(1, { delay: Some(-500) }), /between 0 seconds and 24 hours/);
   assert.equal(q.sends.length, 0);
   await assert.rejects(
     new WorkersQueue({}, "QUEUE_ORDERS").sendValueWith(1, { delay: None }),

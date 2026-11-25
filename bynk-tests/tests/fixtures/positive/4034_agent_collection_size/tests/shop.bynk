@@ -1,0 +1,58 @@
+suite shop
+
+case "a basket within both bounds commits" {
+  do Basket("a").add("x", 1)
+  do Basket("a").add("y", 2)
+  do Basket("a").block("p")
+  let n <- Basket("a").lineCount()
+  expect n == 2
+}
+
+case "an overwrite does not add a line" {
+  do Basket("b").add("x", 1)
+  do Basket("b").add("y", 2)
+  do Basket("b").add("x", 9)
+  let n <- Basket("b").lineCount()
+  expect n == 2
+}
+
+case "a third line breaks the bound on lines" {
+  do Basket("c").add("x", 1)
+  do Basket("c").add("y", 2)
+  do Basket("c").add("z", 3)
+}
+
+case "a second blocked key breaks the bound on blocked" {
+  do Basket("d").block("p")
+  do Basket("d").block("q")
+}
+
+case "a removal frees room under the bound" {
+  do Basket("e").add("x", 1)
+  do Basket("e").add("y", 2)
+  do Basket("e").remove("x")
+  do Basket("e").add("z", 3)
+  let n <- Basket("e").lineCount()
+  expect n == 2
+}
+
+case "a paid basket can still grow" {
+  do Basket("f").add("x", 1)
+  do Basket("f").pay()
+  do Basket("f").add("y", 2)
+  let n <- Basket("f").lineCount()
+  expect n == 2
+}
+
+case "a paid basket cannot shrink" {
+  do Basket("g").add("x", 1)
+  do Basket("g").pay()
+  do Basket("g").remove("x")
+}
+
+case "an unpaid basket can shrink" {
+  do Basket("h").add("x", 1)
+  do Basket("h").remove("x")
+  let n <- Basket("h").lineCount()
+  expect n == 0
+}

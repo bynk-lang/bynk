@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0950](0950-queue-delay-refined.md) | **A Queue send delay is a refined QueueDelay, a part second still rounds up, and the maximum is 24 hours** (v0.688) — QueueSend.delay takes `QueueDelay = Duration where InRange(0.seconds, 24.hours)`, checked at compile time for a literal, and a part second rounds up so a message is never early | Accepted (v0.688) |
+| [0949](0949-authenticated-cache-private.md) | **Authenticated responses are Cache-Control private by default, with noStore opt-in** (v0.687) — A route whose actor carries a credential sends private on every response, refuses public, and @cache(noStore: true) sends no-store | Accepted (v0.687) |
+| [0948](0948-retired-diagnostic-tombstones.md) | **Retired diagnostic codes are tombstoned, not forgotten** (v0.686) — A RETIRED table answers `bynk explain`, a shipped-codes list makes removal without a tombstone fail CI | Accepted (v0.686) |
 | [0947](0947-generate-matches-and-isodate.md) | **A for all draws members of a Matches pattern and real IsoDate dates** (v0.685) — How the pattern is walked, what filters the draws, and what stays pinned | Accepted (v0.685) |
 | [0946](0946-default-body-cap.md) | **Every body-taking HTTP route has a 1 MiB request-body cap by default** (v0.684) — A route that takes a body is capped at 1,048,576 bytes unless it or its service says otherwise, with no unlimited setting and a build hint for routes on the default | Accepted (v0.684) |
 | [0945](0945-const-refinement-bounds.md) | **A constant stands as a refinement predicate's argument under ADR 0826's rule** (v0.683) — A predicate argument may name a constant; the checker substitutes its literal before the refinement is read | Accepted (v0.683) |

@@ -14,11 +14,11 @@ import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStateme
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
 import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
-import { commitStored, noteClock, readStored, readsLazily, then } from "./entries.ts";
+import { commitStored, committedSize, noteClock, readStored, readsLazily, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, queryObject, queryString, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withPlainJson, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
 import { formatIcuDate, formatIcuNumber, selectPluralArm } from "./messages.ts";
@@ -73,6 +73,7 @@ export {
   scanMap as __scanMap,
   scanSkip as __scanSkip,
   scanTake as __scanTake,
+  committedSize as __committedSize,
   checkStoredLayout as __checkStoredLayout,
   checkStoredSchemaVersion as __checkStoredSchemaVersion,
   connIdOf as __connIdOf,
@@ -148,6 +149,7 @@ export {
   migrationFailed as __migrationFailed,
   newWebSocketPair as __newWebSocketPair,
   noStore as __noStore,
+  privateByDefault as __privateByDefault,
   pathLeaf as __pathLeaf,
   notModifiedIfMatch as __notModifiedIfMatch,
   rehydrationViolation as __rehydrationViolation,

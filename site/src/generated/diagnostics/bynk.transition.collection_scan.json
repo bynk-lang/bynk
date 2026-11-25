@@ -1,0 +1,10 @@
+{
+  "blurb": "A transition is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()` in `old` and `new`: the commit knows the staged count, and the last committed one is a single stored count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself, a bare field name) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Compare the sizes, or check the property in the handler that writes the collection. The mirror rule for states is `bynk.invariant.collection_scan`.",
+  "category": "Transitions (step invariants)",
+  "categoryAnchor": "transitions-step-invariants",
+  "code": "bynk.transition.collection_scan",
+  "constructs": [],
+  "example": "transition keeps_x: old.lines.contains(\"x\") implies new.lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ntransition never_shrinks: new.lines.size() >= old.lines.size()   // ✓ one count each",
+  "severity": "error",
+  "summary": "A transition reads a `store` collection beyond its `size()`; a predicate runs at every commit."
+}
