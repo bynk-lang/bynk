@@ -1,0 +1,13 @@
+context api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Oidc(issuer = "https://issuer.example.com", audience = "my-api", jwks = "https://issuer.example.com/.well-known/jwks.json"), identity = UserId }
+
+type H = { authorization: String }
+
+service api from http {
+    on POST("/x") (headers: H, body: String) -> Effect[HttpResult[String]] by u: User {
+        Ok("x")
+    }
+}

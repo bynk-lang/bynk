@@ -215,7 +215,7 @@ and read only the pages they need: `any` and `all` over a `Map` or a `Log`, and 
 `flatMap` ahead of them (and `skip`, on a `Log`). A `Log` is read oldest first, so these
 are the oldest matches. A `Map`'s scan order is insertion order, which only reading every
 page recovers, so `first`, `firstOrElse` and `take` over a `Map` still read it whole. An
-equality `filter` on an `@indexed` field reads its posting list as before. Each single operation on one key
+equality `filter` on an `@indexed` field reads that value's posting list, and `any` and `all` over it read the list a page at a time and stop at the answer; `first`, `firstOrElse` and `take` over it read the whole list, as the list is in key order. Each single operation on one key
 (`update`, `upsert`, `put`, `remove`) is atomic and runs one after another per key, so
 two concurrent branches' `update` or `upsert` calls on the same key both apply. A `get`
 followed by a separate `put` is two operations, so the checker refuses a store write

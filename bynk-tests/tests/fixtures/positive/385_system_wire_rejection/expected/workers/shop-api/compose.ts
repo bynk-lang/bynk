@@ -2,7 +2,7 @@
 // composition root for `shop.api` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -23,7 +23,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_POST_cart(body, { ...deps, identity: __id.value });
+      return handlers.api.http_POST_cart(body, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_POST_reject(request: globalThis.Request, body: handlers.Item) {
       const __authz = request.headers.get("Authorization");
@@ -34,7 +34,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_POST_reject(body, { ...deps, identity: __id.value });
+      return handlers.api.http_POST_reject(body, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_PUT_cart_Param_sku(request: globalThis.Request, sku: handlers.Sku, body: handlers.Item) {
       const __authz = request.headers.get("Authorization");
@@ -45,7 +45,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_PUT_cart_Param_sku(sku, body, { ...deps, identity: __id.value });
+      return handlers.api.http_PUT_cart_Param_sku(sku, body, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
   };
 }

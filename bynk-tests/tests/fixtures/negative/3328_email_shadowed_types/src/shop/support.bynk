@@ -6,7 +6,7 @@ type EmailVerdict =
   | Done
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Done
   }
 }

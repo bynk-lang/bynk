@@ -60,6 +60,8 @@ export interface StoreMapHandle<V> {
   byIndex(index: string, by: string): Awaitable<readonly V[]>;
   /** Whether any value of the `@unique` index `index` is held by more than one entry (#4038), judged on what this handler has staged. */
   hasDuplicate(index: string): Awaitable<boolean>;
+  /** The same values a page at a time, in **no promised order** (a storage-backed handle pages by primary key), for a scan that does not need one. */
+  lazyByIndex(index: string, by: string): AsyncIterable<V> | Iterable<V>;
 }
 
 /** An agent's `store Set`. */
@@ -186,6 +188,10 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
     for (const pks of buckets.values()) if (pks.length > 1) return true;
     return false;
+  }
+
+  *lazyByIndex(index: string, by: string): Generator<V> {
+    for (const v of this.byIndex(index, by)) yield v;
   }
 
   /** A copy of the posting lists of `index`, as an encoded state record holds them. */

@@ -323,6 +323,22 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     return [...found.values()].sort((a, b) => a.i - b.i).map((e) => this.env(e));
   }
 
+  /**
+   * The values whose `index` value is `by`, a page of postings at a time, in **primary-key** order
+   * (insertion order exists only once every posting is read), for a scan whose answer does not depend
+   * on the order (#4300).
+   */
+  async *lazyByIndex(index: string, by: string): AsyncGenerator<V> {
+    if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    const prefix = postingPrefix(this.field, index, by);
+    for await (const page of pagesOf<unknown>(this.overlay, { prefix })) {
+      const pks = page.map(([k]) => decodeKeyPart(k.slice(prefix.length)));
+      if (this.keyCheck !== undefined) for (const pk of pks) this.keyCheck(pk);
+      const found = await this.overlay.getMany<Envelope>(pks.map((pk) => mapKey(this.field, pk)));
+      for (const e of found.values()) yield this.env(e);
+    }
+  }
+
   /** Stage this handler's metadata. The commit calls it once, before the flush. */
   finish(): void {
     this.meta.finish();

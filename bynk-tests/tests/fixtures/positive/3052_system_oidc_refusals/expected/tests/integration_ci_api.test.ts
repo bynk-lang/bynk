@@ -366,7 +366,7 @@ async function test_a_valid_token_with_chosen_claims_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkOidcClaims(["repository: acme/money"]));
+    const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkClaimLines(["repository: acme/money"]));
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "wid acme/money"))) { throw __bynkExpectFailure("tests/api.bynk:9:10", 480, 505, "expect r is Ok(\"wid acme/money\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -383,7 +383,7 @@ async function test_a_valid_token_with_no_claims_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkOidcClaims([]));
+    const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkClaimLines([]));
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "wid -"))) { throw __bynkExpectFailure("tests/api.bynk:14:10", 616, 632, "expect r is Ok(\"wid -\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -400,7 +400,7 @@ async function test_a_non_ASCII_subject_round_trips() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_who(undefined, ("ünï" as any), __bynkOidcClaims([]));
+    const r = await __sysdrive_api_http_GET_who(undefined, ("ünï" as any), __bynkClaimLines([]));
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ünï -"))) { throw __bynkExpectFailure("tests/api.bynk:19:10", 736, 754, "expect r is Ok(\"ünï -\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -502,7 +502,7 @@ async function test_a_valid_raw_request_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkOidcClaims([]));
+    const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkClaimLines([]));
     if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok" && r.value.value === "released v1"))) { throw __bynkExpectFailure("tests/api.bynk:49:10", 1489, 1520, "expect r is Handled(Ok(\"released v1\"))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -553,7 +553,7 @@ async function test_the_trustFrom_variable_moves_the_trust_roots() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkOidcClaims([]));
+    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkClaimLines([]));
     const forged = await __sysdrive_forged_api_http_GET_pinned(undefined, "");
     const wrong = await __sysdrive_wrongaudience_api_http_GET_pinned(undefined, "");
     if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "pinned pid"))) { throw __bynkExpectFailure("tests/api.bynk:67:10", 2175, 2197, "expect ok is Ok(\"pinned pid\")", "ok", () => __bynkShow(ok)); }
@@ -574,7 +574,7 @@ async function test_a_trustFrom_without_an_audience_keeps_the_declared_one() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkOidcClaims([]));
+    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkClaimLines([]));
     const wrong = await __sysdrive_wrongaudience_api_http_GET_pinned(undefined, "");
     if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "pinned pid"))) { throw __bynkExpectFailure("tests/api.bynk:76:10", 2582, 2604, "expect ok is Ok(\"pinned pid\")", "ok", () => __bynkShow(ok)); }
     if (!(((__c: boolean) => __c)(wrong.tag === "Rejected" && wrong.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:77:10", 2614, 2645, "expect wrong is Rejected(Unauthorized)", "wrong", () => __bynkShow(wrong)); }

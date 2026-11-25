@@ -86,7 +86,8 @@ service sweeper from cron {
 
 The name resolves to its literal at compile time, so the generated
 `wrangler.toml` still lists the literal text. Put the constant in a commons to
-share it between contexts, and name it in a test (`sweeper.schedule(Nightly)`) so
+share it between contexts, declared `CronSchedule` there if you want the type to
+check it (a commons names `CronSchedule` with no `consumes`), and name it in a test (`sweeper.schedule(Nightly)`) so
 the test follows a change to the schedule. See
 [Cron](/reference/cron/#naming-a-schedule-with-a-constant).
 

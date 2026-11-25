@@ -1077,7 +1077,18 @@ pub(super) fn emit_http_wrapper(
                 return_(Some(member(ident("HttpResult"), "Unauthorized"))),
             ));
             let mut call_args = param_args.clone();
-            call_args.push(deps_spread_with("identity", member(ident("__id"), "value")));
+            // #3937: and the verified token's claims, which the binder's `.claims` reads.
+            call_args.push(TsExpr::object_entries(vec![
+                TsObjectEntry::Spread(ident("deps")),
+                TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
+                TsObjectEntry::prop(
+                    "claims".to_string(),
+                    call(
+                        ident("__tokenClaims"),
+                        vec![member(member(ident("__claims"), "value"), "claims")],
+                    ),
+                ),
+            ]));
             stmts.push(return_(Some(call(
                 member_chain(ident("handlers"), &[sname, &method_key]),
                 call_args,

@@ -21,7 +21,7 @@ context shop.support
 consumes bynk.cloudflare { InboundEmail, EmailVerdict, EmailReply }
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     if mail.size > 10000000 {
       Reject("too large")
     } else if mail.subject == "refund" {
@@ -48,7 +48,7 @@ the catch-all together are fine, and the named address wins.
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The
-handler's default actor is `Sender`, which carries the address and whether
+handler states its actor with `by` (`by Sender` is "any mail"), and `Sender` carries the address and whether
 Cloudflare found the sender's domain authenticated with DMARC
 (`DmarcPass`, `DmarcFail` or `DmarcNone`). Forward or reply on a claim; act
 on the evidence.
