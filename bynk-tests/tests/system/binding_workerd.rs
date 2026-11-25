@@ -834,7 +834,7 @@ service intake from email(\"Support@Q.Example\") {
 }
 
 service catchall from email(\"*@q.example\") {
-\ton message(mail: InboundEmail) -> Effect[EmailVerdict] {
+\ton message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
 \t\tReject(\"no such mailbox\")
 \t}
 }

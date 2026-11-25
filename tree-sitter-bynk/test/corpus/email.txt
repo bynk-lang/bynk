@@ -5,7 +5,7 @@ from email service protocol (#3328)
 context shop.support
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Accept
   }
 }

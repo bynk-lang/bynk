@@ -2759,6 +2759,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
         }
         return;
     }
+    // #3888: inbound mail states whether it must be authenticated.
+    if matches!(protocol, ServiceProtocol::Email { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_email(handler));
+        }
+        return;
+    }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
     // connection is accepted — `on open` must name its actor, no anonymous upgrade.
     let (msg, note) = match protocol {
@@ -2804,6 +2811,26 @@ fn missing_by_on_call(handler: &Handler) -> CompileError {
     .with_suggestion(
         "add `by Caller`",
         vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3888: an email handler states what mail it acts on. The fix-it inserts `by Sender` (the former
+/// silent default: any mail, whatever its DMARC verdict) after the return type.
+fn missing_by_on_email(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_email",
+        handler.span,
+        "an email `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Sender` admits any mail, whatever its DMARC verdict, which is what an email handler did before the clause \
+         was required. Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_email`",
+    )
+    .with_suggestion(
+        "add `by Sender`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Sender".to_string())],
         Applicability::MachineApplicable,
     )
 }

@@ -210,6 +210,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "context shop\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n\x20   total\n\x20 }\n}\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n\x20   total\n\x20 }\n}",
     },
     Explain {
+        code: "bynk.actor.missing_by_on_email",
+        blurb: "Inbound mail comes from the internet, and the platform reports a DMARC verdict on it that can be a pass, a fail or absent. Whether a handler acts on mail that failed authentication is a decision, so an email `on message` handler states its actor with a `by` clause instead of inheriting one. `by Sender` is the explicit \"any mail\", which is what an email handler meant before the clause was required, and `s.identity.dmarc` carries the verdict for a handler that wants to check it. The error's fix inserts `by Sender`, and `bynk check --fix=bynk.actor.missing_by_on_email` migrates a whole project. A header default, `service support from email(\"support@shop.example\") by Sender`, covers a handler without its own `by`.",
+        example: "context shop\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✗ what mail does this act on?\n    Accept\n  }\n}\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓ any mail, said outright\n    Accept\n  }\n}",
+    },
+    Explain {
         code: "bynk.actor.missing_by_on_http",
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
@@ -1739,7 +1744,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.bad_params",
         blurb: "An email `on message` handler takes the message as one `InboundEmail` parameter: inbound email delivers one message per call, so the handler is `on message(mail: InboundEmail) -> Effect[EmailVerdict]`. A parameter of another type, or none, or more than one, is refused. Import `InboundEmail` and `EmailVerdict` from `bynk.cloudflare`.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n        Accept\n    }\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] by Sender {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n        Accept\n    }\n}",
     },
     Explain {
         code: "bynk.email.duplicate_address",
@@ -1749,7 +1754,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.duplicate_handler",
         blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
     },
     Explain {
         code: "bynk.email.invalid_address",
@@ -1759,7 +1764,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.return_not_email_verdict",
         blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
-        example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+        example: "on message(mail: InboundEmail) -> Effect[String] by Sender {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n    Accept\n}",
     },
     Explain {
         code: "bynk.embed.binary_content",
@@ -7010,6 +7015,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.missing_by_on_call",
         "An `on call` handler lacks the required `by` actor clause.",
+    ),
+    d(
+        "bynk.actor.missing_by_on_email",
+        "An email `on message` handler lacks the required `by` actor clause.",
     ),
     d(
         "bynk.actor.missing_by_on_http",
