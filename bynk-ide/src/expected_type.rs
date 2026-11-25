@@ -93,16 +93,13 @@ pub fn argument_type(
     (!ty.is_empty()).then(|| ty.to_string())
 }
 
-/// In `Rec { …, field: ‸` (the field's value just being started), the declared
-/// type of `field` in the record type `Rec`, when `Rec` is a record declared in
-/// the unit or the project.
-pub fn record_field_type(
-    line_prefix: &str,
-    doc_text: &str,
-    files: Option<&HashMap<PathBuf, String>>,
-) -> Option<String> {
+/// In `Rec { …, field: ‸` (the field's value just being started, the entries
+/// on one line or one per line), the record type's name and the field's.
+/// `before` is the document text up to the cursor. Lexical only, so it is cheap
+/// enough to ask on every completion request.
+pub fn record_field_site(before: &str) -> Option<(&str, &str)> {
     // The innermost `{` still open at the cursor.
-    let bytes = line_prefix.as_bytes();
+    let bytes = before.as_bytes();
     let mut depth = 0i32;
     let mut open = None;
     for i in (0..bytes.len()).rev() {
@@ -118,7 +115,7 @@ pub fn record_field_type(
     }
     let open = open?;
     // The current entry (since the last comma) is `field: <partial word>`.
-    let current = line_prefix[open + 1..].rsplit(',').next()?;
+    let current = before[open + 1..].rsplit(',').next()?;
     let (field, value) = current.split_once(':')?;
     let field = field.trim();
     if field.is_empty() || !field.chars().all(|c| c.is_alphanumeric() || c == '_') {
@@ -132,15 +129,26 @@ pub fn record_field_type(
         return None;
     }
     // The record type is the uppercase name just before the `{`.
-    let head = line_prefix[..open].trim_end();
+    let head = before[..open].trim_end();
     let start = head
         .char_indices()
         .rfind(|&(_, c)| !(c.is_alphanumeric() || c == '_'))
         .map_or(0, |(i, c)| i + c.len_utf8());
     let record = &head[start..];
-    if !record.chars().next()?.is_ascii_uppercase() {
-        return None;
-    }
+    record
+        .chars()
+        .next()?
+        .is_ascii_uppercase()
+        .then_some((record, field))
+}
+
+/// The declared type of `field` in the record type `record` (a
+/// [`record_field_site`]), when `record` is declared in the unit or the project.
+pub fn record_field_type(
+    (record, field): (&str, &str),
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Option<String> {
     let mut found = None;
     for_each_unit(doc_text, files, |unit| {
         let items: &[CommonsItem] = match unit {
@@ -285,7 +293,9 @@ mod tests {
     fn a_record_field_value_names_the_fields_declared_type() {
         let doc =
             "commons m\n\ntype Level = | Low | High\n\ntype Order = { id: Int, level: Level }\n";
-        let at = |line: &str| record_field_type(line, doc, None);
+        let at = |before: &str| {
+            record_field_site(before).and_then(|site| record_field_type(site, doc, None))
+        };
         assert_eq!(
             at("  let o = Order { id: 1, level: Hi").as_deref(),
             Some("Level")
@@ -297,6 +307,16 @@ mod tests {
         assert_eq!(at("  Nope { level: "), None);
         assert_eq!(at("  Order { level: a + "), None);
         assert_eq!(at("  Order { missing: "), None);
+        // One entry per line, a trailing comma and a partial word.
+        assert_eq!(
+            at("  let o = Order {\n    id: 1,\n    level: ").as_deref(),
+            Some("Level")
+        );
+        assert_eq!(
+            at("  let o = Order {\n    level: Hi").as_deref(),
+            Some("Level")
+        );
+        assert_eq!(at("  let o = Order {\n    id: 1,\n    ").as_deref(), None);
     }
 
     #[test]

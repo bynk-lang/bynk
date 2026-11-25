@@ -1395,7 +1395,16 @@ impl Backend {
         let in_open_call = completion::is_keyword_position(line_prefix)
             && bynk_ide::signature_help::call_context(text, offset).is_some();
         let in_value_position = completion::is_expression_position(line_prefix) || in_open_call;
-        let files = self.project_content(uri).await;
+        // The cheap lexical checks first: the project's files are swept only
+        // when one of them says there is a type to name (#4334 review).
+        let before = &text[..offset];
+        let field_site = bynk_ide::expected_type::record_field_site(before);
+        let tail_type = bynk_ide::expected_type::tail_position_type(text, offset);
+        let files = if in_value_position || field_site.is_some() || tail_type.is_some() {
+            self.project_content(uri).await
+        } else {
+            None
+        };
         let comparison = in_value_position
             .then(|| bynk_ide::expected_type::comparison_lhs_end(text, offset))
             .flatten();
@@ -1411,24 +1420,26 @@ impl Backend {
         } else {
             // #4334: a record field's value and the tail of a body name their
             // type too, and sit outside the operator positions above.
-            let expected =
-                bynk_ide::expected_type::record_field_type(line_prefix, text, files.as_deref())
-                    .or_else(|| {
-                        in_value_position
-                            .then(|| {
-                                bynk_ide::expected_type::let_annotation_type(line_prefix).or_else(
-                                    || {
-                                        bynk_ide::expected_type::argument_type(
-                                            text,
-                                            offset,
-                                            files.as_deref(),
-                                        )
-                                    },
-                                )
-                            })
-                            .flatten()
-                    })
-                    .or_else(|| bynk_ide::expected_type::tail_position_type(text, offset));
+            let expected = field_site
+                .and_then(|site| {
+                    bynk_ide::expected_type::record_field_type(site, text, files.as_deref())
+                })
+                .or_else(|| {
+                    in_value_position
+                        .then(|| {
+                            bynk_ide::expected_type::let_annotation_type(line_prefix).or_else(
+                                || {
+                                    bynk_ide::expected_type::argument_type(
+                                        text,
+                                        offset,
+                                        files.as_deref(),
+                                    )
+                                },
+                            )
+                        })
+                        .flatten()
+                })
+                .or(tail_type);
             expected
                 .map(|t| bynk_ide::expected_type::variants_of_type_text(&t, text, files.as_deref()))
                 .unwrap_or_default()
@@ -11436,7 +11447,7 @@ mod tests {
     /// do (#4227).
     #[tokio::test]
     async fn expected_type_variants_lead_in_a_record_field_and_a_tail() {
-        let src = "context shop\n\ntype Level = | Low | High\n\ntype Order = { id: Int, level: Level }\n\nfn tail(n: Int) -> Level {\n  let x = n\n  \n}\n\nfn field() -> Order {\n  Order { id: 1, level: \n}\n";
+        let src = "context shop\n\ntype Level = | Low | High\n\ntype Order = { id: Int, level: Level }\n\nfn tail(n: Int) -> Level {\n  let x = n\n  \n}\n\nfn field() -> Order {\n  Order { id: 1, level: \n}\n\nfn spread() -> Order {\n  Order {\n    id: 1,\n    level: \n  }\n}\n";
         let s = scratch_project(
             "expected_type_field_tail",
             &[
@@ -11448,7 +11459,11 @@ mod tests {
         let uri = file_uri(&s.0, "src/shop.bynk");
         open(&backend, &uri, src).await;
         backend.run_round().await;
-        for needle in ["Order { id: 1, level: ", "let x = n\n  "] {
+        for needle in [
+            "Order { id: 1, level: ",
+            "let x = n\n  ",
+            "Order {\n    id: 1,\n    level: ",
+        ] {
             let items = complete_items(&backend, &uri, src, needle, None).await;
             let mut ranked: Vec<&CompletionItem> = items
                 .iter()
