@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `ValidationError` names the failed predicate as `e.rule`, a closed `ValidationRule` sum with typed arguments, and the `400 RefinementViolation` body carries it beside `field` and `message`
----
+# 0961 — A ValidationError names the failed predicate as a closed ValidationRule sum
 
-## ADR: validation-rule
-title: A ValidationError names the failed predicate as a closed ValidationRule sum
-summary: `e.rule` is a prelude `ValidationRule` with a `Bound` sum for numeric arguments; the 400 body carries it and never the value
+- **Status:** Accepted (v0.697)
 
 **Context.** `ValidationError` had two `String` fields, so code could not tell which predicate failed, or by what limit, without parsing English, and an HTTP client reading a `400` could not either. The compiler generated the check, so it knew the rule and its argument and threw them away.
 
