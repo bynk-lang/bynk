@@ -602,7 +602,9 @@ Here `Session` is any `Codable` type, such as `{ user: UserId, created: Instant,
 - **A stored value that does not decode as `T` faults**, naming the capability
   instance, the operation, the type and the path, never the value:
   `Kv.getValue returned a value that does not decode as Session: at $.created: expected
-  number, got string`. Text that is not JSON at all faults too. There is no
+  number, got string`. Text that is not JSON at all faults too, in the binding's own words
+  (`bynk.cloudflare.Kv: getValue returned a value that is not JSON`): only the call site
+  knows the instance, the type and the path, and it sees a reply that already parsed. There is no
   miss-on-undecodable form; read with `get` and `Json.decode` to treat a bad value as
   absent.
 - **Changing `T` while values are stored under the old shape** faults at the first read of

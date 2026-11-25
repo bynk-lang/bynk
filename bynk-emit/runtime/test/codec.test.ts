@@ -196,6 +196,28 @@ test("a fault over an Option payload names the value read, not the Option wrappe
   );
 });
 
+// The paths a fault over an Option payload reports, from the value read: a record's field (`$.user`)
+// and a list's index (`$[1]`), not the `$.value` the Option's own encoding adds.
+test("a fault over an Option payload reports a record field and a list index relative to the value", async () => {
+  const userCodec = {
+    encode: (v: { user: string }): JsonValue => v,
+    decode: (j: JsonValue, path: string): Result<{ user: string }, BoundaryError> => {
+      const user = (j as { user?: unknown } | null)?.user;
+      return typeof user === "string"
+        ? Ok({ user })
+        : Err({ kind: "StructuralMismatch", path: `${path}.user`, expected: "string", actual: typeof user });
+    },
+  };
+  await assert.rejects(
+    __bynkCapabilityReply(Promise.resolve({ kind: "Some", value: { user: 5 } }), __bynkCodecOption(userCodec), { ...site, type: "Option[Session]" }, "fault"),
+    { message: "bynk: Store.load returned a value that does not decode as Session: at $.user: expected string, got number" },
+  );
+  await assert.rejects(
+    __bynkCapabilityReply(Promise.resolve({ kind: "Some", value: [1, "x"] }), __bynkCodecOption(__bynkCodecList(intCodec)), { ...site, type: "Option[List[Int]]" }, "fault"),
+    { message: "bynk: Store.load returned a value that does not decode as List[Int]: at $[1]: expected number, got string" },
+  );
+});
+
 test("a reply that does not decode is a miss when the operation declares one, with a warning that omits the value", async () => {
   const warned: string[] = [];
   const warn = globalThis.console.warn;
