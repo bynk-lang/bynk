@@ -1211,18 +1211,7 @@ impl<'a> Parser<'a> {
                     Ok(TypeRef::Effect(Box::new(arg), t.span.merge(close.span)))
                 }
                 TokenKind::Ident => {
-                    // #4045: `Y.Status` / `lib.y.Status` — a type named through a
-                    // `uses` clause is one name, written as it is.
-                    let (name, t) = match self.qualified_name_len() {
-                        Some(len) => {
-                            let id = self.bump_qualified_name(len);
-                            (id.name, Token { span: id.span, ..t })
-                        }
-                        None => {
-                            self.bump();
-                            (self.slice(t.span).to_string(), t)
-                        }
-                    };
+                    let (name, t) = self.bump_type_name(t);
                     // Built-in type-name dispatch. Each arm below uses the exact
                     // `name == "<Name>"` idiom: the drift guard
                     // `builtin_type_names_match_parser_dispatch`

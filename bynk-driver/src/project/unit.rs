@@ -428,23 +428,13 @@ pub(super) fn emit_unit(
         emitter::agent_cross_context_targets(&info.table, |c| cross_context_info.resolve_prefix(c))
             .into_iter()
             .collect();
-    // #4045: a qualifier a `uses` clause introduces (`Y`, `lib.y`) is imported where
-    // the unit reads a name through it.
-    for (qualifier, used) in use_qualifiers(&info.table) {
-        let path = unit_ctx
-            .imported_decl_paths_emit
-            .get(&used)
-            .and_then(|m| m.values().min().cloned())
-            .unwrap_or_else(|| EmitProjectCtx::commons_path(&used));
-        extra_imports.push(ExtraImport::Qualifier {
-            qualifier,
-            from: emitter::cross_commons_import_specifier_for_path(
-                &emit_source_path,
-                &path,
-                import_ext,
-            ),
-        });
-    }
+    push_use_qualifier_imports(
+        &mut extra_imports,
+        &info.table,
+        unit_ctx,
+        &emit_source_path,
+        import_ext,
+    );
     let mut emit_ctx = EmitProjectCtx {
         source_path: emit_source_path,
         identity_path: pf.identity_path().to_string_lossy().into_owned(),
@@ -453,20 +443,7 @@ pub(super) fn emit_unit(
         imported_from: imported_from.clone(),
         imported_from_kind: imported_from_kind.clone(),
         imported_decl_paths: unit_ctx.imported_decl_paths_emit.clone(),
-        consumed_type_aliases: info
-            .table
-            .consumed_type_aliases
-            .iter()
-            .map(|(alias, a)| (alias.clone(), a.original.clone()))
-            // #4045: a name a `uses` clause renames is imported the same way, under
-            // the name its commons declares and bound to the spelling used here.
-            .chain(
-                info.table
-                    .use_views
-                    .values()
-                    .flat_map(|v| v.use_origin.iter().map(|(k, o)| (k.clone(), o.clone()))),
-            )
-            .collect(),
+        consumed_type_aliases: emitted_type_aliases(&info.table),
         unit_kind: kind,
         owning_context: owning_context_for_emit.clone(),
         exports_for_consumed: unit_ctx.exports_for_consumed.clone(),
@@ -930,4 +907,49 @@ fn use_qualifiers(table: &bynk_check::symbols::UnitTable) -> Vec<(String, String
     }
     out.sort();
     out
+}
+
+/// #2887, #4045: the names this unit imports under another spelling than the one
+/// their module declares them by, alias → declared name. A type renamed with
+/// `consumes U { T as Alias }` is one; a name a `uses` clause renames
+/// (`uses lib.y { Status as YStatus }`) is the same, imported by what its commons
+/// declares and bound to the spelling used here.
+fn emitted_type_aliases(table: &bynk_check::symbols::UnitTable) -> HashMap<String, String> {
+    table
+        .consumed_type_aliases
+        .iter()
+        .map(|(alias, a)| (alias.clone(), a.original.clone()))
+        .chain(
+            table
+                .use_views
+                .values()
+                .flat_map(|v| v.use_origin.iter().map(|(k, o)| (k.clone(), o.clone()))),
+        )
+        .collect()
+}
+
+/// #4045: a qualifier a `uses` clause introduces (`Y`, `lib.y`) is imported where
+/// the unit reads a name through it.
+fn push_use_qualifier_imports(
+    extra_imports: &mut Vec<ExtraImport>,
+    table: &bynk_check::symbols::UnitTable,
+    unit_ctx: &EmitUnitCtx,
+    emit_source_path: &std::path::Path,
+    import_ext: ImportExt,
+) {
+    for (qualifier, used) in use_qualifiers(table) {
+        let path = unit_ctx
+            .imported_decl_paths_emit
+            .get(&used)
+            .and_then(|m| m.values().min().cloned())
+            .unwrap_or_else(|| EmitProjectCtx::commons_path(&used));
+        extra_imports.push(ExtraImport::Qualifier {
+            qualifier,
+            from: emitter::cross_commons_import_specifier_for_path(
+                emit_source_path,
+                &path,
+                import_ext,
+            ),
+        });
+    }
 }

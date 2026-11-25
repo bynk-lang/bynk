@@ -11146,8 +11146,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A variant payload has the wrong type.",
     ),
     dg(
+        "bynk.uses.ambiguous_name",
+        "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one.",
+        &["uses_decl"],
+    ),
+    dg(
         "bynk.uses.name_conflict",
-        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.second_spelling",
+        "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type.",
         &["uses_decl"],
     ),
     dg(
@@ -11163,6 +11173,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.unknown_commons",
         "`uses` names a commons that does not exist.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.unknown_name",
+        "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly.",
         &["uses_decl"],
     ),
     dg(

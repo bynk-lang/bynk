@@ -1148,6 +1148,32 @@ impl<'a> Parser<'a> {
         Ident { name, span }
     }
 
+    /// #4045: the identifier token `t` (the cursor is on it) as an [`Ident`], or,
+    /// when it begins a name qualified by a `uses` clause (`Y.f`, `lib.y.f`), the
+    /// whole of that name as one identifier.
+    fn bump_ident_maybe_qualified(&mut self, t: Token) -> Ident {
+        match self
+            .qualified_name_len()
+            .filter(|_| t.kind == TokenKind::Ident)
+        {
+            Some(len) => self.bump_qualified_name(len),
+            None => {
+                self.bump();
+                Ident {
+                    name: self.slice(t.span).to_string(),
+                    span: t.span,
+                }
+            }
+        }
+    }
+
+    /// #4045: [`Self::bump_ident_maybe_qualified`] for a type name, with the token
+    /// as it spans the whole name.
+    fn bump_type_name(&mut self, t: Token) -> (String, Token) {
+        let id = self.bump_ident_maybe_qualified(t);
+        (id.name, Token { span: id.span, ..t })
+    }
+
     /// The source text of the token `n` positions ahead, or `""` if none.
     fn nth_text(&self, n: usize) -> &'a str {
         self.nth(n).map(|t| self.slice(t.span)).unwrap_or("")
