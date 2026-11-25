@@ -5,7 +5,7 @@
 use super::*;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::ResolvedStub;
-use bynk_syntax::ast::{ArgPattern, BaseType, CapabilityOp, StubClause, TypeRef};
+use bynk_syntax::ast::{ArgPattern, CapabilityOp, StubClause, TypeRef};
 use bynk_ts::{TsExpr, TsStmt};
 use std::sync::Arc;
 
@@ -65,34 +65,21 @@ pub(super) fn clause_reply_payload(
 }
 
 /// #4382: the payload type a stubbed operation's reply travels as plain JSON in, when the
-/// operation declares an `Effect[P]` reply that mentions one of its `Codable` type parameters
-/// (a typed read: `Idempotency.dedup[T]`). The call site decodes that reply whole with the
-/// codec of `P`, so a stub's value must be encoded with the same one. `clause_op` is the
+/// operation is a typed read (its `Effect[P]` reply mentions one of its `Codable` type
+/// parameters, the rule the call site decodes by). The call site decodes that reply whole with
+/// the codec of `P`, so a stub's value must be encoded with the same one. `clause_op` is the
 /// operation with the clause's written type arguments substituted, so the payload is concrete;
 /// `None` when the reply is not encoded, or a type parameter is still open.
 fn encoded_reply_payload(orig: &CapabilityOp, clause_op: &CapabilityOp) -> Option<TypeRef> {
-    let codable = bynk_check::checker::codable::codable_op_params(orig);
-    let TypeRef::Effect(orig_payload, _) = &orig.return_type else {
-        return None;
-    };
+    use bynk_check::checker::codable::{mentions_any, typed_read_policy};
+    typed_read_policy(orig)?;
     let TypeRef::Effect(payload, _) = &clause_op.return_type else {
         return None;
     };
-    let hidden: HashMap<String, TypeRef> = codable
+    let open: Vec<String> = clause_op
+        .type_params
         .iter()
-        .map(|c| (c.clone(), TypeRef::Base(BaseType::Int, orig.span)))
+        .map(|tp| tp.name.name.clone())
         .collect();
-    let shown = bynk_syntax::print::type_ref_to_string;
-    let mentions =
-        shown(&bynk_check::wire::subst_type_ref(orig_payload, &hidden)) != shown(orig_payload);
-    let open = clause_op.type_params.iter().any(|tp| {
-        shown(&bynk_check::wire::subst_type_ref(
-            payload,
-            &HashMap::from([(
-                tp.name.name.clone(),
-                TypeRef::Base(BaseType::Int, orig.span),
-            )]),
-        )) != shown(payload)
-    });
-    (mentions && !open).then(|| (**payload).clone())
+    (!mentions_any(payload, &open)).then(|| (**payload).clone())
 }

@@ -5,6 +5,7 @@ adapter idempotency {
 
   capability Idempotency {
     fn dedup[T](key: String) -> Effect[Option[T]]
+    fn stamp[T](value: T) -> Effect[Int]
   }
 
   provides Idempotency = MemoIdempotency

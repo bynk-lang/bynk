@@ -7195,6 +7195,17 @@ fn record_capability_wire(
     untyped: Option<&[Expr]>,
     ctx: &mut Ctx,
 ) -> bool {
+    // #4382: written and inferred alike, in declaration order, whether or not the operation
+    // has a `Codable` parameter: a test build keys a `stub` and an observation on the leading
+    // ones.
+    let resolved: Vec<TyId> = op
+        .type_params
+        .iter()
+        .filter_map(|tp| subst.get(tp).copied())
+        .collect();
+    if let Some(Callee::Capability { type_args, .. }) = ctx.callees.get_mut(&expr_id) {
+        type_args.clone_from(&resolved);
+    }
     let Some(wire) = op_encoding(
         &op.type_params,
         &op.codable_params,
@@ -7224,12 +7235,7 @@ fn record_capability_wire(
             wire: Some(wire),
             first_party: local_first_party(cap, ctx),
             event: None,
-            // #4382: written and inferred alike, in declaration order.
-            type_args: op
-                .type_params
-                .iter()
-                .filter_map(|tp| subst.get(tp).copied())
-                .collect(),
+            type_args: resolved,
         },
     );
     true
