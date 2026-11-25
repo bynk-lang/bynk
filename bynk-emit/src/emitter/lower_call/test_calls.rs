@@ -138,7 +138,7 @@ fn test_deps(cx: &LowerCtx, service: &str, sum_key: Option<&str>) -> DepsArg {
         }
         (_, Some(identity)) => {
             let claims =
-                if sum_key.is_some_and(|k| cx.is_oidc_handler(service, k)) {
+                if sum_key.is_some_and(|k| cx.is_claims_handler(service, k)) {
                     Some(cx.call_site_claims.clone().unwrap_or_else(|| {
                         call(ident("__tokenClaims"), vec![TsExpr::array(vec![])])
                     }))

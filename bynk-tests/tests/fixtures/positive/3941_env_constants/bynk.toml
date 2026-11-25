@@ -1,0 +1,16 @@
+[project]
+name = "env-constants"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+# #3941: build-time values for `env(NAME)` constants. `default` is the
+# environment a plain build uses; `staging`'s own variable is read by a constant
+# too, and applies when that environment is built.
+[vars]
+APP_ORIGIN = "https://app.shop.example"
+FLAGS = ["alpha", "beta"]
+
+[env.staging.vars]
+BILLING_WORKER = "legacy-billing-staging"

@@ -78,7 +78,7 @@ export const api = {
   async http_GET_tag_Param_public(__id_public: Tag, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("ok");
   },
-  async http_GET_bearer_Param_delete(__id_delete: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_bearer_Param_delete(__id_delete: string, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(__id_delete);
   },
   async http_GET_oidc_Param_function(__id_function: string, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {

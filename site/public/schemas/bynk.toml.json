@@ -228,6 +228,13 @@
                 },
                 "type": "array"
               },
+              "cpu_ms": {
+                "description": "This Worker's CPU limit, in milliseconds, over `[workers] cpu_ms`.",
+                "format": "uint32",
+                "maximum": 300000,
+                "minimum": 1,
+                "type": "integer"
+              },
               "custom_domains": {
                 "description": "Custom domains the Worker is attached to, like `pay.example.com`.",
                 "items": {
@@ -258,6 +265,14 @@
                   }
                 },
                 "type": "object"
+              },
+              "placement": {
+                "description": "This Worker's placement, `\"smart\"` or `\"off\"`, over `[workers] placement`.",
+                "enum": [
+                  "smart",
+                  "off"
+                ],
+                "type": "string"
               },
               "routes": {
                 "description": "Route patterns the Worker is attached to, like `pay.example.com/*`.",
@@ -409,6 +424,50 @@
       "x-taplo": {
         "links": {
           "key": "https://bynk-lang.org/reference/tooling/manifest/#dev-dependencies"
+        }
+      }
+    },
+    "env": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "description": "One environment's settings.",
+        "properties": {
+          "vars": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ],
+              "description": "A build-time variable's value: what an `env(NAME)` constant is declared as."
+            },
+            "description": "This environment's build-time variables, over `[vars]`.",
+            "propertyNames": {
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "description": "Per-environment settings, keyed by the environment's name (the `--env`\nvalue).",
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#env"
         }
       }
     },
@@ -758,6 +817,39 @@
         }
       }
     },
+    "vars": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "format": "int64",
+            "type": "integer"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        ],
+        "description": "A build-time variable's value: what an `env(NAME)` constant is declared as."
+      },
+      "description": "Build-time variables, by name (`[A-Z][A-Z0-9_]*`): the values the project's\n`const X: T = env(NAME[, default])` constants take, in every environment\n(`default` included). They are resolved when the project is built, from this\ncommitted file only, and are not Wrangler's run-time `[vars]`. A name no\n`env(…)` constant reads is an error, so a typo cannot leave a default in\nforce.",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "type": "object",
+      "x-taplo": {
+        "links": {
+          "key": "https://bynk-lang.org/reference/tooling/manifest/#vars"
+        }
+      }
+    },
     "workers": {
       "additionalProperties": false,
       "description": "Settings for the Cloudflare Workers a Workers build emits (`bynk compile\n--target workers`, `bynk dev`, `bynk deploy`).",
@@ -769,6 +861,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "cpu_ms": {
+          "description": "The CPU time each Worker may use per request, in milliseconds, written as\n`[limits] cpu_ms`: raise it for CPU-heavy work such as password hashing.\nFrom `1` to `300000`; a limit above the account's plan is Cloudflare's\nerror at deploy. Unset leaves Cloudflare's default. A worker group\noverrides it.",
+          "format": "uint32",
+          "maximum": 300000,
+          "minimum": 1,
+          "type": "integer"
         },
         "observability": {
           "additionalProperties": false,
@@ -789,6 +888,15 @@
             }
           },
           "type": "object"
+        },
+        "placement": {
+          "default": "off",
+          "description": "`\"smart\"` turns on Smart Placement for every Worker (written as\n`[placement] mode = \"smart\"`): the Worker runs near the back end it\ntalks to, such as a `D1` database, rather than near the user. `\"off\"`\n(the default) leaves Cloudflare's default placement. A worker group\noverrides it.",
+          "enum": [
+            "smart",
+            "off"
+          ],
+          "type": "string"
         },
         "workers_dev": {
           "description": "Whether every Worker is served on its `*.workers.dev` URL: written as\n`workers_dev` in each `wrangler.toml`. Set `false` to take the Workers\noff `workers.dev`. Unset leaves the key out, so Cloudflare's default\n(on) applies.",

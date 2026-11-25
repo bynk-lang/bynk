@@ -1,0 +1,15 @@
+---
+#4181: a commons names the `bynk` adapter's transparent types (`CronSchedule`,
+`Uuid`) with no `consumes`, so a schedule is written once and shared.
+---
+commons ops.schedules
+
+const Nightly: CronSchedule = "0 2 * * *"
+
+fn parseId(raw: String) -> Result[Uuid, ValidationError] {
+	Uuid.of(raw)
+}
+
+fn echo(id: Uuid) -> Uuid {
+	id
+}

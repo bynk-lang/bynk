@@ -92,6 +92,20 @@ struct WorkersTable {
     /// `wrangler.toml`, which each environment inherits. A worker group
     /// overrides it key by key under `[deploy.workers.<key>.observability]`.
     observability: Option<ObservabilityTable>,
+    /// The CPU time each Worker may use per request, in milliseconds, written as
+    /// `[limits] cpu_ms`: raise it for CPU-heavy work such as password hashing.
+    /// From `1` to `300000`; a limit above the account's plan is Cloudflare's
+    /// error at deploy. Unset leaves Cloudflare's default. A worker group
+    /// overrides it.
+    #[schemars(extend("minimum" = 1, "maximum" = 300000))]
+    cpu_ms: Option<u32>,
+    /// `"smart"` turns on Smart Placement for every Worker (written as
+    /// `[placement] mode = "smart"`): the Worker runs near the back end it
+    /// talks to, such as a `D1` database, rather than near the user. `"off"`
+    /// (the default) leaves Cloudflare's default placement. A worker group
+    /// overrides it.
+    #[schemars(extend("enum" = ["smart", "off"], "default" = "off"))]
+    placement: Option<String>,
 }
 
 /// `[workers.observability]` (and a worker group's own `observability`).
@@ -151,6 +165,12 @@ struct DeployWorkerEntry {
     /// This Worker's Workers Logs settings, laid over `[workers.observability]`
     /// key by key: `head_sampling_rate = 0.01` for a noisy Worker.
     observability: Option<ObservabilityTable>,
+    /// This Worker's CPU limit, in milliseconds, over `[workers] cpu_ms`.
+    #[schemars(extend("minimum" = 1, "maximum" = 300000))]
+    cpu_ms: Option<u32>,
+    /// This Worker's placement, `"smart"` or `"off"`, over `[workers] placement`.
+    #[schemars(extend("enum" = ["smart", "off"]))]
+    placement: Option<String>,
 }
 
 /// One `Container` capability's image at deploy.
@@ -523,6 +543,43 @@ struct RegistryEntry {
 #[allow(dead_code)]
 struct RegistriesTable(std::collections::BTreeMap<String, RegistryEntry>);
 
+/// A build-time variable's value: what an `env(NAME)` constant is declared as.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum VarValueSchema {
+    Text(String),
+    Number(i64),
+    Flag(bool),
+    List(Vec<String>),
+}
+
+/// Build-time variables, by name (`[A-Z][A-Z0-9_]*`): the values the project's
+/// `const X: T = env(NAME[, default])` constants take, in every environment
+/// (`default` included). They are resolved when the project is built, from this
+/// committed file only, and are not Wrangler's run-time `[vars]`. A name no
+/// `env(…)` constant reads is an error, so a typo cannot leave a default in
+/// force.
+#[derive(JsonSchema)]
+#[schemars(extend("propertyNames" = { "pattern": "^[A-Z][A-Z0-9_]*$" }))]
+#[allow(dead_code)]
+struct VarsTable(std::collections::BTreeMap<String, VarValueSchema>);
+
+/// One environment's settings.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct EnvEntry {
+    /// This environment's build-time variables, over `[vars]`.
+    vars: Option<VarsTable>,
+}
+
+/// Per-environment settings, keyed by the environment's name (the `--env`
+/// value).
+#[derive(JsonSchema)]
+#[allow(dead_code)]
+struct EnvTable(std::collections::BTreeMap<String, EnvEntry>);
+
 /// Makes this directory a workspace root: a group of projects that `bynk
 /// check`, `fmt` and `test` run across. A workspace root isn't a project:
 /// its `bynk.toml` holds only `[workspace]` and `[registries]`.
@@ -560,6 +617,8 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "dependencies" => generator.subschema_for::<DependenciesTable>(),
         "dev-dependencies" => generator.subschema_for::<DevDependenciesTable>(),
         "registries" => generator.subschema_for::<RegistriesTable>(),
+        "vars" => generator.subschema_for::<VarsTable>(),
+        "env" => generator.subschema_for::<EnvTable>(),
         _ => return None,
     })
 }

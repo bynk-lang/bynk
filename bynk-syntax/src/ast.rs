@@ -145,6 +145,10 @@ pub struct Commons {
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,
+    /// `consumes` clauses of this file. Source cannot write one in a commons
+    /// yet; the toolchain adds the type-only clause that reaches the `bynk`
+    /// adapter's transparent types (#4181, `ParsedFile::add_implicit_consumes` in `bynk-project`).
+    pub consumes: Vec<ConsumesDecl>,
     /// Optional documentation block attached to the commons declaration.
     pub documentation: Option<Doc>,
     /// Surface form of the file: brace-delimited body or headerless fragment.
@@ -157,6 +161,38 @@ pub struct Commons {
     /// Comments appearing after the last item but before the file ends
     /// (or the closing brace, for brace form). One entry per `--` line.
     pub trailing_comments: Vec<Comment>,
+}
+
+impl Commons {
+    /// A commons as the parser reads it: no `consumes` (source cannot write one;
+    /// the toolchain adds the implicit type-only clause, #4181), the brace or
+    /// fragment form, and no trivia of its own.
+    pub fn parsed(
+        name: QualifiedName,
+        items: Vec<CommonsItem>,
+        uses: Vec<UsesDecl>,
+        documentation: Option<Doc>,
+        brace: bool,
+        span: Span,
+        trailing_comments: Vec<Comment>,
+    ) -> Commons {
+        Commons {
+            name,
+            test_only: false,
+            items,
+            uses,
+            consumes: Vec::new(),
+            documentation,
+            form: if brace {
+                CommonsForm::Brace
+            } else {
+                CommonsForm::Fragment
+            },
+            span,
+            trivia: Trivia::default(),
+            trailing_comments,
+        }
+    }
 }
 
 /// The two surface forms in which a commons body may be parsed (v0.3 §3.1).

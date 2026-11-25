@@ -18,3 +18,22 @@ pub fn observability_block(observability: bynk_project::observability::Observabi
         ],
     )
 }
+
+/// #4128: the `[limits]` and `[placement]` tables of a Worker's `wrangler.toml`,
+/// each only when set: a project that says nothing keeps Cloudflare's defaults.
+pub fn tuning_blocks(tuning: bynk_project::worker_tuning::WorkerTuning) -> Vec<TomlBlock> {
+    let mut blocks = Vec::new();
+    if let Some(cpu_ms) = tuning.cpu_ms {
+        blocks.push(TomlBlock::table(
+            WranglerKey::Limits,
+            vec![TomlEntry::kv("cpu_ms", TomlValue::Int(cpu_ms as i64))],
+        ));
+    }
+    if tuning.placement == bynk_project::worker_tuning::Placement::Smart {
+        blocks.push(TomlBlock::table(
+            WranglerKey::Placement,
+            vec![TomlEntry::kv("mode", TomlValue::str("smart"))],
+        ));
+    }
+    blocks
+}

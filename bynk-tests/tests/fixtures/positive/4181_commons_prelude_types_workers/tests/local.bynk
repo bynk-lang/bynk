@@ -1,0 +1,8 @@
+---
+#4181: the commons' own `File` is the one in scope.
+---
+suite ops.local
+
+case "the commons' own File" {
+	expect label(File { name: "a.txt" }) == "a.txt"
+}

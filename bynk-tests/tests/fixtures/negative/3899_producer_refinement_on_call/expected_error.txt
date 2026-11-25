@@ -1,0 +1,1 @@
+bynk.actor.scheme_not_admissible

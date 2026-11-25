@@ -50,9 +50,11 @@ pub mod paths;
 pub mod roots;
 pub mod schema_registry;
 pub mod snapshots;
+pub mod vars;
 pub mod vectorize;
 pub mod worker_groups;
 pub mod worker_layout;
+pub mod worker_tuning;
 pub mod workspace;
 pub mod wrangler_keys;
 

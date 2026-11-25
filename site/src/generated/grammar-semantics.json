@@ -1312,6 +1312,10 @@
       "summary": "A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached."
     },
     {
+      "code": "bynk.query.while_needs_order",
+      "summary": "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`."
+    },
+    {
       "code": "bynk.race.in_agent_handler",
       "summary": "`a.race(b)` was used in an agent handler, which has no execution context to hand the losing effect to."
     },

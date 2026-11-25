@@ -761,14 +761,14 @@ fn lower_effect_let_value(
             cx.call_site_bad_signature = Some(bad.driver());
         } else {
             cx.call_site_identity = principal.identity.as_ref().map(|id| pre.lower_node(id, cx));
-            // #3052: a `system` call mints its `Oidc` token's claims from the
+            // #3052, #3937: a `system` call mints its `Oidc` or `Bearer` token's claims from the
             // lines of a literal `TokenClaims.of(lines)` (the checker admits
             // no other form there, `bynk.test.system_claims_need_literal`),
             // and never builds the in-process `TokenClaims` value, so the
             // lines are lowered once and in place of it.
             let literal_lines = match principal.claims.as_deref().map(|c| &c.kind) {
                 Some(ExprKind::MethodCall { args, .. })
-                    if cx.is_system_oidc_body()
+                    if cx.is_system_claims_body()
                         && args.len() == 1
                         && matches!(
                             principal

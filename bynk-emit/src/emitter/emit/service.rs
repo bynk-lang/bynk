@@ -332,6 +332,16 @@ pub(crate) fn emit_service(
             ActorSeamIr::Bearer(_) | ActorSeamIr::SignedCookie(_) => {
                 if let Some(id) = seam.captured_identity_type() {
                     append_deps_field(&mut deps_members, "identity", bynk_ts::TsType::named(id));
+                    // #3937: an HTTP `Bearer` binder reads the verified token's claims too.
+                    if matches!(seam, ActorSeamIr::Bearer(_))
+                        && matches!(protocol, ProtocolIr::Http)
+                    {
+                        append_deps_field(
+                            &mut deps_members,
+                            "claims",
+                            crate::emitter::ts_types::token_claims_ts_type(),
+                        );
+                    }
                 }
             }
             // v0.151: an `Oidc`-binding handler threads its `sub`-minted

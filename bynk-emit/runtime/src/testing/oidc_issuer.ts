@@ -30,17 +30,6 @@ export interface __BynkOidcIssuer {
 }
 export function __bynkOidcB64(bytes: Uint8Array): string { let bin = ""; for (const b of bytes) bin += String.fromCharCode(b); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
 export function __bynkOidcText(s: string): string { return __bynkOidcB64(new TextEncoder().encode(s)); }
-// A claim list is `"name: value"` lines, read as `TokenClaims.of` reads them in
-// process: every value is a trimmed string (`"n: 1"` is the string `"1"`), so
-// the `system` and `integration` tiers see the same claims.
-export function __bynkOidcClaims(lines: readonly string[]): globalThis.Record<string, unknown> {
-  const claims: globalThis.Record<string, unknown> = {};
-  for (const line of lines) {
-    const i = line.indexOf(":");
-    if (i > 0) claims[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-  }
-  return claims;
-}
 // The trust roots the seam checks: the actor's declaration, replaced by its
 // `trustFrom` variable's JSON when the case's `env` (or the process) sets it,
 // exactly as the Worker's `__oidcTrust` reads it.

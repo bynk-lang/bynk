@@ -1,0 +1,9 @@
+# 0973 — A queue consumer states who may send to it
+
+- **Status:** Accepted (v0.709)
+
+**Context.** A `from queue("orders")` consumer accepted any well-shaped message from any producer on the Cloudflare account, and its default actor `Producer` was silent about that. Who may send to a handler is an access decision, which Bynk puts in the `by` clause. This is the first part of #3899, which goes on to let a consumer narrow it (a `Producer` refinement admitting only signed messages from named contexts, and `Foreign` producers).
+
+**Decision.** (A) `by` is required on every `on message` handler: `bynk.actor.missing_by_on_queue`, with a fix-it inserting `by Producer`, which means what the handler meant before (anyone on the account, unsigned). A service-header `by` satisfies it. `cron` and `Events` keep silent defaults, because their sender can be no one else. `default_actor` no longer names a queue default.
+
+**Consequences.** This is security-relevant in intent but not in behaviour yet: an existing consumer is as open as before, now visibly. Every `from queue` source in the repository, the documentation and the tests is migrated with the fix-it; the handler-kind snapshot gains the `Producer` participant a stated actor adds. The narrowing, and what makes an unsigned message refused, are later parts of #3899. Hover, completion, semantic tokens and signature help are unchanged; a quick fix offers `by Producer` on the new error.

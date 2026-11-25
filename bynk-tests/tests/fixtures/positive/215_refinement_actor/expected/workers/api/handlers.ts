@@ -19,7 +19,7 @@ export const UserId = {
 };
 
 export const api = {
-  async http_GET_admin(deps: { identity: UserId }): globalThis.Promise<HttpResult<UserId>> {
+  async http_GET_admin(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<UserId>> {
     return HttpResult.Ok(deps.identity);
   },
 };

@@ -3,6 +3,7 @@
 
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { HttpResult } from "../__bynk_runtime/httpresult.js";
+import { __tokenClaims } from "../__bynk_runtime/auth.js";
 import * as __ns_r from "./../r.js";
 
 <<bynk-shared: testing/expectation>>
@@ -69,7 +70,7 @@ async function test_a_single_actor_route_beside_a_sum() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any) });
+    const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any), claims: __tokenClaims([]) });
     if (!(__bynkEq(r, HttpResult.Ok("bo")))) { throw __bynkExpectFailure("tests/r.bynk:25:9", 682, 695, "expect r == Ok(\"bo\")\n  expected: r == Ok(\"bo\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("bo")))); }
     return { pass: true };
   } catch (e) {

@@ -1603,7 +1603,7 @@ returnable from a pure helper, passable. A query is **agent-local** and reads
 **staged** state (read-your-writes).
 
 **Builders** are pure and return a further `Query` — `filter`, `map`, `flatMap`,
-`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below.
+`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below. `filterMap(f)`, `takeWhile(p)` and `skipWhile(p)` are the [`List`](#list-methods) combinators of the same names (#4246): [`takeWhile` and `skipWhile` need an ordered query](#order-while).
 
 **Terminals** execute the query and are `Effect`-typed (awaited with `<-`), folding
 into the storage capability the `store` fields already carry (no new `given`):
@@ -1613,6 +1613,7 @@ into the storage capability the `store` fields already carry (no new `given`):
 | `.collect()` | `Effect[List[T]]` |
 | `.first()` | `Effect[Option[T]]` |
 | `.count()` | `Effect[Int]` |
+| `.count(p)` | `Effect[Int]`, the elements `p` holds for (#4246) |
 | `.sum(key)` / `.min(key)` / `.max(key)` / `.average(key)` | `Effect[…]` (empty-total: `Option`, or the zero for `sum`) |
 | `.any(p)` / `.all(p)` | `Effect[Bool]` |
 | `.fold(init, f)` | `Effect[acc]` |
@@ -1667,6 +1668,31 @@ This is what lets a stored value drop the denormalised copy of its own key. The
 accessors are paren-less builders on the *storage* map, distinct from the eager
 in-memory `Map` value methods `.keys()`/`.values()` that return `List`s.
 
+### Stopping on order: `takeWhile` and `skipWhile` {#order-while}
+
+`q.filterMap(f: T -> Option[U])` is `Query[U]`, the `Some` results of `f`; `q.takeWhile(p)` is the
+longest prefix of `q` whose elements all satisfy `p`; `q.skipWhile(p)` is what is left after that
+prefix. All three have the `List` signatures and meanings (#3963), and `q.count(p)` counts the
+elements `p` holds for.
+
+`takeWhile` and `skipWhile` stop where `p` first fails, so what they keep depends on the order the
+elements come in, and a query plan does not express that as a filter. They are therefore accepted
+only on a query with a **declared order**: an explicit `sortBy` or `sortByDescending` before them,
+with only `filter`, `map`, `filterMap`, `skip`, `take` or another `takeWhile` or
+`skipWhile` between, or a [`Log`](#which-terminals-stop-reading-early), which is read oldest first, or
+a window of one (`since`, `before`, `between`, `recent` or `reversed`, which flips it). A `flatMap` loses
+the order, since each inner query is joined in its own.
+A `Map` scan, a join, a grouping, a `distinct` and a query held in a `let` have none the author can
+see, so the call is `bynk.query.while_needs_order` instead of a guess; put a `sortBy` before it.
+
+```bynk,fragment
+// the readings below 20, in time order
+readings.values.sortBy((r) => r.at).takeWhile((r) => r.value < 20).collect()
+```
+
+These builders read the whole source and then cut, as `sortBy` and `take` on a `Map` already do, so a
+store backend that cannot push the cut down pays the read the rest of the query already pays.
+
 ### Which terminals stop reading early
 
 A terminal over a `store` collection reads its pages from storage. Where the answer is known
@@ -1682,8 +1708,9 @@ Only `filter`, `map` and `flatMap` (and `skip`, on a `Log`) may come before such
 input, so `sortBy(…).first()` reads everything while `first()` does not. A `Log` is read oldest first,
 so `first()` is its oldest match. A `Map` is scanned in insertion order, which only reading every
 entry recovers, so its order-dependent terminals read everything. An equality `filter` on an
-[`@indexed`](/reference/agents/#indexed-routing) field reads its posting list as before. A query
-held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
+[`@indexed`](/reference/agents/#indexed-routing) field reads that value's posting list, and `any` and
+`all` over it read the list a page at a time and stop at the answer, while `first` and `take` read it all.
+A query held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
 
 <!-- /sorted -->
 
