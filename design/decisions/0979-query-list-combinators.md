@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A `Query` has `filterMap`, `takeWhile`, `skipWhile` and `count(p)`, as `List` does; `takeWhile` and `skipWhile` need a declared order (`bynk.query.while_needs_order`)
----
+# 0979 — A Query gets filterMap, takeWhile, skipWhile and count(p), with takeWhile and skipWhile needing a declared order
 
-## ADR: query-list-combinators
-title: A Query gets filterMap, takeWhile, skipWhile and count(p), with takeWhile and skipWhile needing a declared order
-summary: List parity for a Query, lowered through the deferred-thunk builders, and an explained error where a prefix has no order to stop on
+- **Status:** Accepted (v0.716)
 
 **Context.** #3963 gave `List` `filterMap`, `takeWhile`, `skipWhile` and a predicate `count`, and asked for the same on a `Query` (its decision C). A `Query` lowers through the runtime query builder, not through the list kernels, so parity was not a plain mapping and #4246 carries the query side.
 

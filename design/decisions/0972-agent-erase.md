@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An agent handler deletes its own instance's stored state with `self.erase()`: when it commits, every field, entry, index posting and marker for the key goes, the next call starts from the initial state, a faulting handler erases nothing, and a `:=` after it is `bynk.agent.write_after_erase`
----
+# 0972 — `self.erase()` deletes an agent instance's stored state as its commit
 
-## ADR: agent-erase
-title: `self.erase()` deletes an agent instance's stored state as its commit
-summary: What `self.erase()` deletes, when, and what it leaves to events, invariants and the tests
+- **Status:** Accepted (v0.708)
 
 **Context.** An agent's state could be removed only for a whole class (`removed agent Old` deletes
 every instance). A handler had no way to delete its own instance: a closed account's data could not be

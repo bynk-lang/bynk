@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A constant takes a per-environment value from `bynk.toml`: `const X: T = env(NAME[, default])`, read from `[vars]` and `[env.<name>.vars]`, so a value no longer needs its own table per feature
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
----
+# 0980 — A constant's value comes from `bynk.toml` per environment
 
-## ADR: env-constants
-title: A constant's value comes from `bynk.toml` per environment
-summary: `const X: T = env(NAME[, default])` is resolved at build time from `bynk.toml`, and amends ADR 0678 A's static-initialiser set
+- **Status:** Accepted (v0.717)
 
 **Context.** Bynk has no general way to give a value a different setting per deployment environment. Each feature invented its own table (`[deploy.vectorize]`, `[deploy.hyperdrive]`, `[deploy.containers]`, `Oidc`'s `trustFrom`), and where none was invented a staging deployment uses production's values: under `--env` a foreign Worker's name is used as declared, so a staging `Service @worker("legacy-billing")` calls production's billing Worker. A constant's initialiser was a closed static set (ADR 0678 A) and ADR 0826 resolves a constant to its literal before any reader sees it, so the missing piece is a declared, checked way for that literal to differ per environment.
 

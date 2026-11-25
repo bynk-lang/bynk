@@ -1,12 +1,6 @@
----
-level: minor
-probes: ast_importers
-changelog: A `stub` and an observation of a generic capability operation name its type argument, as in `stub Idempotency.dedup[Outcome](_) returns None`, and answer only the calls made at that type argument
----
+# 0978 — A stub names the type argument of a generic capability operation
 
-## ADR: stub-generic-capability-operations
-title: A stub names the type argument of a generic capability operation
-summary: The type argument is part of a stub's and an observation's target, typed by substitution, and matched at run time by a key the test build passes with the call
+- **Status:** Accepted (v0.715)
 
 **Context.** A generic capability operation (`fn dedup[T](key: String) -> Effect[Option[T]]`) could not be stubbed, because a clause's value cannot be built for an unconstrained `T`. A stub that names the type has a concrete `T`, so that reason does not apply (#3945).
 

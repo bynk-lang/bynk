@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A suite helper may return an `Effect` and declare `given`, naming its target's capabilities, so setup that runs effects is written once and called from each case
----
+# 0977 — A suite helper may declare given and run effects with the case's capabilities
 
-## ADR: effectful-suite-helpers
-title: A suite helper may declare given and run effects with the case's capabilities
-summary: Which helpers may be effectful, where they may be called, which tiers allow them, and how they get their capabilities
+- **Status:** Accepted (v0.713)
 
 **Context.** A suite helper had to be pure, so setup that runs effects (create a table, seed rows, open a session) was written out in every case that needed it (#3983).
 

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A commons declared `for tests` holds helpers, types and constants that suites share, and is left out of every deployable
----
+# 0974 — A test-only commons is how suites share code
 
-## ADR: test-only-commons
-title: A test-only commons is how suites share code
-summary: The marker, who may use it, what it holds, how the build treats it, and the limits of this change
+- **Status:** Accepted (v0.710)
 
 **Context.** Suite helpers, types and constants were private to their suite file, so a project with many suites over one API repeated the same request builders, claims, fixtures and row types in each (#3984).
 
