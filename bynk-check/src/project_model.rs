@@ -50,7 +50,7 @@ use crate::symbols::{
 use bynk_project::{
     AttributedError, LabelFile, ParsedFile, UnitKind, check_directory_kind_consistency,
     check_directory_name_consistency, check_file_directory_conflicts, check_group_kind_consistency,
-    check_group_module_docs, check_path_name_alignment, detect_consumes_cycles,
+    check_group_module_docs, check_path_name_alignment, detect_dependency_cycles,
     discover_bynk_files, is_unpinned_range, normalize_rel, parse_sources, parse_sources_recovering,
     read_adapter_binding, read_adapter_include, read_source,
 };
@@ -3090,6 +3090,24 @@ pub fn phase_resolve_consumes(
                         ),
                     );
                     continue;
+                }
+                // #4044: a commons consumes types only: braced, from an adapter.
+                if kind == UnitKind::Commons {
+                    let capabilities = unit_tables
+                        .get(&target)
+                        .map(|t| &t.exported_capabilities)
+                        .cloned()
+                        .unwrap_or_default();
+                    if let Some(err) = commons_consumes_refusal(
+                        c,
+                        &target,
+                        target_kind,
+                        &capabilities,
+                        &exports_type,
+                    ) {
+                        errors.push_for(Some(&parsed[i].identity_path()), err);
+                        continue;
+                    }
                 }
                 // v0.18: adapter dependencies are adapter-to-adapter (spec §4.5) —
                 // an adapter consuming a *context* would pull service logic into
@@ -6458,6 +6476,62 @@ fn suggest_alias(target: &str, type_name: &str) -> String {
     format!("{head}{}{type_name}", chars.as_str())
 }
 
+/// #4044: why a commons may not write this `consumes`, or `None` when it names
+/// only types an adapter exports, in braces. A commons is shared, pure code, so
+/// it takes types from another unit and nothing else: no whole-unit or aliased
+/// form (those bring services), no capability, and no context (a context's
+/// exported types belong to its boundary, and naming one would tie shared code
+/// to one deployable). `T as Alias` stays allowed, as in a context's `consumes`.
+fn commons_consumes_refusal(
+    c: &bynk_syntax::ast::ConsumesDecl,
+    target: &str,
+    target_kind: UnitKind,
+    capabilities: &HashSet<String>,
+    exports_type: &dyn Fn(&str, &str) -> bool,
+) -> Option<CompileError> {
+    const CODE: &str = "bynk.commons.consumes_not_types";
+    let refuse = |span: Span, msg: String, note: &str| {
+        Some(CompileError::new(CODE, span, msg).with_note(note.to_string()))
+    };
+    let Some(names) = &c.selected else {
+        let form = if c.alias.is_some() {
+            "an aliased"
+        } else {
+            "a whole-unit"
+        };
+        return refuse(
+            c.span,
+            format!("a commons cannot write {form} `consumes {target}`"),
+            "a commons may list types only: write `consumes U { Type, … }`",
+        );
+    };
+    if target_kind == UnitKind::Context {
+        return refuse(
+            c.target.span,
+            format!("a commons cannot consume the context `{target}`"),
+            "a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable; a commons consumes types of an adapter",
+        );
+    }
+    for item in names {
+        let n = &item.name;
+        if capabilities.contains(&n.name) {
+            return refuse(
+                n.span,
+                format!("`{}` is a capability of `{target}`, not a type", n.name),
+                "a commons stays pure: it names types, and a context uses a capability with `consumes` and `given`",
+            );
+        }
+        if !exports_type(target, &n.name) {
+            return refuse(
+                n.span,
+                format!("`{target}` does not export a type named `{}`", n.name),
+                "a commons may list only the types an adapter exports: `consumes U { Type, … }`",
+            );
+        }
+    }
+    None
+}
+
 /// Phase 8b: merge one context's `consumes` exports into the composed symbol
 /// space, recording visibility metadata in the returned `consumed_types`. The
 /// per-export `continue`s (missing decl, name conflict) stay internal to the
@@ -7544,6 +7618,9 @@ pub fn phase_detect_consumes_cycles(
     groups: &BTreeMap<String, Vec<usize>>,
     parsed: &[ParsedFile],
     unit_consumes: &HashMap<String, Vec<String>>,
+    // #4044: a commons may `consumes` an adapter that `uses` it, so the cycle
+    // check walks the `uses` edges too.
+    unit_uses: &HashMap<String, Vec<String>>,
     errors: &mut ErrorSink,
 ) {
     let mut consumes_sites: HashMap<(String, String), (PathBuf, Span)> = HashMap::new();
@@ -7560,7 +7637,7 @@ pub fn phase_detect_consumes_cycles(
         }
     }
     let mut cycle_errors: Vec<(Option<PathBuf>, CompileError)> = Vec::new();
-    detect_consumes_cycles(unit_consumes, &consumes_sites, &mut cycle_errors);
+    detect_dependency_cycles(unit_consumes, unit_uses, &consumes_sites, &mut cycle_errors);
     for (path, err) in cycle_errors {
         errors.push_for(path.as_deref(), err);
     }

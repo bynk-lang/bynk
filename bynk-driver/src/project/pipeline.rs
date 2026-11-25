@@ -666,7 +666,13 @@ pub(super) fn run_checks(
     );
 
     // -- 5c. Detect `consumes` cycles. --
-    project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
+    project_model::phase_detect_consumes_cycles(
+        &groups,
+        &parsed,
+        &unit_consumes,
+        &unit_uses,
+        &mut errors,
+    );
 
     // -- 6. Name-conflict detection for uses imports (commons-only check). --
     project_model::phase_uses_name_conflicts(

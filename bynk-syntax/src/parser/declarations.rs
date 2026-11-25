@@ -156,6 +156,7 @@ impl<'a> Parser<'a> {
         self.enter_item_loop();
         let mut items = Vec::new();
         let mut uses = Vec::new();
+        let mut consumes = Vec::new();
         // Cover the header (`commons <name>`) so the unit span stays valid even
         // when every item is dropped by error recovery — the document-symbol
         // selection range (the name span) must remain contained in this span.
@@ -232,6 +233,29 @@ impl<'a> Parser<'a> {
                             u.trivia.trailing = self.take_trailing_trivia();
                             last_span = u.span;
                             uses.push(u);
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #4044: `consumes U { T, … }` in a commons names types of another
+                // unit. Every form parses; the checker accepts only the braced,
+                // type-only one (`bynk.commons.consumes_not_types`).
+                Some(TokenKind::Consumes) => {
+                    if let Some(doc) = item_doc {
+                        let doc_span = doc.span;
+                        self.warnings.push(CompileError::new(
+                            "bynk.parse.orphan_doc_block",
+                            doc_span,
+                            "documentation block before `consumes` is not allowed; only `type` and `fn` declarations carry docs",
+                        ));
+                        keep_orphan(&mut leading, doc);
+                    }
+                    match self.parse_consumes_decl() {
+                        Ok(mut c) => {
+                            c.trivia.leading = leading;
+                            c.trivia.trailing = self.take_trailing_trivia();
+                            last_span = c.span;
+                            consumes.push(c);
                         }
                         Err(e) => self.handle_item_err(e)?,
                     }
@@ -432,15 +456,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a commons contains zero or more `type`, `fn`, `messages`, or `uses` declarations"
+                        "the body of a commons contains zero or more `type`, `fn`, `messages`, `uses`, or `consumes` declarations"
                     } else {
-                        "in fragment-form commons (no braces), the body is a sequence of `type`, `fn`, `messages`, or `uses` declarations to end of file"
+                        "in fragment-form commons (no braces), the body is a sequence of `type`, `fn`, `messages`, `uses`, or `consumes` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `type`, `fn`, `messages`, or `uses` declaration, found {}",
+                            "expected `type`, `fn`, `messages`, `uses`, or `consumes` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -471,7 +495,7 @@ impl<'a> Parser<'a> {
         Ok(Commons::parsed(
             name,
             items,
-            uses,
+            (uses, consumes),
             documentation,
             brace,
             span,

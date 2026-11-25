@@ -484,6 +484,10 @@
       "summary": "An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`."
     },
     {
+      "code": "bynk.commons.consumes_not_types",
+      "summary": "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context."
+    },
+    {
       "code": "bynk.consumes.alias_conflict",
       "summary": "Two `consumes` aliases collide."
     },

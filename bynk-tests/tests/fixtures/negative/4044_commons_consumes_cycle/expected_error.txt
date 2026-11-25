@@ -1,0 +1,1 @@
+bynk.context.consumes_cycle `consumes` cycle detected: app.c → ext.a → app.c
