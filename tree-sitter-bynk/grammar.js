@@ -633,6 +633,8 @@ module.exports = grammar({
         // #3948: a `Duration` bound — `AtLeast(60.seconds)`, `InRange(1.second, 1.day)`.
         seq(optional("-"), $.number_literal, ".", $.identifier),
         $.string_literal,
+        // #3951: a constant standing for the literal it is bound to.
+        $.identifier,
       ),
 
     _base_type: ($) => $.base_type,

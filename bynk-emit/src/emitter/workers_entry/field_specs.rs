@@ -294,17 +294,16 @@ pub fn table_has_plain_json(table: &UnitTable) -> bool {
 
 /// v0.142 (ADR 0165): resolve a route's effective request-body ceiling in bytes.
 /// A route's `@limit(maxBody:)` annotation wins over the service's `limits { }`
-/// default (DECISION B); with neither, the route has no cap (`None`). Project
+/// default (DECISION B); with neither, a body-taking route takes the 1 MiB default (#3921), and a bodyless one has none. Project
 /// validation (`bynk.http.limit_*` / `limits_*`) has already rejected a malformed
 /// or misplaced `@limit`/`limits`, so a bad/absent value here simply yields no
 /// cap. Only a body-taking method can carry a cap — a `@limit` on a GET/DELETE is
-/// a checker error, so it never reaches a live route here. The route-annotation
-/// half is `bynk-emit::ir`'s own [`bynk_model::lower_route_limit_ir`]
-/// (#1228); only the service-wide fallback composition stays here.
+/// a checker error, so it never reaches a live route here. The composition (route
+/// `@limit`, service `limits`, then the 1 MiB default, #3921) is
+/// [`bynk_syntax::ast::Handler::effective_max_body`].
 pub(super) fn effective_max_body(
     service_limits: Option<&LimitsPolicy>,
     h: &Handler,
 ) -> Option<i64> {
-    h.limit_max_body()
-        .or_else(|| service_limits.and_then(|p| p.max_body()))
+    h.effective_max_body(service_limits.and_then(|p| p.max_body()))
 }

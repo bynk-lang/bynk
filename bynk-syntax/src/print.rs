@@ -210,7 +210,27 @@ pub fn matches_argument_span(p: &RefinementPred) -> Span {
     })
 }
 
+/// #3951: a predicate still holding a constant name in an argument, as written
+/// (`InRange(1, MaxQty)`); `None` for any other. The formatter reads it too, so
+/// the name survives a format.
+pub fn pending_pred_to_string(p: &RefinementPred) -> Option<String> {
+    let pending = p.pending.as_ref()?;
+    let args: Vec<String> = pending
+        .args
+        .iter()
+        .map(|a| match a {
+            PendingArg::Num(b) => b.lexeme().to_string(),
+            PendingArg::Str(s) => format!("\"{}\"", escape_string(s)),
+            PendingArg::Const(id) => id.name.clone(),
+        })
+        .collect();
+    Some(format!("{}({})", pending.name, args.join(", ")))
+}
+
 fn pred_to_string(p: &RefinementPred) -> String {
+    if let Some(text) = pending_pred_to_string(p) {
+        return text;
+    }
     let arg = |n: i64| p.arg_text.clone().unwrap_or_else(|| n.to_string());
     match &p.kind {
         PredKind::Matches(re) => format!("Matches({})", literal_text(matches_argument_span(p), re)),

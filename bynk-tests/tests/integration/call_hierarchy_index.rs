@@ -28,14 +28,16 @@ fn analyse(root: &Path) -> ProjectIndex {
         )),
     );
     for f in &result.files {
+        let findings: Vec<_> = f
+            .diagnostics
+            .iter()
+            .filter(|d| bynk_syntax::Severity::for_error(&d.error) != bynk_syntax::Severity::Hint)
+            .map(|d| d.error.category)
+            .collect();
         assert!(
-            f.diagnostics.is_empty(),
-            "fixture should be clean, got in {}: {:?}",
+            findings.is_empty(),
+            "fixture should be clean, got in {}: {findings:?}",
             f.source_path.display(),
-            f.diagnostics
-                .iter()
-                .map(|d| d.error.category)
-                .collect::<Vec<_>>()
         );
     }
     result.index

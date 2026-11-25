@@ -1,0 +1,5 @@
+commons demo
+
+const MaxQty: Int = 100
+
+type Qty = Int where InRange(1, MaxQty)

@@ -2059,8 +2059,8 @@ The **`limits { }`** section is legal only on a `from http` service
 (`bynk.parse.duplicate_limits`). The grammar accepts any `name: value` field; the
 checker enforces the closed field set:
 
-- **`maxBody`** — the only field; a positive `Int` byte count
-  (`bynk.http.limits_invalid_field`). Any other field is
+- **`maxBody`** — the only field; a positive `Int` byte count of at most
+  524 288 000 (`bynk.http.limits_invalid_field`). Any other field is
   `bynk.http.limits_unknown_field`.
 
 The **`@limit`** annotation is a handler-position annotation (the `@cache`
@@ -2069,16 +2069,16 @@ handler** — a body-taking method — and on a `GET`/`DELETE` (or any bodyless
 method) it is `bynk.http.limit_on_bodyless`; at most once per handler
 (`bynk.http.limit_duplicate`). Its arguments:
 
-- **`maxBody`** — the only argument; a positive `Int` byte count
-  (`bynk.http.limit_bad_max_body`). Any other argument is
+- **`maxBody`** — the only argument; a positive `Int` byte count of at most
+  524 288 000 (`bynk.http.limit_bad_max_body`). Any other argument is
   `bynk.http.limit_unknown_arg`.
 
 **Effective cap and precedence.** For a body-taking route the effective cap is the
 route `@limit` `maxBody` if present, otherwise the service `limits { maxBody }` if
-present, otherwise **none**. A route with no effective cap reads the body
-unchanged, so this surface is **opt-in** (the CORS posture, not the security
-default-on posture): a service declaring neither `limits { }` nor any `@limit` is
-byte-for-byte unchanged.
+present, otherwise **1 048 576 bytes**. Every body-taking HTTP route therefore has an
+effective cap; there is no unlimited setting. A `@raw` route MUST still declare a cap
+explicitly (`bynk.http.raw_body_unbounded`). A service whose body-taking routes rely
+on the default gets one hint listing them (`bynk.http.body_cap_defaulted`).
 
 **Enforcement.** A capped route rejects a request whose `Content-Length` exceeds
 the effective cap with a synthesised **`413 PayloadTooLarge`** (`{ kind:
@@ -2122,8 +2122,7 @@ applies refinements and defaults and a failure is a `400` whose `path` is rooted
 `multipart/form-data` upload. Its placement rules are `@form`'s, and it likewise excludes
 `@raw` and `@form` (`bynk.http.body_kind_conflict`). The `body` MUST be a record whose
 fields are form leaves, or `File` (the record `bynk` exports), or an `Option` or `List` of
-one. The route MUST have an effective `maxBody` (`bynk.http.multipart_body_unbounded`),
-and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
+one. Its effective `maxBody` is the route's, the service's or the default, and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
 `maxParts` are positive `Int` fields of `limits { }` and arguments of `@limit`
 (`bynk.http.limits_invalid_field`, `bynk.http.limit_bad_max_file`); in `@limit` they are legal
 only on a `@multipart` handler (`bynk.http.limit_on_non_multipart`). The router answers a
