@@ -209,3 +209,9 @@ and `dev`, as on `bynk deploy`, builds with another environment's: a required
 variable with no value in that environment (and none in `[vars]`) is
 `bynk.env.missing` there, so `bynk check --env staging` finds it before a deploy
 does. A suite's `env { … }` is run-time and unaffected.
+
+In the editor, hovering `env(NAME)` lists what each environment resolves the
+variable to and where each value comes from; completing inside `env(` offers the
+variables `bynk.toml` defines, with their `default` value; and signature help
+shows `env(NAME, default)`. These read `bynk.toml` from disk, so a saved change
+to it shows on the next request.

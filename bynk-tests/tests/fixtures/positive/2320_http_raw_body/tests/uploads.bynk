@@ -49,7 +49,7 @@ suite store.uploads as system {
 			Some(payload) => {
 				let a <- uploads.POST("/either", payload) by Sender
 				let b <- uploads.POST("/either", payload) by User("bob")
-				let forged <- uploads.POST("/either", payload) by Forged
+				let forged <- uploads.POST("/either", payload) by Forged(Sender)
 				expect a is Ok("sender gP8AAf7/")
 				expect b is Ok("bob gP8AAf7/")
 				expect forged is Rejected(Unauthorized)

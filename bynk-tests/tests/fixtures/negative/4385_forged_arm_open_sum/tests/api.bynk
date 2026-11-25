@@ -1,0 +1,6 @@
+suite pay.api as system {
+	case "a bad credential" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Forged(Browser)
+		expect r is Rejected(Unauthorized)
+	}
+}

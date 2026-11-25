@@ -23,7 +23,7 @@ suite hk.hooks as system {
 
 	case "unsigned, forged and stale notices to the sum route are refused" {
 		let none <- api.POST("/notify", "hi") by Nobody
-		let forged <- api.POST("/notify", "hi") by Forged
+		let forged <- api.POST("/notify", "hi") by Forged(Processor)
 		let stale <- api.POST("/notify", "hi") by Stale
 		expect none is Rejected(Unauthorized)
 		expect forged is Rejected(Unauthorized)
@@ -36,7 +36,7 @@ suite hk.hooks as system {
 	}
 
 	case "a forged raw notice to the sum route is refused" {
-		let r <- api.POST("/notify", Wire("hi")) by Forged
+		let r <- api.POST("/notify", Wire("hi")) by Forged(Processor)
 		expect r is Rejected(Unauthorized)
 	}
 

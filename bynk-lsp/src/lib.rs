@@ -43,6 +43,7 @@ pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
 pub mod match_to_expect;
+pub use bynk_ide::env_const;
 pub use bynk_ide::first_party_docs;
 pub mod fix_all;
 pub use bynk_ide::hover;
@@ -522,6 +523,16 @@ impl Backend {
             state.root_cache.insert(uri.clone(), root.clone());
         }
         root
+    }
+
+    /// #3941: the project's `bynk.toml` variables, read from disk; `None` when the
+    /// file is in no project or the tables do not parse (the build says why).
+    async fn project_vars(&self, uri: &Url) -> Option<crate::env_const::ProjectVars> {
+        let root = self.root_for_uri(uri).await?;
+        tokio::task::spawn_blocking(move || crate::env_const::read_vars(&root))
+            .await
+            .ok()
+            .flatten()
     }
 
     /// #682: whether a `root_for_uri` write-back computed while the cache was
@@ -3299,7 +3310,16 @@ impl LanguageServer for Backend {
             }
             _ => None,
         };
-        let content = snapshot_hover.or_else(|| {
+        // #3941: an `env(NAME)` constant's call hovers with what each environment
+        // resolves the variable to.
+        let env_hover = match doc {
+            Some((text, offset)) if crate::env_const::call_on_line(text, offset).is_some() => self
+                .project_vars(&uri)
+                .await
+                .and_then(|vars| crate::env_const::describe_at(text, offset, &vars)),
+            _ => None,
+        };
+        let content = snapshot_hover.or(env_hover).or_else(|| {
             crate::hover::hover_content(&crate::hover::HoverInput {
                 analysis,
                 doc,
@@ -3368,7 +3388,12 @@ impl LanguageServer for Backend {
         // #733: `resolve_label` enumerates the project's units (file stats +
         // recovery parse of the cache-missed ones), so run it on the blocking
         // pool — signature help fires on every `(`/`,` while typing a call.
-        let resolved_label = {
+        // #3941: `env(NAME, default)` on a constant is not a function anywhere.
+        let env_label = (ctx.callee == "env" && crate::env_const::in_call(&text, offset))
+            .then(|| crate::env_const::SIGNATURE.to_string());
+        let resolved_label = if env_label.is_some() {
+            env_label
+        } else {
             let callee = ctx.callee.clone();
             let text = text.clone();
             let files = files.clone();
@@ -3928,6 +3953,18 @@ impl LanguageServer for Backend {
         // offer the secret names actors declare and the `Secrets.get` literals.
         if completion::in_env_name_position(&text, offset) {
             let items = completion::env_name_candidates(&text, files.as_deref())
+                .into_iter()
+                .map(to_completion_item)
+                .collect();
+            return Ok(Some(CompletionResponse::Array(items)));
+        }
+        // #3941: inside `env(` on a constant, the variables `bynk.toml` defines.
+        if crate::env_const::in_name_position(&text, offset) {
+            let items = self
+                .project_vars(&uri)
+                .await
+                .map(|vars| crate::env_const::variable_candidates(&vars))
+                .unwrap_or_default()
                 .into_iter()
                 .map(to_completion_item)
                 .collect();

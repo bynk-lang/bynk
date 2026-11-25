@@ -1071,6 +1071,13 @@ pub fn lower_actor_seam_ir(handler: &Handler, actors: &HashMap<String, ActorDecl
     {
         return ActorSeamIr::CallSum(members);
     }
+    // #3899: a queue consumer's sum of `Foreign` senders, `by who: Legacy | Partner`, resolved by the
+    // message's signer.
+    if let Some(members) =
+        bynk_check::actors::queue_admission_of(handler, actors).and_then(|a| a.sum)
+    {
+        return ActorSeamIr::CallSum(members);
+    }
     if let Some(seam) = bynk_check::actors::bearer_seam_for(handler, actors) {
         return ActorSeamIr::Bearer(seam);
     }

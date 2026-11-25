@@ -1,0 +1,14 @@
+context demo.api
+
+type UserId = String where NonEmpty
+actor Browser { auth = SignedCookie(secret = "S", ttl = 12.hours), identity = UserId }
+actor Partner { auth = Bearer(secret = "P"), identity = UserId }
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by who: Browser | Partner {
+    match who {
+      Browser(b) => Ok(b)
+      Partner(p) => Ok(p)
+    }
+  }
+}

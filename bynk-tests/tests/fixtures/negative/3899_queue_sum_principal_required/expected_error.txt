@@ -1,0 +1,2 @@
+bynk.test.principal_required
+this handler runs as one of the actors `Legacy | Partner`; the case must act as one with `by <Actor>`

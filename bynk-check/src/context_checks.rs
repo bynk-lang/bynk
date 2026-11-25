@@ -2819,8 +2819,8 @@ fn actor_narrowing_refusal(
         );
     }
     // #3899: a `Foreign` actor on its own is enforced: the consumer admits only messages signed
-    // under its secret. A `Producer` refinement, or a `Foreign` actor in a sum or with a binder
-    // (no seam binds the resolved actor on a queue yet), is not yet.
+    // under its secret, and so is a sum of only `Foreign` actors (3c-2a). A `Producer` refinement, a
+    // `Foreign` actor beside an unsigned one, or a lone `Foreign` actor with a binder is not yet.
     if !on_queue || !(producer_refinement || mixes_foreign) {
         return None;
     }
@@ -2828,27 +2828,34 @@ fn actor_narrowing_refusal(
         CompileError::new(
             "bynk.actor.queue_actor_not_enforced",
             by.span,
-            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement, or a `Foreign` actor in a sum or with a binder, is not enforced on `on message`",
+            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder, is not enforced on `on message`",
         )
         .with_note(
             "nothing verifies who sent such a message yet, so accepting this `by` would admit \
              unsigned messages while reading as if it did not — write `by Producer`, or \
-             name one `Foreign` actor alone, with no binder",
+             name only `Foreign` actors, a lone one with no binder",
         ),
     )
 }
 
 /// #3899: whether `actor` is the first `Foreign` member of a `by` clause that names it in a form a
-/// queue consumer cannot enforce yet: in a sum, or with a binder (the handler would read an actor the
-/// entry does not bind). A `Foreign` actor on its own, with no binder, is enforced. Said once, on the
-/// first `Foreign` member, not on each.
+/// queue consumer cannot enforce yet: a sum that also names an unsigned actor (its messages carry no
+/// signature to tell them from the signed ones), or a single `Foreign` actor with a binder (it
+/// identifies no one beyond itself, so nothing binds a value for the body). A sum of only `Foreign`
+/// actors resolves by the message's signer, and a lone `Foreign` actor with no binder needs nothing.
+/// Said once, on the first `Foreign` member, not on each.
 fn by_mixes_foreign(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &str) -> bool {
     use crate::actors::Scheme;
     let foreign = |name: &str| {
         by_actor_contract(name, table.actors.get(name), table)
             .is_some_and(|c| c.scheme == Scheme::Foreign)
     };
-    (by.is_sum() || by.binder.is_some())
+    let refused = if by.is_sum() {
+        !by.actors.iter().all(|a| foreign(&a.name))
+    } else {
+        by.binder.is_some()
+    };
+    refused
         && by
             .actors
             .iter()
