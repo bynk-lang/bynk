@@ -28,7 +28,7 @@ export const api = {
 
 export const place = {
   async call(id: string, deps: { OrderEvents: OrderEvents }): globalThis.Promise<number> {
-    const __r0 = await deps.OrderEvents.sendWith(globalThis.JSON.stringify(id as __JsonValue), { delay: Some(30000) });
+    const __r0 = await deps.OrderEvents.sendWith(globalThis.JSON.stringify(id as __JsonValue), { delay: Some((30000 as bynk_cloudflare.QueueDelay)) });
     const __r1 = await deps.OrderEvents.sendBatch([globalThis.JSON.stringify(((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(1)), globalThis.JSON.stringify(((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(2))]);
     return 3;
   },

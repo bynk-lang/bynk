@@ -2802,6 +2802,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "// bynk internal error: the checker recorded no type for a `fold` call, which the code generator needs here.\n// This is a compiler fault, not a problem in your program; please report it at https://github.com/bynk-lang/bynk/issues\n//\n// There is no program to fix: the report is the fix.",
     },
     Explain {
+        code: "bynk.invariant.collection_scan",
+        blurb: "An invariant is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()`: the commit already knows the staged count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Bound the collection with `size()`, or check the property in the handler that writes the collection, where the one entry in hand is known. The mirror rule for steps is `bynk.transition.collection_scan`.",
+        example: "invariant has_x: lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ninvariant few_lines: lines.size() <= 100   // ✓ one count, read at the commit",
+    },
+    Explain {
         code: "bynk.invariant.cross_agent_reference",
         blurb: "An invariant is checked inside one agent's commit, against that agent's own state. Reading another agent would mean a call out to it, whose value could change before the commit lands, so the claim could not be held. A property that spans agents belongs in a saga or a scenario. Keep the invariant to this agent's fields. The mirror rule for steps is `bynk.transition.cross_agent_reference`.",
         example: "invariant within_total: count <= Total(\"all\").get()   // ✗ reads another agent\n\ninvariant non_negative: count >= 0                    // ✓ this agent's own state",
@@ -5526,6 +5531,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.tier.system_needs_wire",
         blurb: "A `system` case exists to cross a real serialise, JSON, deserialise boundary. A target has one if it consumes another context, or exposes an `http`, `queue` or `email` service. One with neither has nothing to cross, so a `system` suite adds nothing over `unit`. Run the suite at `unit` or `integration`, or give the target a service that has a boundary.",
         example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
+    },
+    Explain {
+        code: "bynk.transition.collection_scan",
+        blurb: "A transition is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()` in `old` and `new`: the commit knows the staged count, and the last committed one is a single stored count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself, a bare field name) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Compare the sizes, or check the property in the handler that writes the collection. The mirror rule for states is `bynk.invariant.collection_scan`.",
+        example: "transition keeps_x: old.lines.contains(\"x\") implies new.lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ntransition never_shrinks: new.lines.size() >= old.lines.size()   // ✓ one count each",
     },
     Explain {
         code: "bynk.transition.cross_agent_reference",
@@ -8648,6 +8658,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues.",
     ),
     d(
+        "bynk.invariant.collection_scan",
+        "An invariant reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
+    ),
+    d(
         "bynk.invariant.cross_agent_reference",
         "An invariant predicate references another agent; invariants are per-agent.",
     ),
@@ -10304,6 +10318,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.tier.system_needs_wire",
         "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
+    ),
+    d(
+        "bynk.transition.collection_scan",
+        "A transition reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
     ),
     d(
         "bynk.transition.cross_agent_reference",

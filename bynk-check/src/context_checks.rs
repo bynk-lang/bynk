@@ -4276,6 +4276,42 @@ fn walk_expr_for_index_filters(
     }
 }
 
+/// Finding #36: `check_handler_body` takes the five kind-scopes as one
+/// `HashMap<String, StoreField>` — a field name is only ever one kind, so
+/// recombine them here rather than threading five parallel maps.
+fn combine_store_fields(
+    store_cells: &HashMap<String, TyId>,
+    store_maps: &HashMap<String, (TyId, TyId)>,
+    store_sets: &HashMap<String, TyId>,
+    store_caches: &HashMap<String, (TyId, TyId, i64)>,
+    store_logs: &HashMap<String, TyId>,
+) -> HashMap<String, checker::StoreField> {
+    store_cells
+        .iter()
+        .map(|(name, t)| (name.clone(), checker::StoreField::Cell(*t)))
+        .chain(
+            store_maps
+                .iter()
+                .map(|(name, (k, v))| (name.clone(), checker::StoreField::Map(*k, *v))),
+        )
+        .chain(
+            store_sets
+                .iter()
+                .map(|(name, t)| (name.clone(), checker::StoreField::Set(*t))),
+        )
+        .chain(
+            store_caches.iter().map(|(name, (k, v, ttl))| {
+                (name.clone(), checker::StoreField::Cache(*k, *v, *ttl))
+            }),
+        )
+        .chain(
+            store_logs
+                .iter()
+                .map(|(name, t)| (name.clone(), checker::StoreField::Log(*t))),
+        )
+        .collect()
+}
+
 /// v0.81/v0.82 (storage track): validate an agent's `store`-field kinds and build
 /// the per-kind scopes — `Cell` fields (name → element type; bare reads + `:=`)
 /// and `Map` fields (name → (key, value) types; effectful entry ops, ADR 0110).
@@ -4682,6 +4718,7 @@ fn check_agent_decls(
         };
         let mut types_for_handler = resolved_for_handler.types.clone();
         types_for_handler.insert(agent_self_name.clone(), Arc::new(self_decl.clone()));
+
         // Same fix as above: `local_type_names` comes from `table.types`
         // (pre-merge), not `types_for_handler` (merged, plus the synthetic
         // `self` record type).
@@ -4723,36 +4760,22 @@ fn check_agent_decls(
         let _ = key_ty;
 
         // Finding #36: `check_handler_body` takes the five kind-scopes as one
-        // `HashMap<String, StoreField>` — a field name is only ever one kind,
-        // so recombine them here rather than threading five parallel maps.
-        let store_fields: HashMap<String, checker::StoreField> = store_cells
-            .iter()
-            .map(|(name, t)| (name.clone(), checker::StoreField::Cell(*t)))
-            .chain(
-                store_maps
-                    .iter()
-                    .map(|(name, (k, v))| (name.clone(), checker::StoreField::Map(*k, *v))),
-            )
-            .chain(
-                store_sets
-                    .iter()
-                    .map(|(name, t)| (name.clone(), checker::StoreField::Set(*t))),
-            )
-            .chain(store_caches.iter().map(|(name, (k, v, ttl))| {
-                (name.clone(), checker::StoreField::Cache(*k, *v, *ttl))
-            }))
-            .chain(
-                store_logs
-                    .iter()
-                    .map(|(name, t)| (name.clone(), checker::StoreField::Log(*t))),
-            )
-            .collect();
+        // `HashMap<String, StoreField>` — see [`combine_store_fields`].
+        let store_fields = combine_store_fields(
+            &store_cells,
+            &store_maps,
+            &store_sets,
+            &store_caches,
+            &store_logs,
+        );
 
         // v0.80/v0.81: invariant well-formedness — predicates are pure `Bool`
         // expressions over the agent's `store` cells (§14, ADR 0108 D5).
+        let collections = checker::PredicateCollections::of(&store_fields);
         checker::check_invariants(
             &agent.invariants,
             &store_cells,
+            &collections,
             &agent.name.name,
             &resolved_for_handler,
             tys,
@@ -4771,6 +4794,7 @@ fn check_agent_decls(
             &agent.transitions,
             state_ty,
             &agent.name.name,
+            &collections,
             &resolved_for_handler,
             &mut typed.expr_types,
             errors,

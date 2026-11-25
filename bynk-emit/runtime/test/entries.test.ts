@@ -5,6 +5,7 @@ import {
   LAYOUT_KEY,
   LAYOUT_PER_ENTRY,
   LAYOUT_WHOLESALE,
+  committedSize,
   decodeKeyPart,
   diffEntries,
   sameStored,
@@ -706,4 +707,17 @@ test("the same chain works against a handle whose calls return promises", async 
   await upsert(slow, "k");
   await upsert(slow, "k");
   assert.equal(inner.get("k"), 2);
+});
+
+test("committedSize: the stored count, an empty one, an inline wholesale collection, or nothing (#4034)", async () => {
+  const s = new InMemoryStorage();
+  await s.put(metaKey("lines"), { size: 3 });
+  await s.put(metaKey("bare"), {});
+  assert.equal(await committedSize(s as never, "lines", {}), 3, "metadata present: its size, whatever the record holds");
+  assert.equal(await committedSize(s as never, "lines", { lines: { a: 1 } }), 3, "metadata wins over an inline record");
+  assert.equal(await committedSize(s as never, "bare", {}), 0, "metadata with no size is empty");
+  assert.equal(await committedSize(s as never, "map", { map: { a: 1, b: 2 } }), 2, "a wholesale Map counts its inline entries");
+  assert.equal(await committedSize(s as never, "set", { set: { x: true } }), 1, "a wholesale Set counts its inline entries");
+  assert.equal(await committedSize(s as never, "none", {}), 0, "neither: empty");
+  assert.equal(await committedSize(s as never, "none", { none: null }), 0, "a null inline record is empty");
 });

@@ -1,0 +1,13 @@
+suite shop.orders {
+
+consumes bynk.cloudflare { QueueDelay }
+  case "a delay between 0 seconds and 24 hours is a QueueDelay" {
+    expect QueueDelay.of(0.seconds).isOk()
+    expect QueueDelay.of(24.hours).isOk()
+  }
+
+  case "a delay over 24 hours or below zero is refused" {
+    expect QueueDelay.of(25.hours).isErr()
+    expect QueueDelay.of(0.seconds - 1.second).isErr()
+  }
+}

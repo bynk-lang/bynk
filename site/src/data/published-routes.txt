@@ -1697,6 +1697,7 @@
 /reference/diagnostics/bynk.index.unknown_key/
 /reference/diagnostics/bynk.index.unused/
 /reference/diagnostics/bynk.internal.missing_checker_fact/
+/reference/diagnostics/bynk.invariant.collection_scan/
 /reference/diagnostics/bynk.invariant.cross_agent_reference/
 /reference/diagnostics/bynk.invariant.duplicate_name/
 /reference/diagnostics/bynk.invariant.impure_predicate/
@@ -2064,6 +2065,7 @@
 /reference/diagnostics/bynk.tier.cross_context_needs_system/
 /reference/diagnostics/bynk.tier.mixed_system_suite/
 /reference/diagnostics/bynk.tier.system_needs_wire/
+/reference/diagnostics/bynk.transition.collection_scan/
 /reference/diagnostics/bynk.transition.cross_agent_reference/
 /reference/diagnostics/bynk.transition.duplicate_name/
 /reference/diagnostics/bynk.transition.impure_predicate/

@@ -1,0 +1,13 @@
+context demo
+
+agent Basket {
+    key id: String
+    store lines: Map[String, Int]
+    store paid: Cell[Bool] = false
+
+    transition never_shrinks: new.lines.size() >= old.lines.size()
+
+    on call add(k: String, n: Int) -> Effect[()] {
+        lines.put(k, n)
+    }
+}
