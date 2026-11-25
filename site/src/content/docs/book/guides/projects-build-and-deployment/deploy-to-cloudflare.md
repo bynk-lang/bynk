@@ -22,6 +22,23 @@ bynk deploy --yes
 
 To deploy from GitHub Actions, see [Deploy from CI](/book/guides/projects-build-and-deployment/deploy-from-ci/).
 
+## Per-environment values
+
+A constant can take its value from `bynk.toml` at build time, so the same
+source builds with different settings per environment:
+
+```bynk
+const Origin: String = env(APP_ORIGIN)
+const MaxLines: Int = env(MAX_LINES, 100)
+```
+
+Set the values under `[vars]` in `bynk.toml` (and `[env.<name>.vars]` for one
+environment); the build resolves each constant to a literal, falling back to the
+default given to `env`. A required variable with no value, a value of the wrong
+kind, and a `bynk.toml` variable no constant reads are all build errors. Keep
+secrets out of `[vars]`: `bynk.toml` is committed, so use `Secrets` instead. See
+[Constants](/reference/constants/) for the full rules.
+
 ## Review a plan
 
 `--dry-run` (or its `--plan` alias) changes nothing on Cloudflare or in the
