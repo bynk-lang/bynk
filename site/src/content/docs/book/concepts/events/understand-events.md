@@ -132,7 +132,7 @@ service OnPayment from Events(PaymentConfirmed) {
 ```
 
 `EventEnvelope` is `{ eventId: String, publisherId: String, emittedAt:
-Instant, schemaVersion: Int }`. Two things worth knowing before you reach
+Instant, schemaVersion: Int, trace: Option[String] }`. Two things worth knowing before you reach
 for it:
 
 - **`eventId` is minted once per emission, not once per delivery.** If two
@@ -166,6 +166,12 @@ trivially idempotent already and needs no `env` parameter at all.
 `schemaVersion` reflects the version the cross-build schema registry computes
 for the event (below) — verified against a declared `@schema(N)` annotation
 when one is present, or `1` for a brand-new event with neither.
+
+`trace` is the id of the trace the event was emitted in, so a handler can tie
+what it logs to the request that caused it. It is `None` when the emission
+happened outside a trace, and it is optional on the wire: an envelope from a
+publisher that predates it, or one with a malformed id, simply has `None`. A
+test that builds an `EventEnvelope` by hand may leave it out.
 
 **Testing the idiom.** A test case delivers an event straight to a
 subscriber with `svc.event(e)` or `svc.event(e, env)`, at the `unit` or

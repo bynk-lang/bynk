@@ -125,6 +125,7 @@
 ; #1706: the fault-claim word — contextual, like the observation words: the
 ; token exists only inside a `faults_expr`.
 "faults" @keyword.operator
+"violates" @keyword.operator
 
 ; #2842: the snapshot claim's words — contextual, like `faults`: the tokens exist
 ; only inside a `snapshot_expr`.

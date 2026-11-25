@@ -78,3 +78,50 @@ suite shop.orders {
             arg: (string_literal))
           principal: (call_site_actor
             actor: (identifier)))))))
+
+==================
+Violation claim — expect <call> violates <name> (#4035)
+==================
+
+suite demo.ledger {
+  case "an overdraft is refused" {
+    expect Account("a").withdraw(5) violates non_negative
+  }
+  case "named by its field and key" {
+    expect Account("a").addContact("c", "x") violates contacts.email
+  }
+}
+
+---
+
+(source_file
+  (suite_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (case
+      (string_literal)
+      (expect_expr
+        (faults_expr
+          (method_call
+            (call
+              (identifier)
+              (string_literal))
+            (identifier)
+            (number_literal))
+          (violates_name
+            (identifier)))))
+    (case
+      (string_literal)
+      (expect_expr
+        (faults_expr
+          (method_call
+            (call
+              (identifier)
+              (string_literal))
+            (identifier)
+            (string_literal)
+            (string_literal))
+          (violates_name
+            (identifier)
+            (identifier)))))))

@@ -1484,6 +1484,13 @@ export const ContainerError = {
  *   `cacheTtl`; `putWith` writes one with an expiry and metadata.
  * - `getBytes` and `putBytes` read and write binary values.
  * - `listPage` reads one page of keys, with each key's expiry and metadata.
+ * - `getValue[T]` and `putValue[T]` read and write any `Codable` value, encoding
+ *   and decoding at the call site: `putValue(key, value, options)` stores
+ *   `Json.encode(value)`, so `Json.decode` of a `get` result reads it, and
+ *   `getValue[T](key)` is `None` for a missing key. A stored value that does
+ *   not decode as `T` faults, naming the capability, the operation, `T` and
+ *   the path, never the value. Change `T` additively, or version the key
+ *   prefix, while values are stored under the old shape.
  *
  * Text and binary values share the namespace, as on the platform: `getBytes`
  * of a text value gives its UTF-8 bytes, and reading a binary value as text
@@ -1491,8 +1498,8 @@ export const ContainerError = {
  *
  * A key over 512 bytes, metadata over 1024 bytes, a `KvExpiration.At` under 60
  * seconds away, or a `limit` outside 1 to 1000 faults the new operations
- * before the platform is called; a value over 25 MiB faults with the
- * platform's error. A TTL under 60 seconds, or a `cacheTtl` under 30, is
+ * before the platform is called; a value over 25 MiB (the encoded text, for
+ * `putValue`) faults with the platform's error. A TTL under 60 seconds, or a `cacheTtl` under 30, is
  * never reached: `KvTtl` and `KvCacheTtl` refuse it first.
  */
 export interface Kv {
@@ -1506,6 +1513,8 @@ export interface Kv {
   getBytes(key: string): globalThis.Promise<Option<globalThis.Uint8Array>>;
   putBytes(key: string, value: globalThis.Uint8Array, options: KvPut): globalThis.Promise<void>;
   listPage(options: KvList): globalThis.Promise<KvListing>;
+  getValue(key: string): globalThis.Promise<unknown>;
+  putValue(key: string, value: unknown, options: KvPut): globalThis.Promise<void>;
 }
 
 export const __KvToken: symbol = globalThis.Symbol("Kv");

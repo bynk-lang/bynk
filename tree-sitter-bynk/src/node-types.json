@@ -4817,6 +4817,16 @@
           }
         ]
       },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "violates_name",
+            "named": true
+          }
+        ]
+      },
       "principal": {
         "multiple": false,
         "required": false,
@@ -13782,6 +13792,21 @@
     }
   },
   {
+    "type": "violates_name",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "where_bound",
     "named": true,
     "fields": {
@@ -14888,6 +14913,10 @@
   },
   {
     "type": "via",
+    "named": false
+  },
+  {
+    "type": "violates",
     "named": false
   },
   {

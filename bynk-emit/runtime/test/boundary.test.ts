@@ -25,7 +25,7 @@ import {
   type BoundaryError,
   type ServiceBinding,
 } from "../src/boundary.ts";
-import { Ok, Err, type Result } from "../src/result.ts";
+import { Ok, Err, None, type Result } from "../src/result.ts";
 import { readCapped } from "../src/boundary.ts";
 
 function bindingReturning(body: unknown, init?: ResponseInit): ServiceBinding {
@@ -241,7 +241,7 @@ const validEnvelope = {
 
 test("deserialiseEventEnvelope: accepts a well-formed envelope", () => {
   const r = deserialiseEventEnvelope(validEnvelope);
-  assert.deepEqual(r, { tag: "Ok", value: validEnvelope });
+  assert.deepEqual(r, { tag: "Ok", value: { ...validEnvelope, trace: None } });
 });
 
 test("deserialiseEventEnvelope: rejects a non-object", () => {

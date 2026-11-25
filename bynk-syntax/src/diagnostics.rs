@@ -1956,6 +1956,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] by Caller {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
     },
     Explain {
+        code: "bynk.expect.ambiguous_invariant",
+        blurb: "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. Two agents this suite reaches both declare `<name>`, so the claim does not say which one. Qualify it with the agent: `violates Account.non_negative`.",
+        example: "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negative           // ✗ `Account` and `Wallet` both declare it\nexpect Account(\"a\").withdraw(5) violates Account.non_negative   // ✓",
+    },
+    Explain {
         code: "bynk.expect.faults_not_effect",
         blurb: "`expect <call> faults` claims that an effectful call throws, for \
                 instance because a `stub … fails`. Only a call can fault, so the \
@@ -2012,6 +2017,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
                   \n\
                   // tests/rules.test.bynk\n\
                   expect positive(1)       // ✓ in a case",
+    },
+    Explain {
+        code: "bynk.expect.unknown_invariant",
+        blurb: "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. The name must be one an agent this suite reaches declares: an invariant or transition by its name, or a `@unique` constraint by its field and key (`customers.email`). A name nothing declares could never be raised, so the claim could never hold. The note lists the names that are reachable.",
+        example: "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negatve   // ✗ no such invariant\nexpect Account(\"a\").withdraw(5) violates non_negative  // ✓",
     },
     Explain {
         code: "bynk.exports.capability_not_provided",
@@ -5606,6 +5616,17 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
     },
     Explain {
+        code: "bynk.test.violates_needs_in_process",
+        blurb: "`expect <call> violates <name>` claims that a commit was refused by a named invariant, transition or `@unique` constraint. At `system` a refused commit reaches the case as a `500` with no payload from the deployed Worker, not a throw that names the declaration, so claim it at `unit` or `integration`.",
+        example: "// tests/ledger.test.bynk\n\
+                  case \"an overdraft is refused\" as system {\n\
+                  \x20\x20\x20\x20expect api.GET(\"/a\") by User(\"bob\") violates non_negative   // ✗ a `system` refusal is a `500`\n\
+                  }\n\n\
+                  case \"an overdraft is refused\" {                           // ✓\n\
+                  \x20\x20\x20\x20expect Account(\"a\").withdraw(5) violates non_negative\n\
+                  }",
+    },
+    Explain {
         code: "bynk.test.wire_http_only",
         blurb: "`Wire(…)` delivers raw text to an http body or path segment. A \
                 queue message, a cron tick, an `on call` or an event has no raw \
@@ -8234,6 +8255,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
     ),
     dg(
+        "bynk.expect.ambiguous_invariant",
+        "A `violates` claim names an invariant, transition or `@unique` constraint that more than one agent this suite reaches declares; qualify it with its agent (`violates Account.non_negative`).",
+        &["faults_expr"],
+    ),
+    dg(
         "bynk.expect.faults_not_effect",
         "A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`.",
         &["faults_expr"],
@@ -8252,6 +8278,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.expect.outside_case",
         "`expect` was used outside a `case` body.",
         &["expect_expr"],
+    ),
+    dg(
+        "bynk.expect.unknown_invariant",
+        "A `violates` claim names something no agent this suite reaches declares as an invariant, a transition or a `@unique` constraint.",
+        &["faults_expr"],
     ),
     dg(
         "bynk.exports.capability_not_provided",
@@ -10645,6 +10676,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.unknown_actor",
         "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.violates_needs_in_process",
+        "A `system`-tier case claims a refused commit with `expect <call> violates <name>`; at `system` a refusal reaches the case as an error response from the deployed Worker, never a throw that names the declaration, so the claim belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(
