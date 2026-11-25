@@ -203,6 +203,18 @@ mod tests {
         );
     }
 
+    /// #4262: an overloaded method lists one signature per arity, never one
+    /// string with the forms joined by ", or".
+    #[test]
+    fn no_kernel_signature_joins_forms() {
+        for m in ALL_METHODS.iter().flat_map(|(_, t)| t.iter()) {
+            assert_eq!(m.signature, m.signatures[0], "{}", m.name);
+            for sig in m.signatures {
+                assert!(!sig.contains(", or "), "{}: {sig}", m.name);
+            }
+        }
+    }
+
     fn refined(tys: &Types, base: BaseType) -> TyId {
         tys.intern(Ty::Named {
             name: "R".to_string(),

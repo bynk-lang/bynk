@@ -1,0 +1,10 @@
+{
+  "blurb": "An `errors { }` section, or an `@errors` annotation, chooses the shape of a service's HTTP error bodies. Only a `from http` service has them, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `json` section has the same rule: `bynk.http.json_not_http`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.errors_not_http",
+  "constructs": [],
+  "example": "service jobs from cron {\n    errors { format: problem }   // ✗ a schedule has no error body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    errors { format: problem }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "An `errors { }` section or an `@errors` annotation is not on a `from http` service."
+}

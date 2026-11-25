@@ -1,0 +1,10 @@
+{
+  "blurb": "`withHeader` adds a header of the handler's own, so it cannot set one the router writes itself: the caching headers (`Cache-Control`, `ETag`, `Vary`, `Expires` and the CDN directives), `Content-Type` and `Content-Length`, `Location`, `Retry-After`, `Content-Disposition`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers, `WWW-Authenticate` and `Allow`, and the hop-by-hop headers. Each has its own way in: `@cache`, a body, `.at(url)`, `withCookie`, `security { }`, `cors { }`. A name computed at run time is checked when the response is built, and a reserved one answers `500`. See also `bynk.http.invalid_response_header`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.reserved_response_header",
+  "constructs": [],
+  "example": "Ok(\"x\").withHeader(\"Set-Cookie\", \"a=1\")   // ✗ use `withCookie`\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+  "severity": "error",
+  "summary": "`withHeader` names a header the router owns, such as `Set-Cookie`, `Cache-Control` or `Location`."
+}

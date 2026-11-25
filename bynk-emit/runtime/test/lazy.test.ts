@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { EntryOverlay, commitStored, expiredRange, noteClock, readStored } from "../src/entries.ts";
+import { EntryOverlay, commitStored, expiredRange, noteClock, readStored, storeKey, MAX_STORAGE_KEY_BYTES } from "../src/entries.ts";
 import type { EntryField } from "../src/entries.ts";
 import { LazyStoreCache, LazyStoreLog, LazyStoreMap, LazyStoreSet, SCAN_PAGE } from "../src/lazy.ts";
 import { StoreCache, StoreLog, StoreMap, StoreSet, fillLog, fillMap, fillSet, wireLog, wireMap, wirePostings, wireSet } from "../src/store.ts";
@@ -373,4 +373,51 @@ test("a Log window wider than one scan page reads every entry (#3747)", async ()
   assert.deepEqual(await read.between(1000, 1000 + n), all, "between");
   assert.deepEqual(await read.since(1005), all.slice(5), "since, from inside the log");
   assert.deepEqual(await read.before(1000 + n), all, "before");
+});
+
+// #4037: a store collection's non-scalar key is held under its canonical encoding.
+test("composite keys round-trip through storage, whatever characters their encoding holds", async () => {
+  const s = new InMemoryStorage();
+  const write = loadLazy(s);
+  const keys = [
+    { region: "eu", code: 7 },
+    { region: "a/b", code: 1 },
+    { region: "100%", code: 2 },
+    { region: 'quo"te', code: 3 },
+  ];
+  for (const [i, k] of keys.entries()) await write.items.put(storeKey("items", k), { team: "t", n: i });
+  await flushLazy(write);
+  const read = loadLazy(s);
+  for (const [i, k] of keys.entries()) {
+    assert.deepEqual(await read.items.get(storeKey("items", k)), { team: "t", n: i });
+  }
+  // The same key spelled in another property order is the same entry.
+  assert.deepEqual(await read.items.get(storeKey("items", { code: 7, region: "eu" })), { team: "t", n: 0 });
+  assert.equal(await read.items.has(storeKey("items", { region: "eu", code: 8 })), false);
+  assert.equal(await read.items.size(), keys.length);
+});
+
+test("a composite key's encoding is the value's own: Decimal by value, sums by tag, Bytes as hex", () => {
+  assert.equal(storeKey("m", { tag: "Front", row: 1 }) === storeKey("m", { tag: "Back", row: 1 }), false);
+  assert.equal(storeKey("m", [1, "1"]) === storeKey("m", [1, 1]), false);
+  assert.equal(storeKey("m", new Uint8Array([1, 171])), '"01ab"');
+});
+
+test("a key over the storage-key limit faults naming the field, never the key", () => {
+  const big = { note: "x".repeat(MAX_STORAGE_KEY_BYTES) };
+  assert.throws(
+    () => storeKey("stock", big),
+    (e: Error) => e.message.includes("`stock`") && !e.message.includes("xxxx"),
+  );
+  assert.doesNotThrow(() => storeKey("stock", { note: "x".repeat(200) }));
+});
+
+test("a posting key over the storage-key limit faults naming the field and index, never the values", async () => {
+  const s = new InMemoryStorage();
+  const l = loadLazy(s);
+  const long = "y".repeat(MAX_STORAGE_KEY_BYTES);
+  await assert.rejects(
+    () => l.items.put("k", { team: long, n: 1 }),
+    (e: Error) => e.message.includes("`items`") && e.message.includes("`by`") && !e.message.includes("yyyy"),
+  );
 });

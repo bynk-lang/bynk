@@ -44,6 +44,34 @@ Two `OrderId`s with the same fields are the same key, however they were built.
 `m.keys()` and `m.entries()` give back real `OrderId`s, in the order they were first inserted,
 and `m.remove(id)` drops one without disturbing the rest.
 
+## A store collection takes the same keys
+
+An agent's `store Map`, `Set` or `Cache` takes any key a value `Map` does, so a model keyed
+by `(region, code)` needs no invented string key:
+
+```bynk
+context guide.warehouse
+
+type StockKey = {
+	region: String,
+	code: Int,
+}
+
+agent Warehouse {
+	key id: String
+
+	store stock: Map[StockKey, Int]
+	store blocked: Set[StockKey]
+
+	on call add(k: StockKey, n: Int) -> Effect[()] {
+		let _ <- stock.upsert(k, n, (q) => q + n)
+	}
+}
+```
+
+Two `StockKey`s with the same fields are one entry, however they were built, and a `String` or
+`Int`-keyed collection is stored exactly as before. See [Agents](/reference/agents/#storage-kinds-and-their-operations).
+
 ## Build a map from computed pairs
 
 `Map.of` takes a list of `MapEntry` values, and you can write one yourself,

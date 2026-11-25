@@ -117,6 +117,8 @@ pub(super) fn emit_agent_handlers(
                     })
                     .map(|f| f.field.clone())
                     .collect(),
+                composite_keys: layout.composite_keys.clone(),
+                composite_indexes: layout.composite_indexes.clone(),
                 log_values: log_value_ts.clone(),
             })
         });

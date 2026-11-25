@@ -1,0 +1,10 @@
+{
+  "blurb": "A handler has one `@errors`, which says which shape its error bodies take. Two would name two shapes for the same response, and neither could be said to win, so the second is refused. Keep one. See also `bynk.http.json_duplicate`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.errors_duplicate",
+  "constructs": [],
+  "example": "@errors(format: problem)\n@errors(format: bynk)       // ✗ already set above\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@errors(format: problem)     // ✓ one shape\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries more than one `@errors` annotation."
+}
