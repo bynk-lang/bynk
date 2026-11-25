@@ -441,6 +441,11 @@ pub enum Command {
         /// it changes nothing; at a project, or inside one, it is an error.
         #[arg(long)]
         each: bool,
+        /// The environment whose `[env.<name>.vars]` values `env(…)` constants
+        /// take (#3941): its own table, then `[vars]`, then each constant's
+        /// default. Omit it for `default`.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -470,6 +475,11 @@ pub enum Command {
         /// (contract checks on). `[profile.<name>]` overrides its defaults.
         #[arg(long, value_enum)]
         profile: Option<bynk_driver::CliProfile>,
+        /// The environment whose `[env.<name>.vars]` values `env(…)` constants
+        /// take (#3941): its own table, then `[vars]`, then each constant's
+        /// default. Omit it for `default`.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
         #[command(flatten)]
         lock: LockArgs,
     },
@@ -507,6 +517,11 @@ pub enum Command {
         /// Compile the unsaved buffers given as JSON on stdin (see above).
         #[arg(long)]
         sources_stdin: bool,
+        /// The environment whose `[env.<name>.vars]` values `env(…)` constants
+        /// take (#3941): its own table, then `[vars]`, then each constant's
+        /// default. Omit it for `default`.
+        #[arg(long, default_value = "default", value_name = "NAME")]
+        env: String,
         #[command(flatten)]
         lock: LockArgs,
     },
