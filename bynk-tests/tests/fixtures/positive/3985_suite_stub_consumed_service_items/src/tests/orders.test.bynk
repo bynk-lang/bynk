@@ -1,10 +1,12 @@
-// #3985: a suite-level stub of a consumed service names the suite's constants, as its argument pattern and as its value.
+// #3985: a suite-level stub of a consumed service names the suite's constants, as its argument pattern and as its value, and builds a suite type declared after it.
 suite shop.orders {
   consumes shop.pay { Receipt, PaymentError }
 
   stub shop.stock.reserve(_) returns Ok(())
   stub Pay.authorise(Limit) returns Err(Declined)
-  stub Pay.authorise(_) returns Ok(Receipt { id: Prefix })
+  stub Pay.authorise(_) returns Ok(Receipt { id: Tagged { text: Prefix }.text })
+
+  type Tagged = { text: String }
 
   const Limit: Int = 5
   const Prefix: String = "r-"
