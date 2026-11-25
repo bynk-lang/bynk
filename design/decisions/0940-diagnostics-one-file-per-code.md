@@ -1,11 +1,6 @@
----
-level: patch
-changelog: The diagnostic reference is generated one file per code, and its index is assembled at site build time, so two changes that add different diagnostics no longer conflict
----
+# 0940 — The diagnostic reference is one generated file per code, with the index assembled at site build time
 
-## ADR: diagnostics-one-file-per-code
-title: The diagnostic reference is one generated file per code, with the index assembled at site build time
-summary: Per-code JSON committed, the index page built and not committed
+- **Status:** Accepted (v0.678.2)
 
 **Context.** `site/src/generated/diagnostics.json` and `site/src/content/docs/reference/diagnostics.md` were generated from the registry and committed. Two changes that each added a diagnostic both regenerated both files. Git often merged the two copies as text, but the result was not what the generator writes, so the merge queue ejected the second change, and on 24 November five changes were serialised in a chain, each costing a full CI cycle.
 
