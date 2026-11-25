@@ -1,0 +1,3 @@
+commons billing
+
+type Amount = Int where Positive

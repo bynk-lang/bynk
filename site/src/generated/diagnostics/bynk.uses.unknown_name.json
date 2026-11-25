@@ -1,0 +1,12 @@
+{
+  "blurb": "A braced `uses` list, or a name written through a `uses` qualifier, names something the commons does not declare publicly. A type, function, constant, asset or embed that the commons marks `private` is never imported, so it cannot be listed either. Check the spelling against the commons' own declarations.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.unknown_name",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// billing.bynk\ncommons billing\n\ntype Amount = Int where Positive\n\n// orders.bynk\ncommons orders\n\nuses billing { Amont }                   // ✗ `billing` declares no `Amont`\nuses billing { Amount }                  // ✓ the declared name\n\ntype Order = { id: Int }",
+  "severity": "error",
+  "summary": "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly."
+}

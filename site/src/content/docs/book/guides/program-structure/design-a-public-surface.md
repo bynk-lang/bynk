@@ -65,6 +65,28 @@ fn cost(i: Item) -> Int {
 }
 ```
 
+## Choose what a unit imports
+
+A library that exports a common name (`Status`, `Id`, `Error`) is no trouble to a unit that
+`uses` it, however many other libraries do the same, because `uses` has three forms:
+
+```bynk,ignore
+commons app
+
+uses lib.x                                       // everything lib.x exports, bare
+uses lib.y as Y                                  // everything, as Y.Status and Y.describe(…)
+uses lib.money { Money, format as formatMoney }  // only these, any under another name
+
+fn f(s: Status, t: Y.Status, m: Money) -> String {
+  formatMoney(m)
+}
+```
+
+Two used commons that declare one name are fine until the file writes it bare; then
+`bynk.uses.ambiguous_name` names the spellings that would resolve it. A declaration is read by
+one spelling in a unit (`bynk.uses.second_spelling`), and a name the commons does not export
+publicly cannot be listed (`bynk.uses.unknown_name`).
+
 ## Name an adapter's types in a commons
 
 A commons can `consumes` the types an adapter exports, in braces, and nothing

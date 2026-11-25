@@ -1380,6 +1380,7 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
     use bynk_check::actors::SumMemberSeam;
     let realm = crate::emitter::escape_ts_string(context);
     let bearer = || format!("Bearer realm=\"{realm}\"");
+    let cookie = || format!("Bynk-Cookie realm=\"{realm}\"");
     let signature = |s: &bynk_check::actors::SignatureSeam| {
         let header = crate::emitter::escape_ts_string(&s.header);
         format!("Bynk-Signature realm=\"{realm}\", header=\"{header}\"")
@@ -1389,8 +1390,9 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
             .iter()
             .map(|m| match &m.seam {
                 SumMemberSeam::None => format!("Bynk realm=\"{realm}\""),
-                SumMemberSeam::Bearer { .. } => bearer(),
+                SumMemberSeam::Bearer { .. } | SumMemberSeam::Oidc(_) => bearer(),
                 SumMemberSeam::Signature(s) => signature(s),
+                SumMemberSeam::SignedCookie(_) => cookie(),
             })
             .collect();
     }
@@ -1403,7 +1405,7 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
         return vec![signature(&s)];
     }
     if signed_cookie_name(h, &table.actors).is_some() {
-        return vec![format!("Bynk-Cookie realm=\"{realm}\"")];
+        return vec![cookie()];
     }
     vec![format!("Bynk realm=\"{realm}\"")]
 }

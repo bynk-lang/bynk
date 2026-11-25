@@ -1,0 +1,6 @@
+{
+  "code": "bynk.actor.signed_cookie_not_in_sum",
+  "lastRelease": "0.661.1",
+  "replacement": "a sum such as `by who: User | ApiClient`, whose cookie arm applies the CSRF check only when it is tried",
+  "why": "A `SignedCookie` actor may now be a member of a multi-actor sum (#3936): its CSRF check belongs to the cookie arm, so a token client that sends no cookie never meets it."
+}
