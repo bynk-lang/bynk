@@ -33,3 +33,7 @@ export function twoEffects(a: globalThis.Promise<number>, b: globalThis.Promise<
 export function maybe(e: globalThis.Promise<number>): Option<globalThis.Promise<number>> {
   return Some(e);
 }
+
+export async function chained(e: globalThis.Promise<number>): globalThis.Promise<number> {
+  return (e).then(async (n: number) => wrap(n + 1));
+}

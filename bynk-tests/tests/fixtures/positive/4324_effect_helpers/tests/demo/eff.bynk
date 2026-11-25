@@ -27,3 +27,8 @@ case "an option of an effect is fine" {
 	let o = maybe(Effect.pure(5))
 	expect o.isSome()
 }
+
+case "andThen chains an effect into a generic helper" {
+	let n <- chained(Effect.pure(1))
+	expect n == 2
+}

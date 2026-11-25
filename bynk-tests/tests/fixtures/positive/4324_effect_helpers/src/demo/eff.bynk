@@ -30,3 +30,7 @@ fn twoEffects(a: Effect[Int], b: Effect[Int]) -> List[Effect[Int]] {
 fn maybe(e: Effect[Int]) -> Option[Effect[Int]] {
 	Some(e)
 }
+
+fn chained(e: Effect[Int]) -> Effect[Int] {
+	e.andThen((n) => wrap(n + 1))
+}

@@ -13,7 +13,7 @@ function __makeTestDeps() {
 async function test_a_generic_helper_wraps_a_plain_value() {
   try {
     const deps = {};
-    const { effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
+    const { chained, effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
     const n = await wrap(7);
     if (!(n === 7)) { throw __bynkExpectFailure("tests/demo/eff.bynk:5:9", 88, 94, "expect n == 7\n  expected: n == 7\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((7))); }
     return { pass: true };
@@ -29,7 +29,7 @@ async function test_a_generic_helper_wraps_a_plain_value() {
 async function test_a_generic_helper_over_two_effects_keeps_the_first_result() {
   try {
     const deps = {};
-    const { effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
+    const { chained, effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
     const n = await first(globalThis.Promise.resolve(1), globalThis.Promise.resolve("ignored"));
     if (!(n === 1)) { throw __bynkExpectFailure("tests/demo/eff.bynk:10:9", 228, 234, "expect n == 1\n  expected: n == 1\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((1))); }
     return { pass: true };
@@ -45,7 +45,7 @@ async function test_a_generic_helper_over_two_effects_keeps_the_first_result() {
 async function test_effects_sequence_with___() {
   try {
     const deps = {};
-    const { effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
+    const { chained, effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
     const n = await sequenced(globalThis.Promise.resolve(41));
     if (!(n === 42)) { throw __bynkExpectFailure("tests/demo/eff.bynk:15:9", 317, 324, "expect n == 42\n  expected: n == 42\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((42))); }
     return { pass: true };
@@ -61,7 +61,7 @@ async function test_effects_sequence_with___() {
 async function test_a_list_of_effects_is_not_an_effect_of_an_effect__and_each_runs() {
   try {
     const deps = {};
-    const { effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
+    const { chained, effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
     const es = effects([1, 2, 3]);
     const a = await ((__o: Option<globalThis.Promise<number>>, __d: globalThis.Promise<number>) => __o.tag === "Some" ? __o.value : __d)(((__xs: readonly globalThis.Promise<number>[]) => __xs.length > 0 ? Some(__xs[0]) : None)(es), globalThis.Promise.resolve(0));
     if (!(a === 2)) { throw __bynkExpectFailure("tests/demo/eff.bynk:21:9", 484, 490, "expect a == 2\n  expected: a == 2\n  actual:   " + __bynkShow((a)) + " == " + __bynkShow((2))); }
@@ -80,7 +80,7 @@ async function test_a_list_of_effects_is_not_an_effect_of_an_effect__and_each_ru
 async function test_an_option_of_an_effect_is_fine() {
   try {
     const deps = {};
-    const { effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
+    const { chained, effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
     const o = maybe(globalThis.Promise.resolve(5));
     if (!((o.tag === "Some"))) { throw __bynkExpectFailure("tests/demo/eff.bynk:28:9", 655, 665, "expect o.isSome()"); }
     return { pass: true };
@@ -92,9 +92,25 @@ async function test_an_option_of_an_effect_is_fine() {
   }
 }
 
+// case tier: unit
+async function test_andThen_chains_an_effect_into_a_generic_helper() {
+  try {
+    const deps = {};
+    const { chained, effects, first, maybe, pairUp, sequenced, twoEffects, wrap } = __ns_demo_eff;
+    const n = await chained(globalThis.Promise.resolve(1));
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/demo/eff.bynk:33:9", 767, 773, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a generic helper wraps a plain value", "a generic helper over two effects keeps the first result", "effects sequence with <-", "a list of effects is not an effect of an effect, and each runs", "an option of an effect is fine"];
+export const __bynkCases: readonly string[] = ["a generic helper wraps a plain value", "a generic helper over two effects keeps the first result", "effects sequence with <-", "a list of effects is not an effect of an effect, and each runs", "an option of an effect is fine", "andThen chains an effect into a generic helper"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -126,6 +142,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("an option of an effect is fine")) {
     const started = __bynkCaseNow();
     const r = { name: "an option of an effect is fine", ...(await test_an_option_of_an_effect_is_fine()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("andThen chains an effect into a generic helper")) {
+    const started = __bynkCaseNow();
+    const r = { name: "andThen chains an effect into a generic helper", ...(await test_andThen_chains_an_effect_into_a_generic_helper()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
