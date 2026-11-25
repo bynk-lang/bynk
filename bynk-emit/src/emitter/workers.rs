@@ -969,6 +969,156 @@ pub(super) fn emit_websocket_upgrade(
     TsObjectEntry::method(method_name, true, params, None, stmts)
 }
 
+/// What a verified actor leaves for the handler: the key a rate limit counts by (the
+/// verified `sub`), and the entries added to the handler's `deps` after `...deps`
+/// (the identity, the claims, the session). Empty `extras` means the handler gets
+/// plain `deps`.
+pub(super) struct SeamPrincipal {
+    pub(super) key: TsExpr,
+    pub(super) extras: Vec<TsObjectEntry>,
+}
+
+/// How a verification step reports a refusal: given the `HttpResult` to refuse with,
+/// the statement that leaves the step. A wrapper returns it; a `verify` step (#3926)
+/// returns it as the `Err` of its outcome.
+pub(super) type Failure<'a> = &'a dyn Fn(TsExpr) -> TsStmt;
+
+/// A wrapper's own refusal: `return <result>`.
+pub(super) fn return_failure(result: TsExpr) -> TsStmt {
+    return_(Some(result))
+}
+
+/// A `verify` step's refusal (#3926): `return { tag: "Err", error: <result> }`.
+pub(super) fn err_failure(result: TsExpr) -> TsStmt {
+    return_(Some(TsExpr::object(vec![
+        ("tag".to_string(), str_lit("Err")),
+        ("error".to_string(), result),
+    ])))
+}
+
+fn refused(failure: Failure, status: &str) -> TsStmt {
+    failure(member(ident("HttpResult"), status))
+}
+
+/// The call of the handler a verified wrapper ends with: the route's params, then
+/// `deps`, extended by `extras` when the seam leaves a principal.
+fn handler_return(
+    sname: &str,
+    method_key: &str,
+    mut param_args: Vec<TsExpr>,
+    extras: Vec<TsObjectEntry>,
+) -> TsStmt {
+    if extras.is_empty() {
+        param_args.push(ident("deps"));
+    } else {
+        let mut entries = vec![TsObjectEntry::Spread(ident("deps"))];
+        entries.extend(extras);
+        param_args.push(TsExpr::object_entries(entries));
+    }
+    return_(Some(call(
+        member_chain(ident("handlers"), &[sname, method_key]),
+        param_args,
+    )))
+}
+
+#[allow(clippy::vec_init_then_push)]
+/// A Bearer actor's verification: the header, the secret, the JWT, the claim predicate
+/// (a refinement actor's authorisation invariant, `403`) and the identity mint. Every
+/// refusal goes through `failure`, in the order they always ran.
+fn bearer_seam_stmts(
+    seam: &bynk_check::actors::BearerSeam,
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
+    let secret = crate::emitter::escape_ts_string(&seam.secret);
+    let mut stmts: Vec<TsStmt> = Vec::new();
+    stmts.push(const_(
+        "__authz",
+        method_call(
+            member(ident("request"), "headers"),
+            "get",
+            vec![str_lit("Authorization")],
+        ),
+    ));
+    stmts.push(if_(
+        or_expr(
+            strict_eq(ident("__authz"), null_lit()),
+            not_expr(method_call(
+                ident("__authz"),
+                "startsWith",
+                vec![str_lit("Bearer ")],
+            )),
+        ),
+        refused(failure, "Unauthorized"),
+    ));
+    // Source the signing secret from the same env the `Secrets` capability
+    // reads (explicit env first, then a `process.env` probe).
+    stmts.push(const_("__secret", secret_probe_expr(&secret)));
+    stmts.push(if_(
+        strict_neq(typeof_expr(ident("__secret")), str_lit("string")),
+        refused(failure, "Unauthorized"),
+    ));
+    stmts.push(const_(
+        "__claims",
+        await_expr(call(
+            ident("__verifyBearerJwtHs256"),
+            vec![
+                method_call(ident("__authz"), "slice", vec![num_lit("7")]),
+                ident("__secret"),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
+        refused(failure, "Unauthorized"),
+    ));
+    // v0.53: a refinement actor's authorisation invariant — the scheme
+    // verified (else 401 above), so a failed claim predicate is 403, not
+    // 401. Checked against the *verified* claims, before the identity mints
+    // or the body runs.
+    if let Some(pred) = &seam.authorization {
+        stmts.push(if_(
+            super::claim_predicate::claim_predicate_denied(pred),
+            refused(failure, "Forbidden"),
+        ));
+    }
+    let mut extras: Vec<TsObjectEntry> = Vec::new();
+    if seam.binder.is_some() {
+        // Capture the identity: construct the declared type from `sub`
+        // (fail-closed on a refinement violation) and thread it into deps.
+        stmts.push(const_(
+            "__id",
+            method_call(
+                member(ident("handlers"), seam.identity_type.clone()),
+                "of",
+                vec![member(member(ident("__claims"), "value"), "sub")],
+            ),
+        ));
+        stmts.push(if_(
+            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
+            refused(failure, "Unauthorized"),
+        ));
+        extras.push(TsObjectEntry::prop(
+            "identity".to_string(),
+            member(ident("__id"), "value"),
+        ));
+        // #3937: and the verified token's claims, which the binder's `.claims` reads.
+        extras.push(TsObjectEntry::prop(
+            "claims".to_string(),
+            call(
+                ident("__tokenClaims"),
+                vec![member(member(ident("__claims"), "value"), "claims")],
+            ),
+        ));
+    }
+    (
+        stmts,
+        SeamPrincipal {
+            key: member(member(ident("__claims"), "value"), "sub"),
+            extras,
+        },
+    )
+}
+
 // `stmts`/`secret_body` in the functions below are built incrementally —
 // unconditional pushes followed by later conditional ones, not a fixed
 // literal clippy's suggested `vec![]` could replace.
@@ -1012,100 +1162,13 @@ pub(super) fn emit_http_wrapper(
                 Some(qualified_ts_type_ref(&p.type_ref)),
             )
         }));
-        let secret = crate::emitter::escape_ts_string(&seam.secret);
-        let mut stmts: Vec<TsStmt> = Vec::new();
-        stmts.push(const_(
-            "__authz",
-            method_call(
-                member(ident("request"), "headers"),
-                "get",
-                vec![str_lit("Authorization")],
-            ),
+        let (mut stmts, principal) = bearer_seam_stmts(seam, &return_failure);
+        stmts.push(handler_return(
+            sname,
+            &method_key,
+            param_args,
+            principal.extras,
         ));
-        stmts.push(if_(
-            or_expr(
-                strict_eq(ident("__authz"), null_lit()),
-                not_expr(method_call(
-                    ident("__authz"),
-                    "startsWith",
-                    vec![str_lit("Bearer ")],
-                )),
-            ),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        // Source the signing secret from the same env the `Secrets` capability
-        // reads (explicit env first, then a `process.env` probe).
-        stmts.push(const_("__secret", secret_probe_expr(&secret)));
-        stmts.push(if_(
-            strict_neq(typeof_expr(ident("__secret")), str_lit("string")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        stmts.push(const_(
-            "__claims",
-            await_expr(call(
-                ident("__verifyBearerJwtHs256"),
-                vec![
-                    method_call(ident("__authz"), "slice", vec![num_lit("7")]),
-                    ident("__secret"),
-                ],
-            )),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        // v0.53: a refinement actor's authorisation invariant — the scheme
-        // verified (else 401 above), so a failed claim predicate is 403, not
-        // 401. Checked against the *verified* claims, before the identity mints
-        // or the body runs.
-        if let Some(pred) = &seam.authorization {
-            stmts.push(if_(
-                super::claim_predicate::claim_predicate_denied(pred),
-                return_(Some(member(ident("HttpResult"), "Forbidden"))),
-            ));
-        }
-        if seam.binder.is_some() {
-            // Capture the identity: construct the declared type from `sub`
-            // (fail-closed on a refinement violation) and thread it into deps.
-            stmts.push(const_(
-                "__id",
-                method_call(
-                    member(ident("handlers"), seam.identity_type.clone()),
-                    "of",
-                    vec![member(member(ident("__claims"), "value"), "sub")],
-                ),
-            ));
-            stmts.push(if_(
-                strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-                return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-            ));
-            let mut call_args = param_args.clone();
-            // #3937: and the verified token's claims, which the binder's `.claims` reads.
-            call_args.push(TsExpr::object_entries(vec![
-                TsObjectEntry::Spread(ident("deps")),
-                TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
-                TsObjectEntry::prop(
-                    "claims".to_string(),
-                    call(
-                        ident("__tokenClaims"),
-                        vec![member(member(ident("__claims"), "value"), "claims")],
-                    ),
-                ),
-            ]));
-            stmts.push(return_(Some(call(
-                member_chain(ident("handlers"), &[sname, &method_key]),
-                call_args,
-            ))));
-        } else {
-            // Binder-less: the token is verified (fail-closed above); the
-            // identity is not captured, so call the handler with plain deps.
-            let mut call_args = param_args.clone();
-            call_args.push(ident("deps"));
-            stmts.push(return_(Some(call(
-                member_chain(ident("handlers"), &[sname, &method_key]),
-                call_args,
-            ))));
-        }
         return TsObjectEntry::Method {
             name: method_key,
             is_async: true,
@@ -1148,42 +1211,148 @@ pub(super) fn emit_http_wrapper(
     }
 }
 
-/// v0.151: the compose wrapper for a single-actor `Oidc` HTTP handler. It reads
-/// the `Authorization: Bearer <token>`, verifies the JWT against the provider's
-/// JWKS (RS256/ES256, `iss`/`aud`/`exp`/`nbf`) via `verifyOidcJwt`, mints the
-/// identity from the verified `sub`, and threads it into `deps` — all before the
-/// body runs. Any failure returns `Unauthorized` (401), fail-closed. Unlike the
-/// Bearer wrapper it sources **no secret**: the trust parameters are the public
-/// `issuer`/`audience`/`jwks` literals from the actor declaration.
-#[allow(clippy::vec_init_then_push)]
-pub(super) fn emit_http_oidc_wrapper(
+/// #3926: a route with `@rateLimit(Limiter, key: identity)` is served by two compose
+/// methods in place of the one wrapper, so the entry can verify the caller, ask the
+/// limiter about them, and only then read the body. `<route>__verify(request)` runs the
+/// seam's own statements, refusals included, and gives `{ tag: "Err", error }` (the
+/// `HttpResult` the wrapper would have returned) or `{ tag: "Ok", value: { key,
+/// principal } }`; `<route>(params…, principal)` runs the handler with the principal
+/// the verification left. Verification runs once: the entry never calls the wrapper's
+/// own seam again.
+fn identity_split_wrapper(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    (mut stmts, principal): (Vec<TsStmt>, SeamPrincipal),
+) -> Vec<TsObjectEntry> {
+    let method_key = http_handler_method_name_ir(method, path);
+    let verify_return = TsType::named(
+        "globalThis.Promise<{ tag: \"Err\"; error: any } | { tag: \"Ok\"; value: { key: string; principal: any } }>",
+    );
+    stmts.push(return_(Some(TsExpr::object(vec![
+        ("tag".to_string(), str_lit("Ok")),
+        (
+            "value".to_string(),
+            TsExpr::object(vec![
+                (
+                    "key".to_string(),
+                    call(ident("globalThis.String"), vec![principal.key]),
+                ),
+                (
+                    "principal".to_string(),
+                    TsExpr::object_entries(principal.extras),
+                ),
+            ]),
+        ),
+    ]))));
+    let verify = TsObjectEntry::Method {
+        name: format!("{method_key}__verify"),
+        is_async: true,
+        generics: Vec::new(),
+        params: vec![TsParam::new(
+            "request".to_string(),
+            Some(TsType::named("globalThis.Request")),
+        )],
+        return_type: Some(verify_return),
+        doc: None,
+        inline: false,
+        body: stmts,
+        span: None,
+    };
+    let mut params: Vec<TsParam> = h
+        .params
+        .iter()
+        .map(|p| {
+            TsParam::new(
+                wire_ident(&p.name.name),
+                Some(qualified_ts_type_ref(&p.type_ref)),
+            )
+        })
+        .collect();
+    params.push(TsParam::new(
+        "principal".to_string(),
+        Some(TsType::named("any")),
+    ));
+    let mut args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| ident(wire_ident(&p.name.name)))
+        .collect();
+    args.push(TsExpr::object_entries(vec![
+        TsObjectEntry::Spread(ident("deps")),
+        TsObjectEntry::Spread(ident("principal")),
+    ]));
+    let run = TsObjectEntry::Method {
+        name: method_key.clone(),
+        is_async: true,
+        generics: Vec::new(),
+        params,
+        return_type: None,
+        doc: None,
+        inline: false,
+        body: vec![return_(Some(call(
+            member_chain(ident("handlers"), &[sname, &method_key]),
+            args,
+        )))],
+        span: None,
+    };
+    vec![verify, run]
+}
+
+/// #3926: the verify/run pair of an identity-limited `Bearer` route.
+pub(super) fn bearer_identity_split(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::BearerSeam,
+) -> Vec<TsObjectEntry> {
+    identity_split_wrapper(
+        sname,
+        h,
+        method,
+        path,
+        bearer_seam_stmts(seam, &err_failure),
+    )
+}
+
+/// #3926: the verify/run pair of an identity-limited `Oidc` route.
+pub(super) fn oidc_identity_split(
     sname: &str,
     h: &Handler,
     method: bynk_model::IrHttpMethod,
     path: &str,
     seam: &bynk_check::actors::OidcSeam,
-) -> TsObjectEntry {
-    let method_key = http_handler_method_name_ir(method, path);
-    let param_args: Vec<TsExpr> = h
-        .params
-        .iter()
-        .map(|p| ident(wire_ident(&p.name.name)))
-        .collect();
+) -> Vec<TsObjectEntry> {
+    identity_split_wrapper(sname, h, method, path, oidc_seam_stmts(seam, &err_failure))
+}
+
+/// #3926: the verify/run pair of an identity-limited `SignedCookie` route. The seam's own
+/// statements run in `verify`: the cross-site check for a state-changing request, the
+/// cookie, its signature and lifetime, and with `sessions = true` the session-live check.
+pub(super) fn signed_cookie_identity_split(
+    service: &ServiceDecl,
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::SignedCookieSeam,
+) -> Vec<TsObjectEntry> {
+    let stmts = signed_cookie_seam_stmts(method, seam, &csrf_origins(service), &err_failure);
+    identity_split_wrapper(sname, h, method, path, stmts)
+}
+
+/// An `Oidc` actor's verification: the header, the trust roots (`trustFrom` replaces the
+/// declared ones, fail closed), the JWT against the provider's JWKS and the identity mint.
+/// Every refusal goes through `failure`, in the order they always ran.
+fn oidc_seam_stmts(
+    seam: &bynk_check::actors::OidcSeam,
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
     let issuer = crate::emitter::escape_ts_string(&seam.issuer);
     let audience = crate::emitter::escape_ts_string(&seam.audience);
     let jwks = crate::emitter::escape_ts_string(&seam.jwks);
-
-    // P7.2: real declared types — same correction as `emit_http_wrapper`'s own.
-    let mut params: Vec<TsParam> = vec![TsParam::new(
-        "request".to_string(),
-        Some(TsType::named("globalThis.Request")),
-    )];
-    params.extend(h.params.iter().map(|p| {
-        TsParam::new(
-            wire_ident(&p.name.name),
-            Some(qualified_ts_type_ref(&p.type_ref)),
-        )
-    }));
     let mut stmts: Vec<TsStmt> = Vec::new();
     stmts.push(const_(
         "__authz",
@@ -1202,7 +1371,7 @@ pub(super) fn emit_http_oidc_wrapper(
                 vec![str_lit("Bearer ")],
             )),
         ),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        refused(failure, "Unauthorized"),
     ));
     // #2380 (L5): `trustFrom`'s variable, when set, replaces the declared
     // trust roots; set but malformed refuses the request (fail closed).
@@ -1222,7 +1391,7 @@ pub(super) fn emit_http_oidc_wrapper(
             ));
             stmts.push(if_(
                 strict_eq(ident("__trust"), null_lit()),
-                return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+                refused(failure, "Unauthorized"),
             ));
             (
                 member(ident("__trust"), "issuer"),
@@ -1246,8 +1415,9 @@ pub(super) fn emit_http_oidc_wrapper(
     ));
     stmts.push(if_(
         strict_eq(member(ident("__claims"), "tag"), str_lit("Err")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        refused(failure, "Unauthorized"),
     ));
+    let mut extras: Vec<TsObjectEntry> = Vec::new();
     if seam.binder.is_some() {
         // Capture the identity: construct the declared type from the verified
         // `sub` (fail-closed on a refinement violation) and thread it into deps.
@@ -1261,33 +1431,69 @@ pub(super) fn emit_http_oidc_wrapper(
         ));
         stmts.push(if_(
             strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+            refused(failure, "Unauthorized"),
         ));
-        let mut call_args = param_args;
         // #2380 (L5): the binder's `.claims` read the verified token's claims.
-        call_args.push(TsExpr::object_entries(vec![
-            TsObjectEntry::Spread(ident("deps")),
-            TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
-            TsObjectEntry::prop(
-                "claims".to_string(),
-                call(
-                    ident("__tokenClaims"),
-                    vec![member(member(ident("__claims"), "value"), "claims")],
-                ),
+        extras.push(TsObjectEntry::prop(
+            "identity".to_string(),
+            member(ident("__id"), "value"),
+        ));
+        extras.push(TsObjectEntry::prop(
+            "claims".to_string(),
+            call(
+                ident("__tokenClaims"),
+                vec![member(member(ident("__claims"), "value"), "claims")],
             ),
-        ]));
-        stmts.push(return_(Some(call(
-            member_chain(ident("handlers"), &[sname, &method_key]),
-            call_args,
-        ))));
-    } else {
-        let mut call_args = param_args;
-        call_args.push(ident("deps"));
-        stmts.push(return_(Some(call(
-            member_chain(ident("handlers"), &[sname, &method_key]),
-            call_args,
-        ))));
+        ));
     }
+    (
+        stmts,
+        SeamPrincipal {
+            key: member(member(ident("__claims"), "value"), "sub"),
+            extras,
+        },
+    )
+}
+
+/// v0.151: the compose wrapper for a single-actor `Oidc` HTTP handler. It reads
+/// the `Authorization: Bearer <token>`, verifies the JWT against the provider's
+/// JWKS (RS256/ES256, `iss`/`aud`/`exp`/`nbf`) via `verifyOidcJwt`, mints the
+/// identity from the verified `sub`, and threads it into `deps` — all before the
+/// body runs. Any failure returns `Unauthorized` (401), fail-closed. Unlike the
+/// Bearer wrapper it sources **no secret**: the trust parameters are the public
+/// `issuer`/`audience`/`jwks` literals from the actor declaration.
+#[allow(clippy::vec_init_then_push)]
+pub(super) fn emit_http_oidc_wrapper(
+    sname: &str,
+    h: &Handler,
+    method: bynk_model::IrHttpMethod,
+    path: &str,
+    seam: &bynk_check::actors::OidcSeam,
+) -> TsObjectEntry {
+    let method_key = http_handler_method_name_ir(method, path);
+    let param_args: Vec<TsExpr> = h
+        .params
+        .iter()
+        .map(|p| ident(wire_ident(&p.name.name)))
+        .collect();
+    // P7.2: real declared types — same correction as `emit_http_wrapper`'s own.
+    let mut params: Vec<TsParam> = vec![TsParam::new(
+        "request".to_string(),
+        Some(TsType::named("globalThis.Request")),
+    )];
+    params.extend(h.params.iter().map(|p| {
+        TsParam::new(
+            wire_ident(&p.name.name),
+            Some(qualified_ts_type_ref(&p.type_ref)),
+        )
+    }));
+    let (mut stmts, principal) = oidc_seam_stmts(seam, &return_failure);
+    stmts.push(handler_return(
+        sname,
+        &method_key,
+        param_args,
+        principal.extras,
+    ));
     TsObjectEntry::Method {
         name: method_key,
         is_async: true,
@@ -1358,6 +1564,123 @@ pub(super) fn csrf_origins(service: &ServiceDecl) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A `SignedCookie` actor's verification: the cross-site check for a state-changing
+/// request, the cookie, its signature and lifetime, the identity mint and, for a
+/// `sessions = true` actor, the session-live check. Every refusal goes through
+/// `failure`, in the order they always ran, so nothing here is skipped when the step
+/// runs ahead of the body.
+fn signed_cookie_seam_stmts(
+    method: bynk_model::IrHttpMethod,
+    seam: &bynk_check::actors::SignedCookieSeam,
+    csrf_origins: &[String],
+    failure: Failure,
+) -> (Vec<TsStmt>, SeamPrincipal) {
+    let mut stmts: Vec<TsStmt> = Vec::new();
+    if !matches!(method, bynk_model::IrHttpMethod::Get) {
+        let origins: Vec<TsExpr> = csrf_origins
+            .iter()
+            .map(|o| str_lit(crate::emitter::escape_ts_string(o)))
+            .collect();
+        stmts.push(if_(
+            not_expr(call(
+                ident("__csrfAllowed"),
+                vec![ident("request"), TsExpr::array(origins)],
+            )),
+            refused(failure, "Forbidden"),
+        ));
+    }
+    stmts.push(const_(
+        "__cookie",
+        call(
+            ident("__sessionCookieOf"),
+            vec![
+                ident("request"),
+                str_lit(crate::emitter::escape_ts_string(&seam.cookie)),
+            ],
+        ),
+    ));
+    stmts.push(if_(
+        strict_eq(ident("__cookie"), null_lit()),
+        refused(failure, "Unauthorized"),
+    ));
+    let previous = match &seam.previous {
+        Some(var) => secret_probe_expr(&crate::emitter::escape_ts_string(var)),
+        // A legitimate default: no previous secret is `undefined`.
+        None => undefined_node(),
+    };
+    stmts.push(const_(
+        "__session",
+        await_expr(call(
+            ident("__verifySignedCookie"),
+            vec![
+                ident("__cookie"),
+                TsExpr::object(vec![
+                    (
+                        "secret".to_string(),
+                        secret_probe_expr(&crate::emitter::escape_ts_string(&seam.secret)),
+                    ),
+                    ("previous".to_string(), previous),
+                ]),
+                str_lit(crate::emitter::escape_ts_string(&seam.actor)),
+                num_lit(seam.ttl_secs.to_string()),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        strict_eq(member(ident("__session"), "tag"), str_lit("Err")),
+        refused(failure, "Unauthorized"),
+    ));
+    let mut extras: Vec<TsObjectEntry> = Vec::new();
+    if seam.binder.is_some() || seam.sessions {
+        // Capture the identity: construct the declared type from the verified `sub`
+        // (fail-closed on a refinement violation) and thread it into deps. A `sessions = true`
+        // actor needs it even without a binder: it keys the session agent.
+        stmts.push(const_(
+            "__id",
+            method_call(
+                member(ident("handlers"), seam.identity_type.clone()),
+                "of",
+                vec![member(member(ident("__session"), "value"), "sub")],
+            ),
+        ));
+        stmts.push(if_(
+            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
+            refused(failure, "Unauthorized"),
+        ));
+        if seam.sessions {
+            push_session_check(&mut stmts, seam, failure);
+            // The verified session, for `Actor.expire()` to end. Spread from its own object so the
+            // handler's exact `deps` type does not flag it as an excess property.
+            extras.push(TsObjectEntry::Spread(TsExpr::object(vec![(
+                "__sessionOf".to_string(),
+                TsExpr::object(vec![
+                    (
+                        "sid".to_string(),
+                        member(member(ident("__session"), "value"), "sid"),
+                    ),
+                    (
+                        "sub".to_string(),
+                        member(member(ident("__session"), "value"), "sub"),
+                    ),
+                ]),
+            )])));
+        }
+        if seam.binder.is_some() {
+            extras.push(TsObjectEntry::prop(
+                "identity".to_string(),
+                member(ident("__id"), "value"),
+            ));
+        }
+    }
+    (
+        stmts,
+        SeamPrincipal {
+            key: member(member(ident("__session"), "value"), "sub"),
+            extras,
+        },
+    )
+}
+
 /// #3386: the compose wrapper for a single-actor `SignedCookie` HTTP handler. Before the body
 /// runs it (1) refuses a cross-site state-changing request (fetch metadata, then `Origin`;
 /// a `GET` is safe and skips this), (2) reads the session cookie, refusing an absent or
@@ -1391,111 +1714,14 @@ fn emit_http_signed_cookie_wrapper(
             Some(qualified_ts_type_ref(&p.type_ref)),
         )
     }));
-    let mut stmts: Vec<TsStmt> = Vec::new();
-    if !matches!(method, bynk_model::IrHttpMethod::Get) {
-        let origins: Vec<TsExpr> = csrf_origins
-            .iter()
-            .map(|o| str_lit(crate::emitter::escape_ts_string(o)))
-            .collect();
-        stmts.push(if_(
-            not_expr(call(
-                ident("__csrfAllowed"),
-                vec![ident("request"), TsExpr::array(origins)],
-            )),
-            return_(Some(member(ident("HttpResult"), "Forbidden"))),
-        ));
-    }
-    stmts.push(const_(
-        "__cookie",
-        call(
-            ident("__sessionCookieOf"),
-            vec![
-                ident("request"),
-                str_lit(crate::emitter::escape_ts_string(&seam.cookie)),
-            ],
-        ),
+    let (mut stmts, principal) =
+        signed_cookie_seam_stmts(method, seam, csrf_origins, &return_failure);
+    stmts.push(handler_return(
+        sname,
+        &method_key,
+        param_args,
+        principal.extras,
     ));
-    stmts.push(if_(
-        strict_eq(ident("__cookie"), null_lit()),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-    ));
-    let previous = match &seam.previous {
-        Some(var) => secret_probe_expr(&crate::emitter::escape_ts_string(var)),
-        // A legitimate default: no previous secret is `undefined`.
-        None => undefined_node(),
-    };
-    stmts.push(const_(
-        "__session",
-        await_expr(call(
-            ident("__verifySignedCookie"),
-            vec![
-                ident("__cookie"),
-                TsExpr::object(vec![
-                    (
-                        "secret".to_string(),
-                        secret_probe_expr(&crate::emitter::escape_ts_string(&seam.secret)),
-                    ),
-                    ("previous".to_string(), previous),
-                ]),
-                str_lit(crate::emitter::escape_ts_string(&seam.actor)),
-                num_lit(seam.ttl_secs.to_string()),
-            ],
-        )),
-    ));
-    stmts.push(if_(
-        strict_eq(member(ident("__session"), "tag"), str_lit("Err")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-    ));
-    let mut call_args = param_args;
-    if seam.binder.is_some() || seam.sessions {
-        // Capture the identity: construct the declared type from the verified `sub`
-        // (fail-closed on a refinement violation) and thread it into deps. A `sessions = true`
-        // actor needs it even without a binder: it keys the session agent.
-        stmts.push(const_(
-            "__id",
-            method_call(
-                member(ident("handlers"), seam.identity_type.clone()),
-                "of",
-                vec![member(member(ident("__session"), "value"), "sub")],
-            ),
-        ));
-        stmts.push(if_(
-            strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
-            return_(Some(member(ident("HttpResult"), "Unauthorized"))),
-        ));
-        let mut deps_entries = vec![TsObjectEntry::Spread(ident("deps"))];
-        if seam.sessions {
-            push_session_check(&mut stmts, seam);
-            // The verified session, for `Actor.expire()` to end. Spread from its own object so the
-            // handler's exact `deps` type does not flag it as an excess property.
-            deps_entries.push(TsObjectEntry::Spread(TsExpr::object(vec![(
-                "__sessionOf".to_string(),
-                TsExpr::object(vec![
-                    (
-                        "sid".to_string(),
-                        member(member(ident("__session"), "value"), "sid"),
-                    ),
-                    (
-                        "sub".to_string(),
-                        member(member(ident("__session"), "value"), "sub"),
-                    ),
-                ]),
-            )])));
-        }
-        if seam.binder.is_some() {
-            deps_entries.push(TsObjectEntry::prop(
-                "identity".to_string(),
-                member(ident("__id"), "value"),
-            ));
-        }
-        call_args.push(TsExpr::object_entries(deps_entries));
-    } else {
-        call_args.push(ident("deps"));
-    }
-    stmts.push(return_(Some(call(
-        member_chain(ident("handlers"), &[sname, &method_key]),
-        call_args,
-    ))));
     TsObjectEntry::Method {
         name: method_key,
         is_async: true,
@@ -1515,11 +1741,15 @@ fn emit_http_signed_cookie_wrapper(
 /// session agent must still hold it live. A forged cookie never reaches here, so costs no agent
 /// call. A revoked, expired or unknown session is `Unauthorized`; an agent that cannot answer
 /// faults the request, which also refuses it.
-fn push_session_check(stmts: &mut Vec<TsStmt>, seam: &bynk_check::actors::SignedCookieSeam) {
+fn push_session_check(
+    stmts: &mut Vec<TsStmt>,
+    seam: &bynk_check::actors::SignedCookieSeam,
+    failure: Failure,
+) {
     let sid = member(member(ident("__session"), "value"), "sid");
     stmts.push(if_(
         strict_eq(sid.clone(), ident("undefined")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        refused(failure, "Unauthorized"),
     ));
     let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
     let factory = member(
@@ -1540,7 +1770,7 @@ fn push_session_check(stmts: &mut Vec<TsStmt>, seam: &bynk_check::actors::Signed
     ));
     stmts.push(if_(
         not_expr(ident("__live")),
-        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+        refused(failure, "Unauthorized"),
     ));
 }
 

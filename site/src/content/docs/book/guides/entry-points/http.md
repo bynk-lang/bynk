@@ -385,7 +385,9 @@ and authentication. A client over its limit gets `429 Too Many Requests` with a 
 the limiter's window in seconds, and a service's [`on rejected`](/reference/http/#rendering-rejections)
 can render it: the rejection is `RateLimited(detail)`, and a `system` test asserts
 `Rejected(RateLimited(_))`. `clientIp` counts by the caller's `CF-Connecting-IP`, so users
-behind one address share a count. `RateLimit` is experimental and Cloudflare's; see
+behind one address share a count. On a route with a `Bearer`, `Oidc` or `SignedCookie` actor,
+`key: identity` counts per signed-in caller instead: the router checks the credential first, so a
+forged one is refused with its usual `401` and never spends anyone's limit. `RateLimit` is experimental and Cloudflare's; see
 [HTTP → Rate limiting](/reference/http/#rate-limiting) for the rest.
 
 ## Set a cookie from the record that reads it

@@ -265,6 +265,7 @@ const WORKER_ORDER: &[&str] = &[
     "__privateByDefault",
     "__problemRejection",
     "__rateLimitAllows",
+    "__rateLimitAllowsKey",
     "__rateLimitedResponse",
     "__edgeCacheGuard",
     "__varyAcceptLanguage",
