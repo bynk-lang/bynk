@@ -5,7 +5,7 @@ type Other = { name: String }
 
 service work from queue("jobs") {
   delivery { deadLetter: "jobs-dlq" }
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -13,7 +13,7 @@ service work from queue("jobs") {
 // ✗ the dead letter is a `Job`, which this consumer cannot decode.
 service review from queue("jobs-dlq") {
   delivery { deadLetter: None }
-  on message(message: Other) -> Effect[QueueResult] {
+  on message(message: Other) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

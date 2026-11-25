@@ -79,8 +79,33 @@ case "a ping is acknowledged" {
 }
 ```
 
-A helper is private to its suite and pure; see
+A helper is private to its suite; see
 [Helper functions in a suite](/reference/testing/#helpers).
+
+## Share setup that runs effects
+
+Setup that runs effects, such as creating a table or seeding rows, is a helper
+that declares `given`. Each case calls it by name, so what a case depends on stays
+visible where it is used:
+
+```bynk,fragment
+suite shop.stock
+
+fn freshTable() -> Effect[()] given Stock {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT, qty INTEGER)", [])
+	Effect.pure(())
+}
+
+case "an empty table counts zero" {
+	do freshTable()
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+The helper runs with the case's capabilities, so the case's `stub`s and
+`expect Stock.run called` apply inside it. Other suites do not see it; see
+[Effectful helpers](/reference/testing/#helpers-effectful) for where it can be called.
 
 ## Test with a real payload
 

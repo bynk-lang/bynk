@@ -166,6 +166,8 @@ module.exports = grammar({
       seq(
         "commons",
         field("name", $.qualified_name),
+        // #3984: `commons x.y for tests`, a commons only suites may `uses`.
+        optional(seq("for", field("marker", alias("tests", $.test_only_marker)))),
         choice(
           seq("{", repeat($._commons_body_item), "}"),
           // Fragment form: header followed by items to EOF (or the next
@@ -1474,6 +1476,8 @@ module.exports = grammar({
         // the operation.
         repeat(seq(field("path", $.identifier), ".")),
         field("op", $.identifier),
+        // #3945: a generic operation's type arguments, `stub Cap.op[T](…)`.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         "(",
         optional(
           seq(
@@ -1805,6 +1809,8 @@ module.exports = grammar({
         field("cap", $.identifier),
         ".",
         field("op", $.identifier),
+        // #3945: `Cap.op[T] called …` observes one type argument of a generic operation.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         choice(
           seq(
             "called",

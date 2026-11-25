@@ -2178,6 +2178,9 @@ fn check_by_clause_contracts(
             if is_caller_refinement(a, table) {
                 // #3890: a refinement over `Caller` inherits its scheme and identity.
                 actors::prelude_actor("Caller")
+            } else if is_producer_refinement(a, table) {
+                // #3899: a refinement over `Producer` inherits its contract.
+                actors::prelude_actor("Producer")
             } else {
                 scheme_actor
                     .and_then(|sa| sa.auth.as_ref())
@@ -2207,6 +2210,12 @@ fn check_by_clause_contracts(
             }
             continue;
         };
+        errors.extend(queue_actor_narrowing(
+            protocol,
+            by,
+            local.is_some_and(|a| is_producer_refinement(a, table)),
+            contract.scheme,
+        ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
             errors.push(
                 CompileError::new(
@@ -2746,6 +2755,65 @@ pub(crate) fn is_caller_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &
         .is_some_and(|r| r.base.name == "Caller" && !table.actors.contains_key("Caller"))
 }
 
+/// #3899: whether an actor declaration refines the prelude `Producer` (no local
+/// actor named `Producer` shadows it).
+pub(crate) fn is_producer_refinement(
+    actor: &bynk_syntax::ast::ActorDecl,
+    table: &UnitTable,
+) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Producer" && !table.actors.contains_key("Producer"))
+}
+
+/// #3899: a queue consumer may name a `Producer` refinement or a `Foreign`
+/// actor, but nothing yet enforces either on delivery (the signed message
+/// format is a later part of #3899), so naming one is refused rather than
+/// accepted unenforced.
+fn queue_actor_narrowing(
+    protocol: &ServiceProtocol,
+    by: &bynk_syntax::ast::ByClause,
+    producer_refinement: bool,
+    scheme: crate::actors::Scheme,
+) -> Option<CompileError> {
+    use crate::actors::Scheme;
+    let on_queue = matches!(protocol, ServiceProtocol::Queue { .. });
+    // A refinement over `Producer` narrows a queue's senders, and only a queue
+    // consumer can name one; elsewhere nothing would enforce its `IsContext(…)`,
+    // so it is refused rather than read as narrowed.
+    if producer_refinement && !on_queue {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Producer` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Producer` refinements narrow who may send to a queue consumer — name one \
+                 only on `on message` of a `from queue` service",
+            ),
+        );
+    }
+    if !on_queue || !(producer_refinement || scheme == Scheme::Foreign) {
+        return None;
+    }
+    Some(
+        CompileError::new(
+            "bynk.actor.queue_actor_not_enforced",
+            by.span,
+            "a queue consumer cannot narrow its actor yet: a `Producer` refinement or a `Foreign` actor is not enforced on `on message`",
+        )
+        .with_note(
+            "nothing verifies who sent a queue message yet, so accepting this `by` would admit \
+             every producer while reading as if it did not — write `by Producer` for now",
+        ),
+    )
+}
+
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
 /// default actor; the internal protocols inherit one.
 fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut Vec<CompileError>) {
@@ -2756,6 +2824,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
         // Only a real `on call` handler: a stray kind in a call service has its own error.
         if handler.kind == HandlerKind::Call {
             errors.push(missing_by_on_call(handler));
+        }
+        return;
+    }
+    // #3899: a queue consumer states who may send to it.
+    if matches!(protocol, ServiceProtocol::Queue { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_queue(handler));
         }
         return;
     }
@@ -2804,6 +2879,26 @@ fn missing_by_on_call(handler: &Handler) -> CompileError {
     .with_suggestion(
         "add `by Caller`",
         vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3899: an `on message` handler states who may send to it. The fix-it inserts `by Producer`
+/// (the former silent default: anyone on the account) after the return type.
+fn missing_by_on_queue(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_queue",
+        handler.span,
+        "an `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Producer` admits any producer on the Cloudflare account, which is what a queue consumer did before the clause was required. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_queue`",
+    )
+    .with_suggestion(
+        "add `by Producer`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Producer".to_string())],
         Applicability::MachineApplicable,
     )
 }
@@ -2872,19 +2967,23 @@ fn check_refinement_actor(
     // (only Bearer carries claims to authorise against), and its `where`
     // predicate MUST be in the closed claim-predicate set.
     if let Some(r) = &actor.refinement
-        && is_caller_refinement(actor, table)
+        && (is_caller_refinement(actor, table) || is_producer_refinement(actor, table))
     {
         // #3890: a refinement over the prelude `Caller` narrows which
-        // contexts may call, by the closed `IsContext(…)` vocabulary.
+        // contexts may call, by the closed `IsContext(…)` vocabulary; #3899
+        // gives a refinement over `Producer` the same vocabulary.
         if let Err(span) = actors::parse_caller_predicate(&r.predicate) {
             errors.push(
                     CompileError::new(
                         "bynk.actor.refinement_predicate_unsupported",
                         span,
-                        "a refinement over `Caller` must be `IsContext(<context>, …)`, composed with `&&`, `||`, `!`",
+                        format!(
+                            "a refinement over `{}` must be `IsContext(<context>, …)`, composed with `&&`, `||`, `!`",
+                            r.base.name
+                        ),
                     )
                     .with_note(
-                        "the calling context is the only thing a `Caller` carries; claims such as \
+                        "the context is the only thing a `Caller` or `Producer` carries; claims such as \
                          `hasClaim` belong to a `Bearer` actor",
                     ),
                 );
@@ -8206,6 +8305,7 @@ mod actor_binding_persistence_tests {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,

@@ -561,15 +561,16 @@ method widen to the base like any other argument.
 
 **String interpolation** (v0.43, ADR 0075). An interpolated string
 `"… \(e) …"` has type `String`. Each hole expression `e` must have type
-`String`, `Int`, `Float`, `Bool`, `Decimal`, or a **refinement** of one of those (which
-widens to its base for display) — these are the types with a well-defined
+`String`, `Int`, `Float`, `Bool`, `Decimal`, `Instant`, `Duration`, or a **refinement** of one of
+those (which widens to its base for display) — these are the types with a well-defined
 string form (`Int`/`Float` via the ADR 0074 `toString` contract, `Bool` as
-`true`/`false`, `Decimal` as its canonical text per ADR 0698). Any other hole type — `record`, `sum`, `Option`, `Result`,
+`true`/`false`, `Decimal` as its canonical text per ADR 0698, and (#3977) `Instant` as RFC 3339
+text in UTC, `2026-11-22T10:00:00.000Z`, and `Duration` as units, largest first,
+`1h30m` — the text their `toString()` gives, see [Types](/reference/types/#duration)). Any other hole type — `record`, `sum`, `Option`, `Result`,
 `List`, an opaque type (whose base is hidden — `.raw` it first), … — is a
 static error (`bynk.types.interpolation_non_scalar`): map the value to a
-`String` first. This includes the remaining base types — `Bytes` (`toHex()`,
-`toBase64()`), `Duration` (`toString()`) and `Instant` (`toIso()`,
-`toString()`) — whose string form is a choice, not a default. The conversion is implicit only here, in a display context; it
+`String` first. This includes `Bytes` (`toHex()`, `toBase64()`), whose string form is a
+choice, not a default. The conversion is implicit only here, in a display context; it
 does **not** generalise to arithmetic or comparison (ADR 0046 is unchanged —
 `+` stays numeric, `concat` stays a method).
 
@@ -651,6 +652,15 @@ function returning `Result[_, F]` (or `Effect[Result[_, F]]`), applying `?` to a
 instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
+
+**`?` on an `Option`** (#3966). `?` on an `Option[T]` has type `T` and returns early on `None`
+where the enclosing body returns an `Option[_]` or an `Effect[Option[_]]`: the `None` is the
+result, so `Option` never converts to `Result` or the reverse. Where the body returns an
+`HttpResult[_]` (or an `Effect` of one) the `None` answers `NotFound` instead (v0.153, ADR 0177).
+Anywhere else, a `Result`-returning body included, it is
+`bynk.types.question_option_outside_http`, with a quick fix that applies `.okOr(todo("…"))`, to be completed with the error. A lambda is
+its own return scope, as for `Result`, and `bynk.par.question_in_join` applies to an `Option`
+as to a `Result`.
 
 **`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
 rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
@@ -772,8 +782,15 @@ type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codabl
 are accepted there), and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
-where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
-`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+where the type is applied, at **every** application: a written type argument
+(`type Set2[T: Eq]` rejects `Set2[(Int) -> Int]` with the equality diagnostics
+below), a type parameter standing for the argument (`Set2[U]` MUST be in the scope
+of a `U` that carries the bound, else `bynk.generics.missing_{eq,ord,key,codable}_bound`
+with the same machine-applicable fix as a function's), and an instantiation the
+checker infers from a record or variant literal (`Set2 { items: [f] }` is checked
+as a written argument would be). The bounds a type needs are declared on it, never
+inferred from its fields, and a method of a bounded type holds its receiver type's
+bounds without repeating them. An `Eq` bound adds nothing to emission. An
 `Ord` bound adds one hidden trailing comparator parameter to the emitted
 function (the receiver type's parameters first, then the method's own, in
 declaration order), which the caller builds from the concrete type; it is
@@ -1266,6 +1283,18 @@ between its `store` fields and its handlers.
   `New`, or a `deleted` one, and the old class gets no binding.
 - **Everything else is refused.** A recorded class that disappears with neither
   declaration is `bynk.agent.class_removed`.
+
+### §5.4.4 Erasing an instance (#3931) {#erase}
+
+`self.erase()` is legal in an agent `on call` handler (not in `migrate`, an invariant, a `transition` or
+a function). It has type `Effect[()]` and is valid only in an effectful body. A handler that calls it,
+on any path, **erases its instance when it commits**: the commit deletes every stored field, entry,
+index posting and marker for the key **instead of** writing the handler's state, and the next call to
+the key starts from the agent's initial state, as a key never seen does. Everything the handler wrote
+before or after the call is discarded. No invariant or `transition` predicate is checked against the
+initial state it returns to. The erasure is part of the atomic commit: a handler that faults commits
+nothing, so erases nothing. Events the handler emitted are released as at any commit. A `:=` after a
+`do self.erase()` in the same block is `bynk.agent.write_after_erase` (a warning).
 
 ## §5.5 Effects, capabilities & providers
 
@@ -2471,11 +2500,12 @@ apart by name. A `Signature` handler MUST take a `body`
 parameter — the signature is computed over the request body, so a bodyless signed
 request is meaningless (`bynk.actor.signature_requires_body`). A handler that
 omits `by` inherits its service header's default, else its protocol's default
-actor (cron `Scheduler`, queue `Producer`, email `Sender`); an **HTTP handler has
+actor (cron `Scheduler`, email `Sender`); an **HTTP handler has
 no safe default and MUST declare `by`** (`bynk.actor.missing_by_on_http`), as MUST
-a WebSocket `on open` and a service's **`on call`** handler
+a WebSocket `on open`, a service's **`on call`** handler
 (`bynk.actor.missing_by_on_call`, which supersedes the earlier silent `Caller`
-default). An agent's `on call` operations are unaffected.
+default) and a queue consumer's **`on message`** handler
+(`bynk.actor.missing_by_on_queue`, likewise superseding a silent `Producer` default). An agent's `on call` operations are unaffected.
 
 The `Caller` prelude actor (the explicit "any consuming context" for `on call`) yields a **live `CallerId`**
 (v0.54): a cross-context `on call … by c: Caller (…)` handler binds `c.identity`
@@ -2746,8 +2776,13 @@ name already in scope there (`bynk.fixture.duplicate`, `bynk.resolve.name_confli
 The text follows an `embed`'s (§5.12a): a leading byte-order mark dropped, line
 endings normalised to `\n`. A fixture is emitted into test output only.
 
+A commons declared `commons x.y for tests` (#3984) is a test-only commons: only a suite or another test-only commons MAY `uses` it (`bynk.uses.test_only_commons`), and a deployable build omits it.
+
 A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
-that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
+(`bynk.suite.fn_method`) that either does not return an `Effect` or declares `given`,
+naming capabilities of the suite's target (`bynk.suite.fn_effectful`; a `given` helper
+in a `system` suite is `bynk.test.helper_given_at_system`, and a `stub` value MUST NOT
+call one),
 MUST NOT repeat the name of another helper of its suite or of any value in scope in
 its cases (`bynk.suite.duplicate_fn`, `bynk.suite.fn_name_clash`), and is visible to
 the `case`s, `property` bodies and other helpers of the suite that declares it,

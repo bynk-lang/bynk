@@ -59,6 +59,7 @@ pub fn compile_in_memory(
         false,
         false,
         false,
+        false,
         true,
         &SchemaLock::Off,
         None,
@@ -72,7 +73,15 @@ pub fn compile_in_memory(
         tys,
         None,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None, None)
+    finish_build(
+        run,
+        ImportExt::Js,
+        Path::new(""),
+        &[],
+        Default::default(),
+        None,
+        None,
+    )
 }
 
 /// [`compile_in_memory`] for several files (#1830): each `(path, source)` pair
@@ -138,6 +147,7 @@ pub fn compile_files_in_memory_locked(
         false,
         false,
         false,
+        false,
         tests,
         &SchemaLock::Off,
         remote,
@@ -156,7 +166,7 @@ pub fn compile_files_in_memory_locked(
         ImportExt::Js,
         Path::new(""),
         &[],
-        None,
+        Default::default(),
         None,
         contracts_lock,
     )
@@ -223,6 +233,7 @@ pub fn analyse_in_memory_with_types(
         &overlay,
         &[],
         Some(vec![vec![path.clone()]]),
+        false,
         false,
         false,
         false,
@@ -337,6 +348,7 @@ pub fn analyse_in_memory_project(
         files,
         &[],
         Some(buckets),
+        false,
         false,
         false,
         false,

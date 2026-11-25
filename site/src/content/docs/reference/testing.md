@@ -1164,6 +1164,14 @@ triad: `consumes` *declares* a seam, `given` *requires* it, and `stub`
 *substitutes* it under test (its own keyword since #548; formerly a pun on the
 production `provides`).
 
+A [generic operation](/reference/capabilities/#generic-operations) is stubbed at a
+type argument, written as at a call site: `stub Idempotency.dedup[Int](_) returns
+Some(7)`. The clause is typed against the operation with the type argument
+substituted, and it answers only calls made at that type argument, so
+`dedup[Int]` and `dedup[String]` carry separate stubs. The test build passes the
+call's type arguments as a trailing marker argument that the real binding
+ignores; the code the compiler emits for a production build is unchanged.
+
 - **The left is `Cap.method(<pattern>, …)`** — the capability, the method, and an
   **argument pattern** per parameter. A pattern is the [one predicate
   surface](/reference/testing/#expect): a literal (`"GBP"`, `1000`), `_`
@@ -1404,9 +1412,12 @@ case "an issue event is recorded" {
   test module alone. The deployable output is the same with or without it, and a
   helper adds nothing to the target's surface. So a helper may use what a test
   body may, such as [`Val[T]`](#val), `RequestHeaders.of`, `RequestQuery.of` and `TokenClaims.of`.
-- **Pure.** A helper returns a value. One that returns an `Effect` is
+- **Pure, or effectful with `given`.** A helper returns a value. One that returns
+  an `Effect` declares the capabilities it uses, as a context function does:
+  `fn seed() -> Effect[()] given Stock { … }`. Without `given` it is
   `bynk.suite.fn_effectful`: build the value in the helper and run the effect in
-  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`.
+  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`. See
+  [Effectful helpers](#helpers-effectful).
 - **Private to its suite.** Another suite, even one targeting the same unit,
   cannot call it, and may declare a helper of the same name. A suite split across
   files is, as for [`stub`](#stub) and [`env`](#env), one suite per file.
@@ -1414,7 +1425,45 @@ case "an issue event is recorded" {
   type, constant, embed, asset, service or agent of the target or of a commons
   it `uses`) is `bynk.suite.fn_name_clash`. Two helpers of one suite with one
   name are `bynk.suite.duplicate_fn`.
-- **Not exported.** There is no way to share helpers across suites.
+- **Not exported.** A suite's helpers are private to it; to share them across suites,
+  put them in a [test-only commons](#test-only-commons).
+
+### Effectful helpers {#helpers-effectful}
+
+Setup that runs effects (create a table, seed rows, open a session) is a helper
+that declares `given`:
+
+```bynk,fragment
+suite shop.stock
+
+fn freshTable() -> Effect[()] given Stock {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT, qty INTEGER)", [])
+	Effect.pure(())
+}
+
+case "an empty table counts zero" {
+	do freshTable()
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+- **Where it is called.** From a `case` or `property` body and from another
+  helper, which declares the capabilities it passes on, as a context function
+  does (`bynk.given.missing_for_call`). Each case calls its setup by name, so the
+  dependency is visible where it is used. A `stub … returns` value cannot call
+  one: a stub supplies a value and never runs logic
+  (`bynk.given.missing_for_call`).
+- **Capabilities.** `given` names the target's capabilities (its own, and those
+  of the adapters it consumes; a consumed service is not a capability). A case already has them, so it does
+  not declare them to call the helper. The case's `stub`s and call recording
+  apply inside the helper, so `expect Stock.run called` sees the helper's calls.
+- **Tiers.** At `unit` and `integration` a helper may declare `given`. A `system`
+  case names no capability, so a `given` helper in a `system` suite is
+  `bynk.test.helper_given_at_system`.
+- **Faults and `expect`.** A fault in a helper fails the case as it would inline.
+  `expect` stays case-only (`bynk.expect.outside_case`): a helper returns values
+  for the case to check.
 
 ## Types and constants in a suite {#suite-types-consts}
 
@@ -1459,6 +1508,46 @@ case "a count reads back as a typed row" {
   `stub … returns` may name the suite's types and constants, whether the stub is
   written before or after them (the order of a suite's items does not matter), and
   for a stub of a consumed service as for one of a capability.
+
+
+## Sharing between suites {#test-only-commons}
+
+A commons marked **`for tests`** holds what several suites share: helpers, types,
+constants, and test-only values such as `Val[T]` and `RequestHeaders.of`.
+
+```bynk,fragment
+commons shop.testkit for tests
+
+fn gh(event: String, delivery: String) -> RequestHeaders {
+	RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
+}
+
+const Repo: String = "bynk-lang/bynk"
+```
+
+```bynk,fragment
+suite hooks.github
+
+uses shop.testkit
+
+case "an issue event is recorded" {
+	let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
+	expect r is Ok("accepted")
+}
+```
+
+- **Marker.** `for tests` is a contextual suffix on the commons header. It is part of
+  the file, so moving the file does not change what it means.
+- **Who may use it.** A suite and another test-only commons. A context, a production
+  commons or an adapter that `uses` one is `bynk.uses.test_only_commons`. A
+  test-only commons may itself `uses` production commons.
+- **What it holds.** What a commons holds: helpers, types and constants, checked as a
+  suite's are, with the test-only forms allowed. It has no services, agents,
+  providers or `stub`s. A helper that declares `given` is not available in it (a
+  commons has no one capability set), so keep effectful setup in the suite.
+- **Build.** A deployable build leaves a test-only commons out, as it does a suite;
+  `bynk test` emits it, and `bynk check` checks it. Its names reach every suite of the
+  target that `uses` it.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 
@@ -2120,6 +2209,10 @@ The subject is a **`Cap.op` reference** — the capability and one of its operat
 | `expect Cap.op called with <pred>` | at least one call whose arguments satisfy `<pred>` |
 | `expect Cap.op called <n> times with <pred>` | exactly `<n>` calls, and they match |
 | `expect A.op before B.op` | both occurred, and the first `A.op` precedes the first `B.op` |
+
+A generic operation is observed per type argument: `expect Idempotency.dedup[Int]
+called once` counts only the calls made at `Int`. Without the type argument an
+observation counts the calls at every type argument.
 
 `before` compares the order calls were **issued** in, not the order they finished.
 Inside a [`par` block](/reference/capabilities/#par) the first call of each

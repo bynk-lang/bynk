@@ -1097,6 +1097,9 @@ pub struct EmitProjectCtx {
     /// v0.115 (testing track slice 3): emit the function-contract call-site guard
     /// (dev/test profile). Stripped in the deploy build for zero runtime cost.
     pub contracts: bool,
+    /// #3945: `bynk test` only (`CompileOptions::typed_capability_calls`): a call to a generic
+    /// capability operation passes its type arguments' identity as a trailing argument.
+    pub typed_capability_calls: bool,
     /// #3580: `Some` emits the per-request trace recording (`bynk dev
     /// --trace-events`): the cross-context, agent and capability sites wrapped in
     /// `__traceStep`, and the Worker's `fetch` in `__traceFetch`. Never set by a

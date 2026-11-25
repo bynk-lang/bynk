@@ -139,6 +139,9 @@ impl Trivia {
 #[derive(Debug, Clone)]
 pub struct Commons {
     pub name: QualifiedName,
+    /// #3984: `commons x.y for tests`: a commons only suites and other test-only commons may
+    /// `uses`, left out of every deployable.
+    pub test_only: bool,
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,
@@ -508,6 +511,10 @@ pub struct StubClause {
     pub capability: Ident,
     /// The overridden method.
     pub method: Ident,
+    /// #3945: the explicit type arguments of a generic operation
+    /// (`stub Idempotency.dedup[Outcome](_) …`): the stub answers a call whose
+    /// own type arguments these are. Empty for an operation without any.
+    pub type_args: Vec<TypeRef>,
     /// One argument pattern per parameter (`_` or a value the arg must equal).
     pub args: Vec<ArgPattern>,
     /// The provision: a value, a fault, a per-call sequence, or none at all.
@@ -5286,6 +5293,9 @@ pub struct FaultsExpr {
 pub struct ObservationExpr {
     pub cap: Ident,
     pub op: Ident,
+    /// #3945: the explicit type arguments (`Idempotency.dedup[Outcome]`): the
+    /// claim is about the calls made with these. Empty counts every call.
+    pub type_args: Vec<TypeRef>,
     pub matcher: ObservationMatcher,
 }
 
@@ -6091,6 +6101,7 @@ fn f(x: Int) -> Int {
                 let ObservationExpr {
                     cap: _,
                     op: _,
+                    type_args: _,
                     matcher,
                 } = obs.as_ref();
                 match matcher {

@@ -13,7 +13,7 @@ The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. For th
 source_file ::= (commons_decl | context_decl | adapter_decl | suite_decl)+ | item_fragment+ | expr_fragment
 item_fragment ::= context_body_item | handler | store_field | key_decl
 expr_fragment ::= statement+ expression? | expression
-commons_decl ::= "commons" qualified_name ("{" commons_body_item* "}" | commons_body_item*)
+commons_decl ::= "commons" qualified_name ("for" "tests")? ("{" commons_body_item* "}" | commons_body_item*)
 context_decl ::= "context" qualified_name ("{" context_body_item* "}" | context_body_item*)
 adapter_decl ::= "adapter" qualified_name ("{" adapter_body_item* "}" | adapter_body_item*)
 suite_decl ::= "suite" qualified_name ("as" ("unit" | "integration" | "system"))? ("{" test_body_item* "}" | test_body_item*)
@@ -118,7 +118,7 @@ scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_duration ::= number_literal "." identifier
 scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier)
 by_clause ::= "by" (identifier ":")? identifier ("|" identifier)*
-stub_clause ::= "stub" identifier "." (identifier ".")* identifier "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never" | "rejected" identifier | "faulted" | "unreachable")
+stub_clause ::= "stub" identifier "." (identifier ".")* identifier ("[" type_ref ("," type_ref)* "]")? "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never" | "rejected" identifier | "faulted" | "unreachable")
 env_clause ::= "env" "{" (env_entry ","?)* "}"
 env_entry ::= identifier "=" expression
 case ::= "case" string_literal ("as" ("unit" | "integration" | "system"))? "{" (stub_clause | env_clause)* statement* expression? "}"
@@ -146,7 +146,7 @@ expression ::= if_expr | match_expr | is_expr | expect_expr | binary_expr | unar
 expect_expr ::= "expect" (observation_expr | faults_expr | snapshot_expr | expression)
 faults_expr ::= expression call_site_actor? "faults"
 snapshot_expr ::= expression "matches" "snapshot" string_literal
-observation_expr ::= identifier "." identifier ("called" ("once" | number_literal "times")? ("with" expression)? | "never" "called" | "before" identifier "." identifier)
+observation_expr ::= identifier "." identifier ("[" type_ref ("," type_ref)* "]")? ("called" ("once" | number_literal "times")? ("with" expression)? | "never" "called" | "before" identifier "." identifier)
 trace_expr ::= "trace" "(" identifier "." identifier ")"
 if_expr ::= "if" expression block ("else" (if_expr | block))?
 match_expr ::= "match" expression "{" match_arm* "}"

@@ -6,7 +6,7 @@
   "constructs": [
     "queue_handler"
   ],
-  "example": "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] { … }\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓ a queue of its own\n}",
+  "example": "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ a queue of its own\n}",
   "severity": "error",
   "summary": "Two `on message` handlers, in one context or in two, consume the same queue."
 }

@@ -16,12 +16,22 @@ impl<'a> Parser<'a> {
                 let start = self.expect(TokenKind::Commons, "to start the commons declaration")?;
                 let doc = self.finalize_doc(leading_doc, start.span, &mut header_leading);
                 let name = self.parse_qualified_name()?;
+                // #3984: the contextual `for tests` marker of a test-only commons.
+                let test_only = self.peek_kind() == Some(TokenKind::Ident)
+                    && self.nth_text(0) == "for"
+                    && self.nth_kind(1) == Some(TokenKind::Ident)
+                    && self.nth_text(1) == "tests";
+                if test_only {
+                    self.bump();
+                    self.bump();
+                }
                 let mut c = match self.peek_kind() {
                     Some(TokenKind::LBrace) => {
                         self.parse_commons_body(start.span, name, doc, true)?
                     }
                     _ => self.parse_commons_body(start.span, name, doc, false)?,
                 };
+                c.test_only = test_only;
                 c.trivia = Trivia {
                     leading: header_leading,
                     trailing: None,
@@ -450,10 +460,8 @@ impl<'a> Parser<'a> {
         let span = if brace {
             let end = self.expect(TokenKind::RBrace, "to close the commons body")?;
             self.exit_item_loop();
-            // A comment after the closing `}` (this being the last
-            // declaration in the file) is a no-op `take_epilogue` unless it
-            // truly is the last content in the file — see the fragment-form
-            // break arm's matching call above.
+            // A comment after the closing `}` (the last declaration in the file) is a no-op
+            // `take_epilogue` unless it is the last content: see the fragment-form arm above.
             trailing_comments.extend(self.take_epilogue_trivia());
             start.merge(end.span)
         } else {
@@ -462,6 +470,7 @@ impl<'a> Parser<'a> {
         };
         Ok(Commons {
             name,
+            test_only: false,
             items,
             uses,
             documentation,
@@ -985,6 +994,8 @@ impl<'a> Parser<'a> {
             };
             method = next;
         }
+        // #3945: explicit type arguments of a generic operation.
+        let type_args = self.parse_stub_type_args()?;
         self.expect(
             TokenKind::LParen,
             "after the method name in a `stub` clause",
@@ -1021,6 +1032,7 @@ impl<'a> Parser<'a> {
         Ok(StubClause {
             capability,
             method,
+            type_args,
             args,
             rhs,
             after,
@@ -1028,6 +1040,23 @@ impl<'a> Parser<'a> {
             span,
             trivia: Trivia::default(),
         })
+    }
+
+    /// #3945: `[T, U]` after a stub target's operation name, or none. The list is a
+    /// type-argument list, as on a call (`Json.decode[T](…)`).
+    pub(super) fn parse_stub_type_args(&mut self) -> Result<Vec<TypeRef>, CompileError> {
+        let mut type_args = Vec::new();
+        if self.eat(TokenKind::LBracket).is_none() {
+            return Ok(type_args);
+        }
+        loop {
+            type_args.push(self.parse_type_ref("as a type argument")?);
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBracket, "to close the type-argument list")?;
+        Ok(type_args)
     }
 
     /// #2134: whether the cursor is at an `env {` clause head. `env` is a

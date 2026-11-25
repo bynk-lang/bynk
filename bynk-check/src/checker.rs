@@ -49,6 +49,7 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub(crate) mod applied_bounds;
 mod call_outcome;
 mod calls;
 pub mod codable;
@@ -63,6 +64,7 @@ pub mod keying;
 pub mod ordering;
 use equality::EqScope;
 mod effect_more;
+mod erase;
 mod expressions;
 mod kernels;
 mod linearity;
@@ -72,6 +74,7 @@ mod list_par;
 mod list_par_with;
 pub(crate) mod nested_effect;
 mod par;
+mod query_more;
 mod query_par;
 mod refined_range;
 mod refinements;
@@ -934,6 +937,9 @@ pub enum Callee {
     AgentInit(String),
     /// `agent.handler(args)` — agent handler dispatch.
     Agent { agent: String, handler: String },
+    /// #3931: `self.erase()` in an agent handler — the instance's stored state is deleted when the
+    /// handler commits, instead of the handler's other writes.
+    AgentErase,
     /// A test-body service address (`svc.call`/`svc.<VERB>("/path", …)`/
     /// `svc.schedule(...)`/`svc.message(...)`). `check_test_service_address`
     /// always returns `None` by design (the runner recovers the outcome
@@ -1291,6 +1297,7 @@ impl TypedCommons {
     pub fn empty() -> Self {
         TypedCommons {
             commons: Arc::new(Commons {
+                test_only: false,
                 name: QualifiedName {
                     parts: Vec::new(),
                     span: Default::default(),
@@ -2191,6 +2198,8 @@ pub fn check_handler_body(
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
         return;
     };
+    // #3931: a `:=` after `self.erase()` is dropped by the commit.
+    erase::warn_writes_after_erase(body, false, &mut ctx);
     // v0.102 (§3 step 11): the held-resource linearity pass, now that
     // `expr_types` is fully populated by the body walk above.
     linearity::check(
@@ -4014,7 +4023,7 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
             "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
         }
         _ => {
-            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
+            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal, Duration, Instant) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`"
         }
     }
 }
@@ -4658,6 +4667,25 @@ pub fn embedding_for(
         }
     }
     None
+}
+
+/// #3945: the identity of a generic capability operation's explicit type arguments, which a call
+/// site and a `stub` or observation naming them must agree on: each resolved type's display, so
+/// `Outcome`, `orders.Outcome` and an alias of it are one key. A type that does not resolve (a
+/// suite's own type, which no call site can name) falls back to the arguments as written.
+pub fn capability_type_key(
+    type_args: &[TypeRef],
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> String {
+    let resolved: Option<Vec<String>> = type_args
+        .iter()
+        .map(|t| resolve_type_ref(t, types, tys).map(|id| tys.display(id)))
+        .collect();
+    match resolved {
+        Some(shown) => ["[", shown.join(", ").as_str(), "]"].concat(),
+        None => bynk_syntax::print::type_args_src(type_args),
+    }
 }
 
 pub fn resolve_type_ref(
@@ -5448,16 +5476,23 @@ fn maybe_auto_lift(ty: Option<TyId>, expected: Option<TyId>, tys: &Types) -> Opt
 }
 
 /// Whether a value of type `ty` may fill an interpolation hole (v0.43, ADR
-/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, or `Decimal` (ADR
-/// 0698: its canonical text) — or a refinement of one (which widens to its base
-/// for display). `Bytes`, `Duration` and `Instant` have no implicit string form
-/// — each has an explicit rendering method — and opaque types are excluded,
-/// their base being hidden (`.raw` it first).
+/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, `Decimal` (ADR
+/// 0698: its canonical text), or (#3977) `Instant` (RFC 3339 UTC) and `Duration`
+/// (`1h30m`), the text their `toString()` gives — or a refinement of one (which
+/// widens to its base for display). `Bytes` has no implicit string form (hex or
+/// base64 is a real choice), and opaque types are excluded, their base being
+/// hidden (`.raw` it first).
 fn interpolable(ty: TyId, tys: &Types) -> bool {
     let scalar = |b: BaseType| {
         matches!(
             b,
-            BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool | BaseType::Decimal
+            BaseType::String
+                | BaseType::Int
+                | BaseType::Float
+                | BaseType::Bool
+                | BaseType::Decimal
+                | BaseType::Duration
+                | BaseType::Instant
         )
     };
     match &*tys.get(ty) {
@@ -5875,6 +5910,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 QueryOp::from_name(&method.name),
                                 args,
                                 v,
+                                Some(receiver),
                                 expr.span,
                                 ctx,
                             );

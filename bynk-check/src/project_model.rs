@@ -367,6 +367,27 @@ pub enum BuildTarget {
     Workers,
 }
 
+/// #3941: resolve every `const X: T = env(NAME[, default])` to the literal
+/// `bynk.toml` gives it in the `default` environment, so every later phase sees
+/// an ordinary constant. The per-environment build selects another environment
+/// ([`crate::env_consts::resolve`] takes its name). A manifest whose variables
+/// do not read is the manifest check's to report, and leaves the constants to
+/// their defaults.
+pub fn resolve_env_consts(
+    parsed: &mut [ParsedFile],
+    project_root: &std::path::Path,
+    overlay: &std::collections::HashMap<std::path::PathBuf, String>,
+    errors: &mut ErrorSink,
+) {
+    let vars = bynk_project::vars::try_read_vars_with(project_root, overlay).unwrap_or_default();
+    let outcome =
+        crate::env_consts::resolve(parsed, &vars, bynk_project::vars::DEFAULT_ENVIRONMENT);
+    errors.extend_attributed_by_span(parsed, outcome.source);
+    for e in outcome.manifest {
+        errors.push_for(Some(std::path::Path::new("bynk.toml")), e);
+    }
+}
+
 pub fn normalize_service_defaults(parsed: &mut [ParsedFile]) {
     for pf in parsed.iter_mut() {
         let items = match pf.unit_mut() {
@@ -2370,6 +2391,85 @@ fn conflicts_with_first_party_pin(
         ),
     );
     true
+}
+
+/// #3984: the `uses` map a suite's checking and emission see: each target's own, plus the
+/// test-only commons its suites `uses`, so a suite's view and its test module reach them as they
+/// reach the target's own commons. Only the test pass reads it, so no deployable module imports
+/// a test-only commons.
+pub fn unit_uses_with_suite_uses(
+    unit_uses: &HashMap<String, Vec<String>>,
+    parsed: &[ParsedFile],
+) -> HashMap<String, Vec<String>> {
+    let test_only: HashSet<String> = parsed
+        .iter()
+        .filter_map(|pf| match pf.unit() {
+            SourceUnit::Commons(c) if c.test_only => Some(c.name.joined()),
+            _ => None,
+        })
+        .collect();
+    let mut out = unit_uses.clone();
+    for pf in parsed {
+        let SourceUnit::Suite(t) = pf.unit() else {
+            continue;
+        };
+        for u in t.uses.iter().map(|u| u.target.joined()) {
+            if test_only.contains(&u) {
+                let entry = out.entry(t.target.joined()).or_default();
+                if !entry.contains(&u) {
+                    entry.push(u);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// #3984: a `commons x.y for tests` is the test build's alone. A unit that is not a suite or
+/// another test-only commons and `uses` one is `bynk.uses.test_only_commons`, and a deployable
+/// build (`tests` off) leaves every test-only commons out, as it does a suite.
+pub fn phase_test_only_commons(parsed: &mut Vec<ParsedFile>, tests: bool, errors: &mut ErrorSink) {
+    let is_test_only = |pf: &ParsedFile| matches!(pf.unit(), SourceUnit::Commons(c) if c.test_only);
+    let names: HashSet<String> = parsed
+        .iter()
+        .filter(|pf| is_test_only(pf))
+        .map(|pf| match pf.unit() {
+            SourceUnit::Commons(c) => c.name.joined(),
+            _ => String::new(),
+        })
+        .collect();
+    if names.is_empty() {
+        return;
+    }
+    let mut refused = false;
+    for pf in parsed.iter() {
+        if is_test_only(pf) || matches!(pf.unit(), SourceUnit::Suite(_)) {
+            continue;
+        }
+        for u in pf
+            .uses()
+            .iter()
+            .filter(|u| names.contains(&u.target.joined()))
+        {
+            refused = true;
+            errors.push_for(
+                Some(pf.identity_path().as_path()),
+                CompileError::new(
+                    "bynk.uses.test_only_commons",
+                    u.span,
+                    format!(
+                        "`{}` is a test-only commons, which only a suite or another test-only commons may `uses`",
+                        u.target.joined()
+                    ),
+                )
+                .with_note("a test-only commons (`commons x.y for tests`) is left out of every deployable, so production code cannot depend on it; move what it needs into a production commons"),
+            );
+        }
+    }
+    // A refused `uses` leaves the commons in, so it is reported once, not again as unknown.
+    if !tests && !refused {
+        parsed.retain(|pf| !is_test_only(pf));
+    }
 }
 
 /// v0.20a: apply the function-type boundary confinement to every serialisable

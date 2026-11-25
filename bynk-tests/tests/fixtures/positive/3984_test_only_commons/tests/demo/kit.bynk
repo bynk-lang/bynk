@@ -1,0 +1,11 @@
+commons demo.kit for tests
+
+type Pair = { before: Int, after: Int }
+
+const Start: Int = 1
+
+fn pair(before: Int, after: Int) -> Pair { Pair { before: before, after: after } }
+
+fn headers() -> RequestHeaders { RequestHeaders.of(["X-Demo: 1"]) }
+
+fn anyPair() -> Pair { Val[Pair] }

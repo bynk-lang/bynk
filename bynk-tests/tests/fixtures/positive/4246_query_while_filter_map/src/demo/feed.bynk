@@ -1,0 +1,73 @@
+context demo.feed
+
+capability Clock {
+  fn now() -> Effect[Instant]
+}
+
+provides Clock = SystemClock {
+  fn now() -> Effect[Instant] {
+    Instant.fromEpochMillis(0)
+  }
+}
+
+fn tenIfEven(n: Int) -> Option[Int] {
+  if n.rem(2) == 0 { Some(n * 10) } else { None }
+}
+
+// #4246: the #3963 List combinators on a `Query`.
+agent Scores {
+  key id: String
+  store points: Map[String, Int]
+  store history: Log[Int] @retain(30.days)
+
+  on call put(k: String, n: Int) -> Effect[()] {
+    points.put(k, n)
+  }
+
+  on call note(n: Int) -> Effect[()] given Clock {
+    let _ <- history.append(n)
+    Effect.pure(())
+  }
+
+  // `filterMap` keeps the `Some`s of a function.
+  on call evens() -> Effect[List[Int]] {
+    points.values.filterMap((n) => tenIfEven(n)).sortBy((n) => n).collect()
+  }
+
+  // `count(p)` counts without building the filtered query.
+  on call over(limit: Int) -> Effect[Int] {
+    points.values.count((n) => n > limit)
+  }
+
+  // On a `Map`, `takeWhile` and `skipWhile` say which order with a `sortBy`.
+  on call below(limit: Int) -> Effect[List[Int]] {
+    points.values.sortBy((n) => n).takeWhile((n) => n < limit).collect()
+  }
+
+  on call atLeast(limit: Int) -> Effect[List[Int]] {
+    points.values.sortBy((n) => n).skipWhile((n) => n < limit).collect()
+  }
+
+  // A `Log` is read oldest first, so it needs no `sortBy`.
+  on call leading(limit: Int) -> Effect[List[Int]] {
+    history.takeWhile((n) => n < limit).collect()
+  }
+
+  // The windows of a `Log` keep its order, and `reversed` flips it explicitly.
+  on call windowed(limit: Int) -> Effect[List[Int]] {
+    history.since(Instant.fromEpochMillis(0)).takeWhile((n) => n < limit).collect()
+  }
+
+  on call newestFirst(limit: Int) -> Effect[List[Int]] {
+    history.reversed().takeWhile((n) => n > limit).collect()
+  }
+
+  // A predicate that does not follow the sort key: a prefix cut is not a filter.
+  on call evenRun() -> Effect[List[Int]] {
+    points.values.sortBy((n) => n).takeWhile((n) => n.rem(2) == 0).collect()
+  }
+
+  on call trailing(limit: Int) -> Effect[List[Int]] {
+    history.filter((n) => n >= 0).skipWhile((n) => n < limit).collect()
+  }
+}

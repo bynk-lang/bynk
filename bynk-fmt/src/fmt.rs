@@ -1198,7 +1198,11 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &c.documentation {
             self.emit_doc(doc);
         }
-        let header = format!("commons {}", c.name.joined());
+        let header = format!(
+            "commons {}{}",
+            c.name.joined(),
+            if c.test_only { " for tests" } else { "" }
+        );
         match c.form {
             CommonsForm::Brace => {
                 self.push(&header);
@@ -3632,8 +3636,12 @@ fn stub_clause_to_string(pv: &StubClause) -> String {
         }
     };
     format!(
-        "stub {}.{}({}) {}",
-        pv.capability.name, pv.method.name, args, rhs
+        "stub {}.{}{}({}) {}",
+        pv.capability.name,
+        pv.method.name,
+        bynk_syntax::print::type_args_src(&pv.type_args),
+        args,
+        rhs
     )
 }
 

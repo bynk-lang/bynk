@@ -12,7 +12,7 @@ type EmailJob = {
 }
 
 service outbox from queue("outbox") {
-  on message(message: EmailJob) -> Effect[QueueResult] {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

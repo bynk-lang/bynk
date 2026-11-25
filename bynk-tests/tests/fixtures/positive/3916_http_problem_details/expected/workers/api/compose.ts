@@ -18,6 +18,9 @@ export function compose(env: Env) {
     async http_POST_widgets(body: handlers.Widget) {
       return handlers.api.http_POST_widgets(body, deps);
     },
+    async http_POST_reserve(body: handlers.Widget) {
+      return handlers.api.http_POST_reserve(body, deps);
+    },
     async http_GET_legacy() {
       return handlers.api.http_GET_legacy(deps);
     },

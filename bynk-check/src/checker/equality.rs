@@ -191,6 +191,12 @@ impl EqScope {
     /// The scope of `f`'s body: its own `T: Eq` / `T: Ord` bounds, `where A: C`
     /// entries, and the bounds its receiver type declares on its own parameters.
     pub(crate) fn for_fn(f: &FnDecl, input: &ResolvedCommons) -> Self {
+        Self::for_fn_in(f, &input.types)
+    }
+
+    /// [`Self::for_fn`] over the type table alone, for a caller that has no
+    /// [`ResolvedCommons`] yet (the resolver's signature walk, #3958).
+    pub(crate) fn for_fn_in(f: &FnDecl, types: &HashMap<String, Arc<TypeDecl>>) -> Self {
         let mut declared = HashSet::new();
         let mut ord = HashSet::new();
         let mut key = HashSet::new();
@@ -249,7 +255,7 @@ impl EqScope {
         let ret = f.return_type.span();
         fix.ret_end = Some(Span::new_in(ret.file, ret.end, ret.end));
         if let FnName::Method { type_name, .. } = &f.name
-            && let Some(decl) = input.types.get(&type_name.name)
+            && let Some(decl) = types.get(&type_name.name)
         {
             for tp in &decl.type_params {
                 if has_eq(&tp.bounds) {
@@ -277,6 +283,63 @@ impl EqScope {
             reported_codable: Rc::default(),
             fix,
         }
+    }
+
+    /// #3958: the scope of a type declaration's own parameters, where a field's
+    /// type applies another bounded type to one of them.
+    pub(crate) fn for_type(decl: &TypeDecl) -> Self {
+        let mut scope = EqScope::default();
+        for tp in &decl.type_params {
+            let name = &tp.name.name;
+            if has_eq(&tp.bounds) {
+                scope.declared.insert(name.clone());
+            }
+            if has_ord(&tp.bounds) {
+                scope.ord.insert(name.clone());
+            }
+            if has_key(&tp.bounds) {
+                scope.key.insert(name.clone());
+            }
+            if has_codable(&tp.bounds) {
+                scope.codable.insert(name.clone());
+            }
+            if let Some(eq) = tp.bounds.iter().find(|b| b.name == "Eq") {
+                scope.fix.eq_bound.insert(name.clone(), eq.span);
+            }
+            let end = tp.bounds.last().map_or(tp.name.span, |b| b.span);
+            scope.fix.own.insert(
+                name.clone(),
+                (
+                    Span::new_in(end.file, end.end, end.end),
+                    !tp.bounds.is_empty(),
+                ),
+            );
+        }
+        scope
+    }
+
+    /// #3958: whether `param` carries `constraint` (`Eq`, `Ord`, `Key` or
+    /// `Codable`) here.
+    pub(crate) fn carries(&self, param: &str, constraint: &str) -> bool {
+        match constraint {
+            "Eq" => self.declared.contains(param),
+            "Ord" => self.ord.contains(param),
+            "Key" => self.key.contains(param),
+            "Codable" => self.codable.contains(param),
+            _ => true,
+        }
+    }
+
+    /// #3958: record that `param`'s missing `constraint` is reported; `false`
+    /// when it already was, so a parameter is reported once per declaration.
+    pub(crate) fn first_report(&self, param: &str, constraint: &str) -> bool {
+        let seen = match constraint {
+            "Eq" => &self.reported,
+            "Ord" => &self.reported_ord,
+            "Key" => &self.reported_key,
+            _ => &self.reported_codable,
+        };
+        seen.borrow_mut().insert(param.to_string())
     }
 
     /// The edit that declares `constraint` (`Eq`, `Ord` or `Key`) on `param`. A

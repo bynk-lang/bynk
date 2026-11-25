@@ -483,6 +483,8 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
             // `mutates` flag. A `Callee::Store` already carries the op
             // resolved against its field's kind, so the op name alone decides.
             Some(Callee::Store { op, .. }) => op.mutates(),
+            // #3931: `self.erase()` is the strongest write: the commit deletes the instance.
+            Some(Callee::AgentErase) => true,
             _ => false,
         }
     }
@@ -1135,6 +1137,7 @@ mod tests {
                 panic!("expected a context unit")
             };
             let commons = Commons {
+                test_only: false,
                 name: ctx.name,
                 items: ctx.items,
                 uses: ctx.uses,
@@ -1259,6 +1262,7 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             }
         }
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
@@ -2151,7 +2155,7 @@ context demo
 type EmailJob = { to: String }
 
 service Outbox from queue("orders") {
-  on message(m: EmailJob) -> Effect[QueueResult] {
+  on message(m: EmailJob) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -2207,6 +2211,7 @@ agent Widget {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
