@@ -1,9 +1,11 @@
 context shop.orders
 
-type Order = { id: String }
+// `claims` is whatever the sender writes in the body: it is not who sent the message.
+type Order = { id: String, claims: String }
 
 // #3899: two foreign producers, each under its own secret. The handler reads which one signed the
-// message, as a `call` sum's does.
+// message, as a `call` sum's does. The actor comes from the signature the entry verified, never from
+// the body, so a message cannot name itself into another producer.
 actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
 actor Partner { auth = Foreign(secret = "PARTNER_QUEUE_KEY") }
 
@@ -11,8 +13,8 @@ service fulfil from queue("orders") {
   delivery { deadLetter: None }
   on message(order: Order) -> Effect[QueueResult] by who: Legacy | Partner {
     match who {
-      Legacy => Ack
-      Partner => Retry("from the partner")
+      Legacy => Retry("signed as Legacy, the body claims \(order.claims)")
+      Partner => Retry("signed as Partner, the body claims \(order.claims)")
     }
   }
 }
