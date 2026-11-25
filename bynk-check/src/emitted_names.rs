@@ -9,6 +9,21 @@
 
 use crate::locals::{LocalBinding, LocalKind};
 
+/// #4403: a wire-codec helper's suffix for the type `key`. A name a `uses` clause
+/// qualifies (`lib.x.Status`, `Y.Status`) is one dotted key, which no TypeScript
+/// identifier can spell, so its helper is named with underscores
+/// (`__serialise_lib_x_Status`) and imported under that name from the module that
+/// declares the type (`__serialise_Status`).
+pub fn codec_key(key: &str) -> String {
+    key.replace('.', "_")
+}
+
+/// #4403: the name a type a `uses` clause qualifies is declared under (`Status` for
+/// `lib.x.Status`), or the key itself for any other name.
+pub fn declared_name_of_key(key: &str) -> &str {
+    key.rsplit('.').next().unwrap_or(key)
+}
+
 /// The TypeScript spelling of a user identifier in a *binding or reference*
 /// position (params, locals, function names, import names). Bynk identifiers
 /// that are illegal as TS binding names — the JS reserved words plus the
@@ -165,6 +180,18 @@ mod tests {
         assert_eq!(ts_ident("a.b.c.Status"), "__use_a_b_c.Status");
         assert_eq!(ts_ident("Y.Status"), "Y.Status");
         assert_eq!(use_qualifier_binding("lib.y"), "__use_lib_y");
+    }
+
+    /// #4403: a codec helper for a qualified type is named without the dots, and is
+    /// imported from the module that declares the type under its declared name.
+    #[test]
+    fn a_qualified_type_names_its_codec_helper_without_dots() {
+        assert_eq!(codec_key("lib.y.Status"), "lib_y_Status");
+        assert_eq!(codec_key("Y.Status"), "Y_Status");
+        assert_eq!(codec_key("Status"), "Status");
+        assert_eq!(declared_name_of_key("lib.y.Status"), "Status");
+        assert_eq!(declared_name_of_key("Y.Status"), "Status");
+        assert_eq!(declared_name_of_key("Status"), "Status");
     }
 
     #[test]
