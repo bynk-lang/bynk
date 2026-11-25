@@ -16,7 +16,7 @@ export type Schedule = string & { readonly __brand: "Schedule" };
 export const Schedule = {
   of(value: string): Result<Schedule, ValidationError> {
     if (!(__bynkIsCron(value))) {
-      return Err({ field: "Schedule", message: "must be a valid cron schedule", value });
+      return Err({ field: "Schedule", message: "must be a valid cron schedule", rule: { tag: "Cron" }, value });
     }
     return Ok(value as Schedule);
   },

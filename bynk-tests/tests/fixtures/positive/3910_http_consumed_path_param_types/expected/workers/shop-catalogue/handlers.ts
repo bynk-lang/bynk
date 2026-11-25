@@ -10,10 +10,10 @@ export type OrderNo = number & { readonly __brand: "shop.catalogue.OrderNo" };
 export const OrderNo = {
   of(value: number): Result<OrderNo, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "OrderNo", message: "must be a safe integer", value });
+      return Err({ field: "OrderNo", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "OrderNo", message: "must be positive", value });
+      return Err({ field: "OrderNo", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as OrderNo);
   },

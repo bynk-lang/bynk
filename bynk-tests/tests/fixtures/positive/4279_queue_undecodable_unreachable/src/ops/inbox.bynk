@@ -1,0 +1,21 @@
+context ops.inbox
+
+type Job = { id: String }
+
+// #4279: a handler's own code never sees a body that failed to decode, so an
+// `Undecodable` arm of a `QueueResult` here is a dead arm.
+fn describe(r: QueueResult) -> String {
+  match r {
+    Ack => "done"
+    Retry(why) => why
+    RetryAfter(why, _) => why
+    Undecodable => "undecodable"
+  }
+}
+
+service inbox from queue("inbox-jobs") {
+  delivery { deadLetter: None }
+  on message(job: Job) -> Effect[QueueResult] {
+    Ack
+  }
+}

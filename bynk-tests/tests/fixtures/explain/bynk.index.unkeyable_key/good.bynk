@@ -1,6 +1,6 @@
 context demo
 
-type Order = { id: String, paid: Bool, customerId: String }
+type Order = { id: String, weight: Float, customerId: String }
 
 agent A {
     key k: String

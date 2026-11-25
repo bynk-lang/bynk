@@ -317,6 +317,11 @@ pub const BYNK_LOCALE_TYPES_SRC: &str = include_str!("../lib/core/bynk.locale.ty
 /// `uses bynk.ordering`.
 pub const ORDERING_UNIT: &str = "bynk.ordering";
 
+/// `bynk.validation` — the `ValidationRule` sum a `ValidationError` names the
+/// failed rule with (`e.rule`), and the `Bound` its numeric arguments are (#3952).
+/// Reached implicitly by a unit that names either type or reads `.rule`.
+pub const VALIDATION_UNIT: &str = "bynk.validation";
+
 /// #4231: a type every unit may name with no `uses`, and the first-party unit
 /// that declares it. A unit reaches `unit` as if it wrote `uses <unit>` when its
 /// source mentions the type's name or one of `triggers` (a method the type
@@ -338,15 +343,31 @@ pub struct PreludeType {
 }
 
 /// Every prelude type. `Ordering` is what `compare` and `sortWith` answer (#3955).
-pub const PRELUDE_TYPES: &[PreludeType] = &[PreludeType {
-    name: "Ordering",
-    unit: ORDERING_UNIT,
-    triggers: &[".compare", ".sortWith"],
-}];
+pub const PRELUDE_TYPES: &[PreludeType] = &[
+    PreludeType {
+        name: "Ordering",
+        unit: ORDERING_UNIT,
+        triggers: &[".compare", ".sortWith"],
+    },
+    // #3952: what a `ValidationError` says failed. `e.rule` yields one.
+    PreludeType {
+        name: "ValidationRule",
+        unit: VALIDATION_UNIT,
+        triggers: &[".rule"],
+    },
+    PreludeType {
+        name: "Bound",
+        unit: VALIDATION_UNIT,
+        triggers: &[],
+    },
+];
 
 /// `bynk.ordering` — the `Ordering` enum (`Less`, `Equal`, `Greater`) that
 /// `compare` and `sortWith` use, with `then` and `reverse`.
 pub const BYNK_ORDERING_SRC: &str = include_str!("../lib/core/bynk.ordering.bynk");
+
+/// `bynk.validation` — `ValidationRule` and `Bound`.
+pub const BYNK_VALIDATION_SRC: &str = include_str!("../lib/core/bynk.validation.bynk");
 
 /// The reserved `bynk` conformance-surface adapter (env-free core). It has no
 /// `binding` clause — the toolchain supplies one per platform (see
@@ -1375,6 +1396,22 @@ pub const UNITS: &[Unit] = &[
         instantiable: &[],
         singletons: &[],
     },
+    Unit {
+        name: VALIDATION_UNIT,
+        kind: UnitKind::Commons,
+        identity_path: "bynk/validation.bynk",
+        source: BYNK_VALIDATION_SRC,
+        binding: Binding::None,
+        // 12: `bynk.testing` takes 10 and `bynk.ordering` 11.
+        id_block: 12,
+        platform: None,
+        env_providers: &[],
+        stability: Stability::Stable,
+        experimental: &[],
+        extensible: &[],
+        instantiable: &[],
+        singletons: &[],
+    },
     #[cfg(feature = "test-support")]
     Unit {
         name: TESTING_UNIT,
@@ -2178,6 +2215,7 @@ mod tests {
                 ("bynk.url", 8),
                 ("bynk.set", 9),
                 ("bynk.ordering", 11),
+                ("bynk.validation", 12),
             ]
         );
         let mut sorted: Vec<u32> = UNITS.iter().map(|u| u.id_block).collect();
@@ -2210,6 +2248,7 @@ mod tests {
                 "bynk.url",
                 "bynk.set",
                 "bynk.ordering",
+                "bynk.validation",
             ]
         );
         for (unit, (name, source)) in UNITS.iter().zip(FIRSTPARTY_SOURCES) {

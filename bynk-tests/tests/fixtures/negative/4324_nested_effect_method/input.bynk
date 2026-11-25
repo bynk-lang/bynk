@@ -1,0 +1,11 @@
+commons demo.nestedmethod
+
+type Box[A] = { value: A }
+
+fn Box.lift(self) -> Effect[A] { Effect.pure(self.value) }
+
+fn lift(e: Effect[Int]) -> Int {
+	let b = Box { value: e }
+	let w = b.lift()
+	0
+}

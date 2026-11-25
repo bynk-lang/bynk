@@ -11,10 +11,10 @@ export type Cents = number & { readonly __brand: "Cents" };
 export const Cents = {
   of(value: number): Result<Cents, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Cents", message: "must be a safe integer", value });
+      return Err({ field: "Cents", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Cents", message: "must be positive", value });
+      return Err({ field: "Cents", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Cents);
   },
@@ -25,7 +25,7 @@ export type CustomerId = string & { readonly __brand: "CustomerId" };
 export const CustomerId = {
   of(value: string): Result<CustomerId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "CustomerId", message: "must be non-empty", value });
+      return Err({ field: "CustomerId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as CustomerId);
   },

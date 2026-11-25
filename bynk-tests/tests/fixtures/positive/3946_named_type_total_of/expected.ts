@@ -17,10 +17,10 @@ export type Age = number & { readonly __brand: "Age" };
 export const Age = {
   of(value: number): Result<Age, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Age", message: "must be a safe integer", value });
+      return Err({ field: "Age", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 150)) {
-      return Err({ field: "Age", message: "must be in range [0, 150]", value });
+      return Err({ field: "Age", message: "must be in range [0, 150]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 150 } }, value });
     }
     return Ok(value as Age);
   },

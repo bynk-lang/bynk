@@ -12,7 +12,7 @@ export type ShortCode = string & { readonly __brand: "secured.ShortCode" };
 export const ShortCode = {
   of(value: string): Result<ShortCode, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 3)) {
-      return Err({ field: "ShortCode", message: "length must be at least 3", value });
+      return Err({ field: "ShortCode", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value });
     }
     return Ok(value as ShortCode);
   },

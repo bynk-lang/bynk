@@ -3756,13 +3756,7 @@ pub fn value_member_candidates(
 ) -> Vec<Completion> {
     let mut out: Vec<Completion> = kernel_methods::methods_for(ty, tys)
         .iter()
-        .map(|km| {
-            Completion::item(
-                km.name,
-                CompletionKind::Member,
-                Some(km.signature.to_string()),
-            )
-        })
+        .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail())))
         .collect();
     // #3955: `compare` on every orderable receiver. A named type is orderable
     // when its declaration says `derives Ord`.
@@ -3783,13 +3777,11 @@ pub fn value_member_candidates(
         }
     });
     if kernel_methods::is_ord_receiver(ty, tys, &|n| ord_names.contains(n)) {
-        out.extend(kernel_methods::ORD_RECEIVER_TABLE.iter().map(|km| {
-            Completion::item(
-                km.name,
-                CompletionKind::Member,
-                Some(km.signature.to_string()),
-            )
-        }));
+        out.extend(
+            kernel_methods::ORD_RECEIVER_TABLE
+                .iter()
+                .map(|km| Completion::item(km.name, CompletionKind::Member, Some(km.detail()))),
+        );
     }
     // An asset's one field (#1883).
     if matches!(&*tys.get(ty), Ty::Asset) {

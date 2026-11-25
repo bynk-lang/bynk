@@ -71,6 +71,7 @@ mod list_basics;
 mod list_more;
 mod list_par;
 mod list_par_with;
+pub(crate) mod nested_effect;
 mod par;
 mod query_par;
 mod refined_range;
@@ -94,8 +95,10 @@ pub fn string_refinement_violation<'a>(
     refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
 }
 mod regex_ambiguity;
+mod response_headers;
 mod string_more;
 mod usefulness;
+mod validation_rule;
 
 use calls::*;
 use expressions::*;
@@ -6045,7 +6048,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 _ => None,
             };
             let inner_ty = type_of(inner, expected_inner, ctx)?;
-            Some(tys.intern(Ty::Effect(inner_ty)))
+            nested_effect::pure(inner_ty, inner.span, ctx)
         }
         ExprKind::RecordSpread {
             type_name,
@@ -6915,6 +6918,9 @@ fn refinements_match(base: BaseType, a: Option<&Refinement>, b: Option<&Refineme
 
 /// #3878: the pattern-only `QueueResult` variant a `system` case sees for a body that did not decode.
 pub const QUEUE_UNDECODABLE: &str = "Undecodable";
+
+/// #4279: the warning for an `Undecodable` pattern that can never match.
+pub const UNDECODABLE_UNREACHABLE: &str = "bynk.queue.undecodable_unreachable";
 
 /// `pub` since P6.4 (#1157, Decision A) — see [`VariantInfo`]'s own doc
 /// comment for why `bynk-emit` needs this exact function rather than a

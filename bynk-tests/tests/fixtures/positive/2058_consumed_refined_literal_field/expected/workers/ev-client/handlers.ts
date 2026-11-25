@@ -36,10 +36,10 @@ export function __deserialise_Code(json: __JsonValue, path: string = "$"): Resul
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 1 && json <= 99)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be in range [1, 99]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Code", message: "must be in range [1, 99]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 99 } }, value: json } });
   }
   return Ok(json as unknown as ev_store.Code);
 }

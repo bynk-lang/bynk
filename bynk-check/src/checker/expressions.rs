@@ -372,17 +372,36 @@ pub(crate) fn check_ident(
         );
         return None;
     }
-    ctx.errors.push(
-        CompileError::new(
-            "bynk.resolve.unknown_name",
-            id.span,
-            format!("unknown name `{}`", id.name),
-        )
-        .with_note(
-            "only parameters, `let` bindings, and functions declared \
-             in this commons are in scope",
-        ),
+    let mut err = CompileError::new(
+        "bynk.resolve.unknown_name",
+        id.span,
+        format!("unknown name `{}`", id.name),
+    )
+    .with_note(
+        "only parameters, `let` bindings, and functions declared \
+         in this commons are in scope",
     );
+    // #4306: a capability is called from a body that is given it. A pure position (a
+    // transition, a `migrate` step, an invariant, a contract) has none in scope, whether the
+    // capability is declared here or consumed from another unit.
+    if ctx
+        .input
+        .commons
+        .items
+        .iter()
+        .any(|i| matches!(i, CommonsItem::Capability(c) if c.name.name == id.name))
+        || ctx
+            .input
+            .cross_context
+            .flattened_caps
+            .contains_key(&id.name)
+    {
+        err = err.with_note(format!(
+            "`{}` is a capability: only a handler or function body that is `given` it can call it, and this position is pure",
+            id.name
+        ));
+    }
+    ctx.errors.push(err);
     None
 }
 
@@ -3856,19 +3875,7 @@ pub(crate) fn check_field_access(
     // failure exposes `field` and `message`. Its runtime `value` is `unknown`
     // and stays unreachable until it has a Bynk type.
     if recv_ty == tys.intern(Ty::ValidationError) {
-        return match field.name.as_str() {
-            "field" | "message" => Some(tys.intern(Ty::Base(BaseType::String))),
-            other => {
-                ctx.errors.push(CompileError::new(
-                    "bynk.types.unknown_field",
-                    field.span,
-                    format!(
-                        "`ValidationError` has no field `{other}` — its fields are `field`, `message`"
-                    ),
-                ));
-                None
-            }
-        };
+        return super::validation_rule::validation_error_field(field, ctx);
     }
     // v0.158 (ADR 0184): `MapEntry[K, V]` is a compiler-known generic record
     // (the element of a map's `.entries` query) with exactly `.key`/`.value` —
@@ -4693,6 +4700,26 @@ fn bind_as_error(pat: &Pattern, ctx: &mut Ctx) {
     }
 }
 
+/// #4279: `Undecodable` reads a body that did not decode, which only a `system` case's queue
+/// address can produce. Everywhere else a `QueueResult` pattern of it is a dead arm. A test body
+/// reports it unconditionally; the suite drops it for a `system` case, where it can match.
+fn warn_unreachable_undecodable(variant: &Ident, ty: TyId, ctx: &mut Ctx) {
+    if variant.name != QUEUE_UNDECODABLE || !matches!(&*ctx.tys.get(ty), Ty::QueueResult) {
+        return;
+    }
+    ctx.errors.push(
+        CompileError::new(
+            UNDECODABLE_UNREACHABLE,
+            variant.span,
+            "`Undecodable` can never match here: only a `system` case's queue address returns it",
+        )
+        .with_note(
+            "a message fails to decode only when a real queue delivers it, so `unit` and `integration` cases and handlers never see this verdict",
+        )
+        .with_note("replace the arm with `_` (a `match` must still be exhaustive), or move the case to `as system` and address the queue by context path"),
+    );
+}
+
 fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     match pat {
@@ -4809,6 +4836,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 bind_as_error(pat, ctx);
                 return;
             };
+            warn_unreachable_undecodable(variant, ty, ctx);
             // v0.25: a qualified `T.Variant` references `T`, and its qualifier
             // must match the scrutinee type's name.
             if let Some(tn) = type_name {
@@ -5521,6 +5549,7 @@ fn check_is_pattern(
             {
                 ctx.refs.record(tn.span, SymbolKind::Type, &tn.name);
             }
+            warn_unreachable_undecodable(variant, value_ty, ctx);
             // 1. Sum-variant interpretation: the name is a variant of `value`'s
             //    sum type. (Takes priority when `value` is that sum.)
             let info = variants

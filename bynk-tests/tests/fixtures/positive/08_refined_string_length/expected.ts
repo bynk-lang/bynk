@@ -10,7 +10,7 @@ export type CountryCode = string & { readonly __brand: "CountryCode" };
 export const CountryCode = {
   of(value: string): Result<CountryCode, ValidationError> {
     if (!(__bynkCodePointLength(value) === 2)) {
-      return Err({ field: "CountryCode", message: "length must be exactly 2", value });
+      return Err({ field: "CountryCode", message: "length must be exactly 2", rule: { tag: "Length", limit: 2 }, value });
     }
     return Ok(value as CountryCode);
   },
