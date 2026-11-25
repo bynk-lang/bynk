@@ -126,6 +126,14 @@ agent Basket {
 }
 ```
 
+## Uniqueness across a collection {#unique}
+
+An invariant cannot say "no two customers share an email", because it may not scan a collection.
+That is the job of [`@unique(by: k)`](/reference/agents/#unique) on a `store Map`: a collection-level
+constraint checked at the same commit boundary, which refuses a commit that gives two entries one
+value the way a violated invariant does (`InvariantViolation`, declaration `unique`, named
+`customers.email`).
+
 ## Step invariants — `transition` {#step-invariants}
 
 An `invariant` constrains a single committed **state**; a `transition` constrains

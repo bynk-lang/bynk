@@ -255,7 +255,7 @@ Design for it:
 ## Storage annotations
 
 A `store` field may carry `@name(args)` annotations between the kind and the
-initialiser. The vocabulary is a closed registry of four; an unknown name
+initialiser. The vocabulary is a closed registry of five; an unknown name
 (`bynk.store.unknown_annotation`) or a wrong-kind use
 (`bynk.store.annotation_kind_mismatch`) is a diagnostic.
 
@@ -264,6 +264,7 @@ initialiser. The vocabulary is a closed registry of four; an unknown name
 | `@ttl(<duration>)` | `Cache` | per-entry lifetime (required on a `Cache`; `bynk.store.cache_ttl_required`) |
 | `@retain(<duration>)` | `Log` | prune entries older than the window on append |
 | `@indexed(by: k)` | `Map` | maintain a secondary index keyed by `k` (see below) |
+| `@unique(by: k)` | `Map` | a value of `k` may appear on at most one entry, enforced at commit (see below) |
 | `@bounded(...)` | — | reserved |
 
 ### `@indexed` routing
@@ -288,6 +289,60 @@ Index hygiene is reported as **non-failing warnings** (the build still succeeds)
 query that filters by equality on an un-indexed field is `bynk.index.missing` (a
 perf hint), and a declared `@indexed` that no equality filter uses is
 `bynk.index.unused`.
+
+### `@unique` {#unique}
+
+`@unique(by: k)` declares that no two entries of a `store Map` hold the same value of the
+value record's field `k`, which "no two customers share an email" needs and an
+[invariant](/reference/agent-invariants/) cannot say, because a predicate may not scan a
+collection. It implies `@indexed(by: k)`: the same index is maintained, equality filters on `k`
+route through it, and declaring both is the warning `bynk.store.unique_implies_indexed`.
+
+```bynk
+context shop
+
+type Customer = {
+	id: String,
+	email: String,
+}
+
+agent Directory {
+	key id: String
+
+	store customers: Map[String, Customer] @unique(by: email)
+
+	on call add(c: Customer) -> Effect[Result[(), String]] {
+		let taken <- customers.filter((x) => x.email == c.email).first()
+		match taken {
+			Some(_) => Err("taken"),
+			None => {
+				let _ <- customers.put(c.id, c)
+				Ok(())
+			},
+		}
+	}
+}
+```
+
+The handler still checks first, so the caller sees `Err("taken")`; the constraint guarantees that a
+handler that forgets cannot commit a duplicate. It is checked at commit, against the state the
+handler staged: two puts of one value in one handler, and a put that collides with a committed
+entry, refuse the commit, while moving a value from one entry to another within one handler is
+allowed. The refusal is an `InvariantViolation` fault with the declaration `unique`, named
+`<field>.<k>` (`customers.email`), and never carries the value. An `Option` field is unique among its
+`Some` values: a `None` is not indexed, so any number of entries may hold one (an equality filter
+on such a field is a scan, as the index is keyed by the payload).
+
+**Adding `@unique` to a map that already holds entries.** The check reads the index, so the first
+handler to touch the map after the change rebuilds its postings from its entries, in its own
+commit (one pass over the map, once; the same happens when an index is added, removed or changes
+its key scheme, as `@indexed` to `@unique` does on an `Option` field). Entries written before the
+annotation are then found, and a put that collides with one is refused. Existing duplicates cannot
+be checked at build time: a commit that touches a duplicated value is refused, and one that does
+not is unaffected.
+
+`@unique` takes one `by:` field. `@unique(by: first, by: last)` is refused rather than read as a
+constraint over the pair, which is not supported; a bare `@unique` is refused too.
 
 ## Invariants
 

@@ -1,5 +1,6 @@
 import type { DurableObjectListOptions, DurableObjectStorage, DurableObjectTransaction } from "./storage.ts";
 import { STORAGE_BATCH_LIMIT, utf8Compare } from "./storage.ts";
+import { invariantViolation } from "./errors.ts";
 import { __bynkKeyEncode } from "./keys.ts";
 import { entriesOf, noteOrder } from "./store.ts";
 
@@ -102,6 +103,8 @@ export function postingKey(field: string, index: string, by: string, pk: string)
   }
   return key;
 }
+/** Every posting of every index of a map field. */
+export const postingFieldPrefix = (field: string): string => `i/${encodeKeyPart(field)}/`;
 /** Every posting of one indexed value; with `by` omitted, every posting of the index. */
 export const postingPrefix = (field: string, index: string, by?: string): string =>
   `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${by === undefined ? "" : `${encodeKeyPart(by)}/`}`;
@@ -308,7 +311,26 @@ export type WholesaleField =
 export interface WholesaleIndex {
   readonly index: string;
   readonly recordField: string;
+  /** A `@unique` index (#4038): its postings key an `Option` by its payload, not the whole option. */
+  readonly unique?: boolean;
 }
+
+/**
+ * The index set a map's metadata records (#4038): each index and its key scheme, sorted. A handle
+ * whose declared set differs from the recorded one rebuilds the field's postings before writing.
+ */
+export function indexSignature(indexes: ReadonlyArray<{ readonly index: string; readonly unique?: boolean }>): string {
+  return indexes
+    .map((ix) => `${ix.index}:${ix.unique === true ? "u" : "i"}`)
+    .sort()
+    .join(",");
+}
+
+/** A map's metadata record: its size and sequence, and its index set when it has one. */
+const mapMeta = (size: number, seq: number | undefined, indexes: ReadonlyArray<WholesaleIndex> | undefined): Record<string, unknown> => {
+  const ix = indexSignature(indexes ?? []);
+  return { size, ...(seq === undefined ? {} : { seq }), ...(ix === "" ? {} : { ix }) };
+};
 
 /** What splitting a wholesale record produces. */
 export interface SplitRecord {
@@ -354,7 +376,7 @@ export function splitWholesale(stored: Readonly<Record<string, unknown>>, fields
             for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
           }
         }
-        entries[metaKey(f.name)] = { size: Object.keys(inline as object).length };
+        entries[metaKey(f.name)] = mapMeta(Object.keys(inline as object).length, undefined, f.indexes);
         break;
       }
       case "set": {
@@ -742,7 +764,7 @@ function planEntries(
       }
     }
     const size = collection.length;
-    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
+    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = f.kind === "map" ? mapMeta(size, seq, f.indexes) : { size, seq };
   }
   record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
   return { record, entries };
@@ -880,5 +902,23 @@ export function then<T, R>(value: T | Promise<T>, f: (value: T) => R | Promise<R
   return isThenable(value) ? value.then(f) : f(value);
 }
 
+/**
+ * The commit-time check of `@unique(by:)` (#4038): for each `[field, index, location]`, no value of the
+ * index may be held by two entries of the staged map. A duplicate refuses the commit, as an invariant
+ * violation does, naming the agent and `field.index`, never the value.
+ */
+export async function checkUnique(
+  agent: string,
+  state: object,
+  declared: ReadonlyArray<readonly [string, string, string]>,
+): Promise<void> {
+  const handles = state as Readonly<Record<string, { hasDuplicate(index: string): boolean | Promise<boolean> }>>;
+  for (const [field, index, location] of declared) {
+    if (await (handles[field] as { hasDuplicate(index: string): boolean | Promise<boolean> }).hasDuplicate(index)) {
+      throw invariantViolation(agent, `${field}.${index}`, "unique", location);
+    }
+  }
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { commitStored as __commitStored, eraseStored as __eraseStored, markErased as __markErased, newErasure as __newErasure, committedSize as __committedSize, storeKey as __bynkStoreKey, noteClock as __noteClock, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };
+export { commitStored as __commitStored, eraseStored as __eraseStored, markErased as __markErased, newErasure as __newErasure, checkUnique as __checkUnique, committedSize as __committedSize, storeKey as __bynkStoreKey, noteClock as __noteClock, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };

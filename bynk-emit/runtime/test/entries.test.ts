@@ -307,7 +307,7 @@ test("splitWholesale: collections and postings become per-entry writes, the rest
   assert.deepEqual(entries[mapKey("orders", "o/2")], { cust: "c2" });
   assert.equal(entries[postingKey("orders", "byCust", "c1", "o1")], 1);
   assert.equal(entries[postingKey("orders", "byCust", "c2", "o/2")], 1);
-  assert.deepEqual(entries[metaKey("orders")], { size: 2 });
+  assert.deepEqual(entries[metaKey("orders")], { size: 2, ix: "byCust:i" });
   assert.equal(entries[setKey("tags", "a")], 1);
   assert.deepEqual(entries[metaKey("tags")], { size: 2 });
   assert.deepEqual(entries[mapKey("sessions", "s1")], { v: "x", exp: 500 });

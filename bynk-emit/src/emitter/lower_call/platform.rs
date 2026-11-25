@@ -15,8 +15,8 @@ use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, num_lit, paren,
-    ret, str_lit,
+    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
+    num_lit, paren, ret, str_lit,
 };
 use bynk_ts::TsParam;
 
@@ -480,10 +480,14 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
     })?;
     if !issue {
-        return Some(call(
+        let expire = call(
             ident("__expireSessionCookie"),
             vec![str_lit(&seam.cookie), str_lit(&seam.same_site)],
-        ));
+        );
+        if !seam.sessions {
+            return Some(expire);
+        }
+        return Some(lower_session_expire(&seam, expire, cx));
     }
     let key = pre.lower_node(args.first()?, cx);
     let deps_node = deps_receiver(cx.in_test_case(), cx);
@@ -494,18 +498,52 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             chain(deps_node.clone(), &["Clock", "now"]),
             vec![],
         )));
-        let issue = call(
-            ident("__issueSessionCookie"),
-            vec![
-                call(ident("__sessionKeysOf"), vec![deps_node, str_lit(&actor)]),
-                str_lit(&actor),
-                str_lit(&seam.cookie),
-                str_lit(&seam.same_site),
-                key,
-                num_lit(seam.ttl_secs),
-                now,
-            ],
-        );
+        let mut issue_args = vec![
+            call(
+                ident("__sessionKeysOf"),
+                vec![deps_node.clone(), str_lit(&actor)],
+            ),
+            str_lit(&actor),
+            str_lit(&seam.cookie),
+            str_lit(&seam.same_site),
+            key.clone(),
+            num_lit(seam.ttl_secs),
+            now,
+        ];
+        if seam.sessions {
+            // #3938: record the new session in the identity's session agent before the cookie is
+            // signed, so a cookie never exists for a session the agent does not hold.
+            let agent = bynk_check::actors::sessions_agent_name(&actor);
+            cx.record_agent_call(&agent, "add");
+            let instance = cx.agent_construct_node(&agent, ident("__sub"));
+            issue_args[4] = ident("__sub");
+            issue_args.push(arrow_with(
+                vec![
+                    TsParam::new("__sid".to_string(), Some(TsType::named("string"))),
+                    TsParam::new("__exp".to_string(), Some(TsType::named("number"))),
+                    TsParam::new("__now".to_string(), Some(TsType::named("number"))),
+                ],
+                true,
+                method_call(
+                    instance,
+                    "add",
+                    vec![ident("__sid"), ident("__exp"), ident("__now"), deps_node],
+                ),
+            ));
+            let issue = call(ident("__issueSessionCookie"), issue_args);
+            return Some(call(
+                paren(arrow_with(
+                    vec![TsParam::new(
+                        "__sub".to_string(),
+                        Some(TsType::named(seam.identity_type.clone())),
+                    )],
+                    true,
+                    issue,
+                )),
+                vec![key],
+            ));
+        }
+        let issue = call(ident("__issueSessionCookie"), issue_args);
         call(paren(arrow_with(vec![], true, issue)), vec![])
     })
 }
@@ -870,6 +908,43 @@ fn capability_op_call(
         }
     };
     call(callee, nodes)
+}
+
+/// #3938: `Actor.expire()` on a `sessions = true` actor: end the verified session in the identity's
+/// session agent (when the handler is guarded by the actor, so the seam threaded one), then return
+/// the deleting cookie. A handler the actor does not guard has no session to end, so only the
+/// cookie is returned.
+fn lower_session_expire(
+    seam: &bynk_check::actors::SignedCookieSeam,
+    expire: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsExpr {
+    use crate::ts_build::{as_expr, await_expr, if_, strict_neq};
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    cx.record_agent_call(&agent, "remove");
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let current = ident("__current");
+    let identity = as_expr(
+        member(current.clone(), "sub"),
+        TsType::named(seam.identity_type.clone()),
+    );
+    let instance = cx.agent_construct_node(&agent, identity);
+    let body = vec![
+        crate::ts_build::const_(
+            "__current",
+            call(ident("__currentSession"), vec![deps_node.clone()]),
+        ),
+        if_(
+            strict_neq(current.clone(), crate::ts_build::null_lit()),
+            expr_stmt(await_expr(method_call(
+                instance,
+                "remove",
+                vec![member(current, "sid"), deps_node],
+            ))),
+        ),
+        ret(expire),
+    ];
+    call(paren(block_arrow(vec![], true, body)), vec![])
 }
 
 #[cfg(test)]

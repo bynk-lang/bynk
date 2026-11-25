@@ -6718,6 +6718,10 @@
               {
                 "type": "SYMBOL",
                 "name": "identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "boolean_literal"
               }
             ]
           }
