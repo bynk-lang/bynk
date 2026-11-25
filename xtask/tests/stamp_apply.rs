@@ -818,7 +818,14 @@ fn a_reused_slug_warns_and_a_crlf_copy_of_a_stamped_file_still_fails() {
 /// Run `git` in `root`, as a fixed author so the test needs no global config.
 fn git(root: &Path, args: &[&str]) {
     let status = std::process::Command::new("git")
-        .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "-c",
+            "commit.gpgsign=false",
+        ])
         .args(args)
         .current_dir(root)
         .status()
@@ -876,4 +883,57 @@ fn a_stamp_the_ledger_never_recorded_is_still_not_repeated() {
     let plan = stamp::plan(&root).expect("plan");
     assert!(plan.already_stamped.is_empty());
     assert_eq!(plan.increments.len(), 1);
+}
+
+#[test]
+fn a_reverted_ledger_era_stamp_can_be_stamped_again() {
+    // A stamp made once the ledger existed, then reverted so it can be redone: the revert puts
+    // the file back with the same bytes and takes its ledger line out. Git still has the deleting
+    // commit, but the ledger is the authority now, so the file stamps.
+    let root = fixture("git-revert");
+    git(&root, &["init", "-q"]);
+    fs::write(root.join("design/stamped.txt"), "# ledger\n").unwrap();
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "the ledger exists, and a branch lands its file",
+        ],
+    );
+    let plan = stamp::plan(&root).expect("plan");
+    assert_eq!(plan.increments.len(), 1, "not stamped yet");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("stamp");
+    git(&root, &["add", "-A"]);
+    git(
+        &root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "chore(stamp): stamped, ledger line written",
+        ],
+    );
+    git(&root, &["revert", "--no-edit", "HEAD"]);
+    assert!(root.join("design/pending/feat-thing.md").exists());
+    assert!(
+        !fs::read_to_string(root.join("design/stamped.txt"))
+            .unwrap()
+            .contains("feat-thing"),
+        "the revert took the ledger line out"
+    );
+
+    let again = stamp::plan(&root).expect("plan");
+    assert!(
+        again.already_stamped.is_empty(),
+        "git is not consulted for ledger-era stamps"
+    );
+    assert_eq!(
+        again.increments.len(),
+        1,
+        "the reverted stamp can be redone"
+    );
 }

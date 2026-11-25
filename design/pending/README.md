@@ -177,6 +177,13 @@ another increment's file is still pending and about to be consumed: a stale copy
 back is caught on the PR, or dropped by the stamp, instead of stamping that increment twice
 (#4234, #4269). If a check fails, delete the named file from your branch: `main` has it.
 
+For stamps made before the ledger existed (the back-fill covers history up to when it
+landed, and the old stamp wrote no line for the few after), the stamp also asks git: a file
+that a commit from before the ledger deleted, with the same bytes, counts as consumed. That
+check is the stamp's alone; `check-pending` reads the ledger only, because a PR's checkout need
+not carry history. Once the ledger is in the tree it is the only authority, so a stamp that
+is reverted to be redone stamps again.
+
 The hash is part of the key so a slug can be reused: a branch name restarted for a new
 increment has different bytes and stamps normally. The ledger was back-filled from the
 history of deleted pending files, with the versions the stamp gave them.

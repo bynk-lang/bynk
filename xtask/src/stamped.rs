@@ -95,8 +95,8 @@ pub fn find<'a>(entries: &'a [Entry], slug: &str, hash: &str) -> Option<&'a Entr
 }
 
 /// The entry for a pending file that git history shows was already consumed, for stamps the
-/// ledger has no line for: any made by the old stamp between a ledger snapshot and the merge that
-/// introduced the ledger. A stamp deletes the pending file it consumes, so a file at this path
+/// ledger has no line for: those made by the old stamp before the ledger landed, whether before
+/// or after the back-filled snapshot. A stamp deletes the pending file it consumes, so a file at this path
 /// that a commit on this history deleted, with the same content, was stamped. The version is the
 /// workspace version at that commit, which for a commit that stamped several files is the last
 /// one's. `None` when `root` is no git checkout or git cannot be run, which a fixture tree is
@@ -113,6 +113,13 @@ pub fn find_in_git_history(root: &Path, file: &str, hash: &str) -> Option<Entry>
     let path = format!("design/pending/{file}");
     let deleting = git(&["log", "--diff-filter=D", "--format=%H", "--", &path])?;
     for commit in String::from_utf8_lossy(&deleting).lines() {
+        // Only commits from before the ledger existed. Every stamp made once `design/stamped.txt`
+        // is in the tree writes its line, so from then on the ledger is the only authority: a
+        // stamp that was reverted to be redone leaves a deleting commit behind, and must stamp
+        // again, as must a file deleted by anything other than the stamp.
+        if git(&["cat-file", "-e", &format!("{commit}:{LEDGER_PATH}")]).is_some() {
+            continue;
+        }
         let Some(before) = git(&["show", &format!("{commit}^:{path}")]) else {
             continue;
         };
