@@ -168,7 +168,8 @@ fn kind(token: String) -> String {
 
 On an `Int`, `_ where InRange(a, b)`, `_ where Positive` and `_ where NonNegative` are
 the range patterns `a..b`, `1..` and `0..`, so the compiler warns
-(`bynk.match.refined_pattern_is_range`) and `bynk check --fix` rewrites them. A
+(`bynk.match.refined_pattern_is_range`) and the editor offers the rewrite (`bynk check --fix` leaves it, because a range arm
+counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`). A
 combined predicate that is one interval (`_ where Positive && InRange(1, 10)`)
 becomes that interval (`1..10`); one that is not is left alone.
 

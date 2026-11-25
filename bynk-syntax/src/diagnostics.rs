@@ -2936,7 +2936,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.match.refined_pattern_is_range",
-        blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The fix replaces the refined pattern with the range it denotes. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
+        blurb: "A refined pattern, `_ where InRange(200, 299)`, `_ where Positive` or `_ where NonNegative`, on an `Int` scrutinee matches the same values as a range pattern, `200..299`, `1..` or `0..`, and is strictly weaker. A refined pattern is a guard and never counts towards exhaustiveness, so a match that covers every case still needs a `_` arm; a range pattern does count, and a missing interval is reported as a pattern you can paste in. The quick fix replaces the refined pattern with the range it denotes; it is offered but never applied by `bynk check --fix`, because a range arm counts for reachability and a later arm it now covers becomes `bynk.types.unreachable_arm`, which you then delete. A combined predicate that is one interval (`_ where Positive && InRange(1, 10)`) becomes that interval (`1..10`), and one that is not (an empty intersection, or a predicate that is not a range) is left alone. A refined pattern stays the way to match a band of `Float` or `Decimal`, or a `String` by `Matches` or its length.",
         example: "fn class(status: Int) -> String {\n    match status {\n        _ where InRange(200, 299) => \"success\"   // ✗ the same test as `200..299`, and never exhaustive\n        _ => \"other\"\n    }\n}\n\nfn class(status: Int) -> String {\n    match status {\n        200..299 => \"success\"                  // ✓ counts towards exhaustiveness\n        _ => \"other\"\n    }\n}",
     },
     Explain {
@@ -8690,7 +8690,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     )),
     warn(dg(
         "bynk.match.refined_pattern_is_range",
-        "A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; auto-fixable).",
+        "A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) is a range pattern, which also counts towards exhaustiveness (warning; quick fix, not applied by `--fix`).",
         &["refined_pattern"],
     )),
     d(

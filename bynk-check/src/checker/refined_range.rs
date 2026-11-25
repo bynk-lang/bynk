@@ -64,11 +64,15 @@ pub(crate) fn refined_pattern_is_range(
             span,
             format!("this refined pattern is the range pattern `{range}`"),
         )
-        .with_note("a range pattern counts towards exhaustiveness; a refined pattern never does")
+        .with_note(
+            "a range pattern counts towards exhaustiveness; a refined pattern never does, so \
+             after the rewrite a later arm that the range now covers is unreachable and must \
+             be deleted",
+        )
         .with_suggestion(
             format!("replace with `{range}`"),
             vec![(span, range)],
-            Applicability::MachineApplicable,
+            Applicability::MaybeIncorrect,
         ),
     )
 }
