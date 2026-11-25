@@ -135,7 +135,7 @@ pub(super) fn lower_faults(
         if kind == CallSitePrincipal::Nobody {
             cx.call_site_no_credential = true;
         } else if let CallSitePrincipal::BadCredential(bad) = kind {
-            cx.call_site_bad_signature = Some(crate::emitter::lower_ctx::BadDriver {
+            cx.call_site_bad_signature = Some(crate::emitter::lower_call::test_calls::BadDriver {
                 driver: bad.driver(),
                 arm: bynk_check::actors::bad_principal_arm(principal).map(str::to_string),
             });

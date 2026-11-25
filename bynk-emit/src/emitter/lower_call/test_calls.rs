@@ -23,6 +23,14 @@ use super::super::{Expr, ExprKind, Ident, TypeRef};
 use crate::ts_build::{arrow, call, ident, member, num_lit, paren, str_lit};
 use bynk_ts::TsParam;
 
+/// #2135, #4385: the bad-credential principal a `system` call drives: the driver's name (`"forged"`,
+/// `"expired"`, …) and, on an actor sum, the member it names (`by Forged(Session)`).
+#[derive(Clone)]
+pub(crate) struct BadDriver {
+    pub(crate) driver: &'static str,
+    pub(crate) arm: Option<String>,
+}
+
 // ---- Names ----
 
 /// The module's event-delivery helper for a service (#2052).
@@ -324,7 +332,7 @@ fn wrong_method_call(service: &str, verb: IrHttpMethod, path: &str) -> bynk_ts::
 fn system_driver(cx: &LowerCtx, has_wire: bool) -> SysdriveKind<'static> {
     let kind = match (&cx.call_site_bad_signature, cx.call_site_no_credential) {
         // #4385: a bad credential naming an actor sum's member drives the sum's bad-credential driver.
-        (Some(crate::emitter::lower_ctx::BadDriver { arm: Some(_), .. }), _) => "sumbad",
+        (Some(BadDriver { arm: Some(_), .. }), _) => "sumbad",
         (Some(bad), _) => bad.driver,
         (None, true) => "noauth",
         (None, false) => "",
