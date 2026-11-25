@@ -55,3 +55,21 @@ test("entries are read from the per-code files, sorted by code", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("retired codes get their own section, sorted, with what replaced them", () => {
+  const page = renderIndex(
+    [entry("bynk.a.x", "A")],
+    [
+      { code: "bynk.z.old", version: "1.2.3", why: "It went.", replacement: null },
+      { code: "bynk.b.old", version: "1.0.0", why: "Unreachable now.", replacement: "the body cap (#3921)" },
+    ],
+  );
+  assert.match(page, /^## Retired codes$/m);
+  assert.ok(page.indexOf("bynk.b.old") < page.indexOf("bynk.z.old"));
+  assert.match(page, /`bynk\.b\.old` — retired in v1\.0\.0\. Unreachable now\. Replaced by the body cap \(#3921\)\./);
+  assert.match(page, /`bynk\.z\.old` — retired in v1\.2\.3\. It went\.\n/);
+});
+
+test("no tombstones, no Retired codes section", () => {
+  assert.doesNotMatch(renderIndex([entry("bynk.a.x", "A")]), /Retired codes/);
+});

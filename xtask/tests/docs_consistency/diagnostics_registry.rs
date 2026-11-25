@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bynk_syntax::diagnostics::{EXPLANATIONS, REGISTRY};
+use bynk_syntax::diagnostics::{EXPLANATIONS, REGISTRY, RETIRED};
 
 fn grammar_json() -> String {
     let path =
@@ -452,6 +452,13 @@ fn generated_diagnostics_json_is_up_to_date() {
         for (code, json) in &rendered {
             fs::write(dir.join(format!("{code}.json")), json).unwrap();
         }
+        let retired = bynk_syntax::diagnostics::render_retired_json();
+        if !retired.is_empty() {
+            fs::create_dir_all(dir.join("retired")).unwrap();
+        }
+        for (code, json) in &retired {
+            fs::write(dir.join("retired").join(format!("{code}.json")), json).unwrap();
+        }
         return;
     }
     let mut problems = Vec::new();
@@ -464,13 +471,107 @@ fn generated_diagnostics_json_is_up_to_date() {
     let known: BTreeSet<String> = rendered.iter().map(|(c, _)| format!("{c}.json")).collect();
     for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !known.contains(&name) {
+        if name != "retired" && !known.contains(&name) {
             problems.push(format!("{name} is not a registry code"));
         }
     }
     assert!(
         problems.is_empty(),
         "site/src/generated/diagnostics/ is out of date with the registry:\n  {}\n\
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::",
+        problems.join("\n  ")
+    );
+}
+
+/// #4277: the tombstones are sorted, unique, and for codes that are really gone.
+#[test]
+fn retired_codes_are_sorted_and_not_live() {
+    let codes: Vec<&str> = RETIRED.iter().map(|r| r.code).collect();
+    let mut sorted = codes.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(
+        codes, sorted,
+        "RETIRED must be sorted by code, with no duplicates"
+    );
+    for r in RETIRED {
+        assert!(
+            !REGISTRY.iter().any(|d| d.code == r.code),
+            "`{}` is in RETIRED but still in REGISTRY: a code is live or retired, not both",
+            r.code
+        );
+        assert!(
+            !r.why.is_empty() && r.version.split('.').count() == 3,
+            "RETIRED `{}` needs a `why` and an `X.Y.Z` version",
+            r.code
+        );
+    }
+}
+
+/// #4277: every code ever shipped is live or tombstoned. `bynk-syntax/shipped-codes.txt` lists
+/// the codes of each release (`cargo xtask release-page --apply` appends the registry's codes at
+/// the cut), so removing a shipped code from the registry without an entry in `RETIRED` fails
+/// here. The check is one-way: a new live code needs no line in the list, and a code added and
+/// removed between two releases never shipped, so needs no tombstone.
+#[test]
+fn every_shipped_code_is_live_or_retired() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bynk-syntax/shipped-codes.txt");
+    let list = fs::read_to_string(&path).expect("read bynk-syntax/shipped-codes.txt");
+    let gone: Vec<&str> = list
+        .lines()
+        .filter(|c| !c.is_empty())
+        .filter(|c| !REGISTRY.iter().any(|d| d.code == *c) && !RETIRED.iter().any(|r| r.code == *c))
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "codes shipped in a release but neither in REGISTRY nor RETIRED: {gone:#?}\n\
+         Add a tombstone for each to RETIRED in bynk-syntax/src/diagnostics.rs (the version \
+         that retired it, why, and what replaced it)."
+    );
+}
+
+/// The shipped list is sorted and has no duplicates, so the release cut's append stays a
+/// clean merge.
+#[test]
+fn shipped_codes_list_is_sorted() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bynk-syntax/shipped-codes.txt");
+    let list = fs::read_to_string(&path).unwrap();
+    let lines: Vec<&str> = list.lines().collect();
+    let mut sorted = lines.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(
+        lines, sorted,
+        "shipped-codes.txt must be sorted, one code per line"
+    );
+}
+
+/// The tombstone files under `site/src/generated/diagnostics/retired/` match `RETIRED`.
+#[test]
+fn generated_retired_json_is_up_to_date() {
+    let dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics/retired");
+    let rendered = bynk_syntax::diagnostics::render_retired_json();
+    if std::env::var_os("BYNK_BLESS").is_some() {
+        return; // written by `generated_diagnostics_json_is_up_to_date`
+    }
+    let mut problems = Vec::new();
+    for (code, json) in &rendered {
+        let current = fs::read_to_string(dir.join(format!("{code}.json"))).unwrap_or_default();
+        if current != *json {
+            problems.push(format!("retired/{code}.json is missing or out of date"));
+        }
+    }
+    let known: BTreeSet<String> = rendered.iter().map(|(c, _)| format!("{c}.json")).collect();
+    for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !known.contains(&name) {
+            problems.push(format!("retired/{name} is not a retired code"));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "site/src/generated/diagnostics/retired/ is out of date with RETIRED:\n  {}\n\
          Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::",
         problems.join("\n  ")
     );

@@ -23,6 +23,7 @@ const INDEX_PATH = "/reference/diagnostics/";
 
 /**
  * @typedef {{ code: string, summary: string, severity: string, category: string }} Entry
+ * @typedef {{ code: string, version: string, why: string, replacement: string | null }} Retired
  */
 
 /** The per-code documents in `dir`, sorted by code. */
@@ -34,8 +35,19 @@ export function readEntries(/** @type {string} */ dir) {
     .map((f) => /** @type {Entry} */ (JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"))));
 }
 
+/** The tombstones in `<dir>/retired/`, sorted by code; none when the directory is absent (#4277). */
+export function readRetired(/** @type {string} */ dir) {
+  const sub = path.join(dir, "retired");
+  if (!fs.existsSync(sub)) return [];
+  return fs
+    .readdirSync(sub)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => /** @type {Retired} */ (JSON.parse(fs.readFileSync(path.join(sub, f), "utf8"))));
+}
+
 /** The index page's Markdown, in the form the Starlight page took when it was committed. */
-export function renderIndex(/** @type {Entry[]} */ entries) {
+export function renderIndex(/** @type {Entry[]} */ entries, /** @type {Retired[]} */ retired = []) {
   /** @type {Map<string, Entry[]>} */
   const byCategory = new Map();
   for (const e of [...entries].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))) {
@@ -70,12 +82,21 @@ export function renderIndex(/** @type {Entry[]} */ entries) {
       out += `- [\`${e.code}\`](${INDEX_PATH}${e.code}/) — ${badge(e.severity)}${e.summary}\n`;
     }
   }
+  if (retired.length > 0) {
+    out +=
+      "\n## Retired codes\n\n" +
+      "Codes the compiler no longer emits. `bynk explain <code>` still says when each was retired and why.\n\n";
+    for (const r of [...retired].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))) {
+      const by = r.replacement ? ` Replaced by ${r.replacement}.` : "";
+      out += `- \`${r.code}\` — retired in v${r.version}. ${r.why}${by}\n`;
+    }
+  }
   return out;
 }
 
 function main() {
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, renderIndex(readEntries(DIR)));
+  fs.writeFileSync(OUT, renderIndex(readEntries(DIR), readRetired(DIR)));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
