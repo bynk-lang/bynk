@@ -386,6 +386,34 @@ header, is a compile error (`bynk.http.reserved_response_header`,
 `result.headers()` reads the headers a result carries. See
 [HTTP → Response headers](/reference/http/#response-headers).
 
+## Reject a stale update
+
+To let a client update something only if it has not changed since it read it, have it send `If-Match`
+with the validator it was given, and answer `428` without one and `412` when it is stale:
+
+```bynk,ignore
+type DocHeaders = { @name("if-match") ifMatch: Option[String] }
+
+on PUT("/docs/:id") (id: DocId, headers: DocHeaders, body: DocUpdate) -> Effect[HttpResult[()]] by u: User given Docs {
+  match headers.ifMatch {
+    None => PreconditionRequired("send If-Match with the document's ETag")
+    Some(expected) => {
+      let current <- Docs.version(id)
+      if "\"\(current)\"" != expected {
+        PreconditionFailed("the document changed since you read it")
+      } else {
+        let _ <- Docs.save(id, body)
+        NoContent
+      }
+    }
+  }
+}
+```
+
+The `ETag` the router adds to a `GET` is weak, and `If-Match` compares strongly, so serve the version the
+client will send back yourself, with `RawTagged` or a version field. See
+[HTTP → Conditional writes](/reference/http/#conditional-writes).
+
 ## Secure by default (security headers)
 
 You don't have to do anything to get the one security header that matters for a

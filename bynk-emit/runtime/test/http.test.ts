@@ -145,6 +145,8 @@ test("httpResultToResponse: status codes map per variant", async () => {
   assert.equal(httpResultToResponse(HttpResult.Conflict("c"), id).status, 409);
   assert.equal(httpResultToResponse(HttpResult.Gone, id).status, 410);
   assert.equal(httpResultToResponse(HttpResult.LengthRequired, id).status, 411);
+  assert.equal(httpResultToResponse(HttpResult.PreconditionFailed("p"), id).status, 412);
+  assert.equal(httpResultToResponse(HttpResult.PreconditionRequired("p"), id).status, 428);
   assert.equal(httpResultToResponse(HttpResult.PayloadTooLarge("p"), id).status, 413);
   assert.equal(httpResultToResponse(HttpResult.UnsupportedMediaType("m"), id).status, 415);
   assert.equal(httpResultToResponse(HttpResult.UnprocessableEntity("u"), id).status, 422);
