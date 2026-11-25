@@ -1,0 +1,5 @@
+# #3931: a `:=` after `self.erase()` in the same block, at the top level and in a branch, in a block nested after the erase, and a store operation after it; a write before it, and one in the other branch, are not warned.
+write_after_erase the write to `closed` has no effect
+write_after_erase the write to `note` has no effect
+write_after_erase the write to `tags` has no effect
+write_after_erase the write to `note` has no effect

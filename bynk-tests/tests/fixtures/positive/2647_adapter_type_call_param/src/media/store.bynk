@@ -11,7 +11,7 @@ service abandon {
 }
 
 service uploads from queue("uploads") {
-	on message(m: R2Upload) -> Effect[QueueResult] {
+	on message(m: R2Upload) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

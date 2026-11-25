@@ -63,6 +63,7 @@ pub mod keying;
 pub mod ordering;
 use equality::EqScope;
 mod effect_more;
+mod erase;
 mod expressions;
 mod kernels;
 mod linearity;
@@ -70,6 +71,7 @@ mod list_basics;
 mod list_more;
 mod list_par;
 mod list_par_with;
+pub(crate) mod nested_effect;
 mod par;
 mod query_more;
 mod query_par;
@@ -934,6 +936,9 @@ pub enum Callee {
     AgentInit(String),
     /// `agent.handler(args)` — agent handler dispatch.
     Agent { agent: String, handler: String },
+    /// #3931: `self.erase()` in an agent handler — the instance's stored state is deleted when the
+    /// handler commits, instead of the handler's other writes.
+    AgentErase,
     /// A test-body service address (`svc.call`/`svc.<VERB>("/path", …)`/
     /// `svc.schedule(...)`/`svc.message(...)`). `check_test_service_address`
     /// always returns `None` by design (the runner recovers the outcome
@@ -1291,6 +1296,7 @@ impl TypedCommons {
     pub fn empty() -> Self {
         TypedCommons {
             commons: Arc::new(Commons {
+                test_only: false,
                 name: QualifiedName {
                     parts: Vec::new(),
                     span: Default::default(),
@@ -2191,6 +2197,8 @@ pub fn check_handler_body(
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
         return;
     };
+    // #3931: a `:=` after `self.erase()` is dropped by the commit.
+    erase::warn_writes_after_erase(body, false, &mut ctx);
     // v0.102 (§3 step 11): the held-resource linearity pass, now that
     // `expr_types` is fully populated by the body walk above.
     linearity::check(
@@ -4014,7 +4022,7 @@ fn interpolation_non_scalar_note(ty: TyId, tys: &Types) -> &'static str {
             "a `ValidationError` has no string form; interpolate its fields, e.g. `\"\\(e.field): \\(e.message)\"`"
         }
         _ => {
-            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`, `Duration` via `toString()`, `Instant` via `toIso()`/`toString()`"
+            "interpolation holes accept the base scalar types (String, Int, Float, Bool, Decimal, Duration, Instant) or a refinement of one; map other values to a String first — `Bytes` via `toHex()`/`toBase64()`"
         }
     }
 }
@@ -5448,16 +5456,23 @@ fn maybe_auto_lift(ty: Option<TyId>, expected: Option<TyId>, tys: &Types) -> Opt
 }
 
 /// Whether a value of type `ty` may fill an interpolation hole (v0.43, ADR
-/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, or `Decimal` (ADR
-/// 0698: its canonical text) — or a refinement of one (which widens to its base
-/// for display). `Bytes`, `Duration` and `Instant` have no implicit string form
-/// — each has an explicit rendering method — and opaque types are excluded,
-/// their base being hidden (`.raw` it first).
+/// 0075): a scalar base — `String`/`Int`/`Float`/`Bool`, `Decimal` (ADR
+/// 0698: its canonical text), or (#3977) `Instant` (RFC 3339 UTC) and `Duration`
+/// (`1h30m`), the text their `toString()` gives — or a refinement of one (which
+/// widens to its base for display). `Bytes` has no implicit string form (hex or
+/// base64 is a real choice), and opaque types are excluded, their base being
+/// hidden (`.raw` it first).
 fn interpolable(ty: TyId, tys: &Types) -> bool {
     let scalar = |b: BaseType| {
         matches!(
             b,
-            BaseType::String | BaseType::Int | BaseType::Float | BaseType::Bool | BaseType::Decimal
+            BaseType::String
+                | BaseType::Int
+                | BaseType::Float
+                | BaseType::Bool
+                | BaseType::Decimal
+                | BaseType::Duration
+                | BaseType::Instant
         )
     };
     match &*tys.get(ty) {
@@ -6043,7 +6058,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                 _ => None,
             };
             let inner_ty = type_of(inner, expected_inner, ctx)?;
-            Some(tys.intern(Ty::Effect(inner_ty)))
+            nested_effect::pure(inner_ty, inner.span, ctx)
         }
         ExprKind::RecordSpread {
             type_name,

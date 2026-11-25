@@ -1198,7 +1198,11 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &c.documentation {
             self.emit_doc(doc);
         }
-        let header = format!("commons {}", c.name.joined());
+        let header = format!(
+            "commons {}{}",
+            c.name.joined(),
+            if c.test_only { " for tests" } else { "" }
+        );
         match c.form {
             CommonsForm::Brace => {
                 self.push(&header);
@@ -2187,6 +2191,7 @@ impl<'a> Formatter<'a> {
                 if s.security.is_some()
                     || s.limits.is_some()
                     || s.json.is_some()
+                    || s.errors.is_some()
                     || s.delivery.is_some()
                     || !s.handlers.is_empty()
                 {
@@ -2197,6 +2202,7 @@ impl<'a> Formatter<'a> {
                 f.format_security_policy(security);
                 if s.limits.is_some()
                     || s.json.is_some()
+                    || s.errors.is_some()
                     || s.delivery.is_some()
                     || !s.handlers.is_empty()
                 {
@@ -2205,12 +2211,22 @@ impl<'a> Formatter<'a> {
             }
             if let Some(limits) = &s.limits {
                 f.format_limits_policy(limits);
-                if s.json.is_some() || s.delivery.is_some() || !s.handlers.is_empty() {
+                if s.json.is_some()
+                    || s.errors.is_some()
+                    || s.delivery.is_some()
+                    || !s.handlers.is_empty()
+                {
                     f.newline();
                 }
             }
             if let Some(json) = &s.json {
                 f.format_json_policy(json);
+                if s.errors.is_some() || s.delivery.is_some() || !s.handlers.is_empty() {
+                    f.newline();
+                }
+            }
+            if let Some(errors) = &s.errors {
+                f.format_errors_policy(errors);
                 if s.delivery.is_some() || !s.handlers.is_empty() {
                     f.newline();
                 }
@@ -2234,6 +2250,7 @@ impl<'a> Formatter<'a> {
                     || s.security.is_some()
                     || s.limits.is_some()
                     || s.json.is_some()
+                    || s.errors.is_some()
                     || s.delivery.is_some()
                 {
                     f.newline();
@@ -2291,6 +2308,16 @@ impl<'a> Formatter<'a> {
             .map(|f| (&f.name, &f.value, &f.trivia))
             .collect();
         self.format_policy("json", &json.trivia, &fields, &json.trailing_comments);
+    }
+
+    /// Format an `errors { }` policy section (#3916), as `format_cors_policy`.
+    fn format_errors_policy(&mut self, errors: &ErrorsPolicy) {
+        let fields: Vec<_> = errors
+            .fields
+            .iter()
+            .map(|f| (&f.name, &f.value, &f.trivia))
+            .collect();
+        self.format_policy("errors", &errors.trivia, &fields, &errors.trailing_comments);
     }
 
     /// Format a `delivery { }` policy section (#3877), as `format_cors_policy`.

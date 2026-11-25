@@ -1,55 +1,85 @@
-name: Stamp batch (dry run)
+name: Stamp batch
 
-# The batched stamp, in DRY-RUN mode only: it plans and prints, and writes
-# nothing.
+# The stamp, in batches through the merge queue. Every three hours this
+# workflow stamps whatever is pending on `main` (versions, ADR numbers, the
+# changelog rows, the ledgers; see `xtask stamp`), opens ONE pull request with
+# the result on a `stamp/*` branch, and turns on auto-merge so it lands through
+# the merge queue like any other PR.
 #
-# Why a batch. `stamp.yml` stamps after every merge and pushes its commit to
-# `main` through the ruleset bypass, outside the merge queue. Each of those
-# pushes moves `main` under every group in the queue, which then rebuilds them
-# all, and each one changes `Cargo.toml`/`Cargo.lock`, which makes `main`'s
-# CI run the full three-OS backstop. The plan is to stamp in batches instead:
-# on a schedule, open ONE PR with the stamp's changes and let it land through
-# the queue like any other entry, so nothing reaches `main` outside the queue.
+# Why a batch. `stamp.yml` used to stamp after every merge and push its commit
+# to `main` through the ruleset bypass, outside the merge queue. Each of those
+# pushes moved `main` under every group in the queue, which then rebuilt them
+# all (28 of 56 PRs ran through the queue more than once on 24-25 November
+# 2026), and each one changed `Cargo.toml`/`Cargo.lock`. Now nothing reaches
+# `main` outside the queue. `stamp.yml` keeps only its manual dispatch, the
+# emergency path, which still pushes through the bypass.
 #
-# This workflow is the first step of that cut-over. While `stamp.yml` is still
-# the stamper, this one only shows what a batch would do, on the live `main`:
-# the pending files in merge order (`xtask stamp` orders them by the commit
-# that added each one, not by filename), the version each would get, and its
-# PR. It also checks the one-batch-at-a-time rule it will need, by looking for
-# an open `stamp/*` PR. Compare its plan with what `stamp.yml` then does.
+# One batch at a time. Two open stamp PRs would hand out the same versions, so
+# a run does nothing while a `stamp/*` PR is open. The pending files stay on
+# `main` until the open PR merges and the next run stamps them. A stamp PR
+# still open after two more slots (STALE_HOURS, a little under the 6 h that
+# spans, since the PR opens some minutes after its run starts) fails the run,
+# so a batch stuck in review, CI or the queue is noticed: look at that PR, fix
+# or close it, and the next run goes ahead. Do not reach for stamp.yml's
+# emergency push while it is open: that would stamp the same files twice.
+# stamp.yml refuses to run while a `stamp/*` PR is open.
 #
-# The switch is a later, separate PR: it removes `stamp.yml`'s `push` trigger
-# and turns this workflow's apply path on, in the same commit.
+# Merge order. `xtask stamp` numbers the pending files by the commit on
+# `main`'s first-parent line that added each one, and gives each increment its
+# own PR in the ledgers (#4330). That needs the full history (fetch-depth 0).
 #
-# Concurrency: deliberately NOT the stamp's `stamp-main` group yet. A group
-# keeps one pending run, and a newer pending run cancels the older one; a
-# scheduled dry run queued behind a running stamp would cancel a REAL stamp
-# run that was waiting, and strand its pending file (stamp.yml's header
-# describes that failure, from 2026-10-22). The switch PR moves this workflow
-# into `stamp-main`, at the moment it starts writing.
+# The App token. The PR is opened by the stamp GitHub App rather than the
+# GITHUB_TOKEN, because events made with the GITHUB_TOKEN start no workflow
+# runs: a GITHUB_TOKEN PR would never get CI, so never `CI green`. As in
+# stamp.yml, the token is minted only after every step that runs dependency
+# code (stamp, build, test), and is handed to the push and `gh` alone, never
+# written to .git/config (#727). The App needs Contents: write and Pull
+# requests: write.
+#
+# Rollback: revert the PR that made this the stamper. That restores
+# stamp.yml's `push` trigger, and the App is still on the bypass list.
 on:
   schedule:
-    # Every 3 hours, off the hour (the nightly CI is at 07:00).
+    # Every 3 hours, off the hour (the nightly CI is at 07:00, the CI backstop
+    # at :40).
     - cron: "17 */3 * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Plan and print only; open no PR"
+        type: boolean
+        default: false
 
+# The same group as stamp.yml's emergency dispatch, so the two never stamp at
+# once. A group keeps one pending run and a newer pending run replaces it. A
+# dry run writes nothing, so it gets a group of its own: queued here, it would
+# cancel a waiting real stamp (the 2026-10-22 failure in stamp.yml's header).
+# A scheduled batch can still replace a pending emergency stamp.yml dispatch;
+# re-dispatch it if that happens.
 concurrency:
-  group: stamp-batch-dry-run
+  group: ${{ inputs.dry_run && 'stamp-batch-dry-run' || 'stamp-main' }}
   cancel-in-progress: false
 
+# The App token does the writing; the GITHUB_TOKEN only reads.
 permissions:
   contents: read
   # To list open `stamp/*` PRs.
   pull-requests: read
 
+env:
+  STALE_HOURS: "5"
+
 jobs:
-  plan:
-    name: Plan a stamp batch (dry run)
+  stamp:
+    name: Stamp a batch
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # A dispatch may name any ref; only ever plan against `main`.
+    timeout-minutes: 40
+    # A dispatch may name any ref, and runs that ref's copy of this file, which
+    # would still mint the App token. Only ever run the reviewed one.
     if: github.ref == 'refs/heads/main'
     steps:
+      # Read-only checkout, and no persisted credentials (see the App token note
+      # at the top).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
@@ -64,30 +94,51 @@ jobs:
           files="$(find design/pending -maxdepth 1 -name '*.md' ! -name README.md)"
           if [ -z "$files" ]; then
             echo "any=false" >> "$GITHUB_OUTPUT"
-            echo "No pending increments on main@$(git rev-parse --short HEAD), so a batch would do nothing." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "No pending increments on main@$(git rev-parse --short HEAD), so there is nothing to stamp." | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo "any=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # One batch at a time (see the top).
       - name: Check that no stamp PR is open
+        id: open
         if: steps.pending.outputs.any == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
+          set -o pipefail
           open="$(gh pr list --repo "$REPO" --state open --base main --limit 100 \
-            --json number,headRefName --jq '[.[] | select(.headRefName | startswith("stamp/")) | "#\(.number) (\(.headRefName))"] | join(", ")')"
-          if [ -n "$open" ]; then
-            echo "A stamp PR is already open: $open. A real batch would wait for it, so two batches never hand out the same versions." | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No stamp PR is open, so a real batch would go ahead." | tee -a "$GITHUB_STEP_SUMMARY"
+            --json number,headRefName,createdAt \
+            --jq '[.[] | select(.headRefName | startswith("stamp/"))]')"
+          if [ "$(jq length <<< "$open")" = 0 ]; then
+            echo "busy=false" >> "$GITHUB_OUTPUT"
+            echo "No stamp PR is open, so this run stamps a batch." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "busy=true" >> "$GITHUB_OUTPUT"
+          list="$(jq -r '[.[] | "#\(.number) (\(.headRefName))"] | join(", ")' <<< "$open")"
+          echo "A stamp PR is already open: $list. This run waits for it, so two batches never hand out the same versions." | tee -a "$GITHUB_STEP_SUMMARY"
+          stale="$(jq -r --argjson h "$STALE_HOURS" \
+            '[.[] | select((now - (.createdAt | fromdate)) > ($h * 3600)) | "#\(.number)"] | join(", ")' <<< "$open")"
+          if [ -n "$stale" ]; then
+            echo "::error::stamp PR $stale has been open for more than $STALE_HOURS hours, so pending increments are not being stamped. Get it merged, or close it so the next run opens a fresh batch. Do not use stamp.yml's emergency push while it is open: that would stamp the same files twice."
+            exit 1
           fi
 
-      - if: steps.pending.outputs.any == 'true'
+      - if: steps.pending.outputs.any == 'true' && steps.open.outputs.busy == 'false'
         uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+      - if: steps.pending.outputs.any == 'true' && steps.open.outputs.busy == 'false'
+        uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266 # v2
+      # bump-version.sh (which the stamp shells out to) runs `npm install
+      # --package-lock-only`, so the job needs Node.
+      - if: steps.pending.outputs.any == 'true' && steps.open.outputs.busy == 'false'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "24"
 
       - name: Plan the batch
-        if: steps.pending.outputs.any == 'true'
+        if: steps.pending.outputs.any == 'true' && steps.open.outputs.busy == 'false'
         run: |
           # The default shell has no pipefail, so `tee` would hide a failing plan.
           set -o pipefail
@@ -98,3 +149,78 @@ jobs:
             cargo run --quiet --locked --package xtask -- stamp
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Everything below writes. A dry-run dispatch stops at the plan.
+      - name: Stamp
+        id: stamp
+        if: >-
+          steps.pending.outputs.any == 'true' && steps.open.outputs.busy == 'false'
+          && !inputs.dry_run
+        run: |
+          cargo run --quiet --locked --package xtask -- stamp --apply
+          echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # The PR's own CI runs the full suite; this re-checks the stamp's drift
+      # surface first, so a broken stamp fails here rather than as a red PR.
+      - name: Validate the stamped tree
+        if: steps.stamp.outcome == 'success'
+        run: |
+          cargo build --workspace --locked
+          cargo test --package xtask
+
+      # Only now, after every step that runs dependency code, mint the token.
+      - name: Mint stamp-app token
+        if: steps.stamp.outcome == 'success'
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ secrets.STAMP_APP_ID }}
+          private-key: ${{ secrets.STAMP_APP_KEY }}
+
+      # Commit on a `stamp/*` branch, open the PR and turn on auto-merge. Stage
+      # only the paths the stamp and bump-version.sh touch, never a blanket
+      # `git add -A`, which could sweep a stray build file into the PR.
+      - name: Open the stamp PR
+        if: steps.stamp.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ steps.stamp.outputs.base }}
+        run: |
+          set -o pipefail
+          git add -A -- \
+            Cargo.toml Cargo.lock \
+            tree-sitter-bynk bynk*/README.md \
+            site design
+          if git diff --cached --quiet; then
+            echo "The stamp changed nothing, so there is no PR to open." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # The App's bot identity. ci.yml, codeql.yml and scorecard.yml
+          # recognise a stamp commit by this author name (`bynk-stamp[bot]`)
+          # plus the `chore(stamp):` subject. The squash merge keeps both: the
+          # PR's author, and its title as the subject.
+          slug='${{ steps.app-token.outputs.app-slug }}'
+          uid="$(gh api "/users/${slug}[bot]" --jq .id)"
+          git config user.name "${slug}[bot]"
+          git config user.email "${uid}+${slug}[bot]@users.noreply.github.com"
+          title="chore(stamp): assign version + ADR number(s)"
+          git commit -q -m "$title"
+
+          branch="stamp/batch-${GITHUB_RUN_ID}"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git push "$remote" "HEAD:refs/heads/$branch"
+
+          body="$(cat <<EOF
+          The scheduled stamp batch, from \`main\` at ${BASE:0:9} ([run](${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID})). It assigns the versions and ADR numbers for the increments below, in merge order, and removes their pending files.
+
+          \`\`\`
+          $(git show --stat --format= HEAD -- design/pending | sed 's/^ //')
+          \`\`\`
+
+          Opened by \`stamp-batch.yml\`, with auto-merge on: it lands through the merge queue once \`CI green\` passes. No review is needed. While it is open, later runs stamp nothing.
+          EOF
+          )"
+          url="$(gh pr create --repo "$REPO" --base main --head "$branch" --title "$title" --body "$body")"
+          echo "Opened $url" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh pr merge --repo "$REPO" --auto --squash "$url"

@@ -1,5 +1,0 @@
-commons demo {
-  fn show(v: Instant) -> String {
-    "value: \(v)"
-  }
-}

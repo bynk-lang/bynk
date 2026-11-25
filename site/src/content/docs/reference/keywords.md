@@ -115,6 +115,7 @@ Not lexer keywords: the lexer treats these as ordinary identifiers, and they car
 | `removed` | Declares an agent class gone (`removed agent Old`): its stored data is deleted at the next deploy, after a named confirmation. |
 | `replaces` | Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one. |
 | `store` | A persisted agent-state field. |
+| `tests` | After `for` in a commons header (`commons shop.kit for tests`): a test-only commons, which only suites and other test-only commons may `uses`, left out of every deployable. |
 
 ## Built-in type names
 

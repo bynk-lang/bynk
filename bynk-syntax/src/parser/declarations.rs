@@ -16,12 +16,22 @@ impl<'a> Parser<'a> {
                 let start = self.expect(TokenKind::Commons, "to start the commons declaration")?;
                 let doc = self.finalize_doc(leading_doc, start.span, &mut header_leading);
                 let name = self.parse_qualified_name()?;
+                // #3984: the contextual `for tests` marker of a test-only commons.
+                let test_only = self.peek_kind() == Some(TokenKind::Ident)
+                    && self.nth_text(0) == "for"
+                    && self.nth_kind(1) == Some(TokenKind::Ident)
+                    && self.nth_text(1) == "tests";
+                if test_only {
+                    self.bump();
+                    self.bump();
+                }
                 let mut c = match self.peek_kind() {
                     Some(TokenKind::LBrace) => {
                         self.parse_commons_body(start.span, name, doc, true)?
                     }
                     _ => self.parse_commons_body(start.span, name, doc, false)?,
                 };
+                c.test_only = test_only;
                 c.trivia = Trivia {
                     leading: header_leading,
                     trailing: None,
@@ -450,10 +460,8 @@ impl<'a> Parser<'a> {
         let span = if brace {
             let end = self.expect(TokenKind::RBrace, "to close the commons body")?;
             self.exit_item_loop();
-            // A comment after the closing `}` (this being the last
-            // declaration in the file) is a no-op `take_epilogue` unless it
-            // truly is the last content in the file — see the fragment-form
-            // break arm's matching call above.
+            // A comment after the closing `}` (the last declaration in the file) is a no-op
+            // `take_epilogue` unless it is the last content: see the fragment-form arm above.
             trailing_comments.extend(self.take_epilogue_trivia());
             start.merge(end.span)
         } else {
@@ -462,6 +470,7 @@ impl<'a> Parser<'a> {
         };
         Ok(Commons {
             name,
+            test_only: false,
             items,
             uses,
             documentation,
@@ -2768,6 +2777,7 @@ impl<'a> Parser<'a> {
         let mut security: Option<SecurityPolicy> = None;
         let mut limits: Option<LimitsPolicy> = None;
         let mut json: Option<JsonPolicy> = None;
+        let mut errors: Option<ErrorsPolicy> = None;
         let mut delivery: Option<DeliveryPolicy> = None;
         // #1756: comments (and an orphaned doc block) before the closing `}`.
         let trailing_comments: Vec<Comment>;
@@ -2811,6 +2821,7 @@ impl<'a> Parser<'a> {
                             ("security", security.is_some()),
                             ("limits", limits.is_some()),
                             ("json", json.is_some()),
+                            ("errors", errors.is_some()),
                             ("delivery", delivery.is_some()),
                         ],
                         !handlers.is_empty(),
@@ -2841,6 +2852,7 @@ impl<'a> Parser<'a> {
                         &[
                             ("limits", limits.is_some()),
                             ("json", json.is_some()),
+                            ("errors", errors.is_some()),
                             ("delivery", delivery.is_some()),
                         ],
                         !handlers.is_empty(),
@@ -2868,7 +2880,11 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "limits",
                         policy.span,
-                        &[("json", json.is_some()), ("delivery", delivery.is_some())],
+                        &[
+                            ("json", json.is_some()),
+                            ("errors", errors.is_some()),
+                            ("delivery", delivery.is_some()),
+                        ],
                         !handlers.is_empty(),
                     )?;
                     limits = Some(policy);
@@ -2892,10 +2908,37 @@ impl<'a> Parser<'a> {
                     self.check_policy_order(
                         "json",
                         policy.span,
-                        &[("delivery", delivery.is_some())],
+                        &[
+                            ("errors", errors.is_some()),
+                            ("delivery", delivery.is_some()),
+                        ],
                         !handlers.is_empty(),
                     )?;
                     json = Some(policy);
+                }
+                // `errors { … }` is a contextual keyword like `json` (#3916): the
+                // identifier `errors` in service-body item position introduces
+                // the error-body policy. At most one per service.
+                Some(TokenKind::Ident) if self.peek_is_errors_kw() => {
+                    if let Some(doc) = item_doc {
+                        self.warn_orphan_before_policy(doc.span);
+                        keep_orphan(&mut leading, doc);
+                    }
+                    let policy = self.parse_errors_policy(leading)?;
+                    if errors.is_some() {
+                        return Err(CompileError::new(
+                            "bynk.parse.duplicate_errors",
+                            policy.span,
+                            "a service declares at most one `errors { }` policy",
+                        ));
+                    }
+                    self.check_policy_order(
+                        "errors",
+                        policy.span,
+                        &[("delivery", delivery.is_some())],
+                        !handlers.is_empty(),
+                    )?;
+                    errors = Some(policy);
                 }
                 // `delivery { … }` is a contextual keyword like `json` (#3877): the
                 // identifier `delivery` in service-body item position introduces
@@ -2977,6 +3020,7 @@ impl<'a> Parser<'a> {
             security,
             limits,
             json,
+            errors,
             delivery,
             handlers,
             documentation: None,
@@ -3015,6 +3059,12 @@ impl<'a> Parser<'a> {
     /// introducing the response-JSON policy section.
     fn peek_is_json_kw(&self) -> bool {
         matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "json")
+    }
+
+    /// True when the next token is the contextual keyword `errors` (#3916),
+    /// introducing the error-body policy section.
+    fn peek_is_errors_kw(&self) -> bool {
+        matches!(self.peek(), Some(t) if t.kind == TokenKind::Ident && self.slice(t.span) == "errors")
     }
 
     /// #1756: a doc block before an adapter's `binding`/`uses`/`consumes`/
@@ -3058,7 +3108,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before the service's handlers"),
             )
             .with_note(
-                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`",
+                "a service's policies open its body, before any handler, in the order `cors`, `security`, `limits`, `json`, `errors`",
             ));
         }
         if let Some((after, _)) = later.iter().find(|(_, seen)| *seen) {
@@ -3068,7 +3118,7 @@ impl<'a> Parser<'a> {
                 format!("`{keyword} {{ }}` must come before `{after} {{ }}`"),
             )
             .with_note(
-                "a service's policies come in the order `cors`, `security`, `limits`, `json`",
+                "a service's policies come in the order `cors`, `security`, `limits`, `json`, `errors`",
             ));
         }
         Ok(())
@@ -3206,6 +3256,32 @@ impl<'a> Parser<'a> {
                 .fields
                 .into_iter()
                 .map(|f| JsonField {
+                    name: f.name,
+                    value: f.value,
+                    span: f.span,
+                    trivia: f.trivia,
+                })
+                .collect(),
+            span: kw.span.merge(body.close),
+            trailing_comments: body.trailing_comments,
+            trivia: Trivia {
+                leading,
+                trailing: self.take_trailing_trivia(),
+            },
+        })
+    }
+
+    /// Parse an `errors { name: value, … }` policy (#3916), as
+    /// [`Self::parse_json_policy`]; the checker validates the closed field set
+    /// `format` and its `bynk`/`problem` value.
+    fn parse_errors_policy(&mut self, leading: Vec<Comment>) -> Result<ErrorsPolicy, CompileError> {
+        let kw = self.expect_ident("to start an `errors` policy")?;
+        let body = self.parse_policy_body("errors")?;
+        Ok(ErrorsPolicy {
+            fields: body
+                .fields
+                .into_iter()
+                .map(|f| ErrorsField {
                     name: f.name,
                     value: f.value,
                     span: f.span,

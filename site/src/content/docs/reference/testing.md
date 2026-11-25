@@ -1414,7 +1414,8 @@ case "an issue event is recorded" {
   type, constant, embed, asset, service or agent of the target or of a commons
   it `uses`) is `bynk.suite.fn_name_clash`. Two helpers of one suite with one
   name are `bynk.suite.duplicate_fn`.
-- **Not exported.** There is no way to share helpers across suites.
+- **Not exported.** A suite's helpers are private to it; to share them across suites,
+  put them in a [test-only commons](#test-only-commons).
 
 ## Types and constants in a suite {#suite-types-consts}
 
@@ -1459,6 +1460,46 @@ case "a count reads back as a typed row" {
   `stub … returns` may name the suite's types and constants, whether the stub is
   written before or after them (the order of a suite's items does not matter), and
   for a stub of a consumed service as for one of a capability.
+
+
+## Sharing between suites {#test-only-commons}
+
+A commons marked **`for tests`** holds what several suites share: helpers, types,
+constants, and test-only values such as `Val[T]` and `RequestHeaders.of`.
+
+```bynk,fragment
+commons shop.testkit for tests
+
+fn gh(event: String, delivery: String) -> RequestHeaders {
+	RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
+}
+
+const Repo: String = "bynk-lang/bynk"
+```
+
+```bynk,fragment
+suite hooks.github
+
+uses shop.testkit
+
+case "an issue event is recorded" {
+	let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
+	expect r is Ok("accepted")
+}
+```
+
+- **Marker.** `for tests` is a contextual suffix on the commons header. It is part of
+  the file, so moving the file does not change what it means.
+- **Who may use it.** A suite and another test-only commons. A context, a production
+  commons or an adapter that `uses` one is `bynk.uses.test_only_commons`. A
+  test-only commons may itself `uses` production commons.
+- **What it holds.** What a commons holds: helpers, types and constants, checked as a
+  suite's are, with the test-only forms allowed. It has no services, agents,
+  providers or `stub`s. A helper that declares `given` is not available in it (a
+  commons has no one capability set), so keep effectful setup in the suite.
+- **Build.** A deployable build leaves a test-only commons out, as it does a suite;
+  `bynk test` emits it, and `bynk check` checks it. Its names reach every suite of the
+  target that `uses` it.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 
@@ -1779,6 +1820,8 @@ case "placing an order stores it" {
 | `String where MinLength(k)` / `Length(k)` | a string of length `k` |
 | `String where Matches(…)` / `IsoDate` | its `@example` ([below](#val-example)); **error** without one — must pin (`bynk.val.needs_pin`) |
 | sum | the first variant (payloads recursively fabricated) |
+| `List[T]`, `Set[T]`, `Map[K, V]` | the empty collection (#4120) |
+| `Option[T]` | `None` (#4120) |
 | record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` takes its `@example`, or must pin) |
 | opaque | `.unsafe(<base zero>)` |
 
@@ -1865,6 +1908,9 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | `String where Matches(…)` | members of the pattern's language, drawn by a random walk of the pattern that includes the shortest member and members at each repeat's bounds (`{3,8}` gives 3- and 8-character runs); shrinks to shorter members, then to earlier characters. Length predicates bound the walk; any other predicate (a second `Matches`, `IsoDate`) filters the draws, and a draw budget that runs out fails the property naming the combination. Every draw is re-checked against the pattern, so a disagreement fails loudly. A pattern the walk cannot honour (a lookaround, a backreference, a word boundary or an anchor inside the pattern, a Unicode property escape, a negated class under `(?i)`) is `bynk.val.needs_pin`, naming the construct |
 | `String where IsoDate` | real calendar dates across 0000 to 9999, mostly the present era, biased to leap days, month ends and the first and last years; shrinks toward `0000-01-01` |
 | sum | each variant |
+| `List[T]`, `Set[T]` | up to eight elements, each drawn from `T`: the empty and the one-element collection lead, and a `Set` keeps distinct members. Nested collections share a size budget, so a `List[List[T]]` stays small. Shrinks by dropping elements (all, each half, one at a time) and then shrinking those left (#4120) |
+| `Map[K, V]` | as a `Set[K]`, each key with a value drawn from `V` (#4120) |
+| `Option[T]` | `None` or `Some` of a `T`; shrinks to `None`, then shrinks its payload (#4120) |
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
 | plain `Bool` | `true` and `false` |
@@ -1892,6 +1938,11 @@ is led by its all-default value and is not shrunk. A refined `Decimal`, `Float` 
 
 Widening the draws changed which counterexamples a given seed finds, so a seed
 recorded from an earlier version may now reproduce a different failure (or none).
+
+Records and sums containing these types are generable too, including a type that recurses through one (`Tree = { children: List[Tree] }`): the empty collection and `None` end the recursion. A counterexample prints as it is
+written (`[0,0,0]`, `Some(0)`, `Set.of([…])`, `Map.of([…])`). When a binding cannot be generated,
+`bynk.val.needs_pin` names the path to the part that cannot, for example
+``Order.lines`: `Slug`: `Matches("…")` uses a lookahead``.
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
 `String where Matches(re)` whose pattern the walk cannot honour, and a `Cron`

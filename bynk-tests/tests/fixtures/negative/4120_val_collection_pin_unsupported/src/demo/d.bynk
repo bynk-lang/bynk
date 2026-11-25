@@ -1,0 +1,3 @@
+commons demo.d
+
+type Id = Int where Positive
