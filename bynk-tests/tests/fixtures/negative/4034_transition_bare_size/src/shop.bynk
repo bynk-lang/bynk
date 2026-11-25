@@ -1,0 +1,14 @@
+context shop
+
+agent Basket {
+  key id: String
+  store lines: Map[String, Int]
+  store paid: Cell[Bool] = false
+
+  transition t:
+    old.paid implies lines.size() < 3
+
+  on call add(k: String, n: Int) -> Effect[()] {
+    lines.put(k, n)
+  }
+}

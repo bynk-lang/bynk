@@ -1,0 +1,7 @@
+# #4034: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# An invariant or a transition reads a collection's `size()`: the staged count,
+# and for `old` the last committed one.
+passed=5 failed=3
+fail a third line breaks the bound on lines
+fail a second blocked key breaks the bound on blocked
+fail a paid basket cannot shrink
