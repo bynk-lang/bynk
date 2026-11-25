@@ -2196,7 +2196,7 @@ pub fn check_handler_body(
         return;
     };
     // #3931: a `:=` after `self.erase()` is dropped by the commit.
-    erase::warn_writes_after_erase(body, &mut ctx);
+    erase::warn_writes_after_erase(body, false, &mut ctx);
     // v0.102 (§3 step 11): the held-resource linearity pass, now that
     // `expr_types` is fully populated by the body walk above.
     linearity::check(

@@ -3,19 +3,22 @@
 
 import { Ok, Err } from "../__bynk_runtime/result.js";
 import type { __DurableObjectState } from "../__bynk_runtime/storage.js";
-import { __readStored, __commitStored, __eraseStored, __markErased, __newErasure } from "../__bynk_runtime/entries.js";
+import { __StoreMap, __fillMap, __wireEntries, __wireMap } from "../__bynk_runtime/store.js";
+import { __readStored, __commitStored, __eraseStored, __markErased, __newErasure, __readsLazily } from "../__bynk_runtime/entries.js";
+import { __attachLazy } from "../__bynk_runtime/lazy.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../__bynk_runtime/boundary.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent } from "../__bynk_runtime/agent.js";
 
 export interface AccountState {
   readonly closed: boolean;
   readonly note: string;
+  readonly tags: __StoreMap<string>;
 }
 
 const __AccountRegistry = new __StateRegistry();
-function __zeroOfAccountState(): AccountState { return { closed: false, note: "" }; }
+function __zeroOfAccountState(): AccountState { return { closed: false, note: "", tags: new __StoreMap<string>() }; }
 
-const __entryFieldsOfAccount = [] as const;
+const __entryFieldsOfAccount = [{ name: "tags", kind: "map" }] as const;
 
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "closed")) {
@@ -28,11 +31,36 @@ function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
     if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
     (s as { -readonly [K in keyof typeof s]: (typeof s)[K] }).note = __r.value as unknown as (typeof s)["note"];
   }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tags")) {
+    for (const __k of globalThis.Object.keys((s as unknown as globalThis.Record<string, unknown>).tags as object)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "tags", expected: "string", actual: typeof __v } as __BoundaryError))((((s as unknown as globalThis.Record<string, unknown>).tags as globalThis.Record<string, unknown>)[__k] as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
+      ((s as unknown as globalThis.Record<string, unknown>).tags as globalThis.Record<string, unknown>)[__k] = __r.value;
+    }
+  }
+  if (globalThis.Object.prototype.hasOwnProperty.call(stored, "tags")) {
+    for (const [__k] of __wireEntries((s as unknown as globalThis.Record<string, unknown>).tags as never)) {
+      const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "tags", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue));
+      if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error);
+    }
+  }
+}
+
+function __hydrateAccountState(s: AccountState, stored: AccountState): void {
+  const __z = __zeroOfAccountState();
+  const __w = s as { -readonly [K in keyof AccountState]: AccountState[K] };
+  const __r = stored as unknown as globalThis.Record<string, unknown>;
+  if (globalThis.Object.hasOwn(__r, "tags")) {
+    __fillMap(__z.tags, __r["tags"] as never);
+    __w.tags = __z.tags;
+  }
 }
 
 function __encodeAccountState(s: AccountState): globalThis.Record<string, unknown> {
-  return { ...s, closed: s.closed as __JsonValue, note: s.note as __JsonValue };
+  return { ...s, closed: s.closed as __JsonValue, note: s.note as __JsonValue, tags: __wireMap(s.tags, (__v) => __v as __JsonValue) };
 }
+
+const __lazyFieldsOfAccount = [{ name: "tags", kind: "map", decode: (__w: unknown) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "tags", expected: "string", actual: typeof __v } as __BoundaryError))((__w as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); return __r.value; }, encode: (__u: unknown) => { const __v = __u as string; return __v as __JsonValue; }, checkKey: (__k: string) => { const __r = ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "tags", expected: "string", actual: typeof __v } as __BoundaryError))((__k as unknown as __JsonValue)); if (__r.tag === "Err") throw __rehydrationViolation("Account", __r.error); } }] as const;
 
 export class Account {
   state: __DurableObjectState;
@@ -44,11 +72,16 @@ export class Account {
     const stored = await this.state.storage.get<AccountState>("state");
     if (stored === undefined) return __zeroOfAccountState();
     __checkStoredLayout("Account", stored);
-    const __wholesale = await __readStored(this, this.state.storage, stored);
+    const __wholesale = await __readStored(this, this.state.storage, stored, []);
     const __zero = __zeroOfAccountState();
     __reportUnknownStoredKeys("Account", __wholesale, __zero);
     const __merged = { ...__zero, ...__wholesale };
     __rehydrateAccountState(__merged, __wholesale);
+    if (__readsLazily(this)) {
+      __attachLazy(this.state.storage, __merged, __lazyFieldsOfAccount);
+    } else {
+      __hydrateAccountState(__merged, __wholesale);
+    }
     return __merged;
   }
 
@@ -105,6 +138,31 @@ export class Account {
     const __result = await (async () => {
       __state.note = text;
       return __markErased(__erasure);
+    })();
+    if (__erasure.erased) {
+      await this.eraseState();
+    }
+    else {
+      await this.commitState(__state);
+    }
+    return __result;
+  }
+
+  async closeNested(flag: boolean, deps: {}): globalThis.Promise<void> {
+    const __state = { ...(await this.loadState()) };
+    const __erasure = __newErasure();
+    const __result = await (async () => {
+      await __markErased(__erasure);
+      await (async () => {
+        await __state.tags.put(String("closed"), "yes");
+        return undefined;
+      })();
+      if (flag) {
+        __state.note = "nested";
+        return undefined;
+      } else {
+        return undefined;
+      }
     })();
     if (__erasure.erased) {
       await this.eraseState();

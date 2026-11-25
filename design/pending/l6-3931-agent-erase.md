@@ -37,4 +37,6 @@ Cloudflare bounds per object. The erasure is not undone by anything the handler 
 write the handler makes before it is lost, which the warning covers only for the write after it. The
 runtime's `StorageLike` gains `deleteAll`, so a test double of it must too. Nothing changes for an agent
 that never calls `self.erase()`: the emitted class has no `eraseState`, and the handler's commit is the
-call it was.
+call it was. In a dev build that records an instance's history, the erasure wipes the history with the instance
+(`deleteAll` covers every key, and the entry for the erasing call is not written), which is intended:
+the instance is as a never-seen key, so there is no past to replay.

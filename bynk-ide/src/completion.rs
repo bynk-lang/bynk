@@ -152,6 +152,25 @@ pub fn complete_in(
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<Completion> {
+    let mut items = complete_base(project_root, line_prefix, doc_text, files);
+    // #3931: `self.<cursor>` in a document with an agent — `erase`, offered beside whatever else the
+    // position offers (the key's fields), not instead of it.
+    if let Some(erase) = crate::agent_erase::erase_member_candidates(line_prefix, doc_text) {
+        for e in erase {
+            if !items.iter().any(|i| i.label == e.label) {
+                items.push(e);
+            }
+        }
+    }
+    items
+}
+
+fn complete_base(
+    project_root: Option<&Path>,
+    line_prefix: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
     // #2223: the project's own files and its dependencies' reachable units,
     // resolved once per request and only by the branches that name units.
     let split = || split_dependency_files(files, project_root);
@@ -236,10 +255,6 @@ pub fn complete_in(
     }
     // 3b'. #3894: `<context>.<service>.<cursor>` on a consumed service — `outcome`.
     if let Some(items) = crate::call_outcome::outcome_member_candidates(line_prefix, doc_text) {
-        return items;
-    }
-    // 3b''. #3931: `self.<cursor>` in a document with an agent — `erase`.
-    if let Some(items) = crate::agent_erase::erase_member_candidates(line_prefix, doc_text) {
         return items;
     }
     // 3c. #3446: `Record.field.<cursor>` on a cookie record — the typed cookie write and deletion.

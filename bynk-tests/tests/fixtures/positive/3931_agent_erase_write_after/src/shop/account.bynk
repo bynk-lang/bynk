@@ -5,6 +5,7 @@ agent Account {
 
 	store closed: Cell[Bool]
 	store note: Cell[String]
+	store tags: Map[String, String]
 
 	// A `:=` after `do self.erase()` in the same block has nothing to write to.
 	on call close() -> Effect[()] {
@@ -29,5 +30,17 @@ agent Account {
 	on call replace(text: String) -> Effect[()] {
 		note := text
 		self.erase()
+	}
+
+	// A nested block after the erase is just as dead, and so is a store operation.
+	on call closeNested(flag: Bool) -> Effect[()] {
+		do self.erase()
+		do tags.put("closed", "yes")
+		if flag {
+			note := "nested"
+			Effect.pure(())
+		} else {
+			Effect.pure(())
+		}
 	}
 }

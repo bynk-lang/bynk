@@ -71,32 +71,52 @@ fn statement_erases(s: &Statement, ctx: &Ctx) -> bool {
     }
 }
 
-/// #3931: a `:=` after `self.erase()` in the same block has no effect, since the commit deletes the
-/// instance rather than writing the handler's state. Warned (`bynk.agent.write_after_erase`) at the
-/// write. A write before the erase is discarded the same way, but is the natural order of a handler
-/// that records something and then erases (an audit entry is an event, not a write), so it is not.
-pub(crate) fn warn_writes_after_erase(block: &Block, ctx: &mut Ctx) {
-    let mut erased = false;
+/// The mutating store operation `e` runs, if it is one (`do orders.put(k, v)`), as the field name.
+fn store_write(e: &Expr, ctx: &Ctx) -> Option<String> {
+    match ctx.callees.get(&e.id) {
+        Some(Callee::Store { field, op }) if op.mutates() => Some(field.clone()),
+        _ => None,
+    }
+}
+
+/// #3931: a write after `self.erase()` has no effect, since the commit deletes the instance rather
+/// than writing the handler's state. Warned (`bynk.agent.write_after_erase`) at the write: a `:=` or
+/// a mutating store operation, in the same block or in a block nested after the erase (`erased` is
+/// the outer block's state). A write before the erase is discarded the same way, but is the natural
+/// order of a handler that records something and then erases (an audit entry is an event, not a
+/// write), so it is not warned.
+pub(crate) fn warn_writes_after_erase(block: &Block, erased: bool, ctx: &mut Ctx) {
+    let mut erased = erased;
     for s in &block.statements {
-        if erased && let Statement::Assign(a) = s {
-            ctx.errors.push(
-                CompileError::new(
-                    "bynk.agent.write_after_erase",
-                    a.span,
-                    format!(
-                        "`{} := …` has no effect: `self.erase()` above deletes this instance's state when the handler commits",
-                        a.target.name
-                    ),
-                )
-                .with_note("an erased instance keeps none of the handler's writes, whether they come before or after the call"),
-            );
+        if erased {
+            let target = match s {
+                Statement::Assign(a) => Some((a.span, a.target.name.clone())),
+                Statement::Do(d) => store_write(&d.value, ctx).map(|f| (d.value.span, f)),
+                Statement::EffectLet(l) => store_write(&l.value, ctx).map(|f| (l.value.span, f)),
+                Statement::Let(_)
+                | Statement::Expect(_)
+                | Statement::Advance(_)
+                | Statement::Par(_) => None,
+            };
+            if let Some((span, name)) = target {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.agent.write_after_erase",
+                        span,
+                        format!(
+                            "the write to `{name}` has no effect: `self.erase()` above deletes this instance's state when the handler commits"
+                        ),
+                    )
+                    .with_note("an erased instance keeps none of the handler's writes, whether they come before or after the call"),
+                );
+            }
         }
         erased = erased || statement_erases(s, ctx);
         for e in statement_exprs(s) {
-            warn_in_expr(e, ctx);
+            warn_in_expr(e, erased, ctx);
         }
     }
-    warn_in_expr(&block.tail, ctx);
+    warn_in_expr(&block.tail, erased, ctx);
 }
 
 fn statement_exprs(s: &Statement) -> Vec<&Expr> {
@@ -108,22 +128,22 @@ fn statement_exprs(s: &Statement) -> Vec<&Expr> {
     }
 }
 
-fn warn_in_expr(e: &Expr, ctx: &mut Ctx) {
+fn warn_in_expr(e: &Expr, erased: bool, ctx: &mut Ctx) {
     if let ExprKind::Block(b) = &e.kind {
-        warn_writes_after_erase(b, ctx);
+        warn_writes_after_erase(b, erased, ctx);
     } else if let ExprKind::If {
         then_block,
         else_block,
         ..
     } = &e.kind
     {
-        warn_writes_after_erase(then_block, ctx);
-        warn_writes_after_erase(else_block, ctx);
+        warn_writes_after_erase(then_block, erased, ctx);
+        warn_writes_after_erase(else_block, erased, ctx);
     } else if let ExprKind::Match { arms, .. } = &e.kind {
         for arm in arms {
             match &arm.body {
-                MatchBody::Block(b) => warn_writes_after_erase(b, ctx),
-                MatchBody::Expr(x) => warn_in_expr(x, ctx),
+                MatchBody::Block(b) => warn_writes_after_erase(b, erased, ctx),
+                MatchBody::Expr(x) => warn_in_expr(x, erased, ctx),
             }
         }
     }
