@@ -1,0 +1,144 @@
+---
+#4036: the early-exit scans answer as the whole-collection reads do.
+---
+suite demo.scan
+
+case "any and all over a Map agree with the whole read" {
+	do Tally("m").score("a", 3)
+	do Tally("m").score("b", 1)
+	do Tally("m").score("c", 7)
+	let hit <- Tally("m").anyScore(7)
+	let hitWhole <- Tally("m").anyScoreWhole(7)
+	let miss <- Tally("m").anyScore(4)
+	let missWhole <- Tally("m").anyScoreWhole(4)
+	expect hit == hitWhole
+	expect miss == missWhole
+	expect hit
+	expect !miss
+	let low <- Tally("m").allScores(1)
+	let lowWhole <- Tally("m").allScoresWhole(1)
+	let high <- Tally("m").allScores(2)
+	let highWhole <- Tally("m").allScoresWhole(2)
+	expect low == lowWhole
+	expect high == highWhole
+	expect low
+	expect !high
+}
+
+case "filter and map stages ahead of any agree with the whole read" {
+	do Tally("f").score("a", 1)
+	do Tally("f").score("b", 5)
+	let yes <- Tally("f").anyDoubled(10)
+	let yesWhole <- Tally("f").anyDoubledWhole(10)
+	let no <- Tally("f").anyDoubled(2)
+	let noWhole <- Tally("f").anyDoubledWhole(2)
+	expect yes == yesWhole
+	expect no == noWhole
+	expect yes
+	expect !no
+}
+
+case "an empty Map: any is false, all is true" {
+	let a <- Tally("e").anyScore(1)
+	let b <- Tally("e").allScores(1)
+	expect !a
+	expect b
+}
+
+case "any, all, first and firstOrElse over a Log agree with the whole read" {
+	do Tally("l").log(4)
+	do Tally("l").log(9)
+	do Tally("l").log(2)
+	let a <- Tally("l").anyLogged(9)
+	let b <- Tally("l").anyLogged(5)
+	let c <- Tally("l").allLogged(10)
+	let d <- Tally("l").allLogged(5)
+	expect a
+	expect !b
+	expect c
+	expect !d
+	let first <- Tally("l").firstLogged()
+	let firstWhole <- Tally("l").firstLoggedWhole()
+	expect first == firstWhole
+	expect first == Some(4)
+	let over <- Tally("l").firstOver(4)
+	let overWhole <- Tally("l").firstOverWhole(4)
+	let none <- Tally("l").firstOver(100)
+	let noneWhole <- Tally("l").firstOverWhole(100)
+	expect over == overWhole
+	expect none == noneWhole
+	expect over == 9
+	expect none == -1
+}
+
+case "an empty Log: first is None" {
+	let first <- Tally("n").firstLogged()
+	expect first == None
+}
+
+case "take and skip over a Log agree with the whole read, oldest first" {
+	do Tally("t").log(1)
+	do Tally("t").log(2)
+	do Tally("t").log(3)
+	do Tally("t").log(4)
+	let two <- Tally("t").oldest(2)
+	let twoWhole <- Tally("t").oldestWhole(2)
+	let many <- Tally("t").oldest(10)
+	let manyWhole <- Tally("t").oldestWhole(10)
+	let none <- Tally("t").oldest(0)
+	expect two == twoWhole
+	expect many == manyWhole
+	expect two == [1, 2]
+	expect many == [1, 2, 3, 4]
+	expect none == []
+	let mid <- Tally("t").afterSkip(1, 2)
+	let midWhole <- Tally("t").afterSkipWhole(1, 2)
+	expect mid == midWhole
+	expect mid == [2, 3]
+}
+
+case "the whole-read shapes keep insertion order on a Map" {
+	do Tally("w").score("z", 5)
+	do Tally("w").score("a", 9)
+	do Tally("w").score("m", 2)
+	let first <- Tally("w").firstScore()
+	let over <- Tally("w").firstScoreOver(4)
+	let low <- Tally("w").lowestScores(2)
+	let skipped <- Tally("w").anyAfterSkip(2)
+	let skippedFirst <- Tally("w").anyAfterSkip(5)
+	expect first == Some(5)
+	expect over == 5
+	expect low == [5, 9]
+	expect skipped
+	expect !skippedFirst
+}
+
+case "sortBy before first reads the whole Log" {
+	do Tally("s").log(7)
+	do Tally("s").log(3)
+	do Tally("s").log(5)
+	let smallest <- Tally("s").smallestLogged()
+	expect smallest == Some(3)
+}
+
+case "a flatMap stage ahead of any" {
+	do Tally("x").log(1)
+	do Tally("x").log(2)
+	let yes <- Tally("x").anyDuplicated(2)
+	let no <- Tally("x").anyDuplicated(9)
+	expect yes
+	expect !no
+}
+
+case "an indexed equality filter and an unindexed one agree with the data" {
+	do Tally("o").order("a", "open", 5)
+	do Tally("o").order("b", "closed", 500)
+	let routed <- Tally("o").anyWithStatus("open")
+	let routedNone <- Tally("o").anyWithStatus("void")
+	let scanned <- Tally("o").anyBig(100)
+	let scannedNone <- Tally("o").anyBig(1000)
+	expect routed
+	expect !routedNone
+	expect !scanned
+	expect !scannedNone
+}

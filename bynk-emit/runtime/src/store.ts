@@ -49,6 +49,8 @@ export interface StoreMapHandle<V> {
   keys(): Awaitable<readonly string[]>;
   /** The values, in insertion order. */
   values(): Awaitable<readonly V[]>;
+  /** The values a page at a time, in **no promised order** (a storage-backed handle pages by key), for a scan that does not need one. */
+  lazyValues(): AsyncIterable<V> | Iterable<V>;
   /** The entries, in insertion order. */
   entries(): Awaitable<ReadonlyArray<readonly [string, V]>>;
   /** The values whose `index` value is `by`, in insertion order. */
@@ -153,6 +155,10 @@ export class StoreMap<V> implements StoreMapHandle<V> {
 
   values(): V[] {
     return [...this.slots.values()].map((s) => s.value);
+  }
+
+  *lazyValues(): Generator<V> {
+    for (const s of this.slots.values()) yield s.value;
   }
 
   entries(): Array<readonly [string, V]> {
@@ -264,6 +270,8 @@ export interface StoreLogHandle<V> {
   size(): Awaitable<number>;
   /** The values, oldest first. */
   values(): Awaitable<readonly V[]>;
+  /** The values oldest first, a page at a time. */
+  lazyValues(): AsyncIterable<V> | Iterable<V>;
   /** The stamped entries, oldest first. */
   entries(): Awaitable<ReadonlyArray<LogEntry<V>>>;
   /** The values appended at or after `t`. */
@@ -303,6 +311,10 @@ export class StoreLog<V> implements StoreLogHandle<V> {
 
   values(): V[] {
     return this.items.map((e) => e.v);
+  }
+
+  *lazyValues(): Generator<V> {
+    for (const e of this.items) yield e.v;
   }
 
   entries(): Array<LogEntry<V>> {
