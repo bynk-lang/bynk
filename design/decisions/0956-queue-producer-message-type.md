@@ -1,13 +1,6 @@
----
-level: minor
-changelog: A `sendValue`, `sendValueWith` or `sendValueBatch` to a queue the project consumes is now checked against the consumer's message type (`bynk.queue.message_type_mismatch`), and the untyped `send`, `sendWith` and `sendBatch` to such a queue warn (`bynk.queue.untyped_send`)
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: A project that sends a type its own consumer cannot accept now fails to compile (`bynk.queue.message_type_mismatch`); it already failed at run time as a message the consumer could not decode
----
+# 0956 — A producer's message type is checked against the queue's consumer when both are in the project
 
-## ADR: queue-producer-message-type
-title: A producer's message type is checked against the queue's consumer when both are in the project
-summary: A project phase pairs each `Queue` instance's `sendValue*` call sites with the `from queue` consumer of the same name and compares their types by the cross-context boundary comparison
+- **Status:** Accepted (v0.694)
 
 **Context.** Both sides of a queue are often in one project and name the same string, yet `sendValue(x)` accepted any `Codable` `x`. A mismatch surfaced only at run time, as a message the consumer could not decode, which is dead-lettered or dropped after #3878.
 
