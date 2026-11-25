@@ -1,0 +1,32 @@
+suite demo.eff
+
+case "map applies a function to the effect's value, in a pure helper" {
+	let n <- twice(Effect.pure(21))
+	expect n == 42
+}
+
+case "map over an Effect[Option] sees the whole Option" {
+	let some <- lengthOr(Effect.pure(Some("abc")))
+	expect some == 3
+	let none <- lengthOr(Effect.pure(None))
+	expect none == 0
+}
+
+case "andThen runs a further effect after the first" {
+	let n <- chained(Effect.pure(4))
+	expect n == 5
+}
+
+case "on an Effect[Result], map and andThen act on the whole Result" {
+	let okFlag <- isOk(Effect.pure(Ok(1)))
+	expect okFlag == true
+	let errFlag <- isOk(Effect.pure(Err("bad")))
+	expect errFlag == false
+	let n <- okOrZero(Effect.pure(Err("bad")))
+	expect n == 0
+}
+
+case "map and andThen chain" {
+	let n <- pipeline(Effect.pure(1))
+	expect n == 30
+}

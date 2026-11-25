@@ -4,6 +4,7 @@
 import { Ok, Err, type Result } from "../__bynk_runtime/result.js";
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import type { __JsonValue, __BoundaryError } from "../__bynk_runtime/boundary.js";
+import { __stubAgents } from "../__bynk_runtime/agent.js";
 import * as __ns_shop_orders from "./../shop/orders.js";
 import * as __ns_shop_pay from "./../shop/pay.js";
 import * as __ns_shop_stock from "./../shop/stock.js";
@@ -115,6 +116,7 @@ function __makeTestDeps(__case?: string, __suite?: number) {
   return { Pay: __svc_Pay, stock: __svc_stock, surface: { Pay: __svc_Pay, stock: __svc_stock } };
 }
 function __makeIntegrationDeps(__case?: string, __suite?: number) {
+  __stubAgents([]);
   const __svc_Pay = __bynkWireStub(__bynkOverlay(undefined as unknown as globalThis.ReturnType<typeof __ns_shop_pay.__makeSurface>, new __Stub_Pay(__case), "Pay") as globalThis.ReturnType<typeof __ns_shop_pay.__makeSurface>, { authorise: { args: [[(__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), (__j: __JsonValue) => ((__v) => typeof __v !== "number" ? Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: typeof __v } as __BoundaryError) : globalThis.Number.isSafeInteger(__v) ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "safe integer", actual: String(__v) } as __BoundaryError))(__j)]], ret: [shop_pay__wire.__serialise_Result_Receipt_PaymentError, shop_pay__wire.__deserialise_Result_Receipt_PaymentError] } });
   const __svc_stock = __bynkWireStub(__bynkOverlay(undefined as unknown as globalThis.ReturnType<typeof __ns_shop_stock.__makeSurface>, new __Stub_shop_stock(__case, __suite), "shop.stock") as globalThis.ReturnType<typeof __ns_shop_stock.__makeSurface>, { reserve: { args: [[(__v: string) => __v as __JsonValue, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j)]], ret: [shop_stock__wire.__serialise_Result_Unit_String, shop_stock__wire.__deserialise_Result_Unit_String] } });
   return { Pay: __svc_Pay, stock: __svc_stock, surface: { Pay: __svc_Pay, stock: __svc_stock } };

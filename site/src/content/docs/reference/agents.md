@@ -181,7 +181,13 @@ returns and are committed with the `Cell` record in one transaction, so a handle
 that faults writes nothing. What still reads a whole collection is a scan: `keys`,
 `values` or `entries`, a filter that is not an `@indexed` equality, a join, a
 group-by or an aggregate. Those read every entry in pages, so their cost still
-grows with the size of the collection. Each single operation on one key
+grows with the size of the collection. Two scans stop as soon as the answer is known,
+and read only the pages they need: `any` and `all` over a `Map` or a `Log`, and `first`,
+`firstOrElse` and `take(n).collect()` over a `Log`, through any `filter`, `map` and
+`flatMap` ahead of them (and `skip`, on a `Log`). A `Log` is read oldest first, so these
+are the oldest matches. A `Map`'s scan order is insertion order, which only reading every
+page recovers, so `first`, `firstOrElse` and `take` over a `Map` still read it whole. An
+equality `filter` on an `@indexed` field reads its posting list as before. Each single operation on one key
 (`update`, `upsert`, `put`, `remove`) is atomic and runs one after another per key, so
 two concurrent branches' `update` or `upsert` calls on the same key both apply. A `get`
 followed by a separate `put` is two operations, so the checker refuses a store write
@@ -548,6 +554,10 @@ is deliberately not a variant of its own: the [invariants](/reference/agent-inva
 violation as a fault and a domain refusal as a `Result`, and a variant would invite using an
 invariant as validation. A fault turned into a value is still logged once. Wrap an agent call
 in `.outcome` only where a different answer or a compensation is needed.
+
+At `unit`, nothing else makes an agent busy or fault on demand: a test
+[stubs the operation](/reference/testing/#stub-agents), as in `stub Basket.add(_) unreachable`,
+to drive the `Unreachable` and `Faulted` arms (#4215).
 
 ### One handler at a time
 

@@ -10,7 +10,7 @@ export type CurrencyCode = string & { readonly __brand: "CurrencyCode" };
 export const CurrencyCode = {
   of(value: string): Result<CurrencyCode, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
-      return Err({ field: "CurrencyCode", message: "must match /[A-Z]{3}/", value });
+      return Err({ field: "CurrencyCode", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as CurrencyCode);
   },

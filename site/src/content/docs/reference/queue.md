@@ -207,6 +207,48 @@ the consumer's `delivery { }`:
 At the `system` tier the address yields `Undecodable` for such a body
 ([testing](/reference/testing/#cron-queue-system)).
 
+Only a `system` case can see `Undecodable`: a handler, a helper, or a `unit` or `integration` case never
+receives a body that failed to decode. A pattern of it anywhere else is a dead arm and warns
+(`bynk.queue.undecodable_unreachable`); use `_` there.
+
+## Producers and consumers agree
+
+A queue's name is a string both sides write, so the compiler is the only party that
+sees a producer and its consumer. When a context in the project consumes the queue a
+`Queue @name("…")` instance sends to, the typed sends are checked against the
+consumer's message type:
+
+```bynk,ignore
+// shop.orders
+capability OrderEvents = Queue @name("order-events")
+
+let _ <- OrderEvents.sendValue(Refund { id: r.id })   // ✗ bynk.queue.message_type_mismatch
+
+// shop.fulfil
+service fulfil from queue("order-events") {
+  on message(order: Order) -> Effect[QueueResult] { … }
+}
+```
+
+- `sendValue(x)`, `sendValueWith(x, …)` and, for each element, `sendValueBatch(xs)` must
+  send a type the consumer's `on message` accepts, by the comparison a cross-context call
+  gets (the same fields and variants; a stronger refinement is admitted where the consumer
+  expects a weaker one). Otherwise the call is `bynk.queue.message_type_mismatch`, labelled
+  at the call and at the consumer's parameter. The check holds whether the two sides are in
+  one context, two contexts, or two Workers of a `[deploy.workers]` group, since the compiler
+  sees the whole project.
+- `send`, `sendWith` and `sendBatch` take JSON text the compiler cannot check, so they warn
+  (`bynk.queue.untyped_send`) when a context in the project consumes the queue, and
+  name the typed form. They stay legal, since they forward a body that is already encoded.
+- A queue no context in the project consumes (a foreign Worker, or nobody yet) has no type
+  to compare with: nothing is reported, and the editor's hover on the instance says
+  "No consumer in this project". Nor is a send checked while its type is still a type
+  parameter of the enclosing generic function.
+- The same rule covers a [dead-letter queue](#dead-letter-queue)'s consumer, which is an
+  ordinary consumer of its own queue.
+
+Changing a consumer's message type while messages are already queued is not caught.
+
 ## Example
 
 ```bynk

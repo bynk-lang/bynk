@@ -404,30 +404,29 @@ pub(super) fn emit_stub_class(
                 .into_iter()
                 .reduce(and_expr)
                 .unwrap_or_else(|| bool_lit(true));
-            let rhs_body = emit_stub_rhs(
-                clause,
-                idx,
-                op,
-                clause_items(rp, idx),
-                target_name,
-                unit_tables,
-                unit_uses,
-                unit_consumes,
-                unit_consumes_aliases,
-                runtime_use,
-                hidden,
-                tys,
-            );
+            let rhs_body = if rp.agent {
+                agent_stub_rhs(clause, cap)
+            } else {
+                emit_stub_rhs(
+                    clause,
+                    idx,
+                    op,
+                    clause_items(rp, idx),
+                    target_name,
+                    unit_tables,
+                    unit_uses,
+                    unit_consumes,
+                    unit_consumes_aliases,
+                    runtime_use,
+                    hidden,
+                    tys,
+                )
+            };
             body.push(if_(cond, block(rhs_body)));
         }
-        body.push(TsStmt::throw_stmt(
-            new(
-                ident("globalThis.Error"),
-                vec![str_lit(format!(
-                    "bynk: no stub clause matched for {cap}.{method}"
-                ))],
-            ),
-            None,
+        body.push(no_stub_match_stmt(
+            rp,
+            format!("bynk: no stub clause matched for {cap}.{method}"),
         ));
 
         methods.push(TsClassMethod::new(

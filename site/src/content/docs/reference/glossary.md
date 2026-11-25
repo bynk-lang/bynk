@@ -4,6 +4,8 @@ title: Glossary
 Terse, exact definitions of Bynk's load-bearing terms. Each links to its fuller
 reference page where one exists.
 
+<!-- sorted: headings -->
+
 ### admission {#term-admission}
 
 The compile-time rule by which a literal that provably satisfies a refined type's
@@ -337,3 +339,5 @@ workspace isn't a project and has no identity. See
 
 A type with a defined implicit zero value, letting an agent state field omit an
 initialiser. See [Agents](/reference/agents/).
+
+<!-- /sorted -->

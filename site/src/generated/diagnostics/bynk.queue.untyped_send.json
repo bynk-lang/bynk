@@ -1,0 +1,10 @@
+{
+  "blurb": "`send`, `sendWith` and `sendBatch` take JSON text, which the compiler cannot check against the consumer's message type, so a body that does not decode is found only at run time. When a context in the project consumes the queue, they warn and name the typed form: `sendValue`, `sendValueWith` and `sendValueBatch` encode a value at the call site, put exactly the same message on the queue, and are checked against the consumer (`bynk.queue.message_type_mismatch`). The untyped forms stay legal, because they are how to forward a body that is already encoded. A queue no context in the project consumes is not warned about.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.untyped_send",
+  "constructs": [],
+  "example": "capability OrderEvents = Queue @name(\"order-events\")\n\nlet _ <- OrderEvents.send(Json.encode(order))   // ⚠ not checked against the consumer\n\nlet _ <- OrderEvents.sendValue(order)   // ✓ checked against the consumer",
+  "severity": "warning",
+  "summary": "`send`, `sendWith` or `sendBatch` sends JSON text to a queue the project consumes, which the compiler cannot check against the consumer (warning)."
+}

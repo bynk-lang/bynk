@@ -9,7 +9,7 @@ export type Timestamp = number & { readonly __brand: "Timestamp" };
 export const Timestamp = {
   of(value: number): Result<Timestamp, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Timestamp", message: "must be a safe integer", value });
+      return Err({ field: "Timestamp", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     return Ok(value as Timestamp);
   },

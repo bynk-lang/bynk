@@ -10,7 +10,7 @@ export type Subject = string & { readonly __brand: "Subject" };
 export const Subject = {
   of(value: string): Result<Subject, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Subject", message: "must be non-empty", value });
+      return Err({ field: "Subject", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Subject);
   },

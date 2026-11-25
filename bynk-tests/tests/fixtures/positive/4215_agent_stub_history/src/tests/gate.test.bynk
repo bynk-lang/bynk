@@ -1,0 +1,10 @@
+suite shop.gate {
+	// Suite-scoped: the audit is busy for every call, in the case and in every driven sequence.
+	stub Audit.note(_) unreachable
+
+	property "the audit is never reached while it is stubbed" {
+		for all run: History[Door] {
+			expect run.all((s) => s.new.audited == false)
+		}
+	}
+}

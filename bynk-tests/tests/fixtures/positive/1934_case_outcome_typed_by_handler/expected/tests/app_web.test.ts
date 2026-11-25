@@ -137,8 +137,8 @@ async function test_a_queue_verdict_binds_its_reason() {
         case "Ack": {
           return __bynkExpect((false), "tests/app/web.bynk:36:21", 1162, 1167, "expect false (in the `Ack` arm of `match r`)", "r", () => __bynkShow(__d));
         }
-        case "Undecodable": {
-          return __bynkExpect((false), "tests/app/web.bynk:37:29", 1196, 1201, "expect false (in the `Undecodable` arm of `match r`)", "r", () => __bynkShow(__d));
+        default: {
+          return __bynkExpect((false), "tests/app/web.bynk:37:19", 1186, 1191, "expect false (in the `_` arm of `match r`)", "r", () => __bynkShow(__d));
         }
       }
       throw new globalThis.Error("non-exhaustive match");

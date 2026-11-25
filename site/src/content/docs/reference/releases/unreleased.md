@@ -7,6 +7,15 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.699.0** | A test stubs an agent operation at `unit`: `stub Basket.add(_) faulted` or `unreachable` makes the calls it matches, whatever the key, end as `Faulted` or `Unreachable(None)` in `Basket(k).add.outcome(x)`, and fault a plain call; only an agent of the context under test, only at `unit`, and only those two words (`bynk.stub.agent_stub`) |
+| **v0.698.0** | A pattern of `Undecodable` over a `QueueResult` warns (`bynk.queue.undecodable_unreachable`) outside a `system` case, where the verdict can never be it |
+| **v0.697.0** | A `ValidationError` names the failed predicate as `e.rule`, a closed `ValidationRule` sum with typed arguments, and the `400 RefinementViolation` body carries it beside `field` and `message` |
+| **v0.696.3** | The stamp keeps a ledger of the pending files it has consumed and never stamps one twice, and `check-pending` fails a branch that carries a consumed file |
+| **v0.696.2** | A `Map` or `Log` store query that asks `any` or `all`, or a `Log` query that asks `first`, `firstOrElse` or `take(n).collect()`, stops reading pages as soon as the answer is known |
+| **v0.696.1** | A SQLite row may hold a `Decimal` read from a `TEXT` column, the checker's admitted row bases are listed explicitly, and a `Decimal` read from a numeric-affinity column warns (`bynk.d1.decimal_numeric_affinity`) |
+| **v0.696.0** | `Effect[T]` gains `map(f)` and `andThen(f)`, legal in a pure helper, and a missing `Effect` method is `method_not_found` naming the real ones |
+| **v0.695.0** | A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) warns with `bynk.match.refined_pattern_is_range` and a fix to the range pattern that counts towards exhaustiveness |
+| **v0.694.0** | A `sendValue`, `sendValueWith` or `sendValueBatch` to a queue the project consumes is now checked against the consumer's message type (`bynk.queue.message_type_mismatch`), and the untyped `send`, `sendWith` and `sendBatch` to such a queue warn (`bynk.queue.untyped_send`) |
 | **v0.693.1** | Releases build both macOS binaries again, `aarch64-apple-darwin` cross-compiled on the Intel runner, and `install.sh` installs on macOS |
 | **v0.693.0** | `MapEntry` is a nameable prelude record, so `Map.of([MapEntry { key: k, value: v }])` builds a map from entries written in source |
 | **v0.692.0** | An HTML response gets `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy: strict-origin-when-cross-origin` by default, and `security { }` gains `frameAncestors`, `referrerPolicy` and an opt-in verbatim `csp`; a JSON response is unchanged |

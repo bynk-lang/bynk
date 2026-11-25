@@ -11,7 +11,7 @@ export type WorkloadId = string & { readonly __brand: "ci.api.WorkloadId" };
 export const WorkloadId = {
   of(value: string): Result<WorkloadId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "WorkloadId", message: "must be non-empty", value });
+      return Err({ field: "WorkloadId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as WorkloadId);
   },

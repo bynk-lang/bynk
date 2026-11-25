@@ -1,0 +1,10 @@
+// #4215: only an agent of the context under test can be stubbed; another context's
+// agent is reached through its services.
+suite shop.basket {
+	stub Ledger.post(_) faulted
+
+	case "a stub of another context's agent" {
+		let r <- place.call("a", 1)
+		expect r is Ok(1)
+	}
+}

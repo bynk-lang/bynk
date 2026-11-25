@@ -19,10 +19,10 @@ export type Code = string & { readonly __brand: "Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 16)) {
-      return Err({ field: "Code", message: "length must be at most 16", value });
+      return Err({ field: "Code", message: "length must be at most 16", rule: { tag: "MaxLength", limit: 16 }, value });
     }
     if (!(__bynkRegExp("^(?:" + "\\d*-?\\d*" + ")$", "u").test(value))) {
-      return Err({ field: "Code", message: "must match /\\d*-?\\d*/", value });
+      return Err({ field: "Code", message: "must match /\\d*-?\\d*/", rule: { tag: "Matches", pattern: "\\d*-?\\d*" }, value });
     }
     return Ok(value as Code);
   },

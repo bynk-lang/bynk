@@ -144,7 +144,9 @@ keep their effects, exactly as in a sequence of `<-`s. See
 ## Bounding an effect — `within` {#within}
 
 `e.within(d)` bounds how long an effect may take. It is a method of every
-`Effect[T]`, `d` is a `Duration`, and the result is `Effect[Result[T, TimedOut]]`:
+`Effect[T]` (the others, `map`, `andThen`, `race` and `detach`, are in
+[Effect methods](/reference/types/#effect-methods)), `d` is a `Duration`, and the
+result is `Effect[Result[T, TimedOut]]`:
 
 ```bynk,fragment
 // the unit has: consumes bynk { TimedOut }

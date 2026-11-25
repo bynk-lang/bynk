@@ -776,6 +776,8 @@ pub(super) fn check_unit_files(
                     bynk_check::checker::Callee::Ctor { sum, tag } => {
                         tag == "Forward" && sum.name.name == "EmailVerdict"
                     }
+                    // #3879: a send to a queue, for the producer check.
+                    c if bynk_check::queue_producers::is_queue_send(c) => true,
                     // `Events.emit`: whether the bundle has a composition
                     // root (`project_model::phase_bundle_composition_unprovided`),
                     // which `bynk check` decides as the build does.
@@ -826,6 +828,7 @@ pub(super) fn check_unit_files(
                 } => {
                     (*first_party == Some(FirstPartyCap::Events) && op == "emit")
                         || *first_party == Some(FirstPartyCap::Idempotency)
+                        || bynk_check::queue_producers::is_send_op(op)
                 }
                 // W30 (#2840): an `Idempotency` call through a consumed context's qualified name.
                 bynk_check::checker::Callee::CrossCap { first_party, .. } => {
