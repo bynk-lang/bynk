@@ -1,0 +1,25 @@
+commons lib.x
+
+type Status = | Open | Shut
+
+type Shape = | Circle(r: Int) | Dot
+
+type Point = {
+  x: Int,
+  y: Int,
+}
+
+type Level = Int where Positive
+
+fn describe(s: Status) -> String {
+  "x"
+}
+
+fn area(s: Shape) -> Int {
+  match s {
+    Circle(r) => r,
+    Dot => 0,
+  }
+}
+
+const Limit: Int = 1

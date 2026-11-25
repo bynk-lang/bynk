@@ -10,7 +10,9 @@ use bynk_syntax::ast::{
 use super::super::internal_fault::undefined_node;
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::unchecked_construct_test_node;
-use super::{Lowered, Pre, decimal_lit, lower_const_literal_node, member_node, one};
+use super::{
+    Lowered, Pre, decimal_lit, lower_const_literal_node, member_node, one, type_member_node,
+};
 use crate::ts_build::{num_lit, str_lit};
 
 /// A default base-type literal (as TypeScript source) that satisfies a refined
@@ -349,11 +351,11 @@ fn mock_value_of(
                     unchecked_construct_test_node(name, base_default_ts(*base), true)
                 }
                 TypeBody::Sum(s) => match s.variants.first()? {
-                    v if v.payload.is_empty() => member_node(name, &v.name.name),
+                    v if v.payload.is_empty() => type_member_node(name, &v.name.name),
                     v => {
                         let args = v.payload.iter().map(|f| field_value(&f.type_ref)).collect();
                         bynk_ts::TsExpr::Call {
-                            callee: Box::new(member_node(name, &v.name.name)),
+                            callee: Box::new(type_member_node(name, &v.name.name)),
                             args,
                         }
                     }

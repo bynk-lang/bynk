@@ -19,7 +19,7 @@ pub(crate) fn unchecked_construct(
 ) -> bynk_ts::TsExpr {
     if is_opaque {
         bynk_ts::TsExpr::Call {
-            callee: Box::new(super::lower::member_node(name, "unsafe")),
+            callee: Box::new(super::lower::type_member_node(name, "unsafe")),
             args: vec![value],
         }
     } else {
@@ -50,7 +50,7 @@ pub(crate) fn unchecked_construct_test_node(
 ) -> bynk_ts::TsExpr {
     if is_opaque {
         bynk_ts::TsExpr::Call {
-            callee: Box::new(super::lower::member_node(name, "unsafe")),
+            callee: Box::new(super::lower::type_member_node(name, "unsafe")),
             args: vec![value],
         }
     } else {
@@ -275,7 +275,8 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
             {
                 format!("{ns}.{}", id.name)
             } else {
-                id.name.clone()
+                bynk_check::emitted_names::use_qualified_name(&id.name)
+                    .unwrap_or_else(|| id.name.clone())
             };
             TsType::named(name)
         }
@@ -672,11 +673,13 @@ impl<'a> TyRender<'a> {
         self.tys
     }
 
-    /// How the unit spells the type `name`: its rename, if any.
+    /// How the unit spells the type `name`: its rename, if any, or the namespace
+    /// import it is read through when written by a commons' full name (#4397).
     pub(crate) fn spelling(&self, name: &str) -> String {
         self.spellings
             .get(name)
             .cloned()
+            .or_else(|| bynk_check::emitted_names::use_qualified_name(name))
             .unwrap_or_else(|| name.to_string())
     }
 }

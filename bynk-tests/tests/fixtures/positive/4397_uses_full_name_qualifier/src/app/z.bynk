@@ -1,0 +1,39 @@
+commons app.z
+
+// #4397: a commons' full name qualifies a name two used commons both declare. Each use
+// below is a type, a value, a constant, a record, a refined type or a variant read
+// through `lib.x`, and each is TypeScript that strips to JavaScript: no `namespace`.
+uses lib.x
+uses lib.y
+
+fn g(s: lib.x.Status) -> String { lib.x.describe(s) }
+
+fn h() -> Int { lib.x.Limit }
+
+fn k(s: lib.x.Status) -> Int {
+  match s {
+    Open => 1,
+    Shut => 2,
+  }
+}
+
+fn m() -> lib.x.Status { Open }
+
+fn c() -> lib.x.Shape { Circle(3) }
+
+fn r(s: lib.x.Shape) -> Int {
+  match s {
+    Circle(n) => n,
+    Dot => 0,
+  }
+}
+
+fn p() -> lib.x.Point { lib.x.Point { x: 1, y: 2 } }
+
+fn px(q: lib.x.Point) -> Int { q.x }
+
+fn l(items: List[lib.x.Status]) -> Option[lib.x.Status] { items.first() }
+
+fn lv(n: Int) -> Result[lib.x.Level, ValidationError] { lib.x.Level.of(n) }
+
+fn ar(s: lib.x.Shape) -> Int { lib.x.area(s) }
