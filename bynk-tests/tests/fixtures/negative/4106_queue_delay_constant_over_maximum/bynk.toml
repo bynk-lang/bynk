@@ -1,0 +1,10 @@
+[project]
+name = "4106-queue-delay-constant-over-maximum"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+
+[unstable]
+allow = ["bynk.cloudflare.Queue"]
