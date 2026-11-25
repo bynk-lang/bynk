@@ -35,6 +35,25 @@ service api from http {
 The two failures are distinct response channels: the runtime never answers "who
 are you" (`401`) when it means "you may not" (`403`).
 
+## Read the claims in the handler
+
+The claim predicate decides whether a request is admitted; it does not hand the handler the claims.
+For that, the binder reads the verified token's claims as a `TokenClaims`, for a `Bearer` actor and
+for a refinement of one:
+
+```bynk,fragment
+on GET("/reports") () -> Effect[HttpResult[String]] by a: Admin {
+	let tenant = a.claims.get("tenant").getOrElse("default")
+	Ok("\(a.identity) \(tenant)")
+}
+```
+
+`get(name)` reads a claim that is a JSON string (`None` for any other type, or none at all), and
+`has(name)` whether the claim is present. In a test, pass them in the principal:
+`by Admin("root", TokenClaims.of(["tenant: acme"]))`. A claim says what the token asserts, so an
+object-level check (is this report this tenant's?) stays in the handler. See
+[Reading claims](/reference/actors/#reading-claims).
+
 ## The predicate vocabulary
 
 Token claims are untyped, so the `where` predicate is a closed set:

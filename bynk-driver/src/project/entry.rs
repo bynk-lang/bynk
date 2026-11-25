@@ -152,6 +152,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.contracts,
         options.trace_requests,
         options.inspect_agents,
+        options.typed_capability_calls,
         options.tests,
         &options.schema_registry,
         options.remote_tests.as_ref(),
@@ -179,7 +180,10 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.import_ext,
         options.roots.project_root(),
         &options.compatibility_flags,
-        options.workers_dev,
+        bynk_emit::emitter::workers_emit::WorkersSettings {
+            workers_dev: options.workers_dev,
+            observability: options.observability,
+        },
         options.out_dir.as_deref(),
         options.contracts_lock.as_deref(),
     )
@@ -289,6 +293,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.contracts,
         options.trace_requests,
         options.inspect_agents,
+        options.typed_capability_calls,
         options.tests,
         // #2078: `bynk check` reconciles against the committed
         // `bynk.schema.lock` whenever the caller pre-read it

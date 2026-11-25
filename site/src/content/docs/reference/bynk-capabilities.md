@@ -45,6 +45,41 @@ service's `workers.dev` address, because every emitted Worker carries the
 [`[workers]`](/reference/tooling/manifest/#workers)). Contexts in the same project don't
 need `Fetch` for each other: `consumes` reaches them through Service Bindings.
 
+### Naming `bynk`'s types in a commons
+
+A commons names the types `bynk` exports as `transparent` (`Uuid`, `CronSchedule`,
+`Method`, `Request`, `Response`, `FetchError`, `LogLevel`, `Claim`, and the other
+data types its surface lists) with no `consumes`, since a commons has none. A
+shared constant or function can then carry one:
+
+```bynk,ignore
+commons ops.schedules
+
+const Nightly: CronSchedule = "0 2 * * *"
+
+fn parseId(raw: String) -> Result[Uuid, ValidationError] {
+  Uuid.of(raw)
+}
+```
+
+The compiler reaches `bynk` for the commons by a type-only clause that selects the
+names the file writes, so the unit gains no capability and stays pure. Three rules
+bound it:
+
+- **Capabilities are not types.** `Clock`, `Logger`, `Fetch` and the others are
+  not nameable in a commons. Naming one is `bynk.resolve.unknown_type`, and the
+  error says it is a capability: a context uses one with `consumes bynk { Clock }`
+  and `given`.
+- **Only `bynk`'s transparent types.** An opaque type, or a type of another
+  first-party adapter (`bynk.cloudflare`, `bynk.crypto`), is not reached, so a
+  commons does not depend on a platform.
+- **A name the commons declares is its own.** A commons that declares `type File`,
+  or a sum with a variant `File`, or that `uses` a commons that does, keeps that
+  declaration and reaches no `bynk` type of the name.
+
+A context that `uses` the commons gets the constant and the functions, and still
+writes `consumes bynk { … }` for any `bynk` type it names itself.
+
 ### The `Idempotency` capability
 
 `Idempotency` makes at-least-once delivery (a retried command, a resent webhook) safe. It is also the habit to carry into event subscribers: event delivery is at most once today, but claiming `env.eventId` will matter once delivery is durable ([#3898](https://github.com/bynk-lang/bynk/issues/3898)):
@@ -427,7 +462,9 @@ let _ <- Logger.log(Warn, "slow checkout", Map.empty().insert("orderId", id).ins
 The record is `{ message, level, fields }`, with `level` in lowercase:
 
 - **On Cloudflare** it is logged as one object, and Workers Logs indexes its
-  keys, so `fields.orderId` is queryable.
+  keys, so `fields.orderId` is queryable. Bynk turns Workers Logs on in every
+  generated `wrangler.toml`; [`[workers.observability]`](/reference/tooling/manifest/#workers-logs)
+  switches it off or samples it.
 - **Under Node** it is one JSON line.
 - **In the browser** it is the message, then the fields.
 

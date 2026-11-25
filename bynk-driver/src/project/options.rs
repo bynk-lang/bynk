@@ -57,6 +57,10 @@ pub struct CompileOptions {
     /// build, for `bynk dev`. `false` for every other build, so a deploy build's
     /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
     pub inspect_agents: bool,
+    /// #3945: `true` (`bynk test`) makes a call to a generic capability operation carry its
+    /// type arguments' identity as a trailing argument, so a test's `stub Cap.op[T]` can tell
+    /// the calls apart. Never set by a build for deploy, whose output is unchanged.
+    pub typed_capability_calls: bool,
     /// #1821 (ADR 0147 D3): whether `suite`s are type-checked and emitted (the
     /// `tests/` modules and `tests/main.ts`). On by default; `bynk compile`
     /// and the driver's dev/deploy build turn it off, so a suite never reaches
@@ -119,6 +123,9 @@ pub struct CompileOptions {
     /// `bynk.toml`'s `[workers] workers_dev`: written into every
     /// `wrangler.toml` when set, left out when `None`.
     pub workers_dev: Option<bool>,
+    /// `bynk.toml`'s `[workers.observability]` (#4127): the project's Workers
+    /// Logs settings, which a worker group may override.
+    pub observability: bynk_project::observability::Observability,
     /// #1883, slice 1b: the project's `assets/` folder — its files, keyed by
     /// normalised project-relative path (`assets/board.css`), listed by the
     /// caller, and a reader for their bytes
@@ -187,12 +194,14 @@ impl CompileOptions {
             contracts: false,
             trace_requests: false,
             inspect_agents: false,
+            typed_capability_calls: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
             contracts_lock: None,
             compatibility_flags: Vec::new(),
             workers_dev: None,
+            observability: Default::default(),
             asset_files: None,
             embed_files: None,
             fixture_files: None,
@@ -219,12 +228,14 @@ impl CompileOptions {
             contracts: false,
             trace_requests: false,
             inspect_agents: false,
+            typed_capability_calls: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
             contracts_lock: None,
             compatibility_flags: Vec::new(),
             workers_dev: None,
+            observability: Default::default(),
             asset_files: None,
             embed_files: None,
             fixture_files: None,
@@ -285,6 +296,12 @@ impl CompileOptions {
 
     /// #3581: emit the dev-only agent inspection into a Workers build (`bynk
     /// dev`). Off by default, and never set by `bynk compile` or `bynk deploy`.
+    /// #3945: see [`Self::typed_capability_calls`].
+    pub fn typed_capability_calls(mut self, on: bool) -> Self {
+        self.typed_capability_calls = on;
+        self
+    }
+
     pub fn inspect_agents(mut self, on: bool) -> Self {
         self.inspect_agents = on;
         self
@@ -333,6 +350,15 @@ impl CompileOptions {
     /// `bynk.toml`'s `[workers]` table. See the field's own doc.
     pub fn compatibility_flags(mut self, flags: Vec<String>) -> Self {
         self.compatibility_flags = flags;
+        self
+    }
+
+    /// #4127: the project's `[workers.observability]`. See the field's own doc.
+    pub fn observability(
+        mut self,
+        observability: bynk_project::observability::Observability,
+    ) -> Self {
+        self.observability = observability;
         self
     }
 

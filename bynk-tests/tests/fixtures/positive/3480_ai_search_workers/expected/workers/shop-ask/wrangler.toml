@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "AI_SEARCH_KB"
 instance_name = "support-docs"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

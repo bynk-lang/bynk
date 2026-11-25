@@ -3,6 +3,7 @@
 
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { HttpResult } from "../__bynk_runtime/httpresult.js";
+import { __tokenClaims } from "../__bynk_runtime/auth.js";
 import * as __ns_r from "./../r.js";
 
 <<bynk-shared: testing/expectation>>
@@ -16,7 +17,7 @@ async function test_an_admin_is_answered() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET_admin({ ...deps, identity: (("root" as any) as any) });
+    const r = await api.http_GET_admin({ ...deps, identity: (("root" as any) as any), claims: __tokenClaims([]) });
     if (!(__bynkEq(r, HttpResult.Ok("root")))) { throw __bynkExpectFailure("tests/r.bynk:7:9", 244, 259, "expect r == Ok(\"root\")\n  expected: r == Ok(\"root\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("root")))); }
     return { pass: true };
   } catch (e) {
@@ -33,7 +34,7 @@ async function test_an_operator_is_answered() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET_ops({ ...deps, identity: (("ada" as any) as any) });
+    const r = await api.http_GET_ops({ ...deps, identity: (("ada" as any) as any), claims: __tokenClaims([]) });
     if (!(__bynkEq(r, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/r.bynk:12:9", 349, 363, "expect r == Ok(\"ada\")\n  expected: r == Ok(\"ada\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }
     return { pass: true };
   } catch (e) {
@@ -67,7 +68,7 @@ async function test_an_admin_is_answered_at_the_integration_tier() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_r;
     type UserId = __ns_r.UserId;
-    const r = await api.http_GET_admin({ ...deps, identity: (("root" as any) as any) });
+    const r = await api.http_GET_admin({ ...deps, identity: (("root" as any) as any), claims: __tokenClaims([]) });
     if (!(__bynkEq(r, HttpResult.Ok("root")))) { throw __bynkExpectFailure("tests/r.bynk:22:9", 616, 631, "expect r == Ok(\"root\")\n  expected: r == Ok(\"root\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("root")))); }
     return { pass: true };
   } catch (e) {

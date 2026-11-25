@@ -49,6 +49,7 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub(crate) mod applied_bounds;
 mod call_outcome;
 mod calls;
 pub mod codable;
@@ -73,6 +74,7 @@ mod list_par;
 mod list_par_with;
 pub(crate) mod nested_effect;
 mod par;
+mod query_more;
 mod query_par;
 mod refined_range;
 mod refinements;
@@ -1302,6 +1304,7 @@ impl TypedCommons {
                 },
                 items: Vec::new(),
                 uses: Vec::new(),
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Fragment,
                 span: Default::default(),
@@ -2032,7 +2035,7 @@ pub struct HandlerBodyCheck<'a> {
     /// connection is owned).
     pub borrowed_held: HashSet<String>,
     /// #2380 (L5): the binder name when the `by` actor is an `Oidc` one.
-    pub oidc_binder: Option<String>,
+    pub claims_binder: Option<String>,
     /// #2683: the body is a service handler's, whose `deps` carry the
     /// execution context `e.within(d)` needs.
     pub service_handler: bool,
@@ -2061,7 +2064,7 @@ impl<'a> HandlerBodyCheck<'a> {
             actor_binding: None,
             store_fields: HashMap::new(),
             borrowed_held: HashSet::new(),
-            oidc_binder: None,
+            claims_binder: None,
             service_handler: false,
         }
     }
@@ -2087,7 +2090,7 @@ pub fn check_handler_body(
         actor_binding,
         store_fields,
         borrowed_held,
-        oidc_binder,
+        claims_binder,
         service_handler: in_service_handler,
     } = check;
     let CheckSinks {
@@ -2180,7 +2183,7 @@ pub fn check_handler_body(
             ..Default::default()
         },
         in_test_body: false,
-        oidc_binder,
+        claims_binder,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: HashSet::new(),
@@ -2356,7 +2359,7 @@ pub fn check_body(
         fold_init_expected: None,
         caps,
         in_test_body: true,
-        oidc_binder: None,
+        claims_binder: None,
         test_services,
         test_actors,
         type_vars: HashSet::new(),
@@ -2730,7 +2733,7 @@ pub fn check_invariants(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2888,7 +2891,7 @@ pub(crate) fn check_contracts(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: type_vars.clone(),
@@ -3131,7 +3134,7 @@ pub fn check_transitions(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3326,7 +3329,7 @@ pub fn check_migrations(
                 ..Default::default()
             },
             in_test_body: false,
-            oidc_binder: None,
+            claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -3781,7 +3784,7 @@ pub(crate) struct Ctx<'a> {
     pub in_test_body: bool,
     /// #2380 (L5): the binder of an `Oidc` actor (`by who: Workload`), whose
     /// `.claims` reads the verified token's claims. `None` elsewhere.
-    pub oidc_binder: Option<String>,
+    pub claims_binder: Option<String>,
     /// The target unit's services, populated for test case bodies (v0.25).
     /// `svc.call(args)` in a test invokes the target's service; the checker
     /// resolves the service's `on call` handler here to check the call's
@@ -4566,16 +4569,7 @@ fn unresolved_type_ref_error(
     vars: &HashSet<String>,
 ) -> CompileError {
     match first_unresolved_type_name(r, types, vars) {
-        Some(id) => CompileError::new(
-            "bynk.resolve.unknown_type",
-            id.span,
-            format!("unknown type `{}`", id.name),
-        )
-        .with_note(
-            "in scope are the base types (`Int`, `Float`, `String`, `Bool`, `Duration`, \
-             `Instant`, `Bytes`), the built-in generics (`List`, `Map`, `Option`, `Result`, …), \
-             `ValidationError`, and the types this unit declares or imports",
-        ),
+        Some(id) => crate::resolver::unknown_type_error(id),
         None => CompileError::new(
             "bynk.resolve.unknown_type",
             r.span(),
@@ -4665,6 +4659,25 @@ pub fn embedding_for(
         }
     }
     None
+}
+
+/// #3945: the identity of a generic capability operation's explicit type arguments, which a call
+/// site and a `stub` or observation naming them must agree on: each resolved type's display, so
+/// `Outcome`, `orders.Outcome` and an alias of it are one key. A type that does not resolve (a
+/// suite's own type, which no call site can name) falls back to the arguments as written.
+pub fn capability_type_key(
+    type_args: &[TypeRef],
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> String {
+    let resolved: Option<Vec<String>> = type_args
+        .iter()
+        .map(|t| resolve_type_ref(t, types, tys).map(|id| tys.display(id)))
+        .collect();
+    match resolved {
+        Some(shown) => ["[", shown.join(", ").as_str(), "]"].concat(),
+        None => bynk_syntax::print::type_args_src(type_args),
+    }
 }
 
 pub fn resolve_type_ref(
@@ -5889,6 +5902,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 QueryOp::from_name(&method.name),
                                 args,
                                 v,
+                                Some(receiver),
                                 expr.span,
                                 ctx,
                             );

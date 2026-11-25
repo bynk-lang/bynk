@@ -517,27 +517,12 @@ fn resolve_stubs(
             ));
             continue;
         };
-        // #926 (Decision F): a generic capability operation cannot be stubbed
-        // — `__Stub_Cap`'s per-op method body has no way to construct a
-        // value of the op's unconstrained `T`. Deferred rather than
-        // supported: the stub class carries no `implements` clause (its
-        // members are duck-typed through an untyped `deps` seam), so
-        // stubbing another, non-generic op of the same capability keeps
-        // type-checking.
-        if !op_decl.type_params.is_empty() {
-            errors.push(
-                CompileError::new(
-                    "bynk.stub.generic_op",
-                    pc.method.span,
-                    format!(
-                        "`{cap_name}.{}` declares its own type parameter — a generic capability operation cannot be stubbed at v1",
-                        pc.method.name
-                    ),
-                )
-                .with_note(
-                    "test through the capability's real (external) provider instead, or restructure the test to avoid stubbing this operation",
-                ),
-            );
+        // #926 (Decision F), #3945: a generic capability operation is stubbed through its
+        // explicit type arguments (`stub Cap.op[T](…)`), the way a call site names them (ADR
+        // 0281), so the value is typed with `T` substituted. Without them the stub's value has
+        // no type to construct.
+        if let Some(why) = stub_type_args_error(op_decl, &pc, &cap_name) {
+            errors.push(why);
             continue;
         }
         if let StubRhs::ReturnsEach(outcomes, span) = &pc.rhs
@@ -576,6 +561,89 @@ fn resolve_stubs(
     out
 }
 
+/// #3945: the error a stub's explicit type arguments earn against the operation they name, if
+/// any: a generic operation needs all of them, and any other takes none.
+fn stub_type_args_error(
+    op_decl: &CapabilityOp,
+    pc: &StubClause,
+    cap_name: &str,
+) -> Option<CompileError> {
+    let want = op_decl.type_params.len();
+    if want == 0 && pc.type_args.is_empty() {
+        return None;
+    }
+    if want == 0 {
+        return Some(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            pc.method.span,
+            format!(
+                "`{cap_name}.{}` takes no type arguments, but the `stub` gives {}",
+                pc.method.name,
+                pc.type_args.len()
+            ),
+        ));
+    }
+    if pc.type_args.is_empty() {
+        return Some(
+            CompileError::new(
+                "bynk.stub.generic_op",
+                pc.method.span,
+                format!(
+                    "`{cap_name}.{}` declares its own type parameter, so a `stub` of it names the type argument",
+                    pc.method.name
+                ),
+            )
+            .with_note(format!(
+                "write `stub {cap_name}.{}[<type>](…) returns …`, naming the type as the call site does; to test through the capability's real (external) provider instead, leave the operation unstubbed",
+                pc.method.name
+            )),
+        );
+    }
+    if pc.type_args.len() != want {
+        return Some(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            pc.method.span,
+            format!(
+                "`{cap_name}.{}` takes {want} type argument(s), but the `stub` gives {}",
+                pc.method.name,
+                pc.type_args.len()
+            ),
+        ));
+    }
+    None
+}
+
+impl ResolvedStub {
+    /// #3945: the operation clause `idx` answers, with the clause's explicit type arguments
+    /// substituted for the operation's type parameters (`dedup[Outcome]` is
+    /// `fn dedup(key: String) -> Effect[Option[Outcome]]`). The declared operation for a clause
+    /// without any; `None` when the clause names no operation of the seam.
+    pub fn op_for_clause(&self, idx: usize) -> Option<CapabilityOp> {
+        let clause = self.clauses.get(idx)?;
+        let op = self
+            .cap_decl
+            .ops
+            .iter()
+            .find(|o| o.name.name == clause.method.name)?;
+        if op.type_params.is_empty() || op.type_params.len() != clause.type_args.len() {
+            return Some(op.clone());
+        }
+        let subst: HashMap<String, TypeRef> = op
+            .type_params
+            .iter()
+            .zip(&clause.type_args)
+            .map(|(p, a)| (p.name.name.clone(), a.clone()))
+            .collect();
+        let mut out = op.clone();
+        out.type_params = Vec::new();
+        for p in &mut out.params {
+            p.type_ref = crate::wire::subst_type_ref(&p.type_ref, &subst);
+        }
+        out.return_type = crate::wire::subst_type_ref(&out.return_type, &subst);
+        Some(out)
+    }
+}
+
 /// #3892: fold a `stub <context>.<service>(…)` clause into the seam map. The
 /// consumed context is the seam and each stubbed service one operation of it,
 /// typed from the service's `on call` handler, so the clause is checked and
@@ -595,6 +663,19 @@ fn resolve_service_stub(
     out: &mut HashMap<String, ResolvedStub>,
     errors: &mut Vec<CompileError>,
 ) {
+    // #3945: a service takes no type arguments.
+    if !pc.type_args.is_empty() {
+        errors.push(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            pc.method.span,
+            format!(
+                "`{seam}.{}` is a service and takes no type arguments, but the `stub` gives {}",
+                pc.method.name,
+                pc.type_args.len()
+            ),
+        ));
+        return;
+    }
     let handler = unit_tables
         .get(ctx)
         .and_then(|t| t.services.get(&pc.method.name))
@@ -1052,13 +1133,13 @@ pub fn phase_integration_bodies(
                 &mut LocalsSink::new(),
                 tys,
             );
-            check_suite_fns(
-                &d.fns,
+            check_harness_suite_fns(
+                d,
                 &mut helper_view,
-                participants.first().and_then(|p| unit_tables.get(p)),
+                &participants,
+                unit_tables,
                 &mut body_errs,
                 refs,
-                &mut LocalsSink::new(),
                 tys,
             );
             // #2906: a suite mixing `system` with lower tiers is already
@@ -1464,6 +1545,7 @@ pub fn integration_resolved(
         },
         items: Vec::new(),
         uses: Vec::new(),
+        consumes: Vec::new(),
         documentation: None,
         form: CommonsForm::Brace,
         span: Span::default(),
@@ -1804,6 +1886,56 @@ pub fn check_suite_decls(
     checker::check_suite_decls(&ok_types, &ok_consts, resolved, tys, errors, refs, locals)
 }
 
+/// #2834/#3983: a `system`-tier or multi-participant suite's helpers, checked in the harness view:
+/// no capability for a `given` to name.
+fn check_harness_suite_fns(
+    d: &bynk_syntax::ast::SuiteDecl,
+    helper_view: &mut ResolvedCommons,
+    participants: &[String],
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    tys: &Arc<Types>,
+) {
+    check_suite_fns(
+        &d.fns,
+        helper_view,
+        participants.first().and_then(|p| unit_tables.get(p)),
+        None,
+        errors,
+        refs,
+        &mut LocalsSink::new(),
+        tys,
+    );
+}
+
+/// #2834/#3983: a unit suite's helpers, checked in the target's view. A `system` suite's cases
+/// name no capability, so its helpers cannot declare `given`.
+#[allow(clippy::too_many_arguments)]
+fn unit_fns(
+    test_decl: &bynk_syntax::ast::SuiteDecl,
+    mut helper_view: ResolvedCommons,
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    locals: &mut LocalsSink,
+    tys: &Arc<Types>,
+) {
+    let caps = (test_decl.tier != Some(bynk_syntax::ast::TestTier::System))
+        .then(|| target_capability_map(target_name, unit_tables, &helper_view, tys));
+    check_suite_fns(
+        &test_decl.fns,
+        &mut helper_view,
+        unit_tables.get(target_name),
+        caps.as_ref(),
+        errors,
+        refs,
+        locals,
+        tys,
+    );
+}
+
 /// #2834: check a suite's helper `fn`s. Each must be a free, pure function
 /// whose name no value in the case scope already uses and no sibling repeats;
 /// the helpers are then added to `resolved` (the suite's view) and their
@@ -1815,6 +1947,8 @@ pub fn check_suite_fns(
     suite_fns: &[FnDecl],
     resolved: &mut ResolvedCommons,
     target: Option<&UnitTable>,
+    // #3983: the target's capabilities, which a helper's `given` names.
+    caps: Option<&HashMap<String, checker::CapabilityInfo>>,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     locals: &mut LocalsSink,
@@ -1877,20 +2011,21 @@ pub fn check_suite_fns(
             );
             continue;
         }
-        if matches!(f.return_type, TypeRef::Effect(..)) {
+        if f.given.is_empty() && matches!(f.return_type, TypeRef::Effect(..)) {
             errors.push(
                 CompileError::new(
                     "bynk.suite.fn_effectful",
                     f.return_type.span(),
                     format!("the suite helper `{}` returns an `Effect`", name.name),
                 )
-                .with_note("a suite helper is a pure function; build the value in the helper and run the effect in the `case`"),
+                .with_note("an effectful suite helper declares the capabilities it uses, `fn seed() -> Effect[()] given Stock { … }`; otherwise build the value in the helper and run the effect in the `case`"),
             );
             continue;
         }
         refs.set_owner(f.name.display());
         checker::check_suite_fn(
             f,
+            caps,
             resolved,
             &mut expr_types,
             &mut callees,
@@ -1938,6 +2073,27 @@ fn first_test_target_span(indices: &[usize], parsed: &[ParsedFile]) -> Span {
         .unwrap_or_default()
 }
 
+/// #3945: each explicit type argument of a `stub` names a type in scope of its clause.
+fn stub_type_arg_errors(
+    clause: &StubClause,
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+    errors: &mut Vec<CompileError>,
+) {
+    for t in &clause.type_args {
+        if checker::resolve_type_ref(t, &resolved.types, tys).is_none() {
+            errors.push(CompileError::new(
+                "bynk.resolve.unknown_type",
+                t.span(),
+                format!(
+                    "unknown type `{}` in the type arguments of a `stub`",
+                    ts_type_ref_display(t)
+                ),
+            ));
+        }
+    }
+}
+
 /// Type-check test/property bodies for a target and validate `stub` RHS
 /// value types (v0.118). Bodies use the target's privileged view; a `stub`
 /// value whose type disagrees with the overridden op's return is
@@ -1981,14 +2137,10 @@ fn check_test_bodies(
         for rp in stubs.values() {
             refs.enter_file(&rp.identity_path, target_name, false);
             for (clause_idx, clause) in rp.clauses.iter().enumerate() {
-                let Some(op) = rp
-                    .cap_decl
-                    .ops
-                    .iter()
-                    .find(|o| o.name.name == clause.method.name)
-                else {
+                let Some(op) = rp.op_for_clause(clause_idx) else {
                     continue;
                 };
+                let op = &op;
                 // #2850/#2907: the declaring suite's fixtures and helpers are
                 // in scope in its clauses' values.
                 let clause_view = if rp.clause_fixtures[clause_idx].is_empty()
@@ -2019,6 +2171,7 @@ fn check_test_bodies(
                     })
                 };
                 let resolved = clause_view.as_ref().unwrap_or(resolved);
+                stub_type_arg_errors(clause, resolved, tys, &mut errors);
                 let check_value = |e: &Expr, errors: &mut Vec<CompileError>| {
                     let errs = stub_value_errors(e, op, resolved, tys);
                     if errs.is_empty() {
@@ -2154,8 +2307,7 @@ fn check_test_bodies(
         );
         // #2517: and so do the case and property locals.
         locals.enter_file(&parsed[i].identity_path(), parsed[i].is_synthetic());
-        // #2834/#2841: the suite's fixtures and helpers, checked once in the
-        // target's view.
+        // #2834/#2841: the suite's fixtures and helpers, checked once in the target's view.
         if !SuiteItems::of(test_decl).is_empty()
             && let Some((mut helper_view, _)) = build_privileged_resolved(
                 target_name,
@@ -2191,10 +2343,11 @@ fn check_test_bodies(
                 locals,
                 tys,
             );
-            check_suite_fns(
-                &test_decl.fns,
-                &mut helper_view,
-                unit_tables.get(target_name),
+            unit_fns(
+                test_decl,
+                helper_view,
+                target_name,
+                unit_tables,
                 &mut errors,
                 refs,
                 locals,
@@ -2432,6 +2585,35 @@ pub fn value_block(e: &Expr) -> Block {
     }
 }
 
+/// #3983: a `stub … returns` value supplies a value and never runs logic, so it cannot call a
+/// suite helper that declares `given`: such a helper runs effects with a case's capabilities.
+fn stub_value_given_calls(e: &Expr, resolved: &ResolvedCommons, errors: &mut Vec<CompileError>) {
+    if let ExprKind::Call { name, .. } = &e.kind
+        && let Some(f) = resolved.fns.get(&name.name).filter(|f| !f.given.is_empty())
+    {
+        let list = f
+            .given
+            .iter()
+            .map(|c| c.display_name())
+            .collect::<Vec<_>>()
+            .join(", ");
+        errors.push(
+            CompileError::new(
+                "bynk.given.missing_for_call",
+                name.span,
+                format!(
+                    "`{}` needs `given {list}`, which a `stub` value does not have",
+                    name.name
+                ),
+            )
+            .with_note("a `stub … returns` value supplies a value, never runs logic: call the helper in the `case` and stub the value it returns"),
+        );
+    }
+    for child in bynk_syntax::ast::expr_children(e) {
+        stub_value_given_calls(child, resolved, errors);
+    }
+}
+
 /// #2907: a name a `stub` value cannot resolve is that, not a mismatch with
 /// the operation's return type. #3344: nor is a variant name several sums
 /// declare that the operation's type does not settle.
@@ -2443,6 +2625,7 @@ fn stub_name_errors(errs: Vec<CompileError>) -> Vec<CompileError> {
                 "bynk.resolve.unknown_name"
                     | "bynk.resolve.unknown_function"
                     | "bynk.resolve.ambiguous_variant"
+                    | "bynk.given.missing_for_call"
             )
         })
         .collect()
@@ -2458,7 +2641,9 @@ fn stub_value_errors(
     resolved: &ResolvedCommons,
     tys: &Arc<Types>,
 ) -> Vec<CompileError> {
-    value_errors(e, &op.return_type, &op.params, resolved, tys)
+    let mut errs = value_errors(e, &op.return_type, &op.params, resolved, tys);
+    stub_value_given_calls(e, resolved, &mut errs);
+    errs
 }
 
 /// #2683: whether a `stub … after <d>` duration is a `Duration`.
@@ -4228,6 +4413,40 @@ pub fn typecheck_case_body(
     )
 }
 
+/// The capabilities of `target_name`: its own, and its consumed adapters'. A case has them in
+/// scope, and (#3983) a suite helper's `given` names them; a consumed service's seam, which a case
+/// stubs and observes but never calls as a capability, is not one.
+pub fn target_capability_map(
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+) -> HashMap<String, checker::CapabilityInfo> {
+    let mut capability_info_map: HashMap<String, checker::CapabilityInfo> = HashMap::new();
+    if let Some(table) = unit_tables.get(target_name) {
+        for (name, decl) in &table.capabilities {
+            let ops = decl
+                .ops
+                .iter()
+                .map(|op| build_capability_op_info(op, &resolved.types, tys))
+                .collect();
+            capability_info_map.insert(
+                name.clone(),
+                checker::CapabilityInfo {
+                    name: name.clone(),
+                    ops,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
+                },
+            );
+        }
+    }
+    add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, resolved, tys);
+    capability_info_map
+}
+
 /// [`typecheck_case_body`], recording the body's local bindings into `locals`
 /// (#2517) so the language server can offer inline values inside a test.
 #[allow(clippy::too_many_arguments)]
@@ -4262,28 +4481,7 @@ fn typecheck_case_body_recording(
 
     // Capabilities of the target context, if any (so the test body can
     // call capabilities directly when targeting a context).
-    let mut capability_info_map: HashMap<String, checker::CapabilityInfo> = HashMap::new();
-    if let Some(table) = unit_tables.get(target_name) {
-        for (name, decl) in &table.capabilities {
-            let ops = decl
-                .ops
-                .iter()
-                .map(|op| build_capability_op_info(op, &resolved.types, tys))
-                .collect();
-            capability_info_map.insert(
-                name.clone(),
-                checker::CapabilityInfo {
-                    name: name.clone(),
-                    ops,
-                    derived_from: crate::context_checks::derived_from(
-                        decl,
-                        &resolved.cross_context.flattened_caps,
-                    ),
-                },
-            );
-        }
-    }
-    add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, resolved, tys);
+    let mut capability_info_map = target_capability_map(target_name, unit_tables, resolved, tys);
     add_consumed_service_seams(&mut capability_info_map, resolved, unit_tables, tys);
 
     // All declared capabilities are implicitly "given" inside a test body;
@@ -6088,6 +6286,7 @@ pub fn build_privileged_resolved(
         },
         items: Vec::new(),
         uses: Vec::new(),
+        consumes: Vec::new(),
         documentation: None,
         form: CommonsForm::Brace,
         span: Span::default(),

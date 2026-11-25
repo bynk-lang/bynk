@@ -367,6 +367,27 @@ pub enum BuildTarget {
     Workers,
 }
 
+/// #3941: resolve every `const X: T = env(NAME[, default])` to the literal
+/// `bynk.toml` gives it in the `default` environment, so every later phase sees
+/// an ordinary constant. The per-environment build selects another environment
+/// ([`crate::env_consts::resolve`] takes its name). A manifest whose variables
+/// do not read is the manifest check's to report, and leaves the constants to
+/// their defaults.
+pub fn resolve_env_consts(
+    parsed: &mut [ParsedFile],
+    project_root: &std::path::Path,
+    overlay: &std::collections::HashMap<std::path::PathBuf, String>,
+    errors: &mut ErrorSink,
+) {
+    let vars = bynk_project::vars::try_read_vars_with(project_root, overlay).unwrap_or_default();
+    let outcome =
+        crate::env_consts::resolve(parsed, &vars, bynk_project::vars::DEFAULT_ENVIRONMENT);
+    errors.extend_attributed_by_span(parsed, outcome.source);
+    for e in outcome.manifest {
+        errors.push_for(Some(std::path::Path::new("bynk.toml")), e);
+    }
+}
+
 pub fn normalize_service_defaults(parsed: &mut [ParsedFile]) {
     for pf in parsed.iter_mut() {
         let items = match pf.unit_mut() {
@@ -684,6 +705,8 @@ pub fn phase_parse(
 
     // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
     crate::implicit_uses::add_implicit_uses(&mut parsed);
+    // #4181: a commons that names a transparent type of the `bynk` adapter reaches it.
+    crate::implicit_uses::add_implicit_consumes(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }

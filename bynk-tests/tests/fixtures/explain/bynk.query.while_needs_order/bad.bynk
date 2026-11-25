@@ -1,0 +1,12 @@
+context demo
+
+type Event = { at: Int, kind: String }
+
+agent Feed {
+    key id: String
+    store events: Map[String, Event]
+
+    on call recent() -> Effect[List[Event]] {
+        events.values.takeWhile((e) => e.at > 100).collect()
+    }
+}

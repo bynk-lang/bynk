@@ -65,7 +65,16 @@ pub struct WorkersEmit<'a> {
     pub unit_flattened: &'a HashMap<String, HashMap<String, String>>,
     pub unit_tables: &'a HashMap<String, UnitTable>,
     pub unit_uses: &'a HashMap<String, Vec<String>>,
+    pub workers: WorkersSettings,
+}
+
+/// The project-wide `[workers]` settings every Worker's `wrangler.toml` gets.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct WorkersSettings {
+    /// `[workers] workers_dev`; `None` leaves the key out.
     pub workers_dev: Option<bool>,
+    /// #4127: `[workers.observability]`, before a group's override.
+    pub observability: bynk_project::observability::Observability,
 }
 
 impl WorkersEmit<'_> {
@@ -419,7 +428,7 @@ impl WorkersEmit<'_> {
             compatibility_flags,
             d1_migrations,
             layout,
-            workers_dev,
+            workers,
             ..
         } = *self;
         let first = members[0].0.context.as_str();
@@ -451,7 +460,7 @@ impl WorkersEmit<'_> {
                 .collect::<Vec<_>>(),
             &union(|p| &p.addresses),
             compatibility_flags,
-            workers_dev,
+            workers.workers_dev,
             &tombstones,
             d1_migrations,
         );
@@ -460,6 +469,10 @@ impl WorkersEmit<'_> {
             .iter()
             .map(|(parts, table)| (parts.context.as_str(), *table))
             .collect();
+        // #4127: Workers Logs, with this Worker's group override laid over the project's.
+        wrangler_doc.push_block(emitter::observability_block(
+            layout.observability(first, workers.observability),
+        ));
         self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
         // #3477: the Durable Object classes of this Worker's containers.
         if let Some(program) = emitter::emit_containers_ts(bindings) {

@@ -17,3 +17,7 @@ queue = "kept-jobs"
 max_batch_size = 10
 dead_letter_queue = "kept-jobs-dlq"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

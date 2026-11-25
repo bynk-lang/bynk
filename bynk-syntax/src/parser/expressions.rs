@@ -111,8 +111,7 @@ impl<'a> Parser<'a> {
         if self.peek_kind() == Some(TokenKind::Ident)
             && self.nth_kind(1) == Some(TokenKind::Dot)
             && self.nth_kind(2) == Some(TokenKind::Ident)
-            && self.nth_kind(3) == Some(TokenKind::Ident)
-            && matches!(self.nth_text(3), "called" | "never" | "before")
+            && self.observation_matcher_ahead(3)
         {
             return self.parse_observation();
         }
@@ -155,6 +154,32 @@ impl<'a> Parser<'a> {
         Ok(subject)
     }
 
+    /// #3945: whether an observation matcher word (`called` / `never` / `before`) is at `at`,
+    /// after the optional bracketed type arguments of the operation (`Cap.op[T] called`).
+    fn observation_matcher_ahead(&self, at: usize) -> bool {
+        let mut i = at;
+        if self.nth_kind(i) == Some(TokenKind::LBracket) {
+            let mut depth = 0usize;
+            loop {
+                match self.nth_kind(i) {
+                    Some(TokenKind::LBracket) => depth += 1,
+                    Some(TokenKind::RBracket) => {
+                        depth -= 1;
+                        if depth == 0 {
+                            i += 1;
+                            break;
+                        }
+                    }
+                    Some(_) => {}
+                    None => return false,
+                }
+                i += 1;
+            }
+        }
+        self.nth_kind(i) == Some(TokenKind::Ident)
+            && matches!(self.nth_text(i), "called" | "never" | "before")
+    }
+
     /// Parse an observation clause (v0.117): `Cap.op` followed by a matcher —
     /// `called [once | <n> times] [with <pred>]`, `never called`, or
     /// `before Cap.op`. The contextual words are matched by text, not token kind.
@@ -165,6 +190,8 @@ impl<'a> Parser<'a> {
             "after the capability name in an observation",
         )?;
         let op = self.expect_ident("as the observed operation name")?;
+        // #3945: explicit type arguments of a generic operation.
+        let type_args = self.parse_stub_type_args()?;
         let start = cap.span;
         let word = self.nth_text(0);
         let matcher = match word {
@@ -240,7 +267,12 @@ impl<'a> Parser<'a> {
         let end = self.prev_span();
         Ok(Expr {
             id: self.alloc_expr_id(),
-            kind: ExprKind::Observation(Box::new(ObservationExpr { cap, op, matcher })),
+            kind: ExprKind::Observation(Box::new(ObservationExpr {
+                cap,
+                op,
+                type_args,
+                matcher,
+            })),
             span: start.merge(end),
         })
     }

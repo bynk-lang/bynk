@@ -75,6 +75,7 @@ pub mod queue_delivery;
 pub mod sequence;
 pub mod signature_help;
 pub mod symbols;
+pub mod token_claims;
 pub mod wire_contract;
 
 /// One diagnostic produced from a recovery-mode compile of a single file.

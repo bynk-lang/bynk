@@ -10,3 +10,7 @@ database_name = "shop-orders-orders"
 database_id = "<D1_ORDERS_ID>" # set at deploy time
 migrations_dir = "migrations/shop-orders-orders"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

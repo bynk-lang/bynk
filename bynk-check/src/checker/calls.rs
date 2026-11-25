@@ -98,6 +98,9 @@ pub fn check_context_fn(
 #[allow(clippy::too_many_arguments)]
 pub fn check_suite_fn(
     f: &FnDecl,
+    // #3983: the target's capabilities, which a helper's `given` names; `None` where there is no
+    // target to name them (the helper then cannot declare `given`).
+    caps: Option<&HashMap<String, CapabilityInfo>>,
     input: &ResolvedCommons,
     expr_types: &mut HashMap<ExprId, TypedExpr>,
     callees: &mut HashMap<ExprId, Callee>,
@@ -108,16 +111,53 @@ pub fn check_suite_fn(
     requirements: &mut RequirementSink,
     tys: &Types,
 ) {
-    // #2868: a suite helper is no context function, so it cannot declare
-    // `given`; its cases get the target's capabilities instead.
-    if !f.given.is_empty() {
-        errors.extend(given_fn_refusal(f, false));
-        return;
-    }
+    // #2868/#3983: a suite helper may declare `given`, naming the target's capabilities, which a
+    // case's own `deps` carry; a method, or one that returns no `Effect`, is refused as in a
+    // context.
+    let fn_caps = if f.given.is_empty() {
+        None
+    } else {
+        if let Some(why) = given_fn_refusal(f, true) {
+            errors.push(why);
+            return;
+        }
+        // #3983: with no capabilities to name (a `system` suite's), `given` has nothing to
+        // refer to.
+        let Some(declared) = caps.cloned() else {
+            errors.push(
+                CompileError::new(
+                    "bynk.test.helper_given_at_system",
+                    f.given[0].span.merge(f.given[f.given.len() - 1].span),
+                    format!(
+                        "the suite helper `{}` declares `given`, but a `system` case cannot name a capability",
+                        f.name.display()
+                    ),
+                )
+                .with_note("a `system` helper reaches its target through the addresses a system case uses, such as `shop.orders.place(…)`; or move the helper to a suite at `unit` or `integration`"),
+            );
+            return;
+        };
+        let mut capabilities: HashMap<String, CapabilityInfo> = HashMap::new();
+        for cap_ref in &f.given {
+            if let Some(info) = crate::symbols::resolve_given_cap_ref(
+                cap_ref,
+                &declared,
+                &input.cross_context,
+                errors,
+                refs,
+            ) {
+                capabilities.insert(cap_ref.key().to_string(), info);
+            }
+        }
+        Some(FnCaps {
+            capabilities,
+            declared_capabilities: declared,
+        })
+    };
     check_fn_in(
         f,
         true,
-        None,
+        fn_caps,
         input,
         expr_types,
         callees,
@@ -332,7 +372,7 @@ pub(crate) fn check_fn_in(
             },
         },
         in_test_body: false,
-        oidc_binder: None,
+        claims_binder: None,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
@@ -514,7 +554,7 @@ fn type_static_initialiser(
             fold_init_expected: None,
             caps: CapabilityCtx::default(),
             in_test_body: false,
-            oidc_binder: None,
+            claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -825,7 +865,7 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
         return;
     }
     if ctx.input.imported_fn_names.contains(&callee.name.display())
-        || given_fn_refusal(callee, ctx.input.is_context).is_some()
+        || given_fn_refusal(callee, ctx.input.is_context || ctx.test_values).is_some()
     {
         return;
     }
@@ -865,9 +905,8 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
                 .join(", ")
         ),
     )
-    .with_note(if ctx.test_values {
-        // A suite helper is not a context function, so it cannot declare
-        // `given` to pass the capabilities on.
+    .with_note(if ctx.test_values && ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
+        // A suite helper with no `given` of its own has no capabilities to pass on.
         "a suite helper has no capabilities of its own to pass on: call it from a `case`, which gets the target's capabilities as its handlers do, or take the operation as a function parameter".to_string()
     } else if ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
         // A method, a pure function or a lambda in one cannot declare `given`.
@@ -877,9 +916,8 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
             "a capability never appears in a body without appearing in the signature of every handler and function on the path to it: add `{list}` to the caller's `given` clause"
         )
     });
-    if !ctx.test_values
-        && let Some((span, insert)) =
-            given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
+    if let Some((span, insert)) =
+        given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
     {
         err = err.with_suggestion(
             format!("add `{list}` to the `given` clause"),
@@ -2708,8 +2746,15 @@ pub(crate) fn check_store_log_op(
         }
         // The general query vocabulary over the entry values.
         name if is_query_op(name) => {
-            let r =
-                check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx);
+            let r = check_query_kernel_method(
+                method,
+                QueryOp::from_name(name),
+                args,
+                elem,
+                None,
+                span,
+                ctx,
+            );
             par::reject_store_write_in_closure(method, args, ctx);
             r
         }
@@ -3426,7 +3471,7 @@ fn check_method_call_inner(
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
             let kop = QueryOp::from_name(&method.name);
-            let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            let r = check_query_kernel_method(method, kop, args, *elem, Some(receiver), span, ctx);
             par::reject_store_write_in_closure(method, args, ctx);
             return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }
@@ -4923,29 +4968,36 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
     })
 }
 
-/// #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
-/// only an `Oidc` actor's handler reads them.
+/// #2380 (L5), #3937: a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
+/// only an `Oidc` or `Bearer` actor's handler reads them (a refinement reads its base's).
 fn check_principal_claims(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
     let tys = ctx.tys;
     if let Some(claims) = &p.claims {
         let want = tys.intern(Ty::TokenClaims);
         check_arg(claims, want, "the principal's claims", ctx);
-        let oidc = ctx.test_actors.get(&p.actor.name).is_some_and(|decl| {
-            decl.auth
-                .as_ref()
-                .is_some_and(|a| a.name.as_str() == "Oidc")
-        });
-        if !oidc {
+        let reads_claims = |name: &str| {
+            ctx.test_actors.get(name).is_some_and(|decl| {
+                decl.auth
+                    .as_ref()
+                    .is_some_and(|a| matches!(a.name.as_str(), "Oidc" | "Bearer"))
+            })
+        };
+        let base = ctx
+            .test_actors
+            .get(&p.actor.name)
+            .and_then(|d| d.refinement.as_ref())
+            .map(|r| r.base.name.clone());
+        if !reads_claims(&p.actor.name) && !base.as_deref().is_some_and(reads_claims) {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.test.principal_claims_not_oidc",
                     claims.span,
                     format!(
-                        "`{}` isn't an `Oidc` actor, so its handlers read no token claims",
+                        "`{}` isn't an `Oidc` or `Bearer` actor, so its handlers read no token claims",
                         p.actor.name
                     ),
                 )
-                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` actor"),
+                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` or `Bearer` actor"),
             );
         }
     }

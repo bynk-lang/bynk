@@ -18,19 +18,19 @@ export const UserId = {
 };
 
 export const api = {
-  async http_GET_me(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_me(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("me");
   },
-  async http_GET_missing(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_missing(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.NotFound;
   },
-  async http_POST_things(body: string, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_POST_things(body: string, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Created(body);
   },
-  async http_GET_cached(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_cached(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("cached");
   },
-  async http_GET_tokens(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_tokens(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("tokens");
   },
   async http_GET_open_tokens(deps: {}): globalThis.Promise<HttpResult<string>> {

@@ -595,20 +595,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // #2078: reconcile events against the committed `bynk.schema.lock`,
         // read-only — a non-additive change fails `test` as it fails a
         // build, and `out.schema_lock` is never written back.
-        let o = match crate::try_project_options(&input)
-            .map_err(|e| e.to_string())
-            .and_then(|o| Ok(o.schema_registry(crate::schema_lock::read_only(&input)?)))
-            // #3107: the `dev` profile, so `[profile.dev] contracts = false`
-            // turns the guard off for a test run; on by default.
-            .and_then(
-                |o| Ok(o.contracts(crate::project_contracts(&input, crate::CliProfile::Dev)?)),
-            )
-            // #2842: the stored snapshots, inlined into the test modules.
-            .and_then(|o| {
-                let files = bynk_project::snapshots::read_snapshot_files(&input)
-                    .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
-                Ok(o.snapshot_files(files))
-            }) {
+        let o = match test_build_options(&input) {
             Ok(o) => match with_overlays(o, &input, mutant_overlay, overlay) {
                 Ok(o) => o,
                 Err(e) => return fail_run(program, json, stream, e),
@@ -1217,6 +1204,25 @@ fn report_no_tests(
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// The options a `bynk test` build starts from, before overlays: the project's, the read-only
+/// event-schema registry, the `dev` profile's contracts, the stored snapshots, and (#3945) the
+/// type-argument marker on generic capability calls that tells a `stub Cap.op[T]` its calls.
+fn test_build_options(input: &Path) -> Result<crate::project::CompileOptions, String> {
+    // #2078: reconcile events against the committed `bynk.schema.lock`, read-only — a
+    // non-additive change fails `test` as it fails a build, and it is never written back.
+    let o = crate::try_project_options(input)
+        .map_err(|e| e.to_string())?
+        .schema_registry(crate::schema_lock::read_only(input)?)
+        // #3107: the `dev` profile, so `[profile.dev] contracts = false` turns the guard off for
+        // a test run; on by default.
+        .contracts(crate::project_contracts(input, crate::CliProfile::Dev)?)
+        .typed_capability_calls(true);
+    // #2842: the stored snapshots, inlined into the test modules.
+    let files = bynk_project::snapshots::read_snapshot_files(input)
+        .map_err(|e| format!("could not read `snapshots/`: {e}"))?;
+    Ok(o.snapshot_files(files))
 }
 
 /// The build's options with the run's in-memory sources laid over the project's:

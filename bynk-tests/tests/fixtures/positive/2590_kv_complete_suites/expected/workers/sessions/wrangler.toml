@@ -12,3 +12,7 @@ id = "<KV_NAMESPACE_ID>" # set at deploy time
 binding = "KV_BLOBS"
 id = "<KV_BLOBS_ID>" # set at deploy time
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

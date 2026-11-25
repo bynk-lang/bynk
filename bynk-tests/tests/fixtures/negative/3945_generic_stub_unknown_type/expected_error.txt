@@ -1,0 +1,1 @@
+bynk.resolve.unknown_type unknown type `Nope` in the type arguments of a `stub`

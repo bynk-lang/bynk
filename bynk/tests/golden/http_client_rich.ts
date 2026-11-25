@@ -439,6 +439,24 @@ export interface WireViolation {
   readonly rule: WireValidationRule;
 }
 
+/**
+ * An error answered as RFC 9457 problem details (a service with `errors { format: problem }`): an error
+ * variant has `type` `about:blank`; a router rejection has a `https://bynk-lang.org/problems/<kind>` type
+ * and its own members: `kind`, `path`, a structural mismatch's `expected` and `actual`, and a refinement's
+ * `violation`.
+ */
+export interface Problem {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail?: string;
+  readonly kind?: string;
+  readonly path?: string;
+  readonly expected?: string;
+  readonly actual?: string;
+  readonly violation?: WireViolation;
+}
+
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
 export type BoundaryError =
   | { readonly kind: "MalformedJson"; readonly details: string }
@@ -532,8 +550,8 @@ export function viaBinding(
 /** What one reply of a route is. */
 export interface __Reply {
   readonly kind: string;
-  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, or nothing. */
-  readonly body: "value" | "message" | "location" | "boundary" | "raw" | "events" | "none";
+  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, problem details, or nothing. */
+  readonly body: "value" | "message" | "location" | "boundary" | "problem" | "problem-rejection" | "raw" | "events" | "none";
   /** A `raw` reply's `ETag`: `maybe` when the server may leave it out, `required` when it always sends one. */
   readonly etag?: "maybe" | "required";
   readonly decode?: (json: JsonValue) => Result<unknown, BoundaryError>;
@@ -769,6 +787,11 @@ function __isObject(v: JsonValue): v is { [k: string]: JsonValue } {
   return typeof v === "object" && v !== null && !globalThis.Array.isArray(v);
 }
 
+/** RFC 9457 problem details as the interface promises them: a string `type` and `title` and a numeric `status`. */
+function __isProblem(v: JsonValue): v is { [k: string]: JsonValue } {
+  return __isObject(v) && typeof v.type === "string" && typeof v.title === "string" && typeof v.status === "number";
+}
+
 /** The reply of `route` that `response` is, or why it is none. */
 function __classify(route: __Route, response: globalThis.Response, text: string): unknown {
   const status = response.status;
@@ -803,6 +826,15 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
         if (parsed && __isObject(json) && typeof json.kind === "string") {
           return { status, kind: reply.kind, error: json };
         }
+        break;
+      // An error variant's problem has no `kind` (its `type` is `about:blank`); a router rejection's has a
+      // string `kind`. Both can answer at one status (a handler's `BadRequest` beside the boundary's `400`), so
+      // the two body kinds are told apart by it.
+      case "problem":
+        if (parsed && __isProblem(json) && json.kind === undefined) return { status, kind: reply.kind, problem: json };
+        break;
+      case "problem-rejection":
+        if (parsed && __isProblem(json) && typeof json.kind === "string") return { status, kind: reply.kind, problem: json };
         break;
       case "value": {
         if (!parsed) break;

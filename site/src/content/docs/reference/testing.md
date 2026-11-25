@@ -202,7 +202,7 @@ handler route would receive for an asset's path still goes to the Worker; only
 
 ### Passing token claims — `by Workload("id", TokenClaims.of([…]))` {#token-claims}
 
-A handler guarded by an [`Oidc` actor](/reference/actors/#reading-claims)
+A handler guarded by an [`Oidc` or `Bearer` actor](/reference/actors/#reading-claims)
 reads its token's claims through its binder. At `unit` and `integration` a case
 supplies them as the principal's second argument, from `"name: value"` lines;
 with none, the handler sees no claims:
@@ -216,10 +216,11 @@ suite ci.release {
 }
 ```
 
-Each line is a string claim. Only an `Oidc` actor's principal takes claims
+Each line is a string claim. Only an `Oidc` or `Bearer` actor's principal takes claims
 (`bynk.test.principal_claims_not_oidc`). A `system` case mints the token itself:
 the [driver is the issuer](#failure-principals), signing a token whose `sub` is
-the identity and whose claims are those lines, and the Worker's real seam
+the identity and whose claims are those lines (for a refinement of a `Bearer` actor, beside the
+claims its predicate needs, which the principal's own override), and the Worker's real seam
 verifies it. There the claims must be written as a literal `TokenClaims.of([…])`
 in the principal (`bynk.test.system_claims_need_literal`), because the driver
 writes the lines into the token.
@@ -1164,6 +1165,14 @@ triad: `consumes` *declares* a seam, `given` *requires* it, and `stub`
 *substitutes* it under test (its own keyword since #548; formerly a pun on the
 production `provides`).
 
+A [generic operation](/reference/capabilities/#generic-operations) is stubbed at a
+type argument, written as at a call site: `stub Idempotency.dedup[Int](_) returns
+Some(7)`. The clause is typed against the operation with the type argument
+substituted, and it answers only calls made at that type argument, so
+`dedup[Int]` and `dedup[String]` carry separate stubs. The test build passes the
+call's type arguments as a trailing marker argument that the real binding
+ignores; the code the compiler emits for a production build is unchanged.
+
 - **The left is `Cap.method(<pattern>, …)`** — the capability, the method, and an
   **argument pattern** per parameter. A pattern is the [one predicate
   surface](/reference/testing/#expect): a literal (`"GBP"`, `1000`), `_`
@@ -1404,9 +1413,12 @@ case "an issue event is recorded" {
   test module alone. The deployable output is the same with or without it, and a
   helper adds nothing to the target's surface. So a helper may use what a test
   body may, such as [`Val[T]`](#val), `RequestHeaders.of`, `RequestQuery.of` and `TokenClaims.of`.
-- **Pure.** A helper returns a value. One that returns an `Effect` is
+- **Pure, or effectful with `given`.** A helper returns a value. One that returns
+  an `Effect` declares the capabilities it uses, as a context function does:
+  `fn seed() -> Effect[()] given Stock { … }`. Without `given` it is
   `bynk.suite.fn_effectful`: build the value in the helper and run the effect in
-  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`.
+  the `case`. A method (`fn Type.name`) is `bynk.suite.fn_method`. See
+  [Effectful helpers](#helpers-effectful).
 - **Private to its suite.** Another suite, even one targeting the same unit,
   cannot call it, and may declare a helper of the same name. A suite split across
   files is, as for [`stub`](#stub) and [`env`](#env), one suite per file.
@@ -1416,6 +1428,43 @@ case "an issue event is recorded" {
   name are `bynk.suite.duplicate_fn`.
 - **Not exported.** A suite's helpers are private to it; to share them across suites,
   put them in a [test-only commons](#test-only-commons).
+
+### Effectful helpers {#helpers-effectful}
+
+Setup that runs effects (create a table, seed rows, open a session) is a helper
+that declares `given`:
+
+```bynk,fragment
+suite shop.stock
+
+fn freshTable() -> Effect[()] given Stock {
+	let _ <- Stock.run("CREATE TABLE items (id TEXT, qty INTEGER)", [])
+	Effect.pure(())
+}
+
+case "an empty table counts zero" {
+	do freshTable()
+	let rows <- Stock.select[Counted]("FROM (SELECT count(*) AS n FROM items)", [])
+	expect rows == Ok([Counted { n: 0 }])
+}
+```
+
+- **Where it is called.** From a `case` or `property` body and from another
+  helper, which declares the capabilities it passes on, as a context function
+  does (`bynk.given.missing_for_call`). Each case calls its setup by name, so the
+  dependency is visible where it is used. A `stub … returns` value cannot call
+  one: a stub supplies a value and never runs logic
+  (`bynk.given.missing_for_call`).
+- **Capabilities.** `given` names the target's capabilities (its own, and those
+  of the adapters it consumes; a consumed service is not a capability). A case already has them, so it does
+  not declare them to call the helper. The case's `stub`s and call recording
+  apply inside the helper, so `expect Stock.run called` sees the helper's calls.
+- **Tiers.** At `unit` and `integration` a helper may declare `given`. A `system`
+  case names no capability, so a `given` helper in a `system` suite is
+  `bynk.test.helper_given_at_system`.
+- **Faults and `expect`.** A fault in a helper fails the case as it would inline.
+  `expect` stays case-only (`bynk.expect.outside_case`): a helper returns values
+  for the case to check.
 
 ## Types and constants in a suite {#suite-types-consts}
 
@@ -2161,6 +2210,10 @@ The subject is a **`Cap.op` reference** — the capability and one of its operat
 | `expect Cap.op called with <pred>` | at least one call whose arguments satisfy `<pred>` |
 | `expect Cap.op called <n> times with <pred>` | exactly `<n>` calls, and they match |
 | `expect A.op before B.op` | both occurred, and the first `A.op` precedes the first `B.op` |
+
+A generic operation is observed per type argument: `expect Idempotency.dedup[Int]
+called once` counts only the calls made at `Int`. Without the type argument an
+observation counts the calls at every type argument.
 
 `before` compares the order calls were **issued** in, not the order they finished.
 Inside a [`par` block](/reference/capabilities/#par) the first call of each

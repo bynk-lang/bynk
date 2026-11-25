@@ -26,7 +26,7 @@ export const Window = {
 };
 
 export const api = {
-  async http_GET_report(query: Window, deps: { identity: ReaderId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_report(query: Window, deps: { identity: ReaderId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`${String(query.days)} days for ${String(deps.identity)}`);
   },
 };

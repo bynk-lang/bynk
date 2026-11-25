@@ -1151,11 +1151,37 @@ fn question_on_an_option_hovers_as_not_found() {
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
     let h = hover_at(r, rel, text, root, at(text, "stored?", "?"))
         .expect("the `?` on an Option hovers");
-    assert!(h.contains("None → 404 NotFound"), "{h}");
+    assert!(h.contains("? : None returns early"), "{h}");
+    assert!(h.contains("404 NotFound"), "{h}");
     assert!(h.contains("let Some(x) = e else"), "{h}");
     let elsewhere = hover_at(r, rel, text, root, at(text, "Ok(\"found", "Ok"));
     assert!(
         elsewhere.is_none_or(|h| !h.contains("404 NotFound")),
         "only the `?` carries the note"
     );
+}
+
+/// #4181 — a commons names the `bynk` adapter's transparent types with no
+/// `consumes`, and hovers them like any type: the reference resolves to the
+/// adapter's declaration.
+#[test]
+fn a_prelude_type_in_a_commons_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/4181_commons_prelude_types",
+        "src/ops/schedules.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "id: Uuid", "Uuid"))
+        .expect("`Uuid` hovers in a commons");
+    assert!(h.contains("Uuid"), "{h}");
+    assert!(h.contains("String where Matches"), "{h}");
+    let c = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "Nightly: CronSchedule", "CronSchedule"),
+    )
+    .expect("`CronSchedule` hovers in a commons");
+    assert!(c.contains("String where Cron"), "{c}");
 }

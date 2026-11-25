@@ -18,7 +18,7 @@ export const UserId = {
 };
 
 export const api = {
-  async http_GET_activity(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_activity(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(`activity for ${String(deps.identity)}`);
   },
   async http_POST_notes(body: string, deps: {}): globalThis.Promise<HttpResult<string>> {
