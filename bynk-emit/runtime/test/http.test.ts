@@ -186,10 +186,10 @@ test("SseEvent framing: a value the wire cannot carry errors the body at that ev
 
 test("Streaming.heartbeat: an idle stream gets a comment line, a busy one none, and no event is lost", async () => {
   async function* slow(): AsyncGenerator<string> {
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 1300));
     yield "late";
   }
-  const beat = httpResultToResponse(withHeartbeat(HttpResult.Streaming(slow()), 40), id);
+  const beat = httpResultToResponse(withHeartbeat(HttpResult.Streaming(slow()), 1000), id);
   const text = await beat.text();
   assert.ok(text.startsWith(":\n\n"), "a heartbeat is written while the source is idle");
   assert.ok(text.endsWith("data: late\n\n"), "the awaited event still arrives, once");
@@ -203,13 +203,14 @@ test("Streaming.heartbeat: an idle stream gets a comment line, a busy one none, 
   assert.equal(await busy.text(), "data: a\n\ndata: b\n\n");
 
   async function* fails(): AsyncGenerator<string> {
-    await new Promise((r) => setTimeout(r, 80));
+    await new Promise((r) => setTimeout(r, 1200));
     throw new Error("boom");
   }
-  const broken = httpResultToResponse(withHeartbeat(HttpResult.Streaming(fails()), 30), id);
+  const broken = httpResultToResponse(withHeartbeat(HttpResult.Streaming(fails()), 1000), id);
   await assert.rejects(broken.text(), /boom/);
 
-  assert.throws(() => withHeartbeat(HttpResult.Streaming(quick()), 0), /interval must be positive/);
+  assert.throws(() => withHeartbeat(HttpResult.Streaming(quick()), 0), /at least one second/);
+  assert.throws(() => withHeartbeat(HttpResult.Streaming(quick()), 999), /at least one second/);
 });
 
 test("httpResultToResponse: status codes map per variant", async () => {

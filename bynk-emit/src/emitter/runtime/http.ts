@@ -532,7 +532,7 @@ export function withRetryAfter<R extends object>(result: R, delayMillis: number)
 
 /** #3918: `Streaming(…).heartbeat(every)`: a comment line whenever the event stream is idle this long. */
 export function withHeartbeat<R extends object>(result: R, everyMillis: number): R {
-  if (!(everyMillis > 0)) throw new Error("heartbeat: the interval must be positive");
+  if (!(everyMillis >= 1000)) throw new Error("heartbeat: the interval must be at least one second");
   return { ...result, heartbeatMs: everyMillis };
 }
 

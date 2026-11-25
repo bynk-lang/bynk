@@ -490,6 +490,9 @@ pub struct SystemJobServices {
     pub cron: HashMap<String, Vec<String>>,
     /// The queue services.
     pub queue: HashSet<String>,
+    /// #3899: the queue services whose consumer admits only signed messages: their driver takes
+    /// the foreign actor a case acts as, as its last argument.
+    pub signed_queue: HashSet<String>,
     /// #3328: the email services, driven as raw MIME through the Worker's
     /// `email()` entry (`__sysdrive_message_<svc>(mail)`).
     pub email: HashSet<String>,
