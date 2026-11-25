@@ -228,6 +228,13 @@
                 },
                 "type": "array"
               },
+              "cpu_ms": {
+                "description": "This Worker's CPU limit, in milliseconds, over `[workers] cpu_ms`.",
+                "format": "uint32",
+                "maximum": 300000,
+                "minimum": 1,
+                "type": "integer"
+              },
               "custom_domains": {
                 "description": "Custom domains the Worker is attached to, like `pay.example.com`.",
                 "items": {
@@ -258,6 +265,14 @@
                   }
                 },
                 "type": "object"
+              },
+              "placement": {
+                "description": "This Worker's placement, `\"smart\"` or `\"off\"`, over `[workers] placement`.",
+                "enum": [
+                  "smart",
+                  "off"
+                ],
+                "type": "string"
               },
               "routes": {
                 "description": "Route patterns the Worker is attached to, like `pay.example.com/*`.",
@@ -770,6 +785,13 @@
           },
           "type": "array"
         },
+        "cpu_ms": {
+          "description": "The CPU time each Worker may use per request, in milliseconds, written as\n`[limits] cpu_ms`: raise it for CPU-heavy work such as password hashing.\nFrom `1` to `300000`; a limit above the account's plan is Cloudflare's\nerror at deploy. Unset leaves Cloudflare's default. A worker group\noverrides it.",
+          "format": "uint32",
+          "maximum": 300000,
+          "minimum": 1,
+          "type": "integer"
+        },
         "observability": {
           "additionalProperties": false,
           "description": "Workers Logs, so `Logger.log`'s structured fields are queryable on\nCloudflare. On by default; written as `[observability]` into every\n`wrangler.toml`, which each environment inherits. A worker group\noverrides it key by key under `[deploy.workers.<key>.observability]`.",
@@ -789,6 +811,15 @@
             }
           },
           "type": "object"
+        },
+        "placement": {
+          "default": "off",
+          "description": "`\"smart\"` turns on Smart Placement for every Worker (written as\n`[placement] mode = \"smart\"`): the Worker runs near the back end it\ntalks to, such as a `D1` database, rather than near the user. `\"off\"`\n(the default) leaves Cloudflare's default placement. A worker group\noverrides it.",
+          "enum": [
+            "smart",
+            "off"
+          ],
+          "type": "string"
         },
         "workers_dev": {
           "description": "Whether every Worker is served on its `*.workers.dev` URL: written as\n`workers_dev` in each `wrangler.toml`. Set `false` to take the Workers\noff `workers.dev`. Unset leaves the key out, so Cloudflare's default\n(on) applies.",

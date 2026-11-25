@@ -177,6 +177,8 @@ pub enum ProjectPathsError {
     BadWorkerGroup { key: String, reason: String },
     /// #4127: a `[workers.observability]` table that is not well formed.
     BadObservability { reason: String },
+    /// #4128: a `[workers]` `cpu_ms` or `placement` that is not well formed.
+    BadWorkers { reason: String },
     /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
     /// `"allow"`.
     BadDevAck { key: String, reason: String },
@@ -245,7 +247,13 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
     (
         "workers",
-        &["compatibility_flags", "workers_dev", "observability"],
+        &[
+            "compatibility_flags",
+            "workers_dev",
+            "observability",
+            "cpu_ms",
+            "placement",
+        ],
     ),
     (
         "deploy",
@@ -444,6 +452,7 @@ impl std::fmt::Display for ProjectPathsError {
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
             }
+            ProjectPathsError::BadWorkers { reason } => write!(f, "`[workers]` {reason}"),
             ProjectPathsError::BadObservability { reason } => {
                 write!(f, "`[workers.observability]` {reason}")
             }
@@ -742,6 +751,9 @@ pub struct WorkersConfig {
     /// `[workers.observability]`; on, keeping every invocation, when the table
     /// is absent.
     pub observability: crate::observability::Observability,
+    /// #4128: the project's CPU limit and Smart Placement, from `[workers]`'s
+    /// `cpu_ms` and `placement`; unset leaves Cloudflare's defaults.
+    pub tuning: crate::worker_tuning::WorkerTuning,
 }
 
 /// Read `bynk.toml`'s `[workers]` table, honouring `overlay` for `bynk.toml`
@@ -1338,10 +1350,14 @@ fn workers_config_from(table: &toml::Table) -> Result<WorkersConfig, ProjectPath
             });
         }
     };
+    let tuning = crate::worker_tuning::from_table(table)
+        .map_err(|reason| ProjectPathsError::BadWorkers { reason })?
+        .over(crate::worker_tuning::WorkerTuning::default());
     Ok(WorkersConfig {
         compatibility_flags,
         workers_dev,
         observability,
+        tuning,
     })
 }
 

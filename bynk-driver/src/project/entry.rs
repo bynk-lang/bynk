@@ -182,6 +182,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         bynk_emit::emitter::workers_emit::WorkersSettings {
             workers_dev: options.workers_dev,
             observability: options.observability,
+            tuning: options.tuning,
         },
         options.out_dir.as_deref(),
         options.contracts_lock.as_deref(),

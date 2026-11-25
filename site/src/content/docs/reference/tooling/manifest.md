@@ -64,6 +64,9 @@ contracts = false           # `release` default
 compatibility_flags = []    # extra Cloudflare flags, after the default
 workers_dev = true          # false takes each Worker off workers.dev; left out unless set
 
+cpu_ms = 50                 # each Worker's CPU limit in ms, 1 to 300000; left out unless set
+placement = "smart"         # "smart" turns on Smart Placement; "off" (the default) leaves it out
+
 [workers.observability]
 enabled = true              # Workers Logs on, so Logger.log's fields are queryable; the default
 head_sampling_rate = 1      # the fraction of invocations whose logs are kept, 0 to 1; the default
@@ -600,6 +603,8 @@ checked, and the duplicate warning below still appears.
 | `compatibility_flags` | array of strings | `[]` | Extra [compatibility flags](https://developers.cloudflare.com/workers/configuration/compatibility-flags/) for every Worker's `wrangler.toml`, after the default set. |
 | `workers_dev` | boolean | unset | Whether every Worker is served on its `*.workers.dev` URL. Set `false` to turn that off; unset leaves the key out of `wrangler.toml`, so Cloudflare's default (on) applies. |
 | `observability` | table | on, keeping every invocation | Workers Logs; see [Workers Logs](#workers-logs) below. |
+| `cpu_ms` | integer, 1 to 300000 | unset | The CPU time each Worker may use per request, written as `[limits] cpu_ms`. Raise it for CPU-heavy work, such as password hashing. Unset leaves Cloudflare's default. A limit above what the account's plan allows is Cloudflare's error at deploy; Bynk checks only the platform's absolute maximum. |
+| `placement` | `"smart"` or `"off"` | `"off"` | `"smart"` turns on [Smart Placement](https://developers.cloudflare.com/workers/configuration/placement/), written as `[placement] mode = "smart"`: a Worker that mostly talks to one `D1` database or one Hyperdrive-fronted Postgres runs near it rather than near the user. It changes latency characteristics, so it is opt-in. |
 
 Every Worker gets `global_fetch_strictly_public` whatever this list says. In
 Bynk, a `Fetch` to a URL goes over the public internet, and the flag makes
@@ -632,6 +637,9 @@ is an error.
 generated `wrangler.toml`. It must be `true` or `false`; anything else is an
 error. A deployment environment inherits it, so `bynk deploy --env` doesn't
 repeat it.
+
+`cpu_ms` and `placement` are inherited by a deployment environment, and a
+[worker group](#worker-groups) overrides either for its own Worker.
 
 ### Workers Logs
 
@@ -756,6 +764,8 @@ routes = ["pay.example.com/*"]
 | `routes` | `[deploy.workers.<key>]` | array of strings | Route patterns the Worker is attached to, like `pay.example.com/*`: a host (a leading `*.` is allowed), then `/` and a path, with no scheme. |
 | `custom_domains` | `[deploy.workers.<key>]` | array of strings | Custom domains the Worker is attached to, like `pay.example.com`. No scheme, path or wildcard. |
 | `observability` | `[deploy.workers.<key>]` | table | This Worker's [Workers Logs](#workers-logs) settings, laid over the project's `[workers.observability]` key by key (`enabled`, `head_sampling_rate`). |
+| `cpu_ms` | `[deploy.workers.<key>]` | integer | This Worker's CPU limit, over `[workers] cpu_ms`: `cpu_ms = 2000` for a Worker that hashes passwords. |
+| `placement` | `[deploy.workers.<key>]` | `"smart"` or `"off"` | This Worker's placement, over `[workers] placement`. |
 
 The **key** is the group's identity: its entry in `bynk.deploy.lock`, its
 `--worker` selector and its `workers/<key>/` directory. `name` only changes
