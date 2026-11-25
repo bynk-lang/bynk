@@ -40,10 +40,10 @@ export const Jar = {
 };
 
 export const api = {
-  async http_GET_me(headers: Auth, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_me(headers: Auth, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("me");
   },
-  async http_GET_many(headers: Many, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_many(headers: Many, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("many");
   },
   async http_GET_jar(headers: Jar, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
