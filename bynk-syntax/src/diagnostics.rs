@@ -261,11 +261,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
     },
     Explain {
-        code: "bynk.actor.oidc_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
-        example: "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
-    },
-    Explain {
         code: "bynk.actor.oidc_trust_from_is_secret",
         blurb: "`trustFrom` names a variable that holds trust roots as JSON. A variable an actor uses as its `secret` holds a signing key, and one variable cannot be both. Give `trustFrom` a variable of its own.",
         example: "type UserId = String where NonEmpty\ntype WorkloadId = String where NonEmpty\n\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"JWT_KEY\"), identity = WorkloadId }   // ✗ `JWT_KEY` is a key\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
@@ -400,11 +395,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.signed_cookie_missing_ttl",
         blurb: "A session cookie that never expires is the failure a language should not allow by omission, so `ttl` is required. It is how long an issued cookie is valid: the browser's `Max-Age` and the signed expiry both come from it. A stateless cookie cannot be revoked before it expires, so keep it short.",
         example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
-    },
-    Explain {
-        code: "bynk.actor.signed_cookie_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
     },
     Explain {
         code: "bynk.actor.signed_cookie_public_cache",
@@ -1202,6 +1192,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.cloudflare.edge_cache_public_authenticated",
         blurb: "In a context with `EdgeCache`, the edge keys a response by its URL alone, and `scope: public` lets it share one response with every later caller. On a route whose actor authenticates, such as a `Bearer` one, that response belongs to one caller, so it would be served to the rest. Use `scope: private`, which is never shared at the edge, or serve the route `by Visitor`. See also `bynk.http.cache_public_reads_cookies`.",
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
+    },
+    Explain {
+        code: "bynk.commons.consumes_not_types",
+        blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
+        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
     },
     Explain {
         code: "bynk.consumes.alias_conflict",
@@ -6275,7 +6270,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.nested_effect",
-        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic type that holds its parameter directly under an `Effect` (`type Wrap[T] = { v: Effect[T] }`) cannot be given an effect either: `Wrap[Effect[Int]]` has a field `Effect[Effect[Int]]`. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
         example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
     },
     Explain {
@@ -6680,25 +6675,67 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
     },
     Explain {
-        code: "bynk.uses.name_conflict",
+        code: "bynk.uses.ambiguous_name",
         blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
-                and embeds) in scope under their own names, with no prefix. If two commons it uses \
-                both declare the same name, a mention of it could mean either, so the compiler \
-                refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the \
-                declarations, drop one of the `uses`, or mark the declaration `private` if only \
-                its own commons needs it, since a `private` declaration is never imported and so \
-                never conflicts.",
+                and embeds) in scope under their own names. Two commons it uses may declare the same \
+                name, and that is fine until the name is written bare: then it could mean either, so \
+                the compiler refuses that reference and lists the qualified spellings. Choose one: give \
+                a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean \
+                (`uses billing { Amount }`), which also brings in only the names you list. A \
+                declaration of the unit's own wins over a used name, and a `private` declaration is \
+                never imported, so neither can be ambiguous.",
         example: "// billing.bynk\n\
                   commons billing\n\n\
                   type Amount = Int where Positive\n\n\
                   // shipping.bynk\n\
                   commons shipping\n\n\
-                  type Amount = Int where NonNegative    // both declare `Amount`\n\
-                  type Postage = Int where NonNegative   // ✓ renamed\n\n\
+                  type Amount = Int where NonNegative    // both declare `Amount`\n\n\
                   // orders.bynk\n\
                   commons orders\n\n\
                   uses billing\n\
-                  uses shipping                          // ✗ `Amount` is also declared by `billing`",
+                  uses shipping as S                     // ✓ `S.Amount` is `shipping`'s\n\n\
+                  type Order = { total: Amount }         // ✗ `Amount` is declared by `billing` and `shipping`\n\
+                  type Order = { total: Amount, postage: S.Amount }    // ✓ the second one by its alias",
+    },
+    Explain {
+        code: "bynk.uses.name_conflict",
+        blurb: "A unit's own declaration shadows a `uses`-imported one of the same name, as it does in \
+                the emitted module, and a reference the local declaration cannot answer cannot mean \
+                the import either: a call to a type, a bare service name, a name written where the \
+                local declaration hides a type. Rename the local declaration, or `uses` the commons \
+                with an alias or a braced list that renames the import (`uses lib.util { total as \
+                totalOf }`). Two used commons that declare one name are not this: that is \
+                `bynk.uses.ambiguous_name`, reported where the name is written.",
+        example: "// lib/util.bynk\n\
+                  commons lib.util\n\n\
+                  fn total() -> Int {\n\
+                  \x20 1\n\
+                  }\n\n\
+                  // app/main.bynk\n\
+                  context app\n\n\
+                  uses lib.util\n\n\
+                  type total = { n: Int }\n\
+                  type Totals = { n: Int }               // ✓ a name of its own\n\n\
+                  fn sum() -> Int {\n\
+                  \x20 total()                              // ✗ the local type `total` hides the imported function\n\
+                  }",
+    },
+    Explain {
+        code: "bynk.uses.second_spelling",
+        blurb: "A unit reaches each declaration of a used commons by one spelling: the bare name \
+                its `uses` brings in, the alias (`uses lib.billing as B`, then `B.Amount`), or the \
+                full name (`lib.billing.Amount`). Reading the same declaration by a second spelling \
+                would make two names for one type, so the compiler refuses the second and names the \
+                one to keep. Use that spelling everywhere, or change the `uses` clauses so that only \
+                one spelling reaches it.",
+        example: "// lib/billing.bynk\n\
+                  commons lib.billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses lib.billing { Amount }\n\n\
+                  type Order = { a: Amount, b: lib.billing.Amount }    // ✗ `Amount` is already in scope\n\
+                  type Order = { a: Amount, b: Amount }                // ✓ one spelling",
     },
     Explain {
         code: "bynk.uses.self_reference",
@@ -6719,6 +6756,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.uses.unknown_commons",
         blurb: "`uses` brings a commons' types, functions and constants into scope, so it must name a commons in the project, and no unit of that name exists. Check the spelling against the `commons` line of the unit you mean. If the unit is a context, `uses` is the wrong clause: that is `bynk.uses.target_is_context`.",
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nuses mony                        // ✗ no commons `mony`\nuses money                       // ✓ the commons' declared name",
+    },
+    Explain {
+        code: "bynk.uses.unknown_name",
+        blurb: "A braced `uses` list, or a name written through a `uses` qualifier, names something the \
+                commons does not declare publicly. A type, function, constant, asset or embed that the \
+                commons marks `private` is never imported, so it cannot be listed either. Check the \
+                spelling against the commons' own declarations.",
+        example: "// billing.bynk\n\
+                  commons billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses billing { Amont }                   // ✗ `billing` declares no `Amont`\n\
+                  uses billing { Amount }                  // ✓ the declared name\n\n\
+                  type Order = { id: Int }",
     },
     Explain {
         code: "bynk.val.agent_not_generable",
@@ -7006,12 +7058,32 @@ pub struct Retired {
 
 /// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
 /// code from [`REGISTRY`].
-pub const RETIRED: &[Retired] = &[Retired {
-    code: "bynk.http.multipart_body_unbounded",
-    last_release: "0.661.1",
-    why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
-    replacement: Some("the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`"),
-}];
+pub const RETIRED: &[Retired] = &[
+    Retired {
+        code: "bynk.actor.oidc_not_in_sum",
+        last_release: "0.661.1",
+        why: "An `Oidc` actor may now be a member of a multi-actor sum (#3936): the sum's seam checks its members in order, asynchronously, so a JWKS fetch fits.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose members are tried in declared order",
+        ),
+    },
+    Retired {
+        code: "bynk.actor.signed_cookie_not_in_sum",
+        last_release: "0.661.1",
+        why: "A `SignedCookie` actor may now be a member of a multi-actor sum (#3936): its CSRF check belongs to the cookie arm, so a token client that sends no cookie never meets it.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose cookie arm applies the CSRF check only when it is tried",
+        ),
+    },
+    Retired {
+        code: "bynk.http.multipart_body_unbounded",
+        last_release: "0.661.1",
+        why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+        replacement: Some(
+            "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+];
 
 /// The tombstone for a retired `code`, or `None` when it was never retired.
 pub fn retired(code: &str) -> Option<&'static Retired> {
@@ -7148,10 +7220,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Oidc` actor does not name its `jwks` endpoint.",
     ),
     d(
-        "bynk.actor.oidc_not_in_sum",
-        "An `Oidc` actor appears as a member of a multi-actor sum.",
-    ),
-    d(
         "bynk.actor.oidc_trust_from_is_secret",
         "An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`.",
     ),
@@ -7246,10 +7314,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.signed_cookie_missing_ttl",
         "A `SignedCookie` actor does not declare a `ttl`.",
-    ),
-    d(
-        "bynk.actor.signed_cookie_not_in_sum",
-        "A `SignedCookie` actor appears as a member of a multi-actor sum.",
     ),
     d(
         "bynk.actor.signed_cookie_public_cache",
@@ -7633,6 +7697,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.codegen.tsc_failed",
         "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
+    ),
+    dg(
+        "bynk.commons.consumes_not_types",
+        "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context.",
+        &["consumes_decl"],
     ),
     dg(
         "bynk.consumes.alias_conflict",
@@ -11247,8 +11316,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A variant payload has the wrong type.",
     ),
     dg(
+        "bynk.uses.ambiguous_name",
+        "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one.",
+        &["uses_decl"],
+    ),
+    dg(
         "bynk.uses.name_conflict",
-        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.second_spelling",
+        "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type.",
         &["uses_decl"],
     ),
     dg(
@@ -11269,6 +11348,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.unknown_commons",
         "`uses` names a commons that does not exist.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.unknown_name",
+        "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly.",
         &["uses_decl"],
     ),
     dg(

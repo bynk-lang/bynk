@@ -36,6 +36,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Commons(c))
             }
             Some(TokenKind::Context) => {
@@ -52,6 +53,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Context(c))
             }
             Some(TokenKind::Adapter) => {
@@ -68,6 +70,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut a.uses);
                 Ok(SourceUnit::Adapter(a))
             }
             Some(TokenKind::Suite) => {
@@ -94,6 +97,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut t.uses);
                 Ok(SourceUnit::Suite(t))
             }
             Some(_) => {
@@ -134,6 +138,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// A documentation block with no declaration to attach to: warn, and keep
+    /// its text as an ordinary comment so nothing is lost.
+    fn warn_orphan_doc(
+        &mut self,
+        item_doc: Option<DocLead>,
+        leading: &mut Vec<Comment>,
+        why: &str,
+    ) {
+        if let Some(doc) = item_doc {
+            self.warnings.push(CompileError::new(
+                "bynk.parse.orphan_doc_block",
+                doc.span,
+                why,
+            ));
+            keep_orphan(leading, doc);
+        }
+    }
+
     /// Parse a commons body, brace or fragment form (`brace` selects which).
     /// Unified from two near-duplicate functions (review Part 3, "the
     /// six-fold item loop") behind the same `brace: bool` parameter
@@ -156,6 +178,7 @@ impl<'a> Parser<'a> {
         self.enter_item_loop();
         let mut items = Vec::new();
         let mut uses = Vec::new();
+        let mut consumes = Vec::new();
         // Cover the header (`commons <name>`) so the unit span stays valid even
         // when every item is dropped by error recovery — the document-symbol
         // selection range (the name span) must remain contained in this span.
@@ -174,28 +197,20 @@ impl<'a> Parser<'a> {
                     // Doc not attachable; treat as orphan if present. Any
                     // leading comments at this position end up as the
                     // body's trailing comments.
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block has no following declaration to attach to",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(
+                        item_doc,
+                        &mut leading,
+                        "documentation block has no following declaration to attach to",
+                    );
                     trailing_comments = std::mem::take(&mut leading);
                     break;
                 }
                 None if !brace => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block has no following declaration to attach to",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(
+                        item_doc,
+                        &mut leading,
+                        "documentation block has no following declaration to attach to",
+                    );
                     // Comments we held as leading for the next item, plus
                     // any held in the trivia table's epilogue, become the
                     // commons body's trailing comments.
@@ -204,17 +219,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(TokenKind::Uses) => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(
-                            CompileError::new(
-                                "bynk.parse.orphan_doc_block",
-                                doc_span,
-                                "documentation block before `uses` is not allowed; only `type` and `fn` declarations carry docs",
-                            ),
-                        );
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(item_doc, &mut leading, "documentation block before `uses` is not allowed; only `type` and `fn` declarations carry docs");
                     if !brace && seen_item {
                         let t = self.peek().unwrap();
                         return Err(CompileError::new(
@@ -232,6 +237,21 @@ impl<'a> Parser<'a> {
                             u.trivia.trailing = self.take_trailing_trivia();
                             last_span = u.span;
                             uses.push(u);
+                        }
+                        Err(e) => self.handle_item_err(e)?,
+                    }
+                }
+                // #4044: `consumes U { T, … }` in a commons names types of another
+                // unit. Every form parses; the checker accepts only the braced,
+                // type-only one (`bynk.commons.consumes_not_types`).
+                Some(TokenKind::Consumes) => {
+                    self.warn_orphan_doc(item_doc, &mut leading, "documentation block before `consumes` is not allowed; only `type` and `fn` declarations carry docs");
+                    match self.parse_consumes_decl() {
+                        Ok(mut c) => {
+                            c.trivia.leading = leading;
+                            c.trivia.trailing = self.take_trailing_trivia();
+                            last_span = c.span;
+                            consumes.push(c);
                         }
                         Err(e) => self.handle_item_err(e)?,
                     }
@@ -432,15 +452,15 @@ impl<'a> Parser<'a> {
                         }
                     };
                     let note = if brace {
-                        "the body of a commons contains zero or more `type`, `fn`, `messages`, or `uses` declarations"
+                        "the body of a commons contains zero or more `type`, `fn`, `messages`, `uses`, or `consumes` declarations"
                     } else {
-                        "in fragment-form commons (no braces), the body is a sequence of `type`, `fn`, `messages`, or `uses` declarations to end of file"
+                        "in fragment-form commons (no braces), the body is a sequence of `type`, `fn`, `messages`, `uses`, or `consumes` declarations to end of file"
                     };
                     let err = CompileError::new(
                         "bynk.parse.expected_item",
                         t.span,
                         format!(
-                            "expected `type`, `fn`, `messages`, or `uses` declaration, found {}",
+                            "expected `type`, `fn`, `messages`, `uses`, or `consumes` declaration, found {}",
                             t.kind.describe()
                         ),
                     )
@@ -471,7 +491,7 @@ impl<'a> Parser<'a> {
         Ok(Commons::parsed(
             name,
             items,
-            uses,
+            (uses, consumes),
             documentation,
             brace,
             span,
@@ -479,13 +499,80 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    /// #4045: hand each qualified name the unit read to the `uses` clause that
+    /// introduced its qualifier, then clear the parser's record for the next unit.
+    fn distribute_qualified_refs(&mut self, uses: &mut [UsesDecl]) {
+        for (full, span) in std::mem::take(&mut self.qualified_refs) {
+            let Some((prefix, name)) = full.rsplit_once('.') else {
+                continue;
+            };
+            for u in uses.iter_mut() {
+                let by_alias = u.alias.as_ref().is_some_and(|a| a.name == prefix);
+                if (by_alias || u.target.joined() == prefix)
+                    && !u.qualified_refs.iter().any(|r| r.text == full)
+                {
+                    u.qualified_refs.push(QualifiedRef {
+                        text: full.clone(),
+                        name: name.to_string(),
+                        span,
+                    });
+                }
+            }
+        }
+        self.use_prefixes.clear();
+    }
+
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {
         let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Uses, "to start a `uses` declaration")?;
         let target = self.parse_qualified_name()?;
-        let span = kw.span.merge(target.span);
+        let mut span = kw.span.merge(target.span);
+        let mut alias = None;
+        let mut selected = None;
+        match self.peek_kind() {
+            // #4045: `uses lib.y as Y`.
+            Some(TokenKind::As) => {
+                self.bump();
+                let id = self.expect_ident("as an alias for the used commons")?;
+                span = span.merge(id.span);
+                alias = Some(id);
+            }
+            // #4045: `uses lib.y { Status as YStatus, describe }`.
+            Some(TokenKind::LBrace) => {
+                self.bump();
+                let mut names = Vec::new();
+                while self.peek_kind() != Some(TokenKind::RBrace) {
+                    let id = self.expect_ident("a name in `uses U { … }`")?;
+                    let alias = if self.eat(TokenKind::As).is_some() {
+                        Some(self.expect_ident("a name after `as` in `uses U { … }`")?)
+                    } else {
+                        None
+                    };
+                    names.push(ConsumesItem { name: id, alias });
+                    if self.eat(TokenKind::Comma).is_none() {
+                        break;
+                    }
+                }
+                let close = self.expect(TokenKind::RBrace, "to close the `uses` list")?;
+                span = span.merge(close.span);
+                selected = Some(names);
+            }
+            _ => {}
+        }
+        // #4045: the names a qualified reference may start with from here on.
+        if let Some(a) = &alias {
+            self.use_prefixes.push(a.name.clone());
+        }
+        // A one-segment commons name (`uses keys`) is no qualifier: it is as likely a
+        // local of that name (`keys.map(…)`), which only an alias is explicit about.
+        if target.parts.len() > 1 {
+            self.use_prefixes.push(target.joined());
+        }
         Ok(UsesDecl {
             target,
+            alias,
+            selected,
+            qualified_refs: Vec::new(),
             span,
             trivia: Trivia::default(),
             blank_before,

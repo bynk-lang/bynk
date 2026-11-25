@@ -1,0 +1,48 @@
+suite page
+
+case "escapeText escapes ampersand, less-than and greater-than" {
+	expect escapeText("a & b < c > d") == "a &amp; b &lt; c &gt; d"
+	expect escapeText("<script>alert(1)</script>") == "&lt;script&gt;alert(1)&lt;/script&gt;"
+}
+
+case "escapeText escapes the ampersand first, so an escape is not escaped twice" {
+	expect escapeText("&lt;") == "&amp;lt;"
+	expect escapeText("&amp;") == "&amp;amp;"
+}
+
+case "escapeText leaves quotes alone, which text does not need escaped" {
+	expect escapeText("say \"hi\" it's") == "say \"hi\" it's"
+}
+
+case "escapeAttr also escapes both quotes and the backtick" {
+	expect escapeAttr("\"") == "&quot;"
+	expect escapeAttr("'") == "&#39;"
+	expect escapeAttr("`") == "&#96;"
+	expect escapeAttr("a&b<c>d\"e'f`g") == "a&amp;b&lt;c&gt;d&quot;e&#39;f&#96;g"
+}
+
+case "escaped output holds none of the special characters" {
+	let nasty = "<a href=\"x\" onclick='y'>&`</a>"
+	let text = escapeText(nasty)
+	let attr = escapeAttr(nasty)
+	expect !text.contains("<")
+	expect !text.contains(">")
+	expect !attr.contains("<")
+	expect !attr.contains(">")
+	expect !attr.contains("\"")
+	expect !attr.contains("'")
+	expect !attr.contains("`")
+}
+
+case "an empty string and a plain one are unchanged" {
+	expect escapeText("") == ""
+	expect escapeAttr("") == ""
+	expect escapeText("plain words") == "plain words"
+	expect escapeAttr("plain words") == "plain words"
+}
+
+case "a page built from the escapes is safe in either quote style" {
+	expect title("A & B") == "<h1>A &amp; B</h1>"
+	expect image("a.png", "x\" onerror=\"y") == "<img src=\"a.png\" alt=\"x&quot; onerror=&quot;y\">"
+	expect imageSingle("a.png", "x' onerror='y") == "<img src='a.png' alt='x&#39; onerror=&#39;y'>"
+}

@@ -1,0 +1,52 @@
+================================================================================
+uses: a braced list and an alias
+================================================================================
+
+commons app.z
+
+uses lib.x
+uses lib.y as Y
+uses lib.money { Money, format as formatMoney }
+
+fn f(t: Y.Status) -> String {
+  Y.describe(t)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier)))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier))
+      (identifier))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier))
+      (consumes_item
+        (identifier))
+      (consumes_item
+        (identifier)
+        (identifier)))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (qualified_type_ref
+          (identifier)
+          (identifier)))
+      (base_type)
+      (block
+        (method_call
+          (identifier)
+          (identifier)
+          (identifier))))))

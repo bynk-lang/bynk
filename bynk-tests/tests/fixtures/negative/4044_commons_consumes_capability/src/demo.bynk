@@ -1,0 +1,10 @@
+---
+#4044: a capability is not a type, so a commons cannot list one.
+---
+commons demo
+
+consumes bynk { Clock }
+
+fn id(x: Int) -> Int {
+	x
+}

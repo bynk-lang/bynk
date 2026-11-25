@@ -40,28 +40,30 @@ so the page links a real, content-hashed URL:
 ```bynk,fragment
 commons app.page
 
+uses bynk.html
+
 asset style = "assets/page.css"
 
 embed shell = "embeds/page.html"
 
----
-Escapes text for an HTML body or a double-quoted attribute.
----
-fn escape(s: String) -> String {
-	s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
-}
-
 fn render(title: String, content: String) -> String {
 	shell
 		.replace("{{style}}", style.url)
-		.replace("{{title}}", escape(title))
+		.replace("{{title}}", escapeText(title))
 		.replace("{{content}}", content)
 }
 ```
 
-`content` is markup you built (a table, say), so it is not escaped here; the
-caller escaped the text inside it. Escaping is yours to do: an embed hands you
-text and nothing more.
+`bynk.html` is the standard library's two escapes, pure and available on every target.
+`escapeText` is for text between tags, as the title is here. For a value that goes inside a
+quoted attribute, such as `<img alt="{{alt}}">`, use `escapeAttr`: it also escapes both
+`"` and `'`, so it is safe in either quote style, where a hand-written escape that covers only
+`"` is not safe in a single-quoted attribute.
+
+`content` is markup you built (a table, say), so it is not escaped here; the caller escaped
+the text inside it. Escaping is still yours to do: an embed hands you text and nothing more.
+Neither function makes a value safe in an unquoted attribute, in a URL attribute such as
+`href` or `src` (where `javascript:` passes), or inside `<script>` or `<style>`.
 
 ## Serve it
 

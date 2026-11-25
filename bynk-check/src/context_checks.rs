@@ -2248,44 +2248,6 @@ fn check_by_clause_contracts(
                 ),
             );
         }
-        // v0.151: `Oidc` is single-actor only this slice — a multi-actor sum owns
-        // the whole boundary and reads the body once, a shape the OIDC seam (JWKS
-        // fetch + async key import) does not yet fit. Reject it as a peer.
-        if by.is_sum() && contract.scheme == actors::Scheme::Oidc {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.oidc_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `Oidc` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "OIDC is single-actor this slice — give the route a single \
-                     `by user: <OidcActor>` clause",
-                ),
-            );
-        }
-        // #3386: `SignedCookie` is single-actor only in its first slice, as
-        // `Oidc` was: the per-arm CSRF rule is the part that gets harder in a
-        // sum, so a route guarded by one takes a single `by u: <Actor>`.
-        if by.is_sum() && contract.scheme == actors::Scheme::SignedCookie {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.signed_cookie_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `SignedCookie` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "a signed cookie is single-actor in this slice — give the route a single \
-                     `by user: <SignedCookieActor>` clause",
-                ),
-            );
-        }
         members.push((actor_ref, contract));
     }
     // v0.51: a Signature member verifies an HMAC over the body, so the handler

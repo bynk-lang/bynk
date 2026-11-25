@@ -787,14 +787,11 @@ fn analyse_project_inner(
     // -- 5c. `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
 
-    // -- 6. `uses` name-conflict detection. --
-    project_model::phase_uses_name_conflicts(
-        &unit_uses,
-        &unit_tables,
-        &parsed,
-        &groups,
-        &mut errors,
-    );
+    // -- 6. `uses` views: selection, renames, aliases, qualified names, and the
+    //       names two used commons share (#4045). --
+    let mut unit_tables = unit_tables;
+    crate::uses_view::phase_use_views(&unit_uses, &parsed, &groups, &mut unit_tables, &mut errors);
+    let unit_tables = unit_tables;
     // -- 6.1. #2618: a public signature naming a private type. --
     project_model::phase_private_in_public(&parsed, &groups, &mut errors);
 
@@ -1168,6 +1165,7 @@ fn analyse_project_inner(
         &unit_uses,
         &unit_consumes,
         &unit_type_aliases,
+        &unit_tables,
         std::mem::take(&mut refs),
     );
 

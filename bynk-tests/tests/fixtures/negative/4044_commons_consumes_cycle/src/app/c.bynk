@@ -1,0 +1,12 @@
+---
+#4044: a commons that consumes an adapter which `uses` it is a cycle.
+---
+commons app.c
+
+consumes ext.a { Thing }
+
+type Mine = { n: Int }
+
+fn f(t: Thing) -> Int {
+	1
+}

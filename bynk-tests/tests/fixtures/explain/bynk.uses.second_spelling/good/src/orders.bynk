@@ -1,0 +1,5 @@
+commons orders
+
+uses lib.billing { Amount }
+
+type Order = { a: Amount, b: Amount }

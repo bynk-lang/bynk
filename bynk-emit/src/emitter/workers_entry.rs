@@ -126,6 +126,16 @@ fn signed_cookie_name(
     h: &bynk_syntax::ast::Handler,
     actors: &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
 ) -> Option<String> {
+    if let Some(members) = bynk_check::actors::sum_members_for(h, actors) {
+        // #3936: a sum's cookie arm (a sum has at most one, as peers differ by scheme).
+        return members.into_iter().find_map(|m| {
+            if let bynk_check::actors::SumMemberSeam::SignedCookie(s) = m.seam {
+                Some(s.cookie)
+            } else {
+                None
+            }
+        });
+    }
     bynk_check::actors::signed_cookie_seam_for(h, actors).map(|s| s.cookie)
 }
 
