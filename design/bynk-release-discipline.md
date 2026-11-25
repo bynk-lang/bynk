@@ -107,6 +107,19 @@ cut when the work it ships is whole:**
    moves the VS Code extension's server pin to the new release, and tells the
    bynk-lang org canary, which re-runs the org's example and action
    repositories against it.
+   **Binaries and runners (#4263).** The `binaries` matrix builds both Apple
+   targets on the Intel macOS runner (`macos-15-intel`), so no leg a release
+   waits on needs an arm64 macOS runner. GitHub's arm64 macOS runners went
+   unallocated for two attempts at v0.661.1, and since `github-release` needs
+   every `binaries` leg, the GitHub Release was never published even though the
+   crates and the grammar had been. The job only builds, packages and uploads;
+   it never runs the binary, so `aarch64-apple-darwin` is cross-compiled on the
+   Intel host, which has the macOS SDK that linking Security.framework needs (a
+   Linux cross-build would not). A step reads each binary's Mach-O slice with
+   `lipo` and fails the leg unless it is the target's own, leaving the
+   `lipo -info` lines in the job log. The release's macOS test leg keeps its
+   name, `Test suite (macos-latest)`, which is how its result is matched with
+   ci.yml's, but runs on the same Intel runner for the same reason.
 4. **What a release carries.** The cumulative migration note (above), covering
    the increments since the previous release, and the Workers
    compatibility-date review (Part 3).

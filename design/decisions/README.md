@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0956](0956-queue-producer-message-type.md) | **A producer's message type is checked against the queue's consumer when both are in the project** (v0.694) — A project phase pairs each `Queue` instance's `sendValue*` call sites with the `from queue` consumer of the same name and compares their types by the cross-context boundary comparison | Accepted (v0.694) |
 | [0955](0955-map-entry-prelude-record.md) | **MapEntry becomes a nameable transparent prelude record** (v0.693) — Makes MapEntry[K, V] constructible and nameable in any unit, so Map.of can take entries written in source, and refuses it at a boundary | Accepted (v0.693) |
 | [0954](0954-html-response-security-headers.md) | **HTML responses get framing and referrer protection, and security { } gains frameAncestors, referrerPolicy and csp** (v0.692) — A text/html response defaults to frame-ancestors 'none' and strict-origin-when-cross-origin, and the security section can name the framing sources, the referrer policy and a whole csp | Accepted (v0.692) |
 | [0953](0953-find-regex-named.md) | **`findRegexNamed` returns a regex's named groups as a Map keyed by name** (v0.691) — a new `String` kernel method reads the group names from the literal pattern at compile time; a pattern with none is an error | Accepted (v0.691) |

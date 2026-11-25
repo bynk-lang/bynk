@@ -4136,6 +4136,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
     },
     Explain {
+        code: "bynk.queue.message_type_mismatch",
+        blurb: "The queue name is a string both sides write, so the compiler is the only party that sees a producer and its consumer and can say they disagree. When a context in the project consumes the queue a `Queue @name(\"…\")` instance sends to, `sendValue`, `sendValueWith` and `sendValueBatch` (its elements) must send a type the consumer's `on message` accepts, by the comparison a cross-context call gets: the same fields and variants, and a stronger refinement is admitted where the consumer expects a weaker one. Otherwise the consumer could not decode the message, which would be retried and then dead-lettered or dropped at run time. Send the consumer's type, or change the consumer. A queue no context in the project consumes (a foreign Worker, or nobody yet) has nothing to compare with and is not checked; nor is a send whose type is still a type parameter.",
+        example: "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] { … }\n}",
+    },
+    Explain {
         code: "bynk.queue.no_dead_letter",
         blurb: "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
@@ -4154,6 +4159,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.queue.undecodable_unreachable",
         blurb: "`Undecodable` is the verdict a `system` case reads when a message reached a real queue and its body did not decode. Only that path can produce it: a handler builds `Ack`, `Retry` or `RetryAfter`, and a `unit` or `integration` case calls the consumer with a value that is already typed, so no message can fail to decode there. A pattern of `Undecodable` anywhere else is a dead arm that looks as if it handled something. Replace the arm with `_`, since a `match` must still be exhaustive, or, if the decode failure is what you want to test, make the case `as system` and address the queue by its context path. It is only a warning, since the arm does no harm.",
         example: "case \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false   // ⚠ a unit case never sees this verdict\n      _ => expect false\n    }\n}\n\ncase \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack   // ✓ the verdicts a unit case can see\n}",
+    },
+    Explain {
+        code: "bynk.queue.untyped_send",
+        blurb: "`send`, `sendWith` and `sendBatch` take JSON text, which the compiler cannot check against the consumer's message type, so a body that does not decode is found only at run time. When a context in the project consumes the queue, they warn and name the typed form: `sendValue`, `sendValueWith` and `sendValueBatch` encode a value at the call site, put exactly the same message on the queue, and are checked against the consumer (`bynk.queue.message_type_mismatch`). The untyped forms stay legal, because they are how to forward a body that is already encoded. A queue no context in the project consumes is not warned about.",
+        example: "capability OrderEvents = Queue @name(\"order-events\")\n\nlet _ <- OrderEvents.send(Json.encode(order))   // ⚠ not checked against the consumer\n\nlet _ <- OrderEvents.sendValue(order)   // ✓ checked against the consumer",
     },
     Explain {
         code: "bynk.race.in_agent_handler",
@@ -9436,6 +9446,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses.",
         &["queue_handler"],
     ),
+    d(
+        "bynk.queue.message_type_mismatch",
+        "A `sendValue`, `sendValueWith` or `sendValueBatch` sends a type the queue's consumer in the project does not accept.",
+    ),
     warn(dg(
         "bynk.queue.no_dead_letter",
         "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
@@ -9453,6 +9467,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.queue.undecodable_unreachable",
         "An `Undecodable` pattern of a `QueueResult` appears where the value is not a `system` case's queue verdict, so it can never match (warning).",
+    )),
+    warn(d(
+        "bynk.queue.untyped_send",
+        "`send`, `sendWith` or `sendBatch` sends JSON text to a queue the project consumes, which the compiler cannot check against the consumer (warning).",
     )),
     dg(
         "bynk.race.in_agent_handler",

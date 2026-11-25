@@ -122,6 +122,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/4279_queue_undecodable_unreachable` holds it with `expected_warnings.txt`, and `positive/4279_queue_undecodable_system_silent` shows a `system` case without it",
     ),
     (
+        "bynk.queue.untyped_send",
+        "a warning; `positive/3644_queue_one_consumer_many_producers` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),
