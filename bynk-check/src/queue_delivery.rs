@@ -254,8 +254,9 @@ pub fn phase_dead_letter_consumers(
     }
 }
 
-/// #3899: the foreign senders a queue service's `on message` admits, as (actor, secret), or `None`
-/// when it admits unsigned messages (`by Producer`).
+/// #3899: the senders a queue service's `on message` admits, as (actor, secret), or `None` when it
+/// admits unsigned messages (`by Producer`). A `Producer` refinement has no secret of its own (its
+/// senders sign under their edge keys), so it is listed by its actor's name alone.
 fn signed_senders(
     service: &ServiceDecl,
     actors: &HashMap<String, ActorDecl>,
@@ -264,7 +265,13 @@ fn signed_senders(
         .handlers
         .iter()
         .find_map(|h| crate::actors::queue_admission_for(h, &service.protocol, actors))
-        .map(|a| a.foreign.into_iter().map(|f| (f.actor, f.secret)).collect())
+        .map(|a| {
+            a.foreign
+                .into_iter()
+                .map(|f| (f.actor, f.secret))
+                .chain(a.producers.into_iter().map(|(actor, _)| (actor, String::new())))
+                .collect()
+        })
 }
 
 /// #3899: a dead letter keeps whatever the source consumer received, so a signed queue's dead

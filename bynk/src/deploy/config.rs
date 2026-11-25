@@ -307,6 +307,10 @@ pub(crate) struct Resources {
     /// to a missing queue fails the deploy too), but recorded in the ledger
     /// only when Bynk created it.
     pub(crate) producer_queues: Vec<String>,
+    /// #3899: the Workers of the signed queue consumers this context's producers send to, by
+    /// directory. Each is an edge key's other end ([`secrets::project_edges`]), though no Service
+    /// Binding joins them, so it never orders the deploy.
+    pub(crate) signs_queue_to: Vec<String>,
     /// #1796: the Durable Object classes the config declares in `exports`
     /// (each agent, plus the events fan-out class), in class-name order.
     /// **Advisory** — Cloudflare reconciles the declared set against the
@@ -456,6 +460,7 @@ impl Default for Resources {
             foreign_services: Vec::new(),
             queues: Vec::new(),
             producer_queues: Vec::new(),
+            signs_queue_to: Vec::new(),
             durable_objects: Vec::new(),
             renamed_durable_objects: Vec::new(),
             deleted_durable_objects: Vec::new(),
@@ -649,6 +654,7 @@ fn read_worker(config: &Path, declared: DeclaredBindings) -> Result<Resources, S
         foreign_services: declared.foreign_services,
         queues,
         producer_queues,
+        signs_queue_to: declared.signs_queue_to,
         durable_objects,
         renamed_durable_objects,
         deleted_durable_objects,
@@ -1653,6 +1659,7 @@ max_batch_size = 10
                 BindingSource::QueueProducer {
                     capability: cap(),
                     queue: "jobs".into(),
+                    signs_to: None,
                 },
             ),
             sample(
@@ -2028,6 +2035,7 @@ max_batch_size = 10
                 BindingSource::QueueProducer {
                     capability: "Cap".into(),
                     queue: queue.into(),
+                    signs_to: None,
                 },
             )
         };

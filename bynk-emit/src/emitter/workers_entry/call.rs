@@ -63,7 +63,7 @@ pub(super) const FOREIGN_CALLERS: &str = "__FOREIGN_CALLERS";
 
 /// #3890: a `Caller` refinement's predicate as a TypeScript boolean over the
 /// proven caller name.
-fn caller_predicate_expr(pred: &bynk_check::actors::CallerPredicate, from: &TsExpr) -> TsExpr {
+pub(super) fn caller_predicate_expr(pred: &bynk_check::actors::CallerPredicate, from: &TsExpr) -> TsExpr {
     use bynk_check::actors::CallerPredicate as P;
     match pred {
         P::IsContext(names) => names

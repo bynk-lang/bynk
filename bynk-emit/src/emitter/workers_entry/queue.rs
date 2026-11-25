@@ -1,11 +1,13 @@
 //! The Worker's `queue()` export: the queue routes, their dispatch and the message entries.
 
+use super::call::caller_predicate_expr;
 use super::respond::{case_, default_case, fault_detail, report_fault};
 use super::wire::deserialise_call;
 use crate::emitter::RuntimeUse;
 use crate::ts_build::{
-    as_expr, assign, await_expr, block, bool_lit, call, const_, const_typed, expr_stmt, ident, if_,
-    member, method_call, not_expr, return_, str_lit, strict_eq, switch_stmt,
+    arrow, as_expr, assign, await_expr, block, bool_lit, call, cond_expr, const_, const_typed,
+    expr_stmt, ident, if_, member, method_call, not_expr, or_expr, paren, return_, str_lit,
+    strict_eq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ServiceProtocol, TypeRef};
@@ -293,6 +295,9 @@ pub(super) struct QueueRoute {
 #[derive(Debug, Clone)]
 pub(super) struct SignedRoute {
     pub(super) secrets: Vec<(String, String)>,
+    /// The `Producer` refinements it admits, as (actor, predicate over the sending context): Bynk
+    /// producers sign under their edge key rather than a declared secret.
+    pub(super) producers: Vec<(String, bynk_check::actors::CallerPredicate)>,
     pub(super) sources: Vec<String>,
     /// For a sum (`by who: Legacy | Partner`), its members: the handler is passed which one signed.
     pub(super) sum: Option<Vec<bynk_check::actors::CallSumMember>>,
@@ -327,7 +332,10 @@ fn admission_stmts(route: &QueueRoute) -> Vec<TsStmt> {
                     sources,
                     ident("env"),
                     secrets,
-                ],
+                ]
+                .into_iter()
+                .chain(admits_context(signed))
+                .collect(),
             )),
         ),
         if_(
@@ -356,6 +364,20 @@ fn admission_stmts(route: &QueueRoute) -> Vec<TsStmt> {
     .collect()
 }
 
+/// `(c: string) => <a refinement admits c>`: the Bynk contexts the consumer admits, when a `Producer`
+/// refinement names any. The admission reads such a sender's edge key and nothing else about it.
+fn admits_context(signed: &SignedRoute) -> Option<TsExpr> {
+    let admitted = signed
+        .producers
+        .iter()
+        .map(|(_, p)| paren(caller_predicate_expr(p, &ident("c"))))
+        .reduce(or_expr)?;
+    Some(arrow(
+        vec![TsParam::new("c", Some(TsType::named("string")))],
+        admitted,
+    ))
+}
+
 /// `msg.ack();`, preceded for a signed consumer by keeping the message's id (`await __a.settle(true);`).
 fn ack_stmt(route: &QueueRoute) -> TsStmt {
     let ack = expr_stmt(method_call(ident("msg"), "ack", vec![]));
@@ -368,22 +390,53 @@ fn ack_stmt(route: &QueueRoute) -> TsStmt {
     )
 }
 
-/// `const __who = { tag: __a.from };` for a sum: the message's signer, which the admission already
-/// verified is one of the members, as the actor the handler's `match` resolves.
+/// `const __who = <the signer>;` for a sum: the message's signer, which the admission already
+/// verified is one of the members, as the actor the handler's `match` resolves. A declared foreign
+/// sender is `{ tag: __a.from }`; a Bynk context is the first `Producer` refinement whose predicate
+/// admits it, with the context's name as its identity, as a `Caller` refinement's member carries it.
 fn signer_stmt(signed: &SignedRoute) -> Option<TsStmt> {
     let members = signed.sum.as_ref()?;
-    let tags = members
+    let from = || member(ident("__a"), "from");
+    let foreign_tags = members
         .iter()
+        .filter(|m| matches!(m, bynk_check::actors::CallSumMember::Foreign(_)))
         .map(|m| format!("\"{}\"", m.actor_name()))
         .collect::<Vec<_>>()
         .join(" | ");
+    let foreign = TsExpr::object(vec![(
+        "tag".to_string(),
+        as_expr(from(), TsType::named(foreign_tags)),
+    )]);
+    let who = match signed.producers.split_last() {
+        None => foreign,
+        Some(((last, _), rest)) => {
+            let member_of = |actor: &str| {
+                TsExpr::object(vec![
+                    ("tag".to_string(), str_lit(actor.to_string())),
+                    ("identity".to_string(), from()),
+                ])
+            };
+            let context =
+                rest.iter()
+                    .rev()
+                    .fold(member_of(last), |otherwise, (actor, pred)| {
+                        cond_expr(
+                            paren(caller_predicate_expr(pred, &from())),
+                            member_of(actor),
+                            otherwise,
+                        )
+                    });
+            if signed.secrets.is_empty() {
+                context
+            } else {
+                cond_expr(member(ident("__a"), "context"), context, foreign)
+            }
+        }
+    };
     Some(const_typed(
         "__who",
         crate::emitter::emit::call_sum_ts_type(members),
-        TsExpr::object(vec![(
-            "tag".to_string(),
-            as_expr(member(ident("__a"), "from"), TsType::named(tags)),
-        )]),
+        who,
     ))
 }
 
@@ -511,6 +564,7 @@ pub(super) fn collect_queue_routes(
                         .map(|a| SignedRoute {
                             sum: a.sum,
                             secrets: a.foreign.into_iter().map(|f| (f.actor, f.secret)).collect(),
+                            producers: a.producers,
                             sources: deliveries
                                 .iter()
                                 .filter(|d| d.dead_letter.as_deref() == Some(name.as_str()))

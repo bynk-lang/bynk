@@ -373,7 +373,8 @@ impl Edge {
 
 /// Every edge of the project: a Worker's Service Binding to another of the
 /// project's Workers is one (a caller to the context it calls, or a publisher
-/// to a subscriber). A binding to anything else is not a Bynk edge.
+/// to a subscriber), and so is a queue producer's signing key to a signed consumer's Worker
+/// (#3899). A binding to anything else is not a Bynk edge.
 pub(crate) fn project_edges(resources: &BTreeMap<String, Resources>) -> Vec<Edge> {
     let members = |worker: &str| resources[worker].members.clone();
     let mut edges: Vec<Edge> = resources
@@ -390,6 +391,19 @@ pub(crate) fn project_edges(resources: &BTreeMap<String, Resources>) -> Vec<Edge
                 })
         })
         .collect();
+    // #3899: a Worker whose queue producers sign for a consumer holds an edge key with the
+    // consumer's Worker, as a call does, though no Service Binding joins them.
+    edges.extend(resources.iter().flat_map(|(caller, r)| {
+        r.signs_queue_to
+            .iter()
+            .filter(|callee| resources.contains_key(*callee))
+            .map(|callee| Edge {
+                caller: caller.clone(),
+                callee: callee.clone(),
+                caller_contexts: members(caller),
+                callee_contexts: members(callee),
+            })
+    }));
     // #3562: a group's members call each other through the Worker's own dispatcher
     // (G3-2), signed as any call is, so the Worker holds a key for each of them. The
     // Worker binds to itself, which is no deploy-order edge but is a key edge.

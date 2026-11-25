@@ -212,12 +212,37 @@ it, as for `Idempotency`). A secret that is missing from the Worker's environmen
 `bynk deploy` mints the secret, sets it on the consumer's Worker and prints it once for the producer's
 operator. Several `Foreign` actors may stand in one sum, `by who: Legacy | Partner`, and the body
 `match`es on which one signed the message. A lone `Foreign` actor takes no binder, and a `Foreign` actor
-beside `Producer` or a refinement of it is `bynk.actor.queue_actor_not_enforced` for now. Signing is
+beside the unsigned `Producer` is `bynk.actor.queue_actor_not_enforced`. Signing is
 covered by the format's integrity guarantee, not confidentiality: anyone with access to the account
 can still read a queued body.
 
-A `system` case sends as a foreign producer with `by`, signing the message as the producer would, and
-sending the same message twice replays it:
+A Bynk producer is admitted by what it is, as a Bynk caller is on a `call` handler: a refinement of
+`Producer` names the contexts that may send, with the same `IsContext(…)` vocabulary as a refinement of
+`Caller`.
+
+```bynk,ignore
+actor FromOrders = Producer where IsContext(shop.orders)
+
+service fulfil from queue("order-events") {
+  on message(order: Order) -> Effect[QueueResult] by FromOrders {
+    …
+  }
+}
+```
+
+The producer writes nothing. A `Queue` instance whose queue has such a consumer in the project signs
+everything it sends from a context the refinement admits, under the key of its edge to the consumer's
+context, the key `bynk deploy` sets between two contexts for a call (`bynk dev` passes a local one), and
+the consumer verifies it under the matching key for the sending context's name. A message from a context
+the refinement does not admit, from another sender or from none is refused as above. A refinement may
+stand in a sum beside `Foreign` actors, `by who: FromOrders | Legacy`, and the body's `match` reads the
+context that sent the message as the member's identity, `FromOrders(sender) => …`, which is the signer
+and never anything in the body. A lone refinement takes no binder, and a refinement beside the unsigned
+`Producer` is `bynk.actor.queue_actor_not_enforced`. A dead-letter queue's consumer must name the same
+actors as its source (`bynk.queue.dead_letter_signing_mismatch`).
+
+A `system` case sends as a foreign producer with `by`, signing the message as the producer would (as a
+Bynk context it names, `by FromOrders("shop.orders")`), and sending the same message twice replays it:
 
 ```bynk,ignore
 suite shop as system {
