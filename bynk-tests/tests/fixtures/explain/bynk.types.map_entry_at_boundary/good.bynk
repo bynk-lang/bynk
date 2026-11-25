@@ -1,0 +1,17 @@
+context shop
+
+type Pair = { key: String, value: Int }
+
+type Index = {
+    entries: List[Pair],
+}
+
+agent Counts {
+    key shop: String
+
+    store all: Map[String, Int]
+
+    on call total() -> Effect[Int] {
+        all.values.count()
+    }
+}

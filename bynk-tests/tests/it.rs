@@ -315,6 +315,8 @@ mod system {
     mod agent_state_schema_lock;
     #[path = "alias_service_workerd.rs"]
     mod alias_service_workerd;
+    #[path = "analyse_mode_corpus.rs"]
+    mod analyse_mode_corpus;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
@@ -425,6 +427,8 @@ mod system {
     mod http_client;
     #[path = "http_edge_cache_behaviour.rs"]
     mod http_edge_cache_behaviour;
+    #[path = "http_html_security.rs"]
+    mod http_html_security;
     #[path = "http_limits_behaviour.rs"]
     mod http_limits_behaviour;
     #[path = "http_method_behaviour.rs"]

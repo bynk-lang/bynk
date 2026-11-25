@@ -369,6 +369,41 @@ pub(in crate::emitter) fn lower_result_kernel(
                 iife(params, body, n)
             })
         }
+        // #3969: `r.orElse(f)` is `r` if `Ok`, else `f(error)`; `r.err()` is the error as an `Option`.
+        (ResultOp::OrElse, [f]) => {
+            // The call's checked type is `Result[T, F]` — peel for F.
+            let fty = call_ty(e, cx, "a `Result.orElse` call", "Result[_, _]", ok, |ty| {
+                ty.as_result().map(|(_, err)| err)
+            });
+            let fnode = ts_ty_to_ts_type(fty, tys);
+            let kids = operands(&mut pre, cx, &[receiver, f]);
+            Some({
+                let n = kids;
+                let params = vec![
+                    TsParam::new("__r", Some(res.clone())),
+                    TsParam::new("__f", Some(fn_type(&[("e", &et)], result_of(&t, &fnode)))),
+                ];
+                let body = cond_expr(
+                    tag_is("__r", "Ok"),
+                    ident("__r"),
+                    call(ident("__f"), vec![field("__r", "error")]),
+                );
+                iife(params, body, n)
+            })
+        }
+        (ResultOp::Err, []) => {
+            let kids = operands(&mut pre, cx, &[receiver]);
+            Some({
+                let n = kids;
+                let params = vec![TsParam::new("__r", Some(res.clone()))];
+                let body = cond_expr(
+                    tag_is("__r", "Err"),
+                    call(ident("Some"), vec![field("__r", "error")]),
+                    ident("None"),
+                );
+                iife(params, body, n)
+            })
+        }
         _ => None,
     };
     finish(pre, built)

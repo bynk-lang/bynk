@@ -1,0 +1,2 @@
+bynk.http.security_invalid_field
+must be one of the standard values, in camel case

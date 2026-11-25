@@ -1,0 +1,9 @@
+---
+#3979: a group name used twice is refused at compile time, because the runtimes
+refuse it when the pattern is built.
+---
+commons demo
+
+fn side(s: String) -> Option[Map[String, Option[String]]] {
+    s.findRegexNamed("(?<side>a)|(?<side>b)")
+}
