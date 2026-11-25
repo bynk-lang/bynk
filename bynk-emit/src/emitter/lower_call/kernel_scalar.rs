@@ -579,9 +579,10 @@ fn none_or_some(name: &str, rhs: TsExpr, some: TsExpr) -> TsExpr {
     }
 }
 
-/// The groups of a regex match, as `Option<string>[]`.
-fn groups_node() -> TsExpr {
-    let map_group = typed_arrow(
+/// `(__g: string | undefined): Option<string> => __g === undefined ? None : Some(__g)`, one
+/// capture group as an `Option`.
+fn group_option_arrow() -> TsExpr {
+    typed_arrow(
         "__g",
         TsType::union(vec![ts_named("string"), ts_named("undefined")]),
         option_string(),
@@ -590,7 +591,12 @@ fn groups_node() -> TsExpr {
             ident("undefined"),
             call(ident("Some"), vec![ident("__g")]),
         ),
-    );
+    )
+}
+
+/// The groups of a regex match, as `Option<string>[]`.
+fn groups_node() -> TsExpr {
+    let map_group = group_option_arrow();
     typed_arrow(
         "__m",
         ts_named("globalThis.RegExpMatchArray"),
@@ -621,6 +627,58 @@ fn find_regex_node(regex: TsExpr, recv: TsExpr) -> TsExpr {
     call(mapper, vec![call(member(regex, "exec"), vec![recv])])
 }
 
+/// #3979: `((__m: RegExpExecArray | null): Option<ReadonlyMap<string, Option<string>>> =>
+/// __m === null ? None : Some(new Map<string, Option<string>>([["major", (group)(__m.groups?.["major"])],
+/// …])))(regex.exec(recv))`: the first match's named groups, keyed by the names the pattern
+/// writes. The names are known at compile time, so there is one entry per name and no runtime
+/// helper; a group that did not take part is `None`.
+fn find_regex_named_node(regex: TsExpr, recv: TsExpr, names: &[String]) -> TsExpr {
+    let entries = names
+        .iter()
+        .map(|name| {
+            let groups = TsExpr::OptionalMember {
+                object: Box::new(ident("__m")),
+                property: "groups".to_string(),
+            };
+            let picked = TsExpr::OptionalIndex {
+                object: Box::new(groups),
+                index: Box::new(str_lit(name.clone())),
+            };
+            TsExpr::array(vec![
+                str_lit(name.clone()),
+                call(group_option_arrow(), vec![picked]),
+            ])
+        })
+        .collect();
+    let map = crate::ts_build::new(
+        crate::ts_build::type_app(
+            ident("globalThis.Map"),
+            vec![ts_named("string"), option_string()],
+        ),
+        vec![TsExpr::array(entries)],
+    );
+    let mapper = typed_arrow(
+        "__m",
+        TsType::union(vec![
+            ts_named("globalThis.RegExpExecArray"),
+            ts_named("null"),
+        ]),
+        TsType::named_with_args(
+            "Option",
+            vec![TsType::named_with_args(
+                "ReadonlyMap",
+                vec![ts_named("string"), option_string()],
+            )],
+        ),
+        none_or_some(
+            "__m",
+            TsExpr::Lit(bynk_ts::TsLit::Null),
+            call(ident("Some"), vec![map]),
+        ),
+    );
+    call(mapper, vec![call(member(regex, "exec"), vec![recv])])
+}
+
 /// One regex arm over a lowered receiver (and the replacement for `replaceRegex`). The node
 /// and the text are the same expression; the `find`, `findAll` and `split` arms carry typed
 /// arrows, written out once each.
@@ -640,6 +698,12 @@ fn regex_arm(op: StringOp, literal: &str, kids: Vec<bynk_ts::TsExpr>) -> Option<
             let n = kids;
             let [recv] = take::<1, _>(n);
             find_regex_node(regex_node(literal, "", false), recv)
+        }
+        StringOp::FindRegexNamed => {
+            let n = kids;
+            let [recv] = take::<1, _>(n);
+            let names = bynk_check::regex_groups::group_names(literal);
+            find_regex_named_node(regex_node(literal, "", false), recv, &names)
         }
         StringOp::FindAllRegex => {
             let n = kids;
@@ -718,6 +782,7 @@ pub(in crate::emitter) fn lower_string_kernel(
                 StringOp::MatchesRegex
                     | StringOp::ContainsRegex
                     | StringOp::FindRegex
+                    | StringOp::FindRegexNamed
                     | StringOp::FindAllRegex
                     | StringOp::ReplaceRegex
                     | StringOp::SplitRegex

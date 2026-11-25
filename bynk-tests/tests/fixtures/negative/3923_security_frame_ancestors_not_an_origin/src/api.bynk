@@ -1,0 +1,9 @@
+context api
+
+service api from http {
+  security { frameAncestors: ["https://*.example.com"] }
+
+  on GET("/page") () -> Effect[HttpResult[()]] by v: Visitor {
+    Raw(Bytes.fromUtf8("<p>x</p>"), "text/html")
+  }
+}
