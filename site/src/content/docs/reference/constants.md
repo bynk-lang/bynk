@@ -128,6 +128,11 @@ a constant too, and there the rule is the type the position expects rather than
 `Cron`. A constant of another refined type is refused, which keeps named types
 distinct inside a context. See [Cron](/reference/cron/#naming-a-schedule-with-a-constant).
 
+The address of a `from email(…)` service takes a constant too, declared exactly
+`String` (there is no refined address type) and bound to a literal or to another
+such constant; the literal it resolves to is checked as an address is. See
+[Inbound email](/reference/inbound-email/#naming-an-address-with-a-constant).
+
 ## What it becomes
 
 A constant is an exported TypeScript function of the declaring module, typed by

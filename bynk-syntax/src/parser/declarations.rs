@@ -3578,13 +3578,33 @@ impl<'a> Parser<'a> {
                     TokenKind::LParen,
                     "expected a recipient address `(\"support@shop.example\")` after `from email`",
                 )?;
-                let addr_tok = self.expect(
-                    TokenKind::StrLit,
-                    "expected the recipient address as a string literal",
-                )?;
-                let address = parse_string_literal(self.slice(addr_tok.span), addr_tok.span)?;
+                // #3889: a string literal, or the name of a constant that is one; a
+                // name leaves the address empty for the resolution pass to fill.
+                let (address, address_const) = if self.peek_kind() == Some(TokenKind::Ident) {
+                    let name = self.expect_ident("as the constant naming the recipient address")?;
+                    (
+                        String::new(),
+                        Some(AddressConst {
+                            name,
+                            decl_span: None,
+                            refusal: None,
+                        }),
+                    )
+                } else {
+                    let addr_tok = self.expect(
+                        TokenKind::StrLit,
+                        "expected the recipient address as a string literal or a constant name",
+                    )?;
+                    (
+                        parse_string_literal(self.slice(addr_tok.span), addr_tok.span)?,
+                        None,
+                    )
+                };
                 self.expect(TokenKind::RParen, "to close the email address binding")?;
-                Ok(ServiceProtocol::Email { address })
+                Ok(ServiceProtocol::Email {
+                    address,
+                    address_const,
+                })
             }
             _ => {
                 let (span, found) = match self.peek() {

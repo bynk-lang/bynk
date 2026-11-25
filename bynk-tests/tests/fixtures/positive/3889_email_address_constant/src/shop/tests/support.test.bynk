@@ -1,0 +1,21 @@
+suite shop.support as system {
+  case "a constant names the support address" {
+    let r <- support.message(InboundEmail { from: "a@b.example", to: "support@shop.example", subject: "hello" })
+    expect r is Forward("billing@shop.example")
+  }
+
+  case "a same-file constant names the sales address" {
+    let r <- sales.message(InboundEmail { from: "a@b.example", to: "sales@shop.example", subject: "hello" })
+    expect r is Forward("support@shop.example")
+  }
+
+  case "a literal address still works beside the constants" {
+    let r <- legal.message(InboundEmail { from: "a@b.example", to: "legal@shop.example", subject: "hello" })
+    expect r is Reject("not handled here")
+  }
+
+  case "a constant that names another constant resolves through the chain" {
+    let r <- returns.message(InboundEmail { from: "a@b.example", to: "billing@shop.example", subject: "hello" })
+    expect r is Accept
+  }
+}

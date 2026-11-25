@@ -1773,7 +1773,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.email.invalid_address",
-        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address.",
+        blurb: "A `from email` service claims a bare address, `local@domain`, or a whole domain with `*@domain`. The domain is dotted labels of letters, digits and `-`. A display name (`Support <a@b.example>`), a list, a wildcard inside the local part, and an address with spaces or quotes are refused: Email Routing matches the bare address. The address may be written as the name of a constant declared exactly `String` and bound to such a literal; a constant of any other type, refined or not, is this error with a note naming it.",
         example: "service support from email(\"Support <support@shop.example>\") { … }   // ✗ a display name\n\nservice support from email(\"support@shop.example\") { … }            // ✓",
     },
     Explain {

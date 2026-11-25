@@ -49,7 +49,7 @@ pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
         .services
         .iter()
         .filter_map(|(name, s)| {
-            let ServiceProtocol::Email { address } = &s.protocol else {
+            let ServiceProtocol::Email { address, .. } = &s.protocol else {
                 return None;
             };
             Some(EmailRoute {

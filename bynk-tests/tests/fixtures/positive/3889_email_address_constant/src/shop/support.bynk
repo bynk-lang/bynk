@@ -1,0 +1,37 @@
+context shop.support
+
+uses shop.addresses
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+const Sales: String = "sales@shop.example"
+
+// #3889: each service claims its address by name; the constant resolves to its literal, so
+// routing, dispatch and the duplicate check see literal text.
+service support from email(Support) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Forward(Billing)
+  }
+}
+
+service sales from email(Sales) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Forward(Support)
+  }
+}
+
+// A constant that names another constant resolves through the chain.
+service returns from email(Returns) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Accept
+  }
+}
+
+service legal from email("legal@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Reject("not handled here")
+  }
+}

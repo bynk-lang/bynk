@@ -624,7 +624,7 @@ pub fn lower_protocol_ir_from_commons(
         ServiceProtocol::Http => ProtocolIr::Http,
         ServiceProtocol::Cron => ProtocolIr::Cron,
         ServiceProtocol::Queue { name } => ProtocolIr::Queue { name: name.clone() },
-        ServiceProtocol::Email { address } => ProtocolIr::Email {
+        ServiceProtocol::Email { address, .. } => ProtocolIr::Email {
             address: address.clone(),
         },
         ServiceProtocol::WebSocket { in_type, out_type } => ProtocolIr::WebSocket {

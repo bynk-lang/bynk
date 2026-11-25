@@ -1,0 +1,16 @@
+context svc
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+type Short40 = String where MaxLength(40)
+
+const Front: Short40 = "front@shop.example"
+
+service front from email(Front) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Accept
+  }
+}
