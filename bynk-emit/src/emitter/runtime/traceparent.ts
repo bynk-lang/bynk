@@ -18,7 +18,7 @@
 // carried.
 
 /** The header a caller sends a trace in, and a callee reads it from. */
-export const TRACEPARENT_HEADER = "traceparent";
+export const W3C_TRACEPARENT_HEADER = "traceparent";
 
 const TRACEPARENT_SHAPE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
 const ALL_ZERO = /^0+$/;
@@ -167,7 +167,7 @@ const admitted = new WeakMap<Request, TraceId>();
 
 /** Record the trace a request carried; called by `verifyCall` once the request is proved. */
 export function admitTrace(request: Request): void {
-  const trace = parseTraceparent(request.headers.get(TRACEPARENT_HEADER));
+  const trace = parseTraceparent(request.headers.get(W3C_TRACEPARENT_HEADER));
   if (trace === undefined) return;
   admitted.set(request, trace);
   // The request is now in its caller's trace.

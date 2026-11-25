@@ -89,6 +89,7 @@
     - [Stream a large upload](guides/entry-points/stream-a-large-upload.md)
     - [Call your API from a front end](guides/entry-points/call-from-a-front-end.md)
     - [Branch on the caller's country](guides/entry-points/branch-on-the-callers-country.md)
+    - [Map a domain error to a status once](guides/entry-points/map-a-domain-error-to-a-status.md)
     - [Serve a page from an HTML file](guides/entry-points/serve-a-page.md)
     - [Run a task on a schedule (cron)](guides/entry-points/cron.md)
     - [Process a queued message](guides/entry-points/queue.md)
