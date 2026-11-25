@@ -46,6 +46,7 @@
 /book/guides/actors/public-and-authenticated/
 /book/guides/actors/verify-webhooks/
 /book/guides/agents-and-state/
+/book/guides/agents-and-state/delete-a-users-data/
 /book/guides/agents-and-state/state-machine/
 /book/guides/agents-and-state/stateful-agent/
 /book/guides/agents-and-state/the-agent-model/
@@ -257,6 +258,7 @@
 /book/reference/diagnostics/bynk.agent.return_not_effect/
 /book/reference/diagnostics/bynk.agent.state_name_conflict/
 /book/reference/diagnostics/bynk.agent.version_without_path/
+/book/reference/diagnostics/bynk.agent.write_after_erase/
 /book/reference/diagnostics/bynk.agents.bad_state_initialiser/
 /book/reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /book/reference/diagnostics/bynk.agents.self_operation/
@@ -1058,6 +1060,7 @@
 /book/reference/diagnostics/bynk.uses.name_conflict/
 /book/reference/diagnostics/bynk.uses.self_reference/
 /book/reference/diagnostics/bynk.uses.target_is_context/
+/book/reference/diagnostics/bynk.uses.test_only_commons/
 /book/reference/diagnostics/bynk.uses.unknown_commons/
 /book/reference/diagnostics/bynk.val.agent_not_generable/
 /book/reference/diagnostics/bynk.val.arity/
@@ -1319,6 +1322,7 @@
 /reference/diagnostics/bynk.actor.identity_not_sealed/
 /reference/diagnostics/bynk.actor.missing_by_on_call/
 /reference/diagnostics/bynk.actor.missing_by_on_http/
+/reference/diagnostics/bynk.actor.missing_by_on_queue/
 /reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.oidc_missing_audience/
 /reference/diagnostics/bynk.actor.oidc_missing_issuer/
@@ -1394,6 +1398,7 @@
 /reference/diagnostics/bynk.agent.return_not_effect/
 /reference/diagnostics/bynk.agent.state_name_conflict/
 /reference/diagnostics/bynk.agent.version_without_path/
+/reference/diagnostics/bynk.agent.write_after_erase/
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /reference/diagnostics/bynk.agents.self_operation/
@@ -2228,6 +2233,7 @@
 /reference/diagnostics/bynk.uses.name_conflict/
 /reference/diagnostics/bynk.uses.self_reference/
 /reference/diagnostics/bynk.uses.target_is_context/
+/reference/diagnostics/bynk.uses.test_only_commons/
 /reference/diagnostics/bynk.uses.unknown_commons/
 /reference/diagnostics/bynk.val.agent_not_generable/
 /reference/diagnostics/bynk.val.arity/

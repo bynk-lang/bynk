@@ -1,0 +1,10 @@
+{
+  "blurb": "A queue consumer reads whatever reaches its queue, and any Worker on the Cloudflare account that has a producer binding can put a message there, so who may send to it is an access decision and the handler must say, with a `by` clause. `by Producer` is the explicit \"anyone on the account\", which is what an `on message` handler meant before the clause was required. The error's fix inserts `by Producer`, and `bynk check --fix=bynk.actor.missing_by_on_queue` migrates a whole project. A header default, `service fulfil from queue(\"orders\") by Producer`, covers every handler without its own `by`. Cron and `Events` handlers have no sender to name, so they are unchanged.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.missing_by_on_queue",
+  "constructs": [],
+  "example": "service fulfil from queue(\"orders\") {\n  on message(order: Order) -> Effect[QueueResult] {   // ✗ who may send to this queue?\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
+  "severity": "error",
+  "summary": "An `on message` handler lacks the required `by` actor clause."
+}

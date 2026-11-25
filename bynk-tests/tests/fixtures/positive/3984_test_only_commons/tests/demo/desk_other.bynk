@@ -1,0 +1,15 @@
+suite demo.desk
+
+uses demo.kit
+
+case "other adds two" {
+  let n <- other.call(Start)
+  let p = pair(Start, n)
+  expect p.after == 3
+}
+
+case "a shared helper may build test-only values" {
+  let p = anyPair()
+  let h = headers()
+  expect p.after == p.after
+}

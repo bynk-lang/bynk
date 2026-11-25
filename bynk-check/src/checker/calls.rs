@@ -37,7 +37,8 @@ pub(crate) fn check_fn(
 ) {
     check_fn_in(
         f,
-        false,
+        // #3984: a test-only commons may use what a suite helper may.
+        input.commons.test_only,
         None,
         input,
         expr_types,
@@ -3116,7 +3117,9 @@ fn check_method_call_inner(
     ) {
         return r;
     }
-    if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx) {
+    if let Some(r) = super::kernels::check_cookie_call(receiver, method, args, span, expr_id, ctx)
+        .or_else(|| super::erase::check_erase_call(receiver, method, args, span, expr_id, ctx))
+    {
         return r;
     }
     // v0.25 / v0.178: a test body invokes the target's service as

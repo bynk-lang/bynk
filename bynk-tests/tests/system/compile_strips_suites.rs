@@ -237,3 +237,36 @@ fn an_unused_fixture_is_a_warning() {
     assert!(ok, "{text}");
     assert!(text.contains("bynk.fixture.unused"), "{text}");
 }
+
+/// #3984: a `commons … for tests` is the test build's alone: `compile` leaves it out of both
+/// targets, as it does a suite, and `bynk test` runs a suite that `uses` it.
+#[test]
+fn compile_emits_no_test_only_commons() {
+    let root = project(
+        "test-only",
+        "suite shop.maths {\n  uses shop.kit\n\n  case \"doubles\" { expect double(Start) == 2 }\n}\n",
+    );
+    std::fs::write(
+        root.join("tests/shop.kit.bynk"),
+        "commons shop.kit for tests\n\nconst Start: Int = 1\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(root.join("tests/shop")).unwrap();
+    std::fs::rename(
+        root.join("tests/shop.kit.bynk"),
+        root.join("tests/shop/kit.bynk"),
+    )
+    .unwrap();
+    for target in ["bundle", "workers"] {
+        let out = format!("out-{target}");
+        let (ok, text) = bynk(&root, &["compile", "--target", target, "-o", &out, "."]);
+        assert!(ok, "{target}: {text}");
+        assert!(
+            !root.join(&out).join("shop/kit.ts").exists(),
+            "{target}: compile emitted the test-only commons"
+        );
+    }
+    let (ok, text) = bynk(&root, &["test", "."]);
+    assert!(ok, "the suite using it passes: {text}");
+    assert!(text.contains("1 passed"), "the suite ran: {text}");
+}

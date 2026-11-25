@@ -9,7 +9,7 @@ service onPaid from Events(Paid) {
 }
 
 service packer from queue("packing") {
-  on message(job: String) -> Effect[QueueResult] {
+  on message(job: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

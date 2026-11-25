@@ -3,7 +3,7 @@ context demo.api
 service packer from queue("packing") {
 
   delivery { deadLetter: None }
-  on message(job: String) -> Effect[QueueResult] {
+  on message(job: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
