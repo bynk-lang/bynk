@@ -178,6 +178,7 @@ impl Commons {
     ) -> Commons {
         Commons {
             name,
+            test_only: false,
             items,
             uses,
             consumes: Vec::new(),

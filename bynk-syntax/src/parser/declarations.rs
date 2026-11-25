@@ -470,7 +470,6 @@ impl<'a> Parser<'a> {
         };
         Ok(Commons::parsed(
             name,
-            test_only: false,
             items,
             uses,
             documentation,
