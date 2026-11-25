@@ -3636,12 +3636,41 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
     }
 }
 
+/// #3925: the `origins` as the source writes them. The hover's declaration is read
+/// from the source text, ahead of the pass that replaces a constant with its
+/// literal, so a name stays a name here (hover on it shows the constant); a
+/// literal list reads as before.
+fn origins_as_written(cors: &CorsPolicy) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let item = |e: &bynk_syntax::ast::Expr| match &e.kind {
+        ExprKind::StrLit(s) => format!("{s:?}"),
+        ExprKind::Ident(id) => id.name.clone(),
+        _ => "…".to_string(),
+    };
+    match cors.field("origins").map(|e| (&e.kind, e)) {
+        Some((ExprKind::ListLit(items, ..), _)) => {
+            format!(
+                "[{}]",
+                items.iter().map(item).collect::<Vec<_>>().join(", ")
+            )
+        }
+        Some((_, e)) => item(e),
+        None => "[]".to_string(),
+    }
+}
+
 /// v0.131: a one-line summary of a `cors { }` policy for hover — the origins
 /// (always present), then `credentials`/`maxAge` when set.
 fn cors_summary(cors: &CorsPolicy) -> String {
-    let mut parts = vec![format!("origins: {:?}", cors.origins())];
+    let mut parts = vec![format!("origins: {}", origins_as_written(cors))];
     if cors.credentials() {
         parts.push("credentials: true".to_string());
+    }
+    // #3925: the headers a browser script may read, beside the ones Bynk writes
+    // for a client (`WWW-Authenticate`, `Retry-After`, `Location`, `ETag`).
+    let expose = cors.expose_headers();
+    if !expose.is_empty() {
+        parts.push(format!("expose: {expose:?} + Bynk's own headers"));
     }
     if let Some(secs) = cors.max_age_secs() {
         parts.push(format!("maxAge: {secs}s"));

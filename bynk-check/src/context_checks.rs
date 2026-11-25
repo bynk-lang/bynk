@@ -5205,7 +5205,7 @@ fn validate_cors_policy(
     for field in &policy.fields {
         if !matches!(
             field.name.name.as_str(),
-            "origins" | "headers" | "credentials" | "maxAge"
+            "origins" | "headers" | "expose" | "credentials" | "maxAge"
         ) {
             errors.push(
                 CompileError::new(
@@ -5213,7 +5213,9 @@ fn validate_cors_policy(
                     field.name.span,
                     format!("unknown `cors` field `{}`", field.name.name),
                 )
-                .with_note("known fields are `origins`, `headers`, `credentials`, and `maxAge`"),
+                .with_note(
+                    "known fields are `origins`, `headers`, `expose`, `credentials`, and `maxAge`",
+                ),
             );
         }
     }
@@ -5232,7 +5234,7 @@ fn validate_cors_policy(
                         errors.push(CompileError::new(
                             "bynk.http.cors_invalid_origins",
                             item.span,
-                            "each `cors` origin must be a string literal (e.g. \"https://app.example.com\" or \"*\")",
+                            "each `cors` origin must be a string literal or a `String` constant (e.g. \"https://app.example.com\" or \"*\")",
                         ));
                     }
                 }
@@ -5240,7 +5242,7 @@ fn validate_cors_policy(
             _ => errors.push(CompileError::new(
                 "bynk.http.cors_invalid_origins",
                 expr.span,
-                "`cors` `origins` must be a non-empty list of string literals",
+                "`cors` `origins` must be a non-empty list of string literals or `String` constants, or a `List[String]` constant",
             )),
         },
     }
@@ -5257,6 +5259,10 @@ fn validate_cors_policy(
             ));
         }
     }
+
+    // #3925: `expose`, when present, is a list of header names (RFC 9110 tokens),
+    // or the wildcard `["*"]` alone.
+    validate_cors_expose(policy, errors);
 
     // `credentials`, when present, is a boolean literal.
     if let Some(expr) = policy.field("credentials")
@@ -5296,6 +5302,82 @@ fn validate_cors_policy(
             ),
         );
     }
+}
+
+/// #3925: the `expose` list: header names that are RFC 9110 tokens, or `["*"]`
+/// alone (a `*` beside names is not the wildcard the Fetch standard defines).
+fn validate_cors_expose(policy: &CorsPolicy, errors: &mut Vec<CompileError>) {
+    let Some(expr) = policy.field("expose") else {
+        return;
+    };
+    // The Fetch standard ignores the wildcard on a credentialed response, so a
+    // `["*"]` that looks like it exposes everything would expose nothing.
+    if policy.credentials() && policy.is_wildcard_expose() {
+        errors.push(
+            CompileError::new(
+                "bynk.http.cors_wildcard_expose_credentials",
+                expr.span,
+                "`cors` cannot combine `credentials: true` with `expose: [\"*\"]`",
+            )
+            .with_note(
+                "on a credentialed response a browser reads `*` as a header literally named `*`, \
+                 not as every header; list the header names instead",
+            ),
+        );
+    }
+    let ExprKind::ListLit(items, ..) = &expr.kind else {
+        errors.push(CompileError::new(
+            "bynk.http.cors_invalid_field",
+            expr.span,
+            "`cors` `expose` must be a list of header names (string literals)",
+        ));
+        return;
+    };
+    let names: Vec<(&Expr, Option<&str>)> = items
+        .iter()
+        .map(|i| {
+            (
+                i,
+                match &i.kind {
+                    ExprKind::StrLit(s) => Some(s.as_str()),
+                    _ => None,
+                },
+            )
+        })
+        .collect();
+    for (item, name) in &names {
+        match name {
+            None => errors.push(CompileError::new(
+                "bynk.http.cors_invalid_field",
+                item.span,
+                "each `cors` `expose` entry must be a header name written as a string literal",
+            )),
+            Some("*") if names.len() > 1 => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_field",
+                    item.span,
+                    "`\"*\"` in `cors` `expose` must be the only entry",
+                )
+                .with_note("the wildcard exposes every header; list names or write `[\"*\"]`, not both"),
+            ),
+            Some(n) if *n != "*" && !is_header_token(n) => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_field",
+                    item.span,
+                    format!("`{n}` is not a valid header name for `cors` `expose`"),
+                )
+                .with_note("a header name is letters, digits and ``!#$%&'*+-.^_`|~``, with no spaces, colons or commas"),
+            ),
+            _ => {}
+        }
+    }
+}
+
+/// RFC 9110 §5.6.2: a `token`, the grammar of a header field name.
+fn is_header_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
 }
 
 /// v0.141 (ADR 0164): validate a service's `security { }` policy. Security

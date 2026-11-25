@@ -2539,12 +2539,12 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.cors_invalid_field",
-        blurb: "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+        blurb: "Each optional `cors` field takes one kind of value: `headers` and `expose` a list of header names written as string literals (`expose` may instead be `[\"*\"]` alone), `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. A header name is an RFC 9110 token: letters, digits and `!#$%&'*+-.^_`|~`, with no space, colon or comma. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
         example: "cors { origins: [\"https://app.example.com\"], credentials: \"yes\" }   // ✗ `true` or `false`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
-        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. A single string, an empty list, a computed entry or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
         example: "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
     },
     Explain {
@@ -2554,13 +2554,18 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.cors_unknown_field",
-        blurb: "A `cors { }` policy has four fields: `origins`, `headers`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
+        blurb: "A `cors { }` policy has five fields: `origins`, `headers`, `expose`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
         example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hour }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
         blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
         example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.cors_wildcard_expose_credentials",
+        blurb: "`expose` names the response headers a browser script may read from a cross-origin response. The Fetch standard reads `*` there as every header only when the request carries no credentials; on a credentialed response a browser treats it as a header literally named `*`, so a policy that looks like it exposes everything would expose nothing. Bynk refuses the pair at compile time. List the header names the page reads, or set `credentials: false`. The same rule for origins is `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"*\"] }                 // ✗ credentials need named headers\n\ncors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"x-request-id\"] }   // ✓",
     },
     Explain {
         code: "bynk.http.duplicate_rejected",
@@ -8611,6 +8616,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.cors_wildcard_credentials",
         "A `cors` policy combines `credentials: true` with the wildcard origin `[\"*\"]`.",
+    ),
+    d(
+        "bynk.http.cors_wildcard_expose_credentials",
+        "A `cors` policy combines `credentials: true` with `expose: [\"*\"]`.",
     ),
     dg(
         "bynk.http.duplicate_rejected",

@@ -1585,15 +1585,19 @@ From this the compiler synthesises, for that service:
   credential-less by spec, so it must not be rejected by an actor check); and
 - **`Access-Control-Allow-Origin`** (plus `Vary: Origin`) stamped onto **every**
   response of the service — uniformly across the `Ok`/`Raw`/redirect/error/stream
-  variants. A `401` also lists `WWW-Authenticate` in `Access-Control-Expose-Headers`, so a
-  browser client can read the [challenge](/reference/actors/#the-401-challenge).
+  variants; and
+- **`Access-Control-Expose-Headers`** on every response that gets the grant, listing the
+  headers Bynk itself writes for a client to read (`WWW-Authenticate`, `Retry-After`,
+  `Location` and `ETag`) and any [`expose`](#exposed-headers) names, so a browser client can
+  read the [challenge](/reference/actors/#the-401-challenge) of a `401`.
 
 ### Fields
 
 | Field | Meaning | Default |
 |---|---|---|
-| `origins` | The allowed origins, as string literals — an exact allowlist (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`. **Required.** | — |
+| `origins` | The allowed origins, as string literals or [`String` constants](#origins-from-constants) — an exact allowlist (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`; or one `List[String]` constant. **Required.** | — |
 | `headers` | The `Access-Control-Allow-Headers` a preflight advertises. | `content-type` (plus `authorization` when the service has a [Bearer](/reference/actors/) route) |
+| `expose` | The response headers a browser script may read, beside the ones Bynk writes for a client ([below](#exposed-headers)). | the automatic set |
 | `credentials` | Whether credentialed requests (cookies / `Authorization`) are allowed — sends `Access-Control-Allow-Credentials: true`. | `false` |
 | `maxAge` | How long a browser may cache the preflight, as a [`Duration`](/reference/types/#duration) — sent as `Access-Control-Max-Age` seconds. | omitted (browser default) |
 
@@ -1609,6 +1613,53 @@ An exact allowlist compares the request's `Origin` and **reflects** the matched 
 not serve one origin's grant to another. A request from an origin not on the list gets
 **no** `Access-Control-Allow-Origin` — the browser blocks the read (fail closed). The
 wildcard `["*"]` answers every origin with a literal `*` (and needs no `Vary`).
+
+### Origins from constants
+
+An `origins` entry may name a `String` constant, and the whole list may name a
+`List[String]` constant, which is read as the literal it is bound to (the rule for a
+[constant in an annotation argument](/reference/constants/)): the constant must be declared
+exactly `String` (or `List[String]`) and bound to a literal or to another such constant, in
+the context or in a commons it `uses`. So the wildcard and credentials checks still see
+literal text. A list that differs per environment is an
+[`env(…)` constant](/reference/constants/#values-that-differ-per-environment), whose value comes from
+`bynk.toml` (`[env.staging.vars]`):
+
+```bynk,ignore
+const AppOrigins: List[String] = env(APP_ORIGINS, ["https://app.example.com"])
+
+service api from http {
+  cors { origins: AppOrigins, credentials: true }
+  …
+}
+```
+
+A constant of another type, or one bound to something that is not a literal, is
+`bynk.http.cors_invalid_origins`.
+
+### Exposed headers
+
+A browser script reading a cross-origin response sees only the CORS-safelisted headers
+unless the response lists the others in `Access-Control-Expose-Headers`. Every response a
+CORS service sends to an allowed origin lists the headers Bynk itself writes for a client:
+`WWW-Authenticate` (the [`401` challenge](/reference/actors/#the-401-challenge)),
+`Retry-After` and `Location` (the [response header helpers](#response-headers)) and `ETag`.
+Naming a header the response does not carry is harmless. `expose` adds the headers you set
+yourself, such as one written with `withHeader`:
+
+```bynk,ignore
+cors {
+  origins: ["https://app.example.com"],
+  expose:  ["x-request-id"],
+}
+```
+
+Each name is a header name (letters, digits and ``!#$%&'*+-.^_`|~``), or the list is `["*"]`
+alone, which exposes every header. A browser reads `*` as a header literally named `*` on a
+credentialed response, so `expose: ["*"]` with `credentials: true` is refused at compile
+time (`bynk.http.cors_wildcard_expose_credentials`); an invalid name, or `*` beside other
+names, is `bynk.http.cors_invalid_field`. The generated client and the OpenAPI document are
+unaffected: CORS is browser policy, not part of the contract.
 
 ### The credentials + wildcard rule
 

@@ -1065,7 +1065,7 @@ fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
 
 /// v0.131: the CORS policy fields, offered at a field-name position inside a
 /// `cors { }` block. `Allow-Methods` is deliberately absent (derived from the
-/// routes), so the closed set is these four.
+/// routes), so the closed set is these five.
 pub const CORS_FIELDS: &[(&str, &str)] = &[
     (
         "origins",
@@ -1074,6 +1074,10 @@ pub const CORS_FIELDS: &[(&str, &str)] = &[
     (
         "headers",
         "the `Access-Control-Allow-Headers` a preflight advertises",
+    ),
+    (
+        "expose",
+        "the response headers a browser script may read, beside the ones Bynk writes for a client",
     ),
     (
         "credentials",

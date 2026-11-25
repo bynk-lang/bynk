@@ -1,0 +1,8 @@
+---
+#3925: origins a service's `cors { }` names, written once. A list comes from
+`bynk.toml` per environment (#3941); one origin is a plain constant.
+---
+commons app.config
+
+const AppOrigins: List[String] = env(APP_ORIGINS)
+const PartnerOrigin: String = "https://partner.example.com"
