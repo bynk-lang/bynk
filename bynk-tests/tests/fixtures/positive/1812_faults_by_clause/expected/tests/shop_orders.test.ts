@@ -11,10 +11,11 @@ class __Stub_Ledger {
     const { Order, UserId } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type UserId = __ns_shop_orders.UserId;
+    const __arg_0 = owner;
     const __pv_0_0 = await (async () => {
       return "bob";
     })();
-    if (__bynkEq(owner, __pv_0_0)) {
+    if (__bynkEq(__arg_0, __pv_0_0)) {
       throw new globalThis.Error("bynk: injected capability fault (stubs … fails)");
     }
     if (true) {

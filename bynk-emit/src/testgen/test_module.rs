@@ -34,6 +34,22 @@ fn real_provider_double_factory(owner: &str, cap: &str, pglite: bool) -> Option<
     }
 }
 
+/// #4373: the `uses` map suite `i`'s runners are emitted over (see [`super::stubs::scoped_imports`]);
+/// module-level imports keep the union.
+fn suite_scoped_imports(
+    union: &HashMap<String, Vec<String>>,
+    unit_tables: &HashMap<String, UnitTable>,
+    parsed: &[ParsedFile],
+    i: usize,
+    target_name: &str,
+) -> HashMap<String, Vec<String>> {
+    let own: Vec<String> = parsed[i]
+        .test()
+        .map(|t| t.uses.iter().map(|u| u.target.joined()).collect())
+        .unwrap_or_default();
+    super::stubs::scoped_imports(union, unit_tables, target_name, &own)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_test_module(
     target_name: &str,
@@ -598,6 +614,7 @@ pub(super) fn emit_test_module(
         let rel_path = parsed[i].identity_path();
         let rel_path = rel_path.to_string_lossy();
         let suite = run_suite(i);
+        let suite_uses = &suite_scoped_imports(unit_uses, unit_tables, parsed, i, target_name);
         for case in &test_decl.cases {
             discovered.push(DiscoveredCase {
                 name: case.name.clone(),
@@ -642,7 +659,7 @@ pub(super) fn emit_test_module(
                 target_kind,
                 stubs,
                 unit_tables,
-                unit_uses,
+                suite_uses,
                 unit_consumes,
                 unit_consumes_aliases,
                 parsed[i].source(),
@@ -684,6 +701,7 @@ pub(super) fn emit_test_module(
         let rel_path = parsed[i].identity_path();
         let rel_path = rel_path.to_string_lossy();
         let suite = run_suite(i);
+        let suite_uses = &suite_scoped_imports(unit_uses, unit_tables, parsed, i, target_name);
         for prop in &test_decl.properties {
             discovered.push(DiscoveredCase {
                 name: prop.name.clone(),
@@ -715,7 +733,7 @@ pub(super) fn emit_test_module(
                     target_name,
                     target_kind,
                     unit_tables,
-                    unit_uses,
+                    suite_uses,
                     unit_consumes,
                     unit_consumes_aliases,
                     parsed[i].source(),
@@ -734,7 +752,7 @@ pub(super) fn emit_test_module(
                     target_name,
                     target_kind,
                     unit_tables,
-                    unit_uses,
+                    suite_uses,
                     unit_consumes,
                     unit_consumes_aliases,
                     parsed[i].source(),

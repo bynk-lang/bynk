@@ -2032,7 +2032,33 @@ pub(crate) fn check_signed_cookie_call(
         },
     );
     if !issue {
-        return Some(Some(cookie));
+        // #3938: with `sessions = true`, `expire()` also ends the current session server-side, so
+        // it is an effect that runs in a handler (the session agent is reached from there).
+        let sessions = crate::actors::signed_cookie_seam_of(decl, None).is_some_and(|s| s.sessions);
+        if !sessions {
+            return Some(Some(cookie));
+        }
+        if !ctx.effectful {
+            ctx.errors.push(CompileError::new(
+                "bynk.effect.capability_in_pure_context",
+                span,
+                format!(
+                    "`{}.expire` ends the session in its session agent, so it can only be called inside an effectful body (one returning `Effect[T]`)",
+                    actor.name
+                ),
+            ));
+        }
+        if !ctx.in_service_handler && !ctx.in_test_body {
+            ctx.errors.push(CompileError::new(
+                "bynk.actor.signed_cookie_issue_outside_handler",
+                span,
+                format!(
+                    "`{}.expire` can only be called in a service handler",
+                    actor.name
+                ),
+            ));
+        }
+        return Some(Some(tys.intern(Ty::Effect(cookie))));
     }
     // The identity the cookie will carry is the actor's own type, so a handler can only issue a
     // session for a value that is already a valid, sealed identity.

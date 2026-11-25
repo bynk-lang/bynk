@@ -1,0 +1,2 @@
+bynk.index.bad_argument
+`@unique` needs a field

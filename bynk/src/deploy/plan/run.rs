@@ -70,7 +70,9 @@ fn build_dir_for(
 /// The rebuild after recording older contracts: the same build as the first,
 /// so `--no-install` and `--dry-run` apply to it as well (#3350).
 pub(crate) fn rebuild(project_root: &Path, build_dir: &Path, opts: &DeployOptions) -> bool {
-    let build = workers::Build::new(true, opts.dry_run).no_install(opts.no_install);
+    let build = workers::Build::new(true, opts.dry_run)
+        .no_install(opts.no_install)
+        .environment(&opts.environment);
     workers::compile_once_reporting(project_root, build_dir, build, None)
 }
 
@@ -87,6 +89,9 @@ pub struct DeployOptions {
     /// `--no-install` (or `BYNK_NO_INSTALL`): stop on a missing npm package
     /// instead of installing it (#3350).
     pub no_install: bool,
+    /// `--strict-environments` (#3941): refuse a named environment whose
+    /// `env(…)` constants fall back to `[vars]` or their default.
+    pub strict_environments: bool,
     pub format: DeployFormat,
     pub yes: bool,
     /// `--context NAME` — deploy this context alone, assuming the contexts it
@@ -283,7 +288,9 @@ fn deploy(
     let Some(model) = workers::compile_built(
         project_root,
         &build_dir,
-        workers::Build::new(true, opts.dry_run).no_install(opts.no_install),
+        workers::Build::new(true, opts.dry_run)
+            .no_install(opts.no_install)
+            .environment(&opts.environment),
         bynk_driver::progress::terminal_sink(),
     ) else {
         return Err(ExitCode::FAILURE);
@@ -403,6 +410,9 @@ fn deploy(
         Lives::for_plan(&hyperdrive_wants),
     )
     .checked_against_account();
+    if report_env_constants(project_root, opts).is_err() {
+        return Err(ExitCode::FAILURE);
+    }
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return Ok(());
@@ -547,4 +557,105 @@ fn select_workers(
         "no Worker `{name}` was built (available: {})",
         available.join(", ")
     ))
+}
+
+/// #3941 decision H: each `env(…)` constant with its resolved value and where it
+/// came from, ahead of the plan, on stderr (the plan's own stdout, `--format
+/// json` included, is untouched). For a named environment, a constant that takes
+/// a `[vars]` or default value rather than the environment's own is called out,
+/// since that Worker would use another environment's setting; `--strict-environments`
+/// refuses it.
+fn report_env_constants(project_root: &Path, opts: &DeployOptions) -> Result<(), ()> {
+    let Ok(options) = bynk_driver::try_project_options(project_root) else {
+        return Ok(());
+    };
+    let options = options.environment(opts.environment.as_str());
+    let facts = bynk_driver::project::env_const_report(&options);
+    let Some(report) = env_constant_report(&facts, &opts.environment, opts.strict_environments)
+    else {
+        return Ok(());
+    };
+    for line in &report.lines {
+        emsg!("{line}");
+    }
+    match report.verdict {
+        EnvVerdict::Fine => Ok(()),
+        EnvVerdict::Note(note) => {
+            emsg!("{note}");
+            Ok(())
+        }
+        EnvVerdict::Refuse(error) => {
+            emsg!("{error}");
+            Err(())
+        }
+    }
+}
+
+/// What the deploy plan says about a build's `env(…)` constants.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct EnvReport {
+    /// The header and one line per constant.
+    pub(crate) lines: Vec<String>,
+    pub(crate) verdict: EnvVerdict,
+}
+
+/// Whether a named environment takes another environment's values.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum EnvVerdict {
+    /// `default`, or every constant has the environment's own value.
+    Fine,
+    /// Some constants fall back; the deploy goes on.
+    Note(String),
+    /// Some constants fall back and `--strict-environments` refuses.
+    Refuse(String),
+}
+
+/// The plan's lines for `facts` under `environment` (an empty name is
+/// `default`), and what to do about a named environment that takes a `[vars]`
+/// or default value: `None` when there are no `env(…)` constants.
+pub(crate) fn env_constant_report(
+    facts: &[bynk_project::vars::ResolvedConst],
+    environment: &str,
+    strict: bool,
+) -> Option<EnvReport> {
+    use bynk_project::vars::{DEFAULT_ENVIRONMENT, ValueSource};
+    if facts.is_empty() {
+        return None;
+    }
+    let environment = if environment.is_empty() {
+        DEFAULT_ENVIRONMENT
+    } else {
+        environment
+    };
+    let mut lines = vec![format!("Environment constants for `{environment}`:")];
+    for f in facts {
+        lines.push(format!(
+            "  {} = {}   ({} from {})",
+            f.constant,
+            f.value,
+            f.variable,
+            f.source.label()
+        ));
+    }
+    let own = ValueSource::EnvVars(environment.to_string());
+    let shared: Vec<&str> = facts
+        .iter()
+        .filter(|f| f.source != own)
+        .map(|f| f.constant.as_str())
+        .collect();
+    let verdict = if environment == DEFAULT_ENVIRONMENT || shared.is_empty() {
+        EnvVerdict::Fine
+    } else {
+        let names = shared.join(", ");
+        if strict {
+            EnvVerdict::Refuse(format!(
+                "bynk: error: `{environment}` takes the value of another environment for {names}; set them under `[env.{environment}.vars]` (`--strict-environments`)"
+            ))
+        } else {
+            EnvVerdict::Note(format!(
+                "bynk: note: `{environment}` takes the value of another environment for {names}; set them under `[env.{environment}.vars]`, or pass `--strict-environments` to refuse this"
+            ))
+        }
+    };
+    Some(EnvReport { lines, verdict })
 }
