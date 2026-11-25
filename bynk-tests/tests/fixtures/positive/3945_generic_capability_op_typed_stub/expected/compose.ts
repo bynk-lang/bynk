@@ -2,13 +2,17 @@
 // composition root
 
 import * as demo_orders from "./demo/orders.js";
+import * as demo_slots from "./demo/slots.js";
 import * as idempotency__binding from "./idempotency.binding.js";
 
 export function composeApp() {
-  const demo_ordersDeps = { Idempotency: new idempotency__binding.MemoIdempotency() };
+  const demo_slotsDeps = {};
+  const demo_slotsSurface = demo_slots.__makeSurface(demo_slotsDeps);
+  const demo_ordersDeps = { Idempotency: new idempotency__binding.MemoIdempotency(), surface: { slots: demo_slotsSurface } };
   const demo_ordersSurface = demo_orders.__makeSurface(demo_ordersDeps);
 
   return {
     orders: demo_ordersSurface,
+    slots: demo_slotsSurface,
   };
 }

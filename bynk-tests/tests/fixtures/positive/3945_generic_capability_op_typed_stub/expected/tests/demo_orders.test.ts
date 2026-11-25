@@ -3,12 +3,14 @@
 
 import { Some, None } from "../__bynk_runtime/result.js";
 import * as __ns_demo_orders from "./../demo/orders.js";
+import * as __ns_demo_slots from "./../demo/slots.js";
 import * as __ns_idempotency from "./../idempotency.js";
 
 <<bynk-shared: testing/expectation>>
 <<bynk-shared: testing/observation>>
 
 type __Idempotency_dedup_Call = { key: string };
+type __slots_noop_Call = {};
 
 class __Stub_Idempotency {
   __case: string | undefined;
@@ -19,11 +21,14 @@ class __Stub_Idempotency {
   }
 
   __applies(op: string): boolean {
-    if (op === "dedup") return this.__suite === 0 || this.__suite === 1;
+    if (op === "dedup") return this.__case === "a stub and a call spell the type differently" || this.__suite === 0 || this.__suite === 1;
     return true;
   }
 
   async dedup(key: unknown, __tk?: { __bynkTypeKey?: string } | undefined): Promise<unknown> {
+    if (this.__case === "a stub and a call spell the type differently" && __tk && __tk.__bynkTypeKey === "[Slot]") {
+      return Some({ id: 9 });
+    }
     if (this.__suite === 0 && __tk && __tk.__bynkTypeKey === "[Int]") {
       return Some(7);
     }
@@ -40,16 +45,20 @@ class __Stub_Idempotency {
 <<bynk-shared: testing/stub_overlay>>
 
 function __makeTestDeps(__case?: string, __suite?: number) {
-  return { Idempotency: __bynkOverlay(undefined, new __Stub_Idempotency(__case, __suite), "Idempotency") as __ns_idempotency.Idempotency };
+  return { Idempotency: __bynkOverlay(undefined, new __Stub_Idempotency(__case, __suite), "Idempotency") as __ns_idempotency.Idempotency, surface: { slots: undefined as unknown as globalThis.ReturnType<typeof __ns_demo_slots.__makeSurface> } };
 }
 
 // case tier: unit
 async function test_each_type_argument_has_its_own_stub() {
   try {
     const deps = __makeTestDeps(undefined, 0);
-    const { reserve } = __ns_demo_orders;
+    const { reserve, slot } = __ns_demo_orders;
+    const { Slot: Item, Slot } = __ns_demo_slots;
+    type Item = __ns_demo_slots.Slot;
+    type Slot = __ns_demo_slots.Slot;
+    const slots = (deps as any).surface?.slots;
     const result = await reserve.call(deps);
-    if (!(result === 107)) { throw __bynkExpectFailure("src/tests/orders.test.bynk:8:12", 249, 262, "expect result == 107\n  expected: result == 107\n  actual:   " + __bynkShow((result)) + " == " + __bynkShow((107))); }
+    if (!(result === 107)) { throw __bynkExpectFailure("src/tests/orders.test.bynk:9:12", 280, 293, "expect result == 107\n  expected: result == 107\n  actual:   " + __bynkShow((result)) + " == " + __bynkShow((107))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -63,12 +72,16 @@ async function test_each_type_argument_has_its_own_stub() {
 async function test_observations_count_calls_per_type_argument() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(undefined, 0), { Idempotency: ["dedup"] }, __obs);
-    const { reserve } = __ns_demo_orders;
+    const deps = __bynkRecordDeps(__makeTestDeps(undefined, 0), { Idempotency: ["dedup"], slots: ["noop"] }, __obs);
+    const { reserve, slot } = __ns_demo_orders;
+    const { Slot: Item, Slot } = __ns_demo_slots;
+    type Item = __ns_demo_slots.Slot;
+    type Slot = __ns_demo_slots.Slot;
+    const slots = (deps as any).surface?.slots;
     const result = await reserve.call(deps);
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Int]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:13:12", 366, 400, "expect Idempotency.dedup[Int] called once"); }
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[String]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:14:12", 412, 449, "expect Idempotency.dedup[String] called once"); }
-    if (!(((__obs.log["Idempotency.dedup"] ?? []).length === (2)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:15:12", 461, 493, "expect Idempotency.dedup called 2 times"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Int]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:14:12", 397, 431, "expect Idempotency.dedup[Int] called once"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[String]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:15:12", 443, 480, "expect Idempotency.dedup[String] called once"); }
+    if (!(((__obs.log["Idempotency.dedup"] ?? []).length === (2)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:16:12", 492, 524, "expect Idempotency.dedup called 2 times"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -82,10 +95,36 @@ async function test_observations_count_calls_per_type_argument() {
 async function test_a_type_argument_that_was_not_called_is_never_called() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(undefined, 0), { Idempotency: ["dedup"] }, __obs);
-    const { reserve } = __ns_demo_orders;
+    const deps = __bynkRecordDeps(__makeTestDeps(undefined, 0), { Idempotency: ["dedup"], slots: ["noop"] }, __obs);
+    const { reserve, slot } = __ns_demo_orders;
+    const { Slot: Item, Slot } = __ns_demo_slots;
+    type Item = __ns_demo_slots.Slot;
+    type Slot = __ns_demo_slots.Slot;
+    const slots = (deps as any).surface?.slots;
     const result = await reserve.call(deps);
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Bool]")).length === 0))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:20:12", 606, 642, "expect Idempotency.dedup[Bool] never called"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Bool]")).length === 0))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:21:12", 637, 673, "expect Idempotency.dedup[Bool] never called"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_stub_and_a_call_spell_the_type_differently() {
+  try {
+    const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
+    const deps = __bynkRecordDeps(__makeTestDeps("a stub and a call spell the type differently", 0), { Idempotency: ["dedup"], slots: ["noop"] }, __obs);
+    const { reserve, slot } = __ns_demo_orders;
+    const { Slot: Item, Slot } = __ns_demo_slots;
+    type Item = __ns_demo_slots.Slot;
+    type Slot = __ns_demo_slots.Slot;
+    const slots = (deps as any).surface?.slots;
+    const result = await slot.call(deps);
+    if (!(result === 9)) { throw __bynkExpectFailure("src/tests/orders.test.bynk:27:12", 841, 852, "expect result == 9\n  expected: result == 9\n  actual:   " + __bynkShow((result)) + " == " + __bynkShow((9))); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Slot]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:28:12", 864, 899, "expect Idempotency.dedup[Slot] called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -99,7 +138,11 @@ async function test_a_type_argument_that_was_not_called_is_never_called() {
 async function test_a_call_at_another_type_argument_is_not_answered_by_the_Int_stub() {
   try {
     const deps = __makeTestDeps(undefined, 1);
-    const { reserve } = __ns_demo_orders;
+    const { reserve, slot } = __ns_demo_orders;
+    const { Slot: Item, Slot } = __ns_demo_slots;
+    type Item = __ns_demo_slots.Slot;
+    type Slot = __ns_demo_slots.Slot;
+    const slots = (deps as any).surface?.slots;
     const result = await reserve.call(deps);
     if (!(result === 107)) { throw __bynkExpectFailure("src/tests/orders_unstubbed.test.bynk:7:12", 228, 241, "expect result == 107\n  expected: result == 107\n  actual:   " + __bynkShow((result)) + " == " + __bynkShow((107))); }
     return { pass: true };
@@ -113,7 +156,7 @@ async function test_a_call_at_another_type_argument_is_not_answered_by_the_Int_s
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["each type argument has its own stub", "observations count calls per type argument", "a type argument that was not called is never called", "a call at another type argument is not answered by the Int stub"];
+export const __bynkCases: readonly string[] = ["each type argument has its own stub", "observations count calls per type argument", "a type argument that was not called is never called", "a stub and a call spell the type differently", "a call at another type argument is not answered by the Int stub"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -133,6 +176,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a type argument that was not called is never called")) {
     const started = __bynkCaseNow();
     const r = { name: "a type argument that was not called is never called", ...(await test_a_type_argument_that_was_not_called_is_never_called()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a stub and a call spell the type differently")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a stub and a call spell the type differently", ...(await test_a_stub_and_a_call_spell_the_type_differently()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

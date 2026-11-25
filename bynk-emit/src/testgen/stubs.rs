@@ -72,6 +72,43 @@ fn signature_type_ns(
     sig_type_ns
 }
 
+/// #3945: the types a clause's explicit type arguments resolve in, for its call key.
+fn clause_key_types(
+    owning_unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+) -> HashMap<String, Arc<bynk_syntax::ast::TypeDecl>> {
+    test_suites::build_privileged_resolved(
+        owning_unit,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_consumes_aliases,
+    )
+    .map(|(r, _)| r.types)
+    .unwrap_or_default()
+}
+
+/// #3945: `__tk && __tk.__bynkTypeKey === "<key>"`: the clause answers the call made at its type
+/// arguments.
+fn type_key_cond(
+    type_args: &[bynk_syntax::ast::TypeRef],
+    key_types: &HashMap<String, Arc<bynk_syntax::ast::TypeDecl>>,
+    tys: &Arc<Types>,
+) -> TsExpr {
+    and_expr(
+        ident("__tk"),
+        strict_eq(
+            member(ident("__tk"), "__bynkTypeKey"),
+            str_lit(bynk_check::checker::capability_type_key(
+                type_args, key_types, tys,
+            )),
+        ),
+    )
+}
+
 /// v0.118: emit the `__Stub_<Cap>` stub class for a capability seam
 /// overridden by `stub` clauses (testing track slice 6). One async method
 /// per overridden operation renders its clauses as a first-match-wins if-chain
@@ -147,6 +184,13 @@ pub(super) fn emit_stub_class(
         }
     }
     let sig_type_ns = signature_type_ns(rp, &owning_unit, &type_ns, unit_tables, unit_uses);
+    let key_types = clause_key_types(
+        &owning_unit,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_consumes_aliases,
+    );
     let scope_names: Vec<String> = if let Some(table) = unit_tables.get(&owning_unit) {
         let mut v: Vec<String> = table
             .types
@@ -354,13 +398,7 @@ pub(super) fn emit_stub_class(
                 cond_parts.insert(0, scopes_test(&[scope]));
             }
             if generic {
-                cond_parts.push(and_expr(
-                    ident("__tk"),
-                    strict_eq(
-                        member(ident("__tk"), "__bynkTypeKey"),
-                        str_lit(bynk_syntax::print::type_args_src(&clause.type_args)),
-                    ),
-                ));
+                cond_parts.push(type_key_cond(&clause.type_args, &key_types, tys));
             }
             let cond = cond_parts
                 .into_iter()

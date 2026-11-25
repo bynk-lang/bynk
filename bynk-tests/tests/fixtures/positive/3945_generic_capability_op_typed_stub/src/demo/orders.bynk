@@ -1,6 +1,17 @@
 context demo.orders
 
+consumes demo.slots { Slot as Item }
 consumes idempotency { Idempotency }
+
+service slot {
+  on call() -> Effect[Int] by Caller given Idempotency {
+    let found <- Idempotency.dedup[Item]("slot-key")
+    match found {
+      Some(s) => s.id
+      None => 0
+    }
+  }
+}
 
 service reserve {
   on call() -> Effect[Int] by Caller given Idempotency {

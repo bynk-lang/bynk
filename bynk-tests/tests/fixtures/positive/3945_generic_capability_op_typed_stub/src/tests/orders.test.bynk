@@ -1,5 +1,6 @@
 suite demo.orders {
   consumes idempotency { Idempotency }
+  consumes demo.slots { Slot }
   stub Idempotency.dedup[Int](_) returns Some(7)
   stub Idempotency.dedup[String](_) returns None
 
@@ -18,5 +19,12 @@ suite demo.orders {
   case "a type argument that was not called is never called" {
     let result <- reserve.call()
     expect Idempotency.dedup[Bool] never called
+  }
+
+  case "a stub and a call spell the type differently" {
+    stub Idempotency.dedup[Slot](_) returns Some(Slot { id: 9 })
+    let result <- slot.call()
+    expect result == 9
+    expect Idempotency.dedup[Slot] called once
   }
 }

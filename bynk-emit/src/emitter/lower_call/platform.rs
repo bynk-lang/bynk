@@ -80,7 +80,7 @@ fn capability_call_type_args_node(
         .collect()
 }
 
-/// #3945: the identity of a generic capability operation call's type arguments (as written: `[Outcome]`), as the trailing
+/// #3945: the identity of a generic capability operation call's type arguments (their resolved types: `[Outcome]`), as the trailing
 /// argument `...([{ __bynkTypeKey: "ReserveOutcome" }] as unknown as [])` of a test build: a stub
 /// or an observation that names the type arguments (`Cap.op[T]`) tells the calls apart by it. The
 /// real binding ignores a trailing argument, and the spread of an empty tuple keeps `tsc` quiet.
@@ -89,15 +89,40 @@ fn type_key_arg(type_args: &[TypeRef], cx: &LowerCtx) -> Option<TsExpr> {
     if !cx.typed_capability_calls() || type_args.is_empty() {
         return None;
     }
-    let key = bynk_syntax::print::type_args_src(type_args);
-    let entry = object(vec![("__bynkTypeKey", str_lit(&key))]);
-    Some(TsExpr::Spread(Box::new(TsExpr::As {
+    Some(type_key_expr(&type_key_of(type_args, cx)))
+}
+
+/// The key of `type_args` as a call site spells them: a consumed type this module renames
+/// (`consumes c { T as U }`) is keyed by the name its owner declares, as a `stub` names it.
+pub(in crate::emitter) fn type_key_of(type_args: &[TypeRef], cx: &LowerCtx) -> String {
+    let declared: Vec<TypeRef> = type_args
+        .iter()
+        .map(|t| {
+            let renamed = if let TypeRef::Named(id) = t {
+                cx.consumed_declared_name(&id.name).map(|original| {
+                    TypeRef::Named(bynk_syntax::ast::Ident {
+                        name: original.to_string(),
+                        span: id.span,
+                    })
+                })
+            } else {
+                None
+            };
+            renamed.unwrap_or_else(|| t.clone())
+        })
+        .collect();
+    bynk_check::checker::capability_type_key(&declared, &cx.commons().types, cx.ty_render().types())
+}
+
+fn type_key_expr(key: &str) -> TsExpr {
+    let entry = object(vec![("__bynkTypeKey", str_lit(key))]);
+    TsExpr::Spread(Box::new(TsExpr::As {
         expr: Box::new(TsExpr::As {
             expr: Box::new(TsExpr::array(vec![entry])),
             ty: TsType::named("unknown"),
         }),
         ty: TsType::named("[]"),
-    })))
+    }))
 }
 
 /// Constrained generics slice 3: how the capability call `e` encodes its

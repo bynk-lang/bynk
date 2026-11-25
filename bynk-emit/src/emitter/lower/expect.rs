@@ -203,7 +203,11 @@ fn recorded_calls(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
 /// #3945: the recorded calls of one generic operation at the type arguments an observation
 /// names (`Cap.dedup[Outcome] was called`): `<calls>.filter(__c => __c.typeKey === "[Outcome]")`.
 /// An observation without type arguments counts every call, whatever it was made at.
-fn keyed_calls(calls: bynk_ts::TsExpr, type_args: &[bynk_syntax::ast::TypeRef]) -> bynk_ts::TsExpr {
+fn keyed_calls(
+    calls: bynk_ts::TsExpr,
+    type_args: &[bynk_syntax::ast::TypeRef],
+    cx: &LowerCtx,
+) -> bynk_ts::TsExpr {
     use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsParam};
     if type_args.is_empty() {
         return calls;
@@ -222,7 +226,9 @@ fn keyed_calls(calls: bynk_ts::TsExpr, type_args: &[bynk_syntax::ast::TypeRef]) 
             }))),
             property: "typeKey".to_string(),
         },
-        str_lit(bynk_syntax::print::type_args_src(type_args)),
+        str_lit(crate::emitter::lower_call::platform::type_key_of(
+            type_args, cx,
+        )),
     );
     TsExpr::Paren(Box::new(TsExpr::Call {
         callee: Box::new(TsExpr::Member {
@@ -308,7 +314,11 @@ pub(super) fn trace_node(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr 
 /// compares call order.
 pub(super) fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     use bynk_ts::{TsBinaryOp, TsExpr};
-    let calls = keyed_calls(recorded_calls(cx, &o.cap.name, &o.op.name), &o.type_args);
+    let calls = keyed_calls(
+        recorded_calls(cx, &o.cap.name, &o.op.name),
+        &o.type_args,
+        cx,
+    );
     let length = |calls: &TsExpr| TsExpr::Member {
         object: Box::new(calls.clone()),
         property: "length".to_string(),
