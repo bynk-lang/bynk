@@ -134,6 +134,34 @@ export const numbers = {
   },
 };
 
+export const contextual = {
+  async call(n: number, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<number> {
+    await deps.Idempotency.remember(`shop.contextual.call::${__bynkIdempotencyKey(n)}`, __serialise_List_Quote([]), 3600000);
+    await deps.Idempotency.remember(`shop.contextual.call::${__bynkIdempotencyKey(n + 1)}`, __serialise_Option_Quote(None), 3600000);
+    const empty = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.contextual.call::${__bynkIdempotencyKey(n)}`), { encode: __serialise_Option_List_Quote, decode: __deserialise_Option_List_Quote }, { capability: "Idempotency", operation: "dedup", type: "Option[List[Quote]]" }, "miss");
+    const none = await __bynkCapabilityReply(deps.Idempotency.dedup(`shop.contextual.call::${__bynkIdempotencyKey(n + 1)}`), { encode: __serialise_Option_Option_Quote, decode: __deserialise_Option_Option_Quote }, { capability: "Idempotency", operation: "dedup", type: "Option[Option[Quote]]" }, "miss");
+    switch (empty.tag) {
+      case "Some": {
+        return ((__d) => {
+          switch (__d.tag) {
+            case "Some": {
+              return 1;
+            }
+            case "None": {
+              return 0;
+            }
+          }
+          throw new globalThis.Error("non-exhaustive match");
+        })(none);
+      }
+      case "None": {
+        return 0;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+};
+
 export interface __ShopDeps {
   readonly Idempotency: bynk.Idempotency;
 }
@@ -151,6 +179,9 @@ export function __makeSurface(deps: __ShopDeps) {
     },
     async numbers(n: number, total: number): globalThis.Promise<number> {
       return numbers.call(n, total, deps);
+    },
+    async contextual(n: number): globalThis.Promise<number> {
+      return contextual.call(n, deps);
     },
   };
 }
@@ -210,6 +241,105 @@ export function __deserialise_Option_Quote(json: __JsonValue, path: string = "$"
   const __b = __option_value_Quote(json, path);
   if (__b.tag === "Ok") {
     return Ok(Some(__b.value as Quote) as Option<Quote>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_List_Quote(value: readonly Quote[]): __JsonValue {
+  return value.map((v) => __serialise_Quote(v));
+}
+
+export function __deserialise_List_Quote(json: __JsonValue, path: string = "$"): Result<readonly Quote[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: Quote[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    const __r_el = __deserialise_Quote(item, `${path}[${i}]`);
+    if (__r_el.tag === "Err") return __r_el;
+    const __el = __r_el.value;
+    out.push(__el as Quote);
+  }
+  return Ok(out);
+}
+
+export function __serialise_Option_List_Quote(value: Option<readonly Quote[]>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_List_Quote(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_List_Quote(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_List_Quote(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_List_Quote(json: __JsonValue, path: string = "$"): Result<Option<readonly Quote[]>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<readonly Quote[]>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<readonly Quote[]>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_List_Quote(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as readonly Quote[]) as Option<readonly Quote[]>);
+    }
+  }
+  const __b = __option_value_List_Quote(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as readonly Quote[]) as Option<readonly Quote[]>);
+  }
+  if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
+    return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
+  }
+  return __b;
+}
+
+export function __serialise_Option_Option_Quote(value: Option<Option<Quote>>): __JsonValue {
+  if (value.tag === "Some") return { kind: "Some", value: __serialise_Option_Quote(value.value) };
+  return { kind: "None" };
+}
+
+function __option_value_Option_Quote(raw: __JsonValue, at: string): Result<unknown, __BoundaryError> {
+  const __r_v = __deserialise_Option_Quote(raw, at);
+  if (__r_v.tag === "Err") return __r_v;
+  const __v = __r_v.value;
+  return Ok(__v);
+}
+
+export function __deserialise_Option_Option_Quote(json: __JsonValue, path: string = "$"): Result<Option<Option<Quote>>, __BoundaryError> {
+  if (json === undefined || json === null) {
+    return Ok(None as Option<Option<Quote>>);
+  }
+  if (typeof json === "object" && !globalThis.Array.isArray(json)) {
+    const obj = json as { [k: string]: __JsonValue };
+    const __keys = globalThis.Object.keys(obj);
+    if (obj["kind"] === "None" && __keys.length === 1) {
+      return Ok(None as Option<Option<Quote>>);
+    }
+    if (obj["kind"] === "Some" && __keys.length === 2 && "value" in obj) {
+      const __t = __option_value_Option_Quote(obj["value"], `${path}.value`);
+      if (__t.tag === "Err") {
+        return __t;
+      }
+      return Ok(Some(__t.value as Option<Quote>) as Option<Option<Quote>>);
+    }
+  }
+  const __b = __option_value_Option_Quote(json, path);
+  if (__b.tag === "Ok") {
+    return Ok(Some(__b.value as Option<Quote>) as Option<Option<Quote>>);
   }
   if (__b.error.kind === "StructuralMismatch" && __b.error.path === path && !__b.error.expected.endsWith(" | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}")) {
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });

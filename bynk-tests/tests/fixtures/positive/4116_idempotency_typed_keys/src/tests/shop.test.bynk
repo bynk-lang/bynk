@@ -22,4 +22,9 @@ suite shop as integration {
     let n <- numbers.call(3, 9)
     expect n == 9
   }
+
+  case "a written type argument types its argument, with the key inferred" {
+    let n <- contextual.call(10)
+    expect n == 1
+  }
 }

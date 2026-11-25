@@ -197,13 +197,15 @@ pub(in crate::emitter) fn decode_capability_reply(
     )
 }
 
-/// #4116: whether an `Idempotency` key argument is text at run time: a `String`, or a refined or
-/// opaque `String`.
+/// #4116: whether an `Idempotency` key argument is statically text: a `String`, or a refined or
+/// opaque `String`. A type variable is not, and goes through `__bynkIdempotencyKey`, which stores
+/// a run-time string as it is.
 fn key_is_text(key: &Expr, cx: &LowerCtx) -> bool {
     use bynk_check::checker::{NamedKind, Ty};
     use bynk_syntax::ast::BaseType;
+    // An unrecorded type is not known to be text: the run-time helper decides.
     let Some(te) = cx.commons().expr_types.get(&key.id) else {
-        return true;
+        return false;
     };
     let ty = te.ty.get(cx.ty_render().types());
     matches!(

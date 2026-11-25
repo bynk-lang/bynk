@@ -101,11 +101,17 @@ on reserve(orderId: OrderId) -> ReserveOutcome given Idempotency {
 ```
 
 The **key** may be any [`Key`](/reference/types/#keys) type: a `String`, a typed id such as
-`OrderId`, a record, a sum, an `Int`. Two keys share an entry exactly when they are `==`. A
-`String` (or a refined or opaque `String`) key is stored as it is written, so entries made
-with `Json.encode(id)` or any other string still match; any other key is stored under the
-canonical encoding value collections use, with a `k:` prefix. Type `K` is inferred from the
-key, so you write only the type arguments no argument determines:
+`OrderId`, a record, a sum, an `Int`. A type that is not a key (a `Float`, a `Map`, a record
+holding one) is `bynk.types.not_keyable`, because two such keys could not be told apart. Two
+keys of one type share an entry exactly when they are `==`. A key that is text (a `String`, or
+a refined or opaque `String`) is stored as it is written, so entries made with
+`Json.encode(id)` or any other string still match; any other key is stored under the canonical
+encoding value collections use, with a `k:` prefix. Keys of *different* types are not kept
+apart: a `String` key spelled `k:…`, or two records of different types with the same fields,
+can land on one entry in the same handler. Do not build a text key from untrusted input if a
+typed key of the same handler could have the same encoding; give each key its own type and
+keep client-supplied text out of the `k:` prefix. Type `K` is inferred from the key, so you
+write only the type arguments no argument determines:
 `Idempotency.dedup[Quote](deliveryKey)`.
 
 Both operations are written with their type argument here (`dedup[ReserveOutcome]`,

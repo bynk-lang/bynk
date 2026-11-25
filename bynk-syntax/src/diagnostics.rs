@@ -2239,7 +2239,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
                 type supplies it: `let x: Option[Int] = none()`. A capability operation also accepts \
                 fewer type arguments than it has parameters: the written ones bind the leading \
                 parameters and the arguments determine the rest, so `Cap.pair[Int](1)` on \
-                `pair[A, B]` leaves `B` open and is refused until you write `Cap.pair[Int, Str](1)`.",
+                `pair[A, B]` leaves `B` open and is refused until you write `Cap.pair[Int, String](1)`.",
         example: "fn none[T]() -> Option[T] {\n    None\n}\n\n\
                   let x = none()                    // ✗ nothing says what `T` is\n\n\
                   let x = none[Int]()               // ✓ given explicitly",

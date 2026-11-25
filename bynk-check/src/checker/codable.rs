@@ -309,6 +309,16 @@ pub fn codable_op_params(op: &bynk_syntax::ast::CapabilityOp) -> Vec<String> {
         .collect()
 }
 
+/// #4116: the operation's type parameters declared `Key`; a call's instantiation of each must
+/// be a key type.
+pub fn key_op_params(op: &bynk_syntax::ast::CapabilityOp) -> Vec<String> {
+    op.type_params
+        .iter()
+        .filter(|tp| super::equality::has_key(&tp.bounds))
+        .map(|tp| tp.name.name.clone())
+        .collect()
+}
+
 /// The internal annotation a first-party operation uses to declare what a reply
 /// that does not decode means (#3458): `@onUndecodable(miss)` or
 /// `@onUndecodable(fault)`. Not user-visible surface: the resolver refuses it

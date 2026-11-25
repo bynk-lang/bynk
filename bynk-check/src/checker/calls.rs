@@ -1716,11 +1716,14 @@ fn infer_op_type_args(
     let mut typed = Vec::with_capacity(args.len());
     let mut ok = true;
     for (pattern, arg) in op.params.iter().zip(args) {
-        // Only an argument whose parameter mentions a type parameter takes part
-        // in inference; the others are checked against their own parameter type,
-        // so contextual typing (`None`, `[]`, a literal for a `Float`) still holds.
-        if !contains_var(*pattern, tys) {
-            typed.push(type_of(arg, Some(*pattern), ctx));
+        // Only an argument whose parameter still mentions an unbound type parameter takes
+        // part in inference; the others are checked against their own parameter type, so
+        // contextual typing (`None`, `[]`, a literal for a `Float`) still holds. A written
+        // type argument binds its parameter first (#4116), so `remember[List[Quote]](k, [], ttl)`
+        // types `[]` against `List[Quote]`.
+        let bound = substitute(*pattern, &subst, tys);
+        if !contains_var(bound, tys) {
+            typed.push(type_of(arg, Some(bound), ctx));
             continue;
         }
         let t = type_of(arg, None, ctx);
@@ -2115,6 +2118,22 @@ pub(crate) fn check_static_call(
                 );
                 subst.insert(tp.clone(), ty);
             }
+        }
+        // #4116: each `Key` type parameter takes a key type, so a `Float` or a `Map` cannot
+        // key an `Idempotency` entry that two distinct keys would then share.
+        if !super::keying::check_declared_key_args(
+            &format!("{}.{}", type_name.name, method.name),
+            span,
+            &op_clone.key_params,
+            &subst,
+            ctx,
+        ) {
+            if arg_tys.is_none() {
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+            }
+            return None;
         }
         // Slice 3: each `Codable` type parameter takes a codable type, and the
         // call records how it encodes the parameters that mention one.
@@ -6242,6 +6261,81 @@ fn flatten_ident_chain(expr: &Expr) -> Option<String> {
     }
 }
 
+/// A qualified capability call's type arguments, and the `(argument index, type)` pairs typed
+/// while inferring them.
+type CrossTypeArgs = (HashMap<String, TyId>, Vec<(usize, TyId)>);
+
+/// A qualified capability call's type arguments: the written ones bind the operation's leading
+/// type parameters; a left-out one is the type of the argument whose parameter is exactly that
+/// parameter (`key: K`), typed here once (#4116). `None` after reporting a mismatch, or a
+/// parameter no argument determines. The second result is the `(argument index, type)` pairs
+/// already typed, which the argument check skips.
+fn cross_context_type_args(
+    op: &crate::resolver::CrossContextCapabilityOp,
+    (consumed, cap, method): (&str, &str, &Ident),
+    type_args: &[TypeRef],
+    args: &[Expr],
+    ctx: &mut Ctx,
+) -> Option<CrossTypeArgs> {
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    let mut inferred_args: Vec<(usize, TyId)> = Vec::new();
+    if !op.type_params.is_empty() || !type_args.is_empty() {
+        if type_args.len() > op.type_params.len() {
+            ctx.errors.push(CompileError::new(
+                "bynk.generics.type_arg_mismatch",
+                method.span,
+                format!(
+                    "capability operation `{consumed}.{cap}.{}` takes {} type argument(s), but {} were given",
+                    method.name,
+                    op.type_params.len(),
+                    type_args.len()
+                ),
+            ));
+            for a in args {
+                let _ = type_of(a, None, ctx);
+            }
+            return None;
+        }
+        for (tp, ta) in op.type_params.iter().zip(type_args) {
+            let ty = resolve_expr_type_ref(ta, ctx)?;
+            subst.insert(tp.clone(), ty);
+        }
+        // #4116: a type parameter the call leaves out is the type of the argument whose parameter
+        // is exactly that parameter (`key: K`); one no argument names is not inferable here.
+        for tp in op.type_params.iter().skip(type_args.len()) {
+            let named_by = op
+                .params
+                .iter()
+                .position(|(_, tr)| matches!(tr, TypeRef::Named(id) if id.name == *tp));
+            let Some(arg) = named_by.and_then(|i| args.get(i)) else {
+                ctx.errors.push(
+                    CompileError::new(
+                        "bynk.generics.uninferable_type_arg",
+                        method.span,
+                        format!(
+                            "capability operation `{consumed}.{cap}.{}` takes a type parameter, but none of its arguments determine it",
+                            method.name
+                        ),
+                    )
+                    .with_note(format!(
+                        "give it explicitly: `{consumed}.{cap}.{}[T](…)`",
+                        method.name
+                    )),
+                );
+                for a in args {
+                    let _ = type_of(a, None, ctx);
+                }
+                return None;
+            };
+            let arg_ty = type_of(arg, None, ctx)?;
+            subst.insert(tp.clone(), arg_ty);
+            // Typed once: its parameter is now exactly this type, so it is not checked again.
+            inferred_args.push((named_by.unwrap_or_default(), arg_ty));
+        }
+    }
+    Some((subst, inferred_args))
+}
+
 /// Type-check a cross-context service call (v0.6 §4.2). `receiver` carries
 /// the prefix's source span for diagnostics. `consumed` is the resolved
 /// qualified name of the consumed context.
@@ -6383,57 +6477,20 @@ fn check_cross_context_capability_call(
     // params/return vs. call-site type args in the local-capability path,
     // `check_static_call`). Explicit only, never inferred.
     let vars: HashSet<String> = op.type_params.iter().cloned().collect();
-    let mut subst: HashMap<String, TyId> = HashMap::new();
-    if !op.type_params.is_empty() || !type_args.is_empty() {
-        if type_args.len() > op.type_params.len() {
-            ctx.errors.push(CompileError::new(
-                "bynk.generics.type_arg_mismatch",
-                method.span,
-                format!(
-                    "capability operation `{consumed}.{cap}.{}` takes {} type argument(s), but {} were given",
-                    method.name,
-                    op.type_params.len(),
-                    type_args.len()
-                ),
-            ));
-            for a in args {
-                let _ = type_of(a, None, ctx);
-            }
-            return None;
+    let (subst, inferred_args) =
+        cross_context_type_args(&op, (consumed, cap, method), type_args, args, ctx)?;
+    // #4116: each `Key` type parameter takes a key type (see the local path).
+    if !super::keying::check_declared_key_args(
+        &format!("{consumed}.{cap}.{}", method.name),
+        method.span,
+        &op.key_params,
+        &subst,
+        ctx,
+    ) {
+        for a in args {
+            let _ = type_of(a, None, ctx);
         }
-        for (tp, ta) in op.type_params.iter().zip(type_args) {
-            let ty = resolve_expr_type_ref(ta, ctx)?;
-            subst.insert(tp.clone(), ty);
-        }
-        // #4116: a type parameter the call leaves out is the type of the argument whose parameter
-        // is exactly that parameter (`key: K`); one no argument names is not inferable here.
-        for tp in op.type_params.iter().skip(type_args.len()) {
-            let named_by = op
-                .params
-                .iter()
-                .position(|(_, tr)| matches!(tr, TypeRef::Named(id) if id.name == *tp));
-            let Some(arg) = named_by.and_then(|i| args.get(i)) else {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.generics.uninferable_type_arg",
-                        method.span,
-                        format!(
-                            "capability operation `{consumed}.{cap}.{}` takes a type parameter, but none of its arguments determine it",
-                            method.name
-                        ),
-                    )
-                    .with_note(format!(
-                        "give it explicitly: `{consumed}.{cap}.{}[T](…)`",
-                        method.name
-                    )),
-                );
-                for a in args {
-                    let _ = type_of(a, None, ctx);
-                }
-                return None;
-            };
-            subst.insert(tp.clone(), type_of(arg, None, ctx)?);
-        }
+        return None;
     }
     // Slice 3: each `Codable` type parameter takes a codable type, and the call
     // records how it encodes the parameters that mention one.
@@ -6502,8 +6559,12 @@ fn check_cross_context_capability_call(
             .unwrap_or(tys.intern(Ty::Unit));
         let param_ty = substitute(param_ty, &subst, tys);
         // #2025: against the parameter's type; see `type_cross_context_arg`.
-        let (arg_ty, crosses) =
-            type_cross_context_arg(arg, param_ty, &caller_types, &consumed_types, consumed, ctx);
+        let (arg_ty, crosses) = match inferred_args.iter().find(|(at, _)| *at == i) {
+            Some(&(_, ty)) => (Some(ty), true),
+            None => {
+                type_cross_context_arg(arg, param_ty, &caller_types, &consumed_types, consumed, ctx)
+            }
+        };
         let Some(arg_ty) = arg_ty else {
             all_ok = false;
             continue;

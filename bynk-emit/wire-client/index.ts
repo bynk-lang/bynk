@@ -621,12 +621,14 @@ export function __bynkKeyEncode(v: unknown): string {
 }
 
 /**
- * The string a first-party `Idempotency` operation stores a non-text key under (#4116): `k:` and
- * its canonical encoding, so two keys share an entry exactly when they are `==`. A text key is
- * stored as it is, by the call site, which does not call this.
+ * The string a first-party `Idempotency` operation stores a key under (#4116). A key that is text
+ * at run time is stored as it is, so existing entries still match; any other key is `k:` and its
+ * canonical encoding, so two keys of one type share an entry exactly when they are `==`. The call
+ * site skips this call for a key it knows is text; a key of a type variable (a generic helper) or
+ * of an unrecorded type comes here, and gets the same string either way.
  */
 export function __bynkIdempotencyKey(k: unknown): string {
-  return "k:" + __bynkKeyEncode(k);
+  return typeof k === "string" ? k : "k:" + __bynkKeyEncode(k);
 }
 
 /** Whether `k` can key a plain `Map`/`Set` (SameValueZero is value equality). */

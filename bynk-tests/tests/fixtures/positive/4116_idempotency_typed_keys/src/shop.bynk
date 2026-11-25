@@ -56,3 +56,20 @@ service numbers {
     }
   }
 }
+
+// A written type argument gives its argument an expected type, with `K` inferred (#4116).
+service contextual {
+  on call(n: Int) -> Effect[Int] by Caller given Idempotency {
+    do Idempotency.remember[List[Quote]](n, [], 1.hour)
+    do Idempotency.remember[Option[Quote]](n + 1, None, 1.hour)
+    let empty <- Idempotency.dedup[List[Quote]](n)
+    let none <- Idempotency.dedup[Option[Quote]](n + 1)
+    match empty {
+      Some(_) => match none {
+        Some(_) => 1
+        None => 0
+      }
+      None => 0
+    }
+  }
+}
