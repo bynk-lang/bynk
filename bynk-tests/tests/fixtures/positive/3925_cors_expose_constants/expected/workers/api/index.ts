@@ -21,8 +21,10 @@ export default {
     const surface = compose(env);
     const __cors_api: __CorsPolicy = { origins: ["https://app.example.com", "https://admin.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS"], allowHeaders: ["content-type"], exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag", "x-request-id"], credentials: true, maxAgeSecs: null };
     const __cors_partner: __CorsPolicy = { origins: ["https://partner.example.com", "https://other.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS"], allowHeaders: ["content-type"], exposeHeaders: ["*"], credentials: false, maxAgeSecs: null };
+    const __cors_partners: __CorsPolicy = { origins: ["https://p1.example.com", "https://p2.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS"], allowHeaders: ["content-type"], exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag"], credentials: false, maxAgeSecs: null };
     const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
     const __security_partner: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+    const __security_partners: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
@@ -44,11 +46,22 @@ export default {
       if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/partner/ping", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_partner, request.headers.get("origin")), __security_partner);
       }
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/partners/ping", path) !== null)) {
+        return __applySecurityHeaders(__corsPreflightResponse(__cors_partners, request.headers.get("origin")), __security_partners);
+      }
       {
         if ((method === "GET" || method === "HEAD") && __matchPath("/partner/ping", path) !== null) {
           __route = "GET /partner/ping";
           const result = await surface.http_GET_partner_ping();
           const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __cors_partner, request.headers.get("origin")), __security_partner);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/partners/ping", path) !== null) {
+          __route = "GET /partners/ping";
+          const result = await surface.http_GET_partners_ping();
+          const __response = __applySecurityHeaders(__applyCors(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __cors_partners, request.headers.get("origin")), __security_partners);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -64,6 +77,11 @@ export default {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_partner, request.headers.get("origin")), __security_partner);
+      }
+      if (__matchPath("/partners/ping", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__applyCors(__res, __cors_partners, request.headers.get("origin")), __security_partners);
       }
       if (__matchPath("/ping", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;

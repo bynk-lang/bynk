@@ -5239,6 +5239,24 @@ fn validate_cors_policy(
                     }
                 }
             }
+            // A bare name that did not resolve (ADR 0826): the pass left it as
+            // written, so say what the constant must be rather than repeat the
+            // rule a reader may think it already meets.
+            ExprKind::Ident(id) => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_origins",
+                    expr.span,
+                    format!(
+                        "`{}` does not name a `List[String]` constant bound to a list of string literals",
+                        id.name
+                    ),
+                )
+                .with_note(
+                    "a constant counts as its literal only when it is declared exactly `List[String]` \
+                     and bound to a list of string literals, or to another such constant (an \
+                     `env(…)` constant is, once `bynk.toml` gives it a value)",
+                ),
+            ),
             _ => errors.push(CompileError::new(
                 "bynk.http.cors_invalid_origins",
                 expr.span,

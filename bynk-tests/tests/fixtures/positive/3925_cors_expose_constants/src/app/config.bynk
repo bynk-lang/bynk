@@ -6,3 +6,7 @@ commons app.config
 
 const AppOrigins: List[String] = env(APP_ORIGINS)
 const PartnerOrigin: String = "https://partner.example.com"
+
+// A list written directly, and one that is another constant.
+const PartnerOrigins: List[String] = ["https://p1.example.com", "https://p2.example.com"]
+const AllPartners: List[String] = PartnerOrigins

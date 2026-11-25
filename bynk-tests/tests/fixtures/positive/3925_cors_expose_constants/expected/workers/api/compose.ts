@@ -15,5 +15,8 @@ export function compose(env: Env) {
     async http_GET_partner_ping() {
       return handlers.partner.http_GET_partner_ping(deps);
     },
+    async http_GET_partners_ping() {
+      return handlers.partners.http_GET_partners_ping(deps);
+    },
   };
 }

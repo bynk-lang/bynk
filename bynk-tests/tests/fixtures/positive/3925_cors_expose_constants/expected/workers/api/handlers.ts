@@ -14,3 +14,9 @@ export const partner = {
     return HttpResult.Ok("pong");
   },
 };
+
+export const partners = {
+  async http_GET_partners_ping(deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok("pong");
+  },
+};

@@ -29,3 +29,15 @@ service partner from http {
     Ok("pong")
   }
 }
+
+// A `List[String]` constant bound to a literal list, reached through a second
+// constant that names it.
+service partners from http {
+  cors {
+    origins: AllPartners,
+  }
+
+  on GET("/partners/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

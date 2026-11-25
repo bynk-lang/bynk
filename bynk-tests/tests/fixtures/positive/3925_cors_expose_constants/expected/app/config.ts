@@ -11,3 +11,9 @@ export function AppOrigins(): readonly string[] { return (__const_AppOrigins ??=
 
 var __const_PartnerOrigin: { v: string } | undefined;
 export function PartnerOrigin(): string { return (__const_PartnerOrigin ??= { v: "https://partner.example.com" }).v; }
+
+var __const_PartnerOrigins: { v: readonly string[] } | undefined;
+export function PartnerOrigins(): readonly string[] { return (__const_PartnerOrigins ??= { v: ["https://p1.example.com", "https://p2.example.com"] }).v; }
+
+var __const_AllPartners: { v: readonly string[] } | undefined;
+export function AllPartners(): readonly string[] { return (__const_AllPartners ??= { v: PartnerOrigins() }).v; }
