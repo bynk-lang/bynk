@@ -204,7 +204,6 @@ pub enum CommonsForm {
     Fragment,
 }
 
-/// A `uses other.commons` declaration (v0.3 §3.3).
 /// #4045: one qualified name a unit reads through a `uses` clause.
 #[derive(Debug, Clone)]
 pub struct QualifiedRef {
@@ -216,6 +215,7 @@ pub struct QualifiedRef {
     pub span: Span,
 }
 
+/// A `uses other.commons` declaration (v0.3 §3.3).
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub target: QualifiedName,
