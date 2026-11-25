@@ -2535,15 +2535,6 @@ agent (`bynk.types.claims_at_boundary`). A test supplies them as the principal's
 
 ### §5.7a.1 Multi-actor sum dispatch (v0.52)
 
-An `Oidc` or a `SignedCookie` actor MAY be a member (#3936). Each member runs its own scheme's check,
-in declared order, the first verifying member winning. A `SignedCookie` member reads the session cookie
-first: with none (or a repeated one) it does not resolve and refuses nothing. With one, on a
-state-changing method it applies its cross-site check (`Sec-Fetch-Site: same-origin`, or an `Origin` among
-the service's credentialed `cors` origins) before verifying the cookie; a request it refuses that no
-other member resolves is `403`, not `401`. A request carrying a token and a cookie is the first
-listed member's. A sum arm binds its identity only; reading `.claims` of an `Oidc` or `Bearer` arm is
-not part of this rule (#4344).
-
 A `by` clause MAY name an **ordered sum of peer actors**
 (`by who: A | B | …`): distinct parties distinguished by **scheme**, resolved
 **first-wins**. The boundary tries each peer's scheme in declared order and binds
@@ -2567,10 +2558,19 @@ A sum is well-formed when:
 - the body `match` is **exhaustive** over the members (the ordinary
   sum-exhaustiveness rule, `bynk.types.non_exhaustive_match`).
 
+An `Oidc` or a `SignedCookie` actor MAY be a member (#3936). Each member runs its own scheme's check,
+in declared order, the first verifying member winning. A `SignedCookie` member reads the session cookie
+first: with none (or a repeated one) it does not resolve and refuses nothing. With one, on a
+state-changing method it applies its cross-site check (`Sec-Fetch-Site: same-origin`, or an `Origin` among
+the service's credentialed `cors` origins) before verifying the cookie; a request it refuses that no
+other member resolves is `403`, not `401`. A request carrying a token and a cookie is the first
+listed member's. A sum arm binds its identity only; reading `.claims` of an `Oidc` or `Bearer` arm is
+not part of this rule (#4344).
+
 The reachability checks are **decidable and scheme-level**; the compiler does not
 reason about predicate-level disjointness. Total verification failure (no member
 verifies) is **fail-closed → 401**; a sum's members carry no invariants, so the
-only 403 is a `SignedCookie` member's cross-site refusal below. Verification is side-effect-free and idempotent: first-wins
+only 403 is a `SignedCookie` member's cross-site refusal above. Verification is side-effect-free and idempotent: first-wins
 short-circuits, so the set and order of verifications attempted is observable, and
 audit/logging belongs *after* resolution.
 

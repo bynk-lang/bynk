@@ -224,9 +224,75 @@ async function test_the_token_first_route_admits_either_arm() {
   }
 }
 
+async function test_a_bad_cookie_beside_a_valid_token_falls_through_to_the_token() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Cookie: __Host-session=garbage"]), ("ci" as any), "ApiClient");
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:50:10", 2020, 2039, "expect r is Ok(\"token ci\")", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_cross_site_request_with_a_bad_cookie_and_a_valid_token_is_admitted_by_the_token() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site", "Cookie: __Host-session=garbage"]), ("ci" as any), "ApiClient");
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "token ci"))) { throw __bynkExpectFailure("tests/api.bynk:55:10", 2280, 2299, "expect r is Ok(\"token ci\")", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_cross_site_cookie_is_refused_on_either_order__because_no_token_arm_admits_it() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const first = await __sysdrive_api_http_POST_orders(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), "User");
+    const second = await __sysdrive_api_http_POST_orders_token_first(__requestHeaders(["Sec-Fetch-Site: cross-site"]), ("ada" as any), "User");
+    if (!(((__c: boolean) => __c)(first.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2617, 2635, "expect first is Forbidden", "first", () => __bynkShow(first)); }
+    if (!(((__c: boolean) => __c)(second.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:62:10", 2645, 2664, "expect second is Forbidden", "second", () => __bynkShow(second)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_valid_cookie_with_a_stray_cookie_of_another_name_is_admitted() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r = await __sysdrive_api_http_POST_orders(__requestHeaders(["Cookie: theme=dark"]), ("ada" as any), "User");
+    if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "cookie ada"))) { throw __bynkExpectFailure("tests/api.bynk:67:10", 2840, 2861, "expect r is Ok(\"cookie ada\")", "r", () => __bynkShow(r)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a valid session cookie is admitted", "a valid token is admitted", "a cross-site state-changing request carrying only a cookie is refused", "the same cross-site request carrying a token is admitted", "a cross-site request from a listed origin carrying a cookie is admitted", "a cross-site safe request carrying a cookie is not checked", "no credential is refused as unauthenticated, not forbidden", "the token-first route admits either arm"];
+export const __bynkCases: readonly string[] = ["a valid session cookie is admitted", "a valid token is admitted", "a cross-site state-changing request carrying only a cookie is refused", "the same cross-site request carrying a token is admitted", "a cross-site request from a listed origin carrying a cookie is admitted", "a cross-site safe request carrying a cookie is not checked", "no credential is refused as unauthenticated, not forbidden", "the token-first route admits either arm", "a bad cookie beside a valid token falls through to the token", "a cross-site request with a bad cookie and a valid token is admitted by the token", "a cross-site cookie is refused on either order, because no token arm admits it", "a valid cookie with a stray cookie of another name is admitted"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -276,6 +342,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("the token-first route admits either arm")) {
     const started = __bynkCaseNow();
     const r = { name: "the token-first route admits either arm", ...(await test_the_token_first_route_admits_either_arm()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bad cookie beside a valid token falls through to the token")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bad cookie beside a valid token falls through to the token", ...(await test_a_bad_cookie_beside_a_valid_token_falls_through_to_the_token()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a cross-site request with a bad cookie and a valid token is admitted by the token")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a cross-site request with a bad cookie and a valid token is admitted by the token", ...(await test_a_cross_site_request_with_a_bad_cookie_and_a_valid_token_is_admitted_by_the_token()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a cross-site cookie is refused on either order, because no token arm admits it")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a cross-site cookie is refused on either order, because no token arm admits it", ...(await test_a_cross_site_cookie_is_refused_on_either_order__because_no_token_arm_admits_it()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a valid cookie with a stray cookie of another name is admitted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a valid cookie with a stray cookie of another name is admitted", ...(await test_a_valid_cookie_with_a_stray_cookie_of_another_name_is_admitted()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

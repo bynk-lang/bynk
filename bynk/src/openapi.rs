@@ -659,7 +659,7 @@ fn sum_security(
     use bynk_check::actors::SumMemberSeam;
     let mut alternatives: Vec<Value> = Vec::new();
     let mut open = false;
-    let mut cross_site = false;
+    let mut has_cookie_arm = false;
     for m in members {
         let scheme = match &m.seam {
             SumMemberSeam::None => {
@@ -689,7 +689,7 @@ fn sum_security(
                 "description": format!("An HMAC signature over the body, verified by the `{}` actor.", m.actor_name),
             }),
             SumMemberSeam::SignedCookie(seam) => {
-                cross_site = !matches!(method, IrHttpMethod::Get);
+                has_cookie_arm = !matches!(method, IrHttpMethod::Get);
                 cookie_scheme(seam)
             }
         };
@@ -707,10 +707,11 @@ fn sum_security(
             "No credential that any of the route's actors accepts.",
         ));
     }
-    if cross_site {
+    // With an open member nothing is refused, so there is no `403` to document either.
+    if has_cookie_arm && !open {
         refusals.push((
             "403",
-            "A cross-site request carrying only a session cookie: the cookie arm's CSRF check refuses it. A request that presents a token instead is admitted.",
+            "A cross-site request whose only credential is the session cookie: the cookie arm's CSRF check refuses it. A request that presents another member's credential instead is admitted by that member.",
         ));
     }
     if let Value::Object(map) = responses {

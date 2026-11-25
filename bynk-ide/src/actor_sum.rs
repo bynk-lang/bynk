@@ -65,15 +65,24 @@ fn describe(by: &ByClause, actors: &HashMap<&str, &ActorDecl>) -> String {
                     .to_string(),
                 _ => "admits any request".to_string(),
             },
-            // A prelude actor: `Visitor` admits everyone.
-            None => "admits any request".to_string(),
+            // A prelude actor: `Visitor` admits everyone. Any other name is declared elsewhere
+            // (another file or a `uses`d commons), so its scheme is not known from this file.
+            None if a.name == "Visitor" => "admits any request".to_string(),
+            None => "declared outside this file: see its declaration".to_string(),
         };
         out.push_str(&format!("{}. `{}`: {check}\n", i + 1, a.name));
     }
-    out.push_str(
-        "\nA request carrying both a cookie and a token is the first listed member's. List the token \
-         first when clients may hold both, so an explicit token wins over an ambient cookie.\n",
-    );
+    let has_cookie = by.actors.iter().any(|a| {
+        actors
+            .get(a.name.as_str())
+            .is_some_and(|d| d.auth.as_ref().map(|i| i.name.as_str()) == Some("SignedCookie"))
+    });
+    if has_cookie {
+        out.push_str(
+            "\nA request carrying both a cookie and a token is the first listed member's. List the \
+             token first when clients may hold both, so an explicit token wins over an ambient cookie.\n",
+        );
+    }
     out
 }
 
@@ -95,6 +104,21 @@ service api from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by wh
         assert!(user < client, "{hover}");
         assert!(hover.contains("cross-site request"), "{hover}");
         assert!(hover.contains("OIDC token"), "{hover}");
+    }
+
+    #[test]
+    fn an_actor_declared_elsewhere_is_not_described_as_open() {
+        let src = "context shop.api\n\ntype UserId = String where NonEmpty\n\nactor User { auth = Bearer(secret = \"K\"), identity = UserId }\n\nservice api from http {\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by who: User | Elsewhere {\n    match who {\n      User(u) => Ok(u)\n      Elsewhere(e) => Ok(e)\n    }\n  }\n}\n";
+        let hover = describe_sum_at(src, src.find("by who").unwrap() + 1).expect("hover");
+        assert!(hover.contains("declared outside this file"), "{hover}");
+        assert!(
+            !hover.contains("`Elsewhere`: admits any request"),
+            "{hover}"
+        );
+        assert!(
+            !hover.contains("cookie and a token"),
+            "no cookie arm, no cookie note: {hover}"
+        );
     }
 
     #[test]

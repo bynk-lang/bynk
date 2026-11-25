@@ -97,10 +97,10 @@ service api from http {
 		credentials: true,
 	}
 
-	on POST("/orders") () -> Effect[HttpResult[String]] by who: User | ApiClient {
+	on POST("/orders") () -> Effect[HttpResult[String]] by who: ApiClient | User {
 		match who {
-			User(u) => Ok("cookie \(u)"),
 			ApiClient(c) => Ok("token \(c)"),
+			User(u) => Ok("cookie \(u)"),
 		}
 	}
 }
@@ -109,7 +109,7 @@ service api from http {
 The members are tried in the order written. The cookie's cross-site check belongs to the cookie arm: it
 runs only when a session cookie is present, so a token client never meets it, while a cross-site page that
 sends only the user's cookie is refused (`403`). A request carrying both a cookie and a token is resolved
-by the order: list the token first when clients may hold both, so an explicit token wins over an ambient
+by the order, which is why the example lists the token first: an explicit token wins over an ambient
 cookie. A test acts as either member (`by User("ada")`, `by ApiClient("ci")`), and `by Nobody` is the
 request with no credential, which is `401`.
 

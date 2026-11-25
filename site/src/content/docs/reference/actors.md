@@ -169,10 +169,10 @@ actor User      { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), i
 actor ApiClient { auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"), identity = UserId }
 
 service api from http {
-  on POST("/orders") (body: NewOrder) -> Effect[HttpResult[Order]] by who: User | ApiClient {
+  on POST("/orders") (body: NewOrder) -> Effect[HttpResult[Order]] by who: ApiClient | User {
     match who {
-      User(u)      => Ok(u)
       ApiClient(c) => Ok(c)
+      User(u)      => Ok(u)
     }
   }
 }

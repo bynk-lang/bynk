@@ -922,6 +922,39 @@ service api from http {
     );
 }
 
+/// #3936: a sum with an open member (`Visitor`) never refuses, so it documents neither the `401`
+/// nor the cookie arm's `403`.
+#[test]
+fn a_sum_with_an_open_member_documents_no_refusal() {
+    let dir = scratch("sum-open-member");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+
+service api from http {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on POST("/note") () -> Effect[HttpResult[String]] by who: User | Visitor {
+    match who {
+      User(u) => Ok(u)
+      Visitor => Ok("anonymous")
+    }
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let post = &d["paths"]["/note"]["post"];
+    assert!(post["responses"].get("401").is_none(), "{post:?}");
+    assert!(post["responses"].get("403").is_none(), "{post:?}");
+}
+
 /// #3631: a user sum variant spelled like an `HttpResult` variant is the sum's constructor, so it
 /// adds no response; a genuine `HttpResult.Found` still documents the `302`.
 #[test]
