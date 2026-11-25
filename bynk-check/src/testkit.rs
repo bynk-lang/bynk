@@ -143,6 +143,15 @@ impl Analysed {
             .collect()
     }
 
+    /// Every note of every diagnostic.
+    pub(crate) fn notes(&self) -> Vec<&str> {
+        self.analysis
+            .errors
+            .iter()
+            .flat_map(|e| e.error.notes.iter().map(String::as_str))
+            .collect()
+    }
+
     /// The categories of error-severity diagnostics only.
     pub(crate) fn error_categories(&self) -> Vec<&'static str> {
         self.analysis
