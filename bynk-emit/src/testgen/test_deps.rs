@@ -723,6 +723,8 @@ pub(super) fn used_commons_destructures<'a>(
 ) -> Vec<NsDestructure> {
     let (target_local, target_values) = target_names(target_name, unit_tables);
     let mut out = Vec::new();
+    let mut bound_here: HashSet<String> = HashSet::new();
+    let mut types_bound: HashSet<String> = HashSet::new();
     if let Some(used) = unit_uses.get(target_name) {
         for u in used {
             let ns = test_ns(u);
@@ -754,25 +756,18 @@ pub(super) fn used_commons_destructures<'a>(
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();
-                // #4403: only the names the target's `uses` clauses bring in bare. Two used
-                // commons that both declare `Status` would otherwise both destructure it
-                // (TS2451); the qualified spellings are bound by [`use_qualifier_imports`].
-                let in_view = |n: &String| match target_view(unit_tables, target_name, u) {
-                    Some(v) => {
-                        v.types.contains_key(n)
-                            || v.fns.contains_key(n)
-                            || v.consts.contains_key(n)
-                            || v.assets.contains_key(n)
-                            || v.embeds.contains_key(n)
-                    }
-                    None => true,
-                };
-                names.retain(|n| in_view(n));
+                // #4403: a name two used commons both declare (`Status`) is bound once, from
+                // the first, as the checker's suite view files it; destructuring it from
+                // both redeclared it (TS2451). The qualified spellings are bound by
+                // [`use_qualifier_imports`], a renamed one by [`use_rename_destructures`].
+                names.retain(|n| bound_here.insert(n.clone()));
                 names.sort();
                 names.dedup();
                 let type_names = aliased_types(table, |n| {
-                    !target_local.contains(n) && is_public_type(table, n) && in_view(&n.to_string())
+                    !target_local.contains(n) && is_public_type(table, n)
                 });
+                let mut type_names = type_names;
+                type_names.retain(|(n, _)| types_bound.insert(n.clone()));
                 out.push((ns, names, type_names));
             }
         }
@@ -788,6 +783,46 @@ fn target_view<'a>(
     used: &str,
 ) -> Option<&'a UnitTable> {
     unit_tables.get(target_name)?.use_views.get(used)
+}
+
+/// #4403: the names a target's braced `uses` list renames (`{ Status as XStatus }`), bound in
+/// the case's scope under the new name: `const { Status: XStatus } = ns;` and the type alias.
+/// Returns the statements and the names they bind.
+pub(super) fn use_rename_destructures(
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+) -> (Vec<TsStmt>, Vec<String>) {
+    let mut stmts = Vec::new();
+    let mut bound = Vec::new();
+    for u in unit_uses.get(target_name).into_iter().flatten() {
+        let (Some(view), Some(table)) =
+            (target_view(unit_tables, target_name, u), unit_tables.get(u))
+        else {
+            continue;
+        };
+        let renames: HashMap<String, String> = view
+            .use_origin
+            .iter()
+            .filter(|(key, orig)| !key.contains('.') && key != orig)
+            .map(|(key, orig)| (orig.clone(), key.clone()))
+            .collect();
+        if renames.is_empty() {
+            continue;
+        }
+        let mut originals: Vec<String> = renames.keys().cloned().collect();
+        originals.sort();
+        let types = aliased_types(table, |n| renames.contains_key(n));
+        bound.extend(renames.values().cloned());
+        stmts.extend(emit_ns_destructure_renamed(
+            &test_ns(u),
+            &originals,
+            &types,
+            &renames,
+            &HashSet::new(),
+        ));
+    }
+    (stmts, bound)
 }
 
 /// #4403: the namespace imports a case's qualified names read through, each as the

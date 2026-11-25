@@ -942,40 +942,42 @@ pub(super) fn synthetic_typed_commons_for_target(
     // resolves against the same set of names the source can mention.
     if let Some(used) = unit_uses.get(target_name) {
         for u in used {
-            if let Some(t) = unit_tables.get(u) {
-                // #4403: as the target itself sees it, so a name its `uses` clauses
-                // qualify (`lib.x.Status`) or rename is in scope under that spelling.
-                // (`table.use_views` read directly: `table` is partly moved above.)
-                let t = table.use_views.get(u).unwrap_or(t);
-                // #2702: a used commons' `private` declarations are not in the
-                // case's scope, so they must not claim a name (and with it the
-                // codec, the methods or the call a visible one resolves to).
-                for (n, d) in &t.types {
-                    if d.private.is_none() {
-                        types.entry(n.clone()).or_insert_with(|| d.clone());
+            if let Some(plain) = unit_tables.get(u) {
+                // #4403: the target's own view of it first, so a name its `uses` clauses
+                // qualify (`lib.x.Status`) or rename is in scope under that spelling, then
+                // the commons' own names. (`table.use_views` read directly: `table` is
+                // partly moved above.)
+                for t in table.use_views.get(u).into_iter().chain([plain]) {
+                    // #2702: a used commons' `private` declarations are not in the
+                    // case's scope, so they must not claim a name (and with it the
+                    // codec, the methods or the call a visible one resolves to).
+                    for (n, d) in &t.types {
+                        if d.private.is_none() {
+                            types.entry(n.clone()).or_insert_with(|| d.clone());
+                        }
                     }
-                }
-                for (n, f) in &t.fns {
-                    if f.private.is_none() {
-                        fns.entry(n.clone()).or_insert_with(|| f.clone());
+                    for (n, f) in &t.fns {
+                        if f.private.is_none() {
+                            fns.entry(n.clone()).or_insert_with(|| f.clone());
+                        }
                     }
-                }
-                for (n, mt) in &t.methods {
-                    if t.types.get(n).is_some_and(|d| d.private.is_some()) {
-                        continue;
-                    }
-                    let entry = methods.entry(n.clone()).or_default();
-                    for (m, decl) in &mt.instance {
-                        entry
-                            .instance
-                            .entry(m.clone())
-                            .or_insert_with(|| decl.clone());
-                    }
-                    for (m, decl) in &mt.statics {
-                        entry
-                            .statics
-                            .entry(m.clone())
-                            .or_insert_with(|| decl.clone());
+                    for (n, mt) in &t.methods {
+                        if t.types.get(n).is_some_and(|d| d.private.is_some()) {
+                            continue;
+                        }
+                        let entry = methods.entry(n.clone()).or_default();
+                        for (m, decl) in &mt.instance {
+                            entry
+                                .instance
+                                .entry(m.clone())
+                                .or_insert_with(|| decl.clone());
+                        }
+                        for (m, decl) in &mt.statics {
+                            entry
+                                .statics
+                                .entry(m.clone())
+                                .or_insert_with(|| decl.clone());
+                        }
                     }
                 }
             }

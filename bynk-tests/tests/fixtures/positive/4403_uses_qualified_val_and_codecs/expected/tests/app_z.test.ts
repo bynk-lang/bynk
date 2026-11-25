@@ -19,11 +19,13 @@ async function test_a_qualified_type_generates_a_value() {
     const deps = {};
     const { Holder, sx } = __ns_app_z;
     type Holder = __ns_app_z.Holder;
-    const { AppError, IoError, Level, Shape } = __ns_lib_x;
+    const { AppError, IoError, Level, Limit, Point, Shape, Status, area, describe } = __ns_lib_x;
     type AppError = __ns_lib_x.AppError;
     type IoError = __ns_lib_x.IoError;
     type Level = __ns_lib_x.Level;
+    type Point = __ns_lib_x.Point;
     type Shape = __ns_lib_x.Shape;
+    type Status = __ns_lib_x.Status;
     const s = __use_lib_x.Status.Open;
     if (!(__bynkEq(s, s))) { throw __bynkExpectFailure("tests/z.test.bynk:6:12", 115, 121, "expect s == s\n  expected: s == s\n  actual:   " + __bynkShow((s)) + " == " + __bynkShow((s))); }
     return { pass: true };
@@ -41,11 +43,13 @@ async function test_a_record_of_qualified_types_generates_a_value() {
     const deps = {};
     const { Holder, sx } = __ns_app_z;
     type Holder = __ns_app_z.Holder;
-    const { AppError, IoError, Level, Shape } = __ns_lib_x;
+    const { AppError, IoError, Level, Limit, Point, Shape, Status, area, describe } = __ns_lib_x;
     type AppError = __ns_lib_x.AppError;
     type IoError = __ns_lib_x.IoError;
     type Level = __ns_lib_x.Level;
+    type Point = __ns_lib_x.Point;
     type Shape = __ns_lib_x.Shape;
+    type Status = __ns_lib_x.Status;
     const h = { s: __use_lib_x.Status.Open, t: __use_lib_y.Status.On, p: { x: 0, y: 0 } };
     if (!(__bynkEq(h, h))) { throw __bynkExpectFailure("tests/z.test.bynk:11:12", 219, 225, "expect h == h\n  expected: h == h\n  actual:   " + __bynkShow((h)) + " == " + __bynkShow((h))); }
     return { pass: true };

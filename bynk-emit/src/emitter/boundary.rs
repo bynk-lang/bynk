@@ -407,11 +407,7 @@ pub(super) fn emit_boundary_helpers(
         for (commons_name, names) in &by_commons {
             for n in names {
                 by_path
-                    .entry(commons_decl_path(
-                        ctx,
-                        commons_name,
-                        bynk_check::emitted_names::declared_name_of_key(n),
-                    ))
+                    .entry(commons_decl_path_of_key(ctx, commons_name, n))
                     .or_default()
                     .insert(n.clone());
             }
@@ -422,13 +418,7 @@ pub(super) fn emit_boundary_helpers(
                 &target_path,
                 ctx.import_ext,
             );
-            let parts: Vec<String> = names
-                .iter()
-                .flat_map(|n| {
-                    let n = bynk_check::emitted_names::codec_key(n);
-                    [format!("__serialise_{n}"), format!("__deserialise_{n}")]
-                })
-                .collect();
+            let parts: Vec<String> = names.iter().flat_map(|n| codec_names(n)).collect();
             let import_parts: Vec<String> = names
                 .iter()
                 .flat_map(|n| {
@@ -667,6 +657,21 @@ fn codec_owner<'a>(ctx: &'a EmitProjectCtx, name: &str) -> Option<&'a String> {
         }
         _ => None,
     }
+}
+
+/// #4403: [`commons_decl_path`] for a type key, which may be a qualified spelling of a name.
+fn commons_decl_path_of_key(ctx: &EmitProjectCtx, commons_name: &str, key: &str) -> PathBuf {
+    commons_decl_path(
+        ctx,
+        commons_name,
+        bynk_check::emitted_names::declared_name_of_key(key),
+    )
+}
+
+/// #4403: the names of the two codec helpers of the type `key` in this module.
+fn codec_names(key: &str) -> [String; 2] {
+    let key = bynk_check::emitted_names::codec_key(key);
+    [format!("__serialise_{key}"), format!("__deserialise_{key}")]
 }
 
 /// The file declaring `name` in the commons `commons_name`, as a module

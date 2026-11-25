@@ -6147,8 +6147,11 @@ pub fn privileged_view(
             // #4403: through the target's own view of it, so a name its `uses`
             // clauses qualify (`lib.x.Status`) or rename is in the view under
             // the spelling the target writes.
+            // Then the commons' own names, so a suite still reaches one the target's
+            // clauses leave out (the first spelling of a name wins).
             let plain = used.importable();
             view.merge(local.seen_through(t, &plain), true, true);
+            view.merge(&plain, true, true);
             imported.push(t.clone());
         }
     }
