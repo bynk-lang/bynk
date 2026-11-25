@@ -5455,20 +5455,22 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Expired, _) => {}
-            (BadCredential::Revoked, _) => {
-                if !by.is_some_and(|by| crate::actors::by_clause_has_sessions(by, &ctx.test_actors))
-                {
-                    let err = CompileError::new(
-                        "bynk.test.revoked_needs_sessions_route",
-                        p.span,
-                        "`by Revoked` sends a cookie for a revoked session, but this handler's route has no `SignedCookie` actor with `sessions = true` to refuse it",
-                    )
-                    .with_note(
-                        "use `by Revoked` on a route guarded by a `SignedCookie` actor declared with `sessions = true`; a stateless cookie cannot be revoked, and `by Forged` or `by Expired` test its signature and expiry",
-                    );
-                    ctx.errors.push(with_open_sum_note(err, &handler, ctx));
-                }
+            (BadCredential::Revoked, _)
+                if !by.is_some_and(|by| {
+                    crate::actors::by_clause_has_sessions(by, &ctx.test_actors)
+                }) =>
+            {
+                let err = CompileError::new(
+                    "bynk.test.revoked_needs_sessions_route",
+                    p.span,
+                    "`by Revoked` sends a cookie for a revoked session, but this handler's route has no `SignedCookie` actor with `sessions = true` to refuse it",
+                )
+                .with_note(
+                    "use `by Revoked` on a route guarded by a `SignedCookie` actor declared with `sessions = true`; a stateless cookie cannot be revoked, and `by Forged` or `by Expired` test its signature and expiry",
+                );
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
+            (BadCredential::Revoked, _) => {}
             (n, _) if !oidc && oidc_only_principal(n).is_some() => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
