@@ -507,10 +507,13 @@ pub fn sender_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     }
     let binder = by.binder.as_ref()?;
     let name = &by.primary().name;
-    (name == "Sender"
-        && !actors.contains_key(name)
-        && !handler.params.iter().any(|p| p.name.name == binder.name))
-    .then(|| binder.name.clone())
+    // #3888: the prelude `Sender`, or a local refinement over it, mints the same `SenderIdentity`.
+    let is_sender = (name == "Sender" && !actors.contains_key(name))
+        || actors
+            .get(name)
+            .is_some_and(|decl| sender_refinement(decl, actors).is_some());
+    (is_sender && !handler.params.iter().any(|p| p.name.name == binder.name))
+        .then(|| binder.name.clone())
 }
 
 /// I3 (#1971): a declared foreign caller, as a `call` handler admits it: the
