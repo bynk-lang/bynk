@@ -4,7 +4,7 @@
   "categoryAnchor": "queue",
   "code": "bynk.queue.message_type_mismatch",
   "constructs": [],
-  "example": "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] { … }\n}",
+  "example": "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] by Producer { … }\n}",
   "severity": "error",
   "summary": "A `sendValue`, `sendValueWith` or `sendValueBatch` sends a type the queue's consumer in the project does not accept."
 }
