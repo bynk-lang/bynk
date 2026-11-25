@@ -817,6 +817,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
     },
     Explain {
+        code: "bynk.agents.self_operation",
+        blurb: "Inside an agent's handler, `self` is the agent's key (`self.id`), not a handle to the agent, so `self.add(…)` and `self.add.outcome(…)` do not call the agent's own operation. Call it the way any other code does, on the agent by key: `Counter(self.id).add(…)`, or `.outcome(…)` for a `CallOutcome`. To share work between two handlers, write it as a function and call that from both.",
+        example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
+    },
+    Explain {
         code: "bynk.asset.duplicate",
         blurb: "An asset is a name for a file, read as a value (`style.url`), so a unit declares each \
                 name once: a second `asset style` would leave `style` meaning two files. Give each \
@@ -7329,6 +7334,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agents.non_zeroable_state_field",
         "An agent `store` field has no initialiser and no implicit zero value.",
         &["store_field"],
+    ),
+    d(
+        "bynk.agents.self_operation",
+        "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
     ),
     d(
         "bynk.asset.duplicate",

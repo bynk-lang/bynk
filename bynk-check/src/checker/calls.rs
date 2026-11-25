@@ -3770,14 +3770,8 @@ pub(crate) fn check_method_call(
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
             }
         }
-        ctx.errors.push(CompileError::new(
-            "bynk.types.method_not_found",
-            method.span,
-            format!(
-                "type `{}` has no instance method named `{}`",
-                type_name, method.name
-            ),
-        ));
+        ctx.errors
+            .push(expressions::method_not_found_error(&type_name, method, ctx));
         return None;
     };
     // v0.36 (ADR 0069): the method is a first-class index symbol, keyed by the
