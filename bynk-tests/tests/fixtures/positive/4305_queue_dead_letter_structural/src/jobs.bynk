@@ -10,14 +10,14 @@ type Wide = Int where InRange(1, 100)
 // is compared as a producer's send is. A type with the same fields under another name is the same type.
 service work from queue("jobs") {
   delivery { deadLetter: "jobs-dlq" }
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
 
 service review from queue("jobs-dlq") {
   delivery { deadLetter: None }
-  on message(message: Retried) -> Effect[QueueResult] {
+  on message(message: Retried) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -25,14 +25,14 @@ service review from queue("jobs-dlq") {
 // A consumer of a weaker refinement accepts every message of a stronger one.
 service count from queue("counts") {
   delivery { deadLetter: "counts-dlq" }
-  on message(message: Small) -> Effect[QueueResult] {
+  on message(message: Small) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
 
 service recount from queue("counts-dlq") {
   delivery { deadLetter: None }
-  on message(message: Wide) -> Effect[QueueResult] {
+  on message(message: Wide) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

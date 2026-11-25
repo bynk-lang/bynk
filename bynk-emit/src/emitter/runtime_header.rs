@@ -77,6 +77,9 @@ const ORDER: &[&str] = &[
     "__checkStoredLayout",
     "__readStored",
     "__commitStored",
+    "__eraseStored",
+    "__markErased",
+    "__newErasure",
     "__noteClock",
     // The handles and wire helpers an agent's state is made of, sorted.
     "__StoreCache",

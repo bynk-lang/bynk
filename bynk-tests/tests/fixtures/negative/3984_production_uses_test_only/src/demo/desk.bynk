@@ -1,0 +1,7 @@
+context demo.desk
+
+uses demo.kit
+
+service local {
+  on call(n: Int) -> Effect[Int] by Caller { n + 1 }
+}

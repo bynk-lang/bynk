@@ -2759,6 +2759,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
         }
         return;
     }
+    // #3899: a queue consumer states who may send to it.
+    if matches!(protocol, ServiceProtocol::Queue { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_queue(handler));
+        }
+        return;
+    }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
     // connection is accepted — `on open` must name its actor, no anonymous upgrade.
     let (msg, note) = match protocol {
@@ -2804,6 +2811,26 @@ fn missing_by_on_call(handler: &Handler) -> CompileError {
     .with_suggestion(
         "add `by Caller`",
         vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3899: an `on message` handler states who may send to it. The fix-it inserts `by Producer`
+/// (the former silent default: anyone on the account) after the return type.
+fn missing_by_on_queue(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_queue",
+        handler.span,
+        "an `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Producer` admits any producer on the Cloudflare account, which is what a queue consumer did before the clause was required. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_queue`",
+    )
+    .with_suggestion(
+        "add `by Producer`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Producer".to_string())],
         Applicability::MachineApplicable,
     )
 }
@@ -8173,6 +8200,7 @@ mod actor_binding_persistence_tests {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,

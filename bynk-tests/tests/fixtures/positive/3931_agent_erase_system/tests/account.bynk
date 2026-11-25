@@ -1,0 +1,15 @@
+// #3931: on workerd, `self.erase()` deletes the Durable Object's storage, so the key reads as new.
+suite shop.account as system {
+	case "close deletes the instance, its entries and its postings" {
+		let _ <- api.GET("/open")
+		let before <- api.GET("/open-orders")
+		expect before is Ok("2")
+		let _ <- api.GET("/close")
+		let mail <- api.GET("/email")
+		let open <- api.GET("/open-orders")
+		let size <- api.GET("/orders")
+		expect mail is Ok("none")
+		expect open is Ok("0")
+		expect size is Ok("0")
+	}
+}

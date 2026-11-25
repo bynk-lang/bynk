@@ -1487,6 +1487,7 @@ mod tests {
         );
         let commons = |name: &str| {
             SourceUnit::Commons(Commons {
+                test_only: false,
                 name: QualifiedName {
                     parts: vec![Ident {
                         name: name.to_string(),

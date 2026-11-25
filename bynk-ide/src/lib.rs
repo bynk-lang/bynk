@@ -53,6 +53,7 @@ pub use bynk_project::is_workspace_root;
 
 pub mod agent_busy;
 pub mod agent_effects;
+pub mod agent_erase;
 /// #2220: the agent state model lives in `bynk-check`, shared with the
 /// checker; re-exported here so existing paths keep working.
 pub use bynk_check::agent_state;
@@ -63,6 +64,7 @@ pub mod completion;
 pub mod doc_link_urls;
 pub mod documentation;
 mod duration_completion;
+pub mod expected_type;
 pub mod first_party_docs;
 pub mod header_completion;
 pub mod hover;

@@ -1,4 +1,4 @@
-//! `bynk check` — type-check a `.bynk` file or project without writing output.
+//! `bynk check` — type-check a `.bynk` file or project without writing compiled output.
 //!
 //! Runs the linked pipeline in-process (v0.138, #487): a directory routes
 //! through [`bynk_driver::project::compile_project`], a single file through

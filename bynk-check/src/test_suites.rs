@@ -1454,6 +1454,7 @@ pub fn integration_resolved(
     } = view.clone();
 
     let synthetic_commons = Commons {
+        test_only: false,
         name: QualifiedName {
             parts: vec![Ident {
                 name: "integration".to_string(),
@@ -6075,6 +6076,7 @@ pub fn build_privileged_resolved(
         unit_tables,
     );
     let synthetic_commons = Commons {
+        test_only: false,
         name: QualifiedName {
             parts: owning_unit
                 .split('.')
@@ -6616,7 +6618,7 @@ service sweeper from cron {
 
 service intake from queue(\"orders\") {
   delivery { deadLetter: None }
-  on message(item: Item) -> Effect[QueueResult] {
+  on message(item: Item) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

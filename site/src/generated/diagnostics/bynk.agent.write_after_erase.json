@@ -1,0 +1,10 @@
+{
+  "blurb": "`self.erase()` marks the instance for deletion, and the handler's commit then deletes everything stored for the key instead of writing the handler's state. A `:=` after it in the same block has nothing to write to, so it is dropped. Remove the write. A write before `self.erase()` is dropped the same way. If something should outlive the erasure, emit an event first: events emitted in the handler are still released at the commit, so a subscriber can keep what it needs.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.write_after_erase",
+  "constructs": [],
+  "example": "on call close() -> Effect[()] {\n  self.erase()\n  closed := true    // ✗ the commit deletes the instance, so nothing is written\n}\n\non call close() -> Effect[()] given Events {\n  do Events.emit[AccountClosed](AccountClosed { id: self.id })\n  self.erase()    // ✓ the event records it; the state goes\n}",
+  "severity": "warning",
+  "summary": "A `:=` follows `self.erase()` in the same block, so the commit drops it (warning)."
+}

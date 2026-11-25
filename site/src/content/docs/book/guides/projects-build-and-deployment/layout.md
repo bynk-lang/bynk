@@ -60,6 +60,14 @@ exclude = ["vendor"]   # skip subtrees (monorepo, vendored, generated .bynk)
 See the [`bynk.toml` reference](/reference/tooling/manifest/) for every key. The tool always
 skips its own `out/` and `node_modules/` caches and dot-directories.
 
+## Shared test code
+
+Code several suites share, such as request builders, fixtures and row types, lives in a
+test-only commons, `commons shop.testkit for tests`. By convention it sits under `tests/`
+(for example `tests/shop/testkit.bynk`), and its file path follows its name like any
+commons'. A deployable never contains it; see
+[Sharing between suites](/reference/testing/#test-only-commons).
+
 ## Path identity
 
 A **source** unit's path must match its qualified name. A file declaring
