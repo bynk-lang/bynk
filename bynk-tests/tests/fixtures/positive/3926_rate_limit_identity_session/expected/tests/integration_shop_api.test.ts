@@ -397,12 +397,12 @@ async function test_a_revoked_session_is_refused_with_401_even_when_the_limit_is
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    const over = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(over.tag === "Rejected" && over.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:78:10", 3920, 3952, "expect over is Rejected(RateLimited(_))", "over", () => __bynkShow(over)); }
+    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bynk-test" as any));
+    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bynk-test" as any));
+    const over = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bynk-test" as any));
+    if (!(((__c: boolean) => __c)(over.tag === "Rejected" && over.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:80:10", 4149, 4181, "expect over is Rejected(RateLimited(_))", "over", () => __bynkShow(over)); }
     const revoked = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
-    if (!(((__c: boolean) => __c)(revoked.tag === "Rejected" && revoked.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:80:10", 4025, 4058, "expect revoked is Rejected(Unauthorized)", "revoked", () => __bynkShow(revoked)); }
+    if (!(((__c: boolean) => __c)(revoked.tag === "Rejected" && revoked.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:82:10", 4254, 4287, "expect revoked is Rejected(Unauthorized)", "revoked", () => __bynkShow(revoked)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -420,14 +420,14 @@ async function test_revoked_sessions_never_consume_the_limiter() {
     const r1 = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
     const r2 = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
     const r3 = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
-    if (!(((__c: boolean) => __c)(r1.tag === "Rejected" && r1.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:87:10", 4299, 4327, "expect r1 is Rejected(Unauthorized)", "r1", () => __bynkShow(r1)); }
-    if (!(((__c: boolean) => __c)(r3.tag === "Rejected" && r3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 4337, 4365, "expect r3 is Rejected(Unauthorized)", "r3", () => __bynkShow(r3)); }
-    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:91:10", 4501, 4524, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:92:10", 4534, 4557, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
-    const c = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 4630, 4659, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
+    if (!(((__c: boolean) => __c)(r1.tag === "Rejected" && r1.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:89:10", 4528, 4556, "expect r1 is Rejected(Unauthorized)", "r1", () => __bynkShow(r1)); }
+    if (!(((__c: boolean) => __c)(r3.tag === "Rejected" && r3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:90:10", 4566, 4594, "expect r3 is Rejected(Unauthorized)", "r3", () => __bynkShow(r3)); }
+    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bynk-test" as any));
+    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bynk-test" as any));
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:93:10", 4742, 4765, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 4775, 4798, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
+    const c = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bynk-test" as any));
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:96:10", 4877, 4906, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
