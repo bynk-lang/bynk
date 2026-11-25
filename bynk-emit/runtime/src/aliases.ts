@@ -19,7 +19,7 @@ import { checkUnique, commitStored, committedSize, eraseStored, markErased, newE
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
 import { fault, invariantViolation } from "./errors.ts";
-import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, rateLimitAllows, rateLimitedResponse, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withDownload, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type SecurityPolicy } from "./http.ts";
+import { allowUnion, applyCache, applyChallenge, applyCors, applyEdgeCache, applySecurityHeaders, cfObject, cookieObject, cookieString, contentDisposition, cookieValue, corsPreflightResponse, csrfAllowed, edgeCacheGuard, formDecode, formMediaTypeMatches, formObject, formString, headResponse, headerPairs, headersObject, httpResultToResponse, jsonMediaTypeMatches, matchPath, mediaTypeMatches, multipartForm, multipartMediaTypeMatches, multipartObject, noStore, notModifiedIfMatch, pathLeaf, privateByDefault, problemRejection, queryObject, queryString, rateLimitAllows, rateLimitedResponse, renderRejection, requestHeaderPairs, requestCookies, requestCookiesHeader, requestBodyStream, requestHeaders, requestQuery, requestQuerySearch, resultHeaders, responseToHttpOutcome, responseToHttpResult, responseToUnauthOutcome, sessionCookieOf, untilBodyTooLarge, varyAcceptLanguage, withDownload, withHeartbeat, withLocation, withPlainJson, withResponseHeader, withRetryAfter, type CorsPolicy, type SecurityPolicy } from "./http.ts";
 import { currentTraceId } from "./traceparent.ts";
 import { traceBinding, traceFault, traceFetch, traceStep, type TraceSpan } from "./trace.ts";
 import { historyBefore, historyRecord, inspectAgent, inspectRoute, noteAgentInstance } from "./inspect.ts";
@@ -106,6 +106,7 @@ export {
   withPlainJson as __withPlainJson,
   withResponseHeader as __withResponseHeader,
   withRetryAfter as __withRetryAfter,
+  withHeartbeat as __withHeartbeat,
   withLocation as __withLocation,
   withDownload as __withDownload,
   resultHeaders as __resultHeaders,

@@ -33,6 +33,11 @@ service routes from http {
     ]))
   }
 
+  // #3918: a heartbeat only fires while the stream is idle; a prompt stream is unchanged.
+  on GET("/beat") () -> Effect[HttpResult[()]] by v: Visitor {
+    Streaming(Stream.of(["x"])).heartbeat(15.seconds)
+  }
+
   // #3918: an `event` name with a line break cannot be framed; the body errors in-band.
   on GET("/bad-event") () -> Effect[HttpResult[()]] by v: Visitor {
     Streaming(Stream.of([SseEvent { data: "x", event: Some("a\nb") }]))

@@ -123,6 +123,8 @@ async function main(): Promise<void> {
     (await r.text()) === "event: greeting\nid: 7\nretry: 1500\ndata: hello\n\ndata: a\ndata: b\ndata: c\n\n",
     "GET /events frames event/id/retry and splits data on any line break",
   );
+  r = await worker.fetch(req("GET", "/beat"), env);
+  assert((await r.text()) === "data: x\n\n", "a heartbeat adds nothing to a stream that never idles");
   r = await worker.fetch(req("GET", "/bad-event"), env);
   let badBody = "";
   try { badBody = await r.text(); } catch { badBody = "<errored>"; }
