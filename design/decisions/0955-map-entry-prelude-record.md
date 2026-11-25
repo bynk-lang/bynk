@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `MapEntry` is a nameable prelude record, so `Map.of([MapEntry { key: k, value: v }])` builds a map from entries written in source
-breaking: a unit that declares its own two-parameter `type MapEntry[A, B]` now gets `bynk.resolve.duplicate_type`, because `MapEntry[K, V]` is the prelude record; rename the type.
----
+# 0955 — MapEntry becomes a nameable transparent prelude record
 
-## ADR: map-entry-prelude-record
-title: MapEntry becomes a nameable transparent prelude record
-summary: Makes MapEntry[K, V] constructible and nameable in any unit, so Map.of can take entries written in source, and refuses it at a boundary
+- **Status:** Accepted (v0.693)
 
 **Context.** `map.entries()` and a store `Map`'s `.entries` yield `MapEntry` values, but the name was not usable in source: `MapEntry { key: k, value: v }` and `List[MapEntry[K, V]]` were both `bynk.resolve.unknown_type`, so `Map.of` could only rebuild a map from another map's entries and never from computed pairs.
 
