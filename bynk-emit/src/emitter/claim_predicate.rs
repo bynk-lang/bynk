@@ -43,6 +43,46 @@ pub(crate) fn claim_predicate_denied(pred: &ClaimPredicate) -> TsExpr {
     not_expr(paren(claim_predicate_node(pred, &claims)))
 }
 
+/// An actor's witness claims as an object literal: each claim a quoted key, so a name that is not
+/// an identifier reads the same, and `true` or its string value.
+pub(crate) fn witness_claims_node(
+    witness: &[(String, bynk_check::actors::WitnessValue)],
+) -> TsExpr {
+    use bynk_check::actors::WitnessValue;
+    TsExpr::object_entries(
+        witness
+            .iter()
+            .map(|(name, value)| {
+                let value = match value {
+                    WitnessValue::True => TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
+                    WitnessValue::Str(v) => TsExpr::Lit(bynk_ts::TsLit::Str(v.clone())),
+                };
+                bynk_ts::TsObjectEntry::prop(
+                    format!("\"{}\"", bynk_ts::escape_ts_literal(name)),
+                    value,
+                )
+            })
+            .collect(),
+    )
+}
+
+/// #3937: the claims a `Bearer` route's call presents: a refinement's witness claims, with the
+/// case's `TokenClaims.of` lines spread over them (the lines override), or whichever is given, or
+/// none.
+pub(crate) fn bearer_claims_node(
+    witness: Option<&[(String, bynk_check::actors::WitnessValue)]>,
+    presented: Option<TsExpr>,
+) -> TsExpr {
+    match (witness.map(witness_claims_node), presented) {
+        (Some(w), Some(p)) => TsExpr::object_entries(vec![
+            bynk_ts::TsObjectEntry::Spread(w),
+            bynk_ts::TsObjectEntry::Spread(p),
+        ]),
+        (Some(only), None) | (None, Some(only)) => only,
+        (None, None) => TsExpr::object(vec![]),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

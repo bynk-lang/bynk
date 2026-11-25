@@ -1,0 +1,26 @@
+context shop.reports
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+actor Admin = User where hasClaim("admin")
+
+service api from http {
+	// A plain `Bearer` binder reads the verified token's claims, as an `Oidc` one does.
+	on GET("/who") () -> Effect[HttpResult[String]] by u: User {
+		let tenant = u.claims.get("tenant").getOrElse("default")
+		Ok("\(u.identity) \(tenant) \(u.claims.has("beta"))")
+	}
+
+	// A refinement's binder reads them too.
+	on GET("/admin") () -> Effect[HttpResult[String]] by a: Admin {
+		let tenant = a.claims.get("tenant").getOrElse("default")
+		Ok("\(a.identity) \(tenant)")
+	}
+
+	// A binder-less route verifies the token and reads nothing.
+	on GET("/ping") () -> Effect[HttpResult[String]] by User {
+		Ok("pong")
+	}
+}

@@ -5381,14 +5381,15 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.test.principal_claims_not_oidc",
-        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
-                carries, which the handler reads and the actor's rules check. A \
-                `Bearer` actor's token holds an identity and nothing else, so \
-                there is no claim set to fill, and the argument is refused. Drop \
-                the claims, or test a route guarded by an `Oidc` actor. See \
-                `bynk.test.actor_no_identity` for the other extra argument.",
+        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` or `Bearer` \
+                actor's token carries, which the handler reads and the actor's rules \
+                check. A `SignedCookie` actor's credential holds an identity and \
+                nothing else, so there is no claim set to fill, and the argument is \
+                refused. Drop the claims, or test a route guarded by an `Oidc` or \
+                `Bearer` actor. See `bynk.test.actor_no_identity` for the other extra \
+                argument.",
         example: "// tests/api.test.bynk\n\
-                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a Bearer actor\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a SignedCookie actor\n\
                   let r <- api.GET(\"/me\") by User(\"bob\")                                               // ✓",
     },
     Explain {

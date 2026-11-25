@@ -28,7 +28,7 @@ export const Profile = {
 };
 
 export const api = {
-  async http_GET_me(deps: { Secrets: bynk.Secrets; identity: UserId }): globalThis.Promise<HttpResult<Profile>> {
+  async http_GET_me(deps: { Secrets: bynk.Secrets; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Profile>> {
     const salt = await deps.Secrets.get("PROFILE_SALT");
     return HttpResult.Ok({ id: deps.identity });
   },

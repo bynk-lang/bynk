@@ -18,13 +18,13 @@ export const UserId = {
 };
 
 export const api = {
-  async http_GET_admin(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_admin(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
-  async http_GET_ops(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_ops(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
-  async http_GET_staff(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_staff(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
   async http_GET_gate(deps: {}): globalThis.Promise<HttpResult<string>> {

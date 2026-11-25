@@ -2,7 +2,7 @@
 // composition root for `media.store` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -27,7 +27,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_bearer_Param_request_Param_result(__id_request, __id_result, { ...deps, identity: __id.value });
+      return handlers.api.http_GET_bearer_Param_request_Param_result(__id_request, __id_result, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_sum_Param_request_Param_result(request: globalThis.Request, __id_request: string, __id_result: string) {
       let __who: any = undefined;
