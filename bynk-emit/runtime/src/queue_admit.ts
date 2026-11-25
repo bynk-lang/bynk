@@ -131,8 +131,8 @@ export function queueForeignKeys(env: unknown, secrets: Readonly<Record<string, 
 
 /** The part of D1 an id claim uses; declared here because the Worker's `env` is a plain value. */
 interface ClaimD1 {
-  prepare(sql: string): { bind(...values: unknown[]): unknown };
-  batch(statements: unknown[]): Promise<Array<{ meta: { changes?: number }; results?: Array<{ expires_at?: unknown }> }>>;
+  prepare(sql: string): { bind(...values: unknown[]): unknown & { first<T>(): Promise<T | null> } };
+  batch(statements: unknown[]): Promise<Array<{ meta: { changes?: number } }>>;
 }
 
 /** The Worker's Idempotency database; a Worker without it fails the message loudly rather than admitting it unchecked. */
@@ -152,14 +152,14 @@ function claimDatabase(env: unknown): ClaimD1 {
 export async function claimQueueMessage(env: unknown, key: string, ttlSeconds: number): Promise<QueueClaim> {
   const db = claimDatabase(env);
   const now = Date.now();
-  const [claimed, held] = await db.batch([
+  const [claimed] = await db.batch([
     db.prepare("INSERT INTO idempotency_claims (key, expires_at) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET expires_at = excluded.expires_at WHERE idempotency_claims.expires_at <= ?3").bind(key, now + ttlSeconds * 1000, now),
-    db.prepare("SELECT expires_at FROM idempotency_claims WHERE key = ?1").bind(key),
     db.prepare("DELETE FROM idempotency_claims WHERE key IN (SELECT key FROM idempotency_claims WHERE expires_at <= ?1 LIMIT 20)").bind(now),
   ]);
   if ((claimed?.meta.changes ?? 0) > 0) return { claimed: true };
-  const expiresAt = Number(held?.results?.[0]?.expires_at ?? now);
-  return { claimed: false, remainingSeconds: Math.max(0, (expiresAt - now) / 1000) };
+  // Held: read how long the holder's claim lasts, to tell a message mid-handler from one already handled.
+  const holder = await db.prepare("SELECT expires_at FROM idempotency_claims WHERE key = ?1").bind(key).first<{ expires_at: number }>();
+  return { claimed: false, remainingSeconds: Math.max(0, (Number(holder?.expires_at ?? now) - now) / 1000) };
 }
 
 /** Keep the claim `key` for `ttlSeconds` from now: the message was handled. */

@@ -169,7 +169,14 @@ const claimDb = () => {
   const held = new Map<string, number>();
   return {
     held,
-    prepare: (sql: string) => ({ bind: (...values: unknown[]) => ({ sql, values }) }),
+    prepare: (sql: string) => ({
+      bind: (...values: unknown[]) => ({
+        sql,
+        values,
+        // The read of a holder's expiry after a failed claim.
+        first: async () => (held.has(String(values[0])) ? { expires_at: held.get(String(values[0])) } : null),
+      }),
+    }),
     batch: async (statements: unknown[]) => {
       const first = statements[0] as { sql: string; values: unknown[] };
       const key = String(first.values[0]);
@@ -179,10 +186,10 @@ const claimDb = () => {
       }
       const now = Date.now();
       if (first.sql.includes("WHERE idempotency_claims.expires_at")) {
-        // The claim: only when the key is absent or lapsed; the SELECT after it reads the holder's expiry.
+        // The claim: only when the key is absent or lapsed.
         const live = (held.get(key) ?? 0) > now;
         if (!live) held.set(key, Number(first.values[1]));
-        return [{ meta: { changes: live ? 0 : 1 } }, { meta: { changes: 0 }, results: [{ expires_at: held.get(key) }] }, { meta: { changes: 0 } }];
+        return [{ meta: { changes: live ? 0 : 1 } }, { meta: { changes: 0 } }];
       }
       held.set(key, Number(first.values[1])); // the confirm
       return [{ meta: { changes: 1 } }];

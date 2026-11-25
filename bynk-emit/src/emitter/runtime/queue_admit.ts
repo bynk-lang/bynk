@@ -16,7 +16,7 @@ export const QUEUE_CLAIM_LEASE_SECONDS = 15 * 60;
 /** How far ahead of the consumer's clock a message's `ts` may be, in seconds, for clock skew. */
 export const QUEUE_CLOCK_SKEW_SECONDS = 5 * 60;
 
-export type QueueAdmitRefusal = QueueRefusal | "replayed" | "stale";
+export type QueueAdmitRefusal = QueueRefusal | "replayed" | "stale" | "in_flight";
 
 export type QueueAdmission =
   | {
@@ -27,7 +27,15 @@ export type QueueAdmission =
       /** Settle the claim: `true` once the message was handled (kept for the window), `false` when it was not (released). */
       readonly settle: (handled: boolean) => Promise<void>;
     }
-  | { readonly ok: false; readonly reason: QueueAdmitRefusal };
+  | {
+      readonly ok: false;
+      readonly reason: QueueAdmitRefusal;
+      /** For `in_flight`: when the lease on the message's id ends, in whole seconds from now. The message is retried after it, not dropped. */
+      readonly retryAfterSeconds?: number;
+    };
+
+/** The outcome of a claim: taken, or held by another delivery until `remainingSeconds` from now. */
+export type QueueClaim = { readonly claimed: true } | { readonly claimed: false; readonly remainingSeconds: number };
 
 /** What the entry supplies: the consumer's secrets per admitted sender, and its id claim. */
 export interface QueueAdmitPorts {
@@ -37,8 +45,8 @@ export interface QueueAdmitPorts {
    * admit, which refuses the message as `unknown_sender`.
    */
   readonly keysFor: (from: string) => readonly string[];
-  /** Claim `key` for `ttlSeconds`: true the first time, false while it is claimed. */
-  readonly claim: (key: string, ttlSeconds: number) => Promise<boolean>;
+  /** Claim `key` for `ttlSeconds`: taken the first time, otherwise how much longer the existing claim holds. */
+  readonly claim: (key: string, ttlSeconds: number) => Promise<QueueClaim>;
   /** Keep a claim `key` for `ttlSeconds` more. */
   readonly confirm: (key: string, ttlSeconds: number) => Promise<void>;
   /** Drop the claim `key`, so the message can be admitted again. */
@@ -68,7 +76,14 @@ export async function queueAdmit(
   if (age > QUEUE_DEDUP_WINDOW_SECONDS || age < -QUEUE_CLOCK_SKEW_SECONDS) return { ok: false, reason: "stale" };
   // Claimed only after the signature verified, so unsigned traffic cannot fill the store with ids.
   const key = queueReplayKey(consumer, sourceQueue, verified.id);
-  if (!(await ports.claim(key, QUEUE_CLAIM_LEASE_SECONDS))) return { ok: false, reason: "replayed" };
+  const claim = await ports.claim(key, QUEUE_CLAIM_LEASE_SECONDS);
+  if (!claim.claimed) {
+    // A claim confirmed for the window outlasts any lease: that message was handled, so this is a replay.
+    // One still on its lease is another delivery of the message mid-handler (or its instance died): the
+    // redelivery is retried after the lease rather than acknowledged, so the message is never lost.
+    if (claim.remainingSeconds > QUEUE_CLAIM_LEASE_SECONDS) return { ok: false, reason: "replayed" };
+    return { ok: false, reason: "in_flight", retryAfterSeconds: Math.max(1, Math.ceil(claim.remainingSeconds)) };
+  }
   return {
     ok: true,
     from: verified.from,
@@ -88,6 +103,7 @@ export function queueRefusalDetail(consumer: string, reason: QueueAdmitRefusal):
     case "bad_signature": return `queue ${consumer} refused a message: the signature does not verify`;
     case "replayed": return `queue ${consumer} refused a message: its id was already delivered`;
     case "stale": return `queue ${consumer} refused a message: it was signed too long ago, or too far ahead`;
+    case "in_flight": return `queue ${consumer} deferred a message: its id is held by a delivery still being handled`;
   }
 }
 
@@ -115,7 +131,7 @@ export function queueForeignKeys(env: unknown, secrets: Readonly<Record<string, 
 
 /** The part of D1 an id claim uses; declared here because the Worker's `env` is a plain value. */
 interface ClaimD1 {
-  prepare(sql: string): { bind(...values: unknown[]): unknown };
+  prepare(sql: string): { bind(...values: unknown[]): unknown & { first<T>(): Promise<T | null> } };
   batch(statements: unknown[]): Promise<Array<{ meta: { changes?: number } }>>;
 }
 
@@ -130,16 +146,20 @@ function claimDatabase(env: unknown): ClaimD1 {
 
 /**
  * Claim `key` for `ttlSeconds` in the Worker's implicit Idempotency database (`env.D1_IDEMPOTENCY`),
- * the table `bynk.Idempotency.claim` uses: true for the first claim, false while it is held.
+ * the table `bynk.Idempotency.claim` uses: taken for the first claim, otherwise how much longer the
+ * claim that holds it lasts.
  */
-export async function claimQueueMessage(env: unknown, key: string, ttlSeconds: number): Promise<boolean> {
+export async function claimQueueMessage(env: unknown, key: string, ttlSeconds: number): Promise<QueueClaim> {
   const db = claimDatabase(env);
   const now = Date.now();
   const [claimed] = await db.batch([
     db.prepare("INSERT INTO idempotency_claims (key, expires_at) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET expires_at = excluded.expires_at WHERE idempotency_claims.expires_at <= ?3").bind(key, now + ttlSeconds * 1000, now),
     db.prepare("DELETE FROM idempotency_claims WHERE key IN (SELECT key FROM idempotency_claims WHERE expires_at <= ?1 LIMIT 20)").bind(now),
   ]);
-  return (claimed?.meta.changes ?? 0) > 0;
+  if ((claimed?.meta.changes ?? 0) > 0) return { claimed: true };
+  // Held: read how long the holder's claim lasts, to tell a message mid-handler from one already handled.
+  const holder = await db.prepare("SELECT expires_at FROM idempotency_claims WHERE key = ?1").bind(key).first<{ expires_at: number }>();
+  return { claimed: false, remainingSeconds: Math.max(0, (Number(holder?.expires_at ?? now) - now) / 1000) };
 }
 
 /** Keep the claim `key` for `ttlSeconds` from now: the message was handled. */
@@ -178,7 +198,7 @@ export async function admitQueueBody(
   let first: QueueAdmission | undefined;
   for (const source of [queue, ...sources]) {
     const admitted = await queueAdmit(received, queue, source, ports);
-    if (admitted.ok || (!admitted.ok && admitted.reason === "replayed")) return admitted;
+    if (admitted.ok || admitted.reason === "replayed" || admitted.reason === "in_flight") return admitted;
     first ??= admitted;
   }
   return first as QueueAdmission;
