@@ -2147,7 +2147,11 @@ fn check_by_clause_contracts(
         // A refinement actor (`actor A = B where …`) is never a peer: every `A`
         // is a `B`, so the arm is dead (Q3/Q4).
         if by.is_sum()
-            && local.is_some_and(|a| a.refinement.is_some() && !is_caller_refinement(a, table))
+            && local.is_some_and(|a| {
+                a.refinement.is_some()
+                    && !is_caller_refinement(a, table)
+                    && !is_sender_refinement(a, table)
+            })
         {
             errors.push(
                 CompileError::new(
@@ -2178,6 +2182,9 @@ fn check_by_clause_contracts(
             if is_caller_refinement(a, table) {
                 // #3890: a refinement over `Caller` inherits its scheme and identity.
                 actors::prelude_actor("Caller")
+            } else if is_sender_refinement(a, table) {
+                // #3888: a refinement over `Sender` inherits its scheme and identity.
+                actors::prelude_actor("Sender")
             } else {
                 scheme_actor
                     .and_then(|sa| sa.auth.as_ref())
@@ -2746,6 +2753,15 @@ pub(crate) fn is_caller_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &
         .is_some_and(|r| r.base.name == "Caller" && !table.actors.contains_key("Caller"))
 }
 
+/// #3888: whether an actor declaration refines the prelude `Sender` (no local
+/// actor named `Sender` shadows it).
+pub(crate) fn is_sender_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &UnitTable) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Sender" && !table.actors.contains_key("Sender"))
+}
+
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
 /// default actor; the internal protocols inherit one.
 fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut Vec<CompileError>) {
@@ -2898,6 +2914,26 @@ fn check_refinement_actor(
     // an authorisation invariant. Its base MUST be a declared `Bearer` actor
     // (only Bearer carries claims to authorise against), and its `where`
     // predicate MUST be in the closed claim-predicate set.
+    if let Some(r) = &actor.refinement
+        && is_sender_refinement(actor, table)
+    {
+        // #3888: a refinement over `Sender` narrows which mail is admitted, by
+        // the closed `Dmarc(…)` vocabulary.
+        if let Err(span) = actors::parse_sender_predicate(&r.predicate) {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.refinement_predicate_unsupported",
+                    span,
+                    "a refinement over `Sender` must be `Dmarc(<DmarcVerdict>, …)`, composed with `&&`, `||`, `!`",
+                )
+                .with_note(
+                    "the DMARC verdict is the only thing a `Sender` refinement tests: name \
+                     `DmarcPass`, `DmarcFail` or `DmarcNone`",
+                ),
+            );
+        }
+        return;
+    }
     if let Some(r) = &actor.refinement
         && is_caller_refinement(actor, table)
     {
@@ -3845,6 +3881,10 @@ fn actor_identity_ty_guarded<'a>(
             // #3890: a refinement over the prelude `Caller` yields a `CallerId`.
             if is_caller_refinement(local, table) {
                 return tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String));
+            }
+            // #3888: a refinement over the prelude `Sender` yields its identity.
+            if is_sender_refinement(local, table) {
+                return actor_identity_ty_guarded("Sender", table, resolved, seen, tys);
             }
             return tys.intern(checker::Ty::Unit);
         }

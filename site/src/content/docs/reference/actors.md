@@ -282,6 +282,16 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   `bynk.actor.caller_not_admitted` at the call, in a case's `by Admin("…")` too;
   the callee also answers such a call `403` (wire format check 6). See
   [Restrict who may call](/book/guides/actors/cross-context-callers/#restrict-who-may-call).
+- **Refinements over `Sender`** (`actor Authenticated = Sender where Dmarc(DmarcPass)`)
+  admit only mail whose DMARC verdict is one of those listed, and the Worker
+  refuses other mail with the reason `sender not authenticated` before the handler
+  runs (a refusal, not a fault, so it is logged by outcome only). `Dmarc(<verdict>, …)`
+  takes `DmarcPass`, `DmarcFail` or `DmarcNone`, composes with `&&`, `||` and `!`
+  (`!Dmarc(DmarcFail)` admits a pass or no verdict), and is admissible only over
+  `Sender`; over another base it is `bynk.actor.refinement_predicate_unsupported`.
+  The refinement inherits `Sender`'s scheme and `SenderIdentity`, so `by s: Authenticated`
+  binds the same record. `Sender` and its refinements share the `Internal` scheme, so at
+  most one of them appears in a sum.
 - **`Caller`** (on `on call`) yields the calling context's qualified name as
   `CallerId`. It admits Bynk contexts only: a foreign caller is admitted by its
   own actor, never by `Caller`, so a handler that names only `Caller` refuses

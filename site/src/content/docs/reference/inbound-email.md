@@ -129,6 +129,12 @@ verdict is `DmarcNone`; the search never goes further down, because every lower
 header can be the sender's.
 Treat `InboundEmail.from` as a claim, and `dmarc` as the evidence.
 
+To act only on authenticated mail, refine `Sender` rather than testing the verdict
+by hand: `actor Authenticated = Sender where Dmarc(DmarcPass)`, then `by s: Authenticated`.
+Mail with any other verdict is refused with `sender not authenticated` before the
+handler runs, and `!Dmarc(DmarcFail)` is the more lenient rule that also admits mail
+from a domain with no DMARC policy. See [Refinements over `Sender`](/reference/actors/).
+
 Bind it to read it, and import the types it names:
 
 ```bynk,ignore

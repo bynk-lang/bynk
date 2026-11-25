@@ -170,6 +170,25 @@ test("handleEmail reads the verdict through the parser: Cloudflare's header on t
   assert.deepEqual((seen2.sender as { dmarc: unknown }).dmarc, { tag: "DmarcPass" });
 });
 
+test("a route that lists admitted verdicts refuses other mail before the handler runs (#3888)", async () => {
+  const admitting = (admits: readonly ("DmarcPass" | "DmarcFail" | "DmarcNone")[], seen: { mail?: InboundEmail }): EmailRoute => ({
+    ...route("support@shop.example", { tag: "Accept" }, seen),
+    admits,
+  });
+  const failing = `${CF.replace("dmarc=pass", "dmarc=fail")}`;
+  for (const [headers, admitted] of [
+    [CF, true],
+    [failing, false],
+    ["X-Other: 1\r\n", false],
+  ] as const) {
+    const seen: { mail?: InboundEmail } = {};
+    const { message, calls } = fake(mime({ headers }));
+    await handleEmail(message, [admitting(["DmarcPass"], seen)], factory, (l) => calls.logs.push(l));
+    assert.equal(seen.mail !== undefined, admitted);
+    assert.deepEqual(calls.rejects, admitted ? [] : ["sender not authenticated"]);
+  }
+});
+
 test("a lone topmost mx.cloudflare.net header is read as written", async () => {
   // Email Routing always prepends its header, so the topmost one is Cloudflare's;
   // a message with no Cloudflare header cannot reach here with one on top.
