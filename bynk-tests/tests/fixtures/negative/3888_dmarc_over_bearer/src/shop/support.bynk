@@ -1,0 +1,16 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+}
+
+type UserId = String where NonEmpty
+actor User { auth = Bearer(secret = "K"), identity = UserId }
+actor Verified = User where Dmarc(DmarcPass)
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Accept
+  }
+}
