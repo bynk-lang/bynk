@@ -4345,6 +4345,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             for ta in type_args {
                 cx.check_type_ref(ta);
             }
+            let mut env_refused = false;
             match cx.fns.get(&name.name) {
                 Some(decl) => {
                     cx.errors.refs.record(name.span, SymbolKind::Fn, &name.name);
@@ -4410,6 +4411,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         // an unknown function: say what it is and where it goes.
                         cx.errors
                             .push(crate::env_consts::not_initialiser(name.span));
+                        env_refused = true;
                     } else {
                         cx.errors.push(
                             CompileError::new(
@@ -4423,11 +4425,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                 }
             }
             // #3941: `env(NAME, …)` names a variable bare; it is no reference.
-            let skip = usize::from(
-                name.name == "env"
-                    && !cx.fns.contains_key("env")
-                    && !name_in_scope("env", cx.params, &cx.scopes),
-            );
+            let skip = usize::from(env_refused);
             for a in args.iter().skip(skip) {
                 check_expr_references(a, cx);
             }
