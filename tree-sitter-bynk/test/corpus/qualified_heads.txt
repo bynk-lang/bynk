@@ -1,0 +1,230 @@
+================================================================================
+a generic applied through an alias or a commons' full name
+================================================================================
+
+commons app.z
+
+uses lib.x
+uses lib.y as Y
+
+fn bx(b: lib.x.Box[Int], c: Y.Box[String]) -> Int {
+  b.value
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier)))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier))
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (applied_type_ref
+          (identifier)
+          (identifier)
+          (identifier)
+          (base_type)))
+      (param
+        (identifier)
+        (applied_type_ref
+          (identifier)
+          (identifier)
+          (base_type)))
+      (base_type)
+      (block
+        (field_access
+          (identifier)
+          (identifier))))))
+
+================================================================================
+a record built through an alias or a commons' full name
+================================================================================
+
+commons app.z
+
+uses lib.x
+uses lib.y as Y
+
+fn mk() -> lib.x.Point {
+  lib.x.Point { x: 1, y: 2 }
+}
+
+fn mk2() -> Y.Point {
+  Y.Point { a: 1 }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier)))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier))
+      (identifier))
+    (fn_decl
+      (identifier)
+      (qualified_type_ref
+        (identifier)
+        (identifier)
+        (identifier))
+      (block
+        (record_construction
+          (qualified_type_ref
+            (identifier)
+            (identifier)
+            (identifier))
+          (field_init
+            (identifier)
+            (number_literal))
+          (field_init
+            (identifier)
+            (number_literal)))))
+    (fn_decl
+      (identifier)
+      (qualified_type_ref
+        (identifier)
+        (identifier))
+      (block
+        (record_construction
+          (qualified_type_ref
+            (identifier)
+            (identifier))
+          (field_init
+            (identifier)
+            (number_literal)))))))
+
+================================================================================
+a record spread through a commons' full name
+================================================================================
+
+commons app.z
+
+uses lib.x
+uses lib.y
+
+fn sp(b: lib.x.Point) -> lib.x.Point {
+  lib.x.Point { ...b, x: 2 }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier)))
+    (uses_decl
+      (qualified_name
+        (identifier)
+        (identifier)))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (qualified_type_ref
+          (identifier)
+          (identifier)
+          (identifier)))
+      (qualified_type_ref
+        (identifier)
+        (identifier)
+        (identifier))
+      (block
+        (record_spread
+          (qualified_type_ref
+            (identifier)
+            (identifier)
+            (identifier))
+          (identifier)
+          (field_init
+            (identifier)
+            (number_literal)))))))
+
+================================================================================
+an if or match over a dotted name still opens a body, not a record
+================================================================================
+
+commons app.z
+
+fn cond(c: Cfg) -> Int {
+  if c.inner.flag {
+    1
+  } else {
+    2
+  }
+}
+
+fn pick(c: Cfg) -> Int {
+  match c.kind {
+    Open => 1,
+    Shut => 2,
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (if_expr
+          (field_access
+            (field_access
+              (identifier)
+              (identifier))
+            (identifier))
+          (block
+            (number_literal))
+          (block
+            (number_literal)))))
+    (fn_decl
+      (identifier)
+      (param
+        (identifier)
+        (identifier))
+      (base_type)
+      (block
+        (match_expr
+          (field_access
+            (identifier)
+            (identifier))
+          (match_arm
+            (variant_pattern
+              (identifier))
+            (number_literal))
+          (match_arm
+            (variant_pattern
+              (identifier))
+            (number_literal)))))))
