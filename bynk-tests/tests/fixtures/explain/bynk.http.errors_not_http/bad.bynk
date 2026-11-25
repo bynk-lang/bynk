@@ -1,0 +1,9 @@
+context jobs
+
+service jobs from cron {
+    errors { format: problem }
+
+    on schedule("0 0 * * *") () -> Effect[Result[(), String]] {
+        Effect.pure(Ok(()))
+    }
+}

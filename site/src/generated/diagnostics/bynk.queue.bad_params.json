@@ -6,7 +6,7 @@
   "constructs": [
     "queue_handler"
   ],
-  "example": "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+  "example": "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
   "severity": "error",
   "summary": "An `on message` handler does not take exactly one `message` parameter."
 }

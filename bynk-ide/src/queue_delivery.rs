@@ -359,7 +359,7 @@ pub fn in_message_param_name_position(text: &str, offset: usize) -> bool {
 mod tests {
     use super::*;
 
-    const SRC: &str = "service outbox from queue(\"q\") {\n  delivery {\n    retries: 5,\n    deadLetter: None,\n  }\n  on message(m: String) -> Effect[QueueResult] { Ack }\n}\n";
+    const SRC: &str = "service outbox from queue(\"q\") {\n  delivery {\n    retries: 5,\n    deadLetter: None,\n  }\n  on message(m: String) -> Effect[QueueResult] by Producer { Ack }\n}\n";
 
     #[test]
     fn the_section_keyword_and_each_key_hover() {
@@ -402,7 +402,7 @@ mod tests {
         assert!(delivery_keyword_spans(plain).is_empty());
     }
 
-    const META_SRC: &str = "context c\n\nconsumes bynk.cloudflare { QueueDelivery }\n\ntype Job = { id: String }\n\nservice w from queue(\"q\") {\n  on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] { Ack }\n}\n\nservice p from queue(\"p\") {\n  on message(job: Job) -> Effect[QueueResult] { Ack }\n}\n";
+    const META_SRC: &str = "context c\n\nconsumes bynk.cloudflare { QueueDelivery }\n\ntype Job = { id: String }\n\nservice w from queue(\"q\") {\n  on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] by Producer { Ack }\n}\n\nservice p from queue(\"p\") {\n  on message(job: Job) -> Effect[QueueResult] by Producer { Ack }\n}\n";
 
     #[test]
     fn the_message_address_shows_the_optional_delivery_only_when_the_handler_takes_it() {

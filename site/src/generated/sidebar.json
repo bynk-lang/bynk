@@ -534,6 +534,10 @@
           {
             "label": "Model an agent as a state machine",
             "link": "/book/guides/agents-and-state/state-machine/"
+          },
+          {
+            "label": "Delete a user's data",
+            "link": "/book/guides/agents-and-state/delete-a-users-data/"
           }
         ]
       },

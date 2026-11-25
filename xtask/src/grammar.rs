@@ -590,7 +590,8 @@ mod tests {
         // #3443 (removal of `~>`) removed: effect_send_stmt. Net -1.
         // #3877 (queue `delivery { }`) added: delivery_policy, delivery_field.
         // Net +2.
-        assert_eq!(rules.len(), 198);
+        // #3916 (`errors { }`) added: errors_policy, errors_field. Net +2.
+        assert_eq!(rules.len(), 200);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

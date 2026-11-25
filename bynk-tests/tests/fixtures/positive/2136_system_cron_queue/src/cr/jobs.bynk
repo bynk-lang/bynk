@@ -46,7 +46,7 @@ service sweeper from cron {
 }
 
 service deliveries from queue("deliveries") {
-	on message(d: Delivery) -> Effect[QueueResult] {
+	on message(d: Delivery) -> Effect[QueueResult] by Producer {
 		if d.qty < 0 {
 			Retry("a delivery cannot be negative")
 		} else {

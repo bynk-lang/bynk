@@ -937,6 +937,7 @@ pub(crate) fn check_query_kernel_method(
     op: Option<QueryOp>,
     args: &[Expr],
     elem: TyId,
+    receiver: Option<&Expr>,
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
@@ -1065,6 +1066,12 @@ pub(crate) fn check_query_kernel_method(
             }
             check_arg(&args[0], elem, "the `Query.firstOrElse` fallback", ctx);
             Some(eff(elem))
+        }
+        Some(o @ (QueryOp::FilterMap | QueryOp::TakeWhile | QueryOp::SkipWhile)) => {
+            super::query_more::check_query_more(method, o, args, elem, receiver, span, ctx)
+        }
+        Some(o @ QueryOp::Count) if !args.is_empty() => {
+            super::query_more::check_query_more(method, o, args, elem, receiver, span, ctx)
         }
         Some(QueryOp::Count) => {
             if !arity(0, ctx) {
@@ -1626,7 +1633,9 @@ pub(crate) fn check_duration_kernel_method(
             | DurationOp::ToHours
             | DurationOp::ToDays,
         ) => Some((vec![], Ty::Base(BaseType::Int))),
-        Some(DurationOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
+        Some(DurationOp::ToString | DurationOp::ToIso) => {
+            Some((vec![], Ty::Base(BaseType::String)))
+        }
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -1634,7 +1643,7 @@ pub(crate) fn check_duration_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`",
+                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`, `toIso`",
                 method.name
             ),
         ));

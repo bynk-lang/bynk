@@ -808,7 +808,7 @@ service api from http {
 }
 
 service fulfilment from queue(\"q-smoke-orders\") {
-\ton message(m: Placed) -> Effect[QueueResult] given Kv {
+\ton message(m: Placed) -> Effect[QueueResult] by Producer given Kv {
 \t\tlet _ <- Kv.put(m.id, m.total.toString())
 \t\tAck
 \t}

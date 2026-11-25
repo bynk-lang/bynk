@@ -206,7 +206,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.missing_by_on_call",
-        blurb: "An `on call` handler is reachable by every context that consumes this one, and which of them may call it is an access decision, so the handler must say, with a `by` clause. `by Caller` is the explicit \"any consuming context\"; a refinement over `Caller`, a `Foreign` actor or a sum narrows it. The error's fix inserts `by Caller`, which is what the handler did before the clause was required, and `bynk check --fix=bynk.actor.missing_by_on_call` migrates a whole project. A header default, `service pay by Caller`, covers every handler without its own `by`. Agents, cron, queue and `Events` handlers have no caller to name, so they are unchanged.",
+        blurb: "An `on call` handler is reachable by every context that consumes this one, and which of them may call it is an access decision, so the handler must say, with a `by` clause. `by Caller` is the explicit \"any consuming context\"; a refinement over `Caller`, a `Foreign` actor or a sum narrows it. The error's fix inserts `by Caller`, which is what the handler did before the clause was required, and `bynk check --fix=bynk.actor.missing_by_on_call` migrates a whole project. A header default, `service pay by Caller`, covers every handler without its own `by`. Agents, cron and `Events` handlers have no caller to name, so they are unchanged.",
         example: "context shop\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n\x20   total\n\x20 }\n}\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n\x20   total\n\x20 }\n}",
     },
     Explain {
@@ -222,7 +222,7 @@ pub const EXPLANATIONS: &[Explain] = &[
                 writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set \
                 it once on the header, `service api from http by Visitor`, and every handler \
                 without its own `by` inherits it. A WebSocket `on open` handler needs one too. \
-                `call` handlers need one too (`bynk.actor.missing_by_on_call`); cron and queue have a default.",
+                `call` handlers (`bynk.actor.missing_by_on_call`) and queue handlers (`bynk.actor.missing_by_on_queue`) need one too; cron has a default.",
         example: "service api from http {\n\
                   \x20 on GET(\"/health\") () -> Effect[HttpResult[String]] {   // ✗ who may call this?\n\
                   \x20   Ok(\"up\")\n\
@@ -234,6 +234,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20   Ok(\"up\")\n\
                   \x20 }\n\
                   }",
+    },
+    Explain {
+        code: "bynk.actor.missing_by_on_queue",
+        blurb: "A queue consumer reads whatever reaches its queue, and any Worker on the Cloudflare account that has a producer binding can put a message there, so who may send to it is an access decision and the handler must say, with a `by` clause. `by Producer` is the explicit \"anyone on the account\", which is what an `on message` handler meant before the clause was required. The error's fix inserts `by Producer`, and `bynk check --fix=bynk.actor.missing_by_on_queue` migrates a whole project. A header default, `service fulfil from queue(\"orders\") by Producer`, covers every handler without its own `by`. Cron and `Events` handlers have no sender to name, so they are unchanged.",
+        example: "service fulfil from queue(\"orders\") {\n  on message(order: Order) -> Effect[QueueResult] {   // ✗ who may send to this queue?\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
     },
     Explain {
         code: "bynk.actor.oidc_identity_not_string_constructible",
@@ -810,6 +815,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
     },
     Explain {
+        code: "bynk.agent.write_after_erase",
+        blurb: "`self.erase()` marks the instance for deletion, and the handler's commit then deletes everything stored for the key instead of writing the handler's state. A `:=` after it in the same block has nothing to write to, so it is dropped. Remove the write. A write before `self.erase()` is dropped the same way. If something should outlive the erasure, emit an event first: events emitted in the handler are still released at the commit, so a subscriber can keep what it needs.",
+        example: "on call close() -> Effect[()] {\n\x20 self.erase()\n\x20 closed := true    // ✗ the commit deletes the instance, so nothing is written\n}\n\non call close() -> Effect[()] given Events {\n\x20 do Events.emit[AccountClosed](AccountClosed { id: self.id })\n\x20 self.erase()    // ✓ the event records it; the state goes\n}",
+    },
+    Explain {
         code: "bynk.agents.bad_state_initialiser",
         blurb: "A key's state is initialised automatically the first time it is used, before any handler runs, so a `store` field's `= value` must be fixed when the program compiles: a literal, a variant, `Some`/`None`/`Ok`/`Err`, a record, or `T.unsafe(lit)` for an opaque type. It cannot read `self`, a parameter or a capability, or call anything. The code is also reported for a static value of the wrong type. Write the starting value out, and set the real one from a handler. A field with no initialiser and no zero is `bynk.agents.non_zeroable_state_field`.",
         example: "store label: Cell[String] = self.id   // ✗ `self` is not available to an initialiser\n\nstore label: Cell[String] = \"\"   // ✓ a static starting value",
@@ -1171,7 +1181,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.cloudflare.edge_cache_in_queue",
         blurb: "A purge reaches the edge cache only from the Worker's own `fetch`, the entrypoint that serves cached responses. A queue consumer is not that entrypoint, and its purge is not known to reach the cache, so a consumer that reaches `EdgeCache`, with `given Edge` or through a provider that does, is refused. Purge from a service handler instead. An agent and an `on schedule` handler have the same rule: `bynk.cloudflare.edge_cache_in_agent`, `bynk.cloudflare.edge_cache_in_schedule`.",
-        example: "capability Edge = EdgeCache\n\nservice purges from queue(\"purges\") {\n    on message(path: String) -> Effect[QueueResult] given Edge {   // ✗ not the entrypoint the cache serves\n        let purged <- Edge.purge([path])\n        if purged { Ack } else { Retry(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+        example: "capability Edge = EdgeCache\n\nservice purges from queue(\"purges\") {\n    on message(path: String) -> Effect[QueueResult] by Producer given Edge {   // ✗ not the entrypoint the cache serves\n        let purged <- Edge.purge([path])\n        if purged { Ack } else { Retry(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
     },
     Explain {
         code: "bynk.cloudflare.edge_cache_in_schedule",
@@ -2534,6 +2544,26 @@ fn wait() -> Duration { 5.hours }     // ✓",
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
     },
     Explain {
+        code: "bynk.http.errors_duplicate",
+        blurb: "A handler has one `@errors`, which says which shape its error bodies take. Two would name two shapes for the same response, and neither could be said to win, so the second is refused. Keep one. See also `bynk.http.json_duplicate`.",
+        example: "@errors(format: problem)\n@errors(format: bynk)       // ✗ already set above\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@errors(format: problem)     // ✓ one shape\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.errors_invalid_field",
+        blurb: "`format` chooses the shape of an HTTP service's error bodies, and has two values, written bare: `bynk` (Bynk's own bodies, the default) or `problem` (RFC 9457 `application/problem+json`). Anything else, a string included, is refused, and `@errors` also needs its `format:` argument. See also `bynk.http.json_invalid_field`.",
+        example: "@errors(format: \"problem\")   // ✗ bare, not a string\n\n@errors(format: problem)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.errors_not_http",
+        blurb: "An `errors { }` section, or an `@errors` annotation, chooses the shape of a service's HTTP error bodies. Only a `from http` service has them, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `json` section has the same rule: `bynk.http.json_not_http`.",
+        example: "service jobs from cron {\n    errors { format: problem }   // ✗ a schedule has no error body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    errors { format: problem }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.errors_unknown_field",
+        blurb: "`errors { }` has one field, `format`, and `@errors` has one argument, also `format:`. Any other name is refused rather than ignored, so a misspelling does not silently leave the default in place. See also `bynk.http.json_unknown_field`.",
+        example: "errors { format: problem, title: short }   // ✗ only `format`\n\nerrors { format: problem }                  // ✓",
+    },
+    Explain {
         code: "bynk.http.extra_param",
         blurb: "A handler's parameters are not free-form. Each is a path parameter, matching a `:name` in the route, or one of the three the router fills itself: `body`, `headers` and `query`. Any other name has nowhere to come from. Read a value from the query string with `query: RequestQuery` or a record, move it into the path, or drop it. A `:name` with no parameter is `bynk.http.unbound_path_param`.",
         example: "on GET(\"/items\") (page: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ not in the path, and not `body`, `headers` or `query`\n\non GET(\"/items\") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -3352,7 +3382,12 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.parse.duplicate_delivery",
         blurb: "A queue consumer has one `delivery` policy: its retries, retry delay, dead-letter queue and batching. A second block could set them differently, and the reader would not know which holds, so it is refused. Merge them into one. `cors`, `security`, `limits` and `json` follow the same rule, as `bynk.parse.duplicate_cors` shows.",
-        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
+    },
+    Explain {
+        code: "bynk.parse.duplicate_errors",
+        blurb: "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
+        example: "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.parse.duplicate_json",
@@ -4136,54 +4171,59 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
     },
     Explain {
+        code: "bynk.query.while_needs_order",
+        blurb: "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first, or a window of one (`since`, `before`, `between`, `recent`, `reversed`). A `flatMap` loses the order, because each inner query is joined in its own. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+        example: "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+    },
+    Explain {
         code: "bynk.queue.bad_params",
         blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
-        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
     },
     Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
-        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
-        example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }   // ✓ the same type\n}",
     },
     Explain {
         code: "bynk.queue.delivery_bad_option",
         blurb: "A `delivery { }` section sets the consumer's `retries` (0 to 100), `retryDelay` (a `Duration` of whole seconds, at most 24 hours), `deadLetter` (a queue name, or `None`), `batchSize` (1 to 100), `batchWait` (a `Duration` of whole seconds, 0 to 60) and `concurrency` (1 to 250). Those are Cloudflare's limits, so a value outside its range, a key that is not one of these, or one written twice is refused here rather than failing at deploy. The dead-letter queue also cannot be the consumer's own queue, which would redeliver a failed message to the consumer that failed it. A literal, or a constant of the key's type, is accepted.",
-        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 500, deadLetter: None }   // ✗ at most 100\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, retryDelay: 30.seconds, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+        example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 500, deadLetter: None }   // ✗ at most 100\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, retryDelay: 30.seconds, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.queue.delivery_not_queue",
         blurb: "A `delivery { }` section sets how a queue consumer's messages are retried, delayed, dead-lettered and batched. Only a `from queue` service consumes a queue, so on any other service the section has nothing to govern. Move it to the `from queue` service it was meant for, or delete it.",
-        example: "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+        example: "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.queue.duplicate_consumer",
         blurb: "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue. The rule holds across the project too: Cloudflare accepts one consumer Worker per queue, so two contexts consuming one queue, in a `[deploy.workers]` group or not, could never both deploy. Move the queue to one context; any number of contexts may still send to it.",
-        example: "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] { … }\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓ a queue of its own\n}",
+        example: "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ a queue of its own\n}",
     },
     Explain {
         code: "bynk.queue.invalid_name",
         blurb: "`from queue(\"…\")` names a Cloudflare queue, so the name must be one Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`, starting and ending with a letter or digit. An empty name, capitals or `_` are refused here, rather than failing at deploy. Rename it, for example `order-events`.",
-        example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
+        example: "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓\n}",
     },
     Explain {
         code: "bynk.queue.message_type_mismatch",
         blurb: "The queue name is a string both sides write, so the compiler is the only party that sees a producer and its consumer and can say they disagree. When a context in the project consumes the queue a `Queue @name(\"…\")` instance sends to, `sendValue`, `sendValueWith` and `sendValueBatch` (its elements) must send a type the consumer's `on message` accepts, by the comparison a cross-context call gets: the same fields and variants, and a stronger refinement is admitted where the consumer expects a weaker one. Otherwise the consumer could not decode the message, which would be retried and then dead-lettered or dropped at run time. Send the consumer's type, or change the consumer. A queue no context in the project consumes (a foreign Worker, or nobody yet) has nothing to compare with and is not checked; nor is a send whose type is still a type parameter.",
-        example: "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] { … }\n}",
+        example: "// shop/orders.bynk\ncapability OrderEvents = Queue @name(\"order-events\")\n\nOrderEvents.sendValue(Refund { id: o.id })   // ✗ the consumer takes `Order`\n\nOrderEvents.sendValue(o)   // ✓\n\n// shop/fulfil.bynk\nservice fulfil from queue(\"order-events\") {\n    on message(order: Order) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.queue.no_dead_letter",
         blurb: "Cloudflare keeps a message for `retries` redeliveries (3 by default) and then deletes it, unless the consumer has a dead-letter queue to move it to. A consumer with none loses a message that keeps failing, with no trace. Name one in `delivery { deadLetter: \"…\" }`; it is an ordinary queue, which a Bynk consumer may read to inspect or replay what failed. If losing such a message is what you want, write `deadLetter: None`, which says so and silences this warning. It is only a warning, so a throwaway queue can ignore it.",
-        example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+        example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.queue.retry_delay_out_of_range",
         blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
-        example: "on message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
+        example: "on message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] by Producer {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
     },
     Explain {
         code: "bynk.queue.return_not_queue_result",
         blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled), `Retry(reason)` (deliver it again) and `RetryAfter(reason, delay)` (deliver it again after a delay). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
-        example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
+        example: "on message(message: String) -> Effect[Result[Int, String]] by Producer { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ `Ack` or `Retry(…)`",
     },
     Explain {
         code: "bynk.queue.undecodable_unreachable",
@@ -4655,7 +4695,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.service.missing_from",
         blurb: "A service with no `from` clause is a call service, and admits only `on call` handlers; the protocol in the header is what says how a handler is invoked. A handler of another form needs its protocol named: `from http` for a route, `from cron`, `from queue(\"…\")`, `from websocket(…)` or `from Events(E)`. The error suggests the one that fits the handler. If the service really is a mix, split it (see `bynk.service.mixed_protocols`).",
-        example: "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] { … }\n}",
+        example: "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] by Producer { … }\n}",
     },
     Explain {
         code: "bynk.service.mixed_protocols",
@@ -4811,8 +4851,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.stub.generic_op",
-        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names, and a fixed value cannot be that. Such an operation cannot be stubbed. Test through the capability's real provider, and stub the other, non-generic operations of the capability if you need to.",
-        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None   // ✗ `dedup` has its own type parameter\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()   // ✓ the real provider answers\n    expect result is None\n}",
+        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names. A `stub` of it names the type argument, as the call site does, so its answer has a concrete type, and it answers only the calls made at that type: `stub Idempotency.dedup[Int](_) returns None`. Without the type argument the clause could not be typed, and is refused.",
+        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None        // ✗ `dedup` has its own type parameter\nstub Idempotency.dedup[Int](_) returns None   // ✓ the type argument, as the call writes it\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()\n    expect result is None\n}",
     },
     Explain {
         code: "bynk.stub.not_a_seam",
@@ -4932,13 +4972,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.suite.fn_effectful",
-        blurb: "A suite helper is a pure function that builds a value for a \
-                case: a request, a fixture, an expected result. Returning an \
-                `Effect` would hide a step of the test inside a helper. Build \
-                the value in the helper and run the effect in the `case`, \
+        blurb: "A suite helper that returns an `Effect` must say which capabilities it \
+                uses, with `given`, so a case's dependency on it is visible where it \
+                is called: `fn seed() -> Effect[()] given Stock { … }`. Without \
+                `given` it is a pure function that builds a value for a case, so \
+                build the value in the helper and run the effect in the `case`, \
                 where each step is visible with `<-`.",
         example: "// tests/desk.test.bynk\n\
-                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`, with no `given`\n\
                   fn start() -> Int { 1 }                            // ✓ build the value\n\
                   let n <- local.call(start())                       // ✓ run it in the case",
     },
@@ -5197,6 +5238,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
                   \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
                   }",
+    },
+    Explain {
+        code: "bynk.test.helper_given_at_system",
+        blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
+        example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
     },
     Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
@@ -5974,13 +6020,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.interpolation_non_scalar",
         blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
-                `Decimal`, or a refined type over one of them, and nothing else. A record or \
+                `Decimal`, `Instant`, `Duration`, or a refined type over one of them, and \
+                nothing else. An `Instant` prints as RFC 3339 UTC and a `Duration` as units, \
+                largest first (`1h30m`), the text their `toString()` gives. A record or \
                 sum has no canonical text, and Bynk will not print an unreadable stand-in \
                 such as `[object Object]`. An opaque type hides its base, so use `.raw` \
                 first. Turn other values into a `String` yourself: `toHex()` or `toBase64()` \
-                on `Bytes`, `toString()` on a `Duration`, `toIso()` or `toString()` on an \
-                `Instant`, or interpolate the fields of a record, a `ValidationError` or a \
-                `DecodeError`.",
+                on `Bytes` (hex or base64 is a real choice), or interpolate the fields of a \
+                record, a `ValidationError` or a `DecodeError`.",
         example: "type User = { name: String }\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u)\"         // ✗ a record has no string form\n}\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u.name)\"    // ✓ interpolate the field\n}",
@@ -6368,8 +6415,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.question_option_outside_http",
-        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a handler that returns an `HttpResult`, `None` becomes a `NotFound` response. Elsewhere an `Option` has no error to carry, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
-        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ no `HttpResult` to answer `NotFound`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
+        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a function returning an `Option` (or an `Effect` of one) the `None` is the result, and in a handler returning an `HttpResult` it becomes a `NotFound` response. Elsewhere there is nowhere to return it, and an `Option` never converts to a `Result` implicitly, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
+        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ `double` returns a `Result`, not an `Option`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
     },
     Explain {
         code: "bynk.types.question_outside_result",
@@ -6611,6 +6658,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.uses.target_is_context",
         blurb: "`uses` is for shared types and functions, and those live in a commons. A context is something to depend on: it has services to call and capabilities to use, and that is `consumes`. Replace `uses` with `consumes`. The mirror of this is `bynk.consumes.target_is_commons`.",
         example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nuses pay                         // ✗ `pay` is a context\nconsumes pay                     // ✓ depend on a context with `consumes`",
+    },
+    Explain {
+        code: "bynk.uses.test_only_commons",
+        blurb: "A commons declared `for tests` holds what suites share (helpers, types, constants and test-only values) and is left out of every deployable. Only a suite or another test-only commons may `uses` it, so production code cannot depend on code that is not there. Move what the unit needs into a commons that is not marked `for tests`.",
+        example: "// kit.bynk\ncommons kit for tests\n\nconst Start: Int = 1\n\n// shop.bynk\ncontext shop\n\nuses kit                         // ✗ `kit` is test-only\n\n// tests/shop.test.bynk\nsuite shop\n\nuses kit                         // ✓ a suite may use it",
     },
     Explain {
         code: "bynk.uses.unknown_commons",
@@ -7025,6 +7077,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An HTTP handler lacks the required `by` actor clause.",
     ),
     d(
+        "bynk.actor.missing_by_on_queue",
+        "An `on message` handler lacks the required `by` actor clause.",
+    ),
+    d(
         "bynk.actor.oidc_identity_not_string_constructible",
         "An `Oidc` actor's identity is not a string-constructible type.",
     ),
@@ -7339,6 +7395,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.agent.version_without_path",
         "A schema version between the agent's floor and its current version has no way forward: no `migrate` step covers it and its path to the current shape is not entirely additive, so a stored record at that version faults on load with `NoMigrationPath` (warning).",
+    )),
+    warn(d(
+        "bynk.agent.write_after_erase",
+        "A `:=` follows `self.erase()` in the same block, so the commit drops it (warning).",
     )),
     dg(
         "bynk.agents.bad_state_initialiser",
@@ -8470,6 +8530,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.error_status_position",
         "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
     ),
+    d(
+        "bynk.http.errors_duplicate",
+        "A handler carries more than one `@errors` annotation.",
+    ),
+    d(
+        "bynk.http.errors_invalid_field",
+        "An `errors` `format`, or an `@errors` `format:`, is missing or is not `bynk` or `problem`.",
+    ),
+    d(
+        "bynk.http.errors_not_http",
+        "An `errors { }` section or an `@errors` annotation is not on a `from http` service.",
+    ),
+    d(
+        "bynk.http.errors_unknown_field",
+        "An `errors { }` section or an `@errors` annotation names something other than `format`.",
+    ),
     dg(
         "bynk.http.extra_param",
         "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
@@ -9066,6 +9142,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["service_decl"],
     ),
     dg(
+        "bynk.parse.duplicate_errors",
+        "A service declares more than one `errors { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
         "bynk.parse.duplicate_json",
         "A service declares more than one `json { }` policy.",
         &["service_decl"],
@@ -9481,6 +9562,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.query.sum_needs_numeric",
         "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).",
         &[],
+    ),
+    dg(
+        "bynk.query.while_needs_order",
+        "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`.",
+        &["method_call"],
     ),
     dg(
         "bynk.queue.bad_params",
@@ -10018,7 +10104,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.stub.generic_op",
-        "A test `stub` targets a capability operation that declares its own type parameter — not supported at v1.",
+        "A test `stub` targets a capability operation that declares its own type parameter without naming its type argument (`stub Cap.op[T](…)`).",
     ),
     d(
         "bynk.stub.not_a_seam",
@@ -10200,6 +10286,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.forged_needs_system",
         "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
         &["case"],
+    ),
+    d(
+        "bynk.test.helper_given_at_system",
+        "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
     ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",
@@ -10906,7 +10996,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.question_option_outside_http",
-        "`?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
+        "`?` on an `Option` needs a function returning `Option` (`None` returns early) or `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
         &["question_expr"],
     ),
     dg(
@@ -11064,6 +11154,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.target_is_context",
         "`uses` targets a context instead of a commons.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.test_only_commons",
+        "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`.",
         &["uses_decl"],
     ),
     dg(

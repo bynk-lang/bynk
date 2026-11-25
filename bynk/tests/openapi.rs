@@ -567,6 +567,55 @@ fn plain_json_options_are_nullable() {
     assert!(s["Row"]["properties"]["note"]["oneOf"].is_array());
 }
 
+/// #3916: a `format: problem` route documents its errors as `application/problem+json`
+/// with the shared `BynkProblemDetails` schema; a route with no such section, and a
+/// route that overrides it with `@errors(format: bynk)`, keep Bynk's own bodies.
+#[test]
+fn problem_details_routes_document_problem_json() {
+    let dir = scratch("problem-details");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"problems\"\nversion = \"0.1.0\"\n",
+    );
+    write(
+        &dir.join("src/api.bynk"),
+        "context api\n\n\
+         type Widget = { qty: Int }\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           on POST(\"/reserve\") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n\n  \
+           @errors(format: bynk)\n  \
+           on POST(\"/legacy\") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n}\n\n\
+         service plain from http {\n  \
+           on POST(\"/plain\") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n}\n",
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let problem = "#/components/schemas/BynkProblemDetails";
+    let r =
+        |path: &str, status: &str| d["paths"][path]["post"]["responses"][status]["content"].clone();
+    assert_eq!(
+        r("/reserve", "409")["application/problem+json"]["schema"]["$ref"],
+        problem
+    );
+    assert!(r("/reserve", "409").get("application/json").is_none());
+    assert_eq!(
+        r("/reserve", "400")["application/problem+json"]["schema"]["$ref"],
+        problem
+    );
+    assert!(
+        r("/legacy", "409")
+            .get("application/problem+json")
+            .is_none()
+    );
+    assert!(r("/legacy", "409").get("application/json").is_some());
+    assert!(r("/plain", "409").get("application/problem+json").is_none());
+    let schema = &d["components"]["schemas"]["BynkProblemDetails"];
+    assert_eq!(
+        schema["required"],
+        serde_json::json!(["type", "title", "status"])
+    );
+}
+
 /// #2858: a type shared by a plain route's request body and response renders the
 /// request tagged (`Row`) and the response nullable (`Row.plain`), whichever
 /// renders first.

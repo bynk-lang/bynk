@@ -5,7 +5,7 @@ type Msg = { a: String }
 service worker from queue("jobs") {
 
   delivery { deadLetter: None }
-  on message(message: Msg, extra: String) -> Effect[QueueResult] {
+  on message(message: Msg, extra: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

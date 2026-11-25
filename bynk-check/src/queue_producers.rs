@@ -244,10 +244,17 @@ pub fn phase_queue_producers(
 }
 
 /// The project tables a type namespace is built from.
-struct Project<'a> {
-    tables: &'a HashMap<String, UnitTable>,
-    uses: &'a HashMap<String, Vec<String>>,
-    consumes: &'a HashMap<String, Vec<String>>,
+pub struct Project<'a> {
+    pub tables: &'a HashMap<String, UnitTable>,
+    pub uses: &'a HashMap<String, Vec<String>>,
+    pub consumes: &'a HashMap<String, Vec<String>>,
+}
+
+impl Project<'_> {
+    /// The types `context` can name: its own, and those of the units it uses or consumes.
+    pub fn types_of(&self, context: &str) -> TypeTable {
+        contract_types_for(context, self.tables, self.uses, self.consumes).0
+    }
 }
 
 fn check_site(
@@ -267,13 +274,7 @@ fn check_site(
         return;
     };
     let taken = &consumer.param.type_ref;
-    let taken_types = contract_types_for(
-        consumer.context,
-        project.tables,
-        project.uses,
-        project.consumes,
-    )
-    .0;
+    let taken_types = project.types_of(consumer.context);
     let verdict = message_compat(&sent, own_types, taken, &taken_types);
     if verdict.verdict != Verdict::Breaking {
         return;
@@ -357,7 +358,7 @@ mod tests {
 
     const TYPES: &str = "type Order = { id: String, qty: Int }\ntype Refund = { id: String }\ntype Qty = Int where InRange(1, 100)\ntype Line = { qty: Qty }\ntype Loose = { qty: Int }\n";
 
-    const CONSUMER: &str = "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] { Ack }\n}\n";
+    const CONSUMER: &str = "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer { Ack }\n}\n";
 
     fn producer(call: &str) -> String {
         format!(
@@ -447,7 +448,7 @@ mod tests {
 
     fn consumer_of(ty: &str) -> String {
         format!(
-            "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+            "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {ty}) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
         )
     }
 
@@ -468,7 +469,7 @@ mod tests {
     fn a_producer_and_consumer_in_one_context_are_compared() {
         let source = |call: &str| {
             format!(
-                "context shop.orders\n\nconsumes bynk.cloudflare {{ Queue }}\n\ncapability OrderEvents = Queue @name(\"order-events\")\n\n{TYPES}\nservice go {{\n  on call(o: Order) -> Effect[()] by Caller given OrderEvents {{\n    {call}\n  }}\n}}\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(order: Order) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+                "context shop.orders\n\nconsumes bynk.cloudflare {{ Queue }}\n\ncapability OrderEvents = Queue @name(\"order-events\")\n\n{TYPES}\nservice go {{\n  on call(o: Order) -> Effect[()] by Caller given OrderEvents {{\n    {call}\n  }}\n}}\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(order: Order) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
             )
         };
         assert!(

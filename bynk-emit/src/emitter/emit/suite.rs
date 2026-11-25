@@ -15,7 +15,8 @@ pub fn emit_suite_fn(
     runtime_use: &RuntimeUse,
 ) -> Vec<bynk_ts::TsStmt> {
     // A suite is only ever built for `bynk test`, which guards every contract.
-    // A suite helper cannot declare `given`, so it has no capability types to name.
+    // A helper's `given` capability types are aliased by the test module (#3983), so the
+    // parameter names them bare.
     let empty = bynk_check::resolver::CrossContextInfo::default();
     emit_free_fn_in(
         f,

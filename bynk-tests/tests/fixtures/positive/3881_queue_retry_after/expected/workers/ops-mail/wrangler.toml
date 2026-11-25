@@ -17,3 +17,7 @@ queue = "plain-jobs"
 max_batch_size = 10
 retry_delay = 45
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

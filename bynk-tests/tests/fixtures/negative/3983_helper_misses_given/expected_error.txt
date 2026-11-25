@@ -1,0 +1,1 @@
+bynk.given.missing_for_call `level` needs `given Gauge`, which the enclosing body does not declare

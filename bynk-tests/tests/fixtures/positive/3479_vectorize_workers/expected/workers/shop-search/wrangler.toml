@@ -12,3 +12,7 @@ index_name = "shop-search-docs"
 binding = "VECTORIZE_SCRATCH"
 index_name = "shop-search-scratch"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

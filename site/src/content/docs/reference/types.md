@@ -214,6 +214,23 @@ is named rather than hidden in `d.toMillis() / 1000`. A `Duration` can be refine
 [Refined types](/reference/refined-types/)). It round-trips through the JSON codec as an integer. See
 [Operators](/reference/operators/#duration--instant-arithmetic).
 
+#### Text (#3977)
+
+`d.toString() -> String` writes the span in units, largest first: `1h30m`, `5m`, `250ms`,
+`1d2h`. The units are `d`, `h`, `m`, `s` and `ms`, each part is an integer, a zero part is left
+out, a zero span is `0s`, and a negative span takes a leading `-` (`-5s`). A day is a 24-hour
+span, as `1.day` is. The text is worked out from whole milliseconds with integer arithmetic, so a
+large span is exact. A `Duration` also fills an interpolation hole, as `toString()` does:
+`"retry in \(backoff)"` is `retry in 1m30s`.
+
+`d.toIso() -> String` writes ISO 8601: `PT1H30M`, `P1DT2H`, `PT0.25S`, `-PT5S`, `PT0S`. Days are
+the largest unit, since months and years are not fixed spans, and the seconds carry the
+millisecond fraction without trailing zeros. The leading `-` of a negative span is a widely
+accepted extension of ISO 8601, not part of the standard.
+
+`toString()` used to give the bare millisecond count (`300000`, with no unit). Code that read it
+back as a number should call `toMillis()`.
+
 ### Instant
 
 `Instant` (v0.90) is an **absolute point in time**, erased to a `number` of Unix
@@ -234,8 +251,10 @@ millis is `t.toEpochMillis() -> Int`; the zero is the epoch. Timestamp math goes
 `t.toIso() -> String` writes an instant as RFC 3339 text in UTC, always
 `YYYY-MM-DDTHH:mm:ss.sssZ`: three fraction digits and `Z`, so the text sorts in
 time order. Outside the years 0000 to 9999 the year takes the expanded `±YYYYYY`
-form, and an instant beyond ±8.64e15 ms (past any date) faults. `toString()`
-still gives the epoch milliseconds, and the JSON codec still writes a number.
+form, and an instant beyond ±8.64e15 ms (past any date) faults. `toString()` is the same text
+(#3977; it used to give the epoch milliseconds, which `toEpochMillis()` still does), an `Instant`
+fills an interpolation hole as `toString()` does (`"expires at \(expiry)"`), and the JSON codec
+still writes a number.
 
 `Instant.fromIso(s) -> Option[Instant]` reads the RFC 3339 date-time profile:
 
@@ -1584,7 +1603,7 @@ returnable from a pure helper, passable. A query is **agent-local** and reads
 **staged** state (read-your-writes).
 
 **Builders** are pure and return a further `Query` — `filter`, `map`, `flatMap`,
-`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below.
+`sortBy`, `sortByDescending`, `take`, `skip`, `distinct`, plus the joins and `groupBy` below. `filterMap(f)`, `takeWhile(p)` and `skipWhile(p)` are the [`List`](#list-methods) combinators of the same names (#4246): [`takeWhile` and `skipWhile` need an ordered query](#order-while).
 
 **Terminals** execute the query and are `Effect`-typed (awaited with `<-`), folding
 into the storage capability the `store` fields already carry (no new `given`):
@@ -1594,6 +1613,7 @@ into the storage capability the `store` fields already carry (no new `given`):
 | `.collect()` | `Effect[List[T]]` |
 | `.first()` | `Effect[Option[T]]` |
 | `.count()` | `Effect[Int]` |
+| `.count(p)` | `Effect[Int]`, the elements `p` holds for (#4246) |
 | `.sum(key)` / `.min(key)` / `.max(key)` / `.average(key)` | `Effect[…]` (empty-total: `Option`, or the zero for `sum`) |
 | `.any(p)` / `.all(p)` | `Effect[Bool]` |
 | `.fold(init, f)` | `Effect[acc]` |
@@ -1647,6 +1667,31 @@ items.entries.map((e) => TodoItem { id: e.key, seq: e.value.seq, title: e.value.
 This is what lets a stored value drop the denormalised copy of its own key. The
 accessors are paren-less builders on the *storage* map, distinct from the eager
 in-memory `Map` value methods `.keys()`/`.values()` that return `List`s.
+
+### Stopping on order: `takeWhile` and `skipWhile` {#order-while}
+
+`q.filterMap(f: T -> Option[U])` is `Query[U]`, the `Some` results of `f`; `q.takeWhile(p)` is the
+longest prefix of `q` whose elements all satisfy `p`; `q.skipWhile(p)` is what is left after that
+prefix. All three have the `List` signatures and meanings (#3963), and `q.count(p)` counts the
+elements `p` holds for.
+
+`takeWhile` and `skipWhile` stop where `p` first fails, so what they keep depends on the order the
+elements come in, and a query plan does not express that as a filter. They are therefore accepted
+only on a query with a **declared order**: an explicit `sortBy` or `sortByDescending` before them,
+with only `filter`, `map`, `filterMap`, `skip`, `take` or another `takeWhile` or
+`skipWhile` between, or a [`Log`](#which-terminals-stop-reading-early), which is read oldest first, or
+a window of one (`since`, `before`, `between`, `recent` or `reversed`, which flips it). A `flatMap` loses
+the order, since each inner query is joined in its own.
+A `Map` scan, a join, a grouping, a `distinct` and a query held in a `let` have none the author can
+see, so the call is `bynk.query.while_needs_order` instead of a guess; put a `sortBy` before it.
+
+```bynk,fragment
+// the readings below 20, in time order
+readings.values.sortBy((r) => r.at).takeWhile((r) => r.value < 20).collect()
+```
+
+These builders read the whole source and then cut, as `sortBy` and `take` on a `Map` already do, so a
+store backend that cannot push the cut down pays the read the rest of the query already pays.
 
 ### Which terminals stop reading early
 

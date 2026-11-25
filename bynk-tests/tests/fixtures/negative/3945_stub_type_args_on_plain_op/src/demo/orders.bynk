@@ -1,0 +1,10 @@
+context demo.orders
+
+consumes idempotency { Idempotency }
+
+service reserve {
+  on call() -> Effect[Option[Int]] by Caller given Idempotency {
+    let cached <- Idempotency.dedup[Int]("order-key-1")
+    cached
+  }
+}

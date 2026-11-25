@@ -1,0 +1,9 @@
+context demo.slots
+
+exports transparent { Slot }
+
+type Slot = { id: Int }
+
+service noop {
+  on call() -> Effect[Int] by Caller { 0 }
+}

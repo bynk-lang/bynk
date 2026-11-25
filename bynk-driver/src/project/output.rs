@@ -66,7 +66,7 @@ pub(super) fn finish_build(
     import_ext: ImportExt,
     display_root: &Path,
     compatibility_flags: &[String],
-    workers_dev: Option<bool>,
+    workers: emitter::workers_emit::WorkersSettings,
     // #3477: the directory the build is written to, when known.
     out_dir: Option<&Path>,
     // #2554: the pre-read `bynk.contracts.lock`; `None` is a project without
@@ -172,7 +172,7 @@ pub(super) fn finish_build(
                 target,
                 import_ext,
                 &flags,
-                workers_dev,
+                workers,
                 &container_root,
                 asset_bytes.as_ref(),
                 &agent_versions,
@@ -332,7 +332,7 @@ pub(super) fn build_output(
     import_ext: ImportExt,
     // #1890: the merged `wrangler.toml` flag list (`finish_build` merges it).
     compatibility_flags: &[String],
-    workers_dev: Option<bool>,
+    workers_settings: emitter::workers_emit::WorkersSettings,
     // #3477: the path back to the project root from a Worker's output
     // directory, for a container's build paths.
     container_root: &str,
@@ -487,7 +487,7 @@ pub(super) fn build_output(
                 unit_flattened: &unit_flattened,
                 unit_tables: &unit_tables,
                 unit_uses: &unit_uses,
-                workers_dev,
+                workers: workers_settings,
             };
             emit.emit_all(&mut compiled, &mut lock_warnings, &mut staged_assets);
         }

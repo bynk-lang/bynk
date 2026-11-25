@@ -1,0 +1,5 @@
+context shop
+
+service ping {
+  on call() -> Effect[Int] by Caller { 1 }
+}

@@ -381,6 +381,12 @@ impl<'a> LowerCtx<'a> {
             .map(String::as_str)
     }
 
+    /// #3945: whether a call to a generic capability operation also passes its type arguments'
+    /// identity (a test build; see `CompileOptions::typed_capability_calls`).
+    pub(crate) fn typed_capability_calls(&self) -> bool {
+        self.module.typed_capability_calls
+    }
+
     /// #2045: whether `name` is a consumed context's type on `workers`.
     pub(crate) fn is_consumed_context_type(&self, name: &str) -> bool {
         self.module.consumed_context_types.contains(name)

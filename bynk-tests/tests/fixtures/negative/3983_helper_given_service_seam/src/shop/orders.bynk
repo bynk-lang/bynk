@@ -1,0 +1,20 @@
+context shop.orders
+
+consumes shop.pay as Pay
+consumes shop.stock
+
+service placeOrder {
+  on call(sku: String, total: Int) -> Effect[Result[String, String]] by Caller {
+    let r <- shop.stock.reserve(sku)
+    match r {
+      Err(e) => Effect.pure(Err(e))
+      Ok(_) => {
+        let p <- Pay.authorise(total)
+        match p {
+          Ok(receipt) => Effect.pure(Ok(receipt.id))
+          Err(_) => Effect.pure(Err("declined"))
+        }
+      }
+    }
+  }
+}
