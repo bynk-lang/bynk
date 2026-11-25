@@ -87,6 +87,25 @@ struct WorkersTable {
     /// off `workers.dev`. Unset leaves the key out, so Cloudflare's default
     /// (on) applies.
     workers_dev: Option<bool>,
+    /// Workers Logs, so `Logger.log`'s structured fields are queryable on
+    /// Cloudflare. On by default; written as `[observability]` into every
+    /// `wrangler.toml`, which each environment inherits. A worker group
+    /// overrides it key by key under `[deploy.workers.<key>.observability]`.
+    observability: Option<ObservabilityTable>,
+}
+
+/// `[workers.observability]` (and a worker group's own `observability`).
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ObservabilityTable {
+    /// Whether Workers Logs collects the Worker's logs. Default: `true`.
+    #[schemars(extend("default" = true))]
+    enabled: Option<bool>,
+    /// The fraction of invocations whose logs are kept, from `0` to `1`: lower
+    /// it for a noisy Worker. Default: `1`.
+    #[schemars(extend("default" = 1, "minimum" = 0, "maximum" = 1))]
+    head_sampling_rate: Option<f64>,
 }
 
 /// Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.
@@ -129,6 +148,9 @@ struct DeployWorkerEntry {
     routes: Option<Vec<String>>,
     /// Custom domains the Worker is attached to, like `pay.example.com`.
     custom_domains: Option<Vec<String>>,
+    /// This Worker's Workers Logs settings, laid over `[workers.observability]`
+    /// key by key: `head_sampling_rate = 0.01` for a noisy Worker.
+    observability: Option<ObservabilityTable>,
 }
 
 /// One `Container` capability's image at deploy.
@@ -501,6 +523,43 @@ struct RegistryEntry {
 #[allow(dead_code)]
 struct RegistriesTable(std::collections::BTreeMap<String, RegistryEntry>);
 
+/// A build-time variable's value: what an `env(NAME)` constant is declared as.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum VarValueSchema {
+    Text(String),
+    Number(i64),
+    Flag(bool),
+    List(Vec<String>),
+}
+
+/// Build-time variables, by name (`[A-Z][A-Z0-9_]*`): the values the project's
+/// `const X: T = env(NAME[, default])` constants take, in every environment
+/// (`default` included). They are resolved when the project is built, from this
+/// committed file only, and are not Wrangler's run-time `[vars]`. A name no
+/// `env(…)` constant reads is an error, so a typo cannot leave a default in
+/// force.
+#[derive(JsonSchema)]
+#[schemars(extend("propertyNames" = { "pattern": "^[A-Z][A-Z0-9_]*$" }))]
+#[allow(dead_code)]
+struct VarsTable(std::collections::BTreeMap<String, VarValueSchema>);
+
+/// One environment's settings.
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct EnvEntry {
+    /// This environment's build-time variables, over `[vars]`.
+    vars: Option<VarsTable>,
+}
+
+/// Per-environment settings, keyed by the environment's name (the `--env`
+/// value).
+#[derive(JsonSchema)]
+#[allow(dead_code)]
+struct EnvTable(std::collections::BTreeMap<String, EnvEntry>);
+
 /// Makes this directory a workspace root: a group of projects that `bynk
 /// check`, `fmt` and `test` run across. A workspace root isn't a project:
 /// its `bynk.toml` holds only `[workspace]` and `[registries]`.
@@ -538,6 +597,8 @@ pub fn table_schema(name: &str, generator: &mut SchemaGenerator) -> Option<Schem
         "dependencies" => generator.subschema_for::<DependenciesTable>(),
         "dev-dependencies" => generator.subschema_for::<DevDependenciesTable>(),
         "registries" => generator.subschema_for::<RegistriesTable>(),
+        "vars" => generator.subschema_for::<VarsTable>(),
+        "env" => generator.subschema_for::<EnvTable>(),
         _ => return None,
     })
 }

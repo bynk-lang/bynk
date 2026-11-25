@@ -10,3 +10,7 @@ database_name = "shop-own-idempotency"
 database_id = "<D1_IDEMPOTENCY_ID>" # set at deploy time
 migrations_dir = "migrations/shop-own-idempotency"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

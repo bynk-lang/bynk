@@ -76,6 +76,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
         Ok(options_for_split(input, paths)?
             .compatibility_flags(workers.compatibility_flags)
             .workers_dev(workers.workers_dev)
+            .observability(workers.observability)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?)
             .fixture_files(discovery::list_fixture_folder(input)?)
@@ -128,6 +129,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .sources(sources)
                 .compatibility_flags(workers.compatibility_flags)
                 .workers_dev(workers.workers_dev)
+                .observability(workers.observability)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
                 .fixture_files(fixture_files)
@@ -1892,6 +1894,232 @@ mod tests {
                 ProjectPathsError::NotABool { .. }
             ))
         ));
+    }
+
+    /// #3941: `env(NAME[, default])` constants take the default environment's
+    /// values from `bynk.toml`, then their own default; the rest is refused.
+    #[test]
+    fn env_constants_resolve_from_bynk_toml_then_their_default() {
+        let build = |name: &str, manifest: &str, source: &str| {
+            let dir = scratch_dir(name);
+            fs::write(dir.0.join("bynk.toml"), manifest).unwrap();
+            fs::create_dir_all(dir.0.join("src")).unwrap();
+            fs::write(dir.0.join("src/config.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0).expect("reads");
+            project::compile_project(&options).map(|_| ()).map_err(|f| {
+                f.errors
+                    .iter()
+                    .map(|e| e.error.category)
+                    .collect::<Vec<_>>()
+            })
+        };
+        let project = "[project]\nname = \"p\"\n\n";
+        let consts = "commons config\n\nconst Origin: String = env(APP_ORIGIN)\nconst Lines: Int = env(MAX_LINES, 100)\n";
+        // A `[vars]` value, and a default for the unset one.
+        assert_eq!(
+            build(
+                "env_ok",
+                &format!("{project}[vars]\nAPP_ORIGIN = \"https://app\"\n"),
+                consts
+            ),
+            Ok(())
+        );
+        // A required variable with no value, in the default environment.
+        assert_eq!(
+            build("env_missing", project, consts),
+            Err(vec!["bynk.env.missing"])
+        );
+        // A value of the wrong kind, a variable nothing reads, and an
+        // environment's own variable that is read.
+        assert_eq!(
+            build(
+                "env_bad",
+                &format!("{project}[vars]\nAPP_ORIGIN = 3\n"),
+                consts
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_unknown",
+                &format!("{project}[vars]\nAPP_ORIGIN = \"x\"\nAPP_ORIGN = \"y\"\n"),
+                consts
+            ),
+            Err(vec!["bynk.env.unknown_variable"])
+        );
+        assert_eq!(
+            build(
+                "env_staging_var_read",
+                &format!(
+                    "{project}[vars]\nAPP_ORIGIN = \"x\"\n\n[env.staging.vars]\nMAX_LINES = 5\n"
+                ),
+                consts
+            ),
+            Ok(())
+        );
+    }
+
+    /// #3941 review: the pass's edges. A secret-looking name warns and still
+    /// builds; a negative default repeated is not a conflict; a default of the
+    /// wrong kind is refused even when `bynk.toml` supplies the value; an
+    /// `Int` beyond the safe range and a doubly nested `env` are refused.
+    #[test]
+    fn env_constants_edges_report_precisely() {
+        let build = |name: &str, manifest: &str, source: &str| {
+            let dir = scratch_dir(name);
+            fs::write(dir.0.join("bynk.toml"), manifest).unwrap();
+            fs::create_dir_all(dir.0.join("src")).unwrap();
+            fs::write(dir.0.join("src/config.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0).expect("reads");
+            match project::compile_project(&options) {
+                Ok(out) => Ok(out
+                    .warnings
+                    .iter()
+                    .map(|w| w.error.category)
+                    .collect::<Vec<_>>()),
+                Err(f) => Err(f
+                    .errors
+                    .iter()
+                    .map(|e| e.error.category)
+                    .collect::<Vec<_>>()),
+            }
+        };
+        let project = "[project]\nname = \"p\"\n\n";
+        assert_eq!(
+            build(
+                "env_secret_like",
+                &format!("{project}[vars]\nAPI_TOKEN = \"t\"\n"),
+                "commons config\n\nconst Token: String = env(API_TOKEN)\n"
+            ),
+            Ok(vec!["bynk.env.secret_like_name"])
+        );
+        assert_eq!(
+            build(
+                "env_negative_defaults",
+                project,
+                "commons config\n\nconst A: Int = env(RETRIES, -1)\nconst B: Int = env(RETRIES, -1)\n"
+            ),
+            Ok(vec![])
+        );
+        assert_eq!(
+            build(
+                "env_bad_default_with_value",
+                &format!("{project}[vars]\nMAX_LINES = 5\n"),
+                "commons config\n\nconst Lines: Int = env(MAX_LINES, \"oops\")\n"
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_out_of_range",
+                &format!("{project}[vars]\nMAX_LINES = 9007199254740993\n"),
+                "commons config\n\nconst Lines: Int = env(MAX_LINES, 1)\n"
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_nested_in_env",
+                project,
+                "commons config\n\nconst Lines: String = env(A, env(B, \"x\"))\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+    }
+
+    /// #3941 decision I: a package consumed as a dependency cannot read the
+    /// consuming project's variables.
+    #[test]
+    fn env_constants_are_refused_in_a_dependency() {
+        let root = scratch_dir("env_in_dependency");
+        let write = |rel: &str, text: &str| {
+            let path = root.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "bynk.toml",
+            "[workspace]\nmembers = [\"packages/*\", \"apps/*\"]\n",
+        );
+        write(
+            "packages/money/bynk.toml",
+            "[package]\nname = \"acme/money\"\nversion = \"1.0.0\"\nexports = [\"currency\"]\n",
+        );
+        write(
+            "packages/money/src/currency.bynk",
+            "commons currency\n\nconst Home: String = env(HOME_ORIGIN, \"https://x\")\n\nfn id(n: Int) -> Int {\n  n\n}\n",
+        );
+        write(
+            "apps/shop/bynk.toml",
+            "[project]\nname = \"shop\"\n\n[dependencies]\nmoney = { package = \"acme/money\", path = \"../../packages/money\" }\n\n[vars]\nHOME_ORIGIN = \"https://app\"\n",
+        );
+        write(
+            "apps/shop/src/pricing.bynk",
+            "commons pricing\n\nuses money.currency\n\nfn total(n: Int) -> Int {\n  id(n)\n}\n",
+        );
+        let options = try_project_options(&root.0.join("apps/shop")).expect("reads");
+        let codes: Vec<&str> = match project::compile_project(&options) {
+            Ok(_) => Vec::new(),
+            Err(f) => f.errors.iter().map(|e| e.error.category).collect(),
+        };
+        assert!(codes.contains(&"bynk.env.in_dependency"), "{codes:?}");
+    }
+
+    /// #4127: Workers Logs is on, keeping every invocation, unless the manifest
+    /// says otherwise; `false` and a sampling rate round-trip; an out-of-range
+    /// rate is refused.
+    #[test]
+    fn manifest_observability_reaches_wrangler_toml() {
+        let dir = workers_project("observability_default", "[project]\nname = \"p\"\n");
+        let (text, _) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
+        assert!(
+            text.contains("[observability]\nenabled = true\nhead_sampling_rate = 1.0\n"),
+            "{text}"
+        );
+        let dir = workers_project(
+            "observability_set",
+            "[workers.observability]\nenabled = false\nhead_sampling_rate = 0.1\n",
+        );
+        for options in [
+            try_project_options(&dir.0).expect("reads"),
+            project_options(&dir.0).expect("reads"),
+        ] {
+            let (text, _) = greet_wrangler(options);
+            assert!(
+                text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.1\n"),
+                "{text}"
+            );
+        }
+        let dir = workers_project(
+            "observability_bad_rate",
+            "[workers.observability]\nhead_sampling_rate = 1.5\n",
+        );
+        assert!(matches!(
+            try_project_options(&dir.0),
+            Err(ProjectOptionsError::Paths(
+                ProjectPathsError::BadObservability { .. }
+            ))
+        ));
+    }
+
+    /// #4127: a worker group's table is laid over the project's, key by key.
+    #[test]
+    fn a_worker_group_overrides_observability_key_by_key() {
+        let dir = workers_project(
+            "observability_group",
+            "[workers.observability]\nhead_sampling_rate = 0.5\n\n[deploy.workers.core]\ncontexts = [\"greet\"]\n\n[deploy.workers.core.observability]\nenabled = false\n",
+        );
+        let options = try_project_options(&dir.0).expect("reads");
+        let out = project::compile_project(&options.target(project::BuildTarget::Workers))
+            .unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+        let text = out.artefacts.docs[Path::new("workers/core/wrangler.toml")].text();
+        assert!(
+            text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.5\n"),
+            "the group sets `enabled`, the project the rate: {text}"
+        );
     }
 
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.

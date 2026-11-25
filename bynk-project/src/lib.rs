@@ -43,12 +43,14 @@ pub mod lock;
 pub mod manifest;
 #[cfg(feature = "schema")]
 pub mod manifest_schema;
+pub mod observability;
 pub mod packages;
 pub mod parse_cache;
 pub mod paths;
 pub mod roots;
 pub mod schema_registry;
 pub mod snapshots;
+pub mod vars;
 pub mod vectorize;
 pub mod worker_groups;
 pub mod worker_layout;

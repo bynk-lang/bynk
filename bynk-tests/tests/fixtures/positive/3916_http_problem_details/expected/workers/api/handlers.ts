@@ -37,6 +37,9 @@ export const api = {
   async http_POST_widgets(body: Widget, deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Created("ok");
   },
+  async http_POST_reserve(body: Widget, deps: {}): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Conflict("widget is out of stock");
+  },
   async http_GET_legacy(deps: {}): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Conflict("widget is out of stock");
   },

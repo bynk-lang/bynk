@@ -653,6 +653,15 @@ instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
 
+**`?` on an `Option`** (#3966). `?` on an `Option[T]` has type `T` and returns early on `None`
+where the enclosing body returns an `Option[_]` or an `Effect[Option[_]]`: the `None` is the
+result, so `Option` never converts to `Result` or the reverse. Where the body returns an
+`HttpResult[_]` (or an `Effect` of one) the `None` answers `NotFound` instead (v0.153, ADR 0177).
+Anywhere else, a `Result`-returning body included, it is
+`bynk.types.question_option_outside_http`, with a quick fix that applies `.okOr(todo("…"))`, to be completed with the error. A lambda is
+its own return scope, as for `Result`, and `bynk.par.question_in_join` applies to an `Option`
+as to a `Result`.
+
 **`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
 rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
 route, [§5.7.5](/reference/spec/static-semantics/#response-json)). It is refused when the type
@@ -773,8 +782,15 @@ type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codabl
 are accepted there), and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
-where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
-`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+where the type is applied, at **every** application: a written type argument
+(`type Set2[T: Eq]` rejects `Set2[(Int) -> Int]` with the equality diagnostics
+below), a type parameter standing for the argument (`Set2[U]` MUST be in the scope
+of a `U` that carries the bound, else `bynk.generics.missing_{eq,ord,key,codable}_bound`
+with the same machine-applicable fix as a function's), and an instantiation the
+checker infers from a record or variant literal (`Set2 { items: [f] }` is checked
+as a written argument would be). The bounds a type needs are declared on it, never
+inferred from its fields, and a method of a bounded type holds its receiver type's
+bounds without repeating them. An `Eq` bound adds nothing to emission. An
 `Ord` bound adds one hidden trailing comparator parameter to the emitted
 function (the receiver type's parameters first, then the method's own, in
 declaration order), which the caller builds from the concrete type; it is
@@ -2771,7 +2787,10 @@ endings normalised to `\n`. A fixture is emitted into test output only.
 A commons declared `commons x.y for tests` (#3984) is a test-only commons: only a suite or another test-only commons MAY `uses` it (`bynk.uses.test_only_commons`), and a deployable build omits it.
 
 A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
-that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
+(`bynk.suite.fn_method`) that either does not return an `Effect` or declares `given`,
+naming capabilities of the suite's target (`bynk.suite.fn_effectful`; a `given` helper
+in a `system` suite is `bynk.test.helper_given_at_system`, and a `stub` value MUST NOT
+call one),
 MUST NOT repeat the name of another helper of its suite or of any value in scope in
 its cases (`bynk.suite.duplicate_fn`, `bynk.suite.fn_name_clash`), and is visible to
 the `case`s, `property` bodies and other helpers of the suite that declares it,

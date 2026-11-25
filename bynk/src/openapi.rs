@@ -44,8 +44,9 @@ use bynk_ide::wire_contract::{
 use bynk_ide::{AnalysisRoots, ContextBoundaryInfo, ProjectDiagnostics, SchemaLock};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
 use bynk_syntax::ast::{
-    BaseType, Handler, HttpVariantPayload, JsonOptions, PredBound, PredKind, ServiceDecl,
-    ServiceProtocol, TypeDecl, TypeRef, effective_json_options, http_variant,
+    BaseType, ErrorFormat, Handler, HttpVariantPayload, JsonOptions, PredBound, PredKind,
+    ServiceDecl, ServiceProtocol, TypeDecl, TypeRef, effective_error_format,
+    effective_json_options, http_variant,
 };
 use bynk_syntax::error::Severity;
 use serde_json::{Map, Value, json};
@@ -57,6 +58,8 @@ pub const OPENAPI_VERSION: &str = "3.1.0";
 
 /// The component the `400` boundary rejection is described once as.
 const BOUNDARY_ERROR: &str = "BynkBoundaryError";
+/// #3916: the RFC 9457 body a `format: problem` route answers its errors with.
+const PROBLEM_DETAILS: &str = "BynkProblemDetails";
 
 /// What names the document: the project's manifest identity.
 #[derive(Debug, Clone)]
@@ -371,6 +374,8 @@ pub fn document(
             model: &model.boundary,
             names: &names,
             plain: effective_json_options(sel.service.json.as_ref(), handler) == JsonOptions::Plain,
+            problem: effective_error_format(sel.service.errors.as_ref(), handler)
+                == ErrorFormat::Problem,
         };
         let op = operation(&r, &mut components, sel, handler, model, *method, path);
         // OpenAPI treats templated paths that differ only in parameter names
@@ -890,6 +895,13 @@ fn renamed_form_schema(r: &Renderer, components: &mut Components, ty: &TypeRef) 
     Some(Value::Object(schema))
 }
 
+/// The media type of a problem-details body (#3916).
+const PROBLEM_MEDIA: &str = "application/problem+json";
+
+fn problem_ref() -> Value {
+    json!({ "$ref": format!("#/components/schemas/{PROBLEM_DETAILS}") })
+}
+
 fn responses_of(
     r: &Renderer,
     components: &mut Components,
@@ -925,6 +937,16 @@ fn responses_of(
         };
         if let ResponseOrigin::BoundaryImplicit { why } = &resp.origin {
             describe(format!("{} — {why}", resp.variant));
+            if r.problem
+                && matches!(
+                    resp.variant.as_str(),
+                    "StructuralMismatch" | "PayloadTooLarge" | "UnsupportedMediaType"
+                )
+            {
+                components.problem_details();
+                body(PROBLEM_MEDIA, problem_ref(), e);
+                continue;
+            }
             match resp.variant.as_str() {
                 "StructuralMismatch" => {
                     components.boundary_error();
@@ -962,6 +984,10 @@ fn responses_of(
                     let shape = wire::wire_ref(t, r.types);
                     body("application/json", r.ref_schema(components, &shape), e);
                 }
+            }
+            HttpVariantPayload::Message if r.problem => {
+                components.problem_details();
+                body(PROBLEM_MEDIA, problem_ref(), e);
             }
             HttpVariantPayload::Message => body(
                 "application/json",
@@ -1044,6 +1070,40 @@ impl Components {
     /// Insert once: a second request for the same name is the same type.
     fn put(&mut self, name: String, make: impl FnOnce() -> Value) {
         self.schemas.entry(name).or_insert_with(make);
+    }
+
+    /// #3916: the RFC 9457 problem details a `format: problem` route answers an error
+    /// with (`runtime/http.ts`'s `problemResponse`).
+    fn problem_details(&mut self) {
+        self.put(PROBLEM_DETAILS.to_string(), || {
+            json!({
+                "description": "An error as RFC 9457 problem details. An error variant has \
+                                `type` `about:blank`; a router rejection has a \
+                                `https://bynk-lang.org/problems/<kind>` type and its own \
+                                members (`kind`, `path`, `expected`, `actual`, `violation`).",
+                "type": "object",
+                "required": ["type", "title", "status"],
+                "properties": {
+                    "type": { "type": "string" },
+                    "title": { "type": "string" },
+                    "status": { "type": "integer" },
+                    "detail": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "path": { "type": "string" },
+                    "expected": { "type": "string" },
+                    "actual": { "type": "string" },
+                    "violation": {
+                        "type": "object",
+                        "required": ["field", "message", "rule"],
+                        "properties": {
+                            "field": { "type": "string" },
+                            "message": { "type": "string" },
+                            "rule": { "type": "object" },
+                        },
+                    },
+                },
+            })
+        });
     }
 
     /// The `400` body the boundary answers a malformed or invalid request with
@@ -1257,6 +1317,8 @@ struct Renderer<'a> {
     names: &'a SchemaNames,
     /// #2858: the route renders its `Option`s as plain JSON (`U` or `null`).
     plain: bool,
+    /// #3916: the route answers its errors as RFC 9457 problem details.
+    problem: bool,
 }
 
 impl Renderer<'_> {

@@ -1,0 +1,1 @@
+bynk.types.question_outside_result the `?` operator can only be used inside a function returning `Result`

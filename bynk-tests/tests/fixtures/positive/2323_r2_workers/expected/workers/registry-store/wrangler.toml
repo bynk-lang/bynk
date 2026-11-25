@@ -21,3 +21,7 @@ class_name = "Projection"
 type = "durable-object"
 storage = "sqlite"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
