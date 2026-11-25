@@ -1,0 +1,16 @@
+suite shop.basket {
+	case "an answered call is Handled" {
+		let r <- place.call("a", 2)
+		expect r is Ok(2)
+	}
+
+	case "an invariant violation is Faulted" {
+		let r <- place.call("b", -5)
+		expect r is Err("faulted")
+	}
+
+	case "a fault in the handler is Faulted, through a let-bound instance" {
+		let r <- placeBound.call("c")
+		expect r is Err("faulted")
+	}
+}

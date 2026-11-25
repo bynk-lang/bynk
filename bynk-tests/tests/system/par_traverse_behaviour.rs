@@ -64,7 +64,7 @@ agent Room {
   store items: Map[String, Int]
 
   on call fan(x: Int) -> Effect[()] given Notes {
-    items.parTraverse((n: Int) => Notes.put(n))
+    items.parForEach((n: Int) => Notes.put(n))
   }
   on call fanAll(x: Int) -> Effect[List[Result[Int, String]]] given Notes {
     items.parTraverseAll((n: Int) => Notes.tryPut(n))
@@ -113,7 +113,7 @@ const subjects = [
   { name: "list parTraverse", method: "val", run: (deps) => lstVals.call([1, 2, 3], deps) },
   { name: "list parTraverseAll", method: "tryPut", run: (deps) => lstAll.call([1, 2, 3], deps) },
   { name: "list parTraverseTry", method: "tryPut", run: (deps) => lstTry.call([1, 2, 3], deps) },
-  { name: "query parTraverse", method: "put", run: (deps) => room().fan(0, deps) },
+  { name: "query parForEach", method: "put", run: (deps) => room().fan(0, deps) },
   { name: "query parTraverseAll", method: "tryPut", run: (deps) => room().fanAll(0, deps) },
   { name: "query parTraverseTry", method: "tryPut", run: (deps) => room().fanTry(0, deps) },
 ];

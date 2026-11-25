@@ -22,6 +22,7 @@ pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &[&str], &str)] = &[
     ("settle", &["expectation"], &[], include_str!("test_runtime/settle.ts")),
     ("snapshot", &[], &[], include_str!("test_runtime/snapshot.ts")),
     ("stub_overlay", &[], &[], include_str!("test_runtime/stub_overlay.ts")),
+    ("stub_wire", &[], &[], include_str!("test_runtime/stub_wire.ts")),
     ("test_filter", &[], &[], include_str!("test_runtime/test_filter.ts")),
     ("virtual_time", &[], &[], include_str!("test_runtime/virtual_time.ts")),
 ];
