@@ -179,7 +179,7 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
-  const listPage = (prefix: any, cursor: any, delimiter: any) => {
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
     const p = prefix.tag === "Some" ? prefix.value : "";
     const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
     const after = cursor.tag === "Some" ? cursor.value : undefined;
@@ -381,7 +381,7 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
-  const listPage = (prefix: any, cursor: any, delimiter: any) => {
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
     const p = prefix.tag === "Some" ? prefix.value : "";
     const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
     const after = cursor.tag === "Some" ? cursor.value : undefined;
@@ -583,7 +583,7 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
-  const listPage = (prefix: any, cursor: any, delimiter: any) => {
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
     const p = prefix.tag === "Some" ? prefix.value : "";
     const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
     const after = cursor.tag === "Some" ? cursor.value : undefined;
