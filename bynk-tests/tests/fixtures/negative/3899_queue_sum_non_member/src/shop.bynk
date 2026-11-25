@@ -5,8 +5,6 @@ type Order = { id: String }
 actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
 actor Partner { auth = Foreign(secret = "PARTNER_QUEUE_KEY") }
 
-// Two foreign senders in a sum: the handler would read which one signed, and no seam binds that on a
-// queue consumer yet.
 service fulfil from queue("orders") {
   delivery { deadLetter: None }
   on message(order: Order) -> Effect[QueueResult] by who: Legacy | Partner {

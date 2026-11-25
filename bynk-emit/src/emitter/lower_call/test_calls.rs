@@ -99,7 +99,7 @@ fn identity_deps(identity: bynk_ts::TsExpr, claims: Option<bynk_ts::TsExpr>) -> 
 }
 
 /// The key the addressed handler's principal is looked up under (a sum handler's `deps.who`).
-fn sum_handler_key(address: Option<&HandlerAddress>) -> Option<String> {
+fn sum_handler_key(address: Option<&HandlerAddress>, service: &str) -> Option<String> {
     match address {
         Some(HandlerAddress::Http {
             verb,
@@ -111,6 +111,10 @@ fn sum_handler_key(address: Option<&HandlerAddress>) -> Option<String> {
         Some(HandlerAddress::Call) => Some("call".to_string()),
         // #3051: a websocket `open` reads its principal as an `on call` or http handler does.
         Some(HandlerAddress::Ws(WsAddress::Open)) => Some("open".to_string()),
+        // #3899: a signed queue consumer's sum, under its handler's method key.
+        Some(HandlerAddress::Message { .. }) => {
+            Some(crate::emitter::queue_handler_method_name(service, 0))
+        }
         _ => None,
     }
 }
@@ -739,7 +743,7 @@ pub(in crate::emitter) fn lower_test_service_call(
     // before anything lowers.
     let helper = settle_helper(cx);
     let address = test_address(cx, e);
-    let sum_key = sum_handler_key(address.as_ref());
+    let sum_key = sum_handler_key(address.as_ref(), &svc.name);
     let DepsArg { value: deps, plain } = test_deps(cx, &svc.name, sum_key.as_deref());
     let settle = |built: bynk_ts::TsExpr| Some(settle_with(helper, built));
     // http address: the method is an HTTP verb and the first argument is the route pattern

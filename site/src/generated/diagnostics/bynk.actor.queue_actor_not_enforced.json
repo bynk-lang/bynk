@@ -1,10 +1,10 @@
 {
-  "blurb": "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor in a sum or with a binder, because nothing binds the resolved actor in a queue handler yet. Write `by Producer`, which says what is true (any producer on the account may send), or name one `Foreign` actor alone, with no binder.",
+  "blurb": "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor beside an unsigned one in a sum, or alone with a binder, because the message of an unsigned actor carries no signature to tell it from a signed one and a lone actor identifies no one for the body to read. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors, a lone one with no binder.",
   "category": "Actors",
   "categoryAnchor": "actors",
   "code": "bynk.actor.queue_actor_not_enforced",
   "constructs": [],
   "example": "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
   "severity": "error",
-  "summary": "A queue consumer names a `Producer` refinement, or a `Foreign` actor in a sum or with a binder, which nothing enforces yet."
+  "summary": "A queue consumer names a `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder, which nothing enforces yet."
 }

@@ -4,8 +4,8 @@ use super::respond::{case_, default_case, fault_detail, report_fault};
 use super::wire::deserialise_call;
 use crate::emitter::RuntimeUse;
 use crate::ts_build::{
-    as_expr, assign, await_expr, block, bool_lit, call, const_, expr_stmt, ident, if_, member,
-    method_call, not_expr, return_, str_lit, strict_eq, switch_stmt,
+    as_expr, assign, await_expr, block, bool_lit, call, const_, const_typed, expr_stmt, ident, if_,
+    member, method_call, not_expr, return_, str_lit, strict_eq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ServiceProtocol, TypeRef};
@@ -244,21 +244,30 @@ fn emit_queue_handler(
 /// `attempts` starts at 1 and `timestamp` is when the message was sent.
 fn handler_args(route: &QueueRoute) -> Vec<TsExpr> {
     let message = member(ident("__r"), "value");
-    let Some(at) = route.delivery_at else {
-        return vec![message];
+    // #3899: a signed sum's resolved actor comes first, as a `call` sum's does.
+    let who = route
+        .signed
+        .as_ref()
+        .is_some_and(|s| s.sum.is_some())
+        .then(|| ident("__who"));
+    let rest = match route.delivery_at {
+        None => vec![message],
+        Some(at) => {
+            let delivery = TsExpr::object(vec![
+                ("attempts".to_string(), member(ident("msg"), "attempts")),
+                (
+                    "sentAt".to_string(),
+                    method_call(member(ident("msg"), "timestamp"), "getTime", vec![]),
+                ),
+            ]);
+            if at == 0 {
+                vec![delivery, message]
+            } else {
+                vec![message, delivery]
+            }
+        }
     };
-    let delivery = TsExpr::object(vec![
-        ("attempts".to_string(), member(ident("msg"), "attempts")),
-        (
-            "sentAt".to_string(),
-            method_call(member(ident("msg"), "timestamp"), "getTime", vec![]),
-        ),
-    ]);
-    if at == 0 {
-        vec![delivery, message]
-    } else {
-        vec![message, delivery]
-    }
+    who.into_iter().chain(rest).collect()
 }
 
 /// One `on queue` consumer, identified by its service and per-service
@@ -285,6 +294,8 @@ pub(super) struct QueueRoute {
 pub(super) struct SignedRoute {
     pub(super) secrets: Vec<(String, String)>,
     pub(super) sources: Vec<String>,
+    /// For a sum (`by who: Legacy | Partner`), its members: the handler is passed which one signed.
+    pub(super) sum: Option<Vec<bynk_check::actors::CallSumMember>>,
 }
 
 /// `const __a = await __bynkQueueAdmit(msg.body, <queue>, [<sources>], env, { <actor>: <secret> });`
@@ -340,6 +351,9 @@ fn admission_stmts(route: &QueueRoute) -> Vec<TsStmt> {
         // Kept for the catch, which releases the claim if the handler throws.
         assign(ident("__s"), ident("__a")),
     ]
+    .into_iter()
+    .chain(signer_stmt(signed))
+    .collect()
 }
 
 /// `msg.ack();`, preceded for a signed consumer by keeping the message's id (`await __a.settle(true);`).
@@ -352,6 +366,25 @@ fn ack_stmt(route: &QueueRoute) -> TsStmt {
         settle_stmts(route, true).into_iter().chain([ack]).collect(),
         None,
     )
+}
+
+/// `const __who = { tag: __a.from };` for a sum: the message's signer, which the admission already
+/// verified is one of the members, as the actor the handler's `match` resolves.
+fn signer_stmt(signed: &SignedRoute) -> Option<TsStmt> {
+    let members = signed.sum.as_ref()?;
+    let tags = members
+        .iter()
+        .map(|m| format!("\"{}\"", m.actor_name()))
+        .collect::<Vec<_>>()
+        .join(" | ");
+    Some(const_typed(
+        "__who",
+        crate::emitter::emit::call_sum_ts_type(members),
+        TsExpr::object(vec![(
+            "tag".to_string(),
+            as_expr(member(ident("__a"), "from"), TsType::named(tags)),
+        )]),
+    ))
 }
 
 /// `let __s: { settle(handled: boolean): globalThis.Promise<void> } | undefined;` before a signed
@@ -476,6 +509,7 @@ pub(super) fn collect_queue_routes(
                 let signed =
                     bynk_check::actors::queue_admission_for(h, &service.protocol, &table.actors)
                         .map(|a| SignedRoute {
+                            sum: a.sum,
                             secrets: a.foreign.into_iter().map(|f| (f.actor, f.secret)).collect(),
                             sources: deliveries
                                 .iter()
