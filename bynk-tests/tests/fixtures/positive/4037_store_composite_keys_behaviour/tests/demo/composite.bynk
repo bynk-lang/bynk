@@ -1,0 +1,120 @@
+---
+#4037: store collections keyed by records, sums, `Option`, `Decimal` and `Bytes`.
+---
+suite demo.composite
+
+case "a record key round-trips and is found by an equal key" {
+	do Warehouse("w").put("eu", 7, 10)
+	do Warehouse("w").put("us", 7, 20)
+	let a <- Warehouse("w").get("eu", 7)
+	let b <- Warehouse("w").get("us", 7)
+	let c <- Warehouse("w").get("eu", 8)
+	expect a == Some(10)
+	expect b == Some(20)
+	expect c.isNone()
+	let n <- Warehouse("w").stockSize()
+	expect n == 2
+}
+
+case "putting an equal record key replaces the entry" {
+	do Warehouse("r").put("eu", 7, 10)
+	do Warehouse("r").put("eu", 7, 11)
+	let n <- Warehouse("r").stockSize()
+	let a <- Warehouse("r").get("eu", 7)
+	expect n == 1
+	expect a == Some(11)
+}
+
+case "upsert, contains and remove address the entry by value" {
+	do Warehouse("u").add("eu", 1, 5)
+	do Warehouse("u").add("eu", 1, 5)
+	let a <- Warehouse("u").get("eu", 1)
+	expect a == Some(15)
+	let yes <- Warehouse("u").has("eu", 1)
+	let no <- Warehouse("u").has("us", 1)
+	expect yes
+	expect !no
+	do Warehouse("u").drop("eu", 1)
+	let gone <- Warehouse("u").has("eu", 1)
+	expect !gone
+}
+
+case "the stored values are still queryable" {
+	do Warehouse("q").put("eu", 1, 3)
+	do Warehouse("q").put("us", 2, 4)
+	let t <- Warehouse("q").total()
+	expect t == 7
+}
+
+case "sum keys with one payload and two variants are two entries" {
+	do Warehouse("s").front(1, "a")
+	do Warehouse("s").back(1, "b")
+	let f <- Warehouse("s").frontAt(1)
+	let b <- Warehouse("s").backAt(1)
+	let n <- Warehouse("s").slotCount()
+	expect f == Some("a")
+	expect b == Some("b")
+	expect n == 2
+}
+
+case "a Set of records and a Set of Options" {
+	do Warehouse("t").block("eu", 1)
+	do Warehouse("t").block("eu", 1)
+	do Warehouse("t").block("us", 1)
+	let yes <- Warehouse("t").isBlocked("eu", 1)
+	let no <- Warehouse("t").isBlocked("eu", 2)
+	let n <- Warehouse("t").blockedCount()
+	expect yes
+	expect !no
+	expect n == 2
+	do Warehouse("t").tag(Some("x"))
+	do Warehouse("t").tag(None)
+	do Warehouse("t").tag(Some("x"))
+	let x <- Warehouse("t").tagged(Some("x"))
+	let none <- Warehouse("t").tagged(None)
+	let y <- Warehouse("t").tagged(Some("y"))
+	let c <- Warehouse("t").tagCount()
+	expect x
+	expect none
+	expect !y
+	expect c == 2
+}
+
+case "a Decimal key is its value: 1.20 and 1.2 are one entry" {
+	do Warehouse("d").price(1.20d, "a")
+	do Warehouse("d").price(1.2d, "b")
+	do Warehouse("d").price(3.0d, "c")
+	let a <- Warehouse("d").priceOf(1.200d)
+	let n <- Warehouse("d").priceCount()
+	expect a == Some("b")
+	expect n == 2
+}
+
+case "a Bytes key is found by equal bytes" {
+	do Warehouse("b").file("abc", 1)
+	do Warehouse("b").file("abd", 2)
+	let a <- Warehouse("b").fileOf("abc")
+	let c <- Warehouse("b").fileOf("zzz")
+	expect a == Some(1)
+	expect c.isNone()
+}
+
+case "a Cache keyed by a record" {
+	do Warehouse("c").remember("eu", 1, 9)
+	let a <- Warehouse("c").recall("eu", 1)
+	let b <- Warehouse("c").recall("eu", 2)
+	expect a == Some(9)
+	expect b.isNone()
+}
+
+case "an @indexed field of record type routes an equality filter" {
+	do Warehouse("i").order("o1", "eu", 1, 3)
+	do Warehouse("i").order("o2", "eu", 1, 4)
+	do Warehouse("i").order("o3", "us", 1, 5)
+	let eu <- Warehouse("i").ordersAt("eu", 1)
+	let us <- Warehouse("i").ordersAt("us", 1)
+	let none <- Warehouse("i").ordersAt("eu", 9)
+	expect eu == 2
+	expect us == 1
+	expect none == 0
+}

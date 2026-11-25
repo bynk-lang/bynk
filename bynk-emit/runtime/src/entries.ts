@@ -1,5 +1,6 @@
 import type { DurableObjectListOptions, DurableObjectStorage, DurableObjectTransaction } from "./storage.ts";
 import { STORAGE_BATCH_LIMIT, utf8Compare } from "./storage.ts";
+import { __bynkKeyEncode } from "./keys.ts";
 import { entriesOf, noteOrder } from "./store.ts";
 
 // Per-entry agent storage: the runtime half (#3189, track #3195,
@@ -113,6 +114,24 @@ export function expiredRange(field: string, now: number): DurableObjectListOptio
 
 /** Per-collection metadata: the entry count for `size()` and a `Log`'s counter. */
 export const metaKey = (field: string): string => `c/${encodeKeyPart(field)}`;
+
+/** The longest a Durable Object storage key may be, in bytes. */
+export const MAX_STORAGE_KEY_BYTES = 2048;
+
+/**
+ * The entry key of a store collection's non-scalar key (#4037): its canonical encoding, the one
+ * a value `Map` indexes by, so two keys are one entry exactly when they are `==`. The encoding
+ * counts towards the platform's key size, and the longest key it appears in is a `Cache`'s expiry
+ * entry, so a key over the limit faults here, naming the field and never the key's value.
+ */
+export function storeKey(field: string, key: unknown): string {
+  const enc = __bynkKeyEncode(key);
+  if (new TextEncoder().encode(expiryKey(field, 0, enc)).length > MAX_STORAGE_KEY_BYTES) {
+    throw new Error(`store \`${field}\`: a key's encoding is over the ${MAX_STORAGE_KEY_BYTES}-byte storage-key limit`);
+  }
+  return enc;
+}
+
 
 /**
  * The committed entry count of a collection field, for `old.<field>.size()` in a

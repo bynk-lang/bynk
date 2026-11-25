@@ -4020,16 +4020,21 @@ fn validate_indexed_keys(
                     ),
                 ));
             }
-            Some(field) if !type_ref_is_keyable(&field.type_ref, types) => {
+            Some(field)
+                if !type_ref_is_keyable(&field.type_ref, types)
+                    && let Some(blocker) =
+                        crate::checker::keying::typeref_not_key(&field.type_ref, &[], types) =>
+            {
                 errors.push(
                     CompileError::new(
                         "bynk.index.unkeyable_key",
                         arg.value.span,
                         format!(
-                            "`@indexed(by: {0})` — field `{0}` is not value-keyable; an index key must be `Int`, `String`, or a refined/opaque type over them",
-                            key.name
+                            "`@indexed(by: {0})` — field `{0}` is not `Key`, and `{1}` is not",
+                            key.name, blocker.part
                         ),
-                    ),
+                    )
+                    .with_note(crate::checker::keying::key_note(&blocker)),
                 );
             }
             Some(_) => {}
@@ -4037,13 +4042,12 @@ fn validate_indexed_keys(
     }
 }
 
-/// #1680 (runtime-semantics track S13): a store `Set`'s element and a store
-/// `Map`'s or `Cache`'s key must be value-keyable, the rule value `Map` keys,
-/// `distinct`/`groupBy` keys and `@indexed` fields already follow. A store
-/// collection is a plain object keyed by its key's string form
-/// (`rec[item] = true`), so a record key failed `tsc` (TS2538), and without
-/// `tsc` every record would have keyed as `"[object Object]"`. A name that
-/// doesn't resolve is reported by the resolver, so it is skipped here.
+/// A store `Set`'s element and a store `Map`'s or `Cache`'s key must be `Key`, the rule value `Map`
+/// keys already follow (#4037). A `String`, an `Int` or a refined or opaque type over one keeps
+/// the stored form it always had (`String(k)`); any other `Key` type (a record, a sum, an
+/// `Option`, a `Decimal`, `Bytes`, `Bool`, an `Instant`) is stored under its canonical encoding
+/// (`__bynkKeyEncode`). A name that doesn't resolve is reported by the resolver, so it is skipped
+/// here.
 fn check_store_keyable(
     t: &TypeRef,
     what: &str,
@@ -4055,25 +4059,25 @@ fn check_store_keyable(
     {
         return;
     }
-    if !type_ref_is_keyable(t, types) {
+    if type_ref_is_keyable(t, types) {
+        return;
+    }
+    if let Some(blocker) = crate::checker::keying::typeref_not_key(t, &[], types) {
         errors.push(
             CompileError::new(
                 "bynk.store.unkeyable_key",
                 t.span(),
-                format!(
-                    "{what} must be value-keyable — `String`, `Int`, or a refined/opaque type over them"
-                ),
+                format!("{what} must be `Key`, and `{}` is not", blocker.part),
             )
-            .with_note(
-                "only `String` and `Int` keys (or a refined or opaque type over them) are supported, matching value `Map` keys and `@indexed` fields; key a record by one of its id fields, and an enum by its name as a `String`",
-            ),
+            .with_note(crate::checker::keying::key_note(&blocker)),
         );
     }
 }
 
-/// Whether a `TypeRef` is value-keyable (the Map-key / index-key rule, ADR 0110
-/// D5): `Int`/`String`, including a refined/opaque named type over them.
-fn type_ref_is_keyable(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+/// Whether a `TypeRef` is a *scalar* store key (ADR 0110 D5): `Int`/`String`, including a
+/// refined/opaque named type over them. Such a key persists as `String(k)`, as it always has;
+/// every other `Key` type persists under its canonical encoding (#4037).
+pub fn type_ref_is_keyable(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match t {
         TypeRef::Base(BaseType::Int | BaseType::String, _) => true,
         TypeRef::Named(id) => matches!(

@@ -302,6 +302,13 @@ pub(crate) struct AgentStoreState {
     /// that drops one close it (#3261, #3224). Decided on the model type, not on the text of
     /// the rendered value type.
     pub(super) connection_maps: HashSet<String>,
+    /// #4037: the `Map`, `Set` and `Cache` fields whose key is not a scalar (`String`, `Int` or a
+    /// refined or opaque type over one): their entries are keyed by `__bynkStoreKey`, the canonical
+    /// encoding, not `String(k)`.
+    pub(super) composite_keys: HashSet<String>,
+    /// #4037: the `@indexed(by:)` fields (as `(map, field)`) whose type is not a scalar key, so a
+    /// posting is keyed by the canonical encoding as well.
+    pub(super) composite_indexes: HashSet<(String, String)>,
     /// Review of #1460: a `store Log[T]` field's own element type `T` (name →
     /// its rendered TS type), for the identical reason `map_values` exists —
     /// a Log's value scan is also lifted into the general query vocabulary.

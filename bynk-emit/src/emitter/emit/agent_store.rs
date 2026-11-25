@@ -477,6 +477,54 @@ pub(super) fn store_field_key_type<'a>(a: &'a AgentDecl, field: &str) -> Option<
         .map(|f| &f.kind.args[0])
 }
 
+/// #4037: the `Map`, `Set` and `Cache` fields of `a` whose key is not a scalar (`String`, `Int` or
+/// a refined or opaque type over one), and the `@indexed(by:)` fields (as `(map, field)`) of the same
+/// kind. Their entries and postings are keyed by the canonical encoding, not `String(k)`.
+pub(super) fn composite_store_keys(
+    a: &AgentDecl,
+    types: &HashMap<String, Arc<TypeDecl>>,
+) -> (HashSet<String>, HashSet<(String, String)>) {
+    let scalar = |t: &TypeRef| bynk_check::context_checks::type_ref_is_keyable(t, types);
+    let mut keys = HashSet::new();
+    let mut indexes = HashSet::new();
+    for f in &a.store_fields {
+        let head = f.kind.head.name.as_str();
+        let Some(key) = f
+            .kind
+            .args
+            .first()
+            .filter(|_| matches!(head, "Map" | "Set" | "Cache"))
+        else {
+            continue;
+        };
+        if !scalar(key) {
+            keys.insert(f.name.name.clone());
+        }
+        let record = match f.kind.args.get(1) {
+            Some(TypeRef::Named(v)) if head == "Map" => match types.get(&v.name).map(|d| &d.body) {
+                Some(TypeBody::Record(r)) => Some(r),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(record) = record else { continue };
+        for arg in f
+            .annotations
+            .iter()
+            .filter(|an| an.name.name == "indexed")
+            .flat_map(|an| &an.args)
+        {
+            if let ExprKind::Ident(by) = &arg.value.kind
+                && let Some(rf) = record.fields.iter().find(|rf| rf.name.name == by.name)
+                && !scalar(&rf.type_ref)
+            {
+                indexes.insert((f.name.name.clone(), by.name.clone()));
+            }
+        }
+    }
+    (keys, indexes)
+}
+
 /// True when a type's base is `String` — directly, or through a named refined /
 /// opaque alias. A textual key persists as its own string in a storage `Record`,
 /// so the rehydration gate can validate it; a non-textual key persists as a
@@ -740,6 +788,10 @@ pub(crate) struct AgentStoreLayout<'a> {
     pub(crate) store_log_fields: Vec<(&'a Ident, &'a TypeRef, Option<i64>)>,
     pub(crate) log_retains: HashMap<String, Option<i64>>,
     pub(crate) log_value_ts: HashMap<String, bynk_ts::TsType>,
+    /// #4037: the fields whose key is not a scalar, and the `(map, field)` indexes over a non-scalar
+    /// field (see [`composite_store_keys`]).
+    pub(crate) composite_keys: HashSet<String>,
+    pub(crate) composite_indexes: HashSet<(String, String)>,
 }
 
 /// Classify an agent's `store` fields (see [`AgentStoreLayout`]).
@@ -1023,6 +1075,7 @@ pub(super) fn classify_agent_store<'a>(
             (n.name.clone(), ts)
         })
         .collect();
+    let (composite_keys, composite_indexes) = composite_store_keys(a, &commons.types);
     AgentStoreLayout {
         state,
         all_held_maps,
@@ -1043,5 +1096,7 @@ pub(super) fn classify_agent_store<'a>(
         store_log_fields,
         log_retains,
         log_value_ts,
+        composite_keys,
+        composite_indexes,
     }
 }
