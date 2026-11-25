@@ -626,15 +626,7 @@ pub(super) fn run_checks(
         &mut errors,
     );
     // #1822, #3328, #2306: the project-wide topology checks.
-    project_model::phase_topology(
-        target,
-        &parsed,
-        &groups,
-        &kinds,
-        &unit_tables,
-        (&unit_uses, &unit_consumes),
-        &mut errors,
-    );
+    project_model::phase_topology(target, &parsed, &groups, &kinds, &unit_tables, &mut errors);
     // #2959: on Workers, the `on open` transfer key must be one the edge can
     // evaluate before the body runs.
     project_model::phase_workers_ws_open_key(
