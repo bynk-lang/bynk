@@ -154,6 +154,7 @@ const ORDER: &[&str] = &[
     "__issueSessionCookie",
     "__expireSessionCookie",
     "__sessionKeysOf",
+    "__currentSession",
     "__cookieValue",
     "__signSessionCookie",
     "__newSessionKey",

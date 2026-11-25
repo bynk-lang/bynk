@@ -108,6 +108,7 @@ With no envelope, the case supplies one as an emission would mint it:
 | `publisherId` | the context that publishes `E` to the target: the target itself, or the one context it consumes that declares `E` |
 | `emittedAt` | the test clock's reading, `Instant.fromEpochMillis(0)`; the clock is not called |
 | `schemaVersion` | the event's current version, the one an emission embeds |
+| `trace` | `None`: a test emission happens outside any trace |
 
 The payload must be the event the service subscribes to. Another event is
 `bynk.test.event_not_subscribed`, and any other wrong payload or envelope is

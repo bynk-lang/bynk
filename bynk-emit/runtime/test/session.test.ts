@@ -381,7 +381,7 @@ test("a key that is not a string, or empty, is a fault that names the key", asyn
 });
 
 // -- issue and expire ----------------------------------------------------------------------------
-import { expireSessionCookie, issueSessionCookie, sessionKeysOf } from "../src/session.ts";
+import { currentSession, expireSessionCookie, issueSessionCookie, sessionKeysOf } from "../src/session.ts";
 import { serialiseCookie } from "../src/http.ts";
 
 test("an issued cookie carries the scheme's safe attributes and verifies", async () => {
@@ -435,4 +435,58 @@ test("requestHeaders hides the session cookie from the Cookie header and keeps t
 test("requestHeaders drops the Cookie header when the session cookie was the only one", () => {
   const request = new Request("https://x/", { headers: { cookie: "__Host-session=abc.def.ghi" } });
   assert.deepEqual(requestHeaders(request, "__Host-session").get("cookie"), { tag: "None" });
+});
+
+// -- #3938: `sessions = true` ----------------------------------------------------------------------
+
+test("a cookie issued without a session carries no `sid`, so a stateless actor's cookies are unchanged", async () => {
+  const c = await issueSessionCookie(KEYS, "User", "__Host-session", "Lax", "ada", TTL, NOW);
+  const r = await verifySignedCookie(c.value, KEYS, "User", TTL, NOW);
+  assert.deepEqual(r, { tag: "Ok", value: { sub: "ada" } });
+});
+
+test("`register` runs before the cookie is signed and the signed `sid` is the one it was given", async () => {
+  const seen: { sid: string; exp: number; now: number }[] = [];
+  const c = await issueSessionCookie(KEYS, "User", "__Host-session", "Lax", "ada", TTL, NOW, async (sid, exp, now) => {
+    seen.push({ sid, exp, now });
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]!.exp, (NOW_S + TTL) * 1000);
+  assert.equal(seen[0]!.now, NOW);
+  const r = await verifySignedCookie(c.value, KEYS, "User", TTL, NOW);
+  assert.deepEqual(r, { tag: "Ok", value: { sub: "ada", sid: seen[0]!.sid } });
+});
+
+test("a session id is fresh for each issue", async () => {
+  const sids = new Set<string>();
+  for (let i = 0; i < 20; i++) {
+    await issueSessionCookie(KEYS, "User", "__Host-session", "Lax", "ada", TTL, NOW, async (sid) => {
+      sids.add(sid);
+    });
+  }
+  assert.equal(sids.size, 20);
+});
+
+test("a failing `register` issues no cookie", async () => {
+  await assert.rejects(
+    issueSessionCookie(KEYS, "User", "__Host-session", "Lax", "ada", TTL, NOW, async () => {
+      throw new Error("agent unavailable");
+    }),
+    /agent unavailable/,
+  );
+});
+
+test("a cookie whose `sid` is not a non-empty string is refused", async () => {
+  for (const sid of ["", 7, null, {}]) {
+    const header = { alg: "HS256", typ: "bynk+session", kid: await kidOf(KEY) };
+    const value = await forge(KEY, header, { sub: "ada", aud: "User", iat: NOW_S, exp: NOW_S + TTL, sid });
+    const r = await verifySignedCookie(value, KEYS, "User", TTL, NOW);
+    assert.equal(r.tag, "Err");
+  }
+});
+
+test("the current session is read from deps, and is null in a handler the actor does not guard", () => {
+  assert.deepEqual(currentSession({ __sessionOf: { sid: "s", sub: "ada" } }), { sid: "s", sub: "ada" });
+  assert.equal(currentSession({}), null);
+  assert.equal(currentSession(undefined), null);
 });

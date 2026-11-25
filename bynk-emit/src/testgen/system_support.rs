@@ -458,7 +458,7 @@ pub(super) fn emit_system_http_support(
             // the credential per call, rather than the primary member's.
             let route_key = (sname.clone(), method.as_str().to_string(), path.clone());
             let sum = sum_auth_for(
-                h,
+                (h, &ns),
                 &table.actors,
                 &mut secrets,
                 &secret_read_of,
@@ -473,7 +473,7 @@ pub(super) fn emit_system_http_support(
             // #3386: a `SignedCookie` route's drivers send a session cookie, and by default the
             // `Sec-Fetch-Site: same-origin` a browser's own page would (a case's headers win).
             let (session, typed_cookie, raw_cookie, csrf_default) = session_route(
-                h,
+                (&ns, h),
                 &table.actors,
                 &secret_read_of,
                 &mut session_secrets,
@@ -1683,6 +1683,9 @@ pub(super) struct SessionDriver {
     pub(super) cookie: String,
     /// How long an issued cookie is valid, in seconds.
     pub(super) ttl_secs: i64,
+    /// #3938: for a `sessions = true` actor, how the acting principal's session is recorded in
+    /// its session agent, as `issue` records one, so the seam finds it live.
+    pub(super) sessions: Option<super::session_driver::SessionAgentRef>,
 }
 
 impl SessionDriver {
@@ -1690,6 +1693,9 @@ impl SessionDriver {
     /// (an expression, in seconds) after the epoch.
     pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
         use crate::ts_build::{await_expr, binary, call, num_lit, paren, str_lit};
+        if let Some(agent) = &self.sessions {
+            return agent.pair(keys, sub, issued_secs);
+        }
         let signed = await_expr(call(
             ident("__signSessionCookie"),
             vec![
@@ -1711,7 +1717,7 @@ impl SessionDriver {
 /// header texts its typed and raw drivers send (the session cookie joined to any `cookies`
 /// param's), and the default `Sec-Fetch-Site` header.
 fn session_route(
-    h: &bynk_syntax::ast::Handler,
+    (ns, h): (&str, &bynk_syntax::ast::Handler),
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secret_read_of: &dyn Fn(&str) -> TsExpr,
     session_secrets: &mut std::collections::BTreeSet<String>,
@@ -1728,9 +1734,10 @@ fn session_route(
     session_secrets.insert(seam.secret.clone());
     let session = SessionDriver {
         keys: TsExpr::object(vec![("secret".to_string(), secret_read_of(&seam.secret))]),
-        actor: seam.actor,
-        cookie: seam.cookie,
+        actor: seam.actor.clone(),
+        cookie: seam.cookie.clone(),
         ttl_secs: seam.ttl_secs,
+        sessions: super::session_driver::SessionAgentRef::of(&seam, ns),
     };
     let pair = session.pair(&session.keys, ident("__sub"), now_secs());
     (
@@ -1931,6 +1938,7 @@ mod tests {
             actor: "User".to_string(),
             cookie: "__Host-session".to_string(),
             ttl_secs: 43200,
+            sessions: None,
         }
     }
 

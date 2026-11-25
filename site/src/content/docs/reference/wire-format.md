@@ -55,6 +55,7 @@ POST /_bynk/call/<service>
 | `X-Bynk-Timestamp` | yes | When the caller signed the request, in whole seconds since the Unix epoch. |
 | `X-Bynk-Signature` | yes | HMAC-SHA256 of the signing input under the edge's key, 64 lowercase hex digits. See *Authentication* below. |
 | `X-Bynk-Wire` | no | The wire version the caller speaks, exactly the decimal digits of an accepted version (`1`, not `01` or `+1`). Absent means `1`. |
+| `traceparent` | no | The trace the call belongs to, as a [W3C `traceparent`](https://www.w3.org/TR/trace-context/): `00-<trace id>-<span id>-01`, the trace id 32 and the span id 16 lowercase hex digits, neither all zero. A Bynk caller sends it from inside a trace and never otherwise. The callee reads it only once the signature has held, and ignores one that is missing or malformed; it is not part of the signing input, and a call is never refused for it. |
 | `content-type` | no | Bynk callers send `application/json`. The callee does not check it. |
 
 **Body.** JSON, encoding the handler's parameters:
@@ -284,6 +285,45 @@ service legacy {
 | `Result[Shape, String]` | `{"kind":"Ok","value":{"kind":"Dot"}}` | accepted; encodes back the same |  |
 | `Result[Shape, String]` | `{"kind":"Err","error":"sold out"}` | accepted; encodes back the same | A domain error is a `200` carrying `Err`. |
 | `Result[(), String]` | `{"kind":"Ok","value":null}` | accepted; encodes back the same | `()` is `null`. |
+
+## Signed queue messages
+
+> **Not yet in effect.** This format is published ahead of its use (#3899). Until the consumer and producer slices land, a `Producer` refinement or a `Foreign` actor on a queue consumer is refused by the compiler, no Bynk producer signs, and no consumer checks. Do not build against the behaviour described below yet.
+
+A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Producer` refinement or a `Foreign` actor, see [Queue](/reference/queue/)) will receive bodies in this form, and a producer that is not Bynk can follow it to be admitted.
+
+```json
+{
+  "bynk": { "v": 1, "from": "shop.orders", "id": "m-8f2c", "ts": 1700000000, "sig": "9c1e…" },
+  "body": { "id": "o-1", "total": 42 }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `v` | The format's version. This page describes `1`; a message with another version is refused. |
+| `from` | The sender: a Bynk context's qualified name, or a `Foreign` actor's name. The consumer looks up the keys it admits for it, and refuses a sender it does not know. |
+| `id` | A unique message id, minted by the producer. The consumer claims it once, so a replay is recognised (below). |
+| `ts` | When the producer signed it, as an integer number of seconds since the epoch, written in decimal. Anything else is refused as malformed. It is covered by the signature and is not a validity window, because a queued message can wait for days. |
+| `sig` | The lower-case hex HMAC-SHA256 of the signing input, keyed by the secret shared between the producer and the consumer. |
+| `body` | The message itself, exactly as an unsigned producer would send it. |
+
+The signing input is these lines joined by a line feed, with no trailing line feed:
+
+```text
+bynk-queue-v1
+<from>
+<id>
+<ts>
+<source queue name>
+<canonical body>
+```
+
+The **source queue name** is the queue the producer sent to, not the queue the message was delivered from. Naming it stops a message being moved from one queue to another, and it lets a dead-letter consumer verify a message the platform moved. The **canonical body** is the body in the JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785): object keys sorted by UTF-16 code unit at every depth, no whitespace, strings escaped as ECMAScript's `JSON.stringify` does, numbers written as ECMAScript does, and arrays in their given order. A producer that is not written in JavaScript should use a JCS library rather than its language's default JSON writer, which differs for non-ASCII text, for numbers such as `1.0` and `1e2`, and for keys outside the Basic Multilingual Plane. `from` and `id` must not contain a line feed.
+
+A consumer refuses, and never handles, a message that is unsigned, malformed, of another version, from a sender it does not admit, or whose signature does not verify under any key it admits for that sender. It acknowledges the message and reports it, without retrying or dead-lettering it, so injected messages never reach a dead-letter consumer. During a key rotation a consumer admits the previous key as well as the current one for a window, so messages queued before the rotation still verify. A consumer also claims each verified `id` in its `Idempotency` store for at least the queue's retention plus the longest a send can be delayed (15 days), and acknowledges a second message with the same `id` without handling it, so putting a signed message back on the queue does not run it twice.
+
+This provides **authenticity** of the sender and **integrity** of the body. It does not provide confidentiality, because anyone with access to the account can read a queued body through the dashboard or by pulling, and it does not provide availability, because an account member can still flood or drain a queue. Keep secrets out of message bodies.
 
 ## Contract hash
 
