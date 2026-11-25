@@ -72,6 +72,9 @@ Two relationships wire a program together:
   reaches shared types and functions. A declaration marked `private` stays
   behind: it is visible only within its own unit (see
   [Design a library's public surface](/book/guides/program-structure/design-a-public-surface/)).
+  `uses lib.y { Status as YStatus, describe }` brings in only the names you list, any
+  renamed, and `uses lib.y as Y` reaches them qualified (`Y.Status`), so two commons that
+  declare one name can both be used: the name is ambiguous only where it is written bare.
 - **`consumes`** declares a dependency on *another context's services*. The
   consumer calls them by qualified name (optionally through an `as` alias). This
   is the only way one context calls into another, so the dependency graph between

@@ -59,9 +59,17 @@ scope-first call resolution would change the meaning of existing programs, so
 the pre-existing ident/call precedence asymmetry is preserved deliberately.
 
 A `commons` is imported with `uses`, which MUST name an existing `commons`, not a
-context, and MUST NOT be self-referential or introduce a colliding name
-(`bynk.uses.unknown_commons`, `bynk.uses.target_is_context`,
-`bynk.uses.self_reference`, `bynk.uses.name_conflict`). The visibility of types
+context, and MUST NOT be self-referential (`bynk.uses.unknown_commons`,
+`bynk.uses.target_is_context`, `bynk.uses.self_reference`). Its three forms bring in the
+public names of the commons: all of them (`uses lib.y`), those listed, each optionally
+renamed (`uses lib.y { Status as YStatus, describe }`; a name that is not public is
+`bynk.uses.unknown_name`), or none bare but all qualified by an alias (`uses lib.y as Y`,
+then `Y.Status`). A commons' full name (`lib.y.Status`) qualifies as well, and a one-segment
+commons name is not a qualifier. A declaration MUST be read by one spelling in a unit
+(`bynk.uses.second_spelling`), since a type's identity is its name. Two used commons that
+declare one name do not collide at the `uses`: the name MUST NOT be written bare
+(`bynk.uses.ambiguous_name`, which lists the qualified spellings), and a declaration of the
+unit's own wins over a used name. The visibility of types
 across context boundaries is governed by `exports` and `consumes`
 ([§5.8](#58-boundaries--cross-context)).
 
