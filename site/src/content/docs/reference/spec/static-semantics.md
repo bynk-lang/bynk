@@ -1379,6 +1379,14 @@ refusals (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `N
 `embeds` propagate a failed call. A value of `CallOutcome` or `CallFailure` MUST NOT be
 constructed in a context (`bynk.call.outcome_construction`); matching one is unaffected.
 
+The same form calls an agent operation (`Agent(key).op.outcome(args)`, or `b.op.outcome(args)` for
+a `b` bound to an instance; #3933): the arguments are checked as for `Agent(key).op(args)`, the call has
+type `Effect[CallOutcome[R]]` for the handler's `R`, and it is legal wherever the plain call is. A
+call to the handler's own instance (`self`) stays a plain call. At run time `AgentBusy` is
+`Unreachable(None)`, a fault in the handler (an invariant or rehydration violation included) is
+`Faulted`, and `Rejected` never occurs; `ReentrantAgentCall` and a failure to encode the call or decode its answer
+remain faults.
+
 A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
 method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
 `Effect[Result[T, TimedOut]]`, where `TimedOut { after: Duration }` is `bynk`'s (a

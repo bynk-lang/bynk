@@ -1,0 +1,23 @@
+context demo
+
+consumes bynk { CallOutcome }
+
+// #3933: `self.op.outcome()` inside the agent is not an outcome call: it stays a plain call.
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call add(by: Int) -> Effect[Int] {
+    n
+  }
+  on call twice() -> Effect[Int] {
+    let o <- self.add.outcome(1)
+    n
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] by Caller {
+    Counter("a").add(1)
+  }
+}
