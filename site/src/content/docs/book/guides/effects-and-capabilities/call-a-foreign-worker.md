@@ -125,3 +125,30 @@ After authenticating, `deploy` asks the account whether `legacy-billing`
 exists and warns if it does not. Cloudflare rejects an upload whose Service
 Binding names a missing Worker, so deploy that Worker first. Under `--env`, the
 Worker's name is used as declared, not suffixed with the environment.
+
+## A staging Worker per environment
+
+Because the name is used as declared, a staging deploy whose `@worker` is the
+same literal as production's calls **production's** Worker. Give the name its
+own value per environment with an
+[`env(…)` constant](/reference/constants/#values-that-differ-per-environment):
+
+```bynk,fragment
+const BillingWorker: String = env(BILLING_WORKER, "legacy-billing")
+
+capability Billing = Service @worker(BillingWorker)
+```
+
+```toml
+# bynk.toml
+[env.staging.vars]
+BILLING_WORKER = "legacy-billing-staging"
+```
+
+When you deploy a named environment, the plan lists a `Service @worker`, and an
+`Email @to` or `@allowedRecipients`, that resolves to the same value as `default`
+as `shared with default: SERVICE_BILLING → "legacy-billing"`, so you see it
+before anything is pushed. It is an advisory, because sharing a read-only partner
+Worker can be what you want; setting the variable under `[env.staging.vars]`,
+even to the same value, records it as deliberate and the line goes.
+`--strict-environments` turns the lines into a refusal.

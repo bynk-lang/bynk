@@ -1,0 +1,10 @@
+context api
+
+// A type of the same name in the context is not the `bynk` record, so it is not a streamable event.
+type SseEvent = { data: String }
+
+service api from http {
+    on GET("/x") () -> Effect[HttpResult[()]] by v: Visitor {
+        Streaming(Stream.of([SseEvent { data: "a" }]))
+    }
+}

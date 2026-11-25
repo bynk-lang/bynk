@@ -76,6 +76,7 @@ mod session_driver;
 pub(crate) mod show_shape;
 mod string_generators;
 mod stub_agent;
+mod stub_clause;
 mod stub_wire;
 mod stubs;
 mod system_jobs;

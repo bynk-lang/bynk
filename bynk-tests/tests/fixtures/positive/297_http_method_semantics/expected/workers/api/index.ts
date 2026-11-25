@@ -37,9 +37,25 @@ export default {
       }
 
       {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/bad-event", path) !== null) {
+          __route = "GET /bad-event";
+          const result = await surface.http_GET_bad_event();
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         if ((method === "GET" || method === "HEAD") && __matchPath("/chunks", path) !== null) {
           __route = "GET /chunks";
           const result = await surface.http_GET_chunks();
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/events", path) !== null) {
+          __route = "GET /events";
+          const result = await surface.http_GET_events();
           const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
@@ -114,7 +130,17 @@ export default {
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
+      if (__matchPath("/bad-event", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_routes);
+      }
       if (__matchPath("/chunks", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_routes);
+      }
+      if (__matchPath("/events", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);

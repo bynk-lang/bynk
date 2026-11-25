@@ -722,8 +722,18 @@
         ]
       },
       "name": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "qualifier": {
+        "multiple": false,
+        "required": false,
         "types": [
           {
             "type": "identifier",
@@ -9819,6 +9829,10 @@
           {
             "type": "identifier",
             "named": true
+          },
+          {
+            "type": "qualified_type_ref",
+            "named": true
           }
         ]
       }
@@ -10270,6 +10284,10 @@
         "types": [
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           }
         ]
