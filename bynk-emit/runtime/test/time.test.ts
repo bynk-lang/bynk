@@ -228,7 +228,15 @@ test("a Duration's string form shows its units, largest first, leaving zero part
   assert.equal(text(-5_000), "-5s");
   assert.equal(text(-1), "-1ms");
   assert.equal(text(86_400_000 * 400), "400d");
-  assert.equal(text(Number.MAX_SAFE_INTEGER), "104249991d8h59m991ms");
+  // The largest exact span, split by BigInt, which cannot lose a digit to floating point.
+  let rest = BigInt(Number.MAX_SAFE_INTEGER);
+  let expected = "";
+  for (const [unit, ms] of [["d", 86_400_000n], ["h", 3_600_000n], ["m", 60_000n], ["s", 1_000n], ["ms", 1n]] as const) {
+    const n = rest / ms;
+    rest -= n * ms;
+    expected += n === 0n ? "" : `${n}${unit}`;
+  }
+  assert.equal(text(Number.MAX_SAFE_INTEGER), expected);
   assert.throws(() => text(0.5), /not a whole number of milliseconds/);
   assert.throws(() => text(Number.NaN), /not a whole number of milliseconds/);
 });
@@ -243,6 +251,8 @@ test("a Duration's ISO 8601 form has days as its largest unit and the fraction o
   assert.equal(iso(1_250), "PT1.25S");
   assert.equal(iso(1_005), "PT1.005S");
   assert.equal(iso(-5_000), "-PT5S");
+  assert.equal(iso(-250), "-PT0.25S");
+  assert.equal(iso(-90_061_001), "-P1DT1H1M1.001S");
   assert.equal(iso(60_000), "PT1M");
   assert.equal(iso(3_600_000), "PT1H");
   assert.equal(iso(90_061_001), "P1DT1H1M1.001S");
