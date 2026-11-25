@@ -12,11 +12,12 @@ export * from "./runtime.js";
 const __route_api_postOrders: __Route = {
   method: "POST",
   path: "/orders",
-  contract: "649eed088c75a251",
+  contract: "a0cd3f51d4395a9c",
   replies: {
     201: [{ kind: "Created", body: "value", decode: (json) => __then(__deserialise_Order(json, "$"), (v) => __toPublic_Order(v)) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
     409: [{ kind: "Conflict", body: "message" }],
+    413: [{ kind: "PayloadTooLarge", body: "boundary" }],
     500: [{ kind: "ServerError", body: "message" }],
   },
 };
@@ -70,9 +71,9 @@ const __route_api_deleteOrderById: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "f80dfb7b6e5882df",
+    service: "761dcb2dd0ff7e23",
     routes: {
-      postOrders: "649eed088c75a251",
+      postOrders: "a0cd3f51d4395a9c",
       getOrders: "8ba5cacf5f1a167c",
       getOrderById: "963bc9758fe525f1",
       getSearch: "2d4544f1493d4088",

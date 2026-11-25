@@ -29,6 +29,9 @@ service api from http {
 }
 ```
 
+A form body is capped at 1 MiB unless the route's `@limit(maxBody: …)` or the service's
+`limits { maxBody: … }` says otherwise; a public form can lower it. A larger post is a `413`.
+
 - A repeated key (`tags=a&tags=b`) fills a `List` field.
 - An unchecked checkbox sends nothing, so give a `Bool` a default
   (`remember: Bool = false`); a checked one sends `on`, which reads as `true`.
