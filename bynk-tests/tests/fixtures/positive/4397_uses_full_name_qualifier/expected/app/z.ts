@@ -69,3 +69,19 @@ export function embed(r: Result<number, __use_lib_x.IoError>): Result<number, __
   const n = __r0.value;
   return Ok(n);
 }
+
+export function p(): __use_lib_x.Point {
+  return { x: 1, y: 2 };
+}
+
+export function sp(b: __use_lib_x.Point): __use_lib_x.Point {
+  return { ...b, x: 2 };
+}
+
+export function bx(b: __use_lib_x.Box<number>): number {
+  return b.value;
+}
+
+export function mk(): __use_lib_x.Box<number> {
+  return { value: 1 };
+}

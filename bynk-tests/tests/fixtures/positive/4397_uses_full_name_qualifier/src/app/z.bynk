@@ -40,3 +40,11 @@ fn embed(r: Result[Int, lib.x.IoError]) -> Result[Int, lib.x.AppError] {
   let n = r?
   Ok(n)
 }
+
+fn p() -> lib.x.Point { lib.x.Point { x: 1, y: 2 } }
+
+fn sp(b: lib.x.Point) -> lib.x.Point { lib.x.Point { ...b, x: 2 } }
+
+fn bx(b: lib.x.Box[Int]) -> Int { b.value }
+
+fn mk() -> lib.x.Box[Int] { lib.x.Box { value: 1 } }
