@@ -118,6 +118,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3877_queue_no_dead_letter` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.queue.untyped_send",
+        "a warning; `positive/3644_queue_one_consumer_many_producers` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),
@@ -128,6 +132,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     (
         "bynk.mysql.sql_invalid",
         "a warning (the parser is not MySQL's own); `positive/3322_mysql_sql_invalid` holds it with `expected_warnings.txt`",
+    ),
+    (
+        "bynk.match.refined_pattern_is_range",
+        "a warning; `positive/3972_refined_pattern_is_range` holds it with `expected_warnings.txt`, and `positive/3972_range_pattern_is_exhaustive` holds the good case",
     ),
 ];
 
