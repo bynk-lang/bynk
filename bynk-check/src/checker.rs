@@ -883,6 +883,10 @@ pub enum Callee {
         /// written or inferred from the argument, once the owner check has accepted it. The one
         /// place the emitter and the architecture model read the emitted event from.
         event: Option<String>,
+        /// #4382: for a generic operation, the type arguments the call resolved to, in the
+        /// operation's declaration order (written, then inferred, #4116). Empty otherwise. A
+        /// test build keys a `stub` and an observation on the leading ones.
+        type_args: Vec<TyId>,
     },
     /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     /// a derived `D1` instance. Not a declared operation: the compiler writes

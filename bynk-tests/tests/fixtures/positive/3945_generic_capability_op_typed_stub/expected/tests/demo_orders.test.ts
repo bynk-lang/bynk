@@ -26,16 +26,16 @@ class __Stub_Idempotency {
   }
 
   async dedup(key: unknown, __tk?: { __bynkTypeKey?: string } | undefined): Promise<unknown> {
-    if (this.__case === "a stub and a call spell the type differently" && __tk && __tk.__bynkTypeKey === "[Slot]") {
+    if (this.__case === "a stub and a call spell the type differently" && __tk && (__tk.__bynkTypeKey === "[Slot]" || globalThis.String(__tk.__bynkTypeKey).startsWith("[Slot, "))) {
       return Some({ id: 9 });
     }
-    if (this.__suite === 0 && __tk && __tk.__bynkTypeKey === "[Int]") {
+    if (this.__suite === 0 && __tk && (__tk.__bynkTypeKey === "[Int]" || globalThis.String(__tk.__bynkTypeKey).startsWith("[Int, "))) {
       return Some(7);
     }
-    if (this.__suite === 0 && __tk && __tk.__bynkTypeKey === "[String]") {
+    if (this.__suite === 0 && __tk && (__tk.__bynkTypeKey === "[String]" || globalThis.String(__tk.__bynkTypeKey).startsWith("[String, "))) {
       return None;
     }
-    if (this.__suite === 1 && __tk && __tk.__bynkTypeKey === "[Int]") {
+    if (this.__suite === 1 && __tk && (__tk.__bynkTypeKey === "[Int]" || globalThis.String(__tk.__bynkTypeKey).startsWith("[Int, "))) {
       return Some(7);
     }
     throw new globalThis.Error("bynk: no stub clause matched for Idempotency.dedup");
@@ -79,8 +79,8 @@ async function test_observations_count_calls_per_type_argument() {
     type Slot = __ns_demo_slots.Slot;
     const slots = (deps as any).surface?.slots;
     const result = await reserve.call(deps);
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Int]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:14:12", 397, 431, "expect Idempotency.dedup[Int] called once"); }
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[String]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:15:12", 443, 480, "expect Idempotency.dedup[String] called once"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Int]" || globalThis.String((__c as { typeKey?: string }).typeKey).startsWith("[Int, "))).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:14:12", 397, 431, "expect Idempotency.dedup[Int] called once"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[String]" || globalThis.String((__c as { typeKey?: string }).typeKey).startsWith("[String, "))).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:15:12", 443, 480, "expect Idempotency.dedup[String] called once"); }
     if (!(((__obs.log["Idempotency.dedup"] ?? []).length === (2)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:16:12", 492, 524, "expect Idempotency.dedup called 2 times"); }
     return { pass: true };
   } catch (e) {
@@ -102,7 +102,7 @@ async function test_a_type_argument_that_was_not_called_is_never_called() {
     type Slot = __ns_demo_slots.Slot;
     const slots = (deps as any).surface?.slots;
     const result = await reserve.call(deps);
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Bool]")).length === 0))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:21:12", 637, 673, "expect Idempotency.dedup[Bool] never called"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Bool]" || globalThis.String((__c as { typeKey?: string }).typeKey).startsWith("[Bool, "))).length === 0))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:21:12", 637, 673, "expect Idempotency.dedup[Bool] never called"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -124,7 +124,7 @@ async function test_a_stub_and_a_call_spell_the_type_differently() {
     const slots = (deps as any).surface?.slots;
     const result = await slot.call(deps);
     if (!(result === 9)) { throw __bynkExpectFailure("src/tests/orders.test.bynk:27:12", 841, 852, "expect result == 9\n  expected: result == 9\n  actual:   " + __bynkShow((result)) + " == " + __bynkShow((9))); }
-    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Slot]")).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:28:12", 864, 899, "expect Idempotency.dedup[Slot] called once"); }
+    if (!((((__obs.log["Idempotency.dedup"] ?? []).filter((__c) => (__c as { typeKey?: string }).typeKey === "[Slot]" || globalThis.String((__c as { typeKey?: string }).typeKey).startsWith("[Slot, "))).length === (1)))) { throw __bynkExpectFailure("src/tests/orders.test.bynk:28:12", 864, 899, "expect Idempotency.dedup[Slot] called once"); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {

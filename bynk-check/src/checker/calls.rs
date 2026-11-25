@@ -1840,6 +1840,7 @@ pub(crate) fn check_static_call(
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
                 event: None,
+                type_args: Vec::new(),
             },
         );
         let mut err = CompileError::new(
@@ -1909,6 +1910,7 @@ pub(crate) fn check_static_call(
                 wire: None,
                 first_party: local_first_party(&type_name.name, ctx),
                 event: None,
+                type_args: Vec::new(),
             },
         );
         if !ctx.effectful {
@@ -7222,6 +7224,12 @@ fn record_capability_wire(
             wire: Some(wire),
             first_party: local_first_party(cap, ctx),
             event: None,
+            // #4382: written and inferred alike, in declaration order.
+            type_args: op
+                .type_params
+                .iter()
+                .filter_map(|tp| subst.get(tp).copied())
+                .collect(),
         },
     );
     true

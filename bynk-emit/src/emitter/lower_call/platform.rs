@@ -85,11 +85,35 @@ fn capability_call_type_args_node(
 /// or an observation that names the type arguments (`Cap.op[T]`) tells the calls apart by it. The
 /// real binding ignores a trailing argument, and the spread of an empty tuple keeps `tsc` quiet.
 /// `None` outside a test build, and for a call with no type arguments.
-fn type_key_arg(type_args: &[TypeRef], cx: &LowerCtx) -> Option<TsExpr> {
-    if !cx.typed_capability_calls() || type_args.is_empty() {
+fn type_key_arg(e: &Expr, type_args: &[TypeRef], cx: &LowerCtx) -> Option<TsExpr> {
+    if !cx.typed_capability_calls() {
         return None;
     }
-    Some(type_key_expr(&type_key_of(type_args, cx)))
+    let resolved: Vec<bynk_check::checker::TyId> = match cx.commons().callee(e.id) {
+        Some(Callee::Capability { type_args, .. }) => type_args.clone(),
+        _ => Vec::new(),
+    };
+    if type_args.is_empty() && resolved.is_empty() {
+        return None;
+    }
+    // #4382: the call's resolved list, written arguments first as a `stub` spells them and the
+    // inferred rest after, so a clause naming the leading ones matches a call that inferred them.
+    let mut shown: Vec<String> = type_args
+        .iter()
+        .map(|t| strip_key_brackets(&type_key_of(std::slice::from_ref(t), cx)))
+        .collect();
+    let types = cx.ty_render().types();
+    shown.extend(resolved.iter().skip(shown.len()).map(|t| types.display(*t)));
+    Some(type_key_expr(
+        &["[", shown.join(", ").as_str(), "]"].concat(),
+    ))
+}
+
+fn strip_key_brackets(key: &str) -> String {
+    key.strip_prefix('[')
+        .and_then(|k| k.strip_suffix(']'))
+        .unwrap_or(key)
+        .to_string()
 }
 
 /// The key of `type_args` as a call site spells them: a consumed type this module renames
@@ -755,7 +779,7 @@ pub(in crate::emitter) fn lower_capability_call(
         let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
         let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-        args_lowered.extend(type_key_arg(type_args, cx));
+        args_lowered.extend(type_key_arg(e, type_args, cx));
         let call = capability_op_call(
             ident("deps"),
             &recv.name,
@@ -822,7 +846,7 @@ pub(in crate::emitter) fn lower_capability_call(
         }
         let wire = capability_wire(e, cx);
         let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-        args_lowered.extend(type_key_arg(type_args, cx));
+        args_lowered.extend(type_key_arg(e, type_args, cx));
         let call = capability_op_call(
             cx.cap_deps_node(),
             &recv.name,
@@ -874,7 +898,7 @@ pub(in crate::emitter) fn lower_cross_capability_call(
     }
     let wire = capability_wire(e, cx);
     let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
-    args_lowered.extend(type_key_arg(type_args, cx));
+    args_lowered.extend(type_key_arg(e, type_args, cx));
     let call = capability_op_call(
         cx.cap_deps_node(),
         &cap,

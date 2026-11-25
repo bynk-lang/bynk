@@ -291,6 +291,23 @@ pub(crate) fn switch_stmt(discriminant: TsExpr, cases: Vec<TsSwitchCase>) -> TsS
     TsStmt::switch_stmt(discriminant, cases, None)
 }
 
+/// #4382: `actual` (a call's recorded type key, `"[Quote, Channel]"`) answers the type arguments
+/// a `stub` or an observation names (`key`, `"[Quote]"`): the same list, or one that starts with
+/// it. `dedup[A]` and `dedup[B]` stay apart; `dedup[Quote]` meets a call that inferred its key.
+pub(crate) fn type_key_matches(actual: TsExpr, key: &str) -> TsExpr {
+    let prefix = [key.strip_suffix(']').unwrap_or(key), ", "].concat();
+    or_expr(
+        strict_eq(actual.clone(), str_lit(key)),
+        call(
+            member(
+                call(member(ident("globalThis"), "String"), vec![actual]),
+                "startsWith",
+            ),
+            vec![str_lit(&prefix)],
+        ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     //! Each builder against the literal variant it replaces. `TsExpr` carries no span and every
