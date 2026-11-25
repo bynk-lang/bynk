@@ -37,6 +37,32 @@ export default {
       }
 
       {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/jar", path) !== null) {
+          __route = "GET /jar";
+          const __h = __headersObject(request, [{ name: "cookie", kind: "string", list: false, option: true }], [], "__Host-session");
+          if (!__h.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__h.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const __r_headers = handlers.__deserialise_Jar(__h.value, "headers");
+          if (__r_headers.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_headers.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const headers = __r_headers.value;
+          const result = await surface.http_GET_jar(request, headers);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk-Cookie realm=\"api\""])), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/many", path) !== null) {
+          __route = "GET /many";
+          const __h = __headersObject(request, [{ name: "credentials", wire: "Authorization", kind: "string", list: true, option: false }], ["authorization"]);
+          if (!__h.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__h.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const __r_headers = handlers.__deserialise_Many(__h.value, "headers");
+          if (__r_headers.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_headers.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const headers = __r_headers.value;
+          const result = await surface.http_GET_many(request, headers);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\""])), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         if ((method === "GET" || method === "HEAD") && __matchPath("/me", path) !== null) {
           __route = "GET /me";
           const __h = __headersObject(request, [{ name: "authorization", kind: "string", list: false, option: true }], ["authorization"]);
@@ -48,6 +74,16 @@ export default {
           const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
+      }
+      if (__matchPath("/jar", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (__matchPath("/many", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_api);
       }
       if (__matchPath("/me", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;

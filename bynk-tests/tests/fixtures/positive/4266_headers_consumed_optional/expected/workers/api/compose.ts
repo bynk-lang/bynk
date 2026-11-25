@@ -2,14 +2,16 @@
 // composition root for `api` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __sessionCookieOf } from "../../__bynk_runtime/http.js";
 import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifySignedCookie } from "../../__bynk_runtime/session.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
 }
 
 export function compose(env: Env) {
-  const deps = {};
+  const deps = { __session: { Member: { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined } } };
   return {
     async http_GET_me(request: globalThis.Request, headers: handlers.Auth) {
       const __authz = request.headers.get("Authorization");
@@ -21,6 +23,26 @@ export function compose(env: Env) {
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
       return handlers.api.http_GET_me(headers, { ...deps, identity: __id.value });
+    },
+    async http_GET_many(request: globalThis.Request, headers: handlers.Many) {
+      const __authz = request.headers.get("Authorization");
+      if (__authz === null || !__authz.startsWith("Bearer ")) return HttpResult.Unauthorized;
+      const __secret = (env as unknown as globalThis.Record<string, unknown>)["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["AUTH_JWT_SECRET"];
+      if (typeof __secret !== "string") return HttpResult.Unauthorized;
+      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
+      if (__claims.tag === "Err") return HttpResult.Unauthorized;
+      const __id = handlers.UserId.of(__claims.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      return handlers.api.http_GET_many(headers, { ...deps, identity: __id.value });
+    },
+    async http_GET_jar(request: globalThis.Request, headers: handlers.Jar) {
+      const __cookie = __sessionCookieOf(request, "__Host-session");
+      if (__cookie === null) return HttpResult.Unauthorized;
+      const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "Member", 43200);
+      if (__session.tag === "Err") return HttpResult.Unauthorized;
+      const __id = handlers.UserId.of(__session.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      return handlers.api.http_GET_jar(headers, { ...deps, identity: __id.value });
     },
   };
 }

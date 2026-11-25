@@ -5489,6 +5489,18 @@ fn validate_json_policy(
     }
 }
 
+/// #4266: what to do instead of reading a header the route's actor consumes, for the note on the
+/// diagnostic: the credential itself is never the handler's to read, only the identity it proves.
+fn consumed_header_note(wire: &str, session_cookie: bool) -> &'static str {
+    if wire == "cookie" && session_cookie {
+        "read the other cookies through a typed `cookies` record, which the session cookie is also removed from; the signed-in identity is the actor's"
+    } else if wire == "authorization" {
+        "the router verifies the credential and hands the handler the actor's identity instead; use that, or drop the field"
+    } else {
+        "the router verifies this header and the handler never sees it; drop the field"
+    }
+}
+
 /// #4266: a typed `headers` field that reads a header the route's actor seam consumes. The router
 /// hides that header from the record (`authorization` on a `Bearer`, `Oidc` or `Signature` route,
 /// the session cookie out of `cookie` on a `SignedCookie` one), so the field always sees it
@@ -5549,7 +5561,7 @@ fn validate_consumed_headers(
                     ),
                     (false, false) => (
                         "bynk.http.headers_field_consumed",
-                        "so this field is absent, and the request answered `400`, unless it carries another cookie",
+                        "so this field is absent, and the request is answered `400`, unless it carries another cookie",
                     ),
                 };
                 errors.push(
@@ -5561,9 +5573,7 @@ fn validate_consumed_headers(
                             f.name.name
                         ),
                     )
-                    .with_note(
-                        "the value is available through the actor's principal; read it there, or drop the field",
-                    ),
+                    .with_note(consumed_header_note(&wire, session.is_some())),
                 );
             }
         }

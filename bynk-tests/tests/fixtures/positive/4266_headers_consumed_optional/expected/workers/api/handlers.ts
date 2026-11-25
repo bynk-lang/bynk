@@ -25,9 +25,29 @@ export interface Auth {
 export const Auth = {
 };
 
+export interface Many {
+  readonly credentials: readonly string[];
+}
+
+export const Many = {
+};
+
+export interface Jar {
+  readonly cookie: Option<string>;
+}
+
+export const Jar = {
+};
+
 export const api = {
   async http_GET_me(headers: Auth, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok("me");
+  },
+  async http_GET_many(headers: Many, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok("many");
+  },
+  async http_GET_jar(headers: Jar, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+    return HttpResult.Ok("jar");
   },
 };
 
@@ -46,6 +66,40 @@ export function __deserialise_Auth(json: __JsonValue, path: string = "$"): Resul
   if (__r_authorization.tag === "Err") return __r_authorization;
   const __authorization = __r_authorization.value;
   return Ok({ authorization: __authorization } as Auth);
+}
+
+export function __serialise_Jar(value: Jar): __JsonValue {
+  return {
+    cookie: __serialise_Option_String(value.cookie),
+  };
+}
+
+export function __deserialise_Jar(json: __JsonValue, path: string = "$"): Result<Jar, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_cookie = __deserialise_Option_String(obj["cookie"], `${path}.cookie`);
+  if (__r_cookie.tag === "Err") return __r_cookie;
+  const __cookie = __r_cookie.value;
+  return Ok({ cookie: __cookie } as Jar);
+}
+
+export function __serialise_Many(value: Many): __JsonValue {
+  return {
+    credentials: __serialise_List_String(value.credentials),
+  };
+}
+
+export function __deserialise_Many(json: __JsonValue, path: string = "$"): Result<Many, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __r_credentials = __deserialise_List_String(obj["credentials"], `${path}.credentials`);
+  if (__r_credentials.tag === "Err") return __r_credentials;
+  const __credentials = __r_credentials.value;
+  return Ok({ credentials: __credentials } as Many);
 }
 
 
@@ -88,4 +142,24 @@ export function __deserialise_Option_String(json: __JsonValue, path: string = "$
     return Err({ ...__b.error, expected: __b.error.expected + " | null | {\"kind\": \"None\"} | {\"kind\": \"Some\", \"value\": ...}" });
   }
   return __b;
+}
+
+export function __serialise_List_String(value: readonly string[]): __JsonValue {
+  return value.map((v) => v as __JsonValue);
+}
+
+export function __deserialise_List_String(json: __JsonValue, path: string = "$"): Result<readonly string[], __BoundaryError> {
+  if (!globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "array", actual: typeof json });
+  }
+  const out: string[] = [];
+  for (let i = 0; i < json.length; i++) {
+    const item = json[i];
+    if (typeof item !== "string") {
+      return Err({ kind: "StructuralMismatch", path: `${path}[${i}]`, expected: "string", actual: typeof item });
+    }
+    const __el = item;
+    out.push(__el as string);
+  }
+  return Ok(out);
 }

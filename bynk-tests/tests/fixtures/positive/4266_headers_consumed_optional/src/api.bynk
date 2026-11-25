@@ -3,11 +3,25 @@ context api
 type UserId = String where NonEmpty
 
 actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+actor Member {
+  auth = SignedCookie(cookie = "__Host-session", secret = "SESSION_KEY", ttl = 12.hours, sameSite = Lax),
+  identity = UserId
+}
 
 type Auth = { authorization: Option[String] }
+type Many = { @name("Authorization") credentials: List[String] }
+type Jar = { cookie: Option[String] }
 
 service api from http {
     on GET("/me") (headers: Auth) -> Effect[HttpResult[String]] by u: User {
         Ok("me")
+    }
+
+    on GET("/many") (headers: Many) -> Effect[HttpResult[String]] by u: User {
+        Ok("many")
+    }
+
+    on GET("/jar") (headers: Jar) -> Effect[HttpResult[String]] by m: Member {
+        Ok("jar")
     }
 }
