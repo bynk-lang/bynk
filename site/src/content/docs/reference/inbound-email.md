@@ -147,8 +147,12 @@ service support from email("support@shop.example") {
 }
 ```
 
-In a suite there is no Email Routing, so a handler reads the envelope sender with
-`DmarcNone`.
+In a suite there is no Email Routing, so a handler reads the verdict from the case's own
+`InboundEmail.headers`, by the Worker's rule: an `authentication-results: mx.cloudflare.net;
+dmarc=pass` header reads `DmarcPass` at `unit`, `integration` and `system` alike, and a case with
+no such header reads `DmarcNone`. A handler bound to a `Sender` refinement refuses a case's mail
+the same way the Worker does, answering `Reject("sender not authenticated")` without running its
+body.
 
 ## Faults
 
