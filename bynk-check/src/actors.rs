@@ -173,13 +173,11 @@ pub fn prelude_actor(name: &str) -> Option<Contract> {
 /// The default actor a handler inherits when it omits `by`, by protocol (ADR
 /// Q5). HTTP and WebSocket have no safe default — `by` is required there — and
 /// neither has `call` (#3891, superseding ADR 0082's `Caller` default) nor `queue`
-/// (#3899: who may send to a consumer is an access decision).
+/// (#3899: who may send to a consumer is an access decision) nor email (#3888:
+/// whether to act on mail that failed DMARC is a written decision).
 pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
     match protocol {
         ServiceProtocol::Cron => Some("Scheduler"),
-        // #3328 (DECISION E): inbound mail's default actor is the envelope
-        // sender, carrying its address and the platform's DMARC verdict.
-        ServiceProtocol::Email { .. } => Some("Sender"),
         // Events track, slice 0 (spine #936): delivery is runtime-triggered,
         // not an external caller — like `Queue`'s "Producer", the default
         // actor names the event's originating publisher.
@@ -189,7 +187,8 @@ pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
         ServiceProtocol::Call
         | ServiceProtocol::Http
         | ServiceProtocol::Queue { .. }
-        | ServiceProtocol::WebSocket { .. } => None,
+        | ServiceProtocol::WebSocket { .. }
+        | ServiceProtocol::Email { .. } => None,
     }
 }
 
@@ -908,6 +907,45 @@ pub fn sum_members_for(
         });
     }
     Some(members)
+}
+
+/// #3994, #4266: the credential headers a route's seam consumes, each with the actor that consumes
+/// it, in a stable order and each header once: `authorization` for a `Bearer` or `Oidc` actor, the
+/// signature header for a `Signature` one. An actor sum hides what any member reads, because the
+/// entry builds the request's header view before the sum's wrapper resolves which member matched.
+pub fn consumed_credential_headers(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut hide = |name: &str, actor: &str| {
+        let name = name.to_ascii_lowercase();
+        if !out.iter().any(|(h, _)| *h == name) {
+            out.push((name, actor.to_string()));
+        }
+    };
+    if let Some(members) = sum_members_for(handler, actors) {
+        for m in &members {
+            match &m.seam {
+                SumMemberSeam::Bearer { .. } => hide("authorization", &m.actor_name),
+                SumMemberSeam::Signature(s) => hide(&s.header, &m.actor_name),
+                SumMemberSeam::None => {}
+            }
+        }
+        return out;
+    }
+    let primary = handler
+        .by_clause
+        .as_ref()
+        .map(|by| by.primary().name.clone())
+        .unwrap_or_default();
+    if bearer_seam_for(handler, actors).is_some() || oidc_seam_for(handler, actors).is_some() {
+        hide("authorization", &primary);
+    }
+    if let Some(s) = signature_seam_for(handler, actors) {
+        hide(&s.header, &primary);
+    }
+    out
 }
 
 /// Whether `scheme` is admissible on `protocol` (the admissible-scheme-per-

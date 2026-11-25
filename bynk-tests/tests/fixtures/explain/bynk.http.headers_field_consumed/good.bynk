@@ -1,0 +1,13 @@
+context api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+type Auth = { accept: String }
+
+service api from http {
+    on GET("/me") (headers: Auth) -> Effect[HttpResult[String]] by u: User {
+        Ok("me")
+    }
+}

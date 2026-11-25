@@ -4,7 +4,7 @@
   "categoryAnchor": "other",
   "code": "bynk.email.duplicate_handler",
   "constructs": [],
-  "example": "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+  "example": "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
   "severity": "error",
   "summary": "A `from email` service declares more than one `on message` handler; it has exactly one."
 }

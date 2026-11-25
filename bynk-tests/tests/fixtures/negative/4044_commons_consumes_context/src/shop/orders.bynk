@@ -1,0 +1,5 @@
+context shop.orders
+
+exports transparent { Order }
+
+type Order = { id: String }

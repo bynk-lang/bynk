@@ -19,13 +19,13 @@ service support from email("Support@Shop.Example") {
 }
 
 service billing from email("billing@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Forward("finance@shop.example")
   }
 }
 
 service everything from email("*@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Reject("no such mailbox")
   }
 }

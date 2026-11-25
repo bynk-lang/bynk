@@ -12,7 +12,7 @@ service support from email("support@shop.example") {
 }
 
 service everything from email("*@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     if mail.to == "sales@shop.example" {
       Accept
     } else {

@@ -212,8 +212,13 @@ on PUT("/archives/:name") (name: ArchiveName, headers: UploadHeaders, body: Stre
   route's actor has run, like every other input. Use an [actor](/reference/actors/) for
   authentication. A credential header the route's seam consumed (`Authorization` on a `Bearer`
   route, the signature header, a `SignedCookie` route's session cookie within a `cookie` field) reads
-  as absent here too. A required field that reads such a header is a `400` on every request; take the
-  identity from the actor instead.
+  as absent here too, so the compiler refuses a required field that reads one
+  (`bynk.http.headers_field_consumed`: the message names the field, the header and the actor that consumes it) rather than let the route
+  answer `400` on every request; take the identity from the actor's principal instead. An `Option`
+  or `List` field is allowed, because it is merely always empty, but it draws
+  `bynk.http.headers_field_consumed_optional`. For a `SignedCookie` route only the session cookie is
+  removed from `cookie`, so a `cookie` field is flagged as absent unless the request carries another
+  cookie too; read cookies through a [`cookies`](#cookies) record instead.
 - **Headers the platform adds.** A proxy or Cloudflare may add or rewrite headers
   (`CF-Connecting-IP`, `CF-Ray`, …); for platform facts, prefer [`cf: RequestCf`](#request-cf).
 - **A list item cannot hold a comma or a double quote.** The router splits at commas outside
