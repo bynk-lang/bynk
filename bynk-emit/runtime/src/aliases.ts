@@ -13,7 +13,7 @@ import { WorkersConnection, acceptHibernatableConnection, connIdOf, newWebSocket
 import { pgExecute, type PgExecute, type PgOutcome, type PgParam, type PgStatementParam, type PgTxOutcome } from "./postgres.ts";
 import { mysqlExecute, type MySqlEndpoint, type MySqlOutcome, type MySqlParam, type MySqlStatementParam, type MySqlTxOutcome, type MySqlExecute } from "./mysql.ts";
 import { makeIntegrationPgliteBinding, makeIntegrationPostgres } from "./testing/pglite.ts";
-import { handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
+import { dmarcVerdictOf, handleEmail, type InboundMessage, type SenderIdentity } from "./email.ts";
 import { checkUnique, commitStored, committedSize, eraseStored, markErased, newErasure, noteClock, readStored, readsLazily, storeKey, then } from "./entries.ts";
 import { attachLazy } from "./lazy.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "./scan.ts";
@@ -47,6 +47,7 @@ export {
   wirePostings as __wirePostings,
   wireSet as __wireSet,
   WorkersConnection as __WorkersConnection,
+  dmarcVerdictOf as __dmarcVerdictOf,
   handleEmail as __handleEmail,
   mysqlExecute as __mysqlExecute,
   makeIntegrationPgliteBinding as __makeIntegrationPgliteBinding,
