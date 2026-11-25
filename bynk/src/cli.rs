@@ -382,9 +382,12 @@ pub enum Command {
     },
     /// Type-check a file or project.
     ///
-    /// Writes no output.
+    /// Writes no compiled output.
     ///
-    /// Runs the compiler pipeline in-process.
+    /// Runs the compiler pipeline in-process. A project with dependencies is
+    /// resolved first, so the first check creates `bynk.lock` (and says so on
+    /// stderr) and a later one writes it again only when the dependency
+    /// graph changed; pass `--locked` to fail instead of writing it.
     Check {
         /// Input `.bynk` file or project root. Defaults to the current directory.
         #[arg(default_value = ".")]
