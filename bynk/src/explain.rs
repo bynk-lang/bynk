@@ -147,13 +147,13 @@ mod tests {
     #[test]
     fn a_retired_code_says_when_why_and_what_replaced_it() {
         let r = Retired {
-            code: "bynk.http.multipart_body_unbounded",
+            code: "bynk.test.example",
             last_release: "1.2.3",
             why: "The default body cap makes it unreachable.",
             replacement: Some("the default body cap (#3921)"),
         };
         let out = render_retired(&r);
-        assert!(out.contains("bynk.http.multipart_body_unbounded"), "{out}");
+        assert!(out.contains("bynk.test.example"), "{out}");
         assert!(out.contains("retired after v1.2.3"), "{out}");
         assert!(
             out.contains("default body cap makes it unreachable"),

@@ -6807,7 +6807,12 @@ pub struct Retired {
 
 /// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
 /// code from [`REGISTRY`].
-pub const RETIRED: &[Retired] = &[];
+pub const RETIRED: &[Retired] = &[Retired {
+    code: "bynk.http.multipart_body_unbounded",
+    last_release: "0.661.1",
+    why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+    replacement: Some("the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`"),
+}];
 
 /// The tombstone for a retired `code`, or `None` when it was never retired.
 pub fn retired(code: &str) -> Option<&'static Retired> {
