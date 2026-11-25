@@ -172,6 +172,11 @@ pub struct TestArgs {
     /// `BYNK_NO_INSTALL=1`.
     #[arg(long)]
     pub no_install: bool,
+    /// The environment whose `[env.<name>.vars]` values `env(…)` constants take
+    /// (#3941): its own table, then `[vars]`, then each constant's default.
+    /// Omit it for `default`. A suite's `env { … }` is run-time and unaffected.
+    #[arg(long, default_value = "default", value_name = "NAME")]
+    pub env: String,
     /// Record snapshots instead of comparing against them: write a snapshot that
     /// is not stored yet, refresh one whose value changed, and delete the
     /// obsolete ones (those no `expect … matches snapshot` names any more).
@@ -279,6 +284,7 @@ impl TestArgs {
             print: false,
             smoke_unsafe: false,
             no_install: false,
+            env: bynk_project::vars::DEFAULT_ENVIRONMENT.to_string(),
             update_snapshots: false,
             declared_statuses: None,
             dev_command: None,
@@ -372,6 +378,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         print,
         smoke_unsafe,
         no_install,
+        env,
         update_snapshots,
         declared_statuses,
         dev_command,
@@ -406,6 +413,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
     // #3069: `--mutate` re-runs the suites against mutants of `src/`; the runs
     // it needs are each a plain in-process run, made below by this function.
+    // #3941: `--mutate` and `--against dev` build for `default` only, so a
+    // named environment is refused rather than silently ignored.
+    let non_default_env = env != bynk_project::vars::DEFAULT_ENVIRONMENT;
     if mutate {
         let with = [
             (inspect, "--inspect"),
@@ -416,6 +426,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             (update_snapshots, "--update-snapshots"),
             (!case.is_empty(), "--case"),
             (stream, "--format ndjson"),
+            (non_default_env, "--env"),
         ]
         .into_iter()
         .find_map(|(set, flag)| set.then_some(flag));
@@ -494,6 +505,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if inspect || coverage {
                 return refused(
                     "`--against` cannot be combined with `--inspect` or `--coverage`, which observe the in-process run".to_string(),
+                );
+            }
+            if non_default_env {
+                return refused(
+                    "`--against` cannot be combined with `--env`: the target runs its own build, so `--env` would be ignored".to_string(),
                 );
             }
             match crate::remote::resolve(
@@ -595,7 +611,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         // #2078: reconcile events against the committed `bynk.schema.lock`,
         // read-only — a non-additive change fails `test` as it fails a
         // build, and `out.schema_lock` is never written back.
-        let o = match test_build_options(&input) {
+        let o = match test_build_options(&input, &env) {
             Ok(o) => match with_overlays(o, &input, mutant_overlay, overlay) {
                 Ok(o) => o,
                 Err(e) => return fail_run(program, json, stream, e),
@@ -1209,7 +1225,10 @@ fn report_no_tests(
 /// The options a `bynk test` build starts from, before overlays: the project's, the read-only
 /// event-schema registry, the `dev` profile's contracts, the stored snapshots, and (#3945) the
 /// type-argument marker on generic capability calls that tells a `stub Cap.op[T]` its calls.
-fn test_build_options(input: &Path) -> Result<crate::project::CompileOptions, String> {
+fn test_build_options(
+    input: &Path,
+    environment: &str,
+) -> Result<crate::project::CompileOptions, String> {
     // #2078: reconcile events against the committed `bynk.schema.lock`, read-only — a
     // non-additive change fails `test` as it fails a build, and it is never written back.
     let o = crate::try_project_options(input)
@@ -1218,7 +1237,9 @@ fn test_build_options(input: &Path) -> Result<crate::project::CompileOptions, St
         // #3107: the `dev` profile, so `[profile.dev] contracts = false` turns the guard off for
         // a test run; on by default.
         .contracts(crate::project_contracts(input, crate::CliProfile::Dev)?)
-        .typed_capability_calls(true);
+        .typed_capability_calls(true)
+        // #3941: `--env` selects whose `env(…)` values the build resolves.
+        .environment(environment);
     // #2842: the stored snapshots, inlined into the test modules.
     let files = bynk_project::snapshots::read_snapshot_files(input)
         .map_err(|e| format!("could not read `snapshots/`: {e}"))?;

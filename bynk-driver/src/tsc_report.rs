@@ -347,9 +347,11 @@ fn private_temp_dir() -> std::io::Result<PathBuf> {
 /// a temporary directory and type-check it, reporting a `tsc` failure as
 /// `bynk.codegen.tsc_failed`. Run after the ordinary check has passed. `true`
 /// when the generated TypeScript type-checks.
-pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
+pub fn check_emit(prog: &str, input: &Path, short: bool, environment: &str) -> bool {
     let options = match crate::try_project_options(input) {
-        Ok(o) => o.target(crate::project::BuildTarget::Workers),
+        Ok(o) => o
+            .target(crate::project::BuildTarget::Workers)
+            .environment(environment),
         Err(e) => {
             emsg!("{prog}: error: {e}");
             return false;
@@ -413,15 +415,21 @@ pub fn check_emit(prog: &str, input: &Path, short: bool) -> bool {
 }
 
 /// [`check_emit`] over a project or, at a workspace root, every member.
-pub fn check_emit_all(prog: &str, input: &Path, short: bool, each: bool) -> bool {
+pub fn check_emit_all(
+    prog: &str,
+    input: &Path,
+    short: bool,
+    each: bool,
+    environment: &str,
+) -> bool {
     if let Ok(Some(Ok(ws))) = crate::workspace_at_each(input, each) {
         let mut ok = true;
         for m in &ws.members {
-            ok &= check_emit(prog, &crate::member_dir(input, m), short);
+            ok &= check_emit(prog, &crate::member_dir(input, m), short, environment);
         }
         return ok;
     }
-    check_emit(prog, input, short)
+    check_emit(prog, input, short, environment)
 }
 
 #[cfg(test)]

@@ -154,6 +154,9 @@ pub struct CompileArgs {
     /// passes `false`; only `bynk build --profile dev` (or a `[profile]` table)
     /// turns it on.
     pub contracts: bool,
+    /// #3941: the environment whose `[env.<name>.vars]` values `env(…)`
+    /// constants take; `default` unless `--env` names one.
+    pub environment: String,
 }
 
 /// What a `build` run was asked to do: the flags given, over `[build]`.
@@ -167,6 +170,8 @@ pub struct BuildArgs {
     pub emit: Option<EmitFormat>,
     /// The profile; `release` when unset.
     pub profile: Option<CliProfile>,
+    /// #3941: see [`CompileArgs::environment`]; empty reads as `default`.
+    pub environment: String,
 }
 
 /// Run `build` (#3054): resolve each setting as flag, else `[build]`, else the
@@ -180,6 +185,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
         platform,
         emit,
         profile,
+        environment,
     } = args;
     if !input.is_dir() {
         emsg!(
@@ -244,6 +250,7 @@ pub fn run_build(prog: &str, args: BuildArgs) -> ExitCode {
             emit,
             sources_stdin: false,
             contracts,
+            environment,
         },
         crate::progress::terminal_sink(),
     );
@@ -366,6 +373,7 @@ fn run_compile_reporting(
         emit,
         sources_stdin,
         contracts,
+        environment,
     } = args;
     if sources_stdin && !input.is_dir() {
         emsg!("{prog}: error: --sources-stdin needs a project directory, not a single file");
@@ -383,6 +391,7 @@ fn run_compile_reporting(
                 sources_stdin,
                 contracts,
                 progress,
+                environment,
             },
         )
     } else {
@@ -398,6 +407,7 @@ struct DirSettings {
     sources_stdin: bool,
     contracts: bool,
     progress: Option<crate::project::ProgressSink>,
+    environment: String,
 }
 
 fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -> ExitCode {
@@ -408,6 +418,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
         sources_stdin,
         contracts,
         progress,
+        environment,
     } = settings;
     // #1078: `bynk-emit` touches no disk for `bynk.schema.lock` — read
     // its current content here (verified-absent `None` for a fresh
@@ -439,6 +450,7 @@ fn compile_dir(prog: &str, input: &Path, output: &Path, settings: DirSettings) -
             .contracts(contracts)
             .progress(progress)
             .out_dir(Some(output.to_path_buf()))
+            .environment(environment_or_default(&environment))
             .tests(false),
         Err(e) => {
             // #3274: `compile` can't take `--each`, so its refusal of a
@@ -635,5 +647,14 @@ mod worker_group_refusal_tests {
         assert!(err.starts_with("invalid `[deploy.workers]`"), "{err}");
         let _ = fs::remove_dir_all(&good);
         let _ = fs::remove_dir_all(&bad);
+    }
+}
+
+/// An empty `--env` (a `Default`-built [`BuildArgs`]) reads as `default`.
+fn environment_or_default(environment: &str) -> &str {
+    if environment.is_empty() {
+        bynk_project::vars::DEFAULT_ENVIRONMENT
+    } else {
+        environment
     }
 }
