@@ -3126,8 +3126,9 @@ mod env_constants {
                 &["a@shop.example"],
             ),
         ]);
-        let foreign = BTreeSet::from(["SERVICE_BILLING".to_string(), "SERVICE_AUDIT".to_string()]);
-        let shared = shared_bindings(&staging, &default, &foreign);
+        // `core` is a Worker this build makes; the others are foreign.
+        let own = BTreeSet::from(["core".to_string()]);
+        let shared = shared_bindings(&staging, &default, &own);
         let found: Vec<(&str, &str)> = shared.iter().map(|s| (s.kind, s.name.as_str())).collect();
         assert_eq!(
             found,
@@ -3139,15 +3140,97 @@ mod env_constants {
         );
         assert_eq!(shared[0].value, "\"legacy-billing\"");
         // Its own address, and an unpinned `Email`, share nothing.
-        let own = bindings(vec![email(
+        let own_addr = bindings(vec![email(
             "EMAIL_ALERTS",
             Some("qa@shop.example"),
             &["q@shop.example"],
         )]);
-        assert!(shared_bindings(&own, &default, &foreign).is_empty());
+        assert!(shared_bindings(&own_addr, &default, &own).is_empty());
         let open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
         let default_open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
-        assert!(shared_bindings(&open, &default_open, &foreign).is_empty());
+        assert!(shared_bindings(&open, &default_open, &own).is_empty());
+    }
+
+    #[test]
+    fn a_binding_name_two_contexts_share_is_judged_per_context() {
+        use super::super::shared::has_comparable_bindings;
+        // Context A reaches a Worker outside the build; context B reaches the
+        // build's own `core` Worker, through a binding of the same name.
+        let both = |billing: &str| {
+            BTreeMap::from([
+                (
+                    "shop.a".to_string(),
+                    vec![service("SERVICE_BILLING", billing)],
+                ),
+                (
+                    "shop.b".to_string(),
+                    vec![service("SERVICE_BILLING", "core")],
+                ),
+            ])
+        };
+        let own = BTreeSet::from(["core".to_string()]);
+        let shared = shared_bindings(&both("legacy-billing"), &both("legacy-billing"), &own);
+        let found: Vec<(&str, &str)> = shared.iter().map(|s| (s.kind, s.value.as_str())).collect();
+        assert_eq!(
+            found,
+            [("service", "\"legacy-billing\"")],
+            "only the foreign one: {shared:?}"
+        );
+        // Nothing comparable means `default` need not be built.
+        let edges_only = BTreeMap::from([(
+            "shop.b".to_string(),
+            vec![service("SERVICE_BILLING", "core")],
+        )]);
+        assert!(!has_comparable_bindings(&edges_only, &own));
+        assert!(has_comparable_bindings(&both("legacy-billing"), &own));
+        // An open `Email` (no `@to`, no `@allowedRecipients`) can never be shared, so it
+        // is not worth building `default` for; one with a value that could match is.
+        let open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
+        assert!(!has_comparable_bindings(&open, &own));
+        let pinned = bindings(vec![email("EMAIL_ALERTS", Some("a@shop.example"), &[])]);
+        assert!(has_comparable_bindings(&pinned, &own));
+        let allowed = bindings(vec![email("EMAIL_ALERTS", None, &["a@shop.example"])]);
+        assert!(has_comparable_bindings(&allowed, &own));
+        assert!(!has_comparable_bindings(&BTreeMap::new(), &own));
+    }
+
+    #[test]
+    fn an_unbuildable_default_is_said_and_a_strict_run_refuses() {
+        use super::super::shared::comparison_skipped;
+        let cause = "bynk.env.missing: `ORIGIN` has no value in the `default` environment";
+        let (note, refuse) = comparison_skipped("staging", false, cause);
+        assert!(
+            !refuse && note.starts_with("bynk: note:") && note.contains("`default`"),
+            "{note}"
+        );
+        let (error, refuse) = comparison_skipped("staging", true, cause);
+        assert!(
+            refuse && error.starts_with("bynk: error:") && error.contains("--strict-environments"),
+            "{error}"
+        );
+        // Both say why `default` failed and what to do about it.
+        for message in [&note, &error] {
+            assert!(message.contains(cause), "{message}");
+            assert!(message.contains("required variable"), "{message}");
+            assert!(message.contains("[env.default.vars]"), "{message}");
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_each_binding_once() {
+        let both = |kind| SharedWithDefault {
+            kind,
+            name: "EMAIL_ALERTS".into(),
+            value: "\"x\"".into(),
+            variable: None,
+        };
+        let refusal = strict_refusal(
+            &[both("email_to"), both("email_allowed_recipients")],
+            "staging",
+        )
+        .unwrap();
+        assert!(refusal.contains("shares EMAIL_ALERTS with"), "{refusal}");
+        assert!(!refusal.contains("EMAIL_ALERTS, EMAIL_ALERTS"), "{refusal}");
     }
 
     #[test]
