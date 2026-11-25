@@ -29,6 +29,13 @@ pub(crate) fn ident(s: impl Into<String>) -> TsExpr {
     TsExpr::Ident(s.into())
 }
 
+/// A Bynk type's name as an identifier: a type a `uses` full-name qualifier names
+/// (`lib.y.Status`) is read through the unit's namespace import of the commons
+/// (#4397), as every other name written that way is.
+pub(crate) fn type_ident(name: &str) -> TsExpr {
+    ident(bynk_check::emitted_names::use_qualified_name(name).unwrap_or_else(|| name.to_string()))
+}
+
 /// `"text"`.
 pub(crate) fn str_lit(s: impl Into<String>) -> TsExpr {
     TsExpr::Lit(TsLit::Str(s.into()))
