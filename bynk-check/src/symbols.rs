@@ -1256,6 +1256,9 @@ pub fn build_unit_table(
                         )
                         .with_label(prev.name.span, "previously declared here"),
                     );
+                } else if crate::prelude_record::is_reserved(&decl) {
+                    // #4192: `MapEntry[A, B]` is the prelude record, already declared.
+                    errors.push(crate::prelude_record::reserved_error(name));
                 } else {
                     table.methods.entry(name.name.clone()).or_default();
                     if is_event {

@@ -350,9 +350,6 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
         TypeRef::ValidationError(_) => TsType::named("ValidationError"),
         TypeRef::DecodeError(_) => TsType::named("DecodeError"),
         TypeRef::Unit(_) => TsType::named("void"),
-        // v0.157 (ADR 0183): `Name[Arg, …]` lowers to the erased TS generic
-        // `Name<Arg, …>` — the generic record's interface is emitted with the
-        // same type parameters (like a generic function's erased `<A, B>`).
         // #4192: the prelude `MapEntry[K, V]` has no declaration to name, so a written
         // `MapEntry[K, V]` renders as its own shape, as the checked type does below.
         TypeRef::App { name, args, .. } if name.name == MAP_ENTRY && args.len() == 2 => {
@@ -367,6 +364,9 @@ pub(super) fn ts_type_ref_to_ts_type(r: &TypeRef, qualify: Option<QualifyFn<'_>>
                 ),
             ])
         }
+        // v0.157 (ADR 0183): `Name[Arg, …]` lowers to the erased TS generic
+        // `Name<Arg, …>` — the generic record's interface is emitted with the
+        // same type parameters (like a generic function's erased `<A, B>`).
         TypeRef::App { name, args, .. } => {
             // Review of #1315/#1316: pre-slice this arm interpolated `head`
             // unconditionally, so a hypothetical empty-args `App` rendered
@@ -724,9 +724,8 @@ pub(super) fn ts_ty_to_ts_type(t: TyId, tys: TyRender<'_>) -> TsType {
         // #1977: the compiler-known `MapEntry[K, V]` (ADR 0184) has no
         // `TypeDecl`, so no module declares or imports a `MapEntry` type to
         // name. It renders as its own shape, the `{ key, value }` record the
-        // `.entries` lowering builds. (A user type of the same name, which the
-        // checker prefers for field access, interns to the same `Ty` and so
-        // renders inline too; no program declares one today.)
+        // `.entries` lowering builds. (A unit cannot declare a two-parameter
+        // `MapEntry` of its own: #4192 reserves it, so none can reach here.)
         Ty::Named {
             name,
             kind: NamedKind::Record,

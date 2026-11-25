@@ -1,0 +1,15 @@
+commons demo.own
+
+type MapEntry = { name: String, size: Int }
+
+fn label(e: MapEntry) -> String {
+	"\(e.name):\(e.size)"
+}
+
+fn make(name: String) -> MapEntry {
+	MapEntry { name: name, size: 3 }
+}
+
+fn total(es: List[MapEntry]) -> Int {
+	es.fold(0, (acc, e) => acc + e.size)
+}

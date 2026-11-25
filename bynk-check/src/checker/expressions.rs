@@ -3455,6 +3455,9 @@ pub(crate) fn check_record_construction(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let decl = crate::prelude_record::lookup(&type_name.name, &ctx.input.types)?;
+    // #4192: the prelude record's spans are offsets into its own source, so no
+    // label may point at them from the user's file.
+    let prelude = !ctx.input.types.contains_key(&type_name.name);
     ctx.refs
         .record(type_name.span, SymbolKind::Type, &type_name.name);
     // An opaque type built with record-literal syntax is reported by the
@@ -3631,19 +3634,21 @@ pub(crate) fn check_record_construction(
                 && !contains_var(actual_ty, tys)
                 && !compatible(actual_ty, expected_ty, tys)
             {
-                ctx.errors.push(
-                    CompileError::new(
-                        "bynk.types.field_value_mismatch",
-                        fspan,
-                        format!(
-                            "field `{}` expects `{}`, but the value has type `{}`",
-                            declared_field.name.name,
-                            expected_ty.display(tys),
-                            actual_ty.display(tys)
-                        ),
-                    )
-                    .with_label(declared_field.name.span, "field declared here"),
+                let mismatch = CompileError::new(
+                    "bynk.types.field_value_mismatch",
+                    fspan,
+                    format!(
+                        "field `{}` expects `{}`, but the value has type `{}`",
+                        declared_field.name.name,
+                        expected_ty.display(tys),
+                        actual_ty.display(tys)
+                    ),
                 );
+                ctx.errors.push(if prelude {
+                    mismatch
+                } else {
+                    mismatch.with_label(declared_field.name.span, "field declared here")
+                });
             }
         }
     }

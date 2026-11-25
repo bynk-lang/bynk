@@ -751,6 +751,9 @@ pub fn resolve_recovering(commons: Commons) -> (ResolvedCommons, Vec<CompileErro
                         )
                         .with_label(prev.name.span, "previously declared here"),
                     );
+                } else if crate::prelude_record::is_reserved(t) {
+                    // #4192: `MapEntry[A, B]` is the prelude record, already declared.
+                    errors.push(crate::prelude_record::reserved_error(&t.name));
                 } else if let Some(prev) = fns.get(&t.name.name) {
                     errors.push(
                         CompileError::new(

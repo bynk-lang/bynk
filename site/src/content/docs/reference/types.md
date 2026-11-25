@@ -1000,11 +1000,13 @@ keys alike. `entries()` yields the same `MapEntry` as a `store Map`'s `.entries`
 name and construct, so `Map.of` also builds a map from entries you write:
 `Map.of([MapEntry { key: "a", value: 1 }])`, or
 `Map.of(xs.map((x) => MapEntry { key: x.id, value: x }))`. The type arguments come
-from the fields, as for any generic record, and a type of your own named
-`MapEntry` takes precedence. A `MapEntry` is built and used in place, so it is not a
+from the fields, as for any generic record. The name is reserved for the
+two-parameter record: declaring your own `type MapEntry[A, B]` is
+`bynk.resolve.duplicate_type`, though a `MapEntry` with no type parameters is an
+ordinary type of your own. A `MapEntry` is built and used in place, so it is not a
 boundary type: a handler projects entries into a named type before returning them,
 and the error `bynk.types.map_entry_at_boundary` refuses one in a record field, a
-store field or a handler signature. The
+store field or a handler signature, even in a record that never leaves memory. The
 `bynk.map` commons is deprecated: `values`, `contains` and `getOr` are the methods
 `m.values()`, `m.contains(key)` and `m.getOrElse(key, default)`, and each call warns
 with `bynk.map.deprecated_function` and a fix. A
