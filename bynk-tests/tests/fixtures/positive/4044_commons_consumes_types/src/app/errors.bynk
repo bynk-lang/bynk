@@ -1,0 +1,31 @@
+---
+#4044: a commons lists the types it names from adapters, in braces. It brings
+no service and no capability, so the commons stays pure. `KvEntry as Entry`
+renames a type, as in a context.
+---
+commons app.errors
+
+consumes bynk { TimedOut }
+consumes bynk.cloudflare { SqlError, KvEntry as Entry }
+
+type AppError = | Slow(after: Duration) | Storage(message: String)
+
+fn fromTimeout(t: TimedOut) -> AppError {
+	Slow(t.after)
+}
+
+fn fromSql(e: SqlError) -> AppError {
+	match e {
+		Constraint(message) => Storage("constraint: \(message)"),
+		Failed(message) => Storage("database: \(message)"),
+		_ => Storage("database"),
+	}
+}
+
+fn entryText(e: Entry) -> String {
+	e.value
+}
+
+fn passThrough(t: TimedOut) -> TimedOut {
+	t
+}
