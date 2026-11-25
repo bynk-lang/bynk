@@ -58,23 +58,31 @@ pub(crate) fn refined_pattern_is_range(
         span,
     }
     .describe();
-    Some(
-        CompileError::new(
-            "bynk.match.refined_pattern_is_range",
-            span,
-            format!("this refined pattern is the range pattern `{range}`"),
-        )
-        .with_note(
-            "a range pattern counts towards exhaustiveness; a refined pattern never does, so \
-             after the rewrite a later arm that the range now covers is unreachable and must \
-             be deleted",
-        )
-        .with_suggestion(
-            format!("replace with `{range}`"),
-            vec![(span, range)],
-            Applicability::MaybeIncorrect,
-        ),
+    let error = CompileError::new(
+        "bynk.match.refined_pattern_is_range",
+        span,
+        format!("this refined pattern is the range pattern `{range}`"),
     )
+    .with_note(
+        "a range pattern counts towards exhaustiveness; a refined pattern never does, so \
+         after the rewrite a later arm that the range now covers is unreachable and must \
+         be deleted",
+    );
+    // A bound that came from a constant (#3951) is written by name, and a range
+    // pattern takes only literals: the rewrite would replace the name with its
+    // value, so it is reported without a fix.
+    if predicate
+        .predicates
+        .iter()
+        .any(|p| !p.from_const.is_empty())
+    {
+        return Some(error);
+    }
+    Some(error.with_suggestion(
+        format!("replace with `{range}`"),
+        vec![(span, range)],
+        Applicability::MaybeIncorrect,
+    ))
 }
 
 #[cfg(test)]
@@ -102,6 +110,8 @@ mod tests {
                 .map(|kind| RefinementPred {
                     kind,
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 })
                 .collect(),
