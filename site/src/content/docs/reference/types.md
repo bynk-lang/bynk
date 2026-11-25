@@ -337,6 +337,26 @@ A method not in this table is `bynk.types.method_not_found`.
 The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
 shows them in use.
 
+### `Effect` methods {#effect-methods}
+
+Every `Effect[T]` has these methods. `map` and `andThen` build an effect rather than
+run one, so they are legal in a pure helper; an effect is already started, so neither
+changes when `e` starts.
+
+| Method | Returns | |
+|---|---|---|
+| `e.andThen(f: T -> Effect[U])` | `Effect[U]` | a further effect, run after `e` |
+| `e.detach()` | `Effect[()]` | stops waiting for `e`; see [`within`, `race` and `detach`](/reference/capabilities/#within) |
+| `e.map(f: T -> U)` | `Effect[U]` | `f` applied to the effect's value |
+| `e.race(other: Effect[T])` | `Effect[T]` | the first side to succeed wins |
+| `e.within(d: Duration)` | `Effect[Result[T, TimedOut]]` | races `e` against a deadline |
+
+On an `Effect[Result[T, E]]`, `map` and `andThen` act on the whole `Result`; `mapOk`,
+`mapErr`, `flatMapOk` and `flatMapErr` act on its two sides (see the
+[specification](/reference/spec/static-semantics/)). A `map` function that returns an
+`Effect` is an error, since it would nest one effect in another: use `andThen`. A method
+an `Effect` does not have is `bynk.types.method_not_found`.
+
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
 A `ValidationError` has two `String` fields:

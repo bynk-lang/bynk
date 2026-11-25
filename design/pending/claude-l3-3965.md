@@ -1,0 +1,15 @@
+---
+level: minor
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
+changelog: `Effect[T]` gains `map(f)` and `andThen(f)`, legal in a pure helper, and a missing `Effect` method is `method_not_found` naming the real ones
+---
+
+## ADR: effect-map-and-then
+title: Effect.map and Effect.andThen, as the spec already describes, usable in a pure helper
+summary: Adds map and andThen to every Effect, and replaces the misleading "has no methods" error with method_not_found
+
+**Context.** The spec said `.map` and `.flatMap` on an `Effect[Result[T, E]]` "remain Effect's own", and advised writing `e.map((r) => …)` for `Effect[Option[T]]` or `Effect[List[T]]`. The compiler had no such methods: `EffectOp` was `within`, `race` and `detach`, and `e.map(f)` was refused with `bynk.types.method_on_non_named_type` ("type `Effect[Int]` has no methods"), which was also wrong, since `within`, `race` and `detach` are methods of every `Effect`. Only an effectful body can use `<-`, so a pure helper could reshape an `Effect[Result]` with `mapOk` but not any other `Effect` it was handed.
+
+**Decision.** `e.map(f: T -> U) -> Effect[U]` and `e.andThen(f: T -> Effect[U]) -> Effect[U]` on every `Effect[T]` (Decision A). `andThen`, not `flatMap` (B), matching `Option.andThen` and `Result.andThen`; the spec's `.flatMap` is corrected. On an `Effect[Result]` they act on the whole `Result`, while `mapOk` and `flatMapOk` keep acting on the success side (C). They build an effect rather than run one, so they are legal in a pure helper, like the `Effect[Result]` combinators of ADR 0176 (D); `f` is typed normally. An effect is an eager promise, so they lower to `e.then(f)` and do not change when `e` starts; they use no execution context, so they do not put a test module on virtual time. A `map` function that returns an `Effect` would nest one effect in another and is `bynk.types.combinator_return_mismatch` with a note to use `andThen`; an `andThen` function that does not return an `Effect` is the same error with a note to use `map`. A method an `Effect` lacks is now `bynk.types.method_not_found`, naming `map`, `andThen`, `within`, `race` and `detach`, in place of `method_on_non_named_type`. No new diagnostic code is introduced.
+
+**Consequences.** Additive: methods that did not exist are added, and a program that called a missing `Effect` method still fails, with a better error. The hover note on `map` over an `Effect[Result]` that the proposal sketches (pointing to `mapOk`) is not added here; the signature shows the whole-`Result` type, and a mix-up is a type error.
