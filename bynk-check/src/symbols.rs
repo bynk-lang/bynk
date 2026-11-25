@@ -3141,6 +3141,7 @@ mod detect_context_message_bundle_tests {
                 name: qualified(name),
                 items: vec![CommonsItem::Messages(messages)],
                 uses: Vec::new(),
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Brace,
                 span: Span::default(),
