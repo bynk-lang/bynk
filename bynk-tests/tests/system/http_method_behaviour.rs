@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   r = await worker.fetch(req("GET", "/bad-event"), env);
   let badBody = "";
   try { badBody = await r.text(); } catch { badBody = "<errored>"; }
-  assert(!badBody.includes("event: a"), "an event name with a line break is never written as a different one");
+  assert(badBody === "<errored>", "an event name with a line break errors the body in-band");
 
   // --- HEAD from a Raw GET: the author content-type, empty body. ---
   r = await worker.fetch(req("HEAD", "/logo"), env);

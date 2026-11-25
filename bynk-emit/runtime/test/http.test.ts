@@ -136,6 +136,48 @@ test("httpResultToResponse: 412 and 428 render as problem details with their rea
   }
 });
 
+// #3918: a structured event is framed per the HTML event-stream format, and a value the wire
+// cannot carry faults the body at that element instead of going out as a different event.
+const noOpt = { tag: "None" } as const;
+const someOpt = <T>(value: T) => ({ tag: "Some", value }) as const;
+const sse = (e: { data: string; event?: ReturnType<typeof someOpt<string>>; id?: ReturnType<typeof someOpt<string>>; retry?: ReturnType<typeof someOpt<number>> }) =>
+  ({ data: e.data, event: e.event ?? noOpt, id: e.id ?? noOpt, retry: e.retry ?? noOpt });
+async function* events(...items: ReturnType<typeof sse>[]): AsyncGenerator<ReturnType<typeof sse>> {
+  yield* items;
+}
+const framed = (...items: ReturnType<typeof sse>[]) => httpResultToResponse(HttpResult.Streaming(events(...items)), id).text();
+
+test("SseEvent framing: event, id and retry precede data; a bare string is unchanged", async () => {
+  assert.equal(
+    await framed(sse({ data: "hi", event: someOpt("greeting"), id: someOpt("7"), retry: someOpt(1500) })),
+    "event: greeting\nid: 7\nretry: 1500\ndata: hi\n\n",
+  );
+  assert.equal(await framed(sse({ data: "hi", retry: someOpt(0) })), "retry: 0\ndata: hi\n\n");
+  assert.equal(await framed(sse({ data: "" })), "data: \n\n");
+});
+
+test("SseEvent framing: data splits on CRLF, LF and a lone CR", async () => {
+  assert.equal(await framed(sse({ data: "a\r\nb\nc\rd" })), "data: a\ndata: b\ndata: c\ndata: d\n\n");
+});
+
+test("SseEvent framing: a value the wire cannot carry errors the body at that event", async () => {
+  const bad: [string, ReturnType<typeof sse>][] = [
+    ["event with LF", sse({ data: "x", event: someOpt("a\nb") })],
+    ["event with CR", sse({ data: "x", event: someOpt("a\rb") })],
+    ["id with LF", sse({ data: "x", id: someOpt("a\nb") })],
+    ["id with CR", sse({ data: "x", id: someOpt("a\rb") })],
+    ["id with NUL", sse({ data: "x", id: someOpt("a\0b") })],
+    ["fractional retry", sse({ data: "x", retry: someOpt(1.5) })],
+    ["negative retry", sse({ data: "x", retry: someOpt(-1) })],
+    ["retry beyond a safe integer", sse({ data: "x", retry: someOpt(1e21) })],
+  ];
+  for (const [what, event] of bad) {
+    // An earlier good event is delivered; the bad one errors the body rather than being rewritten.
+    const response = httpResultToResponse(HttpResult.Streaming(events(sse({ data: "ok" }), event)), id);
+    await assert.rejects(response.text(), /bynk: an SSE/, what);
+  }
+});
+
 test("httpResultToResponse: status codes map per variant", async () => {
   // 2xx success.
   assert.equal(httpResultToResponse(HttpResult.Ok(1), id).status, 200);

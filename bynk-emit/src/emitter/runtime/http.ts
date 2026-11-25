@@ -152,7 +152,7 @@ function sseEventChunks(e: SseEvent): string[] {
   }
   if (e.retry.tag === "Some") {
     const ms = e.retry.value;
-    if (!Number.isInteger(ms) || ms < 0) throw new Error("bynk: an SSE `retry` must be a whole number of milliseconds");
+    if (!Number.isSafeInteger(ms) || ms < 0) throw new Error("bynk: an SSE `retry` must be a whole number of milliseconds");
     out.push(`retry: ${ms}\n`);
   }
   for (const line of e.data.split(/\r\n|\r|\n/)) out.push(`data: ${line}\n`);

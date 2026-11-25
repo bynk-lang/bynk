@@ -1210,7 +1210,7 @@ a whole number of milliseconds errors the body at that event, as any failure mid
 does.
 
 A unit-tier test that matches `Streaming(s)` can drain `s` and count its events; `s` is typed
-`Stream[String]` whatever the handler streams, so do not read an `SseEvent` element as a `String`.
+`Stream[String]` whatever the handler streams, so do not read an `SseEvent` element as a `String` (tracked in #4394).
 
 ## Raw responses
 
