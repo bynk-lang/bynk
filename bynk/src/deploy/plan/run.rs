@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use super::model::GroupNames;
 use super::model::account_name_problem;
@@ -7,7 +7,8 @@ use super::model::confirm_destructive;
 use super::model::derive_plan;
 use super::model::recreate_refusal;
 use super::shared::{
-    SharedWithDefault, shared_bindings, shared_constants, strict_refusal, without_deliberate,
+    SharedWithDefault, comparison_skipped, has_comparable_bindings, shared_bindings,
+    shared_constants, strict_refusal, without_deliberate,
 };
 use crate::cloudflare::Wrangler;
 use crate::deploy::LOCK_FILE;
@@ -20,6 +21,7 @@ use crate::deploy::config::Resources;
 use crate::deploy::config::deployed_worker_name;
 use crate::deploy::config::project_resources;
 use crate::deploy::config::read_contracts_manifest;
+use crate::deploy::config::script_names;
 use crate::deploy::containers::apply_adoptions;
 use crate::deploy::destinations::print_plan_then_forward_warnings;
 use crate::deploy::gates::AccountChecked;
@@ -414,7 +416,9 @@ fn deploy(
         Lives::for_plan(&hyperdrive_wants),
     )
     .checked_against_account();
-    let Ok(shared) = shared_with_default(project_root, opts, &model, &resources) else {
+    let own_scripts: BTreeSet<String> =
+        script_names(&workers_dir, &available).into_keys().collect();
+    let Ok(shared) = shared_with_default(project_root, opts, &model, &own_scripts) else {
         return Err(ExitCode::FAILURE);
     };
     let plan = plan.with_shared(shared);
@@ -601,7 +605,7 @@ fn shared_with_default(
     project_root: &Path,
     opts: &DeployOptions,
     model: &bynk_emit::emit_model::WorkersBuild,
-    resources: &BTreeMap<String, Resources>,
+    own_scripts: &BTreeSet<String>,
 ) -> Result<Vec<SharedWithDefault>, ()> {
     use bynk_project::vars::DEFAULT_ENVIRONMENT;
     let Ok(options) = bynk_driver::try_project_options(project_root) else {
@@ -617,31 +621,37 @@ fn shared_with_default(
         emsg!("{line}");
     }
     let mut shared = shared_constants(&facts, environment);
-    if environment != DEFAULT_ENVIRONMENT {
+    // `default` is built only when there is something to compare it with.
+    if environment != DEFAULT_ENVIRONMENT
+        && has_comparable_bindings(model.bindings.by_context(), own_scripts)
+    {
         // The same build for `default`, in memory: its bindings are what the
-        // environment's are compared with. When `default` cannot be built (a
-        // required variable it does not set), there is nothing to compare.
+        // environment's are compared with.
         let default_build = options
             .environment(DEFAULT_ENVIRONMENT)
             .target(bynk_driver::project::BuildTarget::Workers)
             .tests(false);
-        if let Some(default_model) = bynk_driver::project::compile_project(&default_build)
+        match bynk_driver::project::compile_project(&default_build)
             .ok()
             .and_then(|out| out.workers)
         {
-            let foreign: BTreeSet<String> = resources
-                .values()
-                .flat_map(|r| r.foreign_services.iter().map(|f| f.binding.clone()))
-                .collect();
-            shared.extend(without_deliberate(
+            Some(default_model) => shared.extend(without_deliberate(
                 shared_bindings(
                     model.bindings.by_context(),
                     default_model.bindings.by_context(),
-                    &foreign,
+                    own_scripts,
                 ),
                 &facts,
                 environment,
-            ));
+            )),
+            None => {
+                // Said, not skipped quietly: a strict run must not pass unchecked.
+                let (message, refuse) = comparison_skipped(environment, opts.strict_environments);
+                emsg!("{message}");
+                if refuse {
+                    return Err(());
+                }
+            }
         }
     }
     if opts.strict_environments
