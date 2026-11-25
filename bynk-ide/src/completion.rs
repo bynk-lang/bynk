@@ -2251,7 +2251,7 @@ pub fn nested_variant_completions(
 }
 
 /// The built-in variant names of `Result`/`Option` as `Variant` completions.
-fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
+pub(crate) fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
     names
         .iter()
         .map(|v| {
