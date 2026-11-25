@@ -1,0 +1,10 @@
+{
+  "blurb": "A header name is an RFC 9110 token, so it cannot hold a space, a colon or other separator; a header value, a `Location` URL and a download filename cannot carry a line break or another control character, which would let a value forge a second header. `retryAfter` is whole seconds, so a delay under a second cannot be written. These checks run on a literal at compile time; a computed value is checked when the response is built, and a bad one answers `500` rather than sending a malformed header. See also `bynk.http.reserved_response_header`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.invalid_response_header",
+  "constructs": [],
+  "example": "Ok(\"x\").withHeader(\"X Request Id\", \"1\")   // ✗ a name has no spaces\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+  "severity": "error",
+  "summary": "A response header method is given a malformed name, value, URL, filename or delay."
+}

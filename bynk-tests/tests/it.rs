@@ -443,6 +443,8 @@ mod system {
     mod http_raw_caching_behaviour;
     #[path = "http_recursive_body_behaviour.rs"]
     mod http_recursive_body_behaviour;
+    #[path = "http_response_headers.rs"]
+    mod http_response_headers;
     #[path = "http_security_behaviour.rs"]
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]
