@@ -2314,8 +2314,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.history.not_generable",
-        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
-        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
+        blurb: "To drive an agent the runner must make an argument for every handler, drawing each from its parameter's refinement domain. One parameter with no generator, such as a `Matches` pattern with a lookahead, stops it for the whole agent, since any handler may be chosen. Give that parameter a refinement that has one, such as `Length(3)`, or test that handler with a `case` and a pinned value instead. The same rule applies to a value `for all`, where a type that cannot be generated is `bynk.val.needs_pin`.",
+        example: "// demo/wallet.bynk\ntype Code = String where Matches(\"(?=[A-Z])[A-Z]{3}\")\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { … }   // ✗ `setLabel` takes a `Code`, which has no generator\n\n// demo/wallet.bynk\ntype Code = String where Length(3)   // ✓ a refinement with a generator",
     },
     Explain {
         code: "bynk.history.outside_property",
@@ -8151,7 +8151,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.history.not_generable",
-        "A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` refinement), so its call-history cannot be driven (testing track slice 7, ADR 0155).",
+        "A `for all run: History[Agent]` targets an agent with a handler parameter whose type cannot be generated (e.g. a `Matches` pattern with a lookahead), so its call-history cannot be driven (testing track slice 7, ADR 0155).",
     ),
     d(
         "bynk.history.outside_property",

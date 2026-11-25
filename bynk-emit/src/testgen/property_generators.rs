@@ -326,6 +326,12 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
                 ],
             )
         }
+        // #4121: a `Matches` or `IsoDate` draws members of the pattern or real dates.
+        BaseType::String if string_gen_spec(refinement).is_some() => method_call(
+            ident("rng"),
+            "matches",
+            vec![str_lit(string_gen_spec(refinement).unwrap_or_default())],
+        ),
         BaseType::String => {
             let min = str_min(refinement);
             method_call(
@@ -380,6 +386,18 @@ pub(super) fn base_draw_ts(base: BaseType, refinement: Option<&Refinement>) -> T
     }
 }
 
+/// #4121: `__bynkMatchBoundary(<spec>, which)`: the shortest (`0`) or longest (`1`) member of a
+/// `Matches` or `IsoDate` string.
+fn match_boundary_ts(refinement: Option<&Refinement>, which: u32) -> TsExpr {
+    call(
+        ident("__bynkMatchBoundary"),
+        vec![
+            str_lit(string_gen_spec(refinement).unwrap_or_default()),
+            num_lit(which.to_string()),
+        ],
+    )
+}
+
 /// The canonical (boundary) inhabitant of `base` within `refinement`'s domain,
 /// unbranded: the refinement's floor, or a string of its minimum length.
 pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> TsExpr {
@@ -391,6 +409,9 @@ pub(super) fn base_canon_ts(base: BaseType, refinement: Option<&Refinement>) -> 
         BaseType::Float => {
             let (lo, _) = float_bounds(refinement);
             num_lit(lo.to_string())
+        }
+        BaseType::String if string_gen_spec(refinement).is_some() => {
+            match_boundary_ts(refinement, 0)
         }
         BaseType::String => {
             let min = str_min(refinement);
@@ -1085,13 +1106,32 @@ pub(super) fn binding_gen(
                         let brand = |value: TsExpr| {
                             emitter::ts_types::unchecked_construct_test_node(name, value, is_opaque)
                         };
-                        (
-                            vec![brand(str_lit("x".repeat(min.max(0) as usize)))],
-                            method_call(
+                        // #4121: the shortest and the longest member, and a shrink that keeps
+                        // every candidate a member.
+                        let spec = string_gen_spec(refinement.as_ref());
+                        let (boundaries, shrunk) = match &spec {
+                            Some(spec) => (
+                                vec![
+                                    brand(match_boundary_ts(refinement.as_ref(), 0)),
+                                    brand(match_boundary_ts(refinement.as_ref(), 1)),
+                                ],
+                                call(
+                                    ident("__bynkShrinkMatch"),
+                                    vec![ident("v"), str_lit(spec.clone())],
+                                ),
+                            ),
+                            None => (
+                                vec![brand(str_lit("x".repeat(min.max(0) as usize)))],
                                 call(
                                     ident("__bynkShrinkString"),
                                     vec![ident("v"), num_lit(min.to_string())],
                                 ),
+                            ),
+                        };
+                        (
+                            boundaries,
+                            method_call(
+                                shrunk,
                                 "map",
                                 vec![TsExpr::Arrow {
                                     params: vec![TsParam::new(

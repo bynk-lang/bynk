@@ -97,9 +97,194 @@ export function __bynkRng(seed: number) {
       for (let i = 0; i < out.length; i++) out[i] = next() < 0.15 ? (next() < 0.5 ? 0 : 255) : Math.floor(next() * 256);
       return out;
     },
+    // #4121: a member of a `Matches` pattern, or a real calendar date for `IsoDate`.
+    matches(spec: string): string { return __matchDraw(__matchSpec(spec), next); },
     bool(): boolean { return next() < 0.5; },
     pick(thunks: Array<() => any>): any { return thunks[Math.floor(next() * thunks.length)](); },
   };
+}
+// #4121: drawing from a `Matches` pattern's walk. The walk tree is the checker's parse of the
+// pattern; the compiled patterns check every draw, so a walk the engine disagrees with fails
+// loudly instead of drawing a wrong value.
+type __MatchNode = ["e"] | ["c", number[]] | ["s", __MatchNode[]] | ["a", __MatchNode[]] | ["r", __MatchNode, number, number];
+type __MatchSpec = { t: __MatchNode | null, p: [string, string] | null, o: Array<[string, string]>, iso: boolean, min: number, max: number };
+type __MatchRun = { spec: __MatchSpec, own: RegExp | null, others: RegExp[], lo: number, hi: number, text: string };
+const __matchRuns = new Map<string, __MatchRun>();
+function __matchSpec(json: string): __MatchRun {
+  let run = __matchRuns.get(json);
+  if (run === undefined) {
+    const spec = JSON.parse(json) as __MatchSpec;
+    const re = (pair: [string, string]) => new RegExp("^(?:" + pair[0] + ")$", "u" + pair[1]);
+    const [tlo, thi] = spec.t === null ? [10, 10] : __matchLens(spec.t);
+    const text = [spec.p, ...spec.o].filter((q): q is [string, string] => q !== null).map((q) => "Matches(\"" + q[0] + "\")").concat(spec.iso ? ["IsoDate"] : []).join(" and ");
+    run = { spec, own: spec.p === null ? null : re(spec.p), others: spec.o.map(re), lo: Math.max(tlo, spec.min), hi: Math.min(thi, spec.max < 0 ? Infinity : spec.max), text };
+    __matchRuns.set(json, run);
+  }
+  return run;
+}
+function __matchLens(n: __MatchNode): [number, number] {
+  switch (n[0]) {
+    case "e": return [0, 0];
+    case "c": return [1, 1];
+    case "s": {
+      let lo = 0, hi = 0;
+      for (const c of n[1]) { const [a, b] = __matchLens(c); lo += a; hi += b; }
+      return [lo, hi];
+    }
+    case "a": {
+      const ls = n[1].map(__matchLens);
+      return [Math.min(...ls.map((l) => l[0])), Math.max(...ls.map((l) => l[1]))];
+    }
+    case "r": {
+      const [a, b] = __matchLens(n[1]);
+      const max = n[3] < 0 ? Infinity : n[3];
+      return [a * n[2], b === 0 || max === 0 ? 0 : b * max];
+    }
+  }
+}
+function __matchCp(ranges: number[], next: () => number): string {
+  const pairs: Array<[number, number]> = [];
+  for (let i = 0; i < ranges.length; i += 2) pairs.push([ranges[i], ranges[i + 1]]);
+  const ascii = pairs.map(([a, b]): [number, number] => [Math.max(a, 0x20), Math.min(b, 0x7e)]).filter(([a, b]) => a <= b);
+  const astral = pairs.map(([a, b]): [number, number] => [Math.max(a, 0x10000), b]).filter(([a, b]) => a <= b);
+  let pool = pairs;
+  if (ascii.length > 0 && next() < 0.85) pool = ascii;
+  else if (astral.length > 0 && next() < 0.3) pool = astral;
+  let total = 0;
+  for (const [a, b] of pool) total += b - a + 1;
+  let k = Math.floor(next() * total);
+  for (const [a, b] of pool) {
+    if (k < b - a + 1) return String.fromCodePoint(a + k);
+    k -= b - a + 1;
+  }
+  return String.fromCodePoint(pool[0][0]);
+}
+function __matchPick(lo: number, hi: number, next: () => number): number {
+  return lo + Math.floor(next() * (hi - lo + 1));
+}
+// A member of `n` that is exactly `t` code points long, or `null` when there is none.
+function __matchGen(n: __MatchNode, t: number, next: () => number): string | null {
+  switch (n[0]) {
+    case "e": return t === 0 ? "" : null;
+    case "c": return t === 1 ? __matchCp(n[1], next) : null;
+    case "s": return __matchSeq(n[1], t, next);
+    case "a": {
+      const fit = n[1].filter((c) => { const [a, b] = __matchLens(c); return a <= t && t <= b; });
+      let start = Math.floor(next() * fit.length);
+      for (let i = 0; i < fit.length; i++) {
+        const out = __matchGen(fit[(start + i) % fit.length], t, next);
+        if (out !== null) return out;
+      }
+      return null;
+    }
+    case "r": {
+      const [a, b] = __matchLens(n[1]);
+      const max = n[3] < 0 ? Infinity : n[3];
+      let kLo = b === 0 ? n[2] : Math.max(n[2], Math.ceil(t / b));
+      if (t > 0) kLo = Math.max(kLo, 1);
+      let kHi = a === 0 ? Math.min(max, Math.max(kLo, t) + 2) : Math.min(max, Math.floor(t / a));
+      if (kLo > kHi) return null;
+      const k = __matchPick(kLo, Math.min(kHi, kLo + 24), next);
+      return __matchSeq(Array.from({ length: k }, () => n[1]), t, next);
+    }
+  }
+}
+function __matchSeq(items: __MatchNode[], t: number, next: () => number): string | null {
+  const ls = items.map(__matchLens);
+  const restLo = new Array<number>(items.length + 1).fill(0);
+  const restHi = new Array<number>(items.length + 1).fill(0);
+  for (let i = items.length - 1; i >= 0; i--) { restLo[i] = restLo[i + 1] + ls[i][0]; restHi[i] = restHi[i + 1] + ls[i][1]; }
+  let rem = t, out = "";
+  for (let i = 0; i < items.length; i++) {
+    const lo = Math.max(ls[i][0], rem - restHi[i + 1]);
+    const hi = Math.min(ls[i][1], rem - restLo[i + 1]);
+    if (lo > hi) return null;
+    const len = __matchPick(lo, Math.min(hi, lo + 24), next);
+    const piece = __matchGen(items[i], len, next);
+    if (piece === null) return null;
+    out += piece;
+    rem -= len;
+  }
+  return rem === 0 ? out : null;
+}
+function __matchValid(run: __MatchRun, s: string): boolean {
+  const len = Array.from(s).length;
+  if (len < run.spec.min || (run.spec.max >= 0 && len > run.spec.max)) return false;
+  if (run.own !== null && !run.own.test(s)) return false;
+  if (!run.others.every((re) => re.test(s))) return false;
+  return !run.spec.iso || __matchIsDate(s);
+}
+function __matchIsDate(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (m === null) return false;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= __matchDays(y, mo);
+}
+function __matchDays(y: number, mo: number): number {
+  if (mo === 2) return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0 ? 29 : 28;
+  return [4, 6, 9, 11].includes(mo) ? 30 : 31;
+}
+// A real date: mostly the present era, with leap days, month ends and the first and last years.
+function __matchDate(next: () => number): string {
+  const r = next();
+  const edge = [0, 1900, 2000, 2024, 2028, 9999];
+  const y = r < 0.6 ? 1970 + Math.floor(next() * 131) : r < 0.85 ? Math.floor(next() * 10000) : edge[Math.floor(next() * edge.length)];
+  const mo = 1 + Math.floor(next() * 12);
+  const last = __matchDays(y, mo);
+  const d = next() < 0.3 ? last : next() < 0.15 ? 1 : 1 + Math.floor(next() * last);
+  return String(y).padStart(4, "0") + "-" + String(mo).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+}
+function __matchDraw(run: __MatchRun, next: () => number): string {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    let s: string | null;
+    if (run.spec.t === null) s = __matchDate(next);
+    else {
+      const cap = Math.min(run.hi, run.lo + 24);
+      const r = next();
+      const t = r < 0.1 ? run.lo : r < 0.2 ? cap : __matchPick(run.lo, cap, next);
+      s = __matchGen(run.spec.t, t, next);
+    }
+    if (s === null) continue;
+    if (run.own !== null && !run.own.test(s)) {
+      throw new Error("bynk: the generator disagrees with " + run.text.split(" and ")[0] + " on " + JSON.stringify(s));
+    }
+    if (__matchValid(run, s)) return s;
+  }
+  throw new Error("bynk: no value satisfied " + run.text + " in 200 draws; pin one with a `case`");
+}
+// The shortest (`which` 0) or longest (`which` 1) member, drawn without chance.
+export function __bynkMatchBoundary(json: string, which: number): string {
+  const run = __matchSpec(json);
+  if (run.spec.t === null) return which === 0 ? "0000-01-01" : "9999-12-31";
+  const next = () => (which === 0 ? 0 : 0.999999);
+  const t = which === 0 ? run.lo : Math.min(run.hi, run.lo + 8);
+  for (const target of [t, ...Array.from({ length: 8 }, (_, i) => run.lo + i)]) {
+    const s = __matchGen(run.spec.t, target, next);
+    if (s !== null && __matchValid(run, s)) return s;
+  }
+  return __matchDraw(run, () => 0.5);
+}
+// Candidates shorter or earlier than `v`, each still a member.
+export function __bynkShrinkMatch(v: string, json: string): string[] {
+  const run = __matchSpec(json);
+  const out: string[] = [];
+  const add = (s: string) => { if (s !== v && !out.includes(s) && __matchValid(run, s)) out.push(s); };
+  if (run.spec.t === null) {
+    add("0000-01-01");
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (m !== null) {
+      add(m[1] + "-01-01");
+      add(m[1] + "-" + m[2] + "-01");
+      add(String(Math.floor(Number(m[1]) / 2)).padStart(4, "0") + "-" + m[2] + "-" + m[3]);
+    }
+    return out;
+  }
+  const cps = Array.from(v);
+  for (let i = cps.length - 1; i >= 0; i--) add(cps.filter((_, j) => j !== i).join(""));
+  for (let i = 0; i < cps.length; i++) {
+    for (const c of ["0", "a", "A"]) if (c < cps[i]) add(cps.map((x, j) => (j === i ? c : x)).join(""));
+  }
+  return out.sort((a, b) => Array.from(a).length - Array.from(b).length);
 }
 export function __bynkShrinkInt(v: bigint, floor: bigint): bigint[] {
   const out: bigint[] = [];
