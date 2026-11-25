@@ -1,13 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, emit_diagnostics, explained_codes, ts_writes
-raises: ts_writes — the route dispatch can pass a `problem` option to `httpResultToResponse` and wrap a rejection in `problemRejection` (#3916)
-changelog: A service opts in to RFC 9457 problem details with errors { format: problem }, or a route with @errors(format:); an error variant and a router rejection then answer application/problem+json, and the default is unchanged byte for byte
----
+# 0970 — A service or route opts in to RFC 9457 problem details for the errors it answers
 
-## ADR: opt-in-problem-details
-title: A service or route opts in to RFC 9457 problem details for the errors it answers
-summary: The errors section and @errors annotation, and what an error variant and a router rejection become
+- **Status:** Accepted (v0.705)
 
 **Context.** One service answered errors in two shapes: its error variants sent `{ "error": message }` or no body, and the router's rejections sent `{ "kind": …, "details": … }` or no body. A client that is not Bynk's handles both, and `RawError` and `on rejected` exist only to match someone else's contract, with no standard shape to opt into. The bodies are written by the renderer and the router, not by the handler, as with `json { options: plain }`.
 

@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0971](0971-instant-and-duration-text.md) | **Instant and Duration get real string forms and interpolate** (v0.706) — Instant.toString is RFC 3339, Duration.toString is units, Duration.toIso is ISO 8601; both fill an interpolation hole | Accepted (v0.706) |
+| [0970](0970-opt-in-problem-details.md) | **A service or route opts in to RFC 9457 problem details for the errors it answers** (v0.705) — The errors section and @errors annotation, and what an error variant and a router rejection become | Accepted (v0.705) |
+| [0969](0969-queue-dead-letter-structural.md) | **The dead-letter consumer check uses the producer check's comparison** (v0.704.1) — A dead-letter queue's consumer is compared with the source consumer by ADR 0714's structural comparison, not by the types as written | Accepted (v0.704.1) |
 | [0968](0968-generate-collections-and-options.md) | **Collections and options are generable, and the pin diagnostic names the culprit** (v0.704) — What a for all draws and shrinks for the four types, what Val yields, and how the diagnostic finds the part | Accepted (v0.704) |
 | [0967](0967-store-composite-keys.md) | **Store collections take any Key type, held under the canonical key encoding** (v0.703) — The store key rule becomes the Key rule; a non-scalar key is stored under its canonical encoding, and a scalar key keeps its current stored form | Accepted (v0.703) |
 | [0966](0966-queue-send-in-pure-agent-bodies.md) | **A queue send in a transition or migrate body is refused, with a note naming the capability** (v0.702.1) — The producer check does not walk transitions or migrate steps because a capability is not in scope there; the refusal is pinned and made clearer | Accepted (v0.702.1) |
