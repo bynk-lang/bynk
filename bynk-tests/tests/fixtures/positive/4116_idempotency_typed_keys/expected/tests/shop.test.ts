@@ -16,13 +16,15 @@ type __Idempotency_claim_Call = { key: unknown; expiresAfter: number };
 
 class __Stub_Idempotency {
   __case: string | undefined;
-  constructor(c?: string) {
+  __suite: number | undefined;
+  constructor(c?: string, s?: number) {
     this.__case = c;
+    this.__suite = s;
   }
 
   __applies(op: string): boolean {
     if (op === "claim") return this.__case === "claim is stubbed without a type argument";
-    if (op === "dedup") return this.__case === "a clause naming another type does not match" || this.__case === "a stub and an observation naming the type match a call that inferred it" || this.__case === "a stub names the type no argument determines and leaves the key open" || this.__case === "a stubbed typed read returns the value it was given" || this.__case === "an observation reads the stored key as a String";
+    if (op === "dedup") return this.__case === "a clause naming another type does not match" || this.__case === "a stub and an observation naming the type match a call that inferred it" || this.__case === "a stub names the type no argument determines and leaves the key open" || this.__case === "a stubbed typed read returns the value it was given" || this.__case === "an observation reads the stored key as a String" || this.__suite === 1;
     if (op === "remember") return this.__case === "a stub and an observation naming the type match a call that inferred it";
     return true;
   }
@@ -121,6 +123,11 @@ class __Stub_Idempotency {
         return None;
       })());
     }
+    if (this.__suite === 1 && __tk && (__tk.__bynkTypeKey === "[Quote]" || globalThis.String(__tk.__bynkTypeKey).startsWith("[Quote, "))) {
+      return __serialise_Option_Quote(await (async () => {
+        return Some({ total: 5 });
+      })());
+    }
     throw new globalThis.Error("bynk: no stub clause matched for Idempotency.dedup");
   }
 
@@ -213,14 +220,14 @@ function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
   } as never;
 }
 
-function __makeTestDeps(__case?: string) {
-  return { Idempotency: __bynkOverlay(__bynkTest_Idempotency(), new __Stub_Idempotency(__case), "Idempotency") as __ns_bynk.Idempotency };
+function __makeTestDeps(__case?: string, __suite?: number) {
+  return { Idempotency: __bynkOverlay(__bynkTest_Idempotency(), new __Stub_Idempotency(__case, __suite), "Idempotency") as __ns_bynk.Idempotency };
 }
 
 // case tier: integration
 async function test_a_record_key_is_claimed_once() {
   try {
-    const deps = __makeTestDeps();
+    const deps = __makeTestDeps(undefined, 0);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -267,7 +274,7 @@ async function test_a_record_key_is_claimed_once() {
 // case tier: integration
 async function test_a_sum_key_round_trips_a_remembered_value() {
   try {
-    const deps = __makeTestDeps();
+    const deps = __makeTestDeps(undefined, 0);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -310,7 +317,7 @@ async function test_a_sum_key_round_trips_a_remembered_value() {
 // case tier: integration
 async function test_a_refined_String_key_round_trips() {
   try {
-    const deps = __makeTestDeps();
+    const deps = __makeTestDeps(undefined, 0);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -353,7 +360,7 @@ async function test_a_refined_String_key_round_trips() {
 // case tier: integration
 async function test_an_Int_key_round_trips() {
   try {
-    const deps = __makeTestDeps();
+    const deps = __makeTestDeps(undefined, 0);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -396,7 +403,7 @@ async function test_an_Int_key_round_trips() {
 // case tier: integration
 async function test_a_written_type_argument_types_its_argument__with_the_key_inferred() {
   try {
-    const deps = __makeTestDeps();
+    const deps = __makeTestDeps(undefined, 0);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -437,10 +444,53 @@ async function test_a_written_type_argument_types_its_argument__with_the_key_inf
 }
 
 // case tier: unit
+async function test_a_suite_level_stub_of_a_typed_read_returns_its_value() {
+  try {
+    const deps = __makeTestDeps(undefined, 1);
+    const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
+    type Channel = __ns_shop.Channel;
+    type DeliveryKey = __ns_shop.DeliveryKey;
+    type Quote = __ns_shop.Quote;
+    type Receipt = __ns_shop.Receipt;
+    type Slug = __ns_shop.Slug;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    type BytesResponse = __ns_bynk.BytesResponse;
+    type CallFailure = __ns_bynk.CallFailure;
+    type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
+    type Claim = __ns_bynk.Claim;
+    type Cookie = __ns_bynk.Cookie;
+    type CronSchedule = __ns_bynk.CronSchedule;
+    type EventEnvelope = __ns_bynk.EventEnvelope;
+    type FetchError = __ns_bynk.FetchError;
+    type FetchOptions = __ns_bynk.FetchOptions;
+    type File = __ns_bynk.File;
+    type LogLevel = __ns_bynk.LogLevel;
+    type Method = __ns_bynk.Method;
+    type ParOptions = __ns_bynk.ParOptions;
+    type Redirect = __ns_bynk.Redirect;
+    type Refusal = __ns_bynk.Refusal;
+    type Request = __ns_bynk.Request;
+    type Response = __ns_bynk.Response;
+    type SameSite = __ns_bynk.SameSite;
+    type StreamResponse = __ns_bynk.StreamResponse;
+    type TimedOut = __ns_bynk.TimedOut;
+    type Uuid = __ns_bynk.Uuid;
+    const n = await sums.call(true, 1, deps);
+    if (!(n === 5)) { throw __bynkExpectFailure("src/tests/shop_suite_stub.test.bynk:9:12", 303, 309, "expect n == 5\n  expected: n == 5\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((5))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
 async function test_a_stub_names_the_type_no_argument_determines_and_leaves_the_key_open() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stub names the type no argument determines and leaves the key open"), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stub names the type no argument determines and leaves the key open", 2), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -484,7 +534,7 @@ async function test_a_stub_names_the_type_no_argument_determines_and_leaves_the_
 // case tier: unit
 async function test_a_stubbed_typed_read_returns_the_value_it_was_given() {
   try {
-    const deps = __makeTestDeps("a stubbed typed read returns the value it was given");
+    const deps = __makeTestDeps("a stubbed typed read returns the value it was given", 2);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -528,7 +578,7 @@ async function test_a_stubbed_typed_read_returns_the_value_it_was_given() {
 async function test_a_stub_and_an_observation_naming_the_type_match_a_call_that_inferred_it() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stub and an observation naming the type match a call that inferred it"), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stub and an observation naming the type match a call that inferred it", 2), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -572,7 +622,7 @@ async function test_a_stub_and_an_observation_naming_the_type_match_a_call_that_
 // case tier: unit
 async function test_a_clause_naming_another_type_does_not_match() {
   try {
-    const deps = __makeTestDeps("a clause naming another type does not match");
+    const deps = __makeTestDeps("a clause naming another type does not match", 2);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -616,7 +666,7 @@ async function test_a_clause_naming_another_type_does_not_match() {
 async function test_an_observation_reads_the_stored_key_as_a_String() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("an observation reads the stored key as a String"), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("an observation reads the stored key as a String", 2), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -664,7 +714,7 @@ async function test_an_observation_reads_the_stored_key_as_a_String() {
 async function test_claim_is_stubbed_without_a_type_argument() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("claim is stubbed without a type argument"), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("claim is stubbed without a type argument", 2), { Idempotency: ["claim", "dedup", "remember"] }, __obs);
     const { Channel, DeliveryKey, Quote, Receipt, Slug, claims, contextual, numbers, refined, sums } = __ns_shop;
     type Channel = __ns_shop.Channel;
     type DeliveryKey = __ns_shop.DeliveryKey;
@@ -830,7 +880,7 @@ export function __deserialise_Option_Receipt(json: __JsonValue, path: string = "
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a record key is claimed once", "a sum key round-trips a remembered value", "a refined String key round-trips", "an Int key round-trips", "a written type argument types its argument, with the key inferred", "a stub names the type no argument determines and leaves the key open", "a stubbed typed read returns the value it was given", "a stub and an observation naming the type match a call that inferred it", "a clause naming another type does not match", "an observation reads the stored key as a String", "claim is stubbed without a type argument"];
+export const __bynkCases: readonly string[] = ["a record key is claimed once", "a sum key round-trips a remembered value", "a refined String key round-trips", "an Int key round-trips", "a written type argument types its argument, with the key inferred", "a suite-level stub of a typed read returns its value", "a stub names the type no argument determines and leaves the key open", "a stubbed typed read returns the value it was given", "a stub and an observation naming the type match a call that inferred it", "a clause naming another type does not match", "an observation reads the stored key as a String", "claim is stubbed without a type argument"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -862,6 +912,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a written type argument types its argument, with the key inferred")) {
     const started = __bynkCaseNow();
     const r = { name: "a written type argument types its argument, with the key inferred", ...(await test_a_written_type_argument_types_its_argument__with_the_key_inferred()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a suite-level stub of a typed read returns its value")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a suite-level stub of a typed read returns its value", ...(await test_a_suite_level_stub_of_a_typed_read_returns_its_value()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
