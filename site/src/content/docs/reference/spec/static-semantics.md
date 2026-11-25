@@ -561,15 +561,16 @@ method widen to the base like any other argument.
 
 **String interpolation** (v0.43, ADR 0075). An interpolated string
 `"… \(e) …"` has type `String`. Each hole expression `e` must have type
-`String`, `Int`, `Float`, `Bool`, `Decimal`, or a **refinement** of one of those (which
-widens to its base for display) — these are the types with a well-defined
+`String`, `Int`, `Float`, `Bool`, `Decimal`, `Instant`, `Duration`, or a **refinement** of one of
+those (which widens to its base for display) — these are the types with a well-defined
 string form (`Int`/`Float` via the ADR 0074 `toString` contract, `Bool` as
-`true`/`false`, `Decimal` as its canonical text per ADR 0698). Any other hole type — `record`, `sum`, `Option`, `Result`,
+`true`/`false`, `Decimal` as its canonical text per ADR 0698, and (#3977) `Instant` as RFC 3339
+text in UTC, `2026-11-22T10:00:00.000Z`, and `Duration` as units, largest first,
+`1h30m` — the text their `toString()` gives, see [Types](/reference/types/#duration)). Any other hole type — `record`, `sum`, `Option`, `Result`,
 `List`, an opaque type (whose base is hidden — `.raw` it first), … — is a
 static error (`bynk.types.interpolation_non_scalar`): map the value to a
-`String` first. This includes the remaining base types — `Bytes` (`toHex()`,
-`toBase64()`), `Duration` (`toString()`) and `Instant` (`toIso()`,
-`toString()`) — whose string form is a choice, not a default. The conversion is implicit only here, in a display context; it
+`String` first. This includes `Bytes` (`toHex()`, `toBase64()`), whose string form is a
+choice, not a default. The conversion is implicit only here, in a display context; it
 does **not** generalise to arithmetic or comparison (ADR 0046 is unchanged —
 `+` stays numeric, `concat` stays a method).
 

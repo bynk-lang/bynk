@@ -7,6 +7,9 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.706.0** | `Instant.toString()` is RFC 3339 text, `Duration.toString()` is units (`1h30m`), `Duration.toIso()` is ISO 8601, and both types interpolate |
+| **v0.705.0** | A service opts in to RFC 9457 problem details with errors { format: problem }, or a route with @errors(format:); an error variant and a router rejection then answer application/problem+json, and the default is unchanged byte for byte |
+| **v0.704.1** | The dead-letter consumer check compares message types structurally, as a producer's send does, so a type with the same fields under another name and a weaker refinement are accepted |
 | **v0.704.0** | A `for all` and a bare `Val` work over `List`, `Set`, `Map` and `Option` and the records and sums that hold them, and `bynk.val.needs_pin` names the path to the part that cannot be generated |
 | **v0.703.0** | A store `Map`, `Set` or `Cache` takes any `Key` type as its key (a record, a sum, an `Option`, a `Decimal`, `Bytes`), held under the canonical key encoding; `String` and `Int` keys are stored exactly as before |
 | **v0.702.1** | A queue send in an agent's transition predicate or migrate step is refused as an unknown name, and the diagnostic now says the name is a capability |
