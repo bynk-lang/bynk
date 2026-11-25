@@ -72,6 +72,12 @@ pub(crate) struct Plan<'a> {
     /// after it.
     #[serde(skip)]
     account_notes: Vec<String>,
+    /// #3943: what a named environment takes from `default` (its `env(…)`
+    /// constants left to `[vars]` or a default, and `Service @worker` and `Email`
+    /// values equal to `default`'s). Advisory; present in the JSON only when
+    /// there is any.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    shared_with_default: Vec<super::shared::SharedWithDefault>,
 }
 
 #[derive(Debug, Serialize)]
@@ -586,6 +592,11 @@ pub(crate) fn plan_report(plan: &Plan<'_>, format: DeployFormat) -> String {
             if plan.order.len() > 1 {
                 out.push_str(&format!("order {}\n", plan.order.join(" → ")));
             }
+            // #3943: advisory, after the plan it qualifies.
+            for shared in &plan.shared_with_default {
+                out.push_str(&shared.line(plan.environment));
+                out.push('\n');
+            }
             out
         }
         DeployFormat::Json => {
@@ -705,6 +716,12 @@ impl<'a> Plan<'a> {
         &self.account_notes
     }
 
+    /// #3943: what the environment takes from `default`, listed after the plan.
+    pub(crate) fn with_shared(mut self, shared: Vec<super::shared::SharedWithDefault>) -> Self {
+        self.shared_with_default = shared;
+        self
+    }
+
     /// Each converted kind's lines again, with what the run has read in `lives`: for
     /// Hyperdrive (#3319), each config as `bynk.toml` and the environment say it will be handled
     /// (a `sync` from the variable, an `adopt`), once the deploy has read them.
@@ -752,6 +769,7 @@ pub(crate) fn derive_plan<'a>(
     Plan {
         environment,
         account_notes: Vec::new(),
+        shared_with_default: Vec::new(),
         shown_orphans: orphans.as_named_in(environment),
         orphans,
         order: order
