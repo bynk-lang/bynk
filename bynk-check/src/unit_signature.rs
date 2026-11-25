@@ -333,7 +333,7 @@ fn protocol_signature(p: &ServiceProtocol) -> ProtocolSignature {
         ServiceProtocol::Http => ProtocolSignature::Http,
         ServiceProtocol::Cron => ProtocolSignature::Cron,
         ServiceProtocol::Queue { name } => ProtocolSignature::Queue { name: name.clone() },
-        ServiceProtocol::Email { address } => ProtocolSignature::Email {
+        ServiceProtocol::Email { address, .. } => ProtocolSignature::Email {
             address: address.clone(),
         },
         ServiceProtocol::WebSocket { in_type, out_type } => ProtocolSignature::WebSocket {
