@@ -8038,6 +8038,7 @@ mod actor_binding_persistence_tests {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,

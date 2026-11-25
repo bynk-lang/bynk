@@ -1288,6 +1288,7 @@ impl TypedCommons {
     pub fn empty() -> Self {
         TypedCommons {
             commons: Arc::new(Commons {
+                test_only: false,
                 name: QualifiedName {
                     parts: Vec::new(),
                     span: Default::default(),

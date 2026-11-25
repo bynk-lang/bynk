@@ -1135,6 +1135,7 @@ mod tests {
                 panic!("expected a context unit")
             };
             let commons = Commons {
+                test_only: false,
                 name: ctx.name,
                 items: ctx.items,
                 uses: ctx.uses,
@@ -1259,6 +1260,7 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             }
         }
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
@@ -2207,6 +2209,7 @@ agent Widget {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
