@@ -142,6 +142,10 @@ pub struct Commons {
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,
+    /// `consumes` clauses of this file. Source cannot write one in a commons
+    /// yet; the toolchain adds the type-only clause that reaches the `bynk`
+    /// adapter's transparent types (#4181, [`ParsedFile::add_implicit_consumes`]).
+    pub consumes: Vec<ConsumesDecl>,
     /// Optional documentation block attached to the commons declaration.
     pub documentation: Option<Doc>,
     /// Surface form of the file: brace-delimited body or headerless fragment.

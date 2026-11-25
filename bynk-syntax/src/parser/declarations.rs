@@ -464,6 +464,7 @@ impl<'a> Parser<'a> {
             name,
             items,
             uses,
+            consumes: Vec::new(),
             documentation,
             form: if brace {
                 CommonsForm::Brace

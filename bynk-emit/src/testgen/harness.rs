@@ -454,6 +454,7 @@ pub(super) fn integration_typed_commons(
             },
             items: Vec::new(),
             uses: Vec::new(),
+            consumes: Vec::new(),
             documentation: None,
             form: CommonsForm::Brace,
             span: Span::default(),

@@ -1294,6 +1294,7 @@ impl TypedCommons {
                 },
                 items: Vec::new(),
                 uses: Vec::new(),
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Fragment,
                 span: Default::default(),

@@ -16,6 +16,18 @@
 //!
 //! This is the one place that decides it. A new compiler-known sum is a row in
 //! the table and its unit.
+//!
+//! # The `bynk` adapter's transparent types in a commons (#4181)
+//!
+//! A commons cannot `consumes`, so it could not name `Uuid` or `CronSchedule`,
+//! and a constant a context shares (`const Nightly: CronSchedule = …`) had to
+//! live in each context. [`add_implicit_consumes`] closes that: a commons that
+//! names a type the `bynk` adapter exports `transparent` is given the clause
+//! `consumes bynk { <those types> }`, which is type-only. The unit gains no
+//! capability and stays pure. Opaque types and capabilities are not
+//! `transparent` exports, so they are not reached, and naming one is still
+//! `bynk.resolve.unknown_type`. As with a prelude type, a name the file (or a
+//! unit it `uses`) declares itself is left alone.
 
 use bynk_project::ParsedFile;
 use bynk_std::PRELUDE_TYPES;
@@ -55,6 +67,107 @@ pub(crate) fn add_implicit_uses(parsed: &mut [ParsedFile]) {
             }
         }
     }
+}
+
+/// The types the `bynk` adapter exports `transparent`, read from its own
+/// source, so a type added there is reached with no second edit. Empty if the
+/// source does not parse (`every_first_party_source_parses` rejects that in CI).
+fn bynk_transparent_types() -> &'static [String] {
+    use bynk_syntax::ast::{ExportKind, SourceUnit, Visibility};
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES.get_or_init(|| {
+        let Some(unit) = bynk_std::UNITS.iter().find(|u| u.name == bynk_std::BYNK_UNIT) else {
+            return Vec::new();
+        };
+        let parsed = bynk_syntax::lexer::tokenize(unit.source)
+            .ok()
+            .and_then(|tokens| bynk_syntax::parser::parse_unit(&tokens, unit.source).ok());
+        let Some(SourceUnit::Adapter(adapter)) = parsed else {
+            return Vec::new();
+        };
+        adapter
+            .exports
+            .iter()
+            .filter(|e| e.kind == ExportKind::Type(Visibility::Transparent))
+            .flat_map(|e| e.names.iter().map(|n| n.name.name.clone()))
+            .collect()
+    })
+}
+
+/// #4181: give every commons of the project's own that names a transparent type
+/// of the `bynk` adapter the type-only clause `consumes bynk { … }` for the
+/// names it uses, so the type is nameable there without `consumes`. Contexts
+/// keep writing their own `consumes`. First-party units are left as written. A
+/// name the file declares (a type, or a variant of one of its sums), or that a
+/// unit it `uses` declares, is the unit's own and is not reached.
+pub(crate) fn add_implicit_consumes(parsed: &mut [ParsedFile]) {
+    let candidates = bynk_transparent_types();
+    if candidates.is_empty() {
+        return;
+    }
+    let declaring: Vec<(String, std::collections::HashSet<String>)> = candidates
+        .iter()
+        .map(|name| {
+            let units = parsed
+                .iter()
+                .filter(|pf| !pf.is_synthetic() && declares_name(pf, name))
+                .map(|pf| pf.unit().name().joined())
+                .collect();
+            (name.clone(), units)
+        })
+        .collect();
+    for pf in parsed.iter_mut() {
+        if pf.is_synthetic() || !matches!(pf.unit(), bynk_syntax::ast::SourceUnit::Commons(_)) {
+            continue;
+        }
+        let own = pf.unit().name().joined();
+        let used: Vec<String> = pf.uses().iter().map(|u| u.target.joined()).collect();
+        let wanted: Vec<&str> = declaring
+            .iter()
+            .filter(|(name, units)| {
+                !units.contains(&own) && !used.iter().any(|u| units.contains(u))
+                    && names_identifier(pf.source(), name)
+            })
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if !wanted.is_empty() {
+            let names: Vec<String> = wanted.iter().map(|n| n.to_string()).collect();
+            pf.add_implicit_consumes(bynk_std::BYNK_UNIT, &names);
+        }
+    }
+}
+
+/// Whether the file declares a type or a sum variant called `name`.
+fn declares_name(pf: &ParsedFile, name: &str) -> bool {
+    declares_type(pf, name)
+        || pf.items().iter().any(|item| match item {
+            CommonsItem::Type(t) => type_has_variant(t, name),
+            _ => false,
+        })
+}
+
+/// Whether `t` is a sum with a variant called `name`.
+fn type_has_variant(t: &bynk_syntax::ast::TypeDecl, name: &str) -> bool {
+    use bynk_syntax::ast::TypeBody;
+    match &t.body {
+        TypeBody::Sum(body) => body.variants.iter().any(|v| v.name.name == name),
+        _ => false,
+    }
+}
+
+/// Whether `name` appears in `source` as an identifier token. Unlike
+/// [`mentions_word`] this skips comments, docs and string text, so a word in
+/// prose never reaches an adapter the unit does not use.
+fn names_identifier(source: &str, name: &str) -> bool {
+    use bynk_syntax::lexer::{TokenKind, tokenize};
+    if !mentions_word(source, name) {
+        return false;
+    }
+    tokenize(source).is_ok_and(|tokens| {
+        tokens
+            .iter()
+            .any(|t| t.kind == TokenKind::Ident && source.get(t.span.start..t.span.end) == Some(name))
+    })
 }
 
 /// Whether the file declares a type called `name`.
