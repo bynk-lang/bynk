@@ -3887,6 +3887,17 @@ struct RefCheckCtx<'a, 'b> {
     errors: &'a mut Sinks<'b>,
 }
 
+impl RefCheckCtx<'_, '_> {
+    /// A type reference written in the body resolves, and (#3958) a bounded type
+    /// it applies to one of the function's type parameters finds the bound there.
+    fn check_type_ref(&mut self, r: &TypeRef) {
+        check_type_ref_resolves_in(r, self.types, self.type_params, self.errors);
+        if let Some(scope) = self.eq_scope {
+            check_applied_bounds_at(r, self.type_params, scope, self.types, self.errors);
+        }
+    }
+}
+
 fn check_block_references(block: &Block, cx: &mut RefCheckCtx) {
     cx.scopes.push(HashMap::new());
     for stmt in &block.statements {
@@ -3901,10 +3912,7 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
         Statement::Let(l) | Statement::EffectLet(l) => {
             check_expr_references(&l.value, cx);
             if let Some(annot) = &l.type_annot {
-                check_type_ref_resolves_in(annot, cx.types, cx.type_params, cx.errors);
-                if let Some(scope) = cx.eq_scope {
-                    check_applied_bounds_at(annot, cx.type_params, scope, cx.types, cx.errors);
-                }
+                cx.check_type_ref(annot);
             }
             if let Some(prev) = cx.types.get(&l.name.name) {
                 cx.errors.push(
@@ -4064,10 +4072,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::Lambda(lambda) => {
             for p in &lambda.params {
                 if let Some(tr) = &p.type_ref {
-                    check_type_ref_resolves_in(tr, cx.types, cx.type_params, cx.errors);
-                    if let Some(scope) = cx.eq_scope {
-                        check_applied_bounds_at(tr, cx.type_params, scope, cx.types, cx.errors);
-                    }
+                    cx.check_type_ref(tr);
                 }
             }
             let mut frame: HashMap<String, ()> = HashMap::new();
@@ -4264,10 +4269,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             // `fn`/method bodies are covered; the checker backstops handler
             // bodies (which never reach this walk).
             for ta in type_args {
-                check_type_ref_resolves_in(ta, cx.types, cx.type_params, cx.errors);
-                if let Some(scope) = cx.eq_scope {
-                    check_applied_bounds_at(ta, cx.type_params, scope, cx.types, cx.errors);
-                }
+                cx.check_type_ref(ta);
             }
             match cx.fns.get(&name.name) {
                 Some(decl) => {
