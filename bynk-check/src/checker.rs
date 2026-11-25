@@ -70,6 +70,7 @@ mod list_more;
 mod list_par;
 mod list_par_with;
 mod par;
+mod query_par;
 mod refinements;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
@@ -7028,6 +7029,13 @@ pub fn variants_of(
                         QueueVariantPayload::Message => {
                             vec![("reason".to_string(), tys.intern(Ty::Base(BaseType::String)))]
                         }
+                        QueueVariantPayload::MessageDelay => vec![
+                            ("reason".to_string(), tys.intern(Ty::Base(BaseType::String))),
+                            (
+                                "delay".to_string(),
+                                tys.intern(Ty::Base(BaseType::Duration)),
+                            ),
+                        ],
                     },
                 })
                 // #3878: a `system` case reads a body that did not decode as
@@ -7437,6 +7445,8 @@ mod pure_helper_pins {
         RefinementPred {
             kind,
             arg_text: None,
+            pending: None,
+            from_const: Vec::new(),
             span: sp(),
         }
     }

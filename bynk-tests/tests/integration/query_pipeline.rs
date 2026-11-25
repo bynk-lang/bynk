@@ -32,7 +32,7 @@ agent Room {
   store conns: Map[String, Connection[Frame]]
 
   on call announce(text: String) -> Effect[()] {
-    conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: text }))
+    conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: text }))
   }
 }
 ";

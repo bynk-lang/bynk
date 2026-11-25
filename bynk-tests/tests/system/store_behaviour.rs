@@ -1236,7 +1236,7 @@ agent Room {\n\
 \x20   }\n\
 \x20 }\n\
 \x20 on call broadcast(text: String) -> Effect[()] {\n\
-\x20   conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))\n\
+\x20   conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))\n\
 \x20 }\n\
 }\n";
 

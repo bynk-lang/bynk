@@ -706,21 +706,6 @@ pub fn lower_route_cache_ir(h: &Handler) -> Option<CacheIr> {
     })
 }
 
-/// #1228: a route's own `@limit(maxBody:)` annotation, if present — the
-/// override half of `emitter/workers_entry.rs`'s own (now superseded)
-/// `effective_max_body`; the service-wide `limits { maxBody }` fallback
-/// stays that function's own concern (read from a *service*'s `limits {}`
-/// block, not a per-route `Handler`, so it does not move here). Project validation
-/// (`bynk.http.limit_*`/`limits_*`) has already rejected a malformed or
-/// misplaced `@limit`, so an absent/ill-formed annotation here simply
-/// yields `None` — the caller's own service-default fallback still
-/// applies. No `&CheckedProgram` needed, same reasoning as
-/// [`lower_route_cache_ir`]: `maxBody` is an already-resolved
-/// `ExprKind::IntLit`, not a type.
-pub fn lower_route_limit_ir(h: &Handler) -> Option<i64> {
-    h.limit_max_body()
-}
-
 /// Every `from Events(E)` service in `program`'s own unit, captured as an
 /// [`crate::vocabulary::EventSubscriberShape`] keyed by service name — see that
 /// struct's own doc comment for why this is captured now rather than
@@ -1667,7 +1652,7 @@ agent Room {
   }
 
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }
@@ -1844,8 +1829,8 @@ capability Store {
         assert_eq!(ir.name, "Ledger");
     }
 
-    /// Review of #1229 (#1228): `lower_route_cache_ir`/`lower_route_limit_ir`
-    /// take no `&CheckedProgram`, resolve nothing, and cannot panic — the same
+    /// Review of #1229 (#1228): `lower_route_cache_ir`
+    /// takes no `&CheckedProgram`, resolve nothing, and cannot panic — the same
     /// posture `lower_event_pattern_ir`'s own test above already established a
     /// parsed-not-checked fixture for, and for the identical reason here: their
     /// defensive branches (a non-`GET` handler, a `maxAge`-less `@cache`, a
@@ -1969,61 +1954,6 @@ service Api from http {
         assert!(
             lower_route_cache_ir(parsed_handler(&ctx, "Api", 0)).is_none(),
             "a well-formed scope: must not survive a missing maxAge:"
-        );
-    }
-
-    #[test]
-    fn lower_route_limit_ir_reads_maxbody_off_a_route_annotation() {
-        let ctx = parsed_only_context(
-            r#"
-context demo
-
-service Api from http {
-  @limit(maxBody: 26_214_400)
-  on POST("/bulk") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
-    Created(body)
-  }
-
-  on POST("/upload") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
-    Created(body)
-  }
-}
-"#,
-        );
-        assert_eq!(
-            lower_route_limit_ir(parsed_handler(&ctx, "Api", 0)),
-            Some(26_214_400)
-        );
-        assert!(
-            lower_route_limit_ir(parsed_handler(&ctx, "Api", 1)).is_none(),
-            "no @limit annotation at all must yield None — the caller applies the \
-             service-wide default, this function does not know it"
-        );
-    }
-
-    #[test]
-    fn lower_route_limit_ir_returns_none_for_a_non_positive_maxbody() {
-        // `bynk.http.limit_bad_max_body` already rejects a non-positive maxBody
-        // at check time — this pins the lowering function's own independent
-        // guard. `None` here matters specifically because the caller's own
-        // fallback composition (`effective_max_body`) treats it as "no
-        // route-level override," falling through to the service-wide default —
-        // not as "an explicit zero-byte cap."
-        let ctx = parsed_only_context(
-            r#"
-context demo
-
-service Api from http {
-  @limit(maxBody: 0)
-  on POST("/zero") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
-    Created(body)
-  }
-}
-"#,
-        );
-        assert!(
-            lower_route_limit_ir(parsed_handler(&ctx, "Api", 0)).is_none(),
-            "a non-positive maxBody must not construct Some(0)"
         );
     }
 

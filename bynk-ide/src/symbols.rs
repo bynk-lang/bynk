@@ -891,10 +891,11 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
 }
 
 /// The hover of a contextual word that only means something in its own shape: `advance`
-/// (#2137) and the `delivery` section of a queue consumer with its keys (#3877).
+/// (#2137) and the `delivery` section of a queue consumer with its keys (#3877) and a queue verdict's `RetryAfter` (#3881).
 pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String> {
     describe_advance_at(source, offset)
         .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
+        .or_else(|| crate::queue_delivery::describe_retry_after_at(source, offset))
 }
 
 /// #3191 (ADR 0161): hover for the contextual `by` where it is a clause word —
@@ -1720,10 +1721,7 @@ fn render_handler_annotation_hover(
     }
     // #3276: `@form` decodes the `body` record from a urlencoded form.
     if ann.name.name == "form" {
-        let cap = match handler.limit_max_body().or(service_cap) {
-            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
-            None => "none (add `@limit` or `limits { maxBody }` to bound it)".to_string(),
-        };
+        let cap = body_cap_phrase(handler, service_cap);
         return format!(
             "```bynk\n{sig}\n```\n\n\
              **`@form`** — decode this route's `body` record from an \
@@ -1740,11 +1738,7 @@ fn render_handler_annotation_hover(
     }
     // #3276: `@multipart` decodes the `body` record from `multipart/form-data`.
     if ann.name.name == "multipart" {
-        let cap = match handler.limit_max_body().or(service_cap) {
-            Some(bytes) => format!("{bytes} bytes (from `@limit` or the service `limits`)"),
-            None => "none — a `@multipart` route needs one (`bynk.http.multipart_body_unbounded`)"
-                .to_string(),
-        };
+        let cap = body_cap_phrase(handler, service_cap);
         return format!(
             "```bynk\n{sig}\n```\n\n\
              **`@multipart`** — decode this route's `body` record from a `multipart/form-data` \
@@ -3415,6 +3409,19 @@ fn security_summary(security: &SecurityPolicy) -> String {
         "nosniff".to_string()
     } else {
         parts.join(", ")
+    }
+}
+
+/// #3921: a body-taking route's effective request-body cap and where it comes from:
+/// its `@limit`, the service's `limits`, or the 1 MiB default.
+fn body_cap_phrase(handler: &Handler, service_cap: Option<i64>) -> String {
+    match (handler.limit_max_body(), service_cap) {
+        (Some(bytes), _) => format!("{bytes} bytes (from `@limit`)"),
+        (None, Some(bytes)) => format!("{bytes} bytes (from the service `limits`)"),
+        (None, None) => format!(
+            "{} bytes (the default; `@limit(maxBody: …)` or `limits {{ maxBody }}` raises it)",
+            bynk_syntax::ast::DEFAULT_MAX_BODY
+        ),
     }
 }
 

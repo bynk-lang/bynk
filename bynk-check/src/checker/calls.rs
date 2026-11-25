@@ -3083,6 +3083,12 @@ pub(crate) fn check_method_call(
         }
         return check_test_service_address(&sig, id, method, args, expr_id, ctx);
     }
+    // #3933: `Agent(key).op.outcome(args)`.
+    if let Some(r) =
+        super::call_outcome::check_agent_outcome_call(receiver, method, args, expr_id, ctx)
+    {
+        return r;
+    }
     // v0.6: cross-context service call. Two shapes:
     //   - `Alias.service(args)`           where Alias is from `consumes X as Alias`
     //   - `prefix.tail.service(args)`     where `prefix.tail` is a consumed context's
