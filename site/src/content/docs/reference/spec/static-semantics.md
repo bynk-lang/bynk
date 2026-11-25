@@ -3342,8 +3342,8 @@ to an **index lookup** when an `@indexed` field routes it (below).
 *(v0.93, [ADR 0118](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0118-indexed-indexing-model.md))*
 A `store Map[K, V]` field may carry `@indexed(by: f, …)` to maintain a **secondary
 index** on one or more of its value type's fields. Each `by:` target MUST name a
-**value-keyable field** of `V` (the `Map`-key rule — `String`/`Int`, incl.
-refined/opaque over them); a non-`by:` argument is `bynk.index.bad_argument`, a
+**`Key` field** of `V` (the `Map`-key rule, [§6.2.1](/reference/spec/type-system/#621-the-key-constraint));
+a non-`by:` argument is `bynk.index.bad_argument`, a
 field the value type lacks is `bynk.index.unknown_key`, and a non-keyable field
 is `bynk.index.unkeyable_key`. The runtime maintains a sibling posting-list
 `Record` per indexed field **inside the same atomic commit** (ADR 0109) as the
@@ -3367,7 +3367,9 @@ sum or enum of keys; anything else is `bynk.types.not_keyable`, checked at every
 written `Map[K, V]` reference. A type parameter in key position MUST be declared
 `K: Key`, on the function, on the type, or in a method's `where` clause
 (`bynk.generics.missing_key_bound`, with a machine-applicable fix). A store
-`Map`'s key is still `String`/`Int` (`bynk.store.unkeyable_key`).
+`Map`'s, `Set`'s or `Cache`'s key is `Key` too (`bynk.store.unkeyable_key` for a type that is not):
+a `String`/`Int` key, or a refined or opaque type over one, is persisted as its own text, any
+other key under its canonical encoding, whose length counts towards the platform's storage-key size.
 
 **Order.** A `List` is ordered by construction. A `Map` is
 **insertion-ordered**, normatively: `keys()` enumerates in insertion order,

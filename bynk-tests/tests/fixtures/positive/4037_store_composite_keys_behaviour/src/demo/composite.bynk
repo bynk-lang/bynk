@@ -1,0 +1,154 @@
+---
+#4037: a store `Map`, `Set` or `Cache` takes any `Key` type, held under the canonical key
+encoding: two keys are one entry exactly when they are `==`.
+---
+context demo.composite
+
+capability Clock {
+	fn now() -> Effect[Instant]
+}
+
+provides Clock = FixedClock {
+	fn now() -> Effect[Instant] {
+		Instant.fromEpochMillis(0)
+	}
+}
+
+type StockKey = {
+	region: String,
+	code: Int,
+}
+
+type Slot =
+	| Front(row: Int)
+	| Back(row: Int)
+
+type Order = {
+	at: StockKey,
+	qty: Int,
+}
+
+agent Warehouse {
+	key id: String
+
+	store stock: Map[StockKey, Int]
+	store slots: Map[Slot, String]
+	store blocked: Set[StockKey]
+	store prices: Map[Decimal, String]
+	store tags: Set[Option[String]]
+	store files: Map[Bytes, Int]
+	store recent: Cache[StockKey, Int] @ttl(5.minutes)
+	store orders: Map[String, Order] @indexed(by: at)
+
+	on call put(region: String, code: Int, n: Int) -> Effect[()] {
+		let _ <- stock.put(StockKey { region: region, code: code }, n)
+	}
+
+	on call add(region: String, code: Int, n: Int) -> Effect[()] {
+		let _ <- stock.upsert(StockKey { region: region, code: code }, n, (q) => q + n)
+	}
+
+	on call get(region: String, code: Int) -> Effect[Option[Int]] {
+		stock.get(StockKey { region: region, code: code })
+	}
+
+	on call has(region: String, code: Int) -> Effect[Bool] {
+		stock.contains(StockKey { region: region, code: code })
+	}
+
+	on call drop(region: String, code: Int) -> Effect[()] {
+		let _ <- stock.remove(StockKey { region: region, code: code })
+	}
+
+	on call stockSize() -> Effect[Int] {
+		stock.size()
+	}
+
+	on call total() -> Effect[Int] {
+		stock.sum((n) => n)
+	}
+
+	on call front(row: Int, what: String) -> Effect[()] {
+		let _ <- slots.put(Front(row), what)
+	}
+
+	on call back(row: Int, what: String) -> Effect[()] {
+		let _ <- slots.put(Back(row), what)
+	}
+
+	on call frontAt(row: Int) -> Effect[Option[String]] {
+		slots.get(Front(row))
+	}
+
+	on call backAt(row: Int) -> Effect[Option[String]] {
+		slots.get(Back(row))
+	}
+
+	on call slotCount() -> Effect[Int] {
+		slots.size()
+	}
+
+	on call block(region: String, code: Int) -> Effect[()] {
+		let _ <- blocked.add(StockKey { region: region, code: code })
+	}
+
+	on call isBlocked(region: String, code: Int) -> Effect[Bool] {
+		blocked.contains(StockKey { region: region, code: code })
+	}
+
+	on call blockedCount() -> Effect[Int] {
+		blocked.size()
+	}
+
+	on call price(d: Decimal, what: String) -> Effect[()] {
+		let _ <- prices.put(d, what)
+	}
+
+	on call priceOf(d: Decimal) -> Effect[Option[String]] {
+		prices.get(d)
+	}
+
+	on call priceCount() -> Effect[Int] {
+		prices.size()
+	}
+
+	on call tag(t: Option[String]) -> Effect[()] {
+		let _ <- tags.add(t)
+	}
+
+	on call tagged(t: Option[String]) -> Effect[Bool] {
+		tags.contains(t)
+	}
+
+	on call tagCount() -> Effect[Int] {
+		tags.size()
+	}
+
+	on call file(name: String, n: Int) -> Effect[()] {
+		let _ <- files.put(Bytes.fromUtf8(name), n)
+	}
+
+	on call fileOf(name: String) -> Effect[Option[Int]] {
+		files.get(Bytes.fromUtf8(name))
+	}
+
+	on call remember(region: String, code: Int, n: Int) -> Effect[()] given Clock {
+		let _ <- recent.put(StockKey { region: region, code: code }, n)
+	}
+
+	on call recall(region: String, code: Int) -> Effect[Option[Int]] given Clock {
+		recent.get(StockKey { region: region, code: code })
+	}
+
+	on call order(id: String, region: String, code: Int, qty: Int) -> Effect[()] {
+		let _ <- orders.put(id, Order { at: StockKey { region: region, code: code }, qty: qty })
+	}
+
+	on call ordersAt(region: String, code: Int) -> Effect[Int] {
+		let k = StockKey {
+			region: region,
+			code: code,
+		}
+		orders.filter((o) => o.at == k).count()
+	}
+}

@@ -1323,6 +1323,7 @@ pub(super) fn emit_agent_state_persistence(
                     hydrate_fn: has_collections.then_some(hydrate_fn.as_str()),
                     encode_fn: has_encode.then_some(encode_fn.as_str()),
                     map_names: &map_names,
+                    composite_keys: &layout.composite_keys,
                 },
                 &step_fn,
                 plan,
