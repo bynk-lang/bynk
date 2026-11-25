@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TRACEPARENT_HEADER,
+  W3C_TRACEPARENT_HEADER,
   admitTrace,
   admittedTrace,
   currentTraceId,
@@ -80,7 +80,7 @@ test("callService: sends a traceparent inside a trace, none outside, and the cal
   const seen: Array<string | null> = [];
   const binding: ServiceBinding = {
     fetch: async (req) => {
-      seen.push(req.headers.get(TRACEPARENT_HEADER));
+      seen.push(req.headers.get(W3C_TRACEPARENT_HEADER));
       const body = await verifyCall(req, CALLEE_ENV, "shop.payment");
       assert.equal(typeof body, "string");
       seen.push(admittedTrace(req) ?? null);
@@ -99,13 +99,13 @@ test("admitTrace: a traceparent on a request that is not verified is never read"
   const headers = await signedHeaders(ENV, "shop.orders", "shop.payment", "/_bynk/call/svc", "", "1", "{}", "test");
   const forged = new Request("http://internal/_bynk/call/svc", {
     method: "POST",
-    headers: { ...headers, "X-Bynk-Signature": "0".repeat(64), [TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` },
+    headers: { ...headers, "X-Bynk-Signature": "0".repeat(64), [W3C_TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` },
     body: "{}",
   });
   const refused = await verifyCall(forged, CALLEE_ENV, "shop.payment");
   assert.equal(typeof refused, "object");
   assert.equal(admittedTrace(forged), undefined);
-  const plain = new Request("http://localhost/", { headers: { [TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` } });
+  const plain = new Request("http://localhost/", { headers: { [W3C_TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` } });
   assert.equal(admittedTrace(plain), undefined);
   admitTrace(plain);
   assert.equal(admittedTrace(plain), TRACE, "admitTrace is what records it");
@@ -115,7 +115,7 @@ test("a malformed traceparent on a verified call is ignored, not refused", async
   const headers = await signedHeaders(ENV, "shop.orders", "shop.payment", "/_bynk/call/svc", "", "1", "{}", "test");
   const req = new Request("http://internal/_bynk/call/svc", {
     method: "POST",
-    headers: { ...headers, [TRACEPARENT_HEADER]: "not-a-traceparent" },
+    headers: { ...headers, [W3C_TRACEPARENT_HEADER]: "not-a-traceparent" },
     body: "{}",
   });
   assert.equal(await verifyCall(req, CALLEE_ENV, "shop.payment"), "{}");
@@ -126,7 +126,7 @@ test("deliverEvent: sends the traceparent of the envelope's trace, which the del
   let header: string | null = null;
   const binding: ServiceBinding = {
     fetch: async (req) => {
-      header = req.headers.get(TRACEPARENT_HEADER);
+      header = req.headers.get(W3C_TRACEPARENT_HEADER);
       return new Response(null, { status: 204 });
     },
   };
@@ -137,6 +137,20 @@ test("deliverEvent: sends the traceparent of the envelope's trace, which the del
   assert.equal(header, null);
   await deliverEvent(binding, "svc", {}, { trace: "nope" }, { BYNK_CALL_TO_SHOP__AUDIT: "k" }, "shop.orders", "shop.audit");
   assert.equal(header, null, "a malformed trace is not sent");
+});
+
+test("deliverEvent: an envelope with no trace sends none, even from inside a trace", async () => {
+  let header: string | null = "unset";
+  const binding: ServiceBinding = {
+    fetch: async (req) => {
+      header = req.headers.get(W3C_TRACEPARENT_HEADER);
+      return new Response(null, { status: 204 });
+    },
+  };
+  await runInTrace(TRACE, () => deliverEvent(binding, "svc", {}, {}, { BYNK_CALL_TO_SHOP__AUDIT: "k" }, "shop.orders", "shop.audit"));
+  assert.equal(header, null, "the delivery reads the envelope, never the request scope");
+  await runInTrace(TRACE, () => deliverEvent(binding, "svc", {}, { trace: "nope" }, { BYNK_CALL_TO_SHOP__AUDIT: "k" }, "shop.orders", "shop.audit"));
+  assert.equal(header, null);
 });
 
 const BASE = { eventId: "e", publisherId: "shop.orders", emittedAt: 1, schemaVersion: 1 };

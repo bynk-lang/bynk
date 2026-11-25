@@ -3,7 +3,7 @@ import type { Option } from "./result.ts";
 import { Ok, Err, Some, None } from "./result.ts";
 import type { ValidationBound, ValidationError, ValidationRule, WireViolation } from "./errors.ts";
 import { __bynkDecimalToString } from "./decimal.ts";
-import { TRACEPARENT_HEADER, admitTrace, formatTraceparent, isTraceId, outgoingTraceparent } from "./traceparent.ts";
+import { W3C_TRACEPARENT_HEADER, admitTrace, formatTraceparent, isTraceId, outgoingTraceparent } from "./traceparent.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
@@ -391,13 +391,22 @@ export async function signature(key: string, fields: SignedFields): Promise<stri
   return hex(await crypto.subtle.sign("HMAC", await hmacKey(key, "sign"), new TextEncoder().encode(signingInput(fields))));
 }
 
-// #3895: the `traceparent` header a call or event delivery sends from inside a
-// trace, and none outside one. It is not part of the signing input: it is
-// observability metadata, and a callee reads it only from a request that has
-// already proved its caller.
-function traceHeaders(trace?: string): Record<string, string> {
-  const traceparent = trace !== undefined && isTraceId(trace) ? formatTraceparent(trace) : outgoingTraceparent();
-  return traceparent === undefined ? {} : { [TRACEPARENT_HEADER]: traceparent };
+// #3895: the `traceparent` header a call sends from inside a trace, and none
+// outside one. It is not part of the signing input: it is observability
+// metadata, and a callee reads it only from a request that has already proved
+// its caller.
+function traceHeaders(): Record<string, string> {
+  const traceparent = outgoingTraceparent();
+  return traceparent === undefined ? {} : { [W3C_TRACEPARENT_HEADER]: traceparent };
+}
+
+// #3895: the header an event delivery sends, from the envelope's `trace` alone
+// and never from the request scope. The fan-out Durable Object delivers outside
+// the emitting request, and the handler reads the same trace as `env.trace`, so
+// the header and the envelope cannot disagree.
+function eventTraceHeaders(envelope: unknown): Record<string, string> {
+  const trace = (envelope as { trace?: unknown } | null)?.trace;
+  return isTraceId(trace) ? { [W3C_TRACEPARENT_HEADER]: formatTraceparent(trace) } : {};
 }
 
 // The sending side: the headers that prove `caller` sent `body` to `callee`.
@@ -774,21 +783,13 @@ export async function deliverEvent(
   const signed = await signedHeaders(env, publisher, subscriber, path, "", "1", body, `the event delivery to ${servicePath}`);
   const request = new Request(`http://internal/_bynk/event/${servicePath}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...traceHeaders(envelopeTrace(envelope)), ...signed },
+    headers: { "content-type": "application/json", ...eventTraceHeaders(envelope), ...signed },
     body,
   });
   const response = await binding.fetch(request);
   if (!response.ok) {
     throw new Error(`event delivery to ${servicePath} failed: ${response.status}`);
   }
-}
-
-// #3895: the trace an event was emitted under, which the envelope carries as
-// `trace` (the fan-out Durable Object delivers outside the emitting request, so
-// the request scope cannot supply it).
-function envelopeTrace(envelope: unknown): string | undefined {
-  const trace = (envelope as { trace?: unknown } | null)?.trace;
-  return typeof trace === "string" ? trace : undefined;
 }
 
 // #3895: the envelope a subscriber's handler is handed, from one that was
@@ -861,8 +862,12 @@ export function deserialiseEventEnvelope(
       actual: typeof schemaVersion,
     });
   }
-  // #3895: optional and additive. Absent, `null`, a malformed id and a Bynk
-  // `None` are all `None`: a trace must never make an event undeliverable.
+  // #3895: optional and additive. Absent, `null` and a malformed id are all
+  // `None`: a trace must never make an event undeliverable. On the wire the
+  // trace is a bare id string, as the fan-out carries it. That is not the
+  // tagged `{ kind: "Some", value }` form the std codec writes for an
+  // `Option` field, which this route reads as `None`: the two shapes do not
+  // round-trip, and nothing sends the std form here.
   const wireTrace = obj["trace"];
   const trace = isTraceId(wireTrace) ? Some(wireTrace) : None;
   return Ok({ eventId, publisherId, emittedAt, schemaVersion, trace });
