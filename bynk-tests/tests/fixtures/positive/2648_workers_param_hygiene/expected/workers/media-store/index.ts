@@ -64,7 +64,7 @@ function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds
     msg.retry();
     return;
   }
-  const wanted = globalThis.Math.trunc(result.delay / 1000);
+  const wanted = globalThis.Math.ceil(result.delay / 1000);
   const seconds = globalThis.Number.isNaN(wanted) ? 1 : globalThis.Math.min(86400, globalThis.Math.max(1, wanted));
   if (seconds !== wanted) globalThis.console.error(`queue ${queue} retry delay clamped`, { requestedMs: result.delay, delaySeconds: seconds });
   msg.retry({ delaySeconds: seconds });

@@ -20,7 +20,7 @@ function __bynkTest_OrderEvents(): __ns_bynk_cloudflare.Queue {
     },
     async sendWith(body, options) {
       json(body);
-      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.trunc(options.delay.value / 1000) > 86400)) {
+      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.ceil(options.delay.value / 1000) > 86400)) {
         throw new globalThis.Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 24 hours, not ${options.delay.value} ms`);
       }
     },
@@ -32,7 +32,7 @@ function __bynkTest_OrderEvents(): __ns_bynk_cloudflare.Queue {
     },
     async sendValueWith(message, options) {
       json(globalThis.JSON.stringify(message));
-      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.trunc(options.delay.value / 1000) > 86400)) {
+      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.ceil(options.delay.value / 1000) > 86400)) {
         throw new globalThis.Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 24 hours, not ${options.delay.value} ms`);
       }
     },
@@ -56,7 +56,7 @@ function __bynkTest_Queue(): __ns_bynk_cloudflare.Queue {
     },
     async sendWith(body, options) {
       json(body);
-      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.trunc(options.delay.value / 1000) > 86400)) {
+      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.ceil(options.delay.value / 1000) > 86400)) {
         throw new globalThis.Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 24 hours, not ${options.delay.value} ms`);
       }
     },
@@ -68,7 +68,7 @@ function __bynkTest_Queue(): __ns_bynk_cloudflare.Queue {
     },
     async sendValueWith(message, options) {
       json(globalThis.JSON.stringify(message));
-      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.trunc(options.delay.value / 1000) > 86400)) {
+      if (options.delay.tag === "Some" && (options.delay.value < 0 || globalThis.Math.ceil(options.delay.value / 1000) > 86400)) {
         throw new globalThis.Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 24 hours, not ${options.delay.value} ms`);
       }
     },

@@ -751,12 +751,14 @@ export class WorkersQueue implements Queue {
   }
 
   // A `Duration` is whole milliseconds; the platform takes whole seconds, so a
-  // part second rounds towards zero, as `Duration.toSeconds` does (#3948). A
-  // `QueueDelay` is already between 0 seconds and 24 hours, so the check below
-  // only guards a value that reached the binding some other way.
+  // part second rounds up (a message is never delivered early). A `QueueDelay`
+  // is already between 0 seconds and 24 hours, so the check below only guards a
+  // value that reached the binding some other way.
   private delaySeconds(delay: Option<number>): number | undefined {
     if (delay.tag === "None") return undefined;
-    const seconds = Math.trunc(delay.value / 1000);
+    // The raw value is checked first: `Math.ceil(-500 / 1000)` is `-0`, which
+    // passes `< 0`, and a negative delay is a caller's mistake however small.
+    const seconds = Math.ceil(delay.value / 1000);
     if (delay.value < 0 || seconds > WorkersQueue.MAX_DELAY_SECONDS) {
       throw new Error(`bynk.cloudflare.Queue: a delay is between 0 seconds and 24 hours, not ${delay.value} ms`);
     }

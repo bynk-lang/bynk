@@ -276,8 +276,8 @@ export const QueueDelivery = {
  * constant such as `30.seconds` is checked when the program compiles
  * (`2.days` is a compile error); a computed span goes through
  * `QueueDelay.of(d)`, which gives a `ValidationError` when it is out of
- * range. Whole seconds are taken, rounding towards zero, as
- * `Duration.toSeconds` does.
+ * range. Whole seconds are sent, and a part second rounds up, so a message
+ * is never delivered early.
  */
 export type QueueDelay = number & { readonly __brand: "QueueDelay" };
 
@@ -292,8 +292,8 @@ export const QueueDelay = {
 
 /**
  * The options of a `Queue.sendWith`. `delay` holds the message back before
- * it can be delivered, by a `QueueDelay` (whole seconds, rounding towards
- * zero, at most 24 hours); `None`, the default, delivers as soon as the
+ * it can be delivered, by a `QueueDelay` (whole seconds, a part second
+ * rounding up, at most 24 hours); `None`, the default, delivers as soon as the
  * queue can.
  */
 export interface QueueSend {
