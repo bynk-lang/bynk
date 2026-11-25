@@ -322,6 +322,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   }",
     },
     Explain {
+        code: "bynk.actor.sender_admits_nothing",
+        blurb: "A refinement of `Sender` admits mail by its DMARC verdict, which is one of `DmarcPass`, `DmarcFail` or `DmarcNone`. The compiler decides the predicate against each of the three, and a refinement that is false for all of them would make the Worker refuse every message to an address, with nothing to tell the author it is dead. Check the `&&` and `!` the predicate combines: `Dmarc(DmarcPass) && Dmarc(DmarcFail)` can never hold, because no message has both verdicts.",
+        example: "context shop\n\nactor Never = Sender where Dmarc(DmarcPass) && Dmarc(DmarcFail)   // ✗ no verdict is both\n\nactor Verified = Sender where Dmarc(DmarcPass)   // ✓ admits a pass",
+    },
+    Explain {
         code: "bynk.actor.signature_identity_unsupported",
         blurb: "A signature shows that a request is authentic, not who sent it, so a `Signature` actor has no principal to give an identity. The event is the handler's `body`. Remove `identity`. For an actor that carries a principal, see `bynk.actor.bearer_identity_not_string_constructible`.",
         example: "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\"), identity = String }   // ✗ no principal\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }                       // ✓",
@@ -7250,6 +7255,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.scheme_not_admissible",
         "An actor's scheme is not admissible on this handler's protocol.",
+    ),
+    d(
+        "bynk.actor.sender_admits_nothing",
+        "A refinement of `Sender` admits no DMARC verdict, so it would refuse every message.",
     ),
     d(
         "bynk.actor.signature_identity_unsupported",

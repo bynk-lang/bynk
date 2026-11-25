@@ -1105,6 +1105,95 @@ impl CallerPredicate {
     }
 }
 
+/// #3888: the closed predicate vocabulary for a refinement over `Sender`
+/// (`actor Authenticated = Sender where Dmarc(DmarcPass)`). `Dmarc` is a fixed,
+/// compiler-known check (capitalised, as `IsContext` is). The DMARC verdict
+/// has three values, so a predicate is decided by evaluating it against each
+/// one: the emitted route carries the verdicts it admits, and the Worker
+/// refuses other mail before the handler runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SenderPredicate {
+    /// `Dmarc(DmarcPass, …)` — the verdict is one of those listed.
+    Dmarc(Vec<String>),
+    And(Box<SenderPredicate>, Box<SenderPredicate>),
+    Or(Box<SenderPredicate>, Box<SenderPredicate>),
+    Not(Box<SenderPredicate>),
+}
+
+/// The `DmarcVerdict` variants, as a handler's `s.identity.dmarc` reads them.
+pub const DMARC_VERDICTS: [&str; 3] = ["DmarcPass", "DmarcFail", "DmarcNone"];
+
+impl SenderPredicate {
+    /// Whether mail with the named verdict passes the predicate.
+    pub fn admits(&self, verdict: &str) -> bool {
+        match self {
+            SenderPredicate::Dmarc(names) => names.iter().any(|n| n == verdict),
+            SenderPredicate::And(l, r) => l.admits(verdict) && r.admits(verdict),
+            SenderPredicate::Or(l, r) => l.admits(verdict) || r.admits(verdict),
+            SenderPredicate::Not(inner) => !inner.admits(verdict),
+        }
+    }
+
+    /// The verdicts the predicate admits, in `DMARC_VERDICTS` order.
+    pub fn admitted(&self) -> Vec<&'static str> {
+        DMARC_VERDICTS
+            .into_iter()
+            .filter(|v| self.admits(v))
+            .collect()
+    }
+}
+
+/// Recognise the `Sender` predicate vocabulary in a refinement `where`
+/// expression. `Err(span)` points at the first sub-expression outside it,
+/// including a `Dmarc` argument that is not a `DmarcVerdict` variant.
+pub fn parse_sender_predicate(e: &Expr) -> Result<SenderPredicate, Span> {
+    match &e.kind {
+        ExprKind::Paren(inner) => parse_sender_predicate(inner),
+        ExprKind::BinOp(BinOp::And, l, r) => Ok(SenderPredicate::And(
+            Box::new(parse_sender_predicate(l)?),
+            Box::new(parse_sender_predicate(r)?),
+        )),
+        ExprKind::BinOp(BinOp::Or, l, r) => Ok(SenderPredicate::Or(
+            Box::new(parse_sender_predicate(l)?),
+            Box::new(parse_sender_predicate(r)?),
+        )),
+        ExprKind::UnaryOp(UnaryOp::Not, inner) => Ok(SenderPredicate::Not(Box::new(
+            parse_sender_predicate(inner)?,
+        ))),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+            ..
+        } if type_args.is_empty() && name.name == "Dmarc" && !args.is_empty() => args
+            .iter()
+            .map(|a| match &a.kind {
+                ExprKind::Ident(id) if DMARC_VERDICTS.contains(&id.name.as_str()) => {
+                    Ok(id.name.clone())
+                }
+                _ => Err(a.span),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(SenderPredicate::Dmarc),
+        ExprKind::Call { name, .. } => Err(name.span),
+        _ => Err(e.span),
+    }
+}
+
+/// #3888: the predicate of a refinement over the prelude `Sender` actor, or
+/// `None` for any other actor (a malformed predicate reads as `None` too: the
+/// checker reports it).
+pub fn sender_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<SenderPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Sender" || actors.contains_key("Sender") {
+        return None;
+    }
+    parse_sender_predicate(&r.predicate).ok()
+}
+
 /// A qualified name written as an expression: `shop.admin` is a field access
 /// on an identifier.
 pub fn dotted_name(e: &Expr) -> Option<String> {

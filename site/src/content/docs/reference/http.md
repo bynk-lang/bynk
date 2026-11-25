@@ -430,9 +430,11 @@ body.
 | `Conflict(message)` | 409 | message |
 | `Gone` | 410 | none |
 | `LengthRequired` | 411 | none |
+| `PreconditionFailed(message)` | 412 | message |
 | `PayloadTooLarge(message)` | 413 | message |
 | `UnsupportedMediaType(message)` | 415 | message |
 | `UnprocessableEntity(message)` | 422 | message |
+| `PreconditionRequired(message)` | 428 | message |
 | `TooManyRequests(message)` | 429 | message |
 | `UnavailableForLegalReasons(message)` | 451 | message |
 
@@ -622,16 +624,17 @@ In a function returning an `Option`, `?` returns the `None` as it is; here, wher
 enclosing return is an `HttpResult`, it becomes a `404`. In a `Result`-returning function
 the checker rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
 turn an `Option` into a `Result`). A `Result`
-under `?` is unchanged: its `Err` propagates as before. Mapping a **domain
-error** into an `HttpResult` — the `Result → HttpResult` direction — is a
-separate, later capability, tracked with the declared-embedding design
-([#543](https://github.com/bynk-lang/bynk/issues/543)); see
-[Answering another status](#answering-another-status) for what to write today.
+under `?` is unchanged: its `Err` propagates as before. `?` on a `Result` never picks a status:
+mapping a **domain error** into an `HttpResult` is handler policy (ADR 0178, decision F), made in
+the handler where the call is, so a status decision is not hidden in a table elsewhere. To reuse
+a mapping, write it once as a function returning `HttpResult[T]` and call it at each site (see
+[Map a domain error to a status once](/book/guides/entry-points/map-a-domain-error-to-a-status/));
+[Answering another status](#answering-another-status) has the pieces.
 
-`?` on an `Option` **always means `404`**. That is right for "the thing you asked
+In an `HttpResult` handler, `?` on an `Option` **always means `404`**. That is right for "the thing you asked
 for is not there" (a lookup that misses), and wrong for a missing or malformed
-request input, which is a `400`. Hovering the `?` in an editor says so
-(`None → 404 NotFound`), and `RequestHeaders.get(…)?` is flagged by
+request input, which is a `400`. Hovering the `?` in an editor names both of its meanings, and
+`RequestHeaders.get(…)?` is flagged by
 `bynk.http.header_question_not_found` (below).
 
 ### Answering another status
@@ -1033,6 +1036,52 @@ The `304` is a **router** response synthesised from the request, not an
 preflight, it is stamped with `Access-Control-Allow-Origin` for a CORS service, so
 a cross-origin revalidation stays readable by the browser.
 
+### Conditional writes (`If-Match`, `412`, `428`) {#conditional-writes}
+
+Optimistic concurrency, "update this only if it has not changed since I read it", is a standard
+HTTP pattern: the client sends `If-Match: <etag>` with the validator it read, and the server
+answers `412 Precondition Failed` when the resource has moved on, or `428 Precondition Required`
+when the client must send a condition at all ([RFC 9110 §13.1.1](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1),
+[RFC 6585 §3](https://www.rfc-editor.org/rfc/rfc6585#section-3)). `PreconditionFailed(message)` and
+`PreconditionRequired(message)` are the two `HttpResult` variants for it, message-carrying like
+`Conflict(message)`, so they render under the service's error format, [problem details](#problem-details)
+included. They are `ErrorStatus` names too, so `RawError(PreconditionFailed, …)` works.
+
+```bynk,ignore
+type DocHeaders = { @name("if-match") ifMatch: Option[String] }
+
+on PUT("/docs/:id") (id: DocId, headers: DocHeaders, body: DocUpdate) -> Effect[HttpResult[()]] by u: User given Docs {
+  match headers.ifMatch {
+    None => PreconditionRequired("send If-Match with the document's ETag")
+    Some(expected) => {
+      let current <- Docs.version(id)
+      if "\"\(current)\"" != expected {
+        PreconditionFailed("the document changed since you read it")
+      } else {
+        let _ <- Docs.save(id, body)
+        NoContent
+      }
+    }
+  }
+}
+```
+
+The handler does the comparison: it reads `If-Match` through a typed [`headers`](#typed-headers)
+record, looks up the resource's current validator and answers. The router does not evaluate
+`If-Match` for you, because it would have to know the resource's current validator before the handler
+has looked it up; naming a validator source for the router to check is a later design.
+
+The comparison above handles one strong entity tag. `If-Match` may also be `*` (any current
+representation) or a comma-separated list such as `"v1", "v2"`, and a client that echoes a weak tag
+(`W/"v1"`) is rightly refused under strong comparison. A handler that accepts those splits the header
+on commas, trims each part and accepts `*` or any part equal to the current validator.
+
+The automatic `ETag` on a `GET` is **weak** (`W/"…"`), and `If-Match` uses **strong** comparison
+(RFC 9110 §13.1.1), so a validator the router derived cannot guard a write. It exists to revalidate
+`GET`s only. For writes, serve a strong validator from the `GET`, with
+[`RawTagged`](#supplying-the-validator-rawtagged) or an explicit version field, and compare against
+that.
+
 ### Declared freshness (`@cache`)
 
 To let a client or CDN serve a response **without revalidating** for a window,
@@ -1119,7 +1168,7 @@ A streamed handler returns `Effect[HttpResult[()]]` — the JSON body parameter
 `T` is unused, since the body is the stream. **A response commits its status and
 headers before the first chunk**, so streaming is **200-only**: handle a
 pre-stream failure by returning an ordinary variant *instead* of `Streaming`
-(`NotFound`, `Unauthorized(…)`, …), which share `HttpResult[()]` and so sit in
+(`NotFound`, `Unauthorized`, …), which share `HttpResult[()]` and so sit in
 the same handler with no type conflict:
 
 ```bynk,fragment
@@ -1154,9 +1203,9 @@ on GET("/sitemap.xml") () -> Effect[HttpResult[()]] by v: Visitor {
 
 Like `Streaming`, `Raw` returns `Effect[HttpResult[()]]` — the JSON body
 parameter `T` is unused — and is **200-only**: it serves service-tier bodies,
-which are overwhelmingly `200`. A custom-status raw body (a `404` with an HTML
-error page) is a presentation concern held out of scope; a `Raw` branch and an
-ordinary pre-body variant share `HttpResult[()]`, so they coexist in one handler.
+which are overwhelmingly `200`. A custom-status raw body, such as a `404` with an HTML
+error page, is `RawError(NotFound, html, "text/html")` (see [Error bodies](#error-bodies)); a `Raw` branch, a
+`RawError` and an ordinary pre-body variant share `HttpResult[()]`, so they coexist in one handler.
 
 The `content-type` is an opaque `String`, unvalidated — you own it. If you write
 `Bytes.fromUtf8(s)`, the body is UTF-8, so a `content-type` claiming a different
