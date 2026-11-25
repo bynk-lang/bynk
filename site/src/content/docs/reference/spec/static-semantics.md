@@ -2303,8 +2303,8 @@ else `bynk`. In `bynk` format an error variant with a message answers
 exactly as before. In `problem` format each of them answers an RFC 9457
 `application/problem+json` body with `type`, `title`, `status` and, where there is one,
 `detail`. A variant's `type` is `about:blank`; a router rejection's `type` is
-`https://bynk-lang.org/problems/<kind>` (the kind in kebab case), and its `kind` and `path` ride as
-extension members. A `RawError` body, an `on rejected` handler's body and a status that has
+`https://bynk-lang.org/problems/<kind>` (the kind in kebab case), and the rejection's own members
+(`kind`, `path`, `expected`, `actual`, a refinement's `violation`) ride as extension members. A `RawError` body, an `on rejected` handler's body and a status that has
 no body (`401`, `403`, `404`, `405`) are unchanged, as are success bodies and the `500`
 a fault answers.
 
