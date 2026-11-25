@@ -49,6 +49,28 @@ service outbox from queue("outbound-email") {
 A message that keeps retrying eventually reaches the retry limit (3 redeliveries by
 default). Cloudflare then deletes it, unless you keep it, which is the next section.
 
+## Back off
+
+`Retry` redelivers at once, or after the delivery policy's `retryDelay`. A message that
+failed because a dependency is down comes straight back and fails again, so return
+`RetryAfter(reason, delay)` to wait. Take the attempt count from a `QueueDelivery` to
+back off a little longer each time:
+
+```bynk,fragment
+service outbox from queue("outbound-email") {
+  on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] given Smtp {
+    let sent <- Smtp.send(job.to, job.subject)
+    match sent {
+      Ok(_) => Ack,
+      Err(_) => RetryAfter("smtp unavailable", 30.seconds * delivery.attempts),
+    }
+  }
+}
+```
+
+The delay is whole seconds from 1 second to 24 hours. A literal outside that is refused
+(`bynk.queue.retry_delay_out_of_range`); a computed one is clamped, and logged when it is.
+
 ## Keep failed messages
 
 Name a dead-letter queue in a `delivery { }` section, and a message that reaches

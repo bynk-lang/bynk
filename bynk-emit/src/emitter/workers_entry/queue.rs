@@ -130,8 +130,8 @@ fn emit_queue_handler(
                             "error",
                             vec![
                                 str_lit(format!("queue {} retry", route.name)),
-                                // Past the `Ack` test the verdict is a `Retry`: a handler
-                                // cannot return `Undecodable` (#3878).
+                                // Past the `Ack` test the verdict is a `Retry` or a
+                                // `RetryAfter`: a handler cannot return `Undecodable` (#3878).
                                 member(
                                     as_expr(
                                         ident("result"),
@@ -144,7 +144,11 @@ fn emit_queue_handler(
                                 ),
                             ],
                         )),
-                        expr_stmt(method_call(ident("msg"), "retry", vec![])),
+                        // #3881: a `RetryAfter` retries after its delay.
+                        expr_stmt(call(
+                            ident("__bynkRetryMessage"),
+                            vec![str_lit(route.name.clone()), ident("msg"), ident("result")],
+                        )),
                     ],
                     None,
                 ),

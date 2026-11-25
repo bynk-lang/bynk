@@ -178,6 +178,26 @@ fn callee_before(s: &str) -> Option<String> {
     Some(callee.to_string())
 }
 
+/// #3881: whether a unit in the project declares a sum variant named `name`, which
+/// then shadows a built-in variant of the same name.
+fn declares_variant(name: &str, doc_text: &str, files: Option<&HashMap<PathBuf, String>>) -> bool {
+    let mut declared = false;
+    for_each_unit(doc_text, files, |unit| {
+        let items = match unit {
+            SourceUnit::Commons(c) => &c.items,
+            SourceUnit::Context(c) => &c.items,
+            SourceUnit::Adapter(a) => &a.items,
+            SourceUnit::Suite(_) => return,
+        };
+        declared |= items.iter().any(|item| {
+            matches!(item, CommonsItem::Type(t)
+                if matches!(&t.body, bynk_syntax::ast::TypeBody::Sum(s)
+                    if s.variants.iter().any(|v| v.name.name == name)))
+        });
+    });
+    declared
+}
+
 /// Render the signature *label* for a name callee — `name(p: T, …) -> R`.
 /// `None` if the callee can't be resolved (or is a value receiver — slice 2).
 pub fn resolve_label(
@@ -225,6 +245,10 @@ pub fn resolve_label(
         "Ok" => return Some("Ok(value: T) -> Result[T, E]".to_string()),
         "Err" => return Some("Err(error: E) -> Result[T, E]".to_string()),
         "Some" => return Some("Some(value: T) -> Option[T]".to_string()),
+        // #3881: a queue verdict that retries after a delay.
+        "RetryAfter" if !declares_variant(callee, doc_text, files) => {
+            return Some("RetryAfter(reason: String, delay: Duration) -> QueueResult".to_string());
+        }
         _ => {}
     }
     // A free function.
@@ -852,5 +876,15 @@ mod tests {
         assert_eq!(r.len(), 2, "two params, not split inside (U, T): {r:?}");
         assert_eq!(&label[r[0].0..r[0].1], "init: U");
         assert_eq!(&label[r[1].0..r[1].1], "step: (U, T) -> U");
+    }
+
+    #[test]
+    fn retry_after_has_a_signature_unless_a_user_variant_shadows_it() {
+        assert_eq!(
+            resolve_label("RetryAfter", "context c\n", None).as_deref(),
+            Some("RetryAfter(reason: String, delay: Duration) -> QueueResult")
+        );
+        let shadowed = "context c\n\ntype Job = | RetryAfter(n: Int) | Done\n";
+        assert_eq!(resolve_label("RetryAfter", shadowed, None), None);
     }
 }
