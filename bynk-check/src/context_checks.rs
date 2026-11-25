@@ -2210,7 +2210,7 @@ fn check_by_clause_contracts(
             }
             continue;
         };
-        errors.extend(queue_actor_not_enforced(
+        errors.extend(queue_actor_narrowing(
             protocol,
             by,
             local.is_some_and(|a| is_producer_refinement(a, table)),
@@ -2261,27 +2261,6 @@ fn check_by_clause_contracts(
                 .with_note(
                     "`Caller` carries the calling context's identity — it is only \
                      admissible on `on call`; cron takes `Scheduler`, queue takes `Producer`",
-                ),
-            );
-        }
-        // #3899: a refinement over `Producer` narrows a queue's senders, and only
-        // a queue consumer can name one; elsewhere nothing would enforce its
-        // `IsContext(…)`, so it is refused rather than read as narrowed.
-        if local.is_some_and(|a| is_producer_refinement(a, table))
-            && !matches!(protocol, ServiceProtocol::Queue { .. })
-        {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.scheme_not_admissible",
-                    by.span,
-                    format!(
-                        "a refinement over `Producer` is not admissible on a `{}` handler",
-                        protocol_label(protocol),
-                    ),
-                )
-                .with_note(
-                    "`Producer` refinements narrow who may send to a queue consumer — name one \
-                     only on `on message` of a `from queue` service",
                 ),
             );
         }
@@ -2792,16 +2771,34 @@ pub(crate) fn is_producer_refinement(
 /// actor, but nothing yet enforces either on delivery (the signed message
 /// format is a later part of #3899), so naming one is refused rather than
 /// accepted unenforced.
-fn queue_actor_not_enforced(
+fn queue_actor_narrowing(
     protocol: &ServiceProtocol,
     by: &bynk_syntax::ast::ByClause,
     producer_refinement: bool,
     scheme: crate::actors::Scheme,
 ) -> Option<CompileError> {
     use crate::actors::Scheme;
-    if !matches!(protocol, ServiceProtocol::Queue { .. })
-        || !(producer_refinement || scheme == Scheme::Foreign)
-    {
+    let on_queue = matches!(protocol, ServiceProtocol::Queue { .. });
+    // A refinement over `Producer` narrows a queue's senders, and only a queue
+    // consumer can name one; elsewhere nothing would enforce its `IsContext(…)`,
+    // so it is refused rather than read as narrowed.
+    if producer_refinement && !on_queue {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Producer` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Producer` refinements narrow who may send to a queue consumer — name one \
+                 only on `on message` of a `from queue` service",
+            ),
+        );
+    }
+    if !on_queue || !(producer_refinement || scheme == Scheme::Foreign) {
         return None;
     }
     Some(
