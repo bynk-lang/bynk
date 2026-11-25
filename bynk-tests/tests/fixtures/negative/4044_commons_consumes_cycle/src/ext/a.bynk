@@ -1,0 +1,6 @@
+adapter ext.a {
+	uses app.c
+	exports transparent { Thing }
+
+	type Thing = { id: String }
+}

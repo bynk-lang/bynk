@@ -1,0 +1,10 @@
+---
+#4044: a commons cannot consume a context: its exported types belong to its boundary.
+---
+commons app.helpers
+
+consumes shop.orders { Order }
+
+fn id(x: Int) -> Int {
+	x
+}

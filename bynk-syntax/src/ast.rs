@@ -145,9 +145,9 @@ pub struct Commons {
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,
-    /// `consumes` clauses of this file. Source cannot write one in a commons
-    /// yet; the toolchain adds the type-only clause that reaches the `bynk`
-    /// adapter's transparent types (#4181, `ParsedFile::add_implicit_consumes` in `bynk-project`).
+    /// `consumes` clauses of this file: braced and type-only (#4044). The
+    /// toolchain also adds one that reaches the `bynk` adapter's transparent
+    /// types (#4181, `ParsedFile::add_implicit_consumes` in `bynk-project`).
     pub consumes: Vec<ConsumesDecl>,
     /// Optional documentation block attached to the commons declaration.
     pub documentation: Option<Doc>,
@@ -164,13 +164,13 @@ pub struct Commons {
 }
 
 impl Commons {
-    /// A commons as the parser reads it: no `consumes` (source cannot write one;
-    /// the toolchain adds the implicit type-only clause, #4181), the brace or
-    /// fragment form, and no trivia of its own.
+    /// A commons as the parser reads it: the brace or fragment form, and no
+    /// trivia of its own. (The toolchain adds an implicit type-only `consumes`
+    /// after parsing, #4181.)
     pub fn parsed(
         name: QualifiedName,
         items: Vec<CommonsItem>,
-        uses: Vec<UsesDecl>,
+        (uses, consumes): (Vec<UsesDecl>, Vec<ConsumesDecl>),
         documentation: Option<Doc>,
         brace: bool,
         span: Span,
@@ -181,7 +181,7 @@ impl Commons {
             test_only: false,
             items,
             uses,
-            consumes: Vec::new(),
+            consumes,
             documentation,
             form: if brace {
                 CommonsForm::Brace

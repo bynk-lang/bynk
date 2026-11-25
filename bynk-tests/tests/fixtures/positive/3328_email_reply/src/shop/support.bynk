@@ -7,7 +7,7 @@ consumes bynk.cloudflare {
 }
 
 service support from email("support@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Reply(EmailReply { text: Some("We have your message about \(mail.subject).") })
   }
 }

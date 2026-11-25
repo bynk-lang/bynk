@@ -1,0 +1,10 @@
+{
+  "blurb": "Inbound mail comes from the internet, and the platform reports a DMARC verdict on it that can be a pass, a fail or absent. Whether a handler acts on mail that failed authentication is a decision, so an email `on message` handler states its actor with a `by` clause instead of inheriting one. `by Sender` is the explicit \"any mail\", which is what an email handler meant before the clause was required, and `s.identity.dmarc` carries the verdict for a handler that wants to check it. The error's fix inserts `by Sender`, and `bynk check --fix=bynk.actor.missing_by_on_email` migrates a whole project. A header default, `service support from email(\"support@shop.example\") by Sender`, covers a handler without its own `by`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.missing_by_on_email",
+  "constructs": [],
+  "example": "context shop\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✗ what mail does this act on?\n    Accept\n  }\n}\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓ any mail, said outright\n    Accept\n  }\n}",
+  "severity": "error",
+  "summary": "An email `on message` handler lacks the required `by` actor clause."
+}
