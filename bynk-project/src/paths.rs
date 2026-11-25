@@ -177,6 +177,8 @@ pub enum ProjectPathsError {
     BadWorkerGroup { key: String, reason: String },
     /// #3941: a `[vars]` or `[env.<name>.vars]` table that is not well formed.
     BadVars { reason: String },
+    /// #4127: a `[workers.observability]` table that is not well formed.
+    BadObservability { reason: String },
     /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
     /// `"allow"`.
     BadDevAck { key: String, reason: String },
@@ -243,7 +245,10 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("paths", &["include", "exclude"]),
     ("fmt", &[]),
     ("lsp", &["diagnostics_mode", "diagnostics_debounce_ms"]),
-    ("workers", &["compatibility_flags", "workers_dev"]),
+    (
+        "workers",
+        &["compatibility_flags", "workers_dev", "observability"],
+    ),
     (
         "deploy",
         &["hyperdrive", "vectorize", "containers", "workers"],
@@ -447,6 +452,9 @@ impl std::fmt::Display for ProjectPathsError {
                 write!(f, "`[{table}.{capability}]` {reason}")
             }
             ProjectPathsError::BadVars { reason } => write!(f, "{reason}"),
+            ProjectPathsError::BadObservability { reason } => {
+                write!(f, "`[workers.observability]` {reason}")
+            }
             ProjectPathsError::BadWorkerGroup { key, reason } if key.is_empty() => {
                 write!(f, "`[deploy.workers]` {reason}")
             }
@@ -741,6 +749,10 @@ pub struct WorkersConfig {
     /// served on its `*.workers.dev` URL. `None` leaves the key out, so
     /// Cloudflare's default (on) applies.
     pub workers_dev: Option<bool>,
+    /// #4127: the project's Workers Logs settings, from
+    /// `[workers.observability]`; on, keeping every invocation, when the table
+    /// is absent.
+    pub observability: crate::observability::Observability,
 }
 
 /// Read `bynk.toml`'s `[workers]` table, honouring `overlay` for `bynk.toml`
@@ -1326,9 +1338,21 @@ fn workers_config_from(table: &toml::Table) -> Result<WorkersConfig, ProjectPath
             });
         }
     };
+    let observability = match table.get("observability") {
+        None => crate::observability::Observability::default(),
+        Some(toml::Value::Table(t)) => crate::observability::from_table(t)
+            .map_err(|reason| ProjectPathsError::BadObservability { reason })?
+            .over(crate::observability::Observability::default()),
+        Some(_) => {
+            return Err(ProjectPathsError::BadObservability {
+                reason: "must be a table, like `[workers.observability]`".to_string(),
+            });
+        }
+    };
     Ok(WorkersConfig {
         compatibility_flags,
         workers_dev,
+        observability,
     })
 }
 

@@ -642,6 +642,73 @@ fn header_question_quick_fix_answers_bad_request() {
     );
 }
 
+/// #3966: `?` on an `Option` in a `Result`-returning body offers `.okOr(todo(..))` after the whole
+/// operand (a parenthesised one included), and nothing in a body that returns no `Result`.
+#[test]
+fn option_question_in_a_result_body_offers_okor() {
+    let fix_for = |name: &str, body: &str| -> Option<String> {
+        let src =
+            format!("commons demo\n\nfn lookup(id: Int) -> Option[Int] {{ Some(id) }}\n\n{body}\n");
+        let root = setup_project(name, &[("demo.bynk", &src)]);
+        let sources =
+            bynk_testkit::read_project_sources(&bynk_ide::AnalysisRoots::SingleTree(root.clone()));
+        let result = bynk_ide::diagnose_project(&root, &sources);
+        let file = result
+            .files
+            .iter()
+            .find(|f| f.source_path == Path::new("demo.bynk"))
+            .expect("file analysed");
+        let uri = Url::from_file_path(root.join("demo.bynk")).unwrap();
+        let diag = file
+            .diagnostics
+            .iter()
+            .find(|d| d.error.category == "bynk.types.question_option_outside_http")
+            .expect("the `?` on an Option is refused");
+        let actions = code_actions::quick_fixes(
+            &file.text,
+            &file.diagnostics,
+            diag.error.span,
+            &uri,
+            Some(1),
+        );
+        let CodeActionOrCommand::CodeAction(action) = actions.first()? else {
+            panic!("expected a CodeAction");
+        };
+        let Some(DocumentChanges::Edits(doc_edits)) =
+            &action.edit.as_ref().unwrap().document_changes
+        else {
+            panic!("expected versioned document edits");
+        };
+        Some(apply_text_edits(&file.text, &doc_edits[0].edits))
+    };
+    let plain = fix_for(
+        "okor_plain",
+        "fn double(id: Int) -> Result[Int, String] {\n  let n = lookup(id)?\n  Ok(n * 2)\n}",
+    )
+    .expect("a Result body offers the fix");
+    assert!(
+        plain.contains("let n = lookup(id).okOr(todo(\"the error for None\"))?"),
+        "{plain}"
+    );
+    let wrapped = fix_for(
+        "okor_paren",
+        "fn double(id: Int) -> Result[Int, String] {\n  let n = (lookup(id))?\n  Ok(n * 2)\n}",
+    )
+    .expect("a parenthesised operand takes the fix too");
+    assert!(
+        wrapped.contains("let n = (lookup(id)).okOr(todo(\"the error for None\"))?"),
+        "{wrapped}"
+    );
+    let none = fix_for(
+        "okor_int",
+        "fn double(id: Int) -> Int {\n  let n = lookup(id)?\n  n * 2\n}",
+    );
+    assert!(
+        none.is_none(),
+        "a body that returns no Result offers no fix: {none:?}"
+    );
+}
+
 /// #2641: the two record-pattern parse errors each carry a machine-applicable
 /// fix (#2654: and so does the irrefutable record `let … else`), offered as a quick fix and leaving the file clean once applied.
 #[test]

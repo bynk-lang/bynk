@@ -1,0 +1,23 @@
+context demo
+
+capability Users {
+  fn get(id: Int) -> Effect[String]
+}
+
+capability Orders {
+  fn forUser(id: Int) -> Effect[Int]
+}
+
+fn pick(raw: String) -> Option[Int] {
+  Int.parse(raw)
+}
+
+service dash {
+  on call(raw: String) -> Effect[Option[Int]] by Caller given Users, Orders {
+    par {
+      let user <- Users.get(1)
+      let n <- Orders.forUser(pick(raw)?)
+    }
+    Effect.pure(Some(n))
+  }
+}

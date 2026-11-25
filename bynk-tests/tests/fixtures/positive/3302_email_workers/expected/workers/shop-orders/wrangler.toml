@@ -16,3 +16,7 @@ allowed_sender_addresses = ["orders@shop.example", "billing@shop.example"]
 name = "EMAIL_OPS"
 destination_address = "ops@shop.example"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

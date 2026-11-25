@@ -9,3 +9,7 @@ binding = "D1_FLAGS"
 database_name = "shop-flags-flags"
 database_id = "<D1_FLAGS_ID>" # set at deploy time
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

@@ -427,7 +427,9 @@ let _ <- Logger.log(Warn, "slow checkout", Map.empty().insert("orderId", id).ins
 The record is `{ message, level, fields }`, with `level` in lowercase:
 
 - **On Cloudflare** it is logged as one object, and Workers Logs indexes its
-  keys, so `fields.orderId` is queryable.
+  keys, so `fields.orderId` is queryable. Bynk turns Workers Logs on in every
+  generated `wrangler.toml`; [`[workers.observability]`](/reference/tooling/manifest/#workers-logs)
+  switches it off or samples it.
 - **Under Node** it is one JSON line.
 - **In the browser** it is the message, then the fields.
 

@@ -36,3 +36,7 @@ scheduling_policy = "durable_object"
 dockerfile = "../../../containers/thumbs/Dockerfile"
 build_context = "../../../containers/thumbs"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

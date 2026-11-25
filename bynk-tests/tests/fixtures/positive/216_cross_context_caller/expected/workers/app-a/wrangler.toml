@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "APP_B"
 service = "app-b"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

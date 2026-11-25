@@ -87,6 +87,25 @@ struct WorkersTable {
     /// off `workers.dev`. Unset leaves the key out, so Cloudflare's default
     /// (on) applies.
     workers_dev: Option<bool>,
+    /// Workers Logs, so `Logger.log`'s structured fields are queryable on
+    /// Cloudflare. On by default; written as `[observability]` into every
+    /// `wrangler.toml`, which each environment inherits. A worker group
+    /// overrides it key by key under `[deploy.workers.<key>.observability]`.
+    observability: Option<ObservabilityTable>,
+}
+
+/// `[workers.observability]` (and a worker group's own `observability`).
+#[derive(JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ObservabilityTable {
+    /// Whether Workers Logs collects the Worker's logs. Default: `true`.
+    #[schemars(extend("default" = true))]
+    enabled: Option<bool>,
+    /// The fraction of invocations whose logs are kept, from `0` to `1`: lower
+    /// it for a noisy Worker. Default: `1`.
+    #[schemars(extend("default" = 1, "minimum" = 0, "maximum" = 1))]
+    head_sampling_rate: Option<f64>,
 }
 
 /// Where `bynk deploy` gets each `Postgres` capability's Hyperdrive config.
@@ -129,6 +148,9 @@ struct DeployWorkerEntry {
     routes: Option<Vec<String>>,
     /// Custom domains the Worker is attached to, like `pay.example.com`.
     custom_domains: Option<Vec<String>>,
+    /// This Worker's Workers Logs settings, laid over `[workers.observability]`
+    /// key by key: `head_sampling_rate = 0.01` for a noisy Worker.
+    observability: Option<ObservabilityTable>,
 }
 
 /// One `Container` capability's image at deploy.

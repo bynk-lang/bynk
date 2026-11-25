@@ -43,6 +43,7 @@ pub mod lock;
 pub mod manifest;
 #[cfg(feature = "schema")]
 pub mod manifest_schema;
+pub mod observability;
 pub mod packages;
 pub mod parse_cache;
 pub mod paths;
