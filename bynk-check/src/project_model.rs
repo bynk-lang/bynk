@@ -5885,6 +5885,8 @@ pub fn phase_bundle_composition_unprovided(
         },
         errors,
     );
+    // #3899: a signed queue's dead-letter consumer is signed too.
+    crate::queue_delivery::phase_dead_letter_signing(parsed, groups, kinds, errors);
     // #3879: a producer's message type against the queue's consumer.
     crate::queue_producers::phase_queue_producers(
         parsed,

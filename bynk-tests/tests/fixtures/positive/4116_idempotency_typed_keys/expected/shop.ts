@@ -45,6 +45,13 @@ export interface Quote {
 export const Quote = {
 };
 
+export interface Receipt {
+  readonly total: number;
+}
+
+export const Receipt = {
+};
+
 export const claims = {
   async call(repo: string, delivery: string, deps: { Idempotency: bynk.Idempotency }): globalThis.Promise<boolean> {
     const __claims = (deps.Idempotency as unknown as { __track?: () => { note<C>(k: string, c: C, t: number): C; lease(t: number): number; settle(r: unknown, threw: boolean): globalThis.Promise<void> } }).__track?.() ?? { note: <C>(_k: string, c: C, _t: number) => c, lease: (t: number) => t, settle: async (_r: unknown, _threw: boolean) => {} };

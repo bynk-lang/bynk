@@ -6,6 +6,7 @@ type DeliveryKey = { repo: String, delivery: String }
 type Channel = | Web | Email
 type Slug = String where MinLength(1)
 type Quote = { total: Int }
+type Receipt = { total: Int }
 
 service claims {
   on call(repo: String, delivery: String) -> Effect[Bool] by Caller given Idempotency {

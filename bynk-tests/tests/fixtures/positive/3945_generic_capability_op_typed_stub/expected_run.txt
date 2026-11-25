@@ -1,4 +1,4 @@
 # #3945: run by bynk-tests/tests/system/behaviour_fixtures.rs; see that file for the format.
 # A stub names the type arguments it answers at; a call at another type argument is not answered.
-passed=4 failed=1
+passed=5 failed=1
 fail a call at another type argument is not answered by the Int stub
