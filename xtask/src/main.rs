@@ -36,6 +36,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("check-pending") => check_pending(),
+        Some("sorted-lists") => sorted_lists(),
         Some("greenfield-status") => {
             let mut rest = args[1..].iter();
             let mut unknown = None;
@@ -405,6 +406,26 @@ fn check_pending() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// `sorted-lists`: every list the Book marks as alphabetical (`<!-- sorted: … -->`) is in order,
+/// or this prints each entry that is not, and the one it should follow (#4206). Report only.
+fn sorted_lists() -> ExitCode {
+    let problems = xtask::sorted_lists::check_site(&repo_root());
+    if problems.is_empty() {
+        println!("sorted-lists: every marked list is in alphabetical order");
+        return ExitCode::SUCCESS;
+    }
+    for p in &problems {
+        eprintln!("{p}");
+    }
+    eprintln!(
+        "sorted-lists: {} problem(s). For an entry out of order, move the whole entry (a table row, \
+         or a heading with its section) to the place named, and do not rewrite its text; for a \
+         marker problem, fix the `<!-- sorted -->` marker the message names.",
+        problems.len()
+    );
+    ExitCode::FAILURE
 }
 
 fn stamp(apply: bool) -> ExitCode {
@@ -835,6 +856,12 @@ type Step = (
 fn ci_steps(fast: bool, nextest: bool) -> Vec<Step> {
     let mut steps: Vec<Step> = vec![
         ("formatting", vec!["fmt", "--all", "--check"], vec![]),
+        // #4206: the Reference's marked lists stay alphabetical. Cheap, so before the builds.
+        (
+            "sorted lists",
+            vec!["run", "--locked", "-q", "-p", "xtask", "--", "sorted-lists"],
+            vec![],
+        ),
         // #3174: the examples are the corpus newcomers read, so they must be what
         // `bynk fmt` produces. (CI enforces the same via xtask's
         // `examples_fmt_clean` test.)
@@ -1121,7 +1148,7 @@ fn release_page(apply: bool) -> ExitCode {
 
 fn usage() {
     eprintln!(
-        "usage: cargo xtask <check-pending | ci [--fast] | fn-lengths [--apply] | module-lines [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
+        "usage: cargo xtask <check-pending | sorted-lists | ci [--fast] | fn-lengths [--apply] | module-lines [--apply] | greenfield-status [--apply | --list-unasserted | --check-growth [--base REV] | --trend-only [--apply]] | manifest-schema [--check] | editor-contract [--check | --tag T --out F] | stamp [--apply] | release-notes <vX.Y.Z> | release-page [--apply] | bench [--sizes N,N,…] [--shape independent|linked|both] [--runs N] [--edits N] [--record] | bench-runtime [--sizes-only] [--record] [--runs N] [--requests N] [--startups N] | tier-probe>"
     );
 }
 
@@ -1141,11 +1168,17 @@ mod tests {
         let steps = ci_steps(true, false);
         assert_eq!(
             names(&steps),
-            ["formatting", "examples formatting", "clippy", "docs"]
+            [
+                "formatting",
+                "sorted lists",
+                "examples formatting",
+                "clippy",
+                "docs"
+            ]
         );
         assert_eq!(steps[0].1[0], "fmt");
-        assert_eq!(steps[2].1[0], "clippy");
-        assert_eq!(steps[3].1[0], "doc");
+        assert_eq!(steps[3].1[0], "clippy");
+        assert_eq!(steps[4].1[0], "doc");
     }
 
     /// Matches CI's `API docs (cargo doc)` job, in both `--fast` and the full
@@ -1184,6 +1217,7 @@ mod tests {
             names(&steps),
             [
                 "formatting",
+                "sorted lists",
                 "examples formatting",
                 "clippy",
                 "docs",
