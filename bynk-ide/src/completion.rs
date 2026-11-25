@@ -1050,7 +1050,7 @@ pub const CORS_FIELDS: &[(&str, &str)] = &[
 ];
 
 /// v0.141 (ADR 0164): the security-headers policy fields, offered at a field-name
-/// position inside a `security { }` block. The closed set is these two.
+/// position inside a `security { }` block. The closed set is these five.
 pub const SECURITY_FIELDS: &[(&str, &str)] = &[
     (
         "nosniff",
@@ -1060,7 +1060,28 @@ pub const SECURITY_FIELDS: &[(&str, &str)] = &[
         "hsts",
         "opt in to `Strict-Transport-Security` — the `max-age` as a `Duration`",
     ),
+    (
+        "frameAncestors",
+        "who may frame an HTML page, as `Content-Security-Policy: frame-ancestors` — exact origins or `\"self\"` (default: nobody)",
+    ),
+    (
+        "referrerPolicy",
+        "the `Referrer-Policy` of an HTML page, in camel case (default `strictOriginWhenCrossOrigin`)",
+    ),
+    (
+        "csp",
+        "a whole `Content-Security-Policy` for HTML pages, sent verbatim; `frame-ancestors` is appended if it has none",
+    ),
 ];
+
+/// #3923: the values of a `security { referrerPolicy: … }`, written in camel case, with the
+/// header each sends.
+pub fn referrer_policy_values() -> Vec<(&'static str, String)> {
+    bynk_syntax::ast::REFERRER_POLICIES
+        .iter()
+        .map(|(camel, header)| (*camel, format!("sends `Referrer-Policy: {header}`")))
+        .collect()
+}
 
 /// v0.142 (ADR 0165): the request-limits policy fields, offered at a field-name
 /// position inside a `limits { }` block. The closed set is this one.
@@ -1447,6 +1468,28 @@ pub fn in_security_field_position(text: &str, offset: usize) -> bool {
     };
     let current = seg.rsplit(['\n', ',']).next().unwrap_or("");
     !current.contains(':')
+}
+
+/// #3923: the cursor is at the value of `referrerPolicy:` inside a `security { … }` block,
+/// where the standard values (in camel case) are offered.
+pub fn in_security_referrer_policy_value_position(text: &str, offset: usize) -> bool {
+    let Some(head) = text.get(..offset.min(text.len())) else {
+        return false;
+    };
+    let in_security = innermost_open_brace(text, offset)
+        .is_some_and(|open| word_before_brace(text, open) == "security");
+    if !in_security {
+        return false;
+    }
+    let line = head.rsplit(['\n', ',', '{']).next().unwrap_or("");
+    line.trim_start()
+        .strip_prefix("referrerPolicy")
+        .and_then(|rest| rest.trim_start().strip_prefix(':'))
+        .is_some_and(|value| {
+            value
+                .chars()
+                .all(|c| c.is_alphabetic() || c.is_whitespace())
+        })
 }
 
 /// v0.142 (ADR 0165): the cursor is at a field-*name* position inside a
@@ -5403,6 +5446,39 @@ fn Box.size(self) -> Int { 1 }
         let top = "context c\n\n";
         assert!(!in_effectful_body_position(top, top.len()));
         assert!(par_snippet().insert_text.unwrap().starts_with("par {"));
+    }
+
+    #[test]
+    fn referrer_policy_values_are_offered_after_the_field_name_only() {
+        let doc = "service api from http {\n  security {\n    referrerPolicy: ";
+        assert!(in_security_referrer_policy_value_position(doc, doc.len()));
+        let typing = "service api from http {\n  security {\n    referrerPolicy: sameO";
+        assert!(in_security_referrer_policy_value_position(
+            typing,
+            typing.len()
+        ));
+        // A name position, another field's value, and another block are not it.
+        let name = "service api from http {\n  security {\n    referrerPolicy";
+        assert!(!in_security_referrer_policy_value_position(
+            name,
+            name.len()
+        ));
+        let other = "service api from http {\n  security {\n    hsts: ";
+        assert!(!in_security_referrer_policy_value_position(
+            other,
+            other.len()
+        ));
+        let cors = "service api from http {\n  cors {\n    referrerPolicy: ";
+        assert!(!in_security_referrer_policy_value_position(
+            cors,
+            cors.len()
+        ));
+        assert!(
+            referrer_policy_values()
+                .iter()
+                .any(|(n, d)| *n == "strictOriginWhenCrossOrigin"
+                    && d.contains("strict-origin-when-cross-origin"))
+        );
     }
 
     #[test]
