@@ -1,5 +1,5 @@
 suite demo.d {
-  // An inline `Matches` on a record field has no generator either; pin instead.
+  // #4121: an inline `Matches` the walk cannot honour on a record field has no generator either.
   property "orders cannot be generated" {
     for all o: Order {
       expect o == o

@@ -495,3 +495,53 @@ fn for_all_draws_across_the_realistic_domain_of_each_plain_type() {
         assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
     }
 }
+
+/// #4121: `for all` over a `Matches` type draws members of the pattern (a record's patterned
+/// field and a length-bounded pattern too) and real `IsoDate` dates, and a failing claim shrinks
+/// to the shortest member.
+#[test]
+fn for_all_draws_members_of_a_matches_pattern_and_shrinks_to_the_shortest() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-matches")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_matches"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    for name in [
+        "a sku has the shape its pattern gives",
+        "a slug obeys its pattern and its length bound",
+        "a date is ten characters",
+        "a record's patterned fields are drawn too",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+    let c = case_named(&doc, "a code is shorter than five characters");
+    assert_eq!(c["outcome"], "fail");
+    assert_eq!(c["counterexample"], "c = \"aaaaa\"");
+}
