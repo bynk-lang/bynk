@@ -851,6 +851,59 @@ runtime a response carrying `Set-Cookie` is always sent `Cache-Control: private`
 conditional-`GET` `304` keeps the `Set-Cookie` of the response it replaces. In a test,
 `result.cookies()` reads the `List[Cookie]` a result carries.
 
+## Response headers {#response-headers}
+
+A handler adds a header of its own to any `HttpResult` with `withHeader`, and the status
+that has a standard header takes a typed helper:
+
+```bynk,fragment
+on GET("/report") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("ok").withHeader("X-Request-Id", "abc")
+}
+
+on POST("/things") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+  Created(body).at("/things/1")
+}
+
+on GET("/slow") () -> Effect[HttpResult[String]] by v: Visitor {
+  TooManyRequests("slow down").retryAfter(30.seconds)
+}
+
+on GET("/export") () -> Effect[HttpResult[Bytes]] by v: Visitor {
+  Raw(Bytes.fromUtf8("a,b"), "text/csv").download("report.csv")
+}
+```
+
+| Method | Writes | Applies to |
+|---|---|---|
+| `withHeader(name, value)` | one header line; a repeated name keeps every value | any `HttpResult` |
+| `retryAfter(delay)` | `Retry-After`, `delay` in whole seconds, rounded up | `TooManyRequests`, `ServiceUnavailable` |
+| `at(url)` | `Location` of the new resource | `Created`, `RawCreated`, `Accepted` |
+| `download(filename)` | `Content-Disposition: attachment`, with an ASCII `filename` fallback and the exact name as an RFC 8187 `filename*` | `Raw`, `RawTagged`, `RawStreamed` |
+
+A typed helper is written on the variant itself, after any other header methods
+(`TooManyRequests(m).withHeader("X-Reason", "deploy").retryAfter(90.seconds)`), because the router
+cannot tell at compile time which variant a stored `HttpResult` holds; on another receiver it is
+`bynk.types.method_not_found`. `retryAfter` is whole seconds, so a literal under one second is
+refused (`bynk.http.invalid_response_header`).
+
+`withHeader` cannot set a header the router owns: the caching headers (`Cache-Control`, `ETag`,
+`Vary`, `Expires`, `Last-Modified`, `Age`, `Pragma` and the CDN directives), `Content-Type` and
+`Content-Length`, `Location`, `Retry-After` and `Content-Disposition` (the typed helpers write
+those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
+`WWW-Authenticate`, `Allow` and the hop-by-hop headers. A header value is ASCII: a literal with
+another character is `bynk.http.invalid_response_header`, and a computed one answers `500`; `at`
+percent-encodes a URL instead. A literal name that is one is
+`bynk.http.reserved_response_header`, and its note names the way to set it properly. A literal name
+that is not an RFC 9110 token, or a value with a line break or another control character, is
+`bynk.http.invalid_response_header`. A name or value computed at run time is judged when the
+response is built: a bad one answers `500` and is logged, so a malformed header never reaches the
+wire.
+
+In a test, `result.headers()` reads the `Map[String, List[String]]` a result carries, with
+lower-case names and each name's values in the order they were added; the headers the router owns
+are not in it.
+
 ## Method semantics
 
 The methods a path answers are **derived from the routes you declare** — there is

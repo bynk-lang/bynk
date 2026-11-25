@@ -1,0 +1,16 @@
+context hdr.api
+
+// #3915: a unit-tier test reads a result's headers with `headers()`.
+service api from http {
+  on GET("/custom") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("ok").withHeader("X-Request-Id", "abc").withHeader("X-Trace", "t1").withHeader("X-Trace", "t2")
+  }
+
+  on GET("/limited") () -> Effect[HttpResult[String]] by v: Visitor {
+    TooManyRequests("slow").retryAfter(30.seconds).retryAfter(60.seconds)
+  }
+
+  on POST("/things") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Created(body).at("/things/1")
+  }
+}
