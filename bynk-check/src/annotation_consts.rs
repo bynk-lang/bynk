@@ -101,6 +101,35 @@ impl<'a> Scope<'a> {
     }
 }
 
+/// Resolve one annotation argument that is a bare constant name to the literal
+/// of type `base` it denotes, in place. Returns whether it changed; an argument
+/// that does not resolve is left as written.
+fn resolve_arg(
+    arg: &mut bynk_syntax::ast::AnnotationArg,
+    base: BaseType,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let ExprKind::Ident(id) = &arg.value.kind else {
+        return false;
+    };
+    let Some(found) =
+        crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, base)
+    else {
+        return false;
+    };
+    let same_file = found.owner.is_none() && scope.file_consts.contains(&id.name);
+    arg.from_const = Some(ConstRef {
+        name: id.clone(),
+        decl_span: same_file.then_some(found.decl.name.span),
+    });
+    // The reference is a use of the constant: go-to-definition, hover,
+    // find-references and rename see it as one (#3445 H).
+    refs.record(id.span, SymbolKind::Const, &id.name);
+    arg.value.kind = found.literal.kind.clone();
+    true
+}
+
 /// Rewrite the arguments of `annotations` named by `rules`. Returns whether any
 /// argument changed.
 fn rewrite_annotations(
@@ -112,39 +141,80 @@ fn rewrite_annotations(
     let mut changed = false;
     for ann in annotations {
         for arg in &mut ann.args {
-            let ExprKind::Ident(id) = &arg.value.kind else {
-                continue;
-            };
             let Some(rule) = rules.iter().find(|r| {
                 r.annotation == ann.name.name
                     && r.label == arg.label.as_ref().map(|l| l.name.as_str())
             }) else {
                 continue;
             };
-            let Some(found) = crate::consts::resolve_const_literal(
-                |u| scope.lookup(u),
-                scope.unit,
-                &id.name,
-                rule.base,
-            ) else {
-                continue;
-            };
-            let same_file = found.owner.is_none() && scope.file_consts.contains(&id.name);
-            arg.from_const = Some(ConstRef {
-                name: id.clone(),
-                decl_span: same_file.then_some(found.decl.name.span),
-            });
-            // The reference is a use of the constant: go-to-definition, hover,
-            // find-references and rename see it as one (#3445 H).
-            refs.record(id.span, SymbolKind::Const, &id.name);
-            arg.value.kind = found.literal.kind.clone();
-            changed = true;
+            changed |= resolve_arg(arg, rule.base, scope, refs);
         }
     }
     changed
 }
 
-/// The base type each `delivery { }` key's constant must have (#3877).
+/// #3942: a derived capability instance's options (`Service @worker`, `Queue
+/// @name`, `Email @to`, `RateLimit @limit` and `@period`, …) take a constant
+/// by the same rule. The option's kind comes from the base kind's own table, so
+/// each option resolves to the literal its validator then reads. A list option
+/// (`@allowedRecipients`) takes constants for its string elements.
+fn rewrite_instance_options(
+    derived: &mut bynk_syntax::ast::DerivedCapability,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    use bynk_std::OptionKind;
+    let Some(kind) =
+        crate::firstparty::instantiable(crate::firstparty::CLOUDFLARE_UNIT, &derived.base.name)
+    else {
+        return false;
+    };
+    let mut changed = false;
+    for ann in &mut derived.annotations {
+        let Some(option) = kind.option_kind(&ann.name.name) else {
+            continue;
+        };
+        for arg in &mut ann.args {
+            match option {
+                OptionKind::Str => changed |= resolve_arg(arg, BaseType::String, scope, refs),
+                OptionKind::PositiveInt => changed |= resolve_arg(arg, BaseType::Int, scope, refs),
+                OptionKind::Duration => {
+                    changed |= resolve_arg(arg, BaseType::Duration, scope, refs)
+                }
+                OptionKind::StrList => {
+                    if let ExprKind::ListLit(items, ..) = &mut arg.value.kind {
+                        for item in items {
+                            changed |= resolve_element(item, BaseType::String, scope, refs);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    changed
+}
+
+/// [`resolve_arg`] for a list element, which has no argument to record the
+/// constant on: the reference is still recorded as a use.
+fn resolve_element(
+    item: &mut bynk_syntax::ast::Expr,
+    base: BaseType,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let ExprKind::Ident(id) = &item.kind else {
+        return false;
+    };
+    let Some(found) =
+        crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, base)
+    else {
+        return false;
+    };
+    refs.record(id.span, SymbolKind::Const, &id.name);
+    item.kind = found.literal.kind.clone();
+    true
+}
+
 const DELIVERY_KEYS: &[(&str, BaseType)] = &[
     ("retries", BaseType::Int),
     ("retryDelay", BaseType::Duration),
@@ -334,6 +404,11 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
                     changed |= rewrite_annotations(&mut f.annotations, STORE_RULES, scope, refs);
                 }
                 changed |= rewrite_handlers(&mut agent.handlers, scope, refs);
+            }
+            CommonsItem::Capability(cap) => {
+                if let Some(derived) = cap.derived.as_mut() {
+                    changed |= rewrite_instance_options(derived, scope, refs);
+                }
             }
             _ => {}
         }

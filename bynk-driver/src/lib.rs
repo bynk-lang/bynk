@@ -2029,6 +2029,66 @@ mod tests {
         );
     }
 
+    /// #3942: a derived capability instance's option takes a constant, and the
+    /// binding is the one the literal gives. A constant of the wrong type keeps
+    /// the option's own error.
+    #[test]
+    fn instance_options_take_constants() {
+        let build = |name: &str, worker_arg: &str, consts: &str| {
+            let dir = scratch_dir(name);
+            fs::write(
+                dir.0.join("bynk.toml"),
+                "[project]\nname = \"p\"\n\n[unstable]\nallow = [\"bynk.cloudflare.Service\"]\n",
+            )
+            .unwrap();
+            fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+            let source = format!(
+                "context shop.billing\n\nconsumes bynk\nconsumes bynk.cloudflare {{ Service }}\n\n{consts}capability Billing = Service @worker({worker_arg})\n\nservice charge {{\n\ton call(id: String) -> Effect[Int] by Caller given Billing {{\n\t\tlet req = Request {{\n\t\t\tmethod: Post,\n\t\t\turl: \"https://legacy-billing/charge\",\n\t\t\tcontentType: Some(\"text/plain\"),\n\t\t\tauthorization: None,\n\t\t\theaders: Map.empty(),\n\t\t\tbody: Some(id),\n\t\t}}\n\t\tlet res <- Billing.send(req)\n\t\tmatch res {{\n\t\t\tOk(r) => r.status,\n\t\t\tErr(_) => 0,\n\t\t}}\n\t}}\n}}\n"
+            );
+            fs::write(dir.0.join("src/shop/billing.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .target(project::BuildTarget::Workers);
+            project::compile_project(&options)
+                .map(|out| {
+                    out.artefacts
+                        .docs
+                        .iter()
+                        .filter(|(p, _)| p.ends_with("wrangler.toml"))
+                        .map(|(_, d)| d.text().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .map_err(|f| {
+                    f.errors
+                        .iter()
+                        .map(|e| e.error.category)
+                        .collect::<Vec<_>>()
+                })
+        };
+        let literal = build("inst_literal", "\"legacy-billing\"", "").expect("builds");
+        assert!(literal.contains("legacy-billing"), "{literal}");
+        let named = build(
+            "inst_const",
+            "BillingWorker",
+            "const BillingWorker: String = \"legacy-billing\"\n\n",
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "a constant gives the literal's binding");
+        let chained = build(
+            "inst_chain",
+            "Outer",
+            "const Inner: String = \"legacy-billing\"\nconst Outer: String = Inner\n\n",
+        )
+        .expect("builds");
+        assert_eq!(literal, chained);
+        // The wrong type is refused with the option's own error.
+        assert_eq!(
+            build("inst_wrong_type", "Lines", "const Lines: Int = 3\n\n"),
+            Err(vec!["bynk.capability.invalid_option"])
+        );
+    }
+
     /// #3941 decision I: a package consumed as a dependency cannot read the
     /// consuming project's variables.
     #[test]

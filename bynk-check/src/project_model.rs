@@ -1362,11 +1362,23 @@ fn instance_option_value(
 ) -> Option<crate::symbols::OptionValue> {
     use crate::symbols::OptionValue;
     let option = ann.name.name.as_str();
+    // #3942 B: a bare name that did not resolve (see
+    // `annotation_consts::rewrite_instance_options`) keeps the option's own
+    // error, with a note on what a constant must be to stand here.
+    let named = ann.args.first().and_then(|a| match &a.value.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        _ => None,
+    });
     let invalid = |span, message: String| {
-        CompileError::new("bynk.capability.invalid_option", span, message).with_note(format!(
-            "write `@{option}({})`, for example",
-            option_sample(option)
-        ))
+        let error = CompileError::new("bynk.capability.invalid_option", span, message).with_note(
+            format!("write `@{option}({})`, for example", option_sample(option)),
+        );
+        match &named {
+            Some(name) => error.with_note(format!(
+                "`{name}` is not a constant declared exactly the option's type and bound to a literal, or to another such constant"
+            )),
+            None => error,
+        }
     };
     let [arg] = ann.args.as_slice() else {
         errors.push_for(
