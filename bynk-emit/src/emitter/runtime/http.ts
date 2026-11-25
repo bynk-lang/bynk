@@ -191,6 +191,9 @@ export function claimStream(stream: object): void {
 // returns the iterator so an abandoned read releases the source promptly. A
 // throw from the source errors the body, aborting a response whose status is
 // already sent.
+// One read of a source stream: `done` once it has ended, else the next `value`.
+type Step<T> = { readonly done?: boolean; readonly value: T };
+
 // #3918: with a `heartbeat`, a pull that finds the source idle for `everyMs` writes `chunk`
 // and returns, keeping the pending read for the next pull, so the source is never advanced twice.
 function pullBody<T>(
@@ -200,8 +203,8 @@ function pullBody<T>(
 ): ReadableStream<Uint8Array> {
   claimStream(stream);
   const iterator = stream[Symbol.asyncIterator]();
-  let pending: Promise<IteratorResult<T>> | undefined;
-  const nextOrIdle = async (): Promise<IteratorResult<T> | "idle"> => {
+  let pending: Promise<Step<T>> | undefined;
+  const nextOrIdle = async (): Promise<Step<T> | "idle"> => {
     pending ??= iterator.next();
     const read = pending;
     if (heartbeat === undefined) {

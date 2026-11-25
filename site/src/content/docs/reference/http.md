@@ -1239,7 +1239,7 @@ it received as `Last-Event-ID`. Bynk keeps no event history, so resumption is th
 the header through a typed [`headers`](#typed-headers) record, send what came after it, and give
 every event an `id`:
 
-```bynk,fragment
+```bynk,ignore
 type FeedHeaders = { @name("last-event-id") lastId: Option[String] }
 
 on GET("/feed") (headers: FeedHeaders) -> Effect[HttpResult[()]] by v: Visitor given Feed {
