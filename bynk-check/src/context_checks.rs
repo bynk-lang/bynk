@@ -2805,7 +2805,7 @@ fn queue_actor_narrowing(
         CompileError::new(
             "bynk.actor.queue_actor_not_enforced",
             by.span,
-            "a queue consumer cannot yet narrow its actor: a `Producer` refinement or a `Foreign` actor is not supported on `on message` yet",
+            "a queue consumer cannot narrow its actor yet: a `Producer` refinement or a `Foreign` actor is not enforced on `on message`",
         )
         .with_note(
             "nothing verifies who sent a queue message yet, so accepting this `by` would admit \
