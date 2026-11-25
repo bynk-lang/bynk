@@ -119,14 +119,19 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
 // Each stream element is one SSE event; a multi-line element becomes multiple
 // `data:` lines, terminated by a blank line. The body is a ReadableStream, so
 // this is a Web standard that runs unchanged on Workers and Node.
-function sseResponse(stream: AsyncIterable<string | SseEvent>): Response {
+function sseResponse(stream: AsyncIterable<string | SseEvent>, heartbeatMs?: number): Response {
   const encoder = new TextEncoder();
-  const body = pullBody(stream, (value) => {
-    if (typeof value === "string") {
-      return [...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)), encoder.encode("\n")];
-    }
-    return sseEventChunks(value).map((line) => encoder.encode(line));
-  });
+  const body = pullBody(
+    stream,
+    (value) => {
+      if (typeof value === "string") {
+        return [...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)), encoder.encode("\n")];
+      }
+      return sseEventChunks(value).map((line) => encoder.encode(line));
+    },
+    // A comment line (`:`) is ignored by every `EventSource`, so it only keeps the connection warm.
+    heartbeatMs === undefined ? undefined : { everyMs: heartbeatMs, chunk: encoder.encode(":\n\n") },
+  );
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
@@ -186,19 +191,48 @@ export function claimStream(stream: object): void {
 // returns the iterator so an abandoned read releases the source promptly. A
 // throw from the source errors the body, aborting a response whose status is
 // already sent.
+// #3918: with a `heartbeat`, a pull that finds the source idle for `everyMs` writes `chunk`
+// and returns, keeping the pending read for the next pull, so the source is never advanced twice.
 function pullBody<T>(
   stream: AsyncIterable<T>,
   encode: (value: T) => readonly Uint8Array[],
+  heartbeat?: { readonly everyMs: number; readonly chunk: Uint8Array },
 ): ReadableStream<Uint8Array> {
   claimStream(stream);
   const iterator = stream[Symbol.asyncIterator]();
+  let pending: Promise<IteratorResult<T>> | undefined;
+  const nextOrIdle = async (): Promise<IteratorResult<T> | "idle"> => {
+    pending ??= iterator.next();
+    const read = pending;
+    if (heartbeat === undefined) {
+      pending = undefined;
+      return read;
+    }
+    read.catch(() => {}); // a rejection is surfaced when the read is awaited, not as unhandled
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const idle = new Promise<"idle">((resolve) => {
+      timer = setTimeout(() => resolve("idle"), heartbeat.everyMs);
+    });
+    try {
+      const got = await Promise.race([read, idle]);
+      if (got !== "idle") pending = undefined;
+      return got;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   return new ReadableStream<Uint8Array>(
     {
       // An element that encodes to nothing (an empty chunk) is skipped
       // here: a `pull` that enqueues nothing isn't called again.
       async pull(controller) {
         for (;;) {
-          const { value, done } = await iterator.next();
+          const got = await nextOrIdle();
+          if (got === "idle") {
+            controller.enqueue(heartbeat!.chunk);
+            return;
+          }
+          const { value, done } = got;
           if (done) {
             controller.close();
             return;
@@ -493,6 +527,12 @@ export function withRetryAfter<R extends object>(result: R, delayMillis: number)
   return withHeaderTriple(result, ["retry-after", String(Math.max(0, Math.ceil(delayMillis / 1000))), true]);
 }
 
+/** #3918: `Streaming(…).heartbeat(every)`: a comment line whenever the event stream is idle this long. */
+export function withHeartbeat<R extends object>(result: R, everyMillis: number): R {
+  if (!(everyMillis > 0)) throw new Error("heartbeat: the interval must be positive");
+  return { ...result, heartbeatMs: everyMillis };
+}
+
 /** `result.at(url)`: the `Location` of a created resource. */
 export function withLocation<R extends object>(result: R, url: string): R {
   return withHeaderTriple(result, ["location", encodeNonAscii(url), true]);
@@ -600,7 +640,7 @@ function baseHttpResultToResponse<T>(
     }
     // 200 with a streamed body — each stream element is one SSE event.
     case "Streaming":
-      return sseResponse(result.stream);
+      return sseResponse(result.stream, result.heartbeatMs);
     // 200 with a raw body — author-owned bytes with an explicit content-type.
     // No codec runs; the Uint8Array is written straight into the Response. The
     // `as BodyInit` cast satisfies TS 5.7, whose `Uint8Array<ArrayBufferLike>`
@@ -2372,5 +2412,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

@@ -45,6 +45,14 @@ export default {
         }
       }
       {
+        if ((method === "GET" || method === "HEAD") && __matchPath("/beat", path) !== null) {
+          __route = "GET /beat";
+          const result = await surface.http_GET_beat();
+          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: void) => null, { weakEtag: true }), request), request, ["Bynk realm=\"api\""]), __security_routes);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
         if ((method === "GET" || method === "HEAD") && __matchPath("/chunks", path) !== null) {
           __route = "GET /chunks";
           const result = await surface.http_GET_chunks();
@@ -131,6 +139,11 @@ export default {
         }
       }
       if (__matchPath("/bad-event", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
+        return __applySecurityHeaders(__res, __security_routes);
+      }
+      if (__matchPath("/beat", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_routes);

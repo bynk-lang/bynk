@@ -1213,6 +1213,41 @@ does.
 A unit-tier test that matches `Streaming(s)` can drain `s` and count its events; `s` is typed
 `Stream[String]` whatever the handler streams, so do not read an `SseEvent` element as a `String` (tracked in #4394).
 
+### Heartbeats
+
+A proxy or load balancer closes a connection that carries no bytes for a while, so a stream that
+is idle between events needs something on the wire. `.heartbeat(every)` on a `Streaming(…)` result
+writes a comment line (`:`), which every `EventSource` ignores, whenever the stream has produced
+nothing for `every`:
+
+```bynk,fragment
+on GET("/feed") () -> Effect[HttpResult[()]] by v: Visitor {
+  Streaming(events).heartbeat(15.seconds)
+}
+```
+
+It is written on the `Streaming` variant itself, optionally after other response methods, and an
+interval under one second is refused. A heartbeat is only written while the stream is waiting: an
+event that is ready is never delayed, and no event is dropped or repeated. A heartbeat keeps the
+Worker invocation alive for as long as the connection is open, which is why it is opt-in, and it
+does not extend any platform limit on the response's total duration.
+
+### Resuming after a dropped connection
+
+A browser `EventSource` that loses its connection reconnects and sends the `id` of the last event
+it received as `Last-Event-ID`. Bynk keeps no event history, so resumption is the handler's: read
+the header through a typed [`headers`](#typed-headers) record, send what came after it, and give
+every event an `id`:
+
+```bynk,fragment
+type FeedHeaders = { @name("last-event-id") lastId: Option[String] }
+
+on GET("/feed") (headers: FeedHeaders) -> Effect[HttpResult[()]] by v: Visitor given Feed {
+  let events <- Feed.since(headers.lastId)
+  Streaming(events.map((e) => SseEvent { data: e.body, id: Some(e.id) })).heartbeat(15.seconds)
+}
+```
+
 ## Raw responses
 
 `Raw(body, contentType)` returns a **200** whose body is a raw

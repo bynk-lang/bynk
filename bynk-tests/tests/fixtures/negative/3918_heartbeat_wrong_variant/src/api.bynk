@@ -1,0 +1,7 @@
+context api
+
+service api from http {
+    on GET("/x") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x").heartbeat(15.seconds)
+    }
+}

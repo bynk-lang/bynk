@@ -247,6 +247,7 @@ const WORKER_ORDER: &[&str] = &[
     "__withRetryAfter",
     "__withLocation",
     "__withDownload",
+    "__withHeartbeat",
     "__resultHeaders",
     "__headResponse",
     "__bynkBytesDecodeUtf8",
