@@ -252,6 +252,7 @@ const WORKER_ORDER: &[&str] = &[
     "__readBodyCapped",
     "__deserialiseEventEnvelope",
     "__noStore",
+    "__privateByDefault",
     "__edgeCacheGuard",
     "__varyAcceptLanguage",
     "__SecurityPolicy",

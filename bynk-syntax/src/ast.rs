@@ -2151,6 +2151,20 @@ impl Handler {
             })
     }
 
+    /// #3922: whether the handler's `@cache` says `noStore: true`, so its responses are
+    /// sent `Cache-Control: no-store` with no `ETag`.
+    pub fn cache_no_store(&self) -> bool {
+        self.annotations
+            .iter()
+            .find(|a| a.name.name == "cache")
+            .is_some_and(|ann| {
+                ann.args.iter().any(|arg| {
+                    arg.label.as_ref().is_some_and(|l| l.name == "noStore")
+                        && matches!(arg.value.kind, ExprKind::BoolLit(true))
+                })
+            })
+    }
+
     /// #3921: the route's effective request-body cap, in bytes: its `@limit`, else
     /// `service_cap` (the service's `limits { maxBody }`), else
     /// [`DEFAULT_MAX_BODY`] when it is an HTTP route that takes a `body`. `None`

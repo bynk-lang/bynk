@@ -1,0 +1,10 @@
+{
+  "blurb": "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_public_authenticated",
+  "constructs": [],
+  "example": "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ one member's answer, stored for everyone\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
+  "severity": "error",
+  "summary": "A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another."
+}

@@ -1,0 +1,42 @@
+context api
+
+// #3922: a route guarded by an actor that carries a credential sends
+// `Cache-Control: private` on every response unless it declares its own policy;
+// `@cache(noStore: true)` sends `no-store` with no `ETag`; a `Visitor` route is
+// unchanged. Drives the `http_authenticated_cache` behaviour test.
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by u: User {
+    Ok("me")
+  }
+
+  on GET("/missing") () -> Effect[HttpResult[String]] by u: User {
+    NotFound
+  }
+
+  on POST("/things") (body: String) -> Effect[HttpResult[String]] by u: User {
+    Created(body)
+  }
+
+  @cache(maxAge: 60.seconds)
+  on GET("/cached") () -> Effect[HttpResult[String]] by u: User {
+    Ok("cached")
+  }
+
+  @cache(noStore: true)
+  on GET("/tokens") () -> Effect[HttpResult[String]] by u: User {
+    Ok("tokens")
+  }
+
+  @cache(noStore: true)
+  on GET("/open-tokens") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("tokens")
+  }
+
+  on GET("/hello") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("hello")
+  }
+}

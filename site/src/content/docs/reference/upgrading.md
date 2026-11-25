@@ -17,6 +17,14 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.688.0
+
+`QueueSend.delay` is an `Option[QueueDelay]` instead of an `Option[Duration]`, so a computed `Duration` is refused with `bynk.types.some_value_mismatch` until it goes through `QueueDelay.of(d)`
+
+## v0.687.0
+
+A route guarded by a `Bearer`, `Oidc`, `SignedCookie` or `Signature` actor now sends `Cache-Control: private` on every response that has no `@cache` of its own, and `@cache(scope: public)` on such a route is refused with `bynk.http.cache_public_authenticated`; move a response that is the same for everyone to a `Visitor` route, or use `scope: private`.
+
 ## v0.684.0
 
 A body-taking HTTP route with no `@limit` or `limits { maxBody }` now answers `413` for a body over 1 MiB; the build hints `bynk.http.body_cap_defaulted` name those routes, and `@limit(maxBody: …)` on a route or `limits { maxBody: … }` on the service raises the cap.

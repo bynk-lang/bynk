@@ -1,0 +1,13 @@
+context shop
+
+agent Journal {
+  key id: String
+  store entries: Log[String]
+
+  invariant bounded:
+    entries.size() <= 10
+
+  on call ping() -> Effect[()] {
+    Effect.pure(())
+  }
+}
