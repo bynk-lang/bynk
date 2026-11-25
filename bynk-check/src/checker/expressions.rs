@@ -3961,16 +3961,8 @@ pub(crate) fn check_field_access(
         return None;
     };
     let Some(field_decl) = r.fields.iter().find(|f| f.name.name == field.name) else {
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.unknown_field",
-                field.span,
-                format!("record type `{}` has no field `{}`", name, field.name),
-            )
-            // Finding #46: `decl` comes from the combined cross-file symbol
-            // table — see resolver.rs:1029 for the full rationale.
-            .with_note("type declared here"),
-        );
+        ctx.errors
+            .push(unknown_record_field_error(name, field, ctx));
         return None;
     };
     // v0.36 (ADR 0069, slice 2): the field is an index symbol, keyed by the
@@ -6186,4 +6178,65 @@ mod retry_after_tests {
         assert!(verdict("RetryAfter(\"x\", 24.hours)").is_empty());
         assert!(verdict("RetryAfter(\"x\", 1.second)").is_empty());
     }
+}
+
+/// The agent a synthetic `self` record (`__<Agent>Self`) stands for.
+pub(super) fn self_record_agent(record: &str) -> Option<&str> {
+    record.strip_prefix("__")?.strip_suffix("Self")
+}
+
+/// #4291: `self.<name>` inside an agent handler where `<name>` is not the key.
+/// An operation is refused with the supported spelling; any other name is an
+/// unknown field of the agent, named by the agent.
+pub(super) fn agent_self_member_error(
+    agent: &str,
+    field: &Ident,
+    unknown: (&'static str, &str),
+    ctx: &Ctx,
+) -> CompileError {
+    let is_op = ctx.input.agents.get(agent).is_some_and(|a| {
+        a.handlers
+            .iter()
+            .any(|h| h.method_name.as_ref().is_some_and(|n| n.name == field.name))
+    });
+    if is_op {
+        return CompileError::new(
+            "bynk.agents.self_operation",
+            field.span,
+            format!(
+                "`self.{op}` cannot call the agent's own operation: `self` is the agent's key, \
+                 not a handle to `{agent}`",
+                op = field.name
+            ),
+        )
+        .with_note(format!(
+            "call it on the agent, `{agent}(key).{}(…)`",
+            field.name
+        ));
+    }
+    let (code, noun) = unknown;
+    CompileError::new(
+        code,
+        field.span,
+        format!("`self` in agent `{agent}` has no {noun} `{}`", field.name),
+    )
+    .with_note(
+        "`self` carries the agent's key; its `store` fields are read by name, without `self`",
+    )
+}
+
+/// The error for a field a record lacks. #4291: `self` in an agent handler is a
+/// synthetic record, so it names the agent, never that record.
+fn unknown_record_field_error(name: &str, field: &Ident, ctx: &Ctx) -> CompileError {
+    if let Some(agent) = self_record_agent(name) {
+        return agent_self_member_error(agent, field, ("bynk.types.unknown_field", "field"), ctx);
+    }
+    CompileError::new(
+        "bynk.types.unknown_field",
+        field.span,
+        format!("record type `{}` has no field `{}`", name, field.name),
+    )
+    // Finding #46: `decl` comes from the combined cross-file symbol
+    // table — see resolver.rs:1029 for the full rationale.
+    .with_note("type declared here")
 }
