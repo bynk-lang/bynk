@@ -37,13 +37,20 @@ export async function getStaticPaths() {
       section: heading ? heading.text : undefined,
     };
   };
-  return diagnostics.map((d) => ({
-    params: { code: d.code },
-    props: { d, links: (diagnosticLinks[d.code] ?? []).map(describe) },
-  }));
+  // A retired code (#4277) keeps a short page, so an old log's `/d/<code>` link still lands.
+  const retired = Object.values(
+    import.meta.glob("../../../generated/diagnostics/retired/*.json", { eager: true, import: "default" }),
+  );
+  return [
+    ...diagnostics.map((d) => ({
+      params: { code: d.code },
+      props: { d, r: null, links: (diagnosticLinks[d.code] ?? []).map(describe) },
+    })),
+    ...retired.map((r) => ({ params: { code: r.code }, props: { d: null, r, links: [] } })),
+  ];
 }
 
-const { d, links } = Astro.props;
+const { d, r, links } = Astro.props;
 
 /** Inline Markdown as the registry writes it: `code` spans and *emphasis*. */
 function inline(text) {
@@ -63,11 +70,34 @@ const severity = {
   error: { text: "Error", variant: "danger" },
   warning: { text: "Warning", variant: "caution" },
   hint: { text: "Hint", variant: "note" },
-}[d.severity];
-const paragraphs = d.blurb ? d.blurb.split(/\n\n+/) : [];
+}[d?.severity];
+const paragraphs = d?.blurb ? d.blurb.split(/\n\n+/) : [];
 ---
 
-<StarlightPage
+{
+  r && (
+    <StarlightPage
+      frontmatter={{
+        title: r.code,
+        description: "A retired diagnostic code.",
+        tableOfContents: false,
+        editUrl: false,
+      }}
+    >
+      <p>
+        <Badge text="Retired" variant="caution" /> Retired after v{r.lastRelease}, its last release; the compiler no longer emits this code.
+      </p>
+      <p set:html={inline(r.why)} />
+      {r.replacement && <p>Replaced by <span set:html={inline(r.replacement)} />.</p>}
+      <p>
+        <code>bynk explain {r.code}</code> says the same from the installed toolchain. The{" "}
+        <a href="/reference/diagnostics/#retired-codes">diagnostic index</a> lists every retired code.
+      </p>
+    </StarlightPage>
+  )
+}
+
+{d && (<StarlightPage
   frontmatter={{
     title: d.code,
     description: d.summary.replace(/`/g, ""),
@@ -142,4 +172,4 @@ const paragraphs = d.blurb ? d.blurb.split(/\n\n+/) : [];
       toolchain, without a network.
     </li>
   </ul>
-</StarlightPage>
+</StarlightPage>)}

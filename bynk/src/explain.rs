@@ -18,7 +18,7 @@
 use bynk_driver::emsg;
 use std::process::ExitCode;
 
-use bynk_syntax::diagnostics::{self, Explain};
+use bynk_syntax::diagnostics::{self, Explain, Retired};
 
 /// What `explain` found for a requested code.
 enum Lookup {
@@ -27,6 +27,8 @@ enum Lookup {
     /// A real diagnostic code with no curated explanation yet; carries its
     /// one-line registry summary.
     KnownUnexplained(&'static str),
+    /// A code the compiler once emitted and no longer does (#4277).
+    Retired(&'static Retired),
     /// Not a code the compiler emits.
     Unknown,
 }
@@ -36,9 +38,23 @@ fn lookup(code: &str) -> Lookup {
         Lookup::Explained(e)
     } else if let Some(info) = diagnostics::REGISTRY.iter().find(|d| d.code == code) {
         Lookup::KnownUnexplained(info.summary)
+    } else if let Some(r) = diagnostics::retired(code) {
+        Lookup::Retired(r)
     } else {
         Lookup::Unknown
     }
+}
+
+/// The tombstone text for a retired code: when it went, why, and what replaced it.
+fn render_retired(r: &Retired) -> String {
+    let mut out = format!(
+        "{}\n\nThis diagnostic code was retired after v{}, its last release, and the compiler no longer emits it.\n\n{}\n",
+        r.code, r.last_release, r.why
+    );
+    if let Some(by) = r.replacement {
+        out.push_str(&format!("\nReplaced by: {by}\n"));
+    }
+    out
 }
 
 /// The full explanation text for a curated code (the offline-complete answer).
@@ -79,6 +95,10 @@ pub fn run(code: &str) -> ExitCode {
         }
         Lookup::KnownUnexplained(summary) => {
             print!("{}", render_known_unexplained(code, summary));
+            ExitCode::SUCCESS
+        }
+        Lookup::Retired(r) => {
+            print!("{}", render_retired(r));
             ExitCode::SUCCESS
         }
         Lookup::Unknown => {
@@ -122,6 +142,32 @@ mod tests {
             out.contains("https://bynk-lang.org/d/bynk.wasm.panic\n"),
             "{out}"
         );
+    }
+
+    #[test]
+    fn a_retired_code_says_when_why_and_what_replaced_it() {
+        let r = Retired {
+            code: "bynk.test.example",
+            last_release: "1.2.3",
+            why: "The default body cap makes it unreachable.",
+            replacement: Some("the default body cap (#3921)"),
+        };
+        let out = render_retired(&r);
+        assert!(out.contains("bynk.test.example"), "{out}");
+        assert!(out.contains("retired after v1.2.3"), "{out}");
+        assert!(
+            out.contains("default body cap makes it unreachable"),
+            "{out}"
+        );
+        assert!(
+            out.contains("Replaced by: the default body cap (#3921)"),
+            "{out}"
+        );
+        let bare = Retired {
+            replacement: None,
+            ..r
+        };
+        assert!(!render_retired(&bare).contains("Replaced by"));
     }
 
     #[test]
