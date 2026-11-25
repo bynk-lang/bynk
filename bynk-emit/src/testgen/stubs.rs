@@ -2,6 +2,7 @@
 //!
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
+use super::stub_clause::{alias_tested_args, arg_alias, clause_reply_payload, type_key_cond};
 use super::*;
 
 mod r2;
@@ -149,24 +150,6 @@ fn clause_key_types(
     )
     .map(|(r, _)| r.types)
     .unwrap_or_default()
-}
-
-/// #3945: `__tk && __tk.__bynkTypeKey === "<key>"`: the clause answers the call made at its type
-/// arguments.
-fn type_key_cond(
-    type_args: &[bynk_syntax::ast::TypeRef],
-    key_types: &HashMap<String, Arc<bynk_syntax::ast::TypeDecl>>,
-    tys: &Arc<Types>,
-) -> TsExpr {
-    and_expr(
-        ident("__tk"),
-        strict_eq(
-            member(ident("__tk"), "__bynkTypeKey"),
-            str_lit(bynk_check::checker::capability_type_key(
-                type_args, key_types, tys,
-            )),
-        ),
-    )
 }
 
 /// v0.118: emit the `__Stub_<Cap>` stub class for a capability seam
@@ -427,10 +410,8 @@ pub(super) fn emit_stub_class(
         alias_tested_args(&mut body, rp, clause_idxs, op);
         for &idx in clause_idxs {
             let clause = &rp.clauses[idx];
-            let (cl_uses, start) = (
-                &clause_imports(rp, idx, &owning_unit, unit_tables, unit_uses),
-                body.len(),
-            );
+            let start = body.len();
+            let cl_uses = &clause_imports(rp, idx, &owning_unit, unit_tables, unit_uses);
             let clause_op = rp.op_for_clause(idx).unwrap_or_else(|| op.clone());
             let op = &clause_op;
             // Argument-pattern consts: a `Value(e)` pattern lowers to a const the
@@ -453,6 +434,7 @@ pub(super) fn emit_stub_class(
                         runtime_use,
                         hidden,
                         tys,
+                        None,
                     );
                     let vname = format!("__pv_{idx}_{i}");
                     body.push(const_(vname.clone(), await_expr(iife(value))));
@@ -489,6 +471,7 @@ pub(super) fn emit_stub_class(
                     runtime_use,
                     hidden,
                     tys,
+                    clause_reply_payload(rp, clause, &clause_op).as_ref(),
                 )
             };
             body.push(if_(cond, block(rhs_body)));
@@ -515,30 +498,6 @@ pub(super) fn emit_stub_class(
     );
     class.clear_spans();
     class
-}
-
-/// The call's arguments, aliased ahead of every clause block: a clause binds its suite's
-/// test-only commons, whose names may equal a parameter's, and the match test must compare the
-/// argument, not that name. Only parameters some clause tests by value are aliased.
-fn alias_tested_args(
-    body: &mut Vec<TsStmt>,
-    rp: &ResolvedStub,
-    clause_idxs: &[usize],
-    op: &CapabilityOp,
-) {
-    for (i, param) in op.params.iter().enumerate() {
-        let tested = clause_idxs
-            .iter()
-            .any(|&c| matches!(rp.clauses[c].args.get(i), Some(ArgPattern::Value(_))));
-        if tested {
-            body.push(const_(arg_alias(i), ident(param.name.name.clone())));
-        }
-    }
-}
-
-/// The alias of the call's `i`th argument.
-fn arg_alias(i: usize) -> String {
-    ["__arg_", &i.to_string()].concat()
 }
 
 /// `(async () => { body })()`: a block run in place, for a value that needs its own statements.
@@ -604,9 +563,11 @@ pub(super) fn emit_stub_rhs(
     runtime_use: &RuntimeUse,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
+    // #4382: the payload a typed read's reply is encoded as; see `encoded_reply_payload`.
+    reply_payload: Option<&TypeRef>,
 ) -> Vec<TsStmt> {
     let lower = |e: &Expr| {
-        lower_stub_value_block(
+        let value = lower_stub_value_block(
             e,
             &op.return_type,
             &op.params,
@@ -619,7 +580,18 @@ pub(super) fn emit_stub_rhs(
             runtime_use,
             hidden,
             tys,
-        )
+            reply_payload,
+        );
+        match reply_payload {
+            // The call site decodes the reply with the payload's codec, so the value is
+            // handed back encoded the way that codec reads it.
+            Some(payload) => vec![ret(crate::emitter::serialisation::serialise_expr(
+                payload,
+                &await_expr(iife(value)),
+                runtime_use,
+            ))],
+            None => value,
+        }
     };
     match &clause.rhs {
         StubRhs::Returns(e) => match &clause.after {
@@ -639,6 +611,7 @@ pub(super) fn emit_stub_rhs(
                     runtime_use,
                     hidden,
                     tys,
+                    None,
                 );
                 let after_name = format!("__after_{clause_idx}");
                 let mut out = vec![
@@ -728,6 +701,9 @@ pub(super) fn lower_stub_value_block(
     runtime_use: &RuntimeUse,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
+    // #4382: the payload type the value is handed back encoded as; its serialiser is generated
+    // with the value's other codecs.
+    reply_payload: Option<&TypeRef>,
 ) -> Vec<TsStmt> {
     // #2850: the declaring suite's fixtures are names for module-level
     // constants. An operation parameter of the same name shadows one, as in the
@@ -857,6 +833,11 @@ pub(super) fn lower_stub_value_block(
     // map is discarded — it stays unmapped (a deliberate scope cut).
     let body =
         case_body::lower_block_to_async_stmts(&block, ret_type, &mut typed, &cross, runtime_use);
+    if let Some(payload) = reply_payload
+        && let Some(root) = checker::resolve_type_ref(payload, &typed.types, tys)
+    {
+        runtime_use.note_json_codec_root(root);
+    }
     // #3111: the codecs the value reached for beyond the always-present ones.
     let late_codecs = suite_late_codec_stmts(items, &typed, runtime_use, roots_mark);
     let aliases = fixtures.iter().map(|f| {
