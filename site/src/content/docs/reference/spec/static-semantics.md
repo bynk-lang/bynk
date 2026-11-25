@@ -1315,8 +1315,13 @@ variable is instantiated with an `Effect` where the signature wraps it in anothe
 the call is refused at the argument whose parameter mentions that type variable; so is
 a kernel method that builds one (`q.fold(e0, f)` with `e0: Effect[Int]`), at the call. A generic signature such as
 `fn mapE[T, U](e: Effect[T], f: T -> U) -> Effect[U]` stays legal; only an instantiation that
-nests is refused. A `List[Effect[T]]` or an `Option[Effect[T]]` is not a nested effect and
-is unaffected. To sequence effects, use `andThen` or `<-`.
+nests is refused. A generic type that holds its parameter directly under an `Effect`, such as
+`type Wrap[T] = { v: Effect[T] }`, refuses an `Effect` for that parameter in the same way (#4364):
+`Wrap[Effect[Int]]` has the field `Effect[Effect[Int]]`, whether it is written or a generic call
+returns it, and a type that applies such a type to its own parameter (`type Outer[U] = { w: Wrap[U] }`)
+refuses it too. A parameter held directly (`type Box[T] = { v: T }`) takes an effect, like a
+`List[Effect[T]]` or an `Option[Effect[T]]`, which are not nested effects. To sequence effects, use
+`andThen` or `<-`.
 
 A **detached effect** (`e.detach()`, #3437) stops waiting for an effect that is already
 running. `detach` is a kernel method on every `Effect[T]` that returns `Effect[()]`, so it is an
@@ -2656,9 +2661,14 @@ convention, not syntax ([ADR 0294](https://github.com/bynk-lang/bynk/blob/main/d
 
 ## §5.8 Boundaries & cross-context
 
-`consumes` MUST appear only in a context or an adapter (a `commons` or `suite`
-cannot declare one: `bynk.parse.expected_item`),
-MUST name an existing context or adapter — not a `commons`
+`consumes` MUST appear only in a context, an adapter or a `commons` (a `suite`
+cannot declare one: `bynk.parse.expected_item`). A commons takes types only: its
+`consumes` MUST be the braced list `consumes U { T, … }`, MUST name an adapter
+(not a context), and MUST list only types `U` exports, so no whole-unit or
+aliased form, no capability and no service (`bynk.commons.consumes_not_types`);
+`T as Alias` is allowed. A unit that `uses` the commons does not get the listed
+types in scope through it. A `consumes` MUST
+name an existing context or adapter — not a `commons`
 (`bynk.consumes.unknown_context`, `bynk.consumes.target_is_commons`) — and not the
 consumer itself (`bynk.consumes.self_reference`), and MUST NOT produce colliding
 names or aliases (the `bynk.consumes.*` codes). Calling another context's service

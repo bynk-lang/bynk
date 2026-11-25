@@ -1,0 +1,8 @@
+commons demo.wrapperpermuted
+
+// `next` swaps the parameters, so `B` is held under an `Effect` one level down.
+type Swap[A, B] = { x: Effect[A], next: Option[Swap[B, A]] }
+
+fn hold(s: Swap[Int, Effect[Int]]) -> Int {
+	0
+}
