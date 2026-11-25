@@ -726,11 +726,11 @@ on POST("/orders") (order: Order) -> Effect[HttpResult[String]] by Visitor given
 - `send(body)` sends one message.
 - `sendWith(body, QueueSend { delay: Some(30.seconds) })` holds the message
   back before it can be delivered. The delay is a `QueueDelay`, a `Duration` from
-  0 seconds to 24 hours (Cloudflare's `delaySeconds` range, which its Queues
-  documentation gives as 24 hours: this page and the standard library said 12).
-  A literal or constant such as `30.seconds` is checked when the program
-  compiles (`2.days` is a compile error); a computed span goes through
-  `QueueDelay.of(d)`, which gives a `ValidationError` when it is out of range.
+  0 seconds to 24 hours (Cloudflare's `delaySeconds` range).
+  A literal such as `30.seconds`, or a constant declared as a `QueueDelay`, is
+  checked when the program compiles (`2.days` is a compile error); a computed span goes through
+  `QueueDelay.of(d)`, which gives a `ValidationError` when it is out of range
+  (handle that `Err`: `.ok()` of it is `None`, which delivers at once).
   The delay is whole seconds, and a part second rounds up, so a message is
   never delivered early (a retry's `RetryAfter` rounds up for the same reason).
 - `sendBatch(bodies)` sends its bodies in one call, all or none.

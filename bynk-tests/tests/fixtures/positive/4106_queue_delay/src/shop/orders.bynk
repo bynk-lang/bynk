@@ -10,7 +10,9 @@ service place {
   on call(id: String, wait: Duration) -> Effect[()] by Caller given OrderEvents {
     let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(30.seconds) })
     let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(24.hours) })
-    let _ <- OrderEvents.sendWith(Json.encode(id), QueueSend { delay: QueueDelay.of(wait).ok() })
-    Effect.pure(())
+    match QueueDelay.of(wait) {
+      Ok(d) => OrderEvents.sendWith(Json.encode(id), QueueSend { delay: Some(d) })
+      Err(_) => Effect.pure(())
+    }
   }
 }
