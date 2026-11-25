@@ -669,8 +669,14 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
         ],
     )
     .unwrap_or_default();
+    let consumed = xtask::consumed_raised_probes(&base_pending(&root, &base), &root);
     let live = xtask::greenfield_status::run_gated(&root);
-    match xtask::greenfield_status::check_growth_against(&live, &base_table, &base_ledger, &root) {
+    match xtask::greenfield_status::check_growth_against(
+        &live,
+        &base_table,
+        (&base_ledger, &consumed),
+        &root,
+    ) {
         Ok(()) => {
             println!("greenfield-status: no growth probe rose against {base}");
             ExitCode::SUCCESS
@@ -680,6 +686,23 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// The pending files of `base` as `(file name, text)`, `README.md` excluded; empty when the
+/// revision has none. A stamp PR's consumed `raises:` are the ones in here that the tree lost.
+fn base_pending(root: &Path, base: &str) -> Vec<(String, String)> {
+    let Ok(listing) = git_stdout(root, &["ls-tree", "--name-only", base, "design/pending/"]) else {
+        return Vec::new();
+    };
+    listing
+        .lines()
+        .filter(|l| l.ends_with(".md") && !l.ends_with("/README.md"))
+        .filter_map(|path| {
+            let text = git_stdout(root, &["show", &format!("{base}:{path}")]).ok()?;
+            let name = path.rsplit('/').next()?.to_string();
+            Some((name, text))
+        })
+        .collect()
 }
 
 /// `git <args>` at `root`, stdout on success, or why it failed.

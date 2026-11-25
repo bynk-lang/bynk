@@ -113,7 +113,9 @@ summary: How a case addresses a handler and names its principal
   A stamp PR deletes the pending files whose `raises:` it consumes, so the check
   also accepts a rise that `design/greenfield-status-raises.md` gained a row for
   since the base revision, with exactly that probe's `from` and `to` (the stamp
-  writes the row, see above). A row already in the base ledger excuses nothing.
+  writes the row, see above), but only when the base had a pending file raising
+  that probe which this tree no longer has: a hand-added ledger row in an
+  ordinary PR excuses nothing. A row already in the base ledger excuses nothing.
 
 - **`breaking`** — a one-line Markdown note for an increment that breaks
   existing programs: what breaks, the diagnostic a user will see, and the fix

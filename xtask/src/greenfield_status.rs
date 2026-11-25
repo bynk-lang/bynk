@@ -4015,20 +4015,22 @@ pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(),
     // With no base ledger to compare, the working-tree ledger has no new rows.
     let ledger =
         std::fs::read_to_string(root.join(crate::stamp::RAISE_LEDGER_PATH)).unwrap_or_default();
-    check_growth_against(live, base_table, &ledger, root)
+    check_growth_against(live, base_table, (&ledger, &BTreeSet::new()), root)
 }
 
-/// [`check_growth`] for a PR whose base ledger is `base_ledger` (the text of
-/// `design/greenfield-status-raises.md` at the base revision; empty when it had none).
-/// A rise is also excused by a row the working-tree ledger gained since then for that
-/// probe with exactly this `from` and `to`: the stamp records a consumed `raises:` there
-/// and deletes the pending file, so a stamp PR carries its justification in the ledger and
-/// not in `design/pending` (#4415). A row already in the base ledger never excuses a rise,
-/// so an old row cannot launder a later one.
+/// [`check_growth`] for a PR against a base revision, `(base_ledger, consumed)`: the text of
+/// `design/greenfield-status-raises.md` at the base (empty when it had none), and the probes
+/// the base's pending files raised that this tree no longer has (`crate::consumed_raised_probes`).
+/// A rise is also excused by a row the working-tree ledger gained since the base for that
+/// probe with exactly this `from` and `to`, but only when the PR consumed a `raises:` of that
+/// probe: the stamp records a consumed `raises:` in the ledger and deletes the pending file, so
+/// a stamp PR carries its justification there and not in `design/pending` (#4415). A row
+/// already in the base ledger never excuses a rise, and nor does a hand-added row in a PR
+/// that consumed no such `raises:`.
 pub fn check_growth_against(
     live: &[Probe],
     base_table: &str,
-    base_ledger: &str,
+    (base_ledger, consumed): (&str, &BTreeSet<String>),
     root: &Path,
 ) -> Result<(), String> {
     let rises = growth_rises(live, base_table)
@@ -4046,7 +4048,7 @@ pub fn check_growth_against(
     let ledger =
         std::fs::read_to_string(root.join(crate::stamp::RAISE_LEDGER_PATH)).unwrap_or_default();
     for r in &rises {
-        if ledger_records_rise(&ledger, base_ledger, r) {
+        if consumed.contains(r.probe) && ledger_records_rise(&ledger, base_ledger, r) {
             raised.insert(r.probe.to_string());
         }
     }
@@ -5530,19 +5532,26 @@ mod tests {
             )
             .unwrap();
         };
+        let consumed: BTreeSet<String> = ["ts_writes".to_string()].into();
+        let none = BTreeSet::new();
         // No ledger row, no pending file: refused, as before.
-        assert!(check_growth_against(&live, GROWTH_TABLE, "", &root).is_err());
-        // A row the base ledger lacks, for exactly this rise: the stamp recorded it.
+        assert!(check_growth_against(&live, GROWTH_TABLE, ("", &consumed), &root).is_err());
+        // A row the base ledger lacks, for exactly this rise, and a consumed `raises:` of the
+        // probe: the stamp recorded it.
         write(&format!("{row}\n"));
-        assert!(check_growth_against(&live, GROWTH_TABLE, header, &root).is_ok());
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &consumed), &root).is_ok());
+        // The same row, hand-added in a PR that consumed no `raises:` of this probe, excuses nothing.
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &none), &root).is_err());
+        let other: BTreeSet<String> = ["ts_any".to_string()].into();
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &other), &root).is_err());
         // A row already in the base ledger excuses nothing (an old rise cannot launder this one).
         let base = format!("{header}{row}\n");
-        assert!(check_growth_against(&live, GROWTH_TABLE, &base, &root).is_err());
+        assert!(check_growth_against(&live, GROWTH_TABLE, (&base, &consumed), &root).is_err());
         // A new row for a different rise, or a different probe, does not excuse it.
         write("| ts_writes | 100 | 102 | v1.2.3 | #1 | why |\n");
-        assert!(check_growth_against(&live, GROWTH_TABLE, header, &root).is_err());
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &consumed), &root).is_err());
         write("| ts_any | 100 | 101 | v1.2.3 | #1 | why |\n");
-        assert!(check_growth_against(&live, GROWTH_TABLE, header, &root).is_err());
+        assert!(check_growth_against(&live, GROWTH_TABLE, (header, &consumed), &root).is_err());
     }
 
     #[test]
