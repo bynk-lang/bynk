@@ -1,0 +1,15 @@
+context demo
+
+// #4291: the call form of a name `self` lacks names the agent too.
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call add(by: Int) -> Effect[Int] {
+    n
+  }
+  on call twice() -> Effect[Int] {
+    let a <- self.nope(1)
+    n
+  }
+}

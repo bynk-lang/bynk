@@ -1,0 +1,100 @@
+name: Stamp batch (dry run)
+
+# The batched stamp, in DRY-RUN mode only: it plans and prints, and writes
+# nothing.
+#
+# Why a batch. `stamp.yml` stamps after every merge and pushes its commit to
+# `main` through the ruleset bypass, outside the merge queue. Each of those
+# pushes moves `main` under every group in the queue, which then rebuilds them
+# all, and each one changes `Cargo.toml`/`Cargo.lock`, which makes `main`'s
+# CI run the full three-OS backstop. The plan is to stamp in batches instead:
+# on a schedule, open ONE PR with the stamp's changes and let it land through
+# the queue like any other entry, so nothing reaches `main` outside the queue.
+#
+# This workflow is the first step of that cut-over. While `stamp.yml` is still
+# the stamper, this one only shows what a batch would do, on the live `main`:
+# the pending files in merge order (`xtask stamp` orders them by the commit
+# that added each one, not by filename), the version each would get, and its
+# PR. It also checks the one-batch-at-a-time rule it will need, by looking for
+# an open `stamp/*` PR. Compare its plan with what `stamp.yml` then does.
+#
+# The switch is a later, separate PR: it removes `stamp.yml`'s `push` trigger
+# and turns this workflow's apply path on, in the same commit.
+#
+# Concurrency: deliberately NOT the stamp's `stamp-main` group yet. A group
+# keeps one pending run, and a newer pending run cancels the older one; a
+# scheduled dry run queued behind a running stamp would cancel a REAL stamp
+# run that was waiting, and strand its pending file (stamp.yml's header
+# describes that failure, from 2026-10-22). The switch PR moves this workflow
+# into `stamp-main`, at the moment it starts writing.
+on:
+  schedule:
+    # Every 3 hours, off the hour (the nightly CI is at 07:00).
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: stamp-batch-dry-run
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # To list open `stamp/*` PRs.
+  pull-requests: read
+
+jobs:
+  plan:
+    name: Plan a stamp batch (dry run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A dispatch may name any ref; only ever plan against `main`.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          # Full history: the merge order, and each file's PR, come from the
+          # commits that added the pending files.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find pending increments
+        id: pending
+        run: |
+          files="$(find design/pending -maxdepth 1 -name '*.md' ! -name README.md)"
+          if [ -z "$files" ]; then
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "No pending increments on main@$(git rev-parse --short HEAD), so a batch would do nothing." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check that no stamp PR is open
+        if: steps.pending.outputs.any == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          open="$(gh pr list --repo "$REPO" --state open --base main --limit 100 \
+            --json number,headRefName --jq '[.[] | select(.headRefName | startswith("stamp/")) | "#\(.number) (\(.headRefName))"] | join(", ")')"
+          if [ -n "$open" ]; then
+            echo "A stamp PR is already open: $open. A real batch would wait for it, so two batches never hand out the same versions." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No stamp PR is open, so a real batch would go ahead." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - if: steps.pending.outputs.any == 'true'
+        uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+
+      - name: Plan the batch
+        if: steps.pending.outputs.any == 'true'
+        run: |
+          # The default shell has no pipefail, so `tee` would hide a failing plan.
+          set -o pipefail
+          {
+            echo "### Stamp batch plan for main@$(git rev-parse --short HEAD)"
+            echo
+            echo '```'
+            cargo run --quiet --locked --package xtask -- stamp
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
