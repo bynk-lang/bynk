@@ -177,8 +177,10 @@ export class WorkersKv implements Kv {
 
   // `getValue[T: Codable]` (#4048): the stored text is the call site's `Json.encode` of the value,
   // so the reply is the encoding of an `Option` over that JSON, which the call site decodes as `T`.
-  // A missing key is `None`. Text that is not JSON faults, naming the key's operation but never the
-  // text, as the call site's own decode fault does.
+  // A missing key is `None`. Text that is not JSON faults, naming the operation but never the text. It
+  // cannot take the ADR 0830 form (`Kv.getValue returned a value that does not decode as T: at $.f: …`):
+  // only the call site knows the capability instance, `T` and the path, and it sees a reply, not text.
+  // A value that parses but is the wrong shape gets that form from the call site.
   async getValue(key: string): Promise<unknown> {
     WorkersKv.checkKey(key);
     const text = await this.ns().get(key);
