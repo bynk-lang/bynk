@@ -576,12 +576,15 @@ pub fn describe_scan_reads_at(
         SourceUnit::Adapter(a) => &a.items,
         SourceUnit::Suite(_) => return None,
     };
-    let kind = items.iter().find_map(|item| match item {
+    let (kind, indexed) = items.iter().find_map(|item| match item {
         CommonsItem::Agent(a) if in_state_scope(a, offset) => a
             .store_fields
             .iter()
             .find(|f| f.name.name == field)
-            .map(|f| f.kind.head.name.clone()),
+            .map(|f| {
+                let indexed = f.annotations.iter().any(|an| an.name.name == "indexed");
+                (f.kind.head.name.clone(), indexed)
+            }),
         _ => None,
     })?;
     let is_log = match kind.as_str() {
@@ -606,6 +609,11 @@ pub fn describe_scan_reads_at(
         format!(
             "A `Map` is scanned in insertion order, which only reading every entry recovers, so \
              `{terminal}` reads every entry of `{field}`. `any` and `all` stop early."
+        )
+    } else if indexed && !is_log && stages.last() == Some(&"filter") {
+        format!(
+            "Stops reading `{field}` a page at a time as soon as the answer is known, unless the \
+             leading `filter` is an equality on an `@indexed` field, which reads that posting list instead."
         )
     } else {
         format!("Stops reading `{field}` a page at a time as soon as the answer is known.")
@@ -4784,6 +4792,14 @@ mod tests {
         assert!(hover("first()\n  }\n  on call c").contains("Stops reading `trail`"));
         assert!(hover("first()\n  }\n  on call d").contains("`sortBy` needs the whole input"));
         assert!(hover("first()\n  }\n}").contains("insertion order"));
+        // An indexed `Map`'s leading `filter` may be a posting-list lookup, which the note says.
+        let indexed = src.replace(
+            "store seen: Map[String, Int]",
+            "store seen: Map[String, Int] @indexed(by: x)",
+        );
+        let note =
+            describe_scan_reads_at(&indexed, indexed.find("any((n)").unwrap() + 1, &[]).unwrap();
+        assert!(note.contains("@indexed"), "{note}");
         // Not a terminal, and not a store field.
         assert!(describe_scan_reads_at(src, src.find("filter(").unwrap() + 1, &[]).is_none());
         let other = src.replace("seen.filter", "xs.filter");

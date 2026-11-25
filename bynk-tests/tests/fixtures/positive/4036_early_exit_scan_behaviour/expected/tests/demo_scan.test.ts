@@ -15,7 +15,8 @@ async function test_any_and_all_over_a_Map_agree_with_the_whole_read() {
   try {
     __ns_demo_scan.__resetAgents();
     const deps = __makeTestDeps();
-    const { Tally, __makeTally } = __ns_demo_scan;
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
     await __makeTally("m").score("a", 3, deps);
     await __makeTally("m").score("b", 1, deps);
     await __makeTally("m").score("c", 7, deps);
@@ -49,7 +50,8 @@ async function test_filter_and_map_stages_ahead_of_any_agree_with_the_whole_read
   try {
     __ns_demo_scan.__resetAgents();
     const deps = __makeTestDeps();
-    const { Tally, __makeTally } = __ns_demo_scan;
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
     await __makeTally("f").score("a", 1, deps);
     await __makeTally("f").score("b", 5, deps);
     const yes = await __makeTally("f").anyDoubled(10, deps);
@@ -74,7 +76,8 @@ async function test_an_empty_Map__any_is_false__all_is_true() {
   try {
     __ns_demo_scan.__resetAgents();
     const deps = __makeTestDeps();
-    const { Tally, __makeTally } = __ns_demo_scan;
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
     const a = await __makeTally("e").anyScore(1, deps);
     const b = await __makeTally("e").allScores(1, deps);
     if (!(!a)) { throw __bynkExpectFailure("tests/demo/scan.bynk:44:9", 1215, 1217, "expect !a"); }
@@ -93,7 +96,8 @@ async function test_any__all__first_and_firstOrElse_over_a_Log_agree_with_the_wh
   try {
     __ns_demo_scan.__resetAgents();
     const deps = __makeTestDeps();
-    const { Tally, __makeTally } = __ns_demo_scan;
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
     await __makeTally("l").log(4, deps);
     await __makeTally("l").log(9, deps);
     await __makeTally("l").log(2, deps);
@@ -131,7 +135,8 @@ async function test_an_empty_Log__first_is_None() {
   try {
     __ns_demo_scan.__resetAgents();
     const deps = __makeTestDeps();
-    const { Tally, __makeTally } = __ns_demo_scan;
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
     const first = await __makeTally("n").firstLogged(deps);
     if (!(__bynkEq(first, None))) { throw __bynkExpectFailure("tests/demo/scan.bynk:76:9", 2043, 2056, "expect first == None\n  expected: first == None\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((None))); }
     return { pass: true };
@@ -148,7 +153,8 @@ async function test_take_and_skip_over_a_Log_agree_with_the_whole_read__oldest_f
   try {
     __ns_demo_scan.__resetAgents();
     const deps = __makeTestDeps();
-    const { Tally, __makeTally } = __ns_demo_scan;
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
     await __makeTally("t").log(1, deps);
     await __makeTally("t").log(2, deps);
     await __makeTally("t").log(3, deps);
@@ -176,9 +182,107 @@ async function test_take_and_skip_over_a_Log_agree_with_the_whole_read__oldest_f
   }
 }
 
+// case tier: unit
+async function test_the_whole_read_shapes_keep_insertion_order_on_a_Map() {
+  try {
+    __ns_demo_scan.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
+    await __makeTally("w").score("z", 5, deps);
+    await __makeTally("w").score("a", 9, deps);
+    await __makeTally("w").score("m", 2, deps);
+    const first = await __makeTally("w").firstScore(deps);
+    const over = await __makeTally("w").firstScoreOver(4, deps);
+    const low = await __makeTally("w").lowestScores(2, deps);
+    const skipped = await __makeTally("w").anyAfterSkip(2, deps);
+    const skippedFirst = await __makeTally("w").anyAfterSkip(5, deps);
+    if (!(__bynkEq(first, Some(5)))) { throw __bynkExpectFailure("tests/demo/scan.bynk:109:9", 3035, 3051, "expect first == Some(5)\n  expected: first == Some(5)\n  actual:   " + __bynkShow((first)) + " == " + __bynkShow((Some(5)))); }
+    if (!(over === 5)) { throw __bynkExpectFailure("tests/demo/scan.bynk:110:9", 3060, 3069, "expect over == 5\n  expected: over == 5\n  actual:   " + __bynkShow((over)) + " == " + __bynkShow((5))); }
+    if (!(__bynkEq(low, [5, 9]))) { throw __bynkExpectFailure("tests/demo/scan.bynk:111:9", 3078, 3091, "expect low == [5, 9]\n  expected: low == [5, 9]\n  actual:   " + __bynkShow((low)) + " == " + __bynkShow(([5, 9]))); }
+    if (!(skipped)) { throw __bynkExpectFailure("tests/demo/scan.bynk:112:9", 3100, 3107, "expect skipped"); }
+    if (!(!skippedFirst)) { throw __bynkExpectFailure("tests/demo/scan.bynk:113:9", 3116, 3129, "expect !skippedFirst"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_sortBy_before_first_reads_the_whole_Log() {
+  try {
+    __ns_demo_scan.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
+    await __makeTally("s").log(7, deps);
+    await __makeTally("s").log(3, deps);
+    await __makeTally("s").log(5, deps);
+    const smallest = await __makeTally("s").smallestLogged(deps);
+    if (!(__bynkEq(smallest, Some(3)))) { throw __bynkExpectFailure("tests/demo/scan.bynk:121:9", 3301, 3320, "expect smallest == Some(3)\n  expected: smallest == Some(3)\n  actual:   " + __bynkShow((smallest)) + " == " + __bynkShow((Some(3)))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_flatMap_stage_ahead_of_any() {
+  try {
+    __ns_demo_scan.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
+    await __makeTally("x").log(1, deps);
+    await __makeTally("x").log(2, deps);
+    const yes = await __makeTally("x").anyDuplicated(2, deps);
+    const no = await __makeTally("x").anyDuplicated(9, deps);
+    if (!(yes)) { throw __bynkExpectFailure("tests/demo/scan.bynk:129:9", 3493, 3496, "expect yes"); }
+    if (!(!no)) { throw __bynkExpectFailure("tests/demo/scan.bynk:130:9", 3505, 3508, "expect !no"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_an_indexed_equality_filter_and_an_unindexed_one_agree_with_the_data() {
+  try {
+    __ns_demo_scan.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Order, Tally, __makeTally } = __ns_demo_scan;
+    type Order = __ns_demo_scan.Order;
+    await __makeTally("o").order("a", "open", 5, deps);
+    await __makeTally("o").order("b", "closed", 500, deps);
+    const routed = await __makeTally("o").anyWithStatus("open", deps);
+    const routedNone = await __makeTally("o").anyWithStatus("void", deps);
+    const scanned = await __makeTally("o").anyBig(100, deps);
+    const scannedNone = await __makeTally("o").anyBig(1000, deps);
+    if (!(routed)) { throw __bynkExpectFailure("tests/demo/scan.bynk:140:9", 3858, 3864, "expect routed"); }
+    if (!(!routedNone)) { throw __bynkExpectFailure("tests/demo/scan.bynk:141:9", 3873, 3884, "expect !routedNone"); }
+    if (!(!scanned)) { throw __bynkExpectFailure("tests/demo/scan.bynk:142:9", 3893, 3901, "expect !scanned"); }
+    if (!(!scannedNone)) { throw __bynkExpectFailure("tests/demo/scan.bynk:143:9", 3910, 3922, "expect !scannedNone"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["any and all over a Map agree with the whole read", "filter and map stages ahead of any agree with the whole read", "an empty Map: any is false, all is true", "any, all, first and firstOrElse over a Log agree with the whole read", "an empty Log: first is None", "take and skip over a Log agree with the whole read, oldest first"];
+export const __bynkCases: readonly string[] = ["any and all over a Map agree with the whole read", "filter and map stages ahead of any agree with the whole read", "an empty Map: any is false, all is true", "any, all, first and firstOrElse over a Log agree with the whole read", "an empty Log: first is None", "take and skip over a Log agree with the whole read, oldest first", "the whole-read shapes keep insertion order on a Map", "sortBy before first reads the whole Log", "a flatMap stage ahead of any", "an indexed equality filter and an unindexed one agree with the data"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -216,6 +320,30 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("take and skip over a Log agree with the whole read, oldest first")) {
     const started = __bynkCaseNow();
     const r = { name: "take and skip over a Log agree with the whole read, oldest first", ...(await test_take_and_skip_over_a_Log_agree_with_the_whole_read__oldest_first()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the whole-read shapes keep insertion order on a Map")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the whole-read shapes keep insertion order on a Map", ...(await test_the_whole_read_shapes_keep_insertion_order_on_a_Map()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("sortBy before first reads the whole Log")) {
+    const started = __bynkCaseNow();
+    const r = { name: "sortBy before first reads the whole Log", ...(await test_sortBy_before_first_reads_the_whole_Log()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a flatMap stage ahead of any")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a flatMap stage ahead of any", ...(await test_a_flatMap_stage_ahead_of_any()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an indexed equality filter and an unindexed one agree with the data")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an indexed equality filter and an unindexed one agree with the data", ...(await test_an_indexed_equality_filter_and_an_unindexed_one_agree_with_the_data()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

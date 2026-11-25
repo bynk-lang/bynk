@@ -974,6 +974,26 @@ fn route_indexed_filter(
     Some(pre.finish(built))
 }
 
+/// Whether `route_indexed_filter` would turn `lam` into a posting-list lookup: `(p) => p.<field> ==
+/// <value>` over an indexed field, with a value that does not mention `p`.
+fn routes_to_index(fields: &[String], lam: &LambdaExpr) -> bool {
+    let [param] = lam.params.as_slice() else {
+        return false;
+    };
+    let pname = param.name.name.as_str();
+    let ExprKind::BinOp(BinOp::Eq, lhs, rhs) = &lam.body.kind else {
+        return false;
+    };
+    let (field, value) = match as_param_field(pname, lhs) {
+        Some(f) => (f, rhs.as_ref()),
+        None => match as_param_field(pname, rhs) {
+            Some(f) => (f, lhs.as_ref()),
+            None => return false,
+        },
+    };
+    fields.iter().any(|f| f == field) && param_independent(value, pname)
+}
+
 /// `e` as `<param>.<field>` → the field name; else `None`.
 fn as_param_field<'e>(pname: &str, e: &'e Expr) -> Option<&'e str> {
     if let ExprKind::FieldAccess { receiver, field } = &e.kind
@@ -1092,8 +1112,15 @@ fn lower_early_exit_scan(
         return None;
     }
     // An equality `filter` on an indexed `Map` field is a posting-list lookup, not a scan.
-    let innermost = stages.last().map_or(&method.name, |(m, _)| &m.name);
-    if is_map && innermost == "filter" && !cx.agent_store_index_fields(&field.name).is_empty() {
+    let (first_stage, first_args) = stages
+        .last()
+        .map_or((&method.name, args), |(m, a)| (&m.name, a));
+    if is_map
+        && first_stage == "filter"
+        && let [arg] = first_args
+        && let ExprKind::Lambda(lam) = &arg.kind
+        && routes_to_index(&cx.agent_store_index_fields(&field.name), lam)
+    {
         return None;
     }
     let take_count = match (method.name.as_str(), stages.first()) {

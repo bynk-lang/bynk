@@ -15,11 +15,17 @@ provides Clock = FixedClock {
 	}
 }
 
+type Order = {
+	status: String,
+	total: Int,
+}
+
 agent Tally {
 	key id: String
 
 	store scores: Map[String, Int]
 	store trail: Log[Int] @retain(30.days)
+	store orders: Map[String, Order] @indexed(by: status)
 
 	on call score(k: String, n: Int) -> Effect[()] {
 		let _ <- scores.put(k, n)
@@ -98,5 +104,44 @@ agent Tally {
 	on call afterSkipWhole(skip: Int, n: Int) -> Effect[List[Int]] {
 		let all <- trail.collect()
 		all.skip(skip).take(n)
+	}
+
+	// Shapes that keep the whole-read path: a Map's pages are in key order, not insertion order.
+	on call firstScore() -> Effect[Option[Int]] {
+		scores.first()
+	}
+
+	on call firstScoreOver(n: Int) -> Effect[Int] {
+		scores.filter((s) => s > n).firstOrElse(-1)
+	}
+
+	on call lowestScores(n: Int) -> Effect[List[Int]] {
+		scores.take(n).collect()
+	}
+
+	on call anyAfterSkip(n: Int) -> Effect[Bool] {
+		scores.skip(1).any((s) => s == n)
+	}
+
+	on call smallestLogged() -> Effect[Option[Int]] {
+		trail.sortBy((s) => s).first()
+	}
+
+	// A flatMap stage ahead of a terminal.
+	on call anyDuplicated(n: Int) -> Effect[Bool] {
+		trail.flatMap((x) => trail.filter((y) => y == x)).any((y) => y == n)
+	}
+
+	// An equality filter on an indexed field reads the posting list; any other filter scans lazily.
+	on call order(k: String, status: String, total: Int) -> Effect[()] {
+		let _ <- orders.put(k, Order { status: status, total: total })
+	}
+
+	on call anyWithStatus(status: String) -> Effect[Bool] {
+		orders.filter((o) => o.status == status).any((o) => o.total > 0)
+	}
+
+	on call anyBig(n: Int) -> Effect[Bool] {
+		orders.filter((o) => o.total > n).any((o) => o.status == "open")
 	}
 }
