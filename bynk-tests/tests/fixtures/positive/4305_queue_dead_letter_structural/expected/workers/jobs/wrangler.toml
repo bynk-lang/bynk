@@ -30,3 +30,7 @@ dead_letter_queue = "jobs-dlq"
 queue = "jobs-dlq"
 max_batch_size = 10
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
