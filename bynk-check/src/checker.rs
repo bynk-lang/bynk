@@ -6911,6 +6911,9 @@ fn refinements_match(base: BaseType, a: Option<&Refinement>, b: Option<&Refineme
 /// #3878: the pattern-only `QueueResult` variant a `system` case sees for a body that did not decode.
 pub const QUEUE_UNDECODABLE: &str = "Undecodable";
 
+/// #4279: the warning for an `Undecodable` pattern that can never match.
+pub const UNDECODABLE_UNREACHABLE: &str = "bynk.queue.undecodable_unreachable";
+
 /// `pub` since P6.4 (#1157, Decision A) — see [`VariantInfo`]'s own doc
 /// comment for why `bynk-emit` needs this exact function rather than a
 /// re-derived copy (R5.11, for the IR side).
