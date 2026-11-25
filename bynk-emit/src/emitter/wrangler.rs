@@ -37,14 +37,8 @@ pub const COMPATIBILITY_DATE: &str = "2026-08-11";
 /// redundant here.
 pub const DEFAULT_COMPATIBILITY_FLAGS: &[&str] = &["global_fetch_strictly_public", ALS_FLAG];
 
-/// #3895: the flag that gives a Worker `AsyncLocalStorage`, which holds the
-/// request's trace (`traceparent`). `nodejs_compat` provides it too, so a
-/// project that sets `nodejs_compat` does not also get this one
-/// ([`compatibility_flags`]).
+/// #3895: gives a Worker `AsyncLocalStorage` (the request's trace); `nodejs_compat` does too.
 pub const ALS_FLAG: &str = "nodejs_als";
-
-/// The flag a project's own `nodejs_compat` makes redundant.
-const NODEJS_COMPAT: &str = "nodejs_compat";
 
 /// #1890: the flags a Worker's `wrangler.toml` carries, and the duplicates
 /// dropped on the way. [`DEFAULT_COMPATIBILITY_FLAGS`] come first, then
@@ -53,7 +47,7 @@ const NODEJS_COMPAT: &str = "nodejs_compat";
 /// once per extra occurrence, for the caller to warn about. Names are not
 /// otherwise checked.
 pub fn compatibility_flags(extra: &[String]) -> (Vec<String>, Vec<String>) {
-    let provides_als = extra.iter().any(|f| f == NODEJS_COMPAT);
+    let provides_als = extra.iter().any(|f| f == "nodejs_compat");
     let mut flags: Vec<String> = DEFAULT_COMPATIBILITY_FLAGS
         .iter()
         .filter(|f| !(provides_als && **f == ALS_FLAG))
