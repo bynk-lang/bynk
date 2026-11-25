@@ -261,11 +261,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
     },
     Explain {
-        code: "bynk.actor.oidc_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
-        example: "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
-    },
-    Explain {
         code: "bynk.actor.oidc_trust_from_is_secret",
         blurb: "`trustFrom` names a variable that holds trust roots as JSON. A variable an actor uses as its `secret` holds a signing key, and one variable cannot be both. Give `trustFrom` a variable of its own.",
         example: "type UserId = String where NonEmpty\ntype WorkloadId = String where NonEmpty\n\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"JWT_KEY\"), identity = WorkloadId }   // ✗ `JWT_KEY` is a key\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
@@ -395,11 +390,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.signed_cookie_missing_ttl",
         blurb: "A session cookie that never expires is the failure a language should not allow by omission, so `ttl` is required. It is how long an issued cookie is valid: the browser's `Max-Age` and the signed expiry both come from it. A stateless cookie cannot be revoked before it expires, so keep it short.",
         example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
-    },
-    Explain {
-        code: "bynk.actor.signed_cookie_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
     },
     Explain {
         code: "bynk.actor.signed_cookie_public_cache",
@@ -7006,12 +6996,32 @@ pub struct Retired {
 
 /// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
 /// code from [`REGISTRY`].
-pub const RETIRED: &[Retired] = &[Retired {
-    code: "bynk.http.multipart_body_unbounded",
-    last_release: "0.661.1",
-    why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
-    replacement: Some("the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`"),
-}];
+pub const RETIRED: &[Retired] = &[
+    Retired {
+        code: "bynk.actor.oidc_not_in_sum",
+        last_release: "0.661.1",
+        why: "An `Oidc` actor may now be a member of a multi-actor sum (#3936): the sum's seam checks its members in order, asynchronously, so a JWKS fetch fits.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose members are tried in declared order",
+        ),
+    },
+    Retired {
+        code: "bynk.actor.signed_cookie_not_in_sum",
+        last_release: "0.661.1",
+        why: "A `SignedCookie` actor may now be a member of a multi-actor sum (#3936): its CSRF check belongs to the cookie arm, so a token client that sends no cookie never meets it.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose cookie arm applies the CSRF check only when it is tried",
+        ),
+    },
+    Retired {
+        code: "bynk.http.multipart_body_unbounded",
+        last_release: "0.661.1",
+        why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+        replacement: Some(
+            "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+];
 
 /// The tombstone for a retired `code`, or `None` when it was never retired.
 pub fn retired(code: &str) -> Option<&'static Retired> {
@@ -7148,10 +7158,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `Oidc` actor does not name its `jwks` endpoint.",
     ),
     d(
-        "bynk.actor.oidc_not_in_sum",
-        "An `Oidc` actor appears as a member of a multi-actor sum.",
-    ),
-    d(
         "bynk.actor.oidc_trust_from_is_secret",
         "An `Oidc` actor's `trustFrom` names an environment variable that an actor uses as its `secret`.",
     ),
@@ -7242,10 +7248,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.signed_cookie_missing_ttl",
         "A `SignedCookie` actor does not declare a `ttl`.",
-    ),
-    d(
-        "bynk.actor.signed_cookie_not_in_sum",
-        "A `SignedCookie` actor appears as a member of a multi-actor sum.",
     ),
     d(
         "bynk.actor.signed_cookie_public_cache",

@@ -1,0 +1,27 @@
+suite shop.api as unit {
+	// #3936: in process, a case acts as either arm of the sum.
+
+	case "the cookie arm resolves" {
+		let r <- api.POST("/orders") by User("ada")
+		expect r is Ok("cookie ada")
+	}
+
+	case "the token arm resolves" {
+		let r <- api.POST("/orders") by ApiClient("ci")
+		expect r is Ok("token ci")
+	}
+
+	case "the token-first route resolves either arm" {
+		let cookie <- api.POST("/orders/token-first") by User("ada")
+		let token <- api.POST("/orders/token-first") by ApiClient("ci")
+		expect cookie is Ok("cookie ada")
+		expect token is Ok("token ci")
+	}
+
+	case "a safe request resolves either arm" {
+		let cookie <- api.GET("/orders") by User("ada")
+		let token <- api.GET("/orders") by ApiClient("ci")
+		expect cookie is Ok("cookie ada")
+		expect token is Ok("token ci")
+	}
+}

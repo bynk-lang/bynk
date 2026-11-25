@@ -21,6 +21,7 @@ use crate::emit_model::{ImportExt, LocaleNegotiationArgs};
 use crate::emitter::RuntimeUse;
 use crate::emitter::bindings::{BindingSource, WorkerBinding, events_fanout_binding};
 use crate::emitter::workers::*;
+use crate::emitter::workers_sum::emit_http_sum_wrapper;
 use crate::emitter::wrangler::binding_ts_type;
 use crate::ts_build::{as_expr, call, const_, ident, member, method_call, return_, str_lit};
 use bynk_check::symbols::MessageBundleInfo;
@@ -395,6 +396,7 @@ pub fn emit_worker_compose(
                                 &path,
                                 &members,
                                 service.limits.as_ref().and_then(|p| p.max_body()),
+                                &csrf_origins(service),
                                 &runtime_use,
                             ));
                         }

@@ -1,0 +1,18 @@
+context p
+
+type UserId = String where NonEmpty
+
+actor Web { auth = SignedCookie(secret = "K1", ttl = 2.hours), identity = UserId }
+actor Api { auth = Bearer(secret = "K2"), identity = UserId }
+
+// #3936: a refinement is never a sum member, beside a cookie arm as anywhere else.
+actor Admin = Api where hasClaim("admin")
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by who: Web | Admin {
+    match who {
+      Web(u) => Ok(u)
+      Admin(u) => Ok(u)
+    }
+  }
+}
