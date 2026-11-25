@@ -1,0 +1,28 @@
+context pay.api
+
+type UserId = String where NonEmpty && MaxLength(64)
+
+type Event = {
+	id: String,
+}
+
+// One route, four ways in: a browser's session cookie, a partner's Bearer token, a machine's OIDC token and
+// a webhook's signature. Each arm's refusal is tested by naming it: `by Forged(Browser)`.
+actor Browser { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+actor Partner { auth = Bearer(secret = "PARTNER_KEY"), identity = UserId }
+actor Machine {
+	auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"),
+	identity = UserId
+}
+actor Hook { auth = Signature(secret = "HOOK_SECRET", header = "X-Sig", timestamp = "X-Ts", tolerance = 300) }
+
+service api from http {
+	cors { origins: ["https://app.example.com"], credentials: true }
+
+	on POST("/ingest") (body: Event) -> Effect[HttpResult[String]] by who: Browser | Visitor {
+		match who {
+			Browser(b) => Ok("browser \(b)")
+			Visitor => Ok("hello stranger")
+		}
+	}
+}

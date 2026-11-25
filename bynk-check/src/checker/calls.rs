@@ -4923,15 +4923,15 @@ fn wire_outcome(outcome: TyId, ctx: &Ctx) -> TyId {
 /// becomes `Effect[HttpOutcome[T]]`; anything else is unchanged.
 /// #2155: on an actor sum with an open member (`Visitor`), say why the seam
 /// never answers `401`.
+pub(super) const OPEN_SUM_NOTE: &str = "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`";
+
 fn with_open_sum_note(err: CompileError, handler: &TestHandler, ctx: &Ctx) -> CompileError {
     let open = handler
         .by_clause
         .as_ref()
         .is_some_and(|by| by.is_sum() && crate::actors::sum_has_open_member(by, &ctx.test_actors));
     if open {
-        err.with_note(
-            "this actor sum admits an open member (`Visitor`): a request with a missing or bad credential resolves as it, so the seam never answers `401`",
-        )
+        err.with_note(OPEN_SUM_NOTE)
     } else {
         err
     }

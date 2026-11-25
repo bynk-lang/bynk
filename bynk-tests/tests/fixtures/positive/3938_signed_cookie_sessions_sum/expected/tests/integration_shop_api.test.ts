@@ -526,9 +526,29 @@ async function test_revokeAll_from_a_sum_handler_refuses_the_identity_s_session_
   }
 }
 
+async function test_the_cookie_arm_refuses_a_forged__an_expired_and_a_revoked_session_cookie() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const forged = await __sysdrive_sumbad_api_http_GET_orders(undefined, "forged", "", "User");
+    if (!(((__c: boolean) => __c)(forged.tag === "Rejected" && forged.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:106:10", 4294, 4326, "expect forged is Rejected(Unauthorized)", "forged", () => __bynkShow(forged)); }
+    const expired = await __sysdrive_sumbad_api_http_GET_orders(undefined, "expired", "", "User");
+    if (!(((__c: boolean) => __c)(expired.tag === "Rejected" && expired.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:108:10", 4389, 4422, "expect expired is Rejected(Unauthorized)", "expired", () => __bynkShow(expired)); }
+    const revoked = await __sysdrive_sumbad_api_http_GET_orders(undefined, "revoked", "", "User");
+    if (!(((__c: boolean) => __c)(revoked.tag === "Rejected" && revoked.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:110:10", 4485, 4518, "expect revoked is Rejected(Unauthorized)", "revoked", () => __bynkShow(revoked)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a valid session cookie is admitted", "a valid token is admitted", "a cross-site state-changing request carrying only a cookie is refused", "the same cross-site request carrying a token is admitted", "a cross-site request from a listed origin carrying a cookie is admitted", "a cross-site safe request carrying a cookie is not checked", "no credential is refused as unauthenticated, not forbidden", "the token-first route admits either arm", "a bad cookie beside a valid token falls through to the token", "a cross-site request with a bad cookie and a valid token is admitted by the token", "a cross-site cookie is refused on either order, because no token arm admits it", "a valid cookie with a stray cookie of another name is admitted", "expire ends the session from a sum handler", "revokeAll answers for the acting identity in a sum handler", "a session ended by expire from a sum handler is refused when replayed", "revokeAll from a sum handler refuses the identity's session and leaves another's valid"];
+export const __bynkCases: readonly string[] = ["a valid session cookie is admitted", "a valid token is admitted", "a cross-site state-changing request carrying only a cookie is refused", "the same cross-site request carrying a token is admitted", "a cross-site request from a listed origin carrying a cookie is admitted", "a cross-site safe request carrying a cookie is not checked", "no credential is refused as unauthenticated, not forbidden", "the token-first route admits either arm", "a bad cookie beside a valid token falls through to the token", "a cross-site request with a bad cookie and a valid token is admitted by the token", "a cross-site cookie is refused on either order, because no token arm admits it", "a valid cookie with a stray cookie of another name is admitted", "expire ends the session from a sum handler", "revokeAll answers for the acting identity in a sum handler", "a session ended by expire from a sum handler is refused when replayed", "revokeAll from a sum handler refuses the identity's session and leaves another's valid", "the cookie arm refuses a forged, an expired and a revoked session cookie"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -626,6 +646,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("revokeAll from a sum handler refuses the identity's session and leaves another's valid")) {
     const started = __bynkCaseNow();
     const r = { name: "revokeAll from a sum handler refuses the identity's session and leaves another's valid", ...(await test_revokeAll_from_a_sum_handler_refuses_the_identity_s_session_and_leaves_another_s_valid()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the cookie arm refuses a forged, an expired and a revoked session cookie")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the cookie arm refuses a forged, an expired and a revoked session cookie", ...(await test_the_cookie_arm_refuses_a_forged__an_expired_and_a_revoked_session_cookie()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

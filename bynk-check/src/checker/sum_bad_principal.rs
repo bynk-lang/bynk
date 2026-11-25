@@ -18,6 +18,32 @@ pub(super) fn check(
     ctx: &mut Ctx,
 ) -> bool {
     let name = p.actor.name.as_str();
+    // The `Oidc`-only principals are not offered by member: a bare one reaches the sum's `Oidc`
+    // member under the single-actor rules, and a named one is refused rather than read as an identity.
+    if !matches!(
+        bad,
+        BadCredential::Forged
+            | BadCredential::Expired
+            | BadCredential::Stale
+            | BadCredential::Revoked
+    ) {
+        if crate::actors::bad_principal_arm(p).is_none() {
+            return false;
+        }
+        ctx.errors.push(
+            CompileError::new(
+                "bynk.test.actor_no_identity",
+                p.span,
+                format!(
+                    "`{name}` is not offered by member on an actor sum, so it takes no member name"
+                ),
+            )
+            .with_note(format!(
+                "write `by {name}`: it is presented to the sum's `Oidc` member"
+            )),
+        );
+        return true;
+    }
     let refusing = sum_refusing_arms(by, bad, &ctx.test_actors);
     let Some(arm) = crate::actors::bad_principal_arm(p) else {
         if p.identity.is_none() && refusing.len() > 1 {
@@ -70,13 +96,16 @@ pub(super) fn check(
                 "bynk.test.stale_needs_timestamp",
                 "a `Signature` seam that declares a `timestamp` and a `tolerance`",
             ),
-            _ => (
+            BadCredential::Revoked => (
                 "bynk.test.revoked_needs_sessions_route",
                 "a `SignedCookie` seam with `sessions = true`",
             ),
+            BadCredential::WrongIssuer
+            | BadCredential::WrongAudience
+            | BadCredential::WrongAlgorithm
+            | BadCredential::NoSubject => unreachable!("handled before the member lookup"),
         };
-        ctx.errors.push(
-            CompileError::new(
+        let err = CompileError::new(
                 code,
                 p.span,
                 format!("`by {name}({arm})` presents a credential that only {what} refuses, but the `{arm}` member has none"),
@@ -87,7 +116,15 @@ pub(super) fn check(
                     Some(m) => format!(", e.g. `by {name}({m})`"),
                     None => String::new(),
                 }
-            )),
+            ));
+        // An open member (`Visitor`) catches every bad credential, so no member refuses it: say that
+        // rather than blaming the named member.
+        ctx.errors.push(
+            if crate::actors::sum_has_open_member(by, &ctx.test_actors) {
+                err.with_note(super::calls::OPEN_SUM_NOTE)
+            } else {
+                err
+            },
         );
     }
     true
