@@ -1,0 +1,35 @@
+// #4121: `for all` draws members of a `Matches` pattern and real `IsoDate` dates, and shrinks
+// towards shorter members.
+suite demo.m {
+  property "a sku has the shape its pattern gives" {
+    for all s: Sku {
+      expect s.length() == 8
+    }
+  }
+
+  property "a slug obeys its pattern and its length bound" {
+    for all s: Slug {
+      expect s.length() >= 1
+      expect s.length() <= 12
+    }
+  }
+
+  property "a date is ten characters" {
+    for all d: Day {
+      expect d.length() == 10
+    }
+  }
+
+  property "a record's patterned fields are drawn too" {
+    for all l: Line {
+      expect l.sku.length() == 8
+      expect l.note.length() <= 4
+    }
+  }
+
+  property "a code is shorter than five characters" {
+    for all c: Code {
+      expect c.length() < 5
+    }
+  }
+}

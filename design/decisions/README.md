@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0947](0947-generate-matches-and-isodate.md) | **A for all draws members of a Matches pattern and real IsoDate dates** (v0.685) — How the pattern is walked, what filters the draws, and what stays pinned | Accepted (v0.685) |
 | [0946](0946-default-body-cap.md) | **Every body-taking HTTP route has a 1 MiB request-body cap by default** (v0.684) — A route that takes a body is capped at 1,048,576 bytes unless it or its service says otherwise, with no unlimited setting and a build hint for routes on the default | Accepted (v0.684) |
 | [0945](0945-const-refinement-bounds.md) | **A constant stands as a refinement predicate's argument under ADR 0826's rule** (v0.683) — A predicate argument may name a constant; the checker substitutes its literal before the refinement is read | Accepted (v0.683) |
 | [0944](0944-agent-call-outcome.md) | **`Agent(key).op.outcome(…)` returns a `CallOutcome`, as cross-context calls do** (v0.682) — One outcome type for every call that might not reach its handler, with the agent mapping fixed | Accepted (v0.682) |
