@@ -1183,7 +1183,7 @@ fn check_default(root: PathBuf) -> ExitCode {
         None,
         false,
         false,
-        "default".to_string(),
+        bynk_driver::DEFAULT_ENVIRONMENT.to_string(),
     )
 }
 

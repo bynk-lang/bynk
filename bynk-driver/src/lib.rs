@@ -15,6 +15,8 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 use render::LabelHome;
 
+/// The name of the environment a build uses when `--env` is omitted (#3941).
+pub use bynk_project::vars::DEFAULT_ENVIRONMENT;
 pub mod colour;
 pub mod compile_cmd;
 pub mod contracts_lock;

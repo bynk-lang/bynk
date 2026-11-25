@@ -19,7 +19,7 @@ fn write(path: &Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
 }
 
-/// A project whose `Origin` constant is required: `default` (through `[vars]`) and
+/// A project whose `Origin` constant is required: `default` (through `[env.default.vars]`) and
 /// `production` set it; `staging` does not, and `[vars]` does not cover it.
 fn project(name: &str) -> PathBuf {
     let dir = scratch(name);
@@ -109,4 +109,18 @@ fn test_env_builds_with_that_environments_values() {
         String::from_utf8_lossy(&staging.stdout)
     );
     assert!(err.contains("bynk.env.missing"), "{err}");
+}
+
+#[test]
+fn test_env_is_refused_where_the_run_would_ignore_it() {
+    let dir = project("refused");
+    for mode in [&["--mutate"][..], &["--against", "dev"][..]] {
+        let mut args = vec!["test", "--env", "staging"];
+        args.extend_from_slice(mode);
+        let o = bynk(&args, &dir);
+        assert!(!o.status.success(), "{mode:?}");
+        let err = stderr(&o);
+        assert!(err.contains("cannot be combined with"), "{mode:?}: {err}");
+        assert!(err.contains("--env"), "{mode:?}: {err}");
+    }
 }

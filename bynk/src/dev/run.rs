@@ -74,14 +74,14 @@ pub struct DevOptions {
     /// ([`assign_free_inspector`]). wrangler's inspector is always on, so left
     /// on its default every session would race for 9229 (#1954, #3237).
     pub inspect_port: Option<u16>,
-    /// `--env NAME` (default `"default"`) — which `bynk.deploy.lock` section
-    /// `--remote` reads the KV id from. `dev` never provisions and never
-    /// writes the ledger (unchanged); this only selects which of `deploy`'s
-    /// environments `--remote` connects the placeholder to. Purely a `bynk`
-    /// concept — never forwarded to `wrangler dev` itself, since `dev` curates
-    /// no Wrangler-side environment config (slice 4, #837 review: a project
-    /// deployed only under a non-default `--env` previously read as
-    /// "never provisioned" here, because this always looked at `"default"`).
+    /// `--env NAME` (default `"default"`) — the environment whose
+    /// `[env.<name>.vars]` values the project's `env(…)` constants take for
+    /// every build `dev` runs (#3941), and, with `--remote`, which
+    /// `bynk.deploy.lock` section the KV id is read from. `dev` never
+    /// provisions and never writes the ledger. Never forwarded to
+    /// `wrangler dev` itself, since `dev` curates no Wrangler-side
+    /// environment config (#837: a project deployed only under a non-default
+    /// `--env` otherwise read as "never provisioned" here).
     pub environment: String,
     /// `--local-worker NAME`, repeatable (interop I5, #1972): a foreign
     /// Worker a `Service` instance names that `wrangler dev` should reach in

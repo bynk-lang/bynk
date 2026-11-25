@@ -413,6 +413,9 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
     }
     // #3069: `--mutate` re-runs the suites against mutants of `src/`; the runs
     // it needs are each a plain in-process run, made below by this function.
+    // #3941: `--mutate` and `--against dev` build for `default` only, so a
+    // named environment is refused rather than silently ignored.
+    let non_default_env = env != bynk_project::vars::DEFAULT_ENVIRONMENT;
     if mutate {
         let with = [
             (inspect, "--inspect"),
@@ -423,6 +426,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             (update_snapshots, "--update-snapshots"),
             (!case.is_empty(), "--case"),
             (stream, "--format ndjson"),
+            (non_default_env, "--env"),
         ]
         .into_iter()
         .find_map(|(set, flag)| set.then_some(flag));
@@ -501,6 +505,11 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
             if inspect || coverage {
                 return refused(
                     "`--against` cannot be combined with `--inspect` or `--coverage`, which observe the in-process run".to_string(),
+                );
+            }
+            if non_default_env {
+                return refused(
+                    "`--against` cannot be combined with `--env`: the target runs its own build, so `--env` would be ignored".to_string(),
                 );
             }
             match crate::remote::resolve(
