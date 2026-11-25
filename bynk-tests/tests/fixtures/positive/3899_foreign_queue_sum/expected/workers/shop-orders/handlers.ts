@@ -7,6 +7,7 @@ import { QueueResult } from "../../__bynk_runtime/queue.js";
 
 export interface Order {
   readonly id: string;
+  readonly claims: string;
 }
 
 export const Order = {
@@ -16,10 +17,10 @@ export const fulfil = {
   async queue_fulfil_0(order: Order, deps: { who: { tag: "Legacy" } | { tag: "Partner" } }): globalThis.Promise<QueueResult> {
     switch (deps.who.tag) {
       case "Legacy": {
-        return QueueResult.Ack;
+        return QueueResult.Retry(`signed as Legacy, the body claims ${String(order.claims)}`);
       }
       case "Partner": {
-        return QueueResult.Retry("from the partner");
+        return QueueResult.Retry(`signed as Partner, the body claims ${String(order.claims)}`);
       }
     }
     throw new globalThis.Error("non-exhaustive match");
@@ -29,6 +30,7 @@ export const fulfil = {
 export function __serialise_Order(value: Order): __JsonValue {
   return {
     id: value.id as __JsonValue,
+    claims: value.claims as __JsonValue,
   };
 }
 
@@ -41,6 +43,10 @@ export function __deserialise_Order(json: __JsonValue, path: string = "$"): Resu
     return Err({ kind: "StructuralMismatch", path: `${path}.id`, expected: "string", actual: typeof obj["id"] });
   }
   const __id = obj["id"];
-  return Ok({ id: __id } as Order);
+  if (typeof obj["claims"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.claims`, expected: "string", actual: typeof obj["claims"] });
+  }
+  const __claims = obj["claims"];
+  return Ok({ id: __id, claims: __claims } as Order);
 }
 

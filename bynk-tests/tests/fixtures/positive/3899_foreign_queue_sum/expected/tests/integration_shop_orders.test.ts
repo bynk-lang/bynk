@@ -39,10 +39,28 @@ async function test_a_message_signed_by_either_foreign_producer_reaches_the_hand
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const a = await __sysdrive_message_fulfil({ id: "o1" }, undefined, "Legacy");
-    const b = await __sysdrive_message_fulfil({ id: "o2" }, undefined, "Partner");
-    if (!(((__c: boolean) => __c)(a.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:5:12", 250, 258, "expect a is Ack", "a", () => __bynkShow(a)); }
-    if (!(((__c: boolean) => __c)(b.tag === "Retry" && b.reason === "from the partner"))) { throw __bynkExpectFailure("tests/orders_system.bynk:6:12", 270, 300, "expect b is Retry(\"from the partner\")", "b", () => __bynkShow(b)); }
+    const a = await __sysdrive_message_fulfil({ id: "o1", claims: "Legacy" }, undefined, "Legacy");
+    const b = await __sysdrive_message_fulfil({ id: "o2", claims: "Partner" }, undefined, "Partner");
+    if (!(((__c: boolean) => __c)(a.tag === "Retry" && a.reason === "signed as Legacy, the body claims Legacy"))) { throw __bynkExpectFailure("tests/orders_system.bynk:5:12", 287, 341, "expect a is Retry(\"signed as Legacy, the body claims Legacy\")", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Retry" && b.reason === "signed as Partner, the body claims Partner"))) { throw __bynkExpectFailure("tests/orders_system.bynk:6:12", 353, 409, "expect b is Retry(\"signed as Partner, the body claims Partner\")", "b", () => __bynkShow(b)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_the_actor_comes_from_the_verified_signature__not_from_the_body() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const a = await __sysdrive_message_fulfil({ id: "o3", claims: "Partner" }, undefined, "Legacy");
+    const b = await __sysdrive_message_fulfil({ id: "o4", claims: "Legacy" }, undefined, "Partner");
+    if (!(((__c: boolean) => __c)(a.tag === "Retry" && a.reason === "signed as Legacy, the body claims Partner"))) { throw __bynkExpectFailure("tests/orders_system.bynk:14:12", 842, 897, "expect a is Retry(\"signed as Legacy, the body claims Partner\")", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Retry" && b.reason === "signed as Partner, the body claims Legacy"))) { throw __bynkExpectFailure("tests/orders_system.bynk:15:12", 909, 964, "expect b is Retry(\"signed as Partner, the body claims Legacy\")", "b", () => __bynkShow(b)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -54,7 +72,7 @@ async function test_a_message_signed_by_either_foreign_producer_reaches_the_hand
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a message signed by either foreign producer reaches the handler as that producer"];
+export const __bynkCases: readonly string[] = ["a message signed by either foreign producer reaches the handler as that producer", "the actor comes from the verified signature, not from the body"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -62,6 +80,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a message signed by either foreign producer reaches the handler as that producer")) {
     const started = __bynkCaseNow();
     const r = { name: "a message signed by either foreign producer reaches the handler as that producer", ...(await test_a_message_signed_by_either_foreign_producer_reaches_the_handler_as_that_producer()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the actor comes from the verified signature, not from the body")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the actor comes from the verified signature, not from the body", ...(await test_the_actor_comes_from_the_verified_signature__not_from_the_body()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
