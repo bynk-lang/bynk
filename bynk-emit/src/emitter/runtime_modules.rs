@@ -106,6 +106,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("EMAIL_REJECT_FORWARD", "email"),
     ("EMAIL_REJECT_REPLY", "email"),
     ("EMAIL_REJECT_TOO_LARGE", "email"),
+    ("EMAIL_REJECT_UNAUTHENTICATED", "email"),
     ("EMAIL_REJECT_UNKNOWN_RECIPIENT", "email"),
     ("EMAIL_REJECT_UNPARSEABLE", "email"),
     ("EmailLog", "email"),

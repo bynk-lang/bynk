@@ -51,7 +51,9 @@ the catch-all together are fine, and the named address wins.
 handler states its actor with `by` (`by Sender` is "any mail"), and `Sender` carries the address and whether
 Cloudflare found the sender's domain authenticated with DMARC
 (`DmarcPass`, `DmarcFail` or `DmarcNone`). Forward or reply on a claim; act
-on the evidence.
+on the evidence. To act only on authenticated mail, name a refinement of `Sender`
+(`actor Authenticated = Sender where Dmarc(DmarcPass)`) in the `by` clause, and the
+Worker refuses other mail before your handler runs.
 
 ## Deploy it
 

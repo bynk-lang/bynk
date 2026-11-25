@@ -22,6 +22,24 @@ pub(super) struct EmailRoute {
     pub service: String,
     /// The address as declared (`support@shop.example` or `*@shop.example`).
     pub address: String,
+    /// #3888: the DMARC verdicts a `Sender` refinement admits (`DmarcPass`, …),
+    /// or `None` for a handler that admits any mail (`by Sender`).
+    pub admits: Option<Vec<&'static str>>,
+}
+
+/// The verdicts the service's handler admits when it names a refinement over
+/// the prelude `Sender`, or `None` when it admits all mail.
+fn admitted_verdicts(
+    table: &UnitTable,
+    service: &bynk_syntax::ast::ServiceDecl,
+) -> Option<Vec<&'static str>> {
+    let by = service
+        .handlers
+        .iter()
+        .find_map(|h| h.by_clause.as_ref())
+        .or(service.default_by.as_ref())?;
+    let decl = table.actors.get(&by.actors.first()?.name)?;
+    bynk_check::actors::sender_refinement(decl, &table.actors).map(|p| p.admitted())
 }
 
 /// The routes of every `from email` service in `table`, exact addresses before
@@ -37,6 +55,7 @@ pub(super) fn collect_routes(table: &UnitTable) -> Vec<EmailRoute> {
             Some(EmailRoute {
                 service: name.clone(),
                 address: address.clone(),
+                admits: admitted_verdicts(table, s),
             })
         })
         .collect();
@@ -82,13 +101,25 @@ pub(super) fn emit_email_handler(
                 args: vec![ident("mail"), ident("sender")],
             }))),
         };
-        TsExpr::object(vec![
-            (
-                "address".to_string(),
-                TsExpr::Lit(TsLit::Str(r.address.clone())),
-            ),
-            ("handle".to_string(), handle),
-        ])
+        let mut fields = vec![(
+            "address".to_string(),
+            TsExpr::Lit(TsLit::Str(r.address.clone())),
+        )];
+        // #3888: a `Sender` refinement's admitted verdicts; the runtime refuses
+        // other mail before the handler runs.
+        if let Some(admits) = &r.admits {
+            fields.push((
+                "admits".to_string(),
+                TsExpr::array(
+                    admits
+                        .iter()
+                        .map(|v| TsExpr::Lit(TsLit::Str((*v).to_string())))
+                        .collect(),
+                ),
+            ));
+        }
+        fields.push(("handle".to_string(), handle));
+        TsExpr::object(fields)
     };
     let thunk = TsExpr::Arrow {
         params: Vec::new(),
