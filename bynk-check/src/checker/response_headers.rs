@@ -19,20 +19,29 @@ use crate::kernel_op::HttpResultOp;
 /// case). `access-control-*` is a prefix. The runtime holds the same list
 /// (`RESERVED_RESPONSE_HEADERS` in `http.ts`), for a name computed at run time.
 const RESERVED: &[&str] = &[
+    "age",
     "allow",
     "cache-control",
+    "cdn-cache-control",
+    "cloudflare-cdn-cache-control",
     "connection",
+    "content-disposition",
     "content-length",
     "content-security-policy",
     "content-type",
     "etag",
+    "expires",
     "keep-alive",
+    "last-modified",
     "location",
+    "pragma",
     "proxy-authenticate",
     "proxy-authorization",
     "referrer-policy",
+    "retry-after",
     "set-cookie",
     "strict-transport-security",
+    "surrogate-control",
     "te",
     "trailer",
     "transfer-encoding",
@@ -220,11 +229,11 @@ fn lint_literals(op: HttpResultOp, args: &[Expr], ctx: &mut Ctx) {
                 }
             }
             if let Some(ExprKind::StrLit(value)) = args.get(1).map(|a| &a.kind)
-                && has_control(value)
+                && (has_control(value) || !value.is_ascii())
             {
                 ctx.errors.push(invalid(
                     args[1].span,
-                    "a header value cannot contain a line break or another control character"
+                    "a header value is ASCII with no line break or other control character"
                         .to_string(),
                 ));
             }
@@ -273,6 +282,15 @@ fn reserved_hint(name: &str) -> &'static str {
     match name.to_ascii_lowercase().as_str() {
         "set-cookie" => "set a cookie with `withCookie`",
         "location" => "use `.at(url)` on a `Created`, or a redirect variant",
+        "retry-after" => "use `.retryAfter(delay)` on a `TooManyRequests` or `ServiceUnavailable`",
+        "content-disposition" => "use `.download(filename)` on a `Raw` result",
+        "expires"
+        | "last-modified"
+        | "age"
+        | "pragma"
+        | "cdn-cache-control"
+        | "cloudflare-cdn-cache-control"
+        | "surrogate-control" => "caching headers come from `@cache` and the router",
         "cache-control" | "etag" | "vary" => "caching headers come from `@cache` and the router",
         "content-type" | "content-length" => "the body and its media type decide these",
         "x-content-type-options"
@@ -284,5 +302,31 @@ fn reserved_hint(name: &str) -> &'static str {
             "the service's `cors { }` section sets the CORS headers"
         }
         _ => "this is a hop-by-hop header the platform manages",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RESERVED;
+
+    /// The compile-time list and the runtime's `RESERVED_RESPONSE_HEADERS` must name the same
+    /// headers, so a literal and a computed name are judged alike.
+    #[test]
+    fn the_reserved_lists_match_the_runtime() {
+        let src = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../bynk-emit/runtime/src/http.ts"
+        ))
+        .expect("the runtime source is in the workspace");
+        let start = src
+            .find("RESERVED_RESPONSE_HEADERS: ReadonlySet<string> = new Set([")
+            .expect("the runtime declares the reserved list");
+        let body = &src[start..];
+        let body = &body[..body.find("]);").expect("the list ends")];
+        let ts: Vec<&str> = body
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix('"')?.strip_suffix("\","))
+            .collect();
+        assert_eq!(ts, RESERVED, "the runtime and checker lists differ");
     }
 }

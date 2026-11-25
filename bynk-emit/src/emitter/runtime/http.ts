@@ -328,20 +328,29 @@ type HeaderTriple = readonly [name: string, value: string, own?: boolean];
 // checker holds the same list for a literal name (`RESERVED` in
 // `response_headers.rs`); `access-control-*` is a prefix.
 export const RESERVED_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "age",
   "allow",
   "cache-control",
+  "cdn-cache-control",
+  "cloudflare-cdn-cache-control",
   "connection",
+  "content-disposition",
   "content-length",
   "content-security-policy",
   "content-type",
   "etag",
+  "expires",
   "keep-alive",
+  "last-modified",
   "location",
+  "pragma",
   "proxy-authenticate",
   "proxy-authorization",
   "referrer-policy",
+  "retry-after",
   "set-cookie",
   "strict-transport-security",
+  "surrogate-control",
   "te",
   "trailer",
   "transfer-encoding",
@@ -358,7 +367,10 @@ function headersOf(result: object): readonly HeaderTriple[] {
 }
 
 function withHeaderTriple<R extends object>(result: R, triple: HeaderTriple): R {
-  return { ...result, headers: [...headersOf(result), triple] };
+  // A typed helper sets one header, so a later call replaces an earlier one rather than
+  // sending a second value of a header that is not a list.
+  const held = triple[2] === true ? headersOf(result).filter(([n]) => n.toLowerCase() !== triple[0]) : headersOf(result);
+  return { ...result, headers: [...held, triple] };
 }
 
 /** `result.withHeader(name, value)`: one more header line on the response. */
@@ -373,12 +385,19 @@ export function withRetryAfter<R extends object>(result: R, delayMillis: number)
 
 /** `result.at(url)`: the `Location` of a created resource. */
 export function withLocation<R extends object>(result: R, url: string): R {
-  return withHeaderTriple(result, ["location", url, true]);
+  return withHeaderTriple(result, ["location", encodeNonAscii(url), true]);
 }
 
 /** `result.download(filename)`: `Content-Disposition: attachment` for `filename`. */
 export function withDownload<R extends object>(result: R, filename: string): R {
   return withHeaderTriple(result, ["content-disposition", contentDisposition(filename), true]);
+}
+
+// A URL with every character outside printable ASCII percent-encoded as UTF-8, so a slug with an
+// accent is a valid `Location` (a header value is bytes, and `Headers.append` refuses a code
+// point above U+00FF).
+function encodeNonAscii(url: string): string {
+  return url.replace(/[^\x20-\x7e]/gu, (c) => encodeURIComponent(c));
 }
 
 // An RFC 8187 `value-chars` encoding: every octet outside `attr-char` is `%XX`.
@@ -430,6 +449,9 @@ function appendResultHeaders(response: Response, result: object): void {
     }
     if (/[\x00-\x1f\x7f]/.test(value)) {
       throw new Error(`withHeader: the value of ${lower} contains a control character`);
+    }
+    if (/[^\x00-\xff]/.test(value)) {
+      throw new Error(`withHeader: the value of ${lower} has a character outside Latin-1; a header value is bytes`);
     }
     response.headers.append(name, value);
   }

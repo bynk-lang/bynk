@@ -112,6 +112,17 @@ async function main(): Promise<void> {
   assert(r.status === 500, `a computed router-owned name faults the request (got ${r.status})`);
   assert(r.headers.get("content-type") !== "text/evil", "the forbidden header never reaches the wire");
 
+  // A computed value the platform cannot send faults the request instead of reaching the wire.
+  for (const path of ["/bad-value", "/bad-file", "/wide"]) {
+    r = await call(path);
+    assert(r.status === 500, `${path} faults the request (got ${r.status})`);
+  }
+
+  // A typed helper sets its header once, and a non-ASCII URL is percent-encoded.
+  r = await call("/slugs", "POST", "x");
+  assert(r.status === 201, `/slugs is 201 (got ${r.status})`);
+  assert(r.headers.get("location") === "/slugs/caf%C3%A9/2", `Location is the last, encoded (got ${r.headers.get("location")})`);
+
   console.log("ALL OK");
 }
 

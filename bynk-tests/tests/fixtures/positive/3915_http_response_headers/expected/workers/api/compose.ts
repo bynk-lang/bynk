@@ -27,5 +27,17 @@ export function compose(env: Env) {
     async http_GET_bad_name() {
       return handlers.api.http_GET_bad_name(deps);
     },
+    async http_GET_bad_value() {
+      return handlers.api.http_GET_bad_value(deps);
+    },
+    async http_GET_bad_file() {
+      return handlers.api.http_GET_bad_file(deps);
+    },
+    async http_GET_wide() {
+      return handlers.api.http_GET_wide(deps);
+    },
+    async http_POST_slugs(body: string) {
+      return handlers.api.http_POST_slugs(body, deps);
+    },
   };
 }

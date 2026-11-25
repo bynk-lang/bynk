@@ -585,7 +585,7 @@ fn lower_http_result(
         };
     }
     if let Some(helper) = response_header_helper(op) {
-        return lower_response_header(helper, op, recv, lowered);
+        return lower_response_header(helper, recv, lowered);
     }
     // The cookie argument; absent only for a program that failed checking.
     let arg = lowered.into_iter().next().unwrap_or_else(|| {
@@ -653,7 +653,6 @@ fn response_header_helper(op: HttpResultOp) -> Option<&'static str> {
 /// to whole seconds.
 fn lower_response_header(
     helper: &str,
-    _op: HttpResultOp,
     recv: bynk_ts::TsExpr,
     args: Vec<bynk_ts::TsExpr>,
 ) -> bynk_ts::TsExpr {

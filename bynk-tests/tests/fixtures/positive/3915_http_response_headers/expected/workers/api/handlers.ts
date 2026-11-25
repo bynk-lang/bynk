@@ -25,4 +25,20 @@ export const api = {
     const name = `Content-${String(kind)}`;
     return __withResponseHeader(HttpResult.Ok("x"), name, "text/evil");
   },
+  async http_GET_bad_value(deps: {}): globalThis.Promise<HttpResult<string>> {
+    const tail = "b";
+    return __withResponseHeader(HttpResult.Ok("x"), "X-A", `a\n${String(tail)}`);
+  },
+  async http_GET_bad_file(deps: {}): globalThis.Promise<HttpResult<globalThis.Uint8Array>> {
+    const name = "";
+    return __withDownload(HttpResult.Raw(new globalThis.TextEncoder().encode("a"), "text/plain"), name);
+  },
+  async http_GET_wide(deps: {}): globalThis.Promise<HttpResult<string>> {
+    const word = "日本";
+    return __withResponseHeader(HttpResult.Ok("x"), "X-Name", word);
+  },
+  async http_POST_slugs(body: string, deps: {}): globalThis.Promise<HttpResult<string>> {
+    const slug = "café";
+    return __withLocation(__withLocation(HttpResult.Created(body), `/slugs/${String(slug)}`), `/slugs/${String(slug)}/2`);
+  },
 };

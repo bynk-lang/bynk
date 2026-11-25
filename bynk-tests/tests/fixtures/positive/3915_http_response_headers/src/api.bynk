@@ -30,4 +30,24 @@ service api from http {
     let name = "Content-\(kind)"
     Ok("x").withHeader(name, "text/evil")
   }
+
+  on GET("/bad-value") () -> Effect[HttpResult[String]] by v: Visitor {
+    let tail = "b"
+    Ok("x").withHeader("X-A", "a\n\(tail)")
+  }
+
+  on GET("/bad-file") () -> Effect[HttpResult[Bytes]] by v: Visitor {
+    let name = ""
+    Raw(Bytes.fromUtf8("a"), "text/plain").download(name)
+  }
+
+  on GET("/wide") () -> Effect[HttpResult[String]] by v: Visitor {
+    let word = "日本"
+    Ok("x").withHeader("X-Name", word)
+  }
+
+  on POST("/slugs") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    let slug = "café"
+    Created(body).at("/slugs/\(slug)").at("/slugs/\(slug)/2")
+  }
 }

@@ -808,9 +808,13 @@ cannot tell at compile time which variant a stored `HttpResult` holds; on anothe
 `bynk.types.method_not_found`. `retryAfter` is whole seconds, so a literal under one second is
 refused (`bynk.http.invalid_response_header`).
 
-`withHeader` cannot set a header the router owns: the caching headers, `Content-Type` and
-`Content-Length`, `Location`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS
-headers, `WWW-Authenticate`, `Allow` and the hop-by-hop headers. A literal name that is one is
+`withHeader` cannot set a header the router owns: the caching headers (`Cache-Control`, `ETag`,
+`Vary`, `Expires`, `Last-Modified`, `Age`, `Pragma` and the CDN directives), `Content-Type` and
+`Content-Length`, `Location`, `Retry-After` and `Content-Disposition` (the typed helpers write
+those), `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers,
+`WWW-Authenticate`, `Allow` and the hop-by-hop headers. A header value is ASCII: a literal with
+another character is `bynk.http.invalid_response_header`, and a computed one answers `500`; `at`
+percent-encodes a URL instead. A literal name that is one is
 `bynk.http.reserved_response_header`, and its note names the way to set it properly. A literal name
 that is not an RFC 9110 token, or a value with a line break or another control character, is
 `bynk.http.invalid_response_header`. A name or value computed at run time is judged when the
