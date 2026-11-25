@@ -4,7 +4,7 @@
 use super::{
     append_deps_field, cron_handler_method_name, events_release_body, http_handler_method_name_ir,
     queue_handler_method_name, return_undefined_unless, seam_identity_ts_type,
-    sender_admission_guard,
+    sender_admission_guards,
 };
 use crate::emit_model::EmitProjectCtx;
 use crate::emitter::ctx::{BodyMode, HandlerShared, ModuleCtx};
@@ -269,7 +269,7 @@ pub(crate) fn emit_service(
             async_tail,
             Some(&handler.return_type),
         );
-        let mut guards = Body::new();
+        let mut guards = sender_admission_guards(handler, &handler_kind_ir, &ctx.actors);
         // Events track, slice 1 (spine #936): a `from Events(E { ... })`
         // subscription filter is deliver-and-filter (ADR 0286, unchanged by
         // this slice) — the fan-out mechanism still delivers every emission
@@ -311,14 +311,6 @@ pub(crate) fn emit_service(
             schema_guard.push(return_undefined_unless(test));
             schema_guard.append(std::mem::replace(&mut guards, Body::new()));
             guards = schema_guard;
-        }
-        // #3888: a `Sender` refinement refuses mail whose DMARC verdict it does not admit before
-        // the body runs, whichever tier calls the handler (the Worker, a unit case or a system
-        // case), as a rejection and not a fault.
-        if handler_kind_ir == IrHandlerKind::Message
-            && let Some(admits) = bynk_check::actors::sender_admits_for(handler, &ctx.actors)
-        {
-            guards.push(sender_admission_guard(&admits));
         }
         // Append the deps parameter (may include surface field if the body
         // made cross-context calls). v0.47: a Bearer handler's deps also carries
