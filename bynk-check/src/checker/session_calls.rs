@@ -91,3 +91,15 @@ pub(super) fn check_revoke_all(
     }
     Some(Some(tys.intern(Ty::Effect(tys.intern(Ty::Unit)))))
 }
+
+/// `by Revoked` on a route whose seam keeps no sessions (#3938): `bynk.test.revoked_needs_sessions_route`.
+pub(super) fn revoked_needs_sessions(span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.test.revoked_needs_sessions_route",
+        span,
+        "`by Revoked` sends a cookie for a revoked session, but this handler's route has no `SignedCookie` actor with `sessions = true` to refuse it",
+    )
+    .with_note(
+        "use `by Revoked` on a route guarded by a `SignedCookie` actor declared with `sessions = true`; a stateless cookie cannot be revoked, and `by Forged` or `by Expired` test its signature and expiry",
+    )
+}

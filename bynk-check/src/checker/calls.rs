@@ -5460,14 +5460,7 @@ pub(crate) fn check_effect_let_principal(
                     crate::actors::by_clause_has_sessions(by, &ctx.test_actors)
                 }) =>
             {
-                let err = CompileError::new(
-                    "bynk.test.revoked_needs_sessions_route",
-                    p.span,
-                    "`by Revoked` sends a cookie for a revoked session, but this handler's route has no `SignedCookie` actor with `sessions = true` to refuse it",
-                )
-                .with_note(
-                    "use `by Revoked` on a route guarded by a `SignedCookie` actor declared with `sessions = true`; a stateless cookie cannot be revoked, and `by Forged` or `by Expired` test its signature and expiry",
-                );
+                let err = super::session_calls::revoked_needs_sessions(p.span);
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Revoked, _) => {}
