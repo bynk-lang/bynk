@@ -5,6 +5,7 @@ import type { Option } from "./__bynk_runtime/result.js";
 
 export interface Idempotency {
   dedup<T>(key: string): globalThis.Promise<Option<T>>;
+  stamp<T>(value: T): globalThis.Promise<number>;
 }
 
 export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");

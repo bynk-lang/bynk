@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  admitQueueBody,
+  queueForeignKeys,
   QUEUE_CLAIM_LEASE_SECONDS,
   QUEUE_CLOCK_SKEW_SECONDS,
   queueAdmit,
@@ -22,11 +24,12 @@ function ports(keys: Record<string, string[]>, now = NOW): Fake {
     calls,
     now: () => now,
     keysFor: (from) => keys[from] ?? [],
+    // The fake's value is how long the claim holds: the lease when taken, the window once confirmed.
     claim: async (key, ttl) => {
-      if (claimed.has(key)) return false;
+      if (claimed.has(key)) return { claimed: false, remainingSeconds: claimed.get(key)! };
       claimed.set(key, ttl);
       calls.push("claim");
-      return true;
+      return { claimed: true };
     },
     confirm: async (key, ttl) => {
       claimed.set(key, ttl);
@@ -108,12 +111,27 @@ test("a message that was handled is kept for the window, and a replay is refused
   assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "replayed" });
 });
 
+test("a redelivery that arrives while the lease is held is retried after it, never acknowledged as a replay", async () => {
+  // The instance died (or its settle failed) mid-handler: nothing settled, and the platform redelivers at once.
+  const p = ports({ "shop.orders": ["k1"] });
+  const envelope = wire(await signQueueMessage("k1", parts));
+  admitted(await queueAdmit(envelope, "fulfil", "orders", p));
+  const early = await queueAdmit(envelope, "fulfil", "orders", p);
+  assert.deepEqual(early, { ok: false, reason: "in_flight", retryAfterSeconds: QUEUE_CLAIM_LEASE_SECONDS });
+  // A lease with 90.2 seconds left is retried after 91 seconds, and at least one second.
+  p.claimed.set([...p.claimed.keys()][0]!, 90.2);
+  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "in_flight", retryAfterSeconds: 91 });
+  p.claimed.set([...p.claimed.keys()][0]!, 0);
+  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "in_flight", retryAfterSeconds: 1 });
+  assert.equal(p.claimed.size, 1);
+});
+
 test("a message whose handler failed is admitted again when the platform redelivers it", async () => {
   const p = ports({ "shop.orders": ["k1"] });
   const envelope = wire(await signQueueMessage("k1", parts));
-  // While the handler runs, a second delivery of the same id is refused.
+  // While the handler runs, a second delivery of the same id waits: it is retried after the lease, not dropped.
   const first = admitted(await queueAdmit(envelope, "fulfil", "orders", p));
-  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "replayed" });
+  assert.deepEqual(await queueAdmit(envelope, "fulfil", "orders", p), { ok: false, reason: "in_flight", retryAfterSeconds: QUEUE_CLAIM_LEASE_SECONDS });
   // The handler asked for a retry, or threw: the claim is released, and the redelivery is admitted.
   await first.settle(false);
   assert.equal(p.claimed.size, 0);
@@ -137,8 +155,100 @@ test("a dead-letter consumer verifies a message under the source queue's name", 
 });
 
 test("every refusal has a distinct fault text naming the consumer", () => {
-  const reasons = ["unsigned", "malformed", "version", "unknown_sender", "bad_signature", "replayed", "stale"] as const;
+  const reasons = ["unsigned", "malformed", "version", "unknown_sender", "bad_signature", "replayed", "stale", "in_flight"] as const;
   const texts = new Set(reasons.map((r) => queueRefusalDetail("fulfil", r)));
   assert.equal(texts.size, reasons.length);
   for (const t of texts) assert.ok(t.includes("fulfil"));
+});
+
+// ---- A consumer's own keys and id claim (#3899 3c-1) ----
+
+const secrets = { Legacy: "LEGACY_QUEUE_KEY" };
+// The part of D1 the claims use: `held` maps a key to its expiry (ms), and each statement is read by its SQL.
+const claimDb = () => {
+  const held = new Map<string, number>();
+  return {
+    held,
+    prepare: (sql: string) => ({
+      bind: (...values: unknown[]) => ({
+        sql,
+        values,
+        // The read of a holder's expiry after a failed claim.
+        first: async () => (held.has(String(values[0])) ? { expires_at: held.get(String(values[0])) } : null),
+      }),
+    }),
+    batch: async (statements: unknown[]) => {
+      const first = statements[0] as { sql: string; values: unknown[] };
+      const key = String(first.values[0]);
+      if (first.sql.startsWith("DELETE")) {
+        held.delete(key);
+        return [{ meta: { changes: 1 } }];
+      }
+      const now = Date.now();
+      if (first.sql.includes("WHERE idempotency_claims.expires_at")) {
+        // The claim: only when the key is absent or lapsed.
+        const live = (held.get(key) ?? 0) > now;
+        if (!live) held.set(key, Number(first.values[1]));
+        return [{ meta: { changes: live ? 0 : 1 } }, { meta: { changes: 0 } }];
+      }
+      held.set(key, Number(first.values[1])); // the confirm
+      return [{ meta: { changes: 1 } }];
+    },
+  };
+};
+const nowSecs = () => Math.floor(Date.now() / 1000);
+const legacy = (over: Partial<typeof parts> = {}) => signQueueMessage("legacy-secret", { ...parts, from: "Legacy", ts: nowSecs(), ...over });
+
+test("a foreign sender's key is read from env, the previous one after it", () => {
+  const keys = queueForeignKeys({ LEGACY_QUEUE_KEY: "now", LEGACY_QUEUE_KEY_PREVIOUS: "before" }, secrets);
+  assert.deepEqual(keys("Legacy"), ["now", "before"]);
+  assert.deepEqual(keys("Other"), []);
+  assert.deepEqual(keys("hasOwnProperty"), []);
+});
+
+test("a secret missing from env refuses the message: nothing is admitted without a key", async () => {
+  const db = claimDb();
+  for (const env of [{ D1_IDEMPOTENCY: db }, { D1_IDEMPOTENCY: db, LEGACY_QUEUE_KEY: "" }, { D1_IDEMPOTENCY: db, LEGACY_QUEUE_KEY: 5 }]) {
+    const r = await admitQueueBody(wire(await legacy()), "orders", [], env, secrets);
+    assert.deepEqual(r, { ok: false, reason: "unknown_sender" });
+  }
+  assert.equal(db.held.size, 0);
+});
+
+test("a signed message is admitted through env's secret, leased, and kept for the window once handled", async () => {
+  const db = claimDb();
+  const env = { LEGACY_QUEUE_KEY: "legacy-secret", D1_IDEMPOTENCY: db };
+  const envelope = wire(await legacy());
+  const first = admitted(await admitQueueBody(envelope, "orders", [], env, secrets));
+  assert.deepEqual([first.from, first.id, first.body], ["Legacy", "m-1", { total: 5 }]);
+  // While it is being handled, the redelivery waits for the lease rather than being dropped.
+  const early = await admitQueueBody(envelope, "orders", [], env, secrets);
+  assert.equal(early.ok === false && early.reason, "in_flight");
+  await first.settle(true);
+  const [until] = [...db.held.values()];
+  assert.ok(until! > Date.now() + (QUEUE_DEDUP_WINDOW_SECONDS - 60) * 1000, "kept for the replay window");
+  assert.deepEqual(await admitQueueBody(envelope, "orders", [], env, secrets), { ok: false, reason: "replayed" });
+});
+
+test("a message whose handler failed is admitted again when it is redelivered", async () => {
+  const db = claimDb();
+  const env = { LEGACY_QUEUE_KEY: "legacy-secret", D1_IDEMPOTENCY: db };
+  const envelope = wire(await legacy());
+  await admitted(await admitQueueBody(envelope, "orders", [], env, secrets)).settle(false);
+  assert.equal(db.held.size, 0);
+  assert.equal((await admitQueueBody(envelope, "orders", [], env, secrets)).ok, true);
+});
+
+test("a Worker without the Idempotency database fails loudly rather than admitting unchecked", async () => {
+  const envelope = wire(await legacy());
+  await assert.rejects(admitQueueBody(envelope, "orders", [], { LEGACY_QUEUE_KEY: "legacy-secret" }, secrets), /D1_IDEMPOTENCY/);
+});
+
+test("a message a dead-letter consumer receives is verified under the queue that dead-lettered it", async () => {
+  const db = claimDb();
+  const env = { LEGACY_QUEUE_KEY: "legacy-secret", D1_IDEMPOTENCY: db };
+  const moved = wire(await legacy());
+  assert.equal((await admitQueueBody(moved, "orders-dead", ["orders"], env, secrets)).ok, true);
+  const other = wire(await legacy({ queue: "elsewhere", id: "m-2" }));
+  assert.deepEqual(await admitQueueBody(other, "orders-dead", ["orders"], env, secrets), { ok: false, reason: "bad_signature" });
 });

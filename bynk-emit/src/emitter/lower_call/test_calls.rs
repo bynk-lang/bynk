@@ -283,7 +283,18 @@ pub(in crate::emitter) fn lower_system_schedule_call(
         };
         if let Some(driver) = driver {
             let skip = usize::from(matches!(address, Some(HandlerAddress::Schedule { .. })));
-            let rest = lower_args(&args[skip..], cx, pre);
+            let mut rest = lower_args(&args[skip..], cx, pre);
+            // #3899: a signed consumer's driver takes the foreign actor the case acts as, after
+            // the (optional) delivery metadata.
+            if matches!(address, Some(HandlerAddress::Message { .. }))
+                && cx.system_queue_signed(&id.name)
+                && let Some(actor) = cx.call_site_actor.clone()
+            {
+                if rest.len() < 2 {
+                    rest.push(ident("undefined"));
+                }
+                rest.push(str_lit(actor));
+            }
             return Some({
                 let nodes = rest;
                 call(TsExpr::Ident(driver.clone()), nodes)

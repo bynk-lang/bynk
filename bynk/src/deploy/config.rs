@@ -428,6 +428,9 @@ pub(crate) struct ForeignCaller {
     /// The foreign Worker's name, when the declaration gives one.
     #[serde(default)]
     pub(crate) worker: Option<String>,
+    /// #3899: the sender signs queue messages to a `from queue` consumer rather than calls.
+    #[serde(default)]
+    pub(crate) queue: bool,
 }
 
 impl Resources {

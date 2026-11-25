@@ -1,0 +1,10 @@
+{
+  "blurb": "A message that reaches the retry limit is written to the dead-letter queue unchanged, so a signed queue's dead letters are still the signed envelope and an unsigned queue's are the bare body. The dead-letter queue's consumer must therefore be signed exactly when the source consumer is, in the same context, and a signed one must admit every sender the source does; otherwise it could not verify or decode a single dead letter, and each would be dropped. Make the dead-letter consumer admit the same `Foreign` actors, or point `deadLetter` at a queue whose consumer does.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.dead_letter_signing_mismatch",
+  "constructs": [],
+  "example": "actor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer admits unsigned messages\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }   // ✓ the same sender\n}",
+  "severity": "error",
+  "summary": "A signed queue's dead-letter consumer is not signed, is in another context, or does not admit the same senders (or the reverse)."
+}
