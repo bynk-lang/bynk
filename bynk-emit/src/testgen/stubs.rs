@@ -962,6 +962,10 @@ pub(super) fn synthetic_typed_commons_for_target(
     if let Some(used) = unit_uses.get(target_name) {
         for u in used {
             if let Some(t) = unit_tables.get(u) {
+                // #4403: as the target itself sees it, so a name its `uses` clauses
+                // qualify (`lib.x.Status`) or rename is in scope under that spelling.
+                // (`table.use_views` read directly: `table` is partly moved above.)
+                let t = table.use_views.get(u).unwrap_or(t);
                 // #2702: a used commons' `private` declarations are not in the
                 // case's scope, so they must not claim a name (and with it the
                 // codec, the methods or the call a visible one resolves to).

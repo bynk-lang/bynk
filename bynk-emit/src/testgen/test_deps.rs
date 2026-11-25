@@ -754,15 +754,70 @@ pub(super) fn used_commons_destructures<'a>(
                     .filter(|n| !target_values.contains(n))
                     .cloned()
                     .collect();
+                // #4403: only the names the target's `uses` clauses bring in bare. Two used
+                // commons that both declare `Status` would otherwise both destructure it
+                // (TS2451); the qualified spellings are bound by [`use_qualifier_imports`].
+                let in_view = |n: &String| match target_view(unit_tables, target_name, u) {
+                    Some(v) => {
+                        v.types.contains_key(n)
+                            || v.fns.contains_key(n)
+                            || v.consts.contains_key(n)
+                            || v.assets.contains_key(n)
+                            || v.embeds.contains_key(n)
+                    }
+                    None => true,
+                };
+                names.retain(|n| in_view(n));
                 names.sort();
                 names.dedup();
                 let type_names = aliased_types(table, |n| {
-                    !target_local.contains(n) && is_public_type(table, n)
+                    !target_local.contains(n) && is_public_type(table, n) && in_view(&n.to_string())
                 });
                 out.push((ns, names, type_names));
             }
         }
     }
+    out
+}
+
+/// #4403: the target's own view of used commons `used`, when its `uses` clauses select,
+/// rename or qualify that commons' names.
+fn target_view<'a>(
+    unit_tables: &'a HashMap<String, UnitTable>,
+    target_name: &str,
+    used: &str,
+) -> Option<&'a UnitTable> {
+    unit_tables.get(target_name)?.use_views.get(used)
+}
+
+/// #4403: the namespace imports a case's qualified names read through, each as the
+/// binding name and the commons it imports: the full-name qualifier a `uses lib.x`
+/// introduces (`__use_lib_x`) and the alias one a `uses lib.x as X` does (`X`), for each
+/// the target writes a name through.
+pub(super) fn use_qualifier_imports(
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for u in unit_uses.get(target_name).into_iter().flatten() {
+        let Some(view) = target_view(unit_tables, target_name, u) else {
+            continue;
+        };
+        for key in view.use_origin.keys() {
+            let Some((qualifier, _)) = key.rsplit_once('.') else {
+                continue;
+            };
+            let binding = if qualifier.contains('.') {
+                bynk_check::emitted_names::use_qualifier_binding(qualifier)
+            } else {
+                qualifier.to_string()
+            };
+            out.push((binding, u.clone()));
+        }
+    }
+    out.sort();
+    out.dedup();
     out
 }
 

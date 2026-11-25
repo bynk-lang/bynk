@@ -331,6 +331,15 @@ pub(super) fn emit_test_module(
             }
         }
     }
+    // #4403: the namespaces a qualified name (`lib.x.Status`, `X.Status`) reads through.
+    for (binding, commons) in
+        super::test_deps::use_qualifier_imports(target_name, unit_tables, unit_uses)
+    {
+        uses_imports.push((
+            binding,
+            relative_import_for_test(&commons_dir_for(&commons)),
+        ));
+    }
     uses_imports.sort();
     uses_imports.dedup();
     for (ns, path) in &uses_imports {

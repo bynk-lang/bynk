@@ -6144,7 +6144,11 @@ pub fn privileged_view(
         if let Some(used) = unit_tables.get(t) {
             // #2618: the target's own `private` declarations are in the view
             // (its table, above); a commons it uses keeps its own.
-            view.merge(&used.importable(), true, true);
+            // #4403: through the target's own view of it, so a name its `uses`
+            // clauses qualify (`lib.x.Status`) or rename is in the view under
+            // the spelling the target writes.
+            let plain = used.importable();
+            view.merge(local.seen_through(t, &plain), true, true);
             imported.push(t.clone());
         }
     }

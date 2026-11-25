@@ -407,7 +407,11 @@ pub(super) fn emit_boundary_helpers(
         for (commons_name, names) in &by_commons {
             for n in names {
                 by_path
-                    .entry(commons_decl_path(ctx, commons_name, n))
+                    .entry(commons_decl_path(
+                        ctx,
+                        commons_name,
+                        bynk_check::emitted_names::declared_name_of_key(n),
+                    ))
                     .or_default()
                     .insert(n.clone());
             }
@@ -420,7 +424,10 @@ pub(super) fn emit_boundary_helpers(
             );
             let parts: Vec<String> = names
                 .iter()
-                .flat_map(|n| [format!("__serialise_{n}"), format!("__deserialise_{n}")])
+                .flat_map(|n| {
+                    let n = bynk_check::emitted_names::codec_key(n);
+                    [format!("__serialise_{n}"), format!("__deserialise_{n}")]
+                })
                 .collect();
             let import_parts: Vec<String> = names
                 .iter()
@@ -692,7 +699,11 @@ fn commons_codec_imports(
             continue;
         }
         let path = if let Some(commons_name) = codec_owner(ctx, &n) {
-            commons_decl_path(ctx, commons_name, &n)
+            commons_decl_path(
+                ctx,
+                commons_name,
+                bynk_check::emitted_names::declared_name_of_key(&n),
+            )
         } else if siblings
             && let Some(path) = ctx.file_decl_index.types.get(&n)
             && path.as_path() != ctx.source_path.as_path()
@@ -764,7 +775,17 @@ pub(super) fn unbranded_commons_qual(
                 n,
             )
         })
-        .map(|n| (n.clone(), commons_alias(n)))
+        .map(|n| {
+            // #4403: a name a `uses` clause qualifies (`lib.x.Status`, `X.Status`) is read
+            // through the commons' namespace import, which is unbranded as it is; it has no
+            // `__Commons` alias.
+            let spelled = if n.contains('.') {
+                bynk_check::emitted_names::use_qualified_name(n).unwrap_or_else(|| n.clone())
+            } else {
+                commons_alias(n)
+            };
+            (n.clone(), spelled)
+        })
         .collect()
 }
 
@@ -772,6 +793,13 @@ pub(super) fn unbranded_commons_qual(
 /// `__deserialise_`) as an import specifier: for a type this unit renames, the
 /// helper the module exports for the real type, bound under the alias's name.
 fn codec_import_spec(ctx: &EmitProjectCtx, prefix: &str, n: &str) -> String {
+    // #4403: a name a `uses` clause qualifies (`lib.x.Status`) is one dotted key; its
+    // helper is the declared type's, bound under an underscore name.
+    if n.contains('.') {
+        let declared = bynk_check::emitted_names::declared_name_of_key(n);
+        let bound = bynk_check::emitted_names::codec_key(n);
+        return format!("{prefix}{declared} as {prefix}{bound}");
+    }
     match ctx.consumed_type_aliases.get(n) {
         Some(original) => format!("{prefix}{original} as {prefix}{n}"),
         None => format!("{prefix}{n}"),
