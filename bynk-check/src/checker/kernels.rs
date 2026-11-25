@@ -5,13 +5,15 @@
 
 use super::keying::{KeySite, check_key};
 use super::*;
-use crate::kernel_methods::{KernelMethod, LIST_METHODS, MAP_METHODS, QUERY_METHODS, SET_METHODS};
+use crate::kernel_methods::{
+    EFFECT_RESULT_METHODS, KernelMethod, LIST_METHODS, MAP_METHODS, QUERY_METHODS, SET_METHODS,
+};
 
 /// Render a kernel's method names for a `method_not_found` message —
 /// `` `map`, `filter`, … `` — generated from a `KernelMethod` table rather
 /// than hand-listed at each call site, so the message can't drift from the
 /// table the way `Query`'s once did (T1.6′).
-fn kernel_vocabulary(methods: &[KernelMethod]) -> String {
+pub(super) fn kernel_vocabulary(methods: &[KernelMethod]) -> String {
     methods
         .iter()
         .map(|k| format!("`{}`", k.name))
@@ -2847,6 +2849,7 @@ pub(crate) fn check_effect_method(
     match method.name.as_str() {
         "within" => check_effect_within_method(method, args, inner, span, ctx),
         "race" => check_effect_race_method(args, inner, span, ctx),
+        "map" | "andThen" => super::effect_more::check_map_and_then(method, args, inner, span, ctx),
         _ => check_effect_detach_method(receiver, args, span, ctx),
     }
 }
@@ -3539,11 +3542,11 @@ pub(crate) fn check_effect_result_kernel_method(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
-                    "the built-in `Effect[Result[{}, {}]]` type has no method `{}` — the kernel is \
-                     `mapOk`, `mapErr`, `flatMapOk`, `flatMapErr`",
+                    "the built-in `Effect[Result[{}, {}]]` type has no method `{}` — the kernel is {}",
                     ok.display(tys),
                     err.display(tys),
-                    method.name
+                    method.name,
+                    kernel_vocabulary(EFFECT_RESULT_METHODS)
                 ),
             ));
             for a in args {

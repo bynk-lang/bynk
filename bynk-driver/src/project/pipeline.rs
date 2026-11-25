@@ -1235,7 +1235,7 @@ pub(super) fn run_checks(
         &unit_consumes,
         &unit_consumes_aliases,
         &unit_tables,
-        &unit_callees,
+        (&unit_callees, &unit_uses, tys),
         &unit_flattened,
         &mut errors,
     );

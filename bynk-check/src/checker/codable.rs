@@ -100,37 +100,10 @@ pub(crate) fn null_payload_option_ty(
     crate::context_checks::null_payload_option(&tref, types, &mut HashSet::new())
 }
 
-/// A `Codable` checker type as the `TypeRef` the codec machinery reads. `None`
-/// for a type with no codec (it never reaches here: `json_codable` ran first).
+/// A `Codable` checker type as the `TypeRef` the codec machinery reads: the shared
+/// `Ty` to `TypeRef` conversion ([`crate::ty_ref::ty_to_type_ref`]).
 fn codable_type_ref(t: TyId, tys: &Types) -> Option<bynk_syntax::ast::TypeRef> {
-    use bynk_syntax::ast::{Ident, TypeRef};
-    let sp = Span::new(0, 0);
-    let b = |t: TyId| codable_type_ref(t, tys).map(Box::new);
-    Some(match &*tys.get(t) {
-        Ty::Base(base) => TypeRef::Base(*base, sp),
-        Ty::Named { name, args, .. } if !args.is_empty() => TypeRef::App {
-            name: Ident {
-                name: name.clone(),
-                span: sp,
-            },
-            args: args
-                .iter()
-                .map(|a| codable_type_ref(*a, tys))
-                .collect::<Option<Vec<_>>>()?,
-            span: sp,
-        },
-        Ty::Named { name, .. } => TypeRef::Named(Ident {
-            name: name.clone(),
-            span: sp,
-        }),
-        Ty::Result(a, e) => TypeRef::Result(b(*a)?, b(*e)?, sp),
-        Ty::Option(a) => TypeRef::Option(b(*a)?, sp),
-        Ty::List(a) => TypeRef::List(b(*a)?, sp),
-        Ty::Set(a) => TypeRef::Set(b(*a)?, sp),
-        Ty::Map(k, v) => TypeRef::Map(b(*k)?, b(*v)?, sp),
-        Ty::Unit => TypeRef::Unit(sp),
-        _ => return None,
-    })
+    crate::ty_ref::ty_to_type_ref(t, tys)
 }
 
 /// The `bynk.crypto` key type (`SigningKey`/`VerifyKey`) `t` is or contains, if any.

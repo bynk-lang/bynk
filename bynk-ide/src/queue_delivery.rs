@@ -199,6 +199,141 @@ pub fn message_address_label(
     label
 }
 
+/// #3879: the context that consumes `queue` and the message type it takes, as
+/// written, over the current buffer and the project's files. `None` when no
+/// context in the project consumes it.
+pub fn consumer_of(
+    queue: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Option<(String, String)> {
+    let mut found = None;
+    for_each_unit(doc_text, files, |unit| {
+        let SourceUnit::Context(c) = unit else {
+            return;
+        };
+        for item in &c.items {
+            let CommonsItem::Service(s) = item else {
+                continue;
+            };
+            let ServiceProtocol::Queue { name } = &s.protocol else {
+                continue;
+            };
+            if name != queue || found.is_some() {
+                continue;
+            }
+            let message = s
+                .handlers
+                .iter()
+                .filter(|h| matches!(h.kind, HandlerKind::Message))
+                .find_map(|h| {
+                    h.params
+                        .iter()
+                        .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
+                });
+            if let Some(m) = message {
+                found = Some((c.name.joined(), type_ref_str(&m.type_ref)));
+            }
+        }
+    });
+    found
+}
+
+/// #3879: the line a `Queue` instance's hover gains: who consumes the queue and
+/// what the consumer takes, which a `sendValue*` is checked against, or that
+/// nothing in this project consumes it (so nothing is checked).
+pub fn consumer_note(
+    queue: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> String {
+    match consumer_of(queue, doc_text, files) {
+        Some((context, ty)) => format!(
+            "\nConsumed by `{context}`, which takes `{ty}`: `sendValue`, `sendValueWith` and `sendValueBatch` are checked against it.\n"
+        ),
+        None => "\nNo consumer in this project, so a send is not checked against a message type.\n"
+            .to_string(),
+    }
+}
+
+/// #3879: `content`, a hover for a derived `Queue` instance, with its consumer
+/// note added; any other hover is returned as it is.
+pub fn with_consumer_note(
+    content: String,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> String {
+    const MARK: &str = "sending to queue `";
+    if !content.starts_with("```bynk\ncapability ") {
+        return content;
+    }
+    let Some(rest) = content.find(MARK).map(|i| &content[i + MARK.len()..]) else {
+        return content;
+    };
+    let Some(queue) = rest.split('`').next() else {
+        return content;
+    };
+    let note = consumer_note(queue, doc_text, files);
+    format!("{content}{note}")
+}
+
+/// #3879: the signature label of `Instance.sendValue*(…)` on a `Queue` instance
+/// whose queue the project consumes, with the message type the consumer expects
+/// in place of the open `T`. `None` for any other receiver or operation.
+pub fn send_value_label(
+    instance: &str,
+    op: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Option<String> {
+    if !["sendValue", "sendValueWith", "sendValueBatch"].contains(&op) {
+        return None;
+    }
+    // A capability name is scoped to its context, so the instance is looked up in the
+    // document's own unit first; only when it is declared elsewhere does the project's
+    // other units answer.
+    let from_unit = |unit: &SourceUnit| -> Option<String> {
+        let SourceUnit::Context(c) = unit else {
+            return None;
+        };
+        c.items.iter().find_map(|item| {
+            let CommonsItem::Capability(cap) = item else {
+                return None;
+            };
+            let d = cap.derived.as_ref()?;
+            let ann = d.annotations.iter().find(|a| a.name.name == "name")?;
+            match &ann.args.first()?.value.kind {
+                bynk_syntax::ast::ExprKind::StrLit(q)
+                    if cap.name.name == instance && d.base.name == "Queue" =>
+                {
+                    Some(q.clone())
+                }
+                _ => None,
+            }
+        })
+    };
+    let own = tokenize(doc_text)
+        .ok()
+        .and_then(|tokens| bynk_syntax::parser::parse_unit_with_recovery(&tokens, doc_text).0)
+        .and_then(|unit| from_unit(&unit));
+    let mut queue = own;
+    if queue.is_none() {
+        for_each_unit(doc_text, files, |unit| {
+            if queue.is_none() {
+                queue = from_unit(unit);
+            }
+        });
+    }
+    let (_, ty) = consumer_of(&queue?, doc_text, files)?;
+    Some(match op {
+        "sendValue" => format!("{instance}.sendValue(message: {ty}) -> Effect[()]"),
+        "sendValueWith" => {
+            format!("{instance}.sendValueWith(message: {ty}, options: QueueSend) -> Effect[()]")
+        }
+        _ => format!("{instance}.sendValueBatch(messages: List[{ty}]) -> Effect[()]"),
+    })
+}
+
 /// The cursor is at a parameter-*name* position in the parameter list of an
 /// `on message( … )` handler header: the innermost open paren follows `on message`,
 /// and the current parameter has no `:` yet.
@@ -292,6 +427,41 @@ mod tests {
         assert!(!in_message_param_name_position(t3, t3.len()));
     }
 
+    const PROJECT: &str = "context shop.orders\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"order-events\")\ncapability Audit = Queue @name(\"audit\")\n\nservice fulfil from queue(\"order-events\") {\n  on message(order: Order) -> Effect[QueueResult] { Ack }\n}\n";
+
+    #[test]
+    fn a_queue_instance_hover_names_its_consumer_or_says_there_is_none() {
+        let hover = |queue: &str| {
+            with_consumer_note(
+                format!(
+                    "```bynk\ncapability X = Queue\n```\n\nEmits `[[queues.producers]]` sending to queue `{queue}` (x)."
+                ),
+                PROJECT,
+                None,
+            )
+        };
+        assert!(hover("order-events").contains("Consumed by `shop.orders`, which takes `Order`"));
+        assert!(hover("audit").contains("No consumer in this project"));
+        assert_eq!(
+            with_consumer_note("type A = Int".to_string(), PROJECT, None),
+            "type A = Int"
+        );
+    }
+
+    #[test]
+    fn send_value_signature_shows_the_consumers_message_type() {
+        assert_eq!(
+            send_value_label("OrderEvents", "sendValue", PROJECT, None).as_deref(),
+            Some("OrderEvents.sendValue(message: Order) -> Effect[()]")
+        );
+        assert_eq!(
+            send_value_label("OrderEvents", "sendValueBatch", PROJECT, None).as_deref(),
+            Some("OrderEvents.sendValueBatch(messages: List[Order]) -> Effect[()]")
+        );
+        assert_eq!(send_value_label("Audit", "sendValue", PROJECT, None), None);
+        assert_eq!(send_value_label("OrderEvents", "send", PROJECT, None), None);
+    }
+
     #[test]
     fn retry_after_hovers_with_its_payload_and_range() {
         let src = "on message(m: String) -> Effect[QueueResult] { RetryAfter(\"x\", 30.seconds) }";
@@ -302,6 +472,19 @@ mod tests {
         assert_eq!(
             describe_retry_after_at(src, src.find("Effect").unwrap() + 1),
             None
+        );
+    }
+
+    #[test]
+    fn send_value_signature_prefers_the_documents_own_instance() {
+        let other = "context shop.billing\n\nconsumes bynk.cloudflare { Queue }\n\ncapability OrderEvents = Queue @name(\"billing-events\")\n\nservice pay from queue(\"billing-events\") {\n  on message(invoice: Invoice) -> Effect[QueueResult] { Ack }\n}\n";
+        let dir = std::env::temp_dir().join("bynk-sigdoc-4281");
+        let mut files = HashMap::new();
+        files.insert(dir.join("billing.bynk"), other.to_string());
+        // The document's own `OrderEvents` names `order-events`, whatever another context's names.
+        assert_eq!(
+            send_value_label("OrderEvents", "sendValue", PROJECT, Some(&files)).as_deref(),
+            Some("OrderEvents.sendValue(message: Order) -> Effect[()]")
         );
     }
 }

@@ -1461,6 +1461,7 @@
 /reference/diagnostics/bynk.cron.numeric_weekday/
 /reference/diagnostics/bynk.cron.return_not_effect_result/
 /reference/diagnostics/bynk.cron.uneven_step/
+/reference/diagnostics/bynk.d1.decimal_numeric_affinity/
 /reference/diagnostics/bynk.d1.migration_invalid/
 /reference/diagnostics/bynk.d1.migration_name/
 /reference/diagnostics/bynk.d1.migration_unreadable/
@@ -1729,6 +1730,7 @@
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
 /reference/diagnostics/bynk.map.deprecated_function/
+/reference/diagnostics/bynk.match.refined_pattern_is_range/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/
 /reference/diagnostics/bynk.messages.invalid_locale_tag/
@@ -1876,9 +1878,11 @@
 /reference/diagnostics/bynk.queue.delivery_not_queue/
 /reference/diagnostics/bynk.queue.duplicate_consumer/
 /reference/diagnostics/bynk.queue.invalid_name/
+/reference/diagnostics/bynk.queue.message_type_mismatch/
 /reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
+/reference/diagnostics/bynk.queue.untyped_send/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/
 /reference/diagnostics/bynk.race.outside_handler/

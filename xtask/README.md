@@ -16,7 +16,10 @@ run as `cargo xtask <command>`.
   real numbers in merge order, so parallel PRs never race for the same
   version).
 - `stamp` — assigns the version(s) and ADR number(s) for the pending files
-  and materialises them. Dry-run by default; `--apply` to write.
+  and materialises them. Dry-run by default; `--apply` to write. Records each
+  consumed file in `design/stamped.txt`, and deletes (without a version) any
+  pending file the ledger says was already stamped, so a stale copy is never
+  stamped twice; `check-pending` fails a PR that carries one (#4319).
 - `greenfield-status` — runs the compiler-architecture probes
   (`design/greenfield-status.md`) against the tree and prints the report,
   exiting non-zero if a gated probe disagrees with the committed table — the

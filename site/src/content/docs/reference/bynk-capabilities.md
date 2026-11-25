@@ -746,9 +746,17 @@ on POST("/orders") (order: Order) -> Effect[HttpResult[String]] by Visitor given
 Text that is not JSON faults the send, and so does going over the platform's
 caps: 128 KB a message, and 100 messages or 256 KB a batch. Delivery is at least
 once and the platform stores the messages, so make consumers idempotent and keep
-secrets out of bodies. Nothing checks that a producer's message matches the
-consumer's message type: `send`'s body is text, encoded by the caller, and
-`sendValue` checks only that its argument is `Codable`.
+secrets out of bodies.
+
+When a context in the project consumes the queue the instance names, the typed sends
+are checked against the consumer's message type: a `sendValue`, `sendValueWith` or
+`sendValueBatch` (its elements) that sends a type the consumer cannot accept is
+`bynk.queue.message_type_mismatch`, by the comparison a cross-context call gets, so a
+stronger refinement is admitted where the consumer expects a weaker one. `send`,
+`sendWith` and `sendBatch` take JSON text the compiler cannot check, so they warn
+(`bynk.queue.untyped_send`) and name the typed form; they stay legal for forwarding a
+body that is already encoded. A queue nobody in the project consumes is not checked.
+See [Queue](/reference/queue/#producers-and-consumers-agree).
 
 In tests each instance accepts every send, checking that each body is JSON (and
 a delay is in range) as the platform binding does; nothing is delivered to a
@@ -2101,7 +2109,8 @@ message. `SqlError` is extensible, so a `match` over it needs a wildcard.
 `Option` of either (`NULL` is `None`), or a `List` of such records. A `Decimal`
 field reads canonical decimal text, so declare its column `TEXT`: a `DECIMAL`,
 `NUMERIC` or `REAL` column has numeric affinity in SQLite, arrives as a JSON
-number and fails the decode. Anything else is
+number and fails the decode, so the compiler warns where it can see the declared
+type (`bynk.d1.decimal_numeric_affinity`). Anything else is
 `bynk.types.sql_row_shape`. Only `0` and `1` become booleans: a `Bool` column
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.

@@ -377,16 +377,21 @@ fn scan_with<'a>(
     let mut facts = Facts::default();
     walk(&mut |e| {
         match callees.get(&e.id) {
+            // #3965: `map` and `andThen` build an effect; they use no execution context, so
+            // only `within`, `race` and `detach` count here.
             Some(Callee::Kernel {
                 recv,
-                op: KernelOp::Effect(op),
-            }) => {
-                if matches!(&*tys.get(*recv), Ty::Effect(_)) {
-                    // `detach` registers no timer, so it does not put a test
-                    // module on virtual time.
-                    facts.timed |= !matches!(op, crate::kernel_op::EffectOp::Detach);
-                    facts.direct.get_or_insert((op.name(), e.span));
-                }
+                op:
+                    KernelOp::Effect(
+                        op @ (crate::kernel_op::EffectOp::Within
+                        | crate::kernel_op::EffectOp::Race
+                        | crate::kernel_op::EffectOp::Detach),
+                    ),
+            }) if matches!(&*tys.get(*recv), Ty::Effect(_)) => {
+                // `detach` registers no timer, so it does not put a test
+                // module on virtual time.
+                facts.timed |= !matches!(op, crate::kernel_op::EffectOp::Detach);
+                facts.direct.get_or_insert((op.name(), e.span));
             }
             Some(
                 Callee::Fn(d, _)

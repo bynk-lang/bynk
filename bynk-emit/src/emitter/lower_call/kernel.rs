@@ -132,7 +132,18 @@ fn lower_effect_kernel_call(
                 call(ident("__bynkDetach"), n)
             });
         }
-        EffectOp::Within | EffectOp::Race | EffectOp::Detach => {}
+        // #3965: an effect is a promise, so `e.map(f)` and `e.andThen(f)` are `e.then(f)`
+        // (a promise returned by `f` is followed, which is exactly `andThen`).
+        EffectOp::Map | EffectOp::AndThen if args.len() == 1 => {
+            let recv = pre.lower_node(receiver, cx);
+            let f = pre.lower_node(&args[0], cx);
+            return Some(call(member(paren(recv), "then"), vec![f]));
+        }
+        EffectOp::Within
+        | EffectOp::Race
+        | EffectOp::Detach
+        | EffectOp::Map
+        | EffectOp::AndThen => {}
     }
     None
 }
