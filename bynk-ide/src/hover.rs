@@ -101,6 +101,18 @@ pub struct HoverInput<'a> {
     pub files: Option<&'a HashMap<PathBuf, String>>,
 }
 
+/// `content` with [`used_name_note`] appended when there is one.
+fn with_used_name_note(
+    content: String,
+    a: &HoverAnalysis<'_>,
+    key: &bynk_check::index::SymbolKey,
+) -> String {
+    match used_name_note(a, key) {
+        Some(note) => format!("{content}\n\n{note}"),
+        None => content,
+    }
+}
+
 /// #4045: a name a `uses` clause renames or qualifies (`YStatus`, `Y.Status`) says
 /// which declaration it is and where from, since the spelling in the file is not
 /// the one the commons declares.
@@ -164,11 +176,10 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
             } else {
                 content
             };
-            let content = match used_name_note(a, key) {
-                Some(note) => format!("{content}\n\n{note}"),
-                None => content,
-            };
-            return Some(with_capability_path(content, a));
+            return Some(with_capability_path(
+                with_used_name_note(content, a, key),
+                a,
+            ));
         }
         // 1a. #2469: a `given` entry whose capability rung 1 could not describe
         //    still explains why the declaration needs it.

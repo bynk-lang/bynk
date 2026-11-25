@@ -19,6 +19,7 @@ use bynk_check::project_model::BuildTarget;
 use bynk_check::project_model::{self, AdapterBinding};
 use bynk_check::requirements::RequirementSink;
 use bynk_check::symbols::UnitTable;
+use bynk_check::uses_view;
 use bynk_emit::emit_model::ImportExt;
 use bynk_emit::emit_model::RemoteTests;
 use bynk_emit::emit_model::SchemaVersions;
@@ -593,6 +594,8 @@ pub(super) fn run_checks(
         &mut unit_tables,
         &mut errors,
     );
+    // #4045: `uses` views: selection, renames, aliases, qualified names, shared names.
+    uses_view::phase_use_views(&unit_uses, &parsed, &groups, &mut unit_tables, &mut errors);
     let unit_tables = unit_tables;
     // #3477: each `Container`'s `@build` directory holds a Dockerfile.
     bynk_check::containers::phase_container_builds(
@@ -656,17 +659,6 @@ pub(super) fn run_checks(
     // -- 5c. Detect `consumes` cycles. --
     project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
 
-    // -- 6. `uses` views: selection, renames, aliases, qualified names, and the
-    //       names two used commons share (#4045). --
-    let mut unit_tables = unit_tables;
-    bynk_check::uses_view::phase_use_views(
-        &unit_uses,
-        &parsed,
-        &groups,
-        &mut unit_tables,
-        &mut errors,
-    );
-    let unit_tables = unit_tables;
     // -- 6.1. #2618: a public signature naming a private type. --
     project_model::phase_private_in_public(&parsed, &groups, &mut errors);
 
