@@ -43,6 +43,22 @@ fn embed_conversion(
     bynk_check::checker::embedding_for(f_err, *e, &cx.commons().types, tys.types())
 }
 
+/// #3966: does the enclosing body return an `Option` (or an `Effect` of one)? Then a `?` on an
+/// `Option` returns the `None` itself, rather than answering an `HttpResult` handler's `NotFound`.
+/// The checker accepted the `?` under the same rule.
+fn option_returns_option(cx: &LowerCtx) -> bool {
+    let tys = cx.ty_render();
+    let mut ty = cx.return_ty;
+    while let Some(t) = ty {
+        let node = tys.get(t);
+        if matches!(&*node, bynk_check::checker::Ty::Option(_)) {
+            return true;
+        }
+        ty = node.as_effect();
+    }
+    false
+}
+
 /// Peel `Result[_, E]` / `Effect[Result[_, E]]` to the error type `E`.
 fn peel_result_err(
     ty: bynk_check::checker::TyId,
@@ -121,6 +137,8 @@ enum QuestionExit {
     Embed { ty_name: String, variant: String },
     /// `Err` propagates unchanged.
     Plain,
+    /// #3966: in a body returning `Option`, `None` propagates unchanged.
+    NoneUnchanged,
 }
 
 /// The `?` guard as a statement node: `if (__rN.tag === "Err") return …;`. The
@@ -128,7 +146,7 @@ enum QuestionExit {
 /// byte-identical to the text form. The case form is an `InlineBlock`, which
 /// prints `{ throw …; }` on the one line today's text has.
 fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
-    let tag = if matches!(exit, QuestionExit::NotFound) {
+    let tag = if matches!(exit, QuestionExit::NotFound | QuestionExit::NoneUnchanged) {
         "None"
     } else {
         "Err"
@@ -174,7 +192,9 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
             )),
             None,
         ),
-        QuestionExit::Plain => bynk_ts::TsStmt::return_stmt(Some(ident(tmp)), None),
+        QuestionExit::Plain | QuestionExit::NoneUnchanged => {
+            bynk_ts::TsStmt::return_stmt(Some(ident(tmp)), None)
+        }
     };
     bynk_ts::TsStmt::if_stmt(cond, then, None)
 }
@@ -224,6 +244,8 @@ pub(super) fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lower
             end: e.span.end,
             src: expect_source_text_raw(cx, e.span),
         }
+    } else if is_option && option_returns_option(cx) {
+        QuestionExit::NoneUnchanged
     } else if is_option {
         QuestionExit::NotFound
     } else if let Some((ty_name, variant)) = embed {

@@ -3197,18 +3197,33 @@ pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<
             lint_header_question(inner, span, ctx);
             return Some(*t);
         }
-        ctx.errors.push(
-            CompileError::new(
-                "bynk.types.question_option_outside_http",
-                span,
-                "the `?` operator lifts an `Option` only inside a handler returning `HttpResult` (where `None` becomes `NotFound`)",
-            )
-            .with_label(
-                ctx.return_ty_span,
-                format!("function returns `{}`", ctx.return_ty.display(tys)),
-            )
-            .with_note("to turn an `Option` into a `Result` elsewhere, use `.okOr(err)`"),
-        );
+        // #3966: in a body returning `Option[_]` (or `Effect[Option[_]]`) `None` returns
+        // early as `None`. `Option` and `Result` never convert, so a `Result` body keeps the
+        // refusal, with a fix that makes the `Option` a `Result`.
+        if peel_to_option(ctx.return_ty, tys).is_some() {
+            return Some(*t);
+        }
+        let mut err = CompileError::new(
+            "bynk.types.question_option_outside_http",
+            span,
+            "the `?` operator on an `Option` needs a function returning `Option` (where `None` returns early) or `HttpResult` (where `None` becomes `NotFound`)",
+        )
+        .with_label(
+            ctx.return_ty_span,
+            format!("function returns `{}`", ctx.return_ty.display(tys)),
+        )
+        .with_note("to turn an `Option` into a `Result` elsewhere, use `.okOr(err)`");
+        if peel_to_result(ctx.return_ty, tys).is_some() {
+            err = err.with_suggestion(
+                "make the `Option` a `Result`, naming the error for `None`",
+                vec![(
+                    Span::new_in(span.file, inner.span.end, inner.span.end),
+                    ".okOr(<error>)".to_string(),
+                )],
+                Applicability::HasPlaceholders,
+            );
+        }
+        ctx.errors.push(err);
         return None;
     }
     let Ty::Result(t, e) = &*tys.get(inner_ty) else {

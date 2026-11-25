@@ -1,0 +1,31 @@
+suite demo.opt
+
+case "a full chain yields the value" {
+	let o = Order { address: Some(Addr { city: Some("Leeds"), country: "UK" }) }
+	expect shipTo(o) == Some("Leeds, UK")
+}
+
+case "a missing link returns None early" {
+	let noCity = Order { address: Some(Addr { city: None, country: "UK" }) }
+	expect shipTo(noCity) == None
+	let noAddr = Order { address: None }
+	expect shipTo(noAddr) == None
+}
+
+case "a plain function propagates None" {
+	expect firstPlusOne([4, 5]) == Some(5)
+	expect firstPlusOne([]) == None
+}
+
+case "an effectful body propagates None" {
+	let a <- viaEffect([1])
+	expect a == Some(2)
+	let b <- viaEffect([])
+	expect b == None
+}
+
+case "a lambda returns from the lambda, not the function" {
+	expect doubledFirst([3]) == Some(6)
+	expect doubledFirst([]) == None
+	expect lambdaNoneStaysInLambda([]) == -1
+}

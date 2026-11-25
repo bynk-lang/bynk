@@ -1,0 +1,8 @@
+commons demo.optinplain
+
+fn lookup(id: Int) -> Option[Int] { Some(id) }
+
+fn bad(id: Int) -> Int {
+	let x = lookup(id)?
+	x + 1
+}

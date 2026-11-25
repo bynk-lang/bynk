@@ -61,6 +61,29 @@ commons demo {
 If `Reps.of(n)` is `Err(e)`, `doubled` returns `Err(e)` immediately; otherwise
 `r` is the unwrapped value.
 
+`?` also works on an `Option`, inside a function that returns an `Option` (or an
+`Effect` of one). A `Some` is unwrapped, and a `None` is returned as it is:
+
+```bynk
+commons demo {
+	type Addr = { city: Option[String], country: String }
+	type Order = { address: Option[Addr] }
+
+	fn shipTo(o: Order) -> Option[String] {
+		let addr = o.address?
+		let city = addr.city?
+		Some("\(city), \(addr.country)")
+	}
+}
+```
+
+A lambda follows its own return type, so a `?` in a lambda returning an `Option`
+leaves the lambda, not the function around it. An `Option` and a `Result` never
+convert into each other: in a function returning a `Result`, `?` on an `Option` is
+refused (`bynk.types.question_option_outside_http`), and `.okOr(err)` turns it into a
+`Result` first. In an HTTP handler returning `HttpResult`, the `None` of a `?` answers
+`404 NotFound` instead; see [HTTP](/reference/http/).
+
 ## Sequence fallible steps with `let … else` {#let-else}
 
 `?` hands an `Err` straight back to the caller. When a failure needs handling

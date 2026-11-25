@@ -1,0 +1,38 @@
+commons demo.opt
+
+type Addr = { city: Option[String], country: String }
+type Order = { address: Option[Addr] }
+
+fn shipTo(o: Order) -> Option[String] {
+	let addr = o.address?
+	let city = addr.city?
+	Some("\(city), \(addr.country)")
+}
+
+fn firstPlusOne(xs: List[Int]) -> Option[Int] {
+	let a = xs.first()?
+	Some(a + 1)
+}
+
+fn viaEffect(xs: List[Int]) -> Effect[Option[Int]] {
+	let a = xs.first()?
+	Effect.pure(Some(a + 1))
+}
+
+fn apply(f: (List[Int]) -> Option[Int], xs: List[Int]) -> Option[Int] {
+	f(xs)
+}
+
+fn doubledFirst(xs: List[Int]) -> Option[Int] {
+	apply((ys) => {
+		let a = ys.first()?
+		Some(a * 2)
+	}, xs)
+}
+
+fn lambdaNoneStaysInLambda(xs: List[Int]) -> Int {
+	apply((ys) => {
+		let a = ys.first()?
+		Some(a)
+	}, xs).getOrElse(-1)
+}
