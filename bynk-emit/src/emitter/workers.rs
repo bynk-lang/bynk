@@ -1224,7 +1224,7 @@ fn identity_split_wrapper(
 ) -> Vec<TsObjectEntry> {
     let method_key = http_handler_method_name_ir(method, path);
     let verify_return = TsType::named(
-        "globalThis.Promise<{ tag: \"Err\"; error: unknown } | { tag: \"Ok\"; value: { key: string; principal: object } }>",
+        "globalThis.Promise<{ tag: \"Err\"; error: any } | { tag: \"Ok\"; value: { key: string; principal: any } }>",
     );
     stmts.push(return_(Some(TsExpr::object(vec![
         ("tag".to_string(), str_lit("Ok")),
@@ -1268,7 +1268,7 @@ fn identity_split_wrapper(
         .collect();
     params.push(TsParam::new(
         "principal".to_string(),
-        Some(TsType::named("object")),
+        Some(TsType::named("any")),
     ));
     let mut args: Vec<TsExpr> = h
         .params

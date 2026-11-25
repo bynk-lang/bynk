@@ -4,7 +4,7 @@
   "categoryAnchor": "http",
   "code": "bynk.http.rate_limit_key_unavailable",
   "constructs": [],
-  "example": "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(PostLimit, key: identity)     // ✓ a Bearer actor has one\non PUT(\"/posts/:id\") (id: PostId, body: Post) -> Effect[HttpResult[()]] by u: User { … }",
+  "example": "@rateLimit(SignupLimit, key: identity)   // ✗ a Visitor has no identity\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ count by address\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }",
   "severity": "error",
   "summary": "A `@rateLimit` uses `key: identity` on a route whose actor carries no identity."
 }
