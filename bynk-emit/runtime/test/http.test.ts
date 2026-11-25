@@ -57,6 +57,9 @@ import {
   type CookieValue,
   queryObject,
   queryString,
+  problemRejection,
+  rateLimitAllows,
+  rateLimitedResponse,
   renderRejection,
   responseToHttpResult,
   type CorsPolicy,
@@ -1901,4 +1904,75 @@ test("headerPairs: repeated Wire lines combine; a list item with a comma or quot
   assert.throws(() => headerPairs({ tags: ['say "x"'] }), /does not survive/);
   // A non-list value may hold a comma (a `Date`).
   assert.deepEqual(headerPairs({ date: "Tue, 15 Nov 1994" }), { date: "Tue, 15 Nov 1994" });
+});
+
+test("rateLimitAllows: counts by CF-Connecting-IP, and shares `unknown` without one (#3926)", async () => {
+  const seen: string[] = [];
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      seen.push(key);
+      return { success: key !== "9.9.9.9" };
+    },
+  };
+  const from = (ip?: string) => new Request("https://x.test/", ip ? { headers: { "cf-connecting-ip": ip } } : {});
+  assert.equal(await rateLimitAllows(limiter, from("1.2.3.4")), true);
+  assert.equal(await rateLimitAllows(limiter, from("9.9.9.9")), false);
+  assert.equal(await rateLimitAllows(limiter, from()), true);
+  assert.deepEqual(seen, ["1.2.3.4", "9.9.9.9", "unknown"]);
+});
+
+test("rateLimitedResponse: a 429 with Retry-After and the RateLimited rejection (#3926)", async () => {
+  const res = rateLimitedResponse(60);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  const body = (await res.json()) as { kind: string; details: string };
+  assert.equal(body.kind, "RateLimited");
+  assert.match(body.details, /60 seconds/);
+});
+
+test("responseToHttpOutcome: the router's 429 is Rejected(RateLimited); a handler's TooManyRequests stays Handled (#3926)", async () => {
+  const deser = (v: JsonValue) => ({ tag: "Ok", value: v }) as never;
+  const routed = await responseToHttpOutcome(rateLimitedResponse(10), deser);
+  assert.equal(routed.tag, "Rejected");
+  assert.equal((routed as { value: { tag: string } }).value.tag, "RateLimited");
+  const handled = await responseToHttpOutcome(
+    new Response(JSON.stringify({ error: "slow down" }), { status: 429, headers: { "content-type": "application/json" } }),
+    deser,
+  );
+  assert.equal(handled.tag, "Handled");
+});
+
+test("problemRejection: the 429 keeps Retry-After and becomes problem details of type rate-limited (#3926)", async () => {
+  const res = await problemRejection(rateLimitedResponse(60));
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "application/problem+json");
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body.type, "https://bynk-lang.org/problems/rate-limited");
+  assert.equal(body.title, "Too Many Requests");
+  assert.equal(body.kind, "RateLimited");
+  assert.match(String(body.detail), /60 seconds/);
+});
+
+test("renderRejection: `on rejected` receives RateLimited(detail) and its RawError keeps Retry-After (#3926)", async () => {
+  const seen: { tag: string; detail: string }[] = [];
+  const hook = async (why: { tag: string; detail: string }) => {
+    seen.push(why);
+    return HttpResult.RawError(429, new TextEncoder().encode("slow down"), "text/plain");
+  };
+  const res = await renderRejection(rateLimitedResponse(60), hook as never);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].tag, "RateLimited");
+  assert.match(seen[0].detail, /60 seconds/);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(await res.text(), "slow down");
+});
+
+test("a rate-limited 429 stamped with the CORS policy carries the grant and Retry-After (#3926)", async () => {
+  const res = applyCors(rateLimitedResponse(10), listPolicy, "https://app.example.com");
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("access-control-allow-origin"), "https://app.example.com");
+  assert.equal(res.headers.get("retry-after"), "10");
 });

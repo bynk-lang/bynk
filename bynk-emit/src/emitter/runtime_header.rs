@@ -264,6 +264,8 @@ const WORKER_ORDER: &[&str] = &[
     "__noStore",
     "__privateByDefault",
     "__problemRejection",
+    "__rateLimitAllows",
+    "__rateLimitedResponse",
     "__edgeCacheGuard",
     "__varyAcceptLanguage",
     "__SecurityPolicy",

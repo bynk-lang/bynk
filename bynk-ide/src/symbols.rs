@@ -764,6 +764,9 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
         for h in handlers {
             for ann in &h.annotations {
                 if span_covers(ann.span, offset) {
+                    if ann.name.name == "rateLimit" {
+                        return Some(render_rate_limit_hover(ann, items));
+                    }
                     return Some(render_handler_annotation_hover(ann, h, service_cap));
                 }
             }
@@ -1874,6 +1877,72 @@ fn cache_control_of(ann: &Annotation) -> Option<String> {
 /// closed handler-annotation set. `@cache`, `@limit` (v0.142) and `@raw` carry prose; any
 /// other name (a typo the checker will flag) still hovers as its formatted form so
 /// the surface is never silent.
+/// #3926: hover for `@rateLimit(Limiter, key: …)`: the limiter's limit and window, read from
+/// the `capability` declaration beside it in the same unit when it is there, the key, and
+/// where in the request the router asks it.
+fn render_rate_limit_hover(ann: &Annotation, items: &[CommonsItem]) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let sig = bynk_fmt::annotation_to_string(ann);
+    let ident_of = |e: Option<&bynk_syntax::ast::AnnotationArg>| {
+        e.and_then(|a| match &a.value.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        })
+    };
+    let limiter = ident_of(ann.args.first());
+    let key = ident_of(
+        ann.args
+            .iter()
+            .find(|a| a.label.as_ref().is_some_and(|l| l.name == "key")),
+    );
+    let counts = limiter
+        .as_deref()
+        .and_then(|name| {
+            items.iter().find_map(|i| match i {
+                CommonsItem::Capability(c) if c.name.name == name => c.derived.as_ref(),
+                _ => None,
+            })
+        })
+        .filter(|d| d.base.name == "RateLimit")
+        .map(|d| {
+            let option = |name: &str| {
+                d.annotations
+                    .iter()
+                    .find(|a| a.name.name == name)
+                    .and_then(|a| a.args.first())
+                    .map(|a| match &a.value.kind {
+                        ExprKind::IntLit { value, .. } => value.to_string(),
+                        ExprKind::DurationLit { millis, .. } => format!("{}s", millis / 1_000),
+                        _ => "?".to_string(),
+                    })
+            };
+            format!(
+                "\n\n`{}` allows {} requests per {} for each key.",
+                limiter.as_deref().unwrap_or("?"),
+                option("limit").unwrap_or_else(|| "?".to_string()),
+                option("period").unwrap_or_else(|| "?".to_string()),
+            )
+        })
+        .unwrap_or_default();
+    let by = match key.as_deref() {
+        Some("clientIp") => {
+            "**`clientIp`** — the request's `CF-Connecting-IP`, reliable only behind Cloudflare's edge"
+        }
+        Some("identity") => {
+            "**`identity`** — the verified caller; not available yet (`bynk.http.rate_limit_key_unavailable`)"
+        }
+        _ => "an unknown key (`bynk.http.rate_limit_bad_args`)",
+    };
+    format!(
+        "```bynk\n{sig}\n```\n\n\
+         **`@rateLimit`** — refuse a client over its limit before this route's request body is \
+         read. The router asks the limiter first of all, ahead of the media-type and body-size \
+         checks and of authentication, and answers `429 Too Many Requests` with `Retry-After` \
+         (the limiter's window in seconds) and the rejection `RateLimited`, which `on rejected` \
+         can render.{counts}\n\n- **key** — counts by {by}."
+    )
+}
+
 fn render_handler_annotation_hover(
     ann: &Annotation,
     handler: &Handler,
@@ -5413,6 +5482,27 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    /// #3926: hovering `@rateLimit` says what it counts, where it runs and the limiter's limit and window.
+    #[test]
+    fn rate_limit_annotation_hovers_the_limiter_and_where_it_runs() {
+        let src = "context api\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\nservice api from http {\n  @rateLimit(SignupLimit, key: clientIp)\n  on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+        let at = src.find("@rateLimit").unwrap() + 3;
+        let hover = describe_handler_annotation_at(src, at).expect("the annotation hovers");
+        assert!(
+            hover.contains("@rateLimit(SignupLimit, key: clientIp)"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("`SignupLimit` allows 10 requests per 60s for each key"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("before this route's request body is read"),
+            "{hover}"
+        );
+        assert!(hover.contains("`clientIp`"), "{hover}");
     }
 
     const CACHE_SVC: &str = "context api\nservice api from http {\n  @cache(maxAge: 5.minutes, scope: public)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";

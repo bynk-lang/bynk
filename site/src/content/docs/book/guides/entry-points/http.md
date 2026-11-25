@@ -328,6 +328,31 @@ Likewise, a `domain` on a cookie makes every subdomain receive it, so it warns
 error. Drop `domain` to keep a cookie to the host that set it. See
 [HTTP → Setting cookies](/reference/http/#setting-cookies).
 
+## Limit how often a client may call a route
+
+A flood of large requests costs a service the full read and parse of every body before
+anything says no. A route can refuse a client over its limit *before* its body is read.
+Declare a `RateLimit` in the route's context and name it on the route with `@rateLimit`:
+
+```bynk,ignore
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  on POST("/signup") (body: SignupForm) -> Effect[HttpResult[()]] by v: Visitor { … }
+}
+```
+
+The router asks the limiter first of all, before the media-type check, the body-size check
+and authentication. A client over its limit gets `429 Too Many Requests` with a `Retry-After` of
+the limiter's window in seconds, and a service's [`on rejected`](/reference/http/#rendering-rejections)
+can render it: the rejection is `RateLimited(detail)`, and a `system` test asserts
+`Rejected(RateLimited(_))`. `clientIp` counts by the caller's `CF-Connecting-IP`, so users
+behind one address share a count. `RateLimit` is experimental and Cloudflare's; see
+[HTTP → Rate limiting](/reference/http/#rate-limiting) for the rest.
+
 ## Set a cookie from the record that reads it
 
 A cookie that a typed `cookies` record reads is written from that record, so its name and

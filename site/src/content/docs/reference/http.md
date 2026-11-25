@@ -545,6 +545,7 @@ here once:
 | `RefinementViolation` {#problem-refinement-violation} | `https://bynk-lang.org/problems/refinement-violation` | `400` |
 | `PayloadTooLarge` {#problem-payload-too-large} | `https://bynk-lang.org/problems/payload-too-large` | `413` |
 | `UnsupportedMediaType` {#problem-unsupported-media-type} | `https://bynk-lang.org/problems/unsupported-media-type` | `415` |
+| `RateLimited` {#problem-rate-limited} | `https://bynk-lang.org/problems/rate-limited` | `429` |
 
 The default is `format: bynk`, and with it every error body is what it always was, byte for byte.
 A handler overrides the service with `@errors(format: bynk)` or `@errors(format: problem)`; the route
@@ -584,7 +585,7 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 `why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
 `RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
 `UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MalformedPath(detail)`,
-`MethodNotAllowed` or `Unauthorized`.
+`RateLimited(detail)`, `MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
 `RawError` of that status; the router keeps its other headers (the `WWW-Authenticate` of a
@@ -2007,6 +2008,49 @@ the tagged form (`Json.encodePlain` is the plain form outside a route), so `deco
 `bynk openapi` describes a plain route's `Option` as nullable, and `bynk client`
 generates it as `T | null` (see the [HTTP client](/reference/http-client/)).
 
+## Rate limiting
+
+A route can refuse a client that has made too many requests *before* its request body is
+read. Declare a `RateLimit` instance in the route's context (see
+[`RateLimit`](/reference/bynk-capabilities/#rate-limiting-ratelimit)) and name it on the route
+with `@rateLimit`:
+
+```bynk,ignore
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  @form
+  on POST("/signup") (body: SignupForm) -> Effect[HttpResult[()]] by v: Visitor { … }
+}
+```
+
+The router asks the limiter first of all, ahead of the media-type check, the body-size check
+and authentication, so a flood costs a counter and a `429`, and a request whose body is over
+its cap still gets `429` once the limit is spent. The answer is `429 Too Many Requests` with
+`Retry-After` set to the limiter's period in seconds and a `{ "kind": "RateLimited" }` body
+(problem details under [`errors { format: problem }`](#error-bodies)). It is the rejection
+`RateLimited(detail)`, so [`on rejected`](#rendering-rejections) can render it and a `system`
+test can assert `Rejected(RateLimited(_))`.
+
+- `key: clientIp` counts by the request's `CF-Connecting-IP`, which is reliable only behind
+  Cloudflare's edge. Users behind one address (an office or carrier NAT) share a count. Without
+  the header (under `bynk dev`, or a test that sets none) every request counts as one client,
+  `unknown`.
+- `key: identity`, counting by the verified caller after authentication and before the body,
+  is not available yet: it is `bynk.http.rate_limit_key_unavailable`. A limit keyed on the
+  caller stays a call to the limiter's `allow(key)` in the handler.
+- The limiter is a named instance the route's context declares; the route needs no `given`.
+  A route carries at most one `@rateLimit` (`bynk.http.rate_limit_duplicate`), and a limiter named
+  by several routes counts across all of them, by key. An unknown limiter is
+  `bynk.http.rate_limit_unknown_limiter`, a malformed annotation `bynk.http.rate_limit_bad_args`,
+  and one on a handler that is not `on http` `bynk.http.rate_limit_not_http`.
+- `RateLimit` is experimental: it needs `bynk.cloudflare.RateLimit` in `bynk.toml`'s
+  `[unstable] allow`, and is refused off Cloudflare. Counting is approximate and per location,
+  as the capability's is. In tests the limiter runs on the harness clock.
+
 ## Request lifecycle
 
 ```mermaid
@@ -2018,19 +2062,24 @@ flowchart TD
   known -->|no| nf["404"]
   known -->|yes, OPTIONS| opt["204 + Allow"]
   known -->|yes, other| m405["405 + Allow"]
-  params --> ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
+  params --> rl{"@rateLimit within its limit?"}
+  rl -->|no| m429["429 + Retry-After"]
+  rl -->|yes| ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
   ctype -->|no| m415["415"]
-  ctype -->|yes| actor{"by actor admitted?"}
-  actor -->|no| m401["401 / 403"]
-  actor -->|yes| body{"body valid?"}
-  body -->|over the cap| m413["413"]
+  ctype -->|yes| len{"declared length over the cap?"}
+  len -->|yes| m413["413"]
+  len -->|no| body{"body read under its cap and valid?"}
+  body -->|over the cap| m413
   body -->|no| bad["400 at the boundary"]
+  body -->|yes| actor{"by actor admitted?"}
+  actor -->|no| m401["401 / 403"]
   m401 -.-> hook
   m405 -.-> hook["on rejected renders the body, if declared"]
   m415 -.-> hook
+  m429 -.-> hook
   m413 -.-> hook
   bad -.-> hook
-  body -->|yes| handler["handler runs — returns Effect"]
+  actor -->|yes| handler["handler runs — returns Effect"]
   handler --> result["HttpResult[T]"]
   result --> status["HTTP status + JSON body"]
 ```
@@ -2040,18 +2089,20 @@ flowchart TD
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
 on method **and** path. On a match, path parameters are bound (a path that is not valid percent-encoding is a
 `400 MalformedPath`, never a `500`) and a typed
-[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@rateLimit` route's limiter is asked first of all (`429`, [below](#rate-limiting)); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
-then the handler's `by` actor is checked (`401` or `403`, see [Actors](/reference/actors/)),
-before any body is read; then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
-`400` at the boundary, before the handler runs. The handler then runs as an
+then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
+`400` at the boundary, before the handler runs; then the handler's `by` actor is checked (`401` or `403`, see
+[Actors](/reference/actors/)) by the handler's wrapper. (A multi-actor `by` and a `Signature` route's wrapper read the
+body themselves, verifying over the raw bytes first.) So a rate limit is the only check that runs ahead of the body read
+on every route. The handler then runs as an
 `Effect` and returns an `HttpResult[T]`, which is mapped to an HTTP status and
 JSON body per the table above. When no route matches, a request to a *live* path
 under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain
 `OPTIONS`); only a request to a path that exists under **no** method is a `404`
 (see [Method semantics](#method-semantics)). A service with
-[`on rejected`](#rendering-rejections) renders the router's `400`, `405`, `413` and
-`415` bodies itself, keeping their status.
+[`on rejected`](#rendering-rejections) renders the router's `400`, `405`, `413`, `415` and
+`429` bodies itself, keeping their status.
 
 ## Example
 

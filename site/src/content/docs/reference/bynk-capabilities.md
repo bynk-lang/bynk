@@ -814,6 +814,10 @@ an exact quota (billing, a hard per-account cap), use an agent, one per key,
 as the [rate limiter example](/by-example/projects/rate-limiter/) does. Each
 instance counts on its own: two limiters never share counts.
 
+A limit keyed on the client's address needs no handler code: name the limiter on the route
+with `@rateLimit(PublishLimit, key: clientIp)` and the router refuses a client over its limit
+with a `429` before it reads the body (see [HTTP → Rate limiting](/reference/http/#rate-limiting)).
+
 In tests each instance is a counter per key over windows of its `@period`, on
 the [harness clock](/reference/testing/#time-in-tests), so a case can
 exhaust a limiter and recover with `advance Clock by`. `stub PublishLimit.allow(_)`

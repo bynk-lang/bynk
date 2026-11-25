@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+// A rate limit is the router's, so only a route carries one.
+service jobs {
+  @rateLimit(SignupLimit, key: clientIp)
+  on call(n: Int) -> Effect[Int] by Caller {
+    Effect.pure(1)
+  }
+}
