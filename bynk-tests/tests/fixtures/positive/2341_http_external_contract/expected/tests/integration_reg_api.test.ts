@@ -131,6 +131,41 @@ async function __sysdrive_rawexpired_api_http_POST_notes_Param_id(id: string, bo
   const __res = await __h.env.REG_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_sumbad_api_http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __bad: string, __sub: string, __as: string) {
+  const __body = globalThis.JSON.stringify(body as __JsonValue);
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Sender") {
+    if (__bad === "forged") {
+      const __sig = await __bynkSignHmacSha256(__body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), false, 0);
+      __auth["X-Sig"] = __sig.signature;
+    }
+  }
+  if (__as === "User") {
+    if (__bad === "forged") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;
+    if (__bad === "expired") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), ...__auth }, body: __body });
+  const __res = await __h.env.REG_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawsumbad_api_http_POST_notes_Param_id(id: string, body: string, headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, __bad: string, __sub: string, __as: string) {
+  const __auth: globalThis.Record<string, string> = {};
+  if (__as === "Sender") {
+    if (__bad === "forged") {
+      const __sig = await __bynkSignHmacSha256(body, ((__bynkEnv["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["SENDER_SECRET"] ?? "") + "!"), false, 0);
+      __auth["X-Sig"] = __sig.signature;
+    }
+  }
+  if (__as === "User") {
+    if (__bad === "forged") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "") + "!"))}`;
+    if (__bad === "expired") __auth["authorization"] = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? "")))}`;
+  }
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "POST", headers: { "content-type": "application/json", ...__requestHeaderPairs(headers), ...__auth }, body: body });
+  const __res = await __h.env.REG_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_api_http_DELETE_packages_Param_name(name: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/packages/${name}`, { method: "DELETE", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });

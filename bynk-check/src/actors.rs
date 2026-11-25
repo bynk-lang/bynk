@@ -1634,6 +1634,63 @@ impl BadCredential {
     }
 }
 
+/// #4385: the member a bad-credential principal names on an actor sum, `Session` in
+/// `by Forged(Session)`: its argument when that is a bare identifier. A value (`by User("ada")`) is
+/// an identity, never an arm.
+pub fn bad_principal_arm(p: &bynk_syntax::ast::CallSiteActor) -> Option<&str> {
+    match p.identity.as_deref().map(|e| &e.kind) {
+        Some(ExprKind::Ident(id)) if p.claims.is_none() => Some(id.name.as_str()),
+        _ => None,
+    }
+}
+
+impl BadCredential {
+    /// #4385: whether a member declared as `decl` has a seam that refuses this credential, for the
+    /// principals a sum's arm can be named for. `Forged` reaches any of `Bearer`, `Signature`,
+    /// `Oidc` and `SignedCookie`; `Expired` any but `Signature`; `Stale` a `Signature` declaring a
+    /// `timestamp` and a `tolerance`; `Revoked` a `SignedCookie` with `sessions = true`. The
+    /// `Oidc`-only principals are not offered on a sum.
+    pub fn refused_by(self, decl: &ActorDecl) -> bool {
+        let Some(scheme) = decl
+            .auth
+            .as_ref()
+            .and_then(|a| Scheme::from_name(a.name.as_str()))
+        else {
+            return false;
+        };
+        match (self, scheme) {
+            (
+                BadCredential::Forged,
+                Scheme::Bearer | Scheme::Signature | Scheme::Oidc | Scheme::SignedCookie,
+            ) => true,
+            (BadCredential::Expired, Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie) => true,
+            (BadCredential::Stale, Scheme::Signature) => signature_seam_from_decl(decl)
+                .is_some_and(|s| s.timestamp_header.is_some() && s.tolerance_secs.is_some()),
+            (BadCredential::Revoked, Scheme::SignedCookie) => {
+                signed_cookie_seam_of(decl, None).is_some_and(|s| s.sessions)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// #4385: the members of the sum `by` whose seam refuses `bad`, in declared order. Empty when the
+/// sum admits an open member (`Visitor`), whose catch-all means no credential is ever refused.
+pub fn sum_refusing_arms(
+    by: &ByClause,
+    bad: BadCredential,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<String> {
+    if sum_has_open_member(by, actors) {
+        return Vec::new();
+    }
+    by.actors
+        .iter()
+        .filter(|a| actors.get(&a.name).is_some_and(|d| bad.refused_by(d)))
+        .map(|a| a.name.clone())
+        .collect()
+}
+
 /// What a call-site principal (`by <Name>[(<identity>)]`) is: an actor, the reserved
 /// no-credential principal `Nobody` (#706), or a reserved bad credential. The one
 /// classification of those reserved names; the checker records it on the clause

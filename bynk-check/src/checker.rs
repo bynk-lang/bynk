@@ -81,6 +81,7 @@ mod refined_range;
 mod refinements;
 mod result_more;
 mod session_calls;
+mod sum_bad_principal;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;

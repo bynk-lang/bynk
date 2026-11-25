@@ -16,6 +16,14 @@ use bynk_check::firstparty::FirstPartyCap;
 /// level would leak state between handlers in the same module — most visibly the
 /// `next_tmp` counter, which would stop restarting `__r0` at each function and
 /// so rename every generated temp in the emitted TypeScript.
+/// #2135, #4385: the bad-credential principal a `system` call drives: the driver's name (`"forged"`,
+/// `"expired"`, …) and, on an actor sum, the member it names (`by Forged(Session)`).
+#[derive(Clone)]
+pub(crate) struct BadDriver {
+    pub(crate) driver: &'static str,
+    pub(crate) arm: Option<String>,
+}
+
 pub(crate) struct LowerCtx<'a> {
     pub(super) module: ModuleCtx<'a>,
     pub(super) mode: BodyMode,
@@ -115,7 +123,7 @@ pub(crate) struct LowerCtx<'a> {
     /// #2135: the call-site principal is `by Forged` or `by Stale` — drive a
     /// `Signature` route with a signature its seam refuses (`"forged"` /
     /// `"stale"`, the driver's name). `None` for any other principal.
-    pub call_site_bad_signature: Option<&'static str>,
+    pub call_site_bad_signature: Option<BadDriver>,
     /// Slice 1 (ADR 0103): the source-map builder for the file being emitted, if
     /// any. The deep lowering chain records `(generated offset → source span)`
     /// checkpoints here; `emit_project` owns the `RefCell` and threads a shared

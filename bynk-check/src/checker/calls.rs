@@ -5469,6 +5469,9 @@ pub(crate) fn check_effect_let_principal(
     {
         let name = p.actor.name.as_str();
         let by = handler.by_clause.as_ref();
+        if by.is_some_and(|by| by.is_sum() && super::sum_bad_principal::check(p, bad, by, ctx)) {
+            return;
+        }
         let sig_seam =
             by.and_then(|by| crate::actors::signature_seam_of_route(by, &ctx.test_actors));
         let bearer =

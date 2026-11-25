@@ -669,7 +669,7 @@ pub(super) fn emit_system_http_support(
                 driver_params.clone(),
                 body_stmts.clone(),
                 url.clone(),
-                typed_options,
+                typed_options.clone(),
                 &binding,
                 "__responseToHttpResult",
                 typed_payload,
@@ -687,6 +687,7 @@ pub(super) fn emit_system_http_support(
             // path-param-less route (e.g. `GET /cart/size`) can carry no `Wire`
             // argument, so its raw driver would be dead code.
             let raw_body_init = wire_body_init(body_ps.first().copied(), raw_type.is_some());
+            let mut raw_sum_options = None;
             if !h.params.is_empty() {
                 // The `Wire` text is text, so a raw route is sent it as `text/plain`:
                 // a route declaring another media type answers `415`, which is how a
@@ -716,6 +717,7 @@ pub(super) fn emit_system_http_support(
                     ]),
                     raw_body_init.clone(),
                 );
+                raw_sum_options = Some(raw_options.clone());
                 routes.push(sysdrive_driver(
                     SysdriveKind::raw(""),
                     sname,
@@ -960,29 +962,19 @@ pub(super) fn emit_system_http_support(
                     }
                 }
             }
-            // #3386: on a `SignedCookie` route, `by Forged` (signed with a key the seam does
-            // not hold) and `by Expired` (issued before the cookie's `ttl`), each decoding a
-            // `401` to `Rejected(Unauthorized)`.
-            if let Some(s) = &session {
-                let parts = (sname.as_str(), key.as_str(), binding.as_str(), &payload);
-                let req = SessionRequest::new(verb, &content_type, &headers_spread, h);
-                let (typed, raw) = (
-                    (driver_params.as_slice(), &url),
-                    (raw_params.as_slice(), &raw_url),
-                );
-                push_session_refusal_drivers(
-                    &mut routes,
-                    s,
-                    parts,
-                    (typed, raw),
-                    (
-                        &req,
-                        &body_stmts,
-                        &body_init,
-                        body_ps.first().map(|p| p.name.name.as_str()),
-                    ),
-                );
-            }
+            // #3386, #4385: the bad-credential drivers of a `SignedCookie` route, and of an actor
+            // sum's members.
+            push_credential_drivers(
+                &mut routes,
+                (session.as_ref(), sum.as_ref()),
+                (sname.as_str(), key.as_str(), binding.as_str(), &payload),
+                (
+                    (&driver_params, &url, typed_options, &body_stmts, typed_body),
+                    raw_sum_options.map(|o| (&raw_params, &raw_url, o, raw_body)),
+                ),
+                ((h, verb, &content_type, &headers_spread), &body_init),
+                body_ps.first().map(|p| p.name.name.as_str()),
+            );
             // #3052: on an `Oidc` route, `by Forged` (signed by a key the
             // JWKS does not publish), `by Expired`, `by WrongIssuer` and
             // `by WrongAudience`, typed and raw, each decoding a `401` to
@@ -1715,10 +1707,10 @@ pub(super) fn now_secs() -> TsExpr {
 }
 
 /// A driver's parameters and the URL it requests.
-type DriverShape<'a> = (&'a [TsParam], &'a TsExpr);
+pub(super) type DriverShape<'a> = (&'a [TsParam], &'a TsExpr);
 
 /// The request a route's session-refusal drivers build, bar the credential.
-struct SessionRequest<'a> {
+pub(super) struct SessionRequest<'a> {
     method: &'a str,
     content_type: &'a Entries,
     headers_spread: &'a TsObjectEntry,
@@ -1726,7 +1718,7 @@ struct SessionRequest<'a> {
 }
 
 impl<'a> SessionRequest<'a> {
-    fn new(
+    pub(super) fn new(
         method: &'a str,
         content_type: &'a Entries,
         headers_spread: &'a TsObjectEntry,
@@ -1746,7 +1738,7 @@ impl<'a> SessionRequest<'a> {
 /// and a correctly signed one issued before its `ttl`. Each decodes a `401` to
 /// `Rejected(Unauthorized)`. Both carry `Sec-Fetch-Site: same-origin`, so the refusal is the
 /// cookie's and not the CSRF check's.
-fn push_session_refusal_drivers(
+pub(super) fn push_session_refusal_drivers(
     routes: &mut Vec<TsStmt>,
     session: &SessionDriver,
     (sname, key, binding, payload): (&str, &str, &str, &Vec<TsExpr>),

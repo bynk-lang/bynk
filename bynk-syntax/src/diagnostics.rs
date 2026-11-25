@@ -5189,6 +5189,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.POST(style)    // ✗ only `GET` fetches an asset\nlet r <- api.GET(style)     // ✓",
     },
     Explain {
+        code: "bynk.test.bad_principal_needs_arm",
+        blurb: "A bad credential is presented to one member's seam, so on an actor sum \
+                `by Forged`, `by Expired`, `by Stale` and `by Revoked` must say which \
+                member's refusal the case checks, when more than one member could \
+                refuse it. Name the member in parentheses, as `by Forged(Browser)`. \
+                The name is a bare member name of the handler's `by` sum, not a value: \
+                an actor's identity is a value (`by Browser(\"ada\")`), a bad credential \
+                carries none. A member that cannot refuse the credential is refused \
+                with the principal's own error.",
+        example: "// demo/api.bynk\n\
+                  on GET(\"/me\") () -> Effect[HttpResult[String]] by who: Browser | Partner { … }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Forged            // ✗ the cookie's or the token's?\n\
+                  let r <- api.GET(\"/me\") by Forged(Browser)   // ✓",
+    },
+    Explain {
         code: "bynk.test.call_needs_in_process",
         blurb: "A service with an `on call` handler is internal to a deployment: \
                 it has no public route, and a `system` case can only send requests \
@@ -10468,6 +10484,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.asset_address_method",
         "A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.bad_principal_needs_arm",
+        "A case drives `by Forged`, `by Expired`, `by Stale` or `by Revoked` at an actor sum with more than one member that could refuse it, without naming the member (`by Forged(Browser)`).",
         &["case"],
     ),
     dg(

@@ -1,0 +1,6 @@
+[project]
+name = "4385-bad-principal-arm-not-member"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]

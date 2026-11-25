@@ -1,0 +1,6 @@
+suite demo.api as system {
+  case "a forged credential is refused" {
+    let r <- api.GET("/me") by Forged
+    expect r is Rejected(Unauthorized)
+  }
+}
