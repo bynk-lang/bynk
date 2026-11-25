@@ -1,0 +1,12 @@
+{
+  "blurb": "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.duplicate_errors",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `errors { }` policy."
+}

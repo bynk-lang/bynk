@@ -1,0 +1,5 @@
+commons demo.nestedwritten
+
+fn wrapped(e: Effect[Int]) -> Effect[Effect[Int]] {
+	Effect.pure(e)
+}

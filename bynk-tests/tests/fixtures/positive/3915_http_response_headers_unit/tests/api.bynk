@@ -1,0 +1,18 @@
+suite hdr.api {
+	case "withHeader adds a header, and a repeated name keeps every value" {
+		let r <- api.GET("/custom")
+		expect r is Ok("ok")
+		expect r.headers().get("x-request-id") == Some(["abc"])
+		expect r.headers().get("x-trace") == Some(["t1", "t2"])
+	}
+
+	case "a typed helper sets its header once, the last call winning" {
+		let r <- api.GET("/limited")
+		expect r.headers().get("retry-after") == Some(["60"])
+	}
+
+	case "at writes the Location of a created resource" {
+		let r <- api.POST("/things", "x")
+		expect r.headers().get("location") == Some(["/things/1"])
+	}
+}

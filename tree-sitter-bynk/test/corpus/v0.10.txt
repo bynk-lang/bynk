@@ -79,7 +79,7 @@ on queue handler
 context mailer
 
 service outbox from queue("outbound-email") {
-  on message(message: EmailJob) -> Effect[QueueResult] {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

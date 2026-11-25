@@ -1,0 +1,26 @@
+// #4120: a type that recurses through a collection or an option is generable (the empty
+// collection and `None` end the recursion), and its generator stays small.
+suite demo.m {
+  property "a tree is drawn" {
+    for all t: Tree {
+      expect t.children.length() <= 8
+    }
+  }
+
+  property "a linked node is drawn" {
+    for all n: Node {
+      expect n.v == n.v
+    }
+  }
+
+  property "a json-like sum recursing through a list and a map is drawn" {
+    for all j: Json {
+      expect j == j
+    }
+  }
+
+  case "Val of a recursive type ends at the empty collection" {
+    let t = Val[Tree]
+    expect t.children.length() == 0
+  }
+}

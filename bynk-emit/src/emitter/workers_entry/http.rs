@@ -93,6 +93,9 @@ pub(super) struct HttpRoute {
     /// `on rejected` (`rejected_<service>`), when it declares one. The route's
     /// synthesised rejections are rendered through it.
     pub(super) rejected: Option<String>,
+    /// #3916: the route answers its errors as RFC 9457 problem details — its
+    /// `@errors(format:)`, else the service's `errors { }`.
+    pub(super) error_problem: bool,
     /// #2854: the fields of the handler's typed `query` record, as the runtime's
     /// `queryObject` reads them off the query string: `(name, wire kind, list)`.
     /// `None` when the route has no typed `query` (a raw `RequestQuery` is not
@@ -154,7 +157,7 @@ fn bind_cf_param(
     p: &bynk_syntax::ast::Param,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
-    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
     ru: &RuntimeUse,
 ) -> bool {
     if route.path.split('/').any(|seg| seg == ":cf")
@@ -191,7 +194,7 @@ fn bind_request_record_param(
     p: &bynk_syntax::ast::Param,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
-    wrappers: (Option<&str>, Option<&str>, Option<&str>),
+    wrappers: (Option<&str>, Option<&str>, Rejection),
     ru: &RuntimeUse,
 ) -> bool {
     if p.name.name == "cf" {
@@ -214,7 +217,7 @@ fn bind_headers_param(
     p: &bynk_syntax::ast::Param,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
-    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
     ru: &RuntimeUse,
 ) -> bool {
     let Some(fields) = &route.headers_fields else {
@@ -274,7 +277,7 @@ fn bind_cookies_param(
     p: &bynk_syntax::ast::Param,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
-    wrappers: (Option<&str>, Option<&str>, Option<&str>),
+    wrappers: (Option<&str>, Option<&str>, Rejection),
     ru: &RuntimeUse,
 ) -> bool {
     if p.name.name != "cookies" || route.path.split('/').any(|seg| seg == ":cookies") {
@@ -311,7 +314,7 @@ fn push_cookies_param(
     hide: Option<&str>,
     guarded: &mut Vec<TsStmt>,
     call_args: &mut Vec<TsExpr>,
-    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
     ru: &RuntimeUse,
 ) {
     let spec: Vec<TsExpr> = field_specs_exprs(fields);
@@ -348,6 +351,34 @@ fn push_cookies_param(
     call_args.push(ident("cookies"));
 }
 
+impl HttpRoute {
+    /// How this route's router rejections are rendered (#3916).
+    fn rejection(&self) -> Rejection<'_> {
+        Rejection {
+            hook: self.rejected.as_deref(),
+            problem: self.error_problem,
+        }
+    }
+}
+
+/// The options object `httpResultToResponse` takes for `route` (#3916).
+fn response_opts(route: &HttpRoute) -> TsExpr {
+    let mut opts = vec![("weakEtag".to_string(), bool_lit(!route.no_store))];
+    if route.error_problem {
+        opts.push(("problem".to_string(), bool_lit(true)));
+    }
+    TsExpr::object(opts)
+}
+
+/// How a route's router rejections are rendered (#2341, #3916): through the
+/// service's `on rejected` surface method, if it declares one, and as RFC 9457
+/// problem details when the route's error format is `problem`.
+#[derive(Clone, Copy)]
+pub(super) struct Rejection<'a> {
+    pub(super) hook: Option<&'a str>,
+    pub(super) problem: bool,
+}
+
 /// Stamp a rejection response with the service's policy the same way a
 /// handled response is stamped — `applySecurityHeaders(applyCors(…))` — so a
 /// boundary `400`/`401` carries `nosniff` (and CORS, when the service opts in)
@@ -363,10 +394,18 @@ fn stamp_rejection(
     security_const: Option<&str>,
     // #2341 (decision C): the service's `on rejected` surface method, if it
     // declares one — the default response is rendered through it first, and
-    // the headers are stamped on what it returns.
-    rejected: Option<&str>,
+    // the headers are stamped on what it returns. #3916: and whether the
+    // default is problem details.
+    rejected: Rejection,
 ) -> TsExpr {
-    let inner = match rejected {
+    // #3916: problem details are written first, so `on rejected` still reads the
+    // rejection's `kind` and `detail` and may replace the whole response.
+    let inner = if rejected.problem {
+        await_expr(call(ident("__problemRejection"), vec![inner]))
+    } else {
+        inner
+    };
+    let inner = match rejected.hook {
         Some(m) => await_expr(call(
             ident("__renderRejection"),
             vec![inner, rejection_renderer(m)],
@@ -403,7 +442,7 @@ fn stamp_rejection(
 /// fault, answered before the actor, body or handler.
 fn route_prelude(
     route: &HttpRoute,
-    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
 ) -> Vec<TsStmt> {
     // #1825: names the route, by its pattern, for the fault log.
     let mut out = vec![set_fault_route(format!(
@@ -466,7 +505,7 @@ fn sort_routes(mut routes: Vec<HttpRoute>) -> Vec<HttpRoute> {
 fn raw_json_media_guard(
     route: &HttpRoute,
     has_body: bool,
-    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
 ) -> Option<TsStmt> {
     if !has_body {
         return None;
@@ -528,7 +567,7 @@ pub(super) fn emit_http_route_dispatch(
     consumed_types: &std::collections::HashSet<String>,
 ) -> TsStmt {
     let h = &route.handler;
-    let rejected = route.rejected.as_deref();
+    let rejected = route.rejection();
     let method_key = http_handler_method_name_ir(route.method, &route.path);
     let has_path_params = param_count(&route.path) > 0;
     // v0.139 (ADR 0162 D3): a `GET` route also answers `HEAD` — the guard widens
@@ -1196,11 +1235,7 @@ pub(super) fn emit_http_route_dispatch(
     let response_expr = if route.method == bynk_model::IrHttpMethod::Get {
         let base = call(
             ident("__httpResultToResponse"),
-            vec![
-                ident("result"),
-                ser_fn,
-                TsExpr::object(vec![("weakEtag".to_string(), bool_lit(!route.no_store))]),
-            ],
+            vec![ident("result"), ser_fn, response_opts(route)],
         );
         // `immutable` is passed only when `true`, so every other `@cache` route
         // emits exactly the three-argument call it did before.
@@ -1311,7 +1346,7 @@ fn emit_typed_path_param(
     pname: &str,
     t: &TypeRef,
     kind: &'static str,
-    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Option<&str>),
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
     ru: &RuntimeUse,
 ) -> Vec<TsStmt> {
     let result = format!("__r_{pname}");
@@ -1488,7 +1523,7 @@ fn emit_path_param_construction(
     t: &TypeRef,
     cors_const: Option<&str>,
     security_const: Option<&str>,
-    rejected: Option<&str>,
+    rejected: Rejection,
     consumed_types: &std::collections::HashSet<String>,
 ) -> Vec<TsStmt> {
     // `pname` names the wire segment (the `__raw_`/`__r_` temps and diagnostic
@@ -1665,6 +1700,10 @@ pub(super) fn collect_http_routes(
                     json_plain: bynk_syntax::ast::effective_json_options(service.json.as_ref(), h)
                         == bynk_syntax::ast::JsonOptions::Plain,
                     rejected: rejected_surface(service, sname),
+                    error_problem: bynk_syntax::ast::effective_error_format(
+                        service.errors.as_ref(),
+                        h,
+                    ) == bynk_syntax::ast::ErrorFormat::Problem,
                     query_fields,
                     form_fields: form_field_specs(h, visible_types),
                     cookies_fields,

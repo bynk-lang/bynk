@@ -1,0 +1,14 @@
+context demo
+
+agent Counter {
+    key id: String
+
+    store n: Cell[Int]
+
+    on call add(by: Int) -> Effect[Int] { by }
+
+    on call twice() -> Effect[Int] {
+        let a <- Counter(self.id).add(1)
+        a
+    }
+}

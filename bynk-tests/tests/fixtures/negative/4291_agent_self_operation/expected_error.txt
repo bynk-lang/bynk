@@ -1,0 +1,1 @@
+bynk.agents.self_operation

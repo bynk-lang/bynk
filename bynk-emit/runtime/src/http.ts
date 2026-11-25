@@ -295,10 +295,87 @@ export function withPlainJson<T>(serialise: (v: T) => JsonValue): (v: T) => Json
   };
 }
 
+// #3916: `errors { format: problem }`. An error response as RFC 9457 problem details: `type`,
+// `title`, `status` and `detail` (when there is one), and a router rejection's `kind` and
+// `path` as extension members. A problem with no more to say than its status has `type`
+// `about:blank` (RFC 9457 §4.2.1); a router rejection has a stable
+// `https://bynk-lang.org/problems/<kind>` URI.
+const REASON_PHRASES: Readonly<Record<number, string>> = {
+  400: "Bad Request",
+  401: "Unauthorized",
+  403: "Forbidden",
+  404: "Not Found",
+  405: "Method Not Allowed",
+  406: "Not Acceptable",
+  408: "Request Timeout",
+  409: "Conflict",
+  413: "Payload Too Large",
+  415: "Unsupported Media Type",
+  422: "Unprocessable Entity",
+  429: "Too Many Requests",
+  451: "Unavailable For Legal Reasons",
+  500: "Internal Server Error",
+  501: "Not Implemented",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+};
+
+function problemResponse(
+  status: number,
+  fields: { readonly detail?: string; readonly kind?: string; readonly extra?: Record<string, unknown> },
+  headers?: Headers,
+): Response {
+  // A rejection's own structured members (`path`, `expected`, `actual`, a refinement's `violation`)
+  // ride as extension members; the members RFC 9457 defines are written after, so they always win.
+  const body: Record<string, unknown> = {
+    ...fields.extra,
+    type:
+      fields.kind === undefined
+        ? "about:blank"
+        : `https://bynk-lang.org/problems/${fields.kind.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`,
+    title: REASON_PHRASES[status] ?? "Error",
+    status,
+  };
+  if (fields.detail !== undefined && fields.detail !== "") body.detail = fields.detail;
+  if (fields.kind !== undefined) body.kind = fields.kind;
+  const out = new Headers(headers);
+  out.delete("content-length");
+  out.set("content-type", "application/problem+json");
+  return new Response(JSON.stringify(body), { status, headers: out });
+}
+
+/**
+ * A router rejection as problem details. Only a JSON rejection (`400`, `413`, `415`, with the
+ * `kind` the router writes) is rewritten; a body-less `401` or `405`, and anything else, passes
+ * through, since RFC 9457 does not require a body. Applied before `on rejected`, which still
+ * sees the `kind` and `detail` and may replace the whole response with a `RawError`.
+ */
+export async function problemRejection(response: Response): Promise<Response> {
+  if (response.status < 400 || !(response.headers.get("content-type") ?? "").startsWith("application/json")) {
+    return response;
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = (await response.clone().json()) as Record<string, unknown>;
+  } catch {
+    return response;
+  }
+  if (typeof body.kind !== "string") return response;
+  // `details` becomes `detail`, and `kind` is written by the writer; everything else the router put in
+  // the body (`path`, `expected`, `actual`, a refinement's `violation`) is carried as it was written.
+  const { kind: _kind, details: _details, error: _error, type: _type, title: _title, status: _status, detail: _detail, ...extra } = body;
+  return problemResponse(
+    response.status,
+    { detail: rejectionDetail(body), kind: body.kind, extra },
+    response.headers,
+  );
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   const response = baseHttpResultToResponse(result, serialiseValue, opts);
   // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
@@ -312,13 +389,155 @@ export function httpResultToResponse<T>(
     // route is `@cache` (which also forces `private`, below).
     if (!response.headers.has("cache-control")) response.headers.set("cache-control", "private");
   }
+  appendResultHeaders(response, result);
   return response;
+}
+
+// #3915: response headers a handler adds to an `HttpResult` with `withHeader`,
+// `retryAfter`, `at` and `download`. A result carries them as `[name, value, own?]`
+// triples in a `headers` list (the way it carries `cookies`), and the router appends
+// one header line per triple when it builds the response. `own` marks one of the
+// typed helpers, which may write a header `withHeader` may not (`Location`,
+// `Content-Disposition`).
+type HeaderTriple = readonly [name: string, value: string, own?: boolean];
+
+// The headers the router owns, which `withHeader` may not set, lower case. The
+// checker holds the same list for a literal name (`RESERVED` in
+// `response_headers.rs`); `access-control-*` is a prefix.
+export const RESERVED_RESPONSE_HEADERS: ReadonlySet<string> = new Set([
+  "age",
+  "allow",
+  "cache-control",
+  "cdn-cache-control",
+  "cloudflare-cdn-cache-control",
+  "connection",
+  "content-disposition",
+  "content-length",
+  "content-security-policy",
+  "content-type",
+  "etag",
+  "expires",
+  "keep-alive",
+  "last-modified",
+  "location",
+  "pragma",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "referrer-policy",
+  "retry-after",
+  "set-cookie",
+  "strict-transport-security",
+  "surrogate-control",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "vary",
+  "www-authenticate",
+  "x-content-type-options",
+]);
+
+const HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function headersOf(result: object): readonly HeaderTriple[] {
+  return (result as { readonly headers?: readonly HeaderTriple[] }).headers ?? [];
+}
+
+function withHeaderTriple<R extends object>(result: R, triple: HeaderTriple): R {
+  // A typed helper sets one header, so a later call replaces an earlier one rather than
+  // sending a second value of a header that is not a list.
+  const held = triple[2] === true ? headersOf(result).filter(([n]) => n.toLowerCase() !== triple[0]) : headersOf(result);
+  return { ...result, headers: [...held, triple] };
+}
+
+/** `result.withHeader(name, value)`: one more header line on the response. */
+export function withResponseHeader<R extends object>(result: R, name: string, value: string): R {
+  return withHeaderTriple(result, [name, value]);
+}
+
+/** `result.retryAfter(delay)`: `Retry-After` in whole seconds, rounded up. */
+export function withRetryAfter<R extends object>(result: R, delayMillis: number): R {
+  return withHeaderTriple(result, ["retry-after", String(Math.max(0, Math.ceil(delayMillis / 1000))), true]);
+}
+
+/** `result.at(url)`: the `Location` of a created resource. */
+export function withLocation<R extends object>(result: R, url: string): R {
+  return withHeaderTriple(result, ["location", encodeNonAscii(url), true]);
+}
+
+/** `result.download(filename)`: `Content-Disposition: attachment` for `filename`. */
+export function withDownload<R extends object>(result: R, filename: string): R {
+  return withHeaderTriple(result, ["content-disposition", contentDisposition(filename), true]);
+}
+
+// A URL with every character outside printable ASCII percent-encoded as UTF-8, so a slug with an
+// accent is a valid `Location` (a header value is bytes, and `Headers.append` refuses a code
+// point above U+00FF).
+function encodeNonAscii(url: string): string {
+  return url.replace(/[^\x20-\x7e]/gu, (c) => encodeURIComponent(c));
+}
+
+// An RFC 8187 `value-chars` encoding: every octet outside `attr-char` is `%XX`.
+function encodeExtValue(text: string): string {
+  return encodeURIComponent(text).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/**
+ * RFC 6266 `Content-Disposition: attachment` for a download: an ASCII `filename` fallback
+ * for old clients (each character outside printable ASCII, and `"`, `\`, `%` and path
+ * separators, becomes `_`) and the exact name as an RFC 8187 `filename*`. A name with a
+ * control character, or an empty one, is refused.
+ */
+export function contentDisposition(filename: string): string {
+  if (filename === "") throw new Error("download: the filename is empty");
+  if (/[\x00-\x1f\x7f]/.test(filename)) {
+    throw new Error(`download: ${JSON.stringify(filename)} contains a control character`);
+  }
+  const fallback = filename.replace(/[^\x20-\x7e]|["\\%/]/g, "_");
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeExtValue(filename)}`;
+}
+
+/**
+ * The headers a result carries, as a test reads them: lower-case names, each with its
+ * values in the order they were added. The headers the router owns are not here.
+ */
+export function resultHeaders(result: object): ReadonlyMap<string, readonly string[]> {
+  const out = new Map<string, string[]>();
+  for (const [name, value] of headersOf(result)) {
+    const key = name.toLowerCase();
+    const held = out.get(key);
+    if (held === undefined) out.set(key, [value]);
+    else held.push(value);
+  }
+  return out;
+}
+
+// Append a result's headers to its response. A name that is not a token, a router-owned
+// one set with `withHeader`, or a value with a control character throws, so the
+// dispatch answers `500` and logs the route: a malformed header never reaches the wire.
+function appendResultHeaders(response: Response, result: object): void {
+  for (const [name, value, own] of headersOf(result)) {
+    if (!HEADER_NAME.test(name)) {
+      throw new Error(`withHeader: ${JSON.stringify(name)} is not a valid header name (an RFC 9110 token)`);
+    }
+    const lower = name.toLowerCase();
+    if (own !== true && (RESERVED_RESPONSE_HEADERS.has(lower) || lower.startsWith("access-control-"))) {
+      throw new Error(`withHeader: ${lower} is a header the router owns`);
+    }
+    if (/[\x00-\x1f\x7f]/.test(value)) {
+      throw new Error(`withHeader: the value of ${lower} contains a control character`);
+    }
+    if (/[^\x00-\xff]/.test(value)) {
+      throw new Error(`withHeader: the value of ${lower} has a character outside Latin-1; a header value is bytes`);
+    }
+    response.headers.append(name, value);
+  }
 }
 
 function baseHttpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
@@ -416,6 +635,7 @@ function baseHttpResultToResponse<T>(
     case "BadGateway":
     case "ServiceUnavailable":
     case "GatewayTimeout":
+      if (opts?.problem === true) return problemResponse(status, { detail: result.message });
       return new Response(JSON.stringify({ error: result.message }), {
         status,
         headers: { "content-type": "application/json" },

@@ -1,0 +1,4 @@
+commons demo.d
+
+type Code = String where Matches("[a-z]+") @example("abc")
+type Order = { code: Code where MinLength(5) }

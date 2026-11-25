@@ -1,0 +1,19 @@
+context jobs
+
+type Job = { id: String }
+type Other = { name: String }
+
+service work from queue("jobs") {
+  delivery { deadLetter: "jobs-dlq" }
+  on message(message: Job) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}
+
+// ✗ the dead letter is a `Job`, which this consumer cannot decode.
+service review from queue("jobs-dlq") {
+  delivery { deadLetter: None }
+  on message(message: Other) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}

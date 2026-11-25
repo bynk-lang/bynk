@@ -29,7 +29,7 @@ commons bynk.locale {
 			Text(v) => v,
 			Whole(v) => v.toString(),
 			Num(v) => v.toString(),
-			Moment(v) => v.toString(),
+			Moment(v) => v.toEpochMillis().toString(),
 		}
 	}
 
