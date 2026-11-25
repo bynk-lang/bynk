@@ -156,8 +156,30 @@ filename order) and the next ADR number(s), and — with `--apply` — runs
 `scripts/bump-version.sh`, prepends the changelog row(s), writes the ADR file(s)
 and index row(s), and **deletes** the consumed pending file(s). Without
 `--apply` it prints the plan and changes nothing. Deleting what it consumes is
-what makes a re-run a no-op. An increment with `breaking:` also gets an entry on
+what makes a re-run a no-op, and the **ledger** is what makes it safe when a file
+comes back (below). An increment with `breaking:` also gets an entry on
 the Book's upgrading page.
+
+## The ledger: a stamped file is never stamped twice
+
+`design/stamped.txt` records each file the stamp has consumed: its slug, a hash of its
+bytes, the version it got and any ADR numbers. Only the stamp writes it, so no pull request
+touches it and it cannot conflict. A pending file whose slug **and** hash are on it is
+*already stamped*:
+
+- the stamp deletes it and assigns nothing (no version, no changelog row, no ADR), saying
+  which file and which version it got;
+- `cargo xtask check-pending`, which CI runs on the pull request's merge result and in the
+  merge queue, fails a branch that carries one, naming the slug and version.
+
+This is what makes it safe to merge `main` into a branch at any commit, including one where
+another increment's file is still pending and about to be consumed: a stale copy that merges
+back is caught on the PR, or dropped by the stamp, instead of stamping that increment twice
+(#4234, #4269). If a check fails, delete the named file from your branch: `main` has it.
+
+The hash is part of the key so a slug can be reused: a branch name restarted for a new
+increment has different bytes and stamps normally. The ledger was back-filled from the
+history of deleted pending files, with the versions the stamp gave them.
 
 ## Lifecycle
 
