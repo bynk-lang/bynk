@@ -59,6 +59,17 @@ git config core.hooksPath .githooks
 
 CI remains the authority. The toolchain is pinned in `rust-toolchain.toml`.
 
+**Ordered reference lists.** The long lists in the Reference (the type tables and
+sections of `reference/types.md`, the terms of `reference/glossary.md`) are kept in
+alphabetical order. A list that is ordered is wrapped in a marker, so the check never
+guesses: `<!-- sorted: table -->` around a table (its rows are ordered by their first
+code span) or `<!-- sorted: headings -->` around sections (ordered by heading), each
+closed by `<!-- /sorted -->`. When you add an entry to a marked list, put it in its
+place, and move whole entries only: a table row, or a heading with its section.
+`cargo xtask sorted-lists` (part of `cargo xtask ci --fast`) names any entry that is
+out of order and the one it should follow. Keys ignore case, backticks, symbols and a
+leading "The".
+
 ## Pull requests
 
 1. Branch from `main`. Keep the PR to one concern.
