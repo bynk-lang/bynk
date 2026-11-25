@@ -730,3 +730,46 @@ fn long(s: String) -> String {
     assert_eq!(code, 0, "{err}");
     assert!(!err.contains("refined_pattern_is_range"), "{err}");
 }
+
+/// #3888: an email handler with no `by` is fixed by inserting `by Sender` after the return type,
+/// before a `given` clause.
+#[test]
+fn an_email_handler_without_by_gets_by_sender_before_its_given() {
+    let root = scratch("email-by");
+    let source = "\
+context app.mail
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+capability Audit {
+  fn note() -> Effect[Int]
+}
+
+provides Audit = AuditImpl {
+  fn note() -> Effect[Int] {
+    1
+  }
+}
+
+service support from email(\"support@shop.example\") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] given Audit {
+    Accept
+  }
+}
+";
+    write(&root.join("src/app/mail.bynk"), source);
+    let (code, err) = run(
+        &bynk(),
+        &root,
+        &["check", "--fix=bynk.actor.missing_by_on_email"],
+        &[],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(
+        read(&root.join("src/app/mail.bynk")),
+        source.replace(
+            "Effect[EmailVerdict] given Audit",
+            "Effect[EmailVerdict] by Sender given Audit"
+        )
+    );
+}

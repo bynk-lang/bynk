@@ -1,0 +1,7 @@
+commons demo.wrapperwritten
+
+type Wrap[T] = { v: Effect[T] }
+
+fn hold(w: Wrap[Effect[Int]]) -> Int {
+	0
+}

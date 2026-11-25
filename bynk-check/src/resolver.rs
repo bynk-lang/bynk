@@ -3449,6 +3449,13 @@ fn check_type_ref_resolves_in(
                     }
                 }
             }
+            // #4364: a generic type that holds its parameter under an `Effect` takes no `Effect`.
+            if let Some(decl) = crate::prelude_record::lookup(&name.name, types) {
+                for e in crate::checker::nested_wrapper::check_application(name, &decl, args, types)
+                {
+                    errors.push(e);
+                }
+            }
             for a in args {
                 check_type_ref_resolves_in(a, types, type_params, errors);
             }
