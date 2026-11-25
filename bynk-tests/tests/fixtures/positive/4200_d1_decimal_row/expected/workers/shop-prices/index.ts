@@ -93,6 +93,25 @@ export default {
             const body = handlers.__serialise_Result_List_Taxed_String(result);
             return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
           }
+          case "taxesTyped": {
+            __route = "call taxesTyped";
+            const __contract = request.headers.get("X-Bynk-Contract");
+            if (__contract !== "7ee47adb73ec8e6d") {
+              globalThis.console.error("ContractMismatch shop.prices call taxesTyped", { service: "taxesTyped", expected: "7ee47adb73ec8e6d", actual: globalThis.String(__contract).slice(0, 16) });
+              return new globalThis.Response(globalThis.JSON.stringify({ kind: "ContractMismatch", service: "taxesTyped", expected: "7ee47adb73ec8e6d", actual: __contract }), { status: 409, headers: { "content-type": "application/json" } });
+            }
+            let args: __JsonValue;
+            try {
+              args = globalThis.JSON.parse(__body) as __JsonValue;
+            } catch {
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
+            }
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
+            const argsObj = args as { [k: string]: __JsonValue };
+            const result = await surface.taxesTyped();
+            const body = handlers.__serialise_Result_List_Taxed_SqlReadError(result);
+            return new globalThis.Response(globalThis.JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+          }
           default:
             return new globalThis.Response("Not found", { status: 404 });
         }

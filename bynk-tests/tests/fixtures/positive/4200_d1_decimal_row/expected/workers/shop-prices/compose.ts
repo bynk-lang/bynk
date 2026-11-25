@@ -22,5 +22,8 @@ export function compose(env: Env) {
     async taxes() {
       return handlers.taxes.call(deps);
     },
+    async taxesTyped() {
+      return handlers.taxesTyped.call(deps);
+    },
   };
 }

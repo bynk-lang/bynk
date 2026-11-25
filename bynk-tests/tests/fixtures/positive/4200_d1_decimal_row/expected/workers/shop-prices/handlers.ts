@@ -6,10 +6,10 @@ import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runt
 import type { DecodeError } from "../../__bynk_runtime/errors.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
-import { SqlError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
+import { SqlError, SqlReadError, SqlRun, SqlValue } from "../../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../../bynk/cloudflare.js";
-import { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlRun, __deserialise_SqlRun } from "../../bynk/cloudflare.js";
+import { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlReadError, __deserialise_SqlReadError, __serialise_SqlRun, __deserialise_SqlRun } from "../../bynk/cloudflare.js";
 
 export interface Price {
   readonly id: string;
@@ -113,6 +113,29 @@ export const taxes = {
   },
 };
 
+export const taxesTyped = {
+  async call(deps: { Prices: Prices }): globalThis.Promise<Result<readonly Taxed[], SqlReadError>> {
+    return (async () => {
+      const __decode = (__s: string): Result<readonly Taxed[], DecodeError> => {
+        let __j: __JsonValue;
+        try {
+          __j = globalThis.JSON.parse(__s) as __JsonValue;
+        } catch (__e) {
+          return Err({ kind: "Malformed", path: "$", message: String(__e) });
+        }
+        const __r = __deserialise_List_Taxed(__j, "$");
+        if (__r.tag === "Ok") return Ok(__r.value as readonly Taxed[]);
+        const __be = __r.error;
+        return Err({ kind: __be.kind, path: (__be.kind === "StructuralMismatch" || __be.kind === "RefinementViolation") ? __be.path : "$", message: __be.kind === "StructuralMismatch" ? `expected ${__be.expected}, got ${String(__be.actual)}` : __be.kind === "RefinementViolation" ? __be.violation.message : __be.details });
+      };
+      const __r = await deps.Prices.all("SELECT \"id\", \"tax\" FROM prices ORDER BY id", []);
+      if (__r.tag === "Err") return Err({ tag: "Sql" as const, error: __r.error });
+      const __d = __decode(__r.value);
+      return __d.tag === "Ok" ? Ok(__d.value) : Err({ tag: "Decode" as const, error: __d.error });
+    })();
+  },
+};
+
 export function __serialise_Price(value: Price): __JsonValue {
   return {
     id: value.id as __JsonValue,
@@ -168,7 +191,7 @@ export function __deserialise_Taxed(json: __JsonValue, path: string = "$"): Resu
 }
 
 
-export { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlRun, __deserialise_SqlRun };
+export { __serialise_SqlError, __deserialise_SqlError, __serialise_SqlReadError, __deserialise_SqlReadError, __serialise_SqlRun, __deserialise_SqlRun };
 
 export function __serialise_Result_List_Price_String(value: Result<readonly Price[], string>): __JsonValue {
   if (value.tag === "Ok") return { kind: "Ok", value: __serialise_List_Price(value.value) };
@@ -280,4 +303,28 @@ export function __deserialise_List_Taxed(json: __JsonValue, path: string = "$"):
     out.push(__el as Taxed);
   }
   return Ok(out);
+}
+
+export function __serialise_Result_List_Taxed_SqlReadError(value: Result<readonly Taxed[], SqlReadError>): __JsonValue {
+  if (value.tag === "Ok") return { kind: "Ok", value: __serialise_List_Taxed(value.value) };
+  return { kind: "Err", error: __serialise_SqlReadError(value.error) };
+}
+
+export function __deserialise_Result_List_Taxed_SqlReadError(json: __JsonValue, path: string = "$"): Result<Result<readonly Taxed[], SqlReadError>, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (obj["kind"] === "Ok") {
+    const __r_v = __deserialise_List_Taxed(obj["value"], `${path}.value`);
+    if (__r_v.tag === "Err") return __r_v;
+    const __v = __r_v.value;
+    return Ok(Ok(__v) as Result<readonly Taxed[], SqlReadError>);
+  } else if (obj["kind"] === "Err") {
+    const __r_e = __deserialise_SqlReadError(obj["error"], `${path}.error`);
+    if (__r_e.tag === "Err") return __r_e;
+    const __e = __r_e.value;
+    return Ok(Err(__e) as Result<readonly Taxed[], SqlReadError>);
+  }
+  return Err({ kind: "StructuralMismatch", path, expected: "Ok | Err", actual: String(obj["kind"]) });
 }

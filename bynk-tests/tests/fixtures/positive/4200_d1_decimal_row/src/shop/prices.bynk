@@ -3,7 +3,7 @@ context shop.prices
 // #4200: a `Decimal` is admitted in a `Json.decodeSql` row, read from a `TEXT` column.
 
 consumes bynk
-consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlValue }
+consumes bynk.cloudflare { D1, SqlRun, SqlError, SqlReadError, SqlValue }
 
 capability Prices = D1
 
@@ -41,5 +41,12 @@ service taxes {
 			}
 			Err(_) => Err("query failed")
 		}
+	}
+}
+
+// The same read through `select[T]`, whose column list the compiler writes.
+service taxesTyped {
+	on call() -> Effect[Result[List[Taxed], SqlReadError]] by Caller given Prices {
+		Prices.select[Taxed]("FROM prices ORDER BY id", [])
 	}
 }

@@ -591,6 +591,10 @@ mod native {
     /// given, so a text value stays text; the numeric affinities do not.)
     pub(super) fn is_text_affinity(declared: &str) -> bool {
         let d = declared.to_ascii_uppercase();
+        // SQLite's first rule: a type containing `INT` has INTEGER affinity, whatever else it says.
+        if d.contains("INT") {
+            return false;
+        }
         d.is_empty()
             || d.contains("BLOB")
             || d.contains("CHAR")
@@ -922,6 +926,8 @@ mod tests {
             "FLOAT",
             "DOUBLE",
             "INTEGER",
+            "POINT_TEXT",
+            "INTCHAR",
         ] {
             assert!(!native::is_text_affinity(numeric), "{numeric}");
         }
