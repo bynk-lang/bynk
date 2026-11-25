@@ -493,6 +493,47 @@ marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
     out.push_str(CALLER_OUTCOME);
 }
 
+/// The signed-queue-message section of the page (#3899), kept apart so `render_reference` stays
+/// under its length ceiling.
+const SIGNED_QUEUE_SECTION: &str = r#"
+## Signed queue messages
+
+A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Producer` refinement or a `Foreign` actor, see [Queue](/reference/queue/)) receives bodies in this form, and a producer that is not Bynk can follow it to be admitted.
+
+```json
+{
+  "bynk": { "v": 1, "from": "shop.orders", "id": "m-8f2c", "ts": 1700000000, "sig": "9c1e…" },
+  "body": { "id": "o-1", "total": 42 }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `v` | The format's version. This page describes `1`; a message with another version is refused. |
+| `from` | The sender: a Bynk context's qualified name, or a `Foreign` actor's name. The consumer looks up the keys it admits for it, and refuses a sender it does not know. |
+| `id` | A unique message id, minted by the producer. The consumer claims it once, so a replay is recognised (below). |
+| `ts` | When the producer signed it, in seconds since the epoch. It is covered by the signature and is not a validity window, because a queued message can wait for days. |
+| `sig` | The lower-case hex HMAC-SHA256 of the signing input, keyed by the secret shared between the producer and the consumer. |
+| `body` | The message itself, exactly as an unsigned producer would send it. |
+
+The signing input is these lines joined by a line feed, with no trailing line feed:
+
+```text
+bynk-queue-v1
+<from>
+<id>
+<ts>
+<source queue name>
+<canonical body>
+```
+
+The **source queue name** is the queue the producer sent to, not the queue the message was delivered from. Naming it stops a message being moved from one queue to another, and it lets a dead-letter consumer verify a message the platform moved. The **canonical body** is the body as JSON with every object's keys in sorted order, recursively, no whitespace, and arrays in their given order.
+
+A consumer refuses, and never handles, a message that is unsigned, malformed, of another version, from a sender it does not admit, or whose signature does not verify under any key it admits for that sender. It acknowledges the message and reports it, without retrying or dead-lettering it, so injected messages never reach a dead-letter consumer. During a key rotation a consumer admits the previous key as well as the current one for a window, so messages queued before the rotation still verify. A consumer also claims each verified `id` in its `Idempotency` store for at least the queue's retention plus the longest a send can be delayed (15 days), and acknowledges a second message with the same `id` without handling it, so putting a signed message back on the queue does not run it twice.
+
+This provides **authenticity** of the sender and **integrity** of the body. It does not provide confidentiality, because anyone with access to the account can read a queued body through the dashboard or by pulling, and it does not provide availability, because an account member can still flood or drain a queue. Keep secrets out of message bodies.
+"#;
+
 /// The whole page, in mdBook form (`# H1` title, relative `.md` links).
 pub fn render_reference() -> String {
     let mut out = String::new();
@@ -692,44 +733,7 @@ below, then encoded again. Rejections show the error's `kind` and `path`.
     let contracts = example_contracts();
     let _ = write!(
         out,
-        r#"
-## Signed queue messages
-
-A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Producer` refinement or a `Foreign` actor, see [Queue](/reference/queue/)) receives bodies in this form, and a producer that is not Bynk can follow it to be admitted.
-
-```json
-{{
-  "bynk": {{ "v": 1, "from": "shop.orders", "id": "m-8f2c", "ts": 1700000000, "sig": "9c1e…" }},
-  "body": {{ "id": "o-1", "total": 42 }}
-}}
-```
-
-| Field | Meaning |
-|---|---|
-| `v` | The format's version. This page describes `1`; a message with another version is refused. |
-| `from` | The sender: a Bynk context's qualified name, or a `Foreign` actor's name. The consumer looks up the keys it admits for it, and refuses a sender it does not know. |
-| `id` | A unique message id, minted by the producer. The consumer claims it once, so a replay is recognised (below). |
-| `ts` | When the producer signed it, in seconds since the epoch. It is covered by the signature and is not a validity window, because a queued message can wait for days. |
-| `sig` | The lower-case hex HMAC-SHA256 of the signing input, keyed by the secret shared between the producer and the consumer. |
-| `body` | The message itself, exactly as an unsigned producer would send it. |
-
-The signing input is these lines joined by a line feed, with no trailing line feed:
-
-```text
-bynk-queue-v1
-<from>
-<id>
-<ts>
-<source queue name>
-<canonical body>
-```
-
-The **source queue name** is the queue the producer sent to, not the queue the message was delivered from. Naming it stops a message being moved from one queue to another, and it lets a dead-letter consumer verify a message the platform moved. The **canonical body** is the body as JSON with every object's keys in sorted order, recursively, no whitespace, and arrays in their given order.
-
-A consumer refuses, and never handles, a message that is unsigned, malformed, of another version, from a sender it does not admit, or whose signature does not verify under any key it admits for that sender. It acknowledges the message and reports it, without retrying or dead-lettering it, so injected messages never reach a dead-letter consumer. During a key rotation a consumer admits the previous key as well as the current one for a window, so messages queued before the rotation still verify. A consumer also claims each verified `id` in its `Idempotency` store for at least the queue's retention plus the longest a send can be delayed (15 days), and acknowledges a second message with the same `id` without handling it, so putting a signed message back on the queue does not run it twice.
-
-This provides **authenticity** of the sender and **integrity** of the body. It does not provide confidentiality, because anyone with access to the account can read a queued body through the dashboard or by pulling, and it does not provide availability, because an account member can still flood or drain a queue. Keep secrets out of message bodies.
-
+        r#"{SIGNED_QUEUE_SECTION}
 ## Contract hash
 
 `X-Bynk-Contract` carries a hash of the service's signature, so a callee can
