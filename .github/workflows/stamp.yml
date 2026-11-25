@@ -1,4 +1,12 @@
-name: Stamp increments
+name: Stamp increments (emergency push)
+
+# NOT THE ROUTINE STAMP. Since November 2026 `stamp-batch.yml` stamps every
+# three hours and lands the result as a PR through the merge queue, so nothing
+# reaches `main` outside the queue. This workflow is now dispatch-only: the
+# emergency path that pushes a stamp straight to `main` through the ruleset
+# bypass, for when a batch cannot land. The notes below describe how that push
+# works; those about a run per merge describe the old `push` trigger.
+#
 
 # Assign the version and ADR number(s) for a merged increment, on `main`, per the
 # increment-allocation track (ADR 0206, amended by the "stamp pushes as a GitHub
@@ -37,14 +45,10 @@ name: Stamp increments
 # did (2026-10-22, #2295/#2297) it cancelled the one real run and stranded two
 # pending files. Now that run checks out the tip and stamps whatever is there.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "design/pending/**"
-      # The format doc is not an increment — editing it must not fire a (no-op)
-      # stamp run.
-      - "!design/pending/README.md"
-  # Manual recovery: stamp whatever is pending on the tip of `main`.
+  # Manual recovery only: stamp whatever is pending on the tip of `main` and
+  # push it straight there. The routine stamp is `stamp-batch.yml` (see the
+  # top). Reverting the PR that removed the `push` trigger here is the
+  # rollback to per-merge stamping.
   workflow_dispatch:
 
 # Serialise stamps so two close merges never race the version counter; never
