@@ -16,10 +16,10 @@ export type Cents = number & { readonly __brand: "t.shadow.Cents" };
 export const Cents = {
   of(value: number): Result<Cents, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Cents", message: "must be a safe integer", value });
+      return Err({ field: "Cents", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 5000)) {
-      return Err({ field: "Cents", message: "must be in range [1, 5000]", value });
+      return Err({ field: "Cents", message: "must be in range [1, 5000]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 5000 } }, value });
     }
     return Ok(value as Cents);
   },
@@ -47,10 +47,10 @@ export function __deserialise_t_pay__Cents(json: __JsonValue, path: string = "$"
     return Err({ kind: "StructuralMismatch", path, expected: "number", actual: typeof json });
   }
   if (!globalThis.Number.isSafeInteger(json)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be a safe integer", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be a safe integer", rule: { tag: "WellFormed" }, value: json } });
   }
   if (!(json >= 1 && json <= 1000)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be in range [1, 1000]", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Cents", message: "must be in range [1, 1000]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 1000 } }, value: json } });
   }
   return Ok(json as unknown as t_pay.Cents);
 }

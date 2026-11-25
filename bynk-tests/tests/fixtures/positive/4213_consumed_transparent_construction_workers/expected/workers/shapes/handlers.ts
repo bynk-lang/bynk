@@ -11,10 +11,10 @@ export type Port = number & { readonly __brand: "shapes.Port" };
 export const Port = {
   of(value: number): Result<Port, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Port", message: "must be a safe integer", value });
+      return Err({ field: "Port", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 65535)) {
-      return Err({ field: "Port", message: "must be in range [1, 65535]", value });
+      return Err({ field: "Port", message: "must be in range [1, 65535]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 65535 } }, value });
     }
     return Ok(value as Port);
   },
@@ -42,7 +42,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
+      return Err({ field: "Price", message: "must be positive", rule: { tag: "Positive" }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },
@@ -53,7 +53,7 @@ export type Code = string & { readonly __brand: "shapes.Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
-      return Err({ field: "Code", message: "must match /[A-Z]{3}/", value });
+      return Err({ field: "Code", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as Code);
   },

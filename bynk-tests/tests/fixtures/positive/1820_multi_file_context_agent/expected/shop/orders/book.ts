@@ -14,7 +14,7 @@ export type OrderId = string & { readonly __brand: "shop.orders.OrderId" };
 export const OrderId = {
   of(value: string): Result<OrderId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "OrderId", message: "must be non-empty", value });
+      return Err({ field: "OrderId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as OrderId);
   },

@@ -1,0 +1,42 @@
+commons bynk.validation {
+	---
+	The rule a refinement check enforces, with its argument, as `e.rule` on a
+	`ValidationError`: `MaxLength(limit: 280)` for `String where MaxLength(280)`.
+	It is closed, so a `match` on it is checked for exhaustiveness and a new
+	predicate is a visible change; the `_` arm is the way to opt out.
+
+	`WellFormed` is a value that is not a valid member of its base type at all (a
+	number that is not finite, an `Int` outside the safe range), before any
+	predicate was tried. `message` still says which.
+
+	Its variants name a `ValidationRule` only where the context says so (a `match`
+	or `is` on one, an expected type, the other side of `==` or `!=`): a bare
+	`Positive` is never a `ValidationRule` on its own, so a type of your own with a
+	`Positive` or `MaxLength` variant is unaffected. `ValidationRule.MaxLength(…)`
+	always works.
+	---
+	type ValidationRule =
+		| NonNegative
+		| Positive
+		| InRange(lo: Bound, hi: Bound)
+		| AtLeast(bound: Bound)
+		| AtMost(bound: Bound)
+		| NonEmpty
+		| MinLength(limit: Int)
+		| MaxLength(limit: Int)
+		| Length(limit: Int)
+		| Matches(pattern: String)
+		| IsoDate
+		| Cron
+		| WellFormed
+
+	---
+	A numeric argument of a rule, of whichever base the refined type has: `Int`,
+	`Float`, `Decimal` or `Duration`.
+	---
+	type Bound =
+		| IntBound(value: Int)
+		| FloatBound(value: Float)
+		| DecimalBound(value: Decimal)
+		| DurationBound(value: Duration)
+}

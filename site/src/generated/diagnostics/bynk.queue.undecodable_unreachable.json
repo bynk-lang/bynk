@@ -1,0 +1,10 @@
+{
+  "blurb": "`Undecodable` is the verdict a `system` case reads when a message reached a real queue and its body did not decode. Only that path can produce it: a handler builds `Ack`, `Retry` or `RetryAfter`, and a `unit` or `integration` case calls the consumer with a value that is already typed, so no message can fail to decode there. A pattern of `Undecodable` anywhere else is a dead arm that looks as if it handled something. Replace the arm with `_`, since a `match` must still be exhaustive, or, if the decode failure is what you want to test, make the case `as system` and address the queue by its context path. It is only a warning, since the arm does no harm.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.undecodable_unreachable",
+  "constructs": [],
+  "example": "case \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false   // ⚠ a unit case never sees this verdict\n      _ => expect false\n    }\n}\n\ncase \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack   // ✓ the verdicts a unit case can see\n}",
+  "severity": "warning",
+  "summary": "An `Undecodable` pattern of a `QueueResult` appears where the value is not a `system` case's queue verdict, so it can never match (warning)."
+}

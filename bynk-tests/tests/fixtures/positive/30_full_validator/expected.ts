@@ -11,7 +11,7 @@ export type Sku = string & { readonly __brand: "Sku" };
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z0-9]{3,16}" + ")$", "u").test(value))) {
-      return Err({ field: "Sku", message: "must match /[A-Z0-9]{3,16}/", value });
+      return Err({ field: "Sku", message: "must match /[A-Z0-9]{3,16}/", rule: { tag: "Matches", pattern: "[A-Z0-9]{3,16}" }, value });
     }
     return Ok(value as Sku);
   },
@@ -22,10 +22,10 @@ export type Quantity = number & { readonly __brand: "Quantity" };
 export const Quantity = {
   of(value: number): Result<Quantity, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Quantity", message: "must be a safe integer", value });
+      return Err({ field: "Quantity", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 9999)) {
-      return Err({ field: "Quantity", message: "must be in range [1, 9999]", value });
+      return Err({ field: "Quantity", message: "must be in range [1, 9999]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 9999 } }, value });
     }
     return Ok(value as Quantity);
   },
@@ -36,10 +36,10 @@ export type Discount = number & { readonly __brand: "Discount" };
 export const Discount = {
   of(value: number): Result<Discount, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Discount", message: "must be a safe integer", value });
+      return Err({ field: "Discount", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 100)) {
-      return Err({ field: "Discount", message: "must be in range [0, 100]", value });
+      return Err({ field: "Discount", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Discount);
   },

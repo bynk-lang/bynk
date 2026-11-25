@@ -1,0 +1,9 @@
+// #4215: a stub names one of the agent's `on call` handlers.
+suite shop.basket {
+	stub Basket.remove(_) faulted
+
+	case "an operation the agent does not declare" {
+		let r <- place.call("a", 1)
+		expect r is Ok(1)
+	}
+}

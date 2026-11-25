@@ -1,0 +1,26 @@
+context demo.basket
+
+consumes bynk { CallOutcome }
+
+agent Basket {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}
+
+service place {
+	on call(id: String, n: Int) -> Effect[Result[Int, String]] by Caller {
+		let o <- Basket(id).add.outcome(n)
+		match o {
+			Handled(t) => Effect.pure(Ok(t))
+			Rejected(_) => Effect.pure(Err("rejected"))
+			Faulted => Effect.pure(Err("faulted"))
+			Unreachable(_) => Effect.pure(Err("busy"))
+		}
+	}
+}

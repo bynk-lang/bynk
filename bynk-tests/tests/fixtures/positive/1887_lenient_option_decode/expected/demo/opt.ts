@@ -19,7 +19,7 @@ export type Name = string & { readonly __brand: "Name" };
 export const Name = {
   of(value: string): Result<Name, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Name", message: "must be non-empty", value });
+      return Err({ field: "Name", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Name);
   },

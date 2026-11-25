@@ -15,7 +15,7 @@ export type Ttl = number & { readonly __brand: "Ttl" };
 export const Ttl = {
   of(value: number): Result<Ttl, ValidationError> {
     if (!(value >= 60000)) {
-      return Err({ field: "Ttl", message: "must be at least 60.seconds", value });
+      return Err({ field: "Ttl", message: "must be at least 60.seconds", rule: { tag: "AtLeast", bound: { tag: "DurationBound", value: 60000 } }, value });
     }
     return Ok(value as Ttl);
   },
@@ -26,7 +26,7 @@ export type Window = number & { readonly __brand: "Window" };
 export const Window = {
   of(value: number): Result<Window, ValidationError> {
     if (!(value >= 1000 && value <= 86400000)) {
-      return Err({ field: "Window", message: "must be in range [1.second, 1.day]", value });
+      return Err({ field: "Window", message: "must be in range [1.second, 1.day]", rule: { tag: "InRange", lo: { tag: "DurationBound", value: 1000 }, hi: { tag: "DurationBound", value: 86400000 } }, value });
     }
     return Ok(value as Window);
   },
@@ -37,13 +37,13 @@ export type Percent = number & { readonly __brand: "Percent" };
 export const Percent = {
   of(value: number): Result<Percent, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Percent", message: "must be a safe integer", value });
+      return Err({ field: "Percent", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Percent", message: "must be at least 0", value });
+      return Err({ field: "Percent", message: "must be at least 0", rule: { tag: "AtLeast", bound: { tag: "IntBound", value: 0 } }, value });
     }
     if (!(value <= 100)) {
-      return Err({ field: "Percent", message: "must be at most 100", value });
+      return Err({ field: "Percent", message: "must be at most 100", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Percent);
   },
@@ -54,13 +54,13 @@ export type Ratio = number & { readonly __brand: "Ratio" };
 export const Ratio = {
   of(value: number): Result<Ratio, ValidationError> {
     if (!globalThis.Number.isFinite(value)) {
-      return Err({ field: "Ratio", message: "must be a finite number", value });
+      return Err({ field: "Ratio", message: "must be a finite number", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0.0)) {
-      return Err({ field: "Ratio", message: "must be at least 0.0", value });
+      return Err({ field: "Ratio", message: "must be at least 0.0", rule: { tag: "AtLeast", bound: { tag: "FloatBound", value: 0.0 } }, value });
     }
     if (!(value <= 1.5)) {
-      return Err({ field: "Ratio", message: "must be at most 1.5", value });
+      return Err({ field: "Ratio", message: "must be at most 1.5", rule: { tag: "AtMost", bound: { tag: "FloatBound", value: 1.5 } }, value });
     }
     return Ok(value as Ratio);
   },
@@ -71,7 +71,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!(((value).coefficient * 10n ** globalThis.BigInt(2) >= (50n) * 10n ** globalThis.BigInt((value).scale)))) {
-      return Err({ field: "Price", message: "must be at least 0.50", value: __bynkDecimalToString(value) });
+      return Err({ field: "Price", message: "must be at least 0.50", rule: { tag: "AtLeast", bound: { tag: "DecimalBound", value: { coefficient: 50n, scale: 2 } } }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },

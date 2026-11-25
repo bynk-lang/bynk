@@ -10,7 +10,7 @@ export type Code = string & { readonly __brand: "Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 3)) {
-      return Err({ field: "Code", message: "length must be at least 3", value });
+      return Err({ field: "Code", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value });
     }
     return Ok(value as Code);
   },

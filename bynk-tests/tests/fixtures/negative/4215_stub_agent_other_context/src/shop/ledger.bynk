@@ -1,0 +1,12 @@
+context shop.ledger
+
+agent Ledger {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call post(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+}

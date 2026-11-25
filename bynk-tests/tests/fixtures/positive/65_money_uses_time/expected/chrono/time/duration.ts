@@ -12,7 +12,7 @@ export type Span = number & { readonly __brand: "Span" };
 export const Span = {
   of(value: number): Result<Span, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Span", message: "must be a safe integer", value });
+      return Err({ field: "Span", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     return Ok(value as Span);
   },

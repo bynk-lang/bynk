@@ -10,7 +10,7 @@ export type OrderId = string & { readonly __brand: "OrderId" };
 export const OrderId = {
   of(value: string): Result<OrderId, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "ORD-[0-9]+" + ")$", "u").test(value))) {
-      return Err({ field: "OrderId", message: "must match /ORD-[0-9]+/", value });
+      return Err({ field: "OrderId", message: "must match /ORD-[0-9]+/", rule: { tag: "Matches", pattern: "ORD-[0-9]+" }, value });
     }
     return Ok(value as OrderId);
   },
@@ -21,7 +21,7 @@ export type CustomerId = string & { readonly __brand: "CustomerId" };
 export const CustomerId = {
   of(value: string): Result<CustomerId, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "CUST-[0-9]+" + ")$", "u").test(value))) {
-      return Err({ field: "CustomerId", message: "must match /CUST-[0-9]+/", value });
+      return Err({ field: "CustomerId", message: "must match /CUST-[0-9]+/", rule: { tag: "Matches", pattern: "CUST-[0-9]+" }, value });
     }
     return Ok(value as CustomerId);
   },

@@ -22,7 +22,7 @@ export type LocalToken = string & { readonly __brand: "boundary.consumer.LocalTo
 export const LocalToken = {
   of(value: string): Result<LocalToken, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 1)) {
-      return Err({ field: "LocalToken", message: "length must be at least 1", value });
+      return Err({ field: "LocalToken", message: "length must be at least 1", rule: { tag: "MinLength", limit: 1 }, value });
     }
     return Ok(value as LocalToken);
   },
