@@ -2,7 +2,7 @@
 # One line per design/pending file the stamp has consumed: <slug> <content hash> <version> [adr:NNNN,..].
 # A pending file whose slug AND content hash are listed is "already stamped": the stamp deletes it
 # without assigning a version, and `cargo xtask check-pending` fails a PR that carries it (#4319).
-# Entries without ADR numbers were back-filled from git history (the deleted pending files), up to v0.696.1; later entries are written by the stamp.
+# Entries up to v0.696.1 were back-filled from git history (the deleted pending files) and carry no ADR numbers; later entries are written by the stamp.
 slice-b-system-boundary f82345d674a11f21 0.187.0
 stamp-app-bypass e8d2c637bb9edb93 0.188.0
 boundary-rejection-security-headers 657534df6b44241a 0.188.1
