@@ -119,6 +119,9 @@ pub struct CompileOptions {
     /// `bynk.toml`'s `[workers] workers_dev`: written into every
     /// `wrangler.toml` when set, left out when `None`.
     pub workers_dev: Option<bool>,
+    /// `bynk.toml`'s `[workers.observability]` (#4127): the project's Workers
+    /// Logs settings, which a worker group may override.
+    pub observability: bynk_project::observability::Observability,
     /// #1883, slice 1b: the project's `assets/` folder — its files, keyed by
     /// normalised project-relative path (`assets/board.css`), listed by the
     /// caller, and a reader for their bytes
@@ -193,6 +196,7 @@ impl CompileOptions {
             contracts_lock: None,
             compatibility_flags: Vec::new(),
             workers_dev: None,
+            observability: Default::default(),
             asset_files: None,
             embed_files: None,
             fixture_files: None,
@@ -225,6 +229,7 @@ impl CompileOptions {
             contracts_lock: None,
             compatibility_flags: Vec::new(),
             workers_dev: None,
+            observability: Default::default(),
             asset_files: None,
             embed_files: None,
             fixture_files: None,
@@ -333,6 +338,15 @@ impl CompileOptions {
     /// `bynk.toml`'s `[workers]` table. See the field's own doc.
     pub fn compatibility_flags(mut self, flags: Vec<String>) -> Self {
         self.compatibility_flags = flags;
+        self
+    }
+
+    /// #4127: the project's `[workers.observability]`. See the field's own doc.
+    pub fn observability(
+        mut self,
+        observability: bynk_project::observability::Observability,
+    ) -> Self {
+        self.observability = observability;
         self
     }
 

@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "CYC_GRAPH"
 service = "cyc-graph"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

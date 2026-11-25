@@ -49,6 +49,8 @@ pub enum WranglerKey {
     Assets,
     Cache,
     Rules,
+    /// #4127: Workers Logs (`[observability]`).
+    Observability,
     /// A one-per-Worker table named by `bynk-std`'s registry: `version_metadata`, `ai`, `images`
     /// or `analytics`, held as the registry spells it.
     Singleton(&'static str),
@@ -120,6 +122,7 @@ impl WranglerKey {
         Self::Assets,
         Self::Cache,
         Self::Rules,
+        Self::Observability,
     ];
 
     /// The key as a header or root entry spells it, dotted for a sub-table
@@ -155,6 +158,7 @@ impl WranglerKey {
             Self::Assets => "assets",
             Self::Cache => "cache",
             Self::Rules => "rules",
+            Self::Observability => "observability",
             Self::Singleton(table) => table,
         }
     }
@@ -189,7 +193,8 @@ impl WranglerKey {
             | Self::Addresses
             | Self::Assets
             | Self::Cache
-            | Self::Rules => Inherited,
+            | Self::Rules
+            | Self::Observability => Inherited,
             Self::KvNamespaces => ResolvedIds { field: "id" },
             Self::R2Buckets => Qualified {
                 field: "bucket_name",
@@ -291,7 +296,8 @@ mod tests {
                 "addresses",
                 "assets",
                 "cache",
-                "rules"
+                "rules",
+                "observability"
             ]
             .into_iter()
             .collect()

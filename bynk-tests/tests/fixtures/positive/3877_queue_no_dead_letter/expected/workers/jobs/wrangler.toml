@@ -26,3 +26,7 @@ queue = "tuned-jobs"
 max_batch_size = 10
 max_retries = 1
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

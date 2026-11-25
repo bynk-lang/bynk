@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 queue = "outbox"
 max_batch_size = 10
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

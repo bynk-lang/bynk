@@ -72,7 +72,15 @@ pub fn compile_in_memory(
         tys,
         None,
     );
-    finish_build(run, ImportExt::Js, Path::new(""), &[], None, None, None)
+    finish_build(
+        run,
+        ImportExt::Js,
+        Path::new(""),
+        &[],
+        Default::default(),
+        None,
+        None,
+    )
 }
 
 /// [`compile_in_memory`] for several files (#1830): each `(path, source)` pair
@@ -156,7 +164,7 @@ pub fn compile_files_in_memory_locked(
         ImportExt::Js,
         Path::new(""),
         &[],
-        None,
+        Default::default(),
         None,
         contracts_lock,
     )

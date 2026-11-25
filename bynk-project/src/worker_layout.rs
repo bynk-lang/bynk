@@ -36,6 +36,8 @@ pub struct WorkerLayout {
     /// Each group's members in the order its `contexts` list gives them, by the
     /// group's directory: the order the group's entry tries them in.
     order: BTreeMap<String, Vec<String>>,
+    /// #4127: each group's own Workers Logs settings, by the group's directory.
+    observability: BTreeMap<String, crate::observability::ObservabilityOverride>,
 }
 
 impl WorkerLayout {
@@ -81,7 +83,27 @@ impl WorkerLayout {
                 })
             })
             .collect();
-        Self { members, order }
+        let observability = groups
+            .iter()
+            .filter_map(|(key, group)| group.observability.map(|o| (key.clone(), o)))
+            .collect();
+        Self {
+            members,
+            order,
+            observability,
+        }
+    }
+
+    /// #4127: the Workers Logs settings of the Worker `context` belongs to:
+    /// `base` (the project's), with its group's table laid over it.
+    pub fn observability(
+        &self,
+        context: &str,
+        base: crate::observability::Observability,
+    ) -> crate::observability::Observability {
+        self.observability
+            .get(&self.dir(context))
+            .map_or(base, |o| o.over(base))
     }
 
     /// Whether `context` is a member of a group, so its entry is one of several
