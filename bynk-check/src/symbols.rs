@@ -17,6 +17,46 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::CompileError;
 use bynk_syntax::span::Span;
 
+/// #4045: per unit, a name a `uses` clause renames or qualifies, to the commons it
+/// comes from and the name that commons declares it as.
+fn use_renames_of(
+    unit_tables: &HashMap<String, UnitTable>,
+) -> HashMap<String, HashMap<String, (String, String)>> {
+    unit_tables
+        .iter()
+        .map(|(unit, t)| {
+            let renames = t
+                .use_views
+                .iter()
+                .flat_map(|(target, view)| {
+                    view.use_origin
+                        .iter()
+                        .map(move |(key, orig)| (key.clone(), (target.clone(), orig.clone())))
+                })
+                .collect::<HashMap<_, _>>();
+            (unit.clone(), renames)
+        })
+        .filter(|(_, r)| !r.is_empty())
+        .collect()
+}
+
+/// #2887: only the aliases `phase_resolve_consumes` accepted, per unit, as
+/// alias -> (consumed unit, declared name).
+fn type_aliases_of(
+    unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
+) -> HashMap<String, HashMap<String, (String, String)>> {
+    unit_type_aliases
+        .iter()
+        .map(|(unit, aliases)| {
+            let aliases = aliases
+                .iter()
+                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
+                .collect();
+            (unit.clone(), aliases)
+        })
+        .collect()
+}
+
 /// v0.25 (ADR 0053): walk every parsed file's top-level declarations into
 /// the def table (synthetic first-party units and test files excluded —
 /// neither declares user-editable symbols), then qualify and attach the
@@ -31,42 +71,12 @@ pub fn assemble_index(
     refs: RefSink,
 ) -> ProjectIndex {
     let mut builder = IndexBuilder::default();
-    // #4045: a name a `uses` clause renames or qualifies is its declared name in the
-    // commons it comes from.
-    builder.set_use_renames(
-        unit_tables
-            .iter()
-            .map(|(unit, t)| {
-                let renames = t
-                    .use_views
-                    .iter()
-                    .flat_map(|(target, view)| {
-                        view.use_origin
-                            .iter()
-                            .map(move |(key, orig)| (key.clone(), (target.clone(), orig.clone())))
-                    })
-                    .collect::<HashMap<_, _>>();
-                (unit.clone(), renames)
-            })
-            .filter(|(_, r)| !r.is_empty())
-            .collect(),
-    );
+    builder.set_use_renames(use_renames_of(unit_tables));
     let mut uses = unit_uses.clone();
     uses.extend(refs.extra_uses);
     builder.set_uses(uses);
     builder.set_consumes(unit_consumes.clone());
-    // #2887: only the aliases `phase_resolve_consumes` accepted.
-    let type_aliases = unit_type_aliases
-        .iter()
-        .map(|(unit, aliases)| {
-            let aliases = aliases
-                .iter()
-                .map(|(alias, a)| (alias.clone(), (a.target.clone(), a.original.clone())))
-                .collect();
-            (unit.clone(), aliases)
-        })
-        .collect();
-    builder.set_type_aliases(type_aliases);
+    builder.set_type_aliases(type_aliases_of(unit_type_aliases));
     for pf in parsed {
         // #2834: a suite's helper `fn`s are definitions in the suite's own
         // namespace (`test_suites::suite_helper_namespace`); its cases are

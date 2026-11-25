@@ -404,7 +404,20 @@ A dotted name, e.g. `shop.orders` — used to name modules and reference them.
 
 {{#grammar uses_decl}}
 
-Imports a `commons` so its public names are in scope.
+Imports a `commons` so its public names are in scope. Three forms, as `consumes` has:
+
+```bynk
+uses lib.x                                    // the whole commons: every public name, bare
+uses lib.y as Y                               // reached qualified: Y.Status, Y.describe(…)
+uses lib.money { Money, format as formatMoney }  // only these names, any renamed with `as`
+```
+
+A braced list may rename a function, constant, asset or embed as well as a type; renaming a
+type leaves its variants' names as they are. Two commons that declare one name can be used
+together: writing the name bare is `bynk.uses.ambiguous_name`, which lists the qualified
+spellings, so alias one (`uses lib.y as Y`) or select the one you mean. A commons' full name
+(`lib.y.Status`) qualifies as well as an alias does. A declaration is read by one spelling in a
+unit: a second is `bynk.uses.second_spelling`.
 
 **Static semantics.**
 {{#grammar-semantics uses_decl}}
@@ -712,6 +725,15 @@ handler signature, agent state, or JSON codec target.
 
 **Static semantics.**
 {{#grammar-semantics applied_type_ref}}
+
+### qualified_type_ref {#rule-qualified_type_ref}
+
+{{#grammar qualified_type_ref}}
+
+A type named through a `uses` clause (#4045): `Y.Status` by an alias, or
+`lib.y.Status` by the commons' full name. The same names qualify a function or
+constant in an expression (`Y.describe(t)`), which parses as the call it reads as.
+A one-segment commons name (`uses keys`) is no qualifier; only an alias is.
 
 ### function_type_ref {#rule-function_type_ref}
 

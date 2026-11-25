@@ -1171,12 +1171,21 @@ fn a_renamed_or_qualified_used_name_hovers_as_the_declaration_it_names() {
     );
     let offset = at(&text, "fn f(", "formatMoney(m)");
     let h = hover_at(&r, &rel, &text, &root, offset).expect("`formatMoney` hovers");
-    assert!(h.contains("fn format"), "the declaration, not the alias: {h}");
-    assert!(h.contains("`formatMoney` is `format` of `lib.money`"), "{h}");
+    assert!(
+        h.contains("fn format"),
+        "the declaration, not the alias: {h}"
+    );
+    assert!(
+        h.contains("`formatMoney` is `format` of `lib.money`"),
+        "{h}"
+    );
     let offset = at(&text, "fn f(", "Y.describe") + 2;
     let h = hover_at(&r, &rel, &text, &root, offset).expect("`describe` of `Y.describe` hovers");
     assert!(h.contains("`Y.describe` is `describe` of `lib.y`"), "{h}");
     let offset = at(&text, "fn f(", "describe(s)");
     let h = hover_at(&r, &rel, &text, &root, offset).expect("a bare name hovers");
-    assert!(!h.contains(" is `describe` of "), "a bare name needs no note: {h}");
+    assert!(
+        !h.contains(" is `describe` of "),
+        "a bare name needs no note: {h}"
+    );
 }
