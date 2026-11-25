@@ -1,0 +1,61 @@
+suite shop.api as system {
+	case "a valid cookie is admitted" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Browser("ada")
+		expect r is Ok("browser ada")
+	}
+
+	case "a valid token is admitted" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Partner("p1")
+		expect r is Ok("partner p1")
+	}
+
+	case "a valid OIDC token is admitted" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Machine("m1")
+		expect r is Ok("machine m1")
+	}
+
+	case "a valid signature is admitted" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Hook
+		expect r is Ok("hook")
+	}
+
+	case "a forged session cookie is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Forged(Browser)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired session cookie is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Expired(Browser)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged Bearer token is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Forged(Partner)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired Bearer token is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Expired(Partner)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged OIDC token is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Forged(Machine)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "an expired OIDC token is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Expired(Machine)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a forged signature is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Forged(Hook)
+		expect r is Rejected(Unauthorized)
+	}
+
+	case "a stale signature is refused" {
+		let r <- api.POST("/ingest", Event { id: "e1" }) by Stale(Hook)
+		expect r is Rejected(Unauthorized)
+	}
+}

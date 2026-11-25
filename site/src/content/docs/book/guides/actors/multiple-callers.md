@@ -67,6 +67,21 @@ case "a user sees their own view" {
 }
 ```
 
+A bad credential is tested the same way, by naming the member whose refusal the case checks. A sum can hold
+several members that refuse a forged credential, so `by Forged` names one in parentheses:
+
+```bynk,fragment
+case "a forged session cookie is refused" {
+  let r <- api.GET("/orders") by Forged(User)
+  expect r is Rejected(Unauthorized)
+}
+```
+
+A bare `by Forged` is accepted only when exactly one member can refuse it; when more than one could, the
+compiler reports `bynk.test.bad_principal_needs_arm` and asks you to name the member. `by Expired` and
+`by Stale` work the same way, and `by Revoked(User)` tests a `sessions = true` cookie. A bad credential takes no
+identity.
+
 See [acting as an actor](/reference/testing/#call-site-by).
 
 ## A browser session or an API token

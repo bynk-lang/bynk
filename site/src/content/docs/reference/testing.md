@@ -720,12 +720,24 @@ Nine reserved principals drive the failures. Each yields the same
 | `by NoSubject` | two correctly signed, unexpired `Oidc` tokens with a `sub` the seam must refuse: one empty, one absent | a route with an `Oidc` actor |
 | `by Revoked` | a `SignedCookie` cookie correctly signed and unexpired, for a session that was issued and then revoked in the actor's session agent (`revokeAll`) | a route with a single `SignedCookie` actor declared with `sessions = true` |
 
-On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
-member: `by Forged` and `by Stale` sign as the sum's first `Signature` member,
-and a sum with no `Signature` member, `by Forged` and `by Expired` mint the token
-for its first Bearer member. A sum that admits `Visitor` (`by who: Processor |
-Visitor`) never answers `401`: a request with a missing or bad credential
-resolves as `Visitor`. So none of them is legal there.
+On an [actor sum](/book/guides/actors/multiple-callers/) a bad credential is presented to
+one member's seam, so the principal names the member in parentheses:
+`by Forged(Browser)`, `by Expired(Machine)`, `by Stale(Hook)`. The name is a bare member
+of the handler's `by` sum, resolved against it and never evaluated (an actor's identity is a
+value, `by Browser("ada")`; a bad credential carries none). Each member is tested with the
+credential its own scheme checks: a `SignedCookie` member gets a forged or expired session
+cookie, a Bearer or `Oidc` member a forged or expired token, a `Signature` member a forged
+or stale signature. A member whose seam cannot refuse the credential (`by Stale(Browser)`)
+is refused with the principal's own error, and a name that is not a member is
+`bynk.test.principal_identity_mismatch`.
+
+Without a name, `by Forged`, `by Expired` or `by Stale` still reaches the one member that can
+refuse it when there is exactly one and it is a Bearer or `Signature` member. When more than
+one member could refuse it, the principal must name one
+(`bynk.test.bad_principal_needs_arm`). A sum that admits `Visitor` (`by who: Processor |
+Visitor`) never answers `401`: a request with a missing or bad credential resolves as
+`Visitor`. So none of them is legal there. `by WrongIssuer`, `by WrongAudience`,
+`by WrongAlgorithm` and `by NoSubject` are not offered on a sum.
 
 All nine are `system`-tier only: below it the seam is skipped and the identity
 is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
