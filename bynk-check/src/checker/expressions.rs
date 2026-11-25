@@ -3189,9 +3189,9 @@ pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<
     let inner_ty = type_of(inner, None, ctx)?;
     // v0.153 (ADR 0177): `Option[T]?` lifts into an HttpResult-returning
     // handler — `Some(v)` yields `v`, `None` early-returns `NotFound` (404).
-    // Allowed ONLY where the enclosing return peels to `HttpResult[_]` (a bare
-    // `HttpResult[T]` handler or `Effect[HttpResult[T]]`); anywhere else an
-    // `Option` has no error channel to propagate into.
+    // Allowed where the enclosing return peels to `HttpResult[_]` (a bare
+    // `HttpResult[T]` handler or `Effect[HttpResult[T]]`), or (#3966) to `Option[_]`;
+    // anywhere else an `Option` has nowhere to propagate to.
     if let Ty::Option(t) = &*tys.get(inner_ty) {
         if peel_to_http_result(ctx.return_ty, tys).is_some() {
             lint_header_question(inner, span, ctx);
@@ -3216,11 +3216,13 @@ pub(crate) fn check_question(inner: &Expr, span: Span, ctx: &mut Ctx) -> Option<
         if peel_to_result(ctx.return_ty, tys).is_some() {
             err = err.with_suggestion(
                 "make the `Option` a `Result`, naming the error for `None`",
+                // `todo` has every type, so the placeholder checks, and it warns
+                // (`bynk.fault.todo`) until the author names the error.
                 vec![(
                     Span::new_in(span.file, inner.span.end, inner.span.end),
-                    ".okOr(<error>)".to_string(),
+                    ".okOr(todo(\"the error for None\"))".to_string(),
                 )],
-                Applicability::HasPlaceholders,
+                Applicability::MaybeIncorrect,
             );
         }
         ctx.errors.push(err);

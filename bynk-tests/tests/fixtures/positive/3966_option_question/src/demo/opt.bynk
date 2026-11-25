@@ -36,3 +36,30 @@ fn lambdaNoneStaysInLambda(xs: List[Int]) -> Int {
 		Some(a)
 	}, xs).getOrElse(-1)
 }
+
+fn Order.addressOf(self) -> Option[Addr] {
+	let a = self.address?
+	Some(a)
+}
+
+fn countdown(n: Int, xs: List[Int]) -> Option[Int] {
+	if n <= 0 {
+		xs.first()
+	} else {
+		let a = xs.first()?
+		countdown(n - 1, xs.skip(a))
+	}
+}
+
+fn viaIf(o: Order, flag: Bool) -> Option[String] {
+	let v = if flag { o.address?.country } else { "none" }
+	Some(v)
+}
+
+fn viaMatch(o: Order, k: Int) -> Option[String] {
+	let v = match k {
+		0 => o.address?.country,
+		_ => "other",
+	}
+	Some(v)
+}

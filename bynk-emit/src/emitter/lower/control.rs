@@ -43,6 +43,15 @@ fn embed_conversion(
     bynk_check::checker::embedding_for(f_err, *e, &cx.commons().types, tys.types())
 }
 
+/// Is `ty` an `HttpResult`, or an `Effect` of one?
+fn peel_http_result(ty: bynk_check::checker::TyId, tys: &Types) -> bool {
+    let node = tys.get(ty);
+    matches!(&*node, bynk_check::checker::Ty::HttpResult(_))
+        || node
+            .as_effect()
+            .is_some_and(|inner| peel_http_result(inner, tys))
+}
+
 /// #3966: does the enclosing body return an `Option` (or an `Effect` of one)? Then a `?` on an
 /// `Option` returns the `None` itself, rather than answering an `HttpResult` handler's `NotFound`.
 /// The checker accepted the `?` under the same rule.
@@ -205,7 +214,8 @@ pub(super) fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lower
     let tys = cx.ty_render();
     // v0.153 (ADR 0177): an `Option[T]?` operand lifts into an
     // HttpResult handler — `None` early-returns `NotFound` (404),
-    // `Some(v)` yields `v`. Any other operand is a `Result`: `Err`
+    // `Some(v)` yields `v`. #3966: in a body returning `Option`, the `None`
+    // returns unchanged. Any other operand is a `Result`: `Err`
     // propagates unchanged. Branch on the operand's checked type.
     // The checker rejects any other `?` operand, so a typed operand is
     // always present — assert it, so a future gap surfaces loudly in
@@ -237,7 +247,7 @@ pub(super) fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lower
         // #2857: a case returns a `CaseResult`, not the operand's
         // `Result` — so the `?` fails the case, reporting the `Err`
         // value at the `?`'s location. (The checker rejects an `Option`
-        // operand outside an `HttpResult` handler.)
+        // operand outside an `HttpResult` or `Option` body.)
         QuestionExit::Case {
             location: expect_location_raw(cx, e.span.start),
             start: e.span.start,
@@ -247,6 +257,15 @@ pub(super) fn lower_question(e: &Expr, inner: &Expr, cx: &mut LowerCtx) -> Lower
     } else if is_option && option_returns_option(cx) {
         QuestionExit::NoneUnchanged
     } else if is_option {
+        // The checker accepted this `?` only in an `HttpResult` body or an `Option` body (#3966).
+        // The latter was taken above, so the enclosing return must be an `HttpResult`: a body
+        // site that never bound `return_ty` would otherwise miscompile an `Option` function.
+        debug_assert!(
+            cx.return_ty
+                .is_some_and(|t| peel_http_result(t, tys.types())),
+            "`?` on an `Option` lowered with no enclosing `HttpResult` return at {:?}",
+            e.span,
+        );
         QuestionExit::NotFound
     } else if let Some((ty_name, variant)) = embed {
         QuestionExit::Embed { ty_name, variant }

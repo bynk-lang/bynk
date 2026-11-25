@@ -14,7 +14,7 @@ function __makeTestDeps() {
 async function test_a_full_chain_yields_the_value() {
   try {
     const deps = {};
-    const { Addr, Order, apply, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect } = __ns_demo_opt;
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
     type Addr = __ns_demo_opt.Addr;
     type Order = __ns_demo_opt.Order;
     const o = { address: Some({ city: Some("Leeds"), country: "UK" }) };
@@ -32,7 +32,7 @@ async function test_a_full_chain_yields_the_value() {
 async function test_a_missing_link_returns_None_early() {
   try {
     const deps = {};
-    const { Addr, Order, apply, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect } = __ns_demo_opt;
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
     type Addr = __ns_demo_opt.Addr;
     type Order = __ns_demo_opt.Order;
     const noCity = { address: Some({ city: None, country: "UK" }) };
@@ -52,7 +52,7 @@ async function test_a_missing_link_returns_None_early() {
 async function test_a_plain_function_propagates_None() {
   try {
     const deps = {};
-    const { Addr, Order, apply, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect } = __ns_demo_opt;
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
     type Addr = __ns_demo_opt.Addr;
     type Order = __ns_demo_opt.Order;
     if (!(__bynkEq(firstPlusOne([4, 5]), Some(5)))) { throw __bynkExpectFailure("tests/demo/opt.bynk:16:9", 445, 476, "expect firstPlusOne([4, 5]) == Some(5)\n  expected: firstPlusOne([4, 5]) == Some(5)\n  actual:   " + __bynkShow((firstPlusOne([4, 5]))) + " == " + __bynkShow((Some(5)))); }
@@ -70,7 +70,7 @@ async function test_a_plain_function_propagates_None() {
 async function test_an_effectful_body_propagates_None() {
   try {
     const deps = {};
-    const { Addr, Order, apply, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect } = __ns_demo_opt;
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
     type Addr = __ns_demo_opt.Addr;
     type Order = __ns_demo_opt.Order;
     const a = await viaEffect([1]);
@@ -90,7 +90,7 @@ async function test_an_effectful_body_propagates_None() {
 async function test_a_lambda_returns_from_the_lambda__not_the_function() {
   try {
     const deps = {};
-    const { Addr, Order, apply, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect } = __ns_demo_opt;
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
     type Addr = __ns_demo_opt.Addr;
     type Order = __ns_demo_opt.Order;
     if (!(__bynkEq(doubledFirst([3]), Some(6)))) { throw __bynkExpectFailure("tests/demo/opt.bynk:28:9", 715, 743, "expect doubledFirst([3]) == Some(6)\n  expected: doubledFirst([3]) == Some(6)\n  actual:   " + __bynkShow((doubledFirst([3]))) + " == " + __bynkShow((Some(6)))); }
@@ -105,9 +105,70 @@ async function test_a_lambda_returns_from_the_lambda__not_the_function() {
   }
 }
 
+// case tier: unit
+async function test_an_attached_method_propagates_None() {
+  try {
+    const deps = {};
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
+    type Addr = __ns_demo_opt.Addr;
+    type Order = __ns_demo_opt.Order;
+    const o = { address: Some({ city: None, country: "UK" }) };
+    if (!((Order.addressOf(o).tag === "Some"))) { throw __bynkExpectFailure("tests/demo/opt.bynk:35:9", 943, 965, "expect o.addressOf().isSome()"); }
+    if (!(__bynkEq(Order.addressOf(({ address: None })), None))) { throw __bynkExpectFailure("tests/demo/opt.bynk:36:9", 974, 1019, "expect (Order { address: None }).addressOf() == None\n  expected: (Order { address: None }).addressOf() == None\n  actual:   " + __bynkShow((Order.addressOf(({ address: None })))) + " == " + __bynkShow((None))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_self_recursive_function_propagates_None_from_its_loop() {
+  try {
+    const deps = {};
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
+    type Addr = __ns_demo_opt.Addr;
+    type Order = __ns_demo_opt.Order;
+    if (!(__bynkEq(countdown(2, [1, 1, 5]), Some(5)))) { throw __bynkExpectFailure("tests/demo/opt.bynk:40:9", 1096, 1130, "expect countdown(2, [1, 1, 5]) == Some(5)\n  expected: countdown(2, [1, 1, 5]) == Some(5)\n  actual:   " + __bynkShow((countdown(2, [1, 1, 5]))) + " == " + __bynkShow((Some(5)))); }
+    if (!(__bynkEq(countdown(3, [1, 1]), None))) { throw __bynkExpectFailure("tests/demo/opt.bynk:41:9", 1139, 1167, "expect countdown(3, [1, 1]) == None\n  expected: countdown(3, [1, 1]) == None\n  actual:   " + __bynkShow((countdown(3, [1, 1]))) + " == " + __bynkShow((None))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_value_position_if_and_match_propagate_None() {
+  try {
+    const deps = {};
+    const { Addr, Order, apply, countdown, doubledFirst, firstPlusOne, lambdaNoneStaysInLambda, shipTo, viaEffect, viaIf, viaMatch } = __ns_demo_opt;
+    type Addr = __ns_demo_opt.Addr;
+    type Order = __ns_demo_opt.Order;
+    const some = { address: Some({ city: None, country: "UK" }) };
+    const none = { address: None };
+    if (!(__bynkEq(viaIf(some, true), Some("UK")))) { throw __bynkExpectFailure("tests/demo/opt.bynk:47:9", 1341, 1372, "expect viaIf(some, true) == Some(\"UK\")\n  expected: viaIf(some, true) == Some(\"UK\")\n  actual:   " + __bynkShow((viaIf(some, true))) + " == " + __bynkShow((Some("UK")))); }
+    if (!(__bynkEq(viaIf(none, true), None))) { throw __bynkExpectFailure("tests/demo/opt.bynk:48:9", 1381, 1406, "expect viaIf(none, true) == None\n  expected: viaIf(none, true) == None\n  actual:   " + __bynkShow((viaIf(none, true))) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(viaIf(none, false), Some("none")))) { throw __bynkExpectFailure("tests/demo/opt.bynk:49:9", 1415, 1449, "expect viaIf(none, false) == Some(\"none\")\n  expected: viaIf(none, false) == Some(\"none\")\n  actual:   " + __bynkShow((viaIf(none, false))) + " == " + __bynkShow((Some("none")))); }
+    if (!(__bynkEq(viaMatch(some, 0), Some("UK")))) { throw __bynkExpectFailure("tests/demo/opt.bynk:50:9", 1458, 1489, "expect viaMatch(some, 0) == Some(\"UK\")\n  expected: viaMatch(some, 0) == Some(\"UK\")\n  actual:   " + __bynkShow((viaMatch(some, 0))) + " == " + __bynkShow((Some("UK")))); }
+    if (!(__bynkEq(viaMatch(none, 0), None))) { throw __bynkExpectFailure("tests/demo/opt.bynk:51:9", 1498, 1523, "expect viaMatch(none, 0) == None\n  expected: viaMatch(none, 0) == None\n  actual:   " + __bynkShow((viaMatch(none, 0))) + " == " + __bynkShow((None))); }
+    if (!(__bynkEq(viaMatch(none, 1), Some("other")))) { throw __bynkExpectFailure("tests/demo/opt.bynk:52:9", 1532, 1566, "expect viaMatch(none, 1) == Some(\"other\")\n  expected: viaMatch(none, 1) == Some(\"other\")\n  actual:   " + __bynkShow((viaMatch(none, 1))) + " == " + __bynkShow((Some("other")))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a full chain yields the value", "a missing link returns None early", "a plain function propagates None", "an effectful body propagates None", "a lambda returns from the lambda, not the function"];
+export const __bynkCases: readonly string[] = ["a full chain yields the value", "a missing link returns None early", "a plain function propagates None", "an effectful body propagates None", "a lambda returns from the lambda, not the function", "an attached method propagates None", "a self-recursive function propagates None from its loop", "a value-position if and match propagate None"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -139,6 +200,24 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a lambda returns from the lambda, not the function")) {
     const started = __bynkCaseNow();
     const r = { name: "a lambda returns from the lambda, not the function", ...(await test_a_lambda_returns_from_the_lambda__not_the_function()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an attached method propagates None")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an attached method propagates None", ...(await test_an_attached_method_propagates_None()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a self-recursive function propagates None from its loop")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a self-recursive function propagates None from its loop", ...(await test_a_self_recursive_function_propagates_None_from_its_loop()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a value-position if and match propagate None")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a value-position if and match propagate None", ...(await test_a_value_position_if_and_match_propagate_None()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

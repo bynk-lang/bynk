@@ -16,6 +16,12 @@ export interface Order {
 }
 
 export const Order = {
+  addressOf(self: Order): Option<Addr> {
+    const __r0 = self.address;
+    if (__r0.tag === "None") return __r0;
+    const a = __r0.value;
+    return Some(a);
+  },
 };
 
 export function shipTo(o: Order): Option<string> {
@@ -62,4 +68,58 @@ export function lambdaNoneStaysInLambda(xs: readonly number[]): number {
     const a = __r0.value;
     return Some(a);
   }, xs), -1);
+}
+
+export function countdown(n: number, xs: readonly number[]): Option<number> {
+  let __tco0 = n, __tco1 = xs;
+  __tco: while (true) {
+    const n = __tco0;
+    const xs = __tco1;
+    if (n <= 0) {
+      return ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs);
+    } else {
+      const __r0 = ((__xs: readonly number[]) => __xs.length > 0 ? Some(__xs[0]) : None)(xs);
+      if (__r0.tag === "None") return __r0;
+      const a = __r0.value;
+      const __r1 = n - 1;
+      const __r2 = (xs).slice(globalThis.Math.max(0, a));
+      __tco0 = __r1;
+      __tco1 = __r2;
+      continue __tco;
+    }
+  }
+}
+
+export function viaIf(o: Order, flag: boolean): Option<string> {
+  let __r1: string;
+  if (flag) {
+    const __r0 = o.address;
+    if (__r0.tag === "None") return __r0;
+    __r1 = __r0.value.country;
+  } else {
+    __r1 = "none";
+  }
+  const v = __r1;
+  return Some(v);
+}
+
+export function viaMatch(o: Order, k: number): Option<string> {
+  let __r0: string;
+  __r0_out: {
+    switch (k) {
+      case 0: {
+        const __r1 = o.address;
+        if (__r1.tag === "None") return __r1;
+        __r0 = __r1.value.country;
+        break __r0_out;
+      }
+      default: {
+        __r0 = "other";
+        break __r0_out;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  }
+  const v = __r0;
+  return Some(v);
 }

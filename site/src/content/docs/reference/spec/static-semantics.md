@@ -657,7 +657,7 @@ where the enclosing body returns an `Option[_]` or an `Effect[Option[_]]`: the `
 result, so `Option` never converts to `Result` or the reverse. Where the body returns an
 `HttpResult[_]` (or an `Effect` of one) the `None` answers `NotFound` instead (v0.153, ADR 0177).
 Anywhere else, a `Result`-returning body included, it is
-`bynk.types.question_option_outside_http`, with a fix that applies `.okOr(<error>)`. A lambda is
+`bynk.types.question_option_outside_http`, with a quick fix that applies `.okOr(todo("…"))`, to be completed with the error. A lambda is
 its own return scope, as for `Result`, and `bynk.par.question_in_join` applies to an `Option`
 as to a `Result`.
 
