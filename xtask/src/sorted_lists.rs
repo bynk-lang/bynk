@@ -82,6 +82,14 @@ fn regions(file: &str, lines: &[&str]) -> Result<Regions, Vec<String>> {
         if !fenced {
             match open_marker(line) {
                 Some(Ok(kind)) => {
+                    if let Some(parent) = stack.last().filter(|r| regions[**r].kind == Kind::Table)
+                    {
+                        errors.push(format!(
+                            "{file}:{}: a `table` region cannot hold another region (the one opened at line {})",
+                            i + 1,
+                            regions[*parent].open + 1
+                        ));
+                    }
                     regions.push(Region {
                         kind,
                         open: i,
@@ -252,6 +260,18 @@ pub fn check_text(file: &str, text: &str) -> Vec<String> {
     let mut problems = Vec::new();
     for (index, region) in regions.iter().enumerate() {
         let found = entries(region, index, &lines, &innermost);
+        // A region with nothing to order is a typo that would switch the check off.
+        if found.is_empty() {
+            let what = match region.kind {
+                Kind::Table => "table rows",
+                Kind::Headings => "headings",
+            };
+            problems.push(format!(
+                "{file}:{}: this `sorted` region holds no {what} to order; fix the marker or remove it",
+                region.open + 1
+            ));
+            continue;
+        }
         let mut sorted: Vec<&Entry> = found.iter().collect();
         sorted.sort_by(|a, b| a.key.cmp(&b.key));
         for pair in found.windows(2) {
@@ -418,6 +438,36 @@ mod tests {
         );
         assert!(check_text("t.md", &table(&["`Alpha`", "`alpha`"])).is_empty());
         assert_eq!(check_text("t.md", &table(&["`alpha`", "`Alpha`"])).len(), 1);
+    }
+
+    #[test]
+    fn a_region_with_nothing_to_order_is_an_error() {
+        // A table marker around prose, and a headings marker around a table: neither orders a thing.
+        let prose = check_text(
+            "e.md",
+            "<!-- sorted: table -->\n\nno table here\n\n<!-- /sorted -->\n",
+        );
+        assert!(prose[0].contains("holds no table rows"), "{prose:?}");
+        let table_as_headings = check_text(
+            "e.md",
+            "<!-- sorted: headings -->\n\n| T |\n|---|\n| `b` |\n| `a` |\n\n<!-- /sorted -->\n",
+        );
+        assert!(
+            table_as_headings[0].contains("holds no headings"),
+            "{table_as_headings:?}"
+        );
+    }
+
+    #[test]
+    fn a_table_region_cannot_hold_another_region() {
+        let text = "<!-- sorted: table -->\n\n| T |\n|---|\n| `a` |\n\n<!-- sorted: headings -->\n\n## X\n\n<!-- /sorted -->\n\n<!-- /sorted -->\n";
+        let problems = check_text("e.md", text);
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("cannot hold another region")),
+            "{problems:?}"
+        );
     }
 
     #[test]
