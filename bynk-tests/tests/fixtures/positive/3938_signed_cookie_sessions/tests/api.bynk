@@ -134,4 +134,34 @@ suite shop.api as system {
 		let r <- api.POST("/logout") by User("ada")
 		expect r is NoContent
 	}
+	case "a revoked session is refused" {
+		let r <- api.GET("/me") by Revoked
+		expect r is Rejected(Unauthorized)
+	}
+	case "revokeAll answers for the acting identity" {
+		let r <- api.POST("/password") by User("ada")
+		expect r is NoContent
+	}
+
+	case "a session ended by expire is refused when replayed" {
+		let before <- api.GET("/me") by User("ada")
+		expect before is Ok("ada")
+		let out <- api.POST("/logout") by User("ada")
+		expect out is NoContent
+		let after <- api.GET("/me") by User("ada")
+		expect after is Unauthorized
+	}
+
+	case "revokeAll refuses the identity's session and leaves another identity's valid" {
+		let ada <- api.GET("/me") by User("ada")
+		expect ada is Ok("ada")
+		let bob <- api.GET("/me") by User("bob")
+		expect bob is Ok("bob")
+		let revoked <- api.POST("/password") by User("ada")
+		expect revoked is NoContent
+		let adaAfter <- api.GET("/me") by User("ada")
+		expect adaAfter is Unauthorized
+		let bobAfter <- api.GET("/me") by User("bob")
+		expect bobAfter is Ok("bob")
+	}
 }

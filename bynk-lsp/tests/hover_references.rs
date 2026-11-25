@@ -1151,14 +1151,139 @@ fn question_on_an_option_hovers_as_not_found() {
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
     let h = hover_at(r, rel, text, root, at(text, "stored?", "?"))
         .expect("the `?` on an Option hovers");
-    assert!(h.contains("? : None returns early"), "{h}");
-    assert!(h.contains("404 NotFound"), "{h}");
+    assert!(h.contains("? : None answers 404 NotFound"), "{h}");
     assert!(h.contains("let Some(x) = e else"), "{h}");
+    assert!(
+        !h.contains("returning `Option`"),
+        "an `HttpResult` handler is not told about the `Option` rule: {h}"
+    );
     let elsewhere = hover_at(r, rel, text, root, at(text, "Ok(\"found", "Ok"));
     assert!(
         elsewhere.is_none_or(|h| !h.contains("404 NotFound")),
         "only the `?` carries the note"
     );
+}
+
+/// #4363 — a `?` on an `Option` hovers with only the propagation the enclosing
+/// declaration's return type gives: `None` returned in a body returning `Option`,
+/// both where it is not decided (inside a lambda).
+#[test]
+fn question_hover_names_only_the_propagation_that_applies() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3966_option_question",
+        "src/demo/opt.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "o.address?", "?"))
+        .expect("the `?` in an `Option` function hovers");
+    assert!(h.contains("? : None returns early"), "{h}");
+    assert!(
+        !h.contains("404"),
+        "an `Option` function is not told about `404 NotFound`: {h}"
+    );
+    // `Effect[Option[…]]` is the same rule.
+    let h = hover_at(r, rel, text, root, at(text, "fn viaEffect", "?"))
+        .expect("the `?` in an `Effect[Option]` function hovers");
+    assert!(
+        h.contains("? : None returns early") && !h.contains("404"),
+        "{h}"
+    );
+    // Inside a lambda the enclosing declaration does not decide it.
+    let h = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "fn doubledFirst", "first()?") + "first()".len(),
+    )
+    .expect("the `?` in a lambda hovers");
+    assert!(
+        h.contains("404 NotFound") && h.contains("returning `Option`"),
+        "{h}"
+    );
+}
+
+/// #4363 — the delimiters of an interpolation hole say how its value is rendered,
+/// by its type; an identifier inside keeps its own hover.
+#[test]
+fn an_interpolation_hole_hovers_with_how_it_renders() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3977_instant_duration_text",
+        "src/demo/stamps.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "expires at ", "\\(") + 1)
+        .expect("an `Instant` hole hovers on its `\\(`");
+    assert!(h.contains("Instant") && h.contains("RFC 3339"), "{h}");
+    let h = hover_at(r, rel, text, root, at(text, "retry in ", "\\(") + 1)
+        .expect("a `Duration` hole hovers on its `\\(`");
+    assert!(h.contains("Duration") && h.contains("1h30m"), "{h}");
+    // The identifier inside the hole is not the hole's note.
+    let inner = hover_at(r, rel, text, root, at(text, "expires at \\(", "expiry"));
+    assert!(
+        inner
+            .as_ref()
+            .is_none_or(|h| !h.contains("An interpolation hole")),
+        "{inner:?}"
+    );
+}
+
+/// #4363 review — the closing `)` (with a call inside the hole), a refined hole
+/// (named in the header, with the sentence about refinements) and a plain scalar
+/// hole (without it), on a scratch project.
+#[test]
+fn interpolation_hole_hover_covers_the_closing_paren_refinements_and_plain_scalars() {
+    let dir = std::env::temp_dir().join(format!("bynk-hole-hover-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src/demo")).unwrap();
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"holes\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src/demo/holes.bynk"),
+        "commons demo.holes\n\ntype Backoff = Duration where AtLeast(1.second)\ntype Count = Int where AtLeast(0)\n\nfn call(n: Int, b: Backoff, c: Count) -> String {\n\t\"call=\\(n.toString()) backoff=\\(b) count=\\(c) plain=\\(n)\"\n}\n",
+    )
+    .unwrap();
+    let (r, rel, text, root) = analysed(dir.to_str().unwrap(), "src/demo/holes.bynk");
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    // The closing `)` of a hole holding a call: the paren balancing must end the
+    // hole at its own `)`, not the call's.
+    let close = at(text, "call=\\(", "n.toString()") + "n.toString()".len();
+    let h = hover_at(r, rel, text, root, close).expect("the closing `)` hovers");
+    assert!(
+        h.contains("\\(…) : String") && h.contains("the text as it is"),
+        "{h}"
+    );
+    // The call's own parentheses are inside the hole, not its delimiters.
+    let inner = hover_at(r, rel, text, root, close - 1);
+    assert!(
+        inner
+            .as_ref()
+            .is_none_or(|h| !h.contains("An interpolation hole")),
+        "{inner:?}"
+    );
+    // A refinement is named, and says it renders as its base.
+    let h = hover_at(r, rel, text, root, at(text, "backoff=", "\\(") + 1)
+        .expect("a refined `Duration` hole hovers");
+    assert!(h.contains("\\(…) : Backoff (Duration)"), "{h}");
+    assert!(
+        h.contains("A refinement of a scalar renders as its base does."),
+        "{h}"
+    );
+    let h = hover_at(r, rel, text, root, at(text, "count=", "\\(") + 1)
+        .expect("a refined `Int` hole hovers");
+    assert!(h.contains("\\(…) : Count (Int)"), "{h}");
+    // A plain scalar names itself and has no sentence about refinements.
+    let h =
+        hover_at(r, rel, text, root, at(text, "plain=", "\\(") + 1).expect("an `Int` hole hovers");
+    assert!(
+        h.contains("\\(…) : Int") && h.contains("`toString()`"),
+        "{h}"
+    );
+    assert!(!h.contains("A refinement"), "{h}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// #4045: a name a `uses` clause renames or qualifies hovers as the declaration it
@@ -1214,4 +1339,70 @@ fn a_prelude_type_in_a_commons_hovers_as_its_declaration() {
     )
     .expect("`CronSchedule` hovers in a commons");
     assert!(c.contains("String where Cron"), "{c}");
+}
+
+/// #3925 — a constant named in `cors { origins: … }` hovers as its declaration
+/// (the pass records the reference as a use), and the service's header line shows
+/// the origins as written (the constant's name) and the `expose` names.
+#[test]
+fn a_cors_origins_constant_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3925_cors_expose_constants",
+        "src/api.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "origins: AppOrigins", "AppOrigins"),
+    )
+    .expect("the origins constant hovers");
+    assert!(h.contains("AppOrigins"), "{h}");
+    assert!(h.contains("List[String]"), "{h}");
+    let svc = hover_at(r, rel, text, root, at(text, "service api from", "api"))
+        .expect("the service hovers");
+    assert!(
+        svc.contains("origins: AppOrigins"),
+        "the origins as written: {svc}"
+    );
+    assert!(
+        svc.contains("expose: [\"x-request-id\"]"),
+        "the expose names: {svc}"
+    );
+}
+
+/// #3925 — a constant named in `cors { origins: … }` is coloured as a constant,
+/// like any other reference to one: the pass records the reference as a use.
+#[test]
+fn a_cors_origins_constant_gets_the_constant_semantic_token() {
+    let (r, rel, text, _) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3925_cors_expose_constants",
+        "src/api.bynk",
+    );
+    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
+    let constant = legend
+        .token_types
+        .iter()
+        .position(|t| t.as_str() == "constant")
+        .expect("`constant` is in the legend") as u32;
+    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let off = at(&text, "origins: [PartnerOrigin", "PartnerOrigin");
+    let want_line = text[..off].matches('\n').count() as u32;
+    let want_col = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;
+    let (mut line, mut col) = (0u32, 0u32);
+    let mut found = Vec::new();
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            col = t.delta_start;
+        } else {
+            col += t.delta_start;
+        }
+        if (line, col) == (want_line, want_col) {
+            found.push((t.length, t.token_type));
+        }
+    }
+    assert_eq!(found, vec![("PartnerOrigin".len() as u32, constant)]);
 }

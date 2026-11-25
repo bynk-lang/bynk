@@ -80,6 +80,7 @@ mod query_par;
 mod refined_range;
 mod refinements;
 mod result_more;
+mod session_calls;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -846,6 +847,9 @@ pub enum Callee {
     /// actor: the session cookie the actor mints, or its matching deletion.
     /// `issue` reads the `Clock` and is an `Effect`; `expire` is pure.
     SignedCookie { actor: String, issue: bool },
+    /// #3938: `Actor.revokeAll(identity)` on a `SignedCookie` actor with `sessions = true`: end
+    /// every session of the identity in its session agent. An `Effect[()]`.
+    SessionRevokeAll { actor: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.
@@ -7181,6 +7185,9 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     ("MalformedForm", true),
     // #3908: the router's `400` to a path whose percent-encoding does not decode.
     ("MalformedPath", true),
+    // #3926: the router's `429` to a client over a `@rateLimit` route's limit. A
+    // breaking addition to a closed sum, as ADR 0586's was.
+    ("RateLimited", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────

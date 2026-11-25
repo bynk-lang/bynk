@@ -1,0 +1,14 @@
+[project]
+name = "cors-expose-constants"
+version = "0.1.0"
+
+[paths]
+include = ["src"]
+
+# #3925: the origins a front end may call from, per environment. `default` is the
+# environment a plain build uses; a staging build reads the staging list.
+[vars]
+APP_ORIGINS = ["https://app.example.com", "https://admin.example.com"]
+
+[env.staging.vars]
+APP_ORIGINS = ["https://staging.app.example.com"]

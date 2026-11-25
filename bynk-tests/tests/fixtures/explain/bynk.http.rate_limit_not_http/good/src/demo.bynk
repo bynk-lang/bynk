@@ -1,0 +1,12 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service jobs {
+  on call(n: Int) -> Effect[Int] by Caller given SignupLimit {
+    let ok <- SignupLimit.allow("jobs")
+    Effect.pure(if ok { 1 } else { 0 })
+  }
+}

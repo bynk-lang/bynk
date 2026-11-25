@@ -152,6 +152,38 @@ test("makeIntegrationR2: get streams the body in 64 KiB chunks; put takes a stre
   assert.deepEqual(sizes, [65_536, 70_000 - 65_536]);
 });
 
+// #4049: ranges, conditions and delimiters, as R2 serves them.
+test("makeIntegrationR2: a range is clamped, one that starts at the end or is negative is refused", async () => {
+  const r2 = makeIntegrationR2();
+  await r2.put("k", new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+  const read = async (options: Parameters<typeof r2.get>[1]) => {
+    const o = (await r2.get("k", options))! as { range?: { offset: number; length: number }; arrayBuffer(): Promise<ArrayBuffer> };
+    return { range: o.range, bytes: [...new Uint8Array(await o.arrayBuffer())] };
+  };
+  assert.deepEqual(await read({ range: { offset: 2, length: 4 } }), { range: { offset: 2, length: 4 }, bytes: [2, 3, 4, 5] });
+  assert.deepEqual(await read({ range: { offset: 8, length: 50 } }), { range: { offset: 8, length: 2 }, bytes: [8, 9] });
+  assert.deepEqual(await read({ range: { suffix: 3 } }), { range: { offset: 7, length: 3 }, bytes: [7, 8, 9] });
+  assert.deepEqual((await read({ range: { suffix: 50 } })).range, { offset: 0, length: 10 });
+  await assert.rejects(() => r2.get("k", { range: { offset: 10 } }), /not satisfiable/);
+  await assert.rejects(() => r2.get("k", { range: { offset: -3 } }), /not negative/);
+  await assert.rejects(() => r2.get("k", { range: { offset: 2, length: -1 } }), /not negative/);
+  await assert.rejects(() => r2.get("k", { range: { suffix: -5 } }), /not negative/);
+});
+
+test("makeIntegrationR2: a condition that does not hold answers the object with no body; a delimiter folds keys", async () => {
+  const r2 = makeIntegrationR2();
+  const made = (await r2.put("a/1", new Uint8Array([1])))!;
+  await r2.put("a/2", new Uint8Array([2]));
+  await r2.put("b", new Uint8Array([3]));
+  assert.equal((await r2.get("a/1", { onlyIf: { etagMatches: "other" } }) as { body?: unknown }).body, undefined);
+  assert.equal((await r2.get("a/1", { onlyIf: { etagDoesNotMatch: made.etag } }) as { body?: unknown }).body, undefined);
+  assert.notEqual((await r2.get("a/1", { onlyIf: { etagMatches: made.etag } }) as { body?: unknown }).body, undefined);
+  const page = await r2.list({ delimiter: "/" });
+  assert.deepEqual(page.objects.map((o) => o.key), ["b"]);
+  assert.deepEqual(page.delimitedPrefixes, ["a/"]);
+  assert.deepEqual((await r2.list({ prefix: "a/", delimiter: "/" })).objects.map((o) => o.key), ["a/1", "a/2"]);
+});
+
 test("makeIntegrationR2: a multipart upload joins its parts in number order, by R2's rules", async () => {
   const r2 = makeIntegrationR2();
   const u = await r2.createMultipartUpload("big", { httpMetadata: { contentType: "text/plain" } });
