@@ -1,0 +1,56 @@
+---
+#4038: `@unique(by: k)` on a store `Map`: a value may appear on at most one entry, checked at
+commit against the staged state. An `Option` field's `None` is not indexed.
+---
+context demo.dir
+
+type Customer = {
+	id: String,
+	email: String,
+	nick: Option[String],
+}
+
+agent Directory {
+	key id: String
+
+	store customers: Map[String, Customer] @unique(by: email)
+	store byNick: Map[String, Customer] @unique(by: nick)
+	// Both declare the one index: the `@indexed` is redundant (a warning).
+	store both: Map[String, Customer] @unique(by: email) @indexed(by: email)
+
+	on call add(id: String, email: String) -> Effect[()] {
+		let _ <- customers.put(id, Customer { id: id, email: email, nick: None })
+	}
+
+	on call addPair(a: String, b: String, email: String) -> Effect[()] {
+		let _ <- customers.put(a, Customer { id: a, email: email, nick: None })
+		let _ <- customers.put(b, Customer { id: b, email: email, nick: None })
+	}
+
+	on call move(src: String, dst: String, fresh: String) -> Effect[()] {
+		let held <- customers.get(src)
+		match held {
+			Some(c) => {
+				let _ <- customers.put(src, Customer { id: c.id, email: fresh, nick: None })
+				let _ <- customers.put(dst, Customer { id: dst, email: c.email, nick: None })
+			},
+			None => (),
+		}
+	}
+
+	on call size() -> Effect[Int] {
+		customers.size()
+	}
+
+	on call owner(email: String) -> Effect[Option[Customer]] {
+		customers.filter((c) => c.email == email).first()
+	}
+
+	on call nick(id: String, nick: Option[String]) -> Effect[()] {
+		let _ <- byNick.put(id, Customer { id: id, email: id, nick: nick })
+	}
+
+	on call nickCount() -> Effect[Int] {
+		byNick.size()
+	}
+}

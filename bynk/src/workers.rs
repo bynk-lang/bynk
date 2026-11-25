@@ -40,9 +40,12 @@ pub fn compile_once(project_root: &Path, build_dir: &Path, schema_registry: bool
 /// How a build is made: whether it reconciles `bynk.schema.lock`, whether it
 /// only reports what a deploy would do (`--dry-run`), which never installs, and
 /// whether a missing npm package stops it instead of being installed (#3350).
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Build {
     schema_registry: bool,
+    /// #3941: the environment whose `[env.<name>.vars]` the build resolves
+    /// `env(…)` constants from; `default` unless `bynk deploy --env` names one.
+    environment: String,
     dry_run: bool,
     no_install: bool,
     /// #3580: record per-request traces (`bynk dev --trace-events`).
@@ -55,6 +58,7 @@ impl Build {
     pub fn new(schema_registry: bool, dry_run: bool) -> Self {
         Build {
             schema_registry,
+            environment: bynk_project::vars::DEFAULT_ENVIRONMENT.to_string(),
             dry_run,
             no_install: false,
             trace_requests: false,
@@ -76,6 +80,21 @@ impl Build {
     pub fn trace_requests(self, trace_requests: bool) -> Self {
         Build {
             trace_requests,
+            ..self
+        }
+    }
+
+    /// `bynk deploy --env <name>` (#3941): resolve `env(…)` constants from that
+    /// environment's `bynk.toml` values.
+    pub fn environment(self, environment: &str) -> Self {
+        // `DeployOptions::default()` carries an empty name (tests only).
+        let environment = if environment.is_empty() {
+            bynk_project::vars::DEFAULT_ENVIRONMENT
+        } else {
+            environment
+        };
+        Build {
+            environment: environment.to_string(),
             ..self
         }
     }
@@ -156,6 +175,7 @@ pub fn compile_built(
             .target(BuildTarget::Workers)
             .schema_registry(schema_lock)
             .progress(progress)
+            .environment(build.environment.as_str())
             .tests(false),
         Err(e) => {
             emsg!("bynk: error: {e}");

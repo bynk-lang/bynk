@@ -97,9 +97,11 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
   Conflict: 409,
   Gone: 410,
   LengthRequired: 411,
+  PreconditionFailed: 412,
   PayloadTooLarge: 413,
   UnsupportedMediaType: 415,
   UnprocessableEntity: 422,
+  PreconditionRequired: 428,
   TooManyRequests: 429,
   UnavailableForLegalReasons: 451,
   ServerError: 500,
@@ -309,9 +311,11 @@ const REASON_PHRASES: Readonly<Record<number, string>> = {
   406: "Not Acceptable",
   408: "Request Timeout",
   409: "Conflict",
+  412: "Precondition Failed",
   413: "Payload Too Large",
   415: "Unsupported Media Type",
   422: "Unprocessable Entity",
+  428: "Precondition Required",
   429: "Too Many Requests",
   451: "Unavailable For Legal Reasons",
   500: "Internal Server Error",
@@ -625,9 +629,11 @@ function baseHttpResultToResponse<T>(
     // Error variants carrying an explanatory message — `{ error }` JSON body.
     case "BadRequest":
     case "Conflict":
+    case "PreconditionFailed":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
     case "UnprocessableEntity":
+    case "PreconditionRequired":
     case "TooManyRequests":
     case "UnavailableForLegalReasons":
     case "ServerError":
@@ -699,9 +705,11 @@ const STATUS_TO_TAG: Record<number, HttpResult<unknown>["tag"]> = {
   409: "Conflict",
   410: "Gone",
   411: "LengthRequired",
+  412: "PreconditionFailed",
   413: "PayloadTooLarge",
   415: "UnsupportedMediaType",
   422: "UnprocessableEntity",
+  428: "PreconditionRequired",
   429: "TooManyRequests",
   451: "UnavailableForLegalReasons",
   500: "ServerError",
@@ -853,9 +861,11 @@ async function decodeHttpResult<T>(
       return { tag, location: response.headers.get("location") ?? "" };
     case "BadRequest":
     case "Conflict":
+    case "PreconditionFailed":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
     case "UnprocessableEntity":
+    case "PreconditionRequired":
     case "TooManyRequests":
     case "UnavailableForLegalReasons":
     case "ServerError":

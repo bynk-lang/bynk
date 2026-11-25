@@ -2754,6 +2754,11 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         status: 411,
     },
     HttpVariant {
+        name: "PreconditionFailed",
+        payload: HttpVariantPayload::Message,
+        status: 412,
+    },
+    HttpVariant {
         name: "PayloadTooLarge",
         payload: HttpVariantPayload::Message,
         status: 413,
@@ -2767,6 +2772,11 @@ pub const HTTP_VARIANTS: &[HttpVariant] = &[
         name: "UnprocessableEntity",
         payload: HttpVariantPayload::Message,
         status: 422,
+    },
+    HttpVariant {
+        name: "PreconditionRequired",
+        payload: HttpVariantPayload::Message,
+        status: 428,
     },
     HttpVariant {
         name: "TooManyRequests",

@@ -1,0 +1,16 @@
+suite demo.desk
+
+uses demo.kit_b
+
+case "suite B sees kit_b's names" {
+  let r = Row { n: helper(), label: "b" }
+  let n <- local.call(Base)
+  expect r.n == 20
+  expect n == 101
+}
+
+property "suite B's property sees its own kit" {
+  for all n: Int {
+    expect helper() == 20
+  }
+}

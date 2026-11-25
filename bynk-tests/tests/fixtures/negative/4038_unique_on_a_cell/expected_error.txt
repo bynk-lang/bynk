@@ -1,0 +1,2 @@
+bynk.store.annotation_kind_mismatch
+`@unique` applies to `Map`, not `Cell`

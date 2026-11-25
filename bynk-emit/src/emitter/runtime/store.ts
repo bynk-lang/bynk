@@ -27,7 +27,10 @@ export type Awaitable<T> = T | Promise<T>;
 /** One `@indexed(by:)` index: its name, and the index value a stored value carries. */
 export interface Indexer<V> {
   readonly index: string;
-  readonly of: (value: V) => string;
+  /** The index value of a stored value; `undefined` when it has none (a `None` under `@unique`), so it is not indexed. */
+  readonly of: (value: V) => string | undefined;
+  /** `@unique(by:)` (#4038): no two entries share an index value. Enforced by {@link StoreMapHandle.hasDuplicate} at commit. */
+  readonly unique?: boolean;
 }
 
 /** An agent's `store Map` (and, over `{ v, exp }`, its `store Cache`). */
@@ -55,6 +58,8 @@ export interface StoreMapHandle<V> {
   entries(): Awaitable<ReadonlyArray<readonly [string, V]>>;
   /** The values whose `index` value is `by`, in insertion order. */
   byIndex(index: string, by: string): Awaitable<readonly V[]>;
+  /** Whether any value of the `@unique` index `index` is held by more than one entry (#4038), judged on what this handler has staged. */
+  hasDuplicate(index: string): Awaitable<boolean>;
   /** The same values a page at a time, in **no promised order** (a storage-backed handle pages by primary key), for a scan that does not need one. */
   lazyByIndex(index: string, by: string): AsyncIterable<V> | Iterable<V>;
 }
@@ -84,6 +89,8 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   readonly indexers: readonly Indexer<V>[];
   // index name -> index value -> primary keys in rank (insertion) order.
   private readonly postings = new Map<string, Map<string, string[]>>();
+  /** The values staged under each `@unique` index since the handle was loaded, to check at commit (#4038). */
+  private readonly touched = new Map<string, Set<string>>();
   private nextRank = 0;
 
   constructor(indexers: ReadonlyArray<Indexer<V>> = []) {
@@ -100,6 +107,8 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     // `new this`, so a subclass (`StoreCache`) builds an instance of itself.
     const handle = new this(indexers);
     for (const [k, v] of entries) handle.put(k, v);
+    // What a handle is loaded with is not something a handler staged (#4038).
+    handle.touched.clear();
     return handle;
   }
 
@@ -134,7 +143,7 @@ export class StoreMap<V> implements StoreMapHandle<V> {
       const from = ix.of(old);
       const to = ix.of(value);
       if (from === to) continue;
-      this.dropPosting(ix, from, key);
+      if (from !== undefined) this.dropPosting(ix, from, key);
       this.addPosting(ix, key, existing);
     }
   }
@@ -142,7 +151,10 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   remove(key: string): boolean {
     const slot = this.slots.get(key);
     if (slot === undefined) return false;
-    for (const ix of this.indexers) this.dropPosting(ix, ix.of(slot.value), key);
+    for (const ix of this.indexers) {
+      const by = ix.of(slot.value);
+      if (by !== undefined) this.dropPosting(ix, by, key);
+    }
     this.slots.delete(key);
     return true;
   }
@@ -175,6 +187,14 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     return pks.map((pk) => (this.slots.get(pk) as Slot<V>).value);
   }
 
+  /** Only the values this handler staged are judged, as a storage-backed handle judges them: a duplicate it never touched is not its to refuse. */
+  hasDuplicate(index: string): boolean {
+    const buckets = this.postings.get(index);
+    if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
+    for (const by of this.touched.get(index) ?? []) if ((buckets.get(by)?.length ?? 0) > 1) return true;
+    return false;
+  }
+
   *lazyByIndex(index: string, by: string): Generator<V> {
     for (const v of this.byIndex(index, by)) yield v;
   }
@@ -187,9 +207,15 @@ export class StoreMap<V> implements StoreMapHandle<V> {
 
   private addPosting(ix: Indexer<V>, key: string, slot: Slot<V>): void {
     const by = ix.of(slot.value);
+    if (by === undefined) return;
     const buckets = this.postings.get(ix.index) as Map<string, string[]>;
     const bucket = buckets.get(by) ?? [];
     buckets.set(by, bucket);
+    if (ix.unique === true) {
+      const seen = this.touched.get(ix.index) ?? new Set<string>();
+      seen.add(by);
+      this.touched.set(ix.index, seen);
+    }
     // A posting list is in insertion order: the entry goes after every member that was
     // inserted before it. A new key is the newest, so that is the end; a key whose
     // indexed value changed is older than some members, so it goes in at its rank.

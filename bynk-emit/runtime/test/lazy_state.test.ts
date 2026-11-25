@@ -146,7 +146,7 @@ test("concurrent puts of one new key count it once", async () => {
   await Promise.all([s.items.put("new", { team: "red", n: 1 }), s.items.put("new", { team: "red", n: 2 })]);
   assert.equal(await s.items.size(), 3);
   await commit(self, storage, s);
-  assert.deepEqual(await storage.get("c/items"), { size: 3, seq: 3 });
+  assert.deepEqual(await storage.get("c/items"), { size: 3, seq: 3, ix: "by:i" });
 });
 
 test("the commit reaps expired cache entries within its bound", async () => {
