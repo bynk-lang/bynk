@@ -20,6 +20,16 @@ pub fn read_vars(project_root: &Path) -> Option<ProjectVars> {
     bynk_project::vars::try_read_vars_with(project_root, &HashMap::new()).ok()
 }
 
+/// The variables of `manifest_text` (an open buffer), or of the project's
+/// `bynk.toml` on disk when there is none.
+pub fn read_vars_from(project_root: &Path, manifest_text: Option<&str>) -> Option<ProjectVars> {
+    let overlay: HashMap<std::path::PathBuf, String> = manifest_text
+        .map(|t| (project_root.join("bynk.toml"), t.to_string()))
+        .into_iter()
+        .collect();
+    bynk_project::vars::try_read_vars_with(project_root, &overlay).ok()
+}
+
 /// The label signature help shows for `env`.
 pub const SIGNATURE: &str = "env(NAME, default)";
 
@@ -213,7 +223,8 @@ pub fn manifest_key_spans(manifest: &str, name: &str) -> Vec<(usize, usize)> {
     for line in manifest.split_inclusive('\n') {
         let trimmed = line.trim();
         if trimmed.starts_with('[') {
-            let header: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
+            let header_text = trimmed.split('#').next().unwrap_or(trimmed);
+            let header: String = header_text.chars().filter(|c| !c.is_whitespace()).collect();
             in_vars =
                 header == "[vars]" || (header.starts_with("[env.") && header.ends_with(".vars]"));
         } else if in_vars {
@@ -244,6 +255,9 @@ pub fn plan_rename(
     manifest: Option<(&Path, &str)>,
     vars: &ProjectVars,
 ) -> Result<std::collections::BTreeMap<std::path::PathBuf, Vec<(usize, usize)>>, String> {
+    if new_name == name {
+        return Ok(std::collections::BTreeMap::new());
+    }
     if !bynk_project::vars::is_var_name(new_name) {
         return Err(format!(
             "`{new_name}` is not a variable name: capital letters, digits and `_`, starting with a capital letter"
@@ -280,7 +294,8 @@ pub fn plan_rename(
         let spans = manifest_key_spans(text, name);
         if spans.len() != defined {
             return Err(format!(
-                "`{name}` is set in {defined} `bynk.toml` table(s), but only {} could be found to edit: rename it by hand in `bynk.toml` (a dotted or inline key), then rename the constants",
+                "`{name}` is set in {defined} `bynk.toml` {}, but only {} could be found to edit: it is written in a form the rename cannot edit (a quoted, dotted or inline key), so rename it by hand in `bynk.toml`, then rename the constants",
+                if defined == 1 { "table" } else { "tables" },
                 spans.len()
             ));
         }
@@ -428,6 +443,9 @@ mod tests {
             assert_eq!(&MANIFEST[*s..*e], "APP_ORIGIN");
         }
         assert!(manifest_key_spans("[project]\nAPP_ORIGIN = 1\n", "APP_ORIGIN").is_empty());
+        // A header with a trailing comment, as the manifest docs write it.
+        let commented = "[vars]   # every environment\nAPP_ORIGIN = 1\n\n[env.staging.vars] # staging\nAPP_ORIGIN = 2\n";
+        assert_eq!(manifest_key_spans(commented, "APP_ORIGIN").len(), 2);
     }
 
     fn sources() -> std::collections::HashMap<std::path::PathBuf, String> {
@@ -451,6 +469,12 @@ mod tests {
     #[test]
     fn a_rename_that_would_merge_or_miss_a_key_is_refused() {
         let m = Some((Path::new("bynk.toml"), MANIFEST));
+        // Renaming a variable to its own name is no change, not a merge.
+        assert!(
+            plan_rename("APP_ORIGIN", "APP_ORIGIN", &sources(), m, &vars())
+                .unwrap()
+                .is_empty()
+        );
         let e = plan_rename("APP_ORIGIN", "lower", &sources(), m, &vars()).unwrap_err();
         assert!(e.contains("not a variable name"), "{e}");
         let e = plan_rename("APP_ORIGIN", "OTHER", &sources(), m, &vars()).unwrap_err();

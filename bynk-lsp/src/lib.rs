@@ -562,11 +562,6 @@ impl Backend {
     ) -> Option<Result<WorkspaceEdit, String>> {
         let (text, name, _, _) = self.env_variable_at(uri, pos).await?;
         let root = self.root_for_uri(uri).await?;
-        let Some(vars) = self.project_vars(uri).await else {
-            return Some(Err(
-                "`bynk.toml` does not parse, so a variable cannot be renamed".into(),
-            ));
-        };
         let mut sources = self
             .project_content(uri)
             .await
@@ -576,17 +571,42 @@ impl Backend {
         let here = here.canonicalize().unwrap_or(here);
         sources.insert(here, text);
         let manifest_path = root.join("bynk.toml");
-        let manifest_text = {
-            let open = {
-                let state = self.state.read().await;
-                Url::from_file_path(&manifest_path)
-                    .ok()
-                    .and_then(|u| state.docs.get(&u).map(|d| d.text.clone()))
-            };
-            match open {
-                Some(t) => Some(t),
-                None => tokio::fs::read_to_string(&manifest_path).await.ok(),
-            }
+        // The open buffer's text wins over the disk's, and its version stamps the
+        // edit: the client rejects the rename if a buffer drifted past it.
+        let (manifest_text, versions) = {
+            let state = self.state.read().await;
+            let versions: std::collections::HashMap<PathBuf, i32> = state
+                .docs
+                .iter()
+                .filter_map(|(u, d)| {
+                    let p = u.to_file_path().ok()?;
+                    Some((p.canonicalize().unwrap_or(p), d.version))
+                })
+                .collect();
+            let open = Url::from_file_path(&manifest_path)
+                .ok()
+                .and_then(|u| state.docs.get(&u).map(|d| d.text.clone()));
+            (open, versions)
+        };
+        let manifest_text = match manifest_text {
+            Some(t) => Some(t),
+            None => tokio::fs::read_to_string(&manifest_path).await.ok(),
+        };
+        // The variables come from the same text the edits are computed on.
+        let vars = {
+            let root = root.clone();
+            let text = manifest_text.clone();
+            tokio::task::spawn_blocking(move || {
+                crate::env_const::read_vars_from(&root, text.as_deref())
+            })
+            .await
+            .ok()
+            .flatten()
+        };
+        let Some(vars) = vars else {
+            return Some(Err(
+                "`bynk.toml` does not parse, so a variable cannot be renamed".into(),
+            ));
         };
         let plan = match crate::env_const::plan_rename(
             &name,
@@ -625,7 +645,9 @@ impl Backend {
             document_edits.push(TextDocumentEdit {
                 text_document: OptionalVersionedTextDocumentIdentifier {
                     uri: file_uri,
-                    version: None,
+                    version: versions
+                        .get(&path.canonicalize().unwrap_or_else(|_| path.clone()))
+                        .copied(),
                 },
                 edits,
             });
@@ -8553,6 +8575,16 @@ mod tests {
         };
         assert_eq!(count(&a_uri), 1);
         assert_eq!(count(&b_uri), 1);
+        // An open buffer's edit carries its version, so the client rejects the
+        // rename if the buffer drifted; the unopened manifest carries none.
+        let version = |u: &Url| {
+            edits
+                .iter()
+                .find(|e| &e.text_document.uri == u)
+                .and_then(|e| e.text_document.version)
+        };
+        assert_eq!(version(&a_uri), Some(1));
+        assert_eq!(version(&b_uri), Some(1));
         let manifest_uri = Url::from_file_path(s.0.join("bynk.toml")).unwrap();
         assert_eq!(count(&manifest_uri), 2, "[vars] and [env.production.vars]");
 
