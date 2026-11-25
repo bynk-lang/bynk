@@ -2819,8 +2819,8 @@ fn actor_narrowing_refusal(
         );
     }
     // #3899: a `Foreign` actor on its own is enforced: the consumer admits only messages signed
-    // under its secret. A `Producer` refinement, or a `Foreign` actor beside an unsigned one or with a binder
-    // (no seam binds the resolved actor on a queue yet), is not yet.
+    // under its secret, and so is a sum of only `Foreign` actors (3c-2a). A `Producer` refinement, a
+    // `Foreign` actor beside an unsigned one, or a lone `Foreign` actor with a binder is not yet.
     if !on_queue || !(producer_refinement || mixes_foreign) {
         return None;
     }
