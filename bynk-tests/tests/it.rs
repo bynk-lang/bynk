@@ -315,6 +315,8 @@ mod system {
     mod agent_state_schema_lock;
     #[path = "alias_service_workerd.rs"]
     mod alias_service_workerd;
+    #[path = "analyse_mode_corpus.rs"]
+    mod analyse_mode_corpus;
     #[path = "asset_check_behaviour.rs"]
     mod asset_check_behaviour;
     #[path = "bearer_auth.rs"]
