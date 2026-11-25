@@ -1151,13 +1151,80 @@ fn question_on_an_option_hovers_as_not_found() {
     let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
     let h = hover_at(r, rel, text, root, at(text, "stored?", "?"))
         .expect("the `?` on an Option hovers");
-    assert!(h.contains("? : None returns early"), "{h}");
-    assert!(h.contains("404 NotFound"), "{h}");
+    assert!(h.contains("? : None answers 404 NotFound"), "{h}");
     assert!(h.contains("let Some(x) = e else"), "{h}");
+    assert!(
+        !h.contains("returning `Option`"),
+        "an `HttpResult` handler is not told about the `Option` rule: {h}"
+    );
     let elsewhere = hover_at(r, rel, text, root, at(text, "Ok(\"found", "Ok"));
     assert!(
         elsewhere.is_none_or(|h| !h.contains("404 NotFound")),
         "only the `?` carries the note"
+    );
+}
+
+/// #4363 — a `?` on an `Option` hovers with only the propagation the enclosing
+/// declaration's return type gives: `None` returned in a body returning `Option`,
+/// both where it is not decided (inside a lambda).
+#[test]
+fn question_hover_names_only_the_propagation_that_applies() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3966_option_question",
+        "src/demo/opt.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "o.address?", "?"))
+        .expect("the `?` in an `Option` function hovers");
+    assert!(h.contains("? : None returns early"), "{h}");
+    assert!(
+        !h.contains("404"),
+        "an `Option` function is not told about `404 NotFound`: {h}"
+    );
+    // `Effect[Option[…]]` is the same rule.
+    let h = hover_at(r, rel, text, root, at(text, "fn viaEffect", "?"))
+        .expect("the `?` in an `Effect[Option]` function hovers");
+    assert!(
+        h.contains("? : None returns early") && !h.contains("404"),
+        "{h}"
+    );
+    // Inside a lambda the enclosing declaration does not decide it.
+    let h = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "fn doubledFirst", "first()?") + "first()".len(),
+    )
+    .expect("the `?` in a lambda hovers");
+    assert!(
+        h.contains("404 NotFound") && h.contains("returning `Option`"),
+        "{h}"
+    );
+}
+
+/// #4363 — the delimiters of an interpolation hole say how its value is rendered,
+/// by its type; an identifier inside keeps its own hover.
+#[test]
+fn an_interpolation_hole_hovers_with_how_it_renders() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3977_instant_duration_text",
+        "src/demo/stamps.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(r, rel, text, root, at(text, "expires at ", "\\(") + 1)
+        .expect("an `Instant` hole hovers on its `\\(`");
+    assert!(h.contains("Instant") && h.contains("RFC 3339"), "{h}");
+    let h = hover_at(r, rel, text, root, at(text, "retry in ", "\\(") + 1)
+        .expect("a `Duration` hole hovers on its `\\(`");
+    assert!(h.contains("Duration") && h.contains("1h30m"), "{h}");
+    // The identifier inside the hole is not the hole's note.
+    let inner = hover_at(r, rel, text, root, at(text, "expires at \\(", "expiry"));
+    assert!(
+        inner
+            .as_ref()
+            .is_none_or(|h| !h.contains("An interpolation hole")),
+        "{inner:?}"
     );
 }
 

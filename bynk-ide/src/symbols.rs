@@ -2146,10 +2146,84 @@ pub fn describe_effect_method_at(
     )
 }
 
+/// What a `?` on an `Option` does where it stands (#4363): fixed by the declared
+/// return type of the function or handler around it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Propagation {
+    /// The body returns `Option` (or `Effect[Option]`): `None` is returned as it is.
+    NoneReturns,
+    /// The handler returns `HttpResult`: `None` answers `404 NotFound` (ADR 0177).
+    NotFound,
+    /// Not decided from the declaration: a `?` inside a lambda, or a return type
+    /// the tables do not name. The hover then describes both.
+    Either,
+}
+
+/// Whether `e`, or any expression below it, is a lambda holding `offset`: a `?`
+/// there propagates out of the lambda, not out of the declaration around it.
+fn lambda_holds(e: &Expr, offset: usize) -> bool {
+    if matches!(e.kind, ExprKind::Lambda(_)) && e.span.start <= offset && offset <= e.span.end {
+        return true;
+    }
+    expr_children(e)
+        .into_iter()
+        .any(|c| lambda_holds(c, offset))
+}
+
+/// [`Propagation`] for the `?` at `offset`, from the innermost function or
+/// handler body holding it.
+fn question_propagation(text: &str, offset: usize) -> Propagation {
+    let Ok(tokens) = tokenize(text) else {
+        return Propagation::Either;
+    };
+    let (Some(unit), _) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, text) else {
+        return Propagation::Either;
+    };
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => return Propagation::Either,
+    };
+    let holds =
+        |body: &bynk_syntax::ast::Block| body.span.start <= offset && offset <= body.span.end;
+    let classify = |ret: &TypeRef, body: &bynk_syntax::ast::Block| {
+        let inner = match ret {
+            TypeRef::Effect(inner, _) => inner,
+            other => other,
+        };
+        let is_lambda = body.statements.iter().any(|s| {
+            let mut exprs = Vec::new();
+            statement_exprs(s, &mut exprs);
+            exprs.into_iter().any(|e| lambda_holds(e, offset))
+        }) || lambda_holds(&body.tail, offset);
+        if is_lambda {
+            return Propagation::Either;
+        }
+        match type_ref_str(inner).split('[').next().unwrap_or("").trim() {
+            "Option" => Propagation::NoneReturns,
+            "HttpResult" => Propagation::NotFound,
+            _ => Propagation::Either,
+        }
+    };
+    let handler = |h: &Handler| holds(&h.body).then(|| classify(&h.return_type, &h.body));
+    items
+        .iter()
+        .find_map(|item| match item {
+            CommonsItem::Fn(f) => holds(&f.body).then(|| classify(&f.return_type, &f.body)),
+            CommonsItem::Service(s) => s.handlers.iter().find_map(handler),
+            CommonsItem::Agent(a) => a.handlers.iter().find_map(handler),
+            _ => None,
+        })
+        .unwrap_or(Propagation::Either)
+}
+
 /// #2839: hover on the `?` of an `Option` value. An `Option` is only liftable
 /// by `?` inside a handler returning `HttpResult` (ADR 0177), where `None` answers
-/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns early. The
-/// hover names both and points at `let … else` for any other status. A `?` on a `Result` is not described.
+/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns
+/// early. The hover names the one that applies to the enclosing declaration's return
+/// type (#4363), both where that is not decided (a lambda), and points at
+/// `let … else` for any other status. A `?` on a `Result` is not described.
 pub fn describe_question_at(
     text: &str,
     offset: usize,
@@ -2166,16 +2240,107 @@ pub fn describe_question_at(
     if !matches!(&*tys.get(operand), bynk_check::checker::Ty::Option(_)) {
         return None;
     }
-    Some(
-        "```bynk\n? : None returns early\n```\n\n\
-         On an `Option`, `?` yields the value for `Some` and returns early for `None`. In a \
-         function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as \
-         it is; `Option` and `Result` never convert. In an `HttpResult` handler, `None` answers \
-         `404 NotFound`, which is right for \"the thing you asked for is not there\", but a \
-         missing or malformed request input is a `400`: write \
-         `let Some(x) = e else { BadRequest(\"…\") }` to answer another status."
-            .to_string(),
-    )
+    const NOT_FOUND: &str = "In an `HttpResult` handler, `None` answers `404 NotFound`, which is right for \"the thing you asked for is not there\", but a missing or malformed request input is a `400`: write `let Some(x) = e else { BadRequest(\"…\") }` to answer another status.";
+    const RETURNS: &str = "In a function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as it is; `Option` and `Result` never convert.";
+    Some(match question_propagation(text, tok.span.start) {
+        Propagation::NoneReturns => format!(
+            "```bynk\n? : None returns early\n```\n\n\
+             On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS}"
+        ),
+        Propagation::NotFound => format!(
+            "```bynk\n? : None answers 404 NotFound\n```\n\n\
+             On an `Option`, `?` yields the value for `Some`. {NOT_FOUND}"
+        ),
+        Propagation::Either => format!(
+            "```bynk\n? : None returns early\n```\n\n\
+             On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS} {NOT_FOUND}"
+        ),
+    })
+}
+
+/// The `\( … )` hole of an interpolated string whose delimiter `offset` is on, as
+/// the span of the expression inside it (trimmed), found on the cursor's line.
+fn interpolation_hole_at(text: &str, offset: usize) -> Option<Span> {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
+    let line = &text[line_start..line_end];
+    let mut from = 0;
+    while let Some(rel) = line[from..].find("\\(") {
+        let open = line_start + from + rel + 2;
+        let mut depth = 1usize;
+        let mut close = None;
+        for (i, c) in text[open..line_end].char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(open + i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let close = close?;
+        // On the hole's own delimiters, `\(` and `)`: an identifier inside keeps
+        // its own hover.
+        if (open - 2 <= offset && offset < open) || offset == close {
+            let inner = &text[open..close];
+            let start = open + (inner.len() - inner.trim_start().len());
+            let end = close - (inner.len() - inner.trim_end().len());
+            return (start < end).then(|| Span::new(start, end));
+        }
+        from = close + 1 - line_start;
+    }
+    None
+}
+
+/// #4363: hover on an interpolation hole's `\(` or `)` (`"… \(e) …"`) says how the
+/// hole's value is rendered, from its type: the scalar bases and refinements of them
+/// (ADR 0075, #3977). `None` outside a hole, or when the type has no string form.
+pub fn describe_interpolation_hole_at(
+    text: &str,
+    offset: usize,
+    expr_types: &[(Span, bynk_check::checker::TyId)],
+    tys: &bynk_check::checker::Types,
+) -> Option<String> {
+    use bynk_check::checker::{NamedKind, Ty};
+    let hole = interpolation_hole_at(text, offset)?;
+    let ty = bynk_check::expr_types::type_at_span(expr_types, hole)?;
+    let base = match &*tys.get(ty) {
+        Ty::Base(b) => *b,
+        Ty::Named {
+            kind: NamedKind::Refined(b),
+            ..
+        } => *b,
+        _ => return None,
+    };
+    let rendering = match base {
+        BaseType::String => "the text as it is",
+        BaseType::Int | BaseType::Float => "its `toString()` text",
+        BaseType::Bool => "`true` or `false`",
+        BaseType::Decimal => "its canonical text",
+        BaseType::Instant => {
+            "RFC 3339 text in UTC (`2026-11-22T10:00:00.000Z`), the text `toString()` gives"
+        }
+        BaseType::Duration => "units, largest first (`1h30m`), the text `toString()` gives",
+        _ => return None,
+    };
+    let base_name = match base {
+        BaseType::String => "String",
+        BaseType::Int => "Int",
+        BaseType::Float => "Float",
+        BaseType::Bool => "Bool",
+        BaseType::Decimal => "Decimal",
+        BaseType::Instant => "Instant",
+        BaseType::Duration => "Duration",
+        _ => return None,
+    };
+    Some(format!(
+        "```bynk\n\\(…) : {base_name}\n```\n\nAn interpolation hole renders its value as {rendering}. \
+         A refinement of a scalar renders as its base does."
+    ))
 }
 
 /// v0.123 (editor-currency slice 2, DECISION B): if the identifier at
