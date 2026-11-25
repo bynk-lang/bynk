@@ -2,11 +2,12 @@
 //! constructor, its state record and the zero entries that seed it.
 
 use super::{
-    AgentDispatchFacts, AgentLoadFns, AgentPersistFns, AgentStoreLayout, GivenDeps, WsDepsRebuild,
-    WsOpenHost, agent_key_codec_name, agent_reads_key, classify_agent_store, consumed_type_ns,
-    emit_agent_dispatch, emit_agent_factory, emit_agent_handlers, emit_agent_history_driver,
-    emit_agent_load_commit_state, emit_agent_state_persistence, emit_ws_do_method,
-    ws_close_do_method_name, ws_message_do_method_name, ws_open_do_method_name, ws_open_hosts_for,
+    AgentDispatchFacts, AgentLoadFns, AgentPersistFns, AgentStoreLayout, GivenDeps, UniqueIndex,
+    WsDepsRebuild, WsOpenHost, agent_key_codec_name, agent_reads_key, classify_agent_store,
+    consumed_type_ns, emit_agent_dispatch, emit_agent_factory, emit_agent_handlers,
+    emit_agent_history_driver, emit_agent_load_commit_state, emit_agent_state_persistence,
+    emit_ws_do_method, ws_close_do_method_name, ws_message_do_method_name, ws_open_do_method_name,
+    ws_open_hosts_for,
 };
 use crate::emit_model::EmitProjectCtx;
 use crate::emitter::ctx::{BodyMode, ModuleCtx};
@@ -15,7 +16,7 @@ use crate::emitter::lower_ctx::LowerCtx;
 use crate::emitter::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use crate::emitter::zero_value::zero_expr as zero_value_expr;
 use crate::emitter::{BuildTarget, Pre, UnitFacts, agent_registry_name, compact_iife};
-use crate::ts_build::{call, ident, member, str_lit};
+use crate::ts_build::{binary, call, ident, member, str_lit};
 use bynk_check::checker::TypedCommons;
 use bynk_model::{StoreFieldIr, StoreKindIr};
 use bynk_syntax::ast::{AgentDecl, Expr, RecordField, Refinement, TypeDecl, TypeRef};
@@ -107,6 +108,10 @@ fn agent_zero_entries(
                             layout
                                 .composite_indexes
                                 .contains(&(name.name.clone(), f.clone())),
+                            layout
+                                .unique_indexes
+                                .iter()
+                                .find(|u| u.map == name.name && u.field == *f),
                         )
                     })
                     .collect(),
@@ -195,8 +200,33 @@ fn store_handle_init(
 
 /// `{ index: "<field>", of: (__v) => String(__v.<field>) }`: how a `Map` handle derives the posting
 /// key of one `@indexed(by:)` field (its canonical encoding when the field is not a scalar, #4037).
-fn map_indexer(field: &str, composite: bool) -> bynk_ts::TsExpr {
-    bynk_ts::TsExpr::object(vec![
+/// A `@unique(by:)` field (#4038) also carries `unique: true`, and when it is an `Option` its `of` is
+/// the `Some` payload's key, or `undefined` for a `None`, which is not indexed.
+fn map_indexer(field: &str, composite: bool, unique: Option<&UniqueIndex>) -> bynk_ts::TsExpr {
+    let key = |x: bynk_ts::TsExpr, composite: bool| {
+        call(
+            ident(if composite {
+                "__bynkKeyEncode"
+            } else {
+                "String"
+            }),
+            vec![x],
+        )
+    };
+    let value = member(ident("__v"), field);
+    let derived = match unique.and_then(|u| u.optional) {
+        Some(inner_composite) => bynk_ts::TsExpr::Conditional {
+            test: Box::new(binary(
+                bynk_ts::TsBinaryOp::StrictEq,
+                member(value.clone(), "tag"),
+                str_lit("Some"),
+            )),
+            consequent: Box::new(key(member(value, "value"), inner_composite)),
+            alternate: Box::new(ident("undefined")),
+        },
+        None => key(value, composite),
+    };
+    let mut entries = vec![
         ("index".to_string(), str_lit(field)),
         (
             "of".to_string(),
@@ -205,17 +235,17 @@ fn map_indexer(field: &str, composite: bool) -> bynk_ts::TsExpr {
                 is_async: false,
                 generics: Vec::new(),
                 return_type: None,
-                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(call(
-                    ident(if composite {
-                        "__bynkKeyEncode"
-                    } else {
-                        "String"
-                    }),
-                    vec![member(ident("__v"), field)],
-                )))),
+                body: Box::new(bynk_ts::TsArrowBody::Expr(Box::new(derived))),
             },
         ),
-    ])
+    ];
+    if unique.is_some() {
+        entries.push((
+            "unique".to_string(),
+            bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
+        ));
+    }
+    bynk_ts::TsExpr::object(entries)
 }
 
 /// The lowered, static initialiser of a state field. A static initialiser lowers to a pure

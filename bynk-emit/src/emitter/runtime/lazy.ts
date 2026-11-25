@@ -143,6 +143,8 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
   private readonly chains = new KeyChains();
   private readonly envelope: MapEnvelope<V>;
   private readonly indexers: readonly Indexer<V>[];
+  /** The values staged under each `@unique` index this handler, to check at commit (#4038). */
+  private readonly touched = new Map<string, Set<string>>();
   private readonly keyCheck: ((key: string) => void) | undefined;
 
   constructor(overlay: EntryOverlay, field: string, envelope: MapEnvelope<V>, indexers: ReadonlyArray<Indexer<V>> = [], keyCheck?: (key: string) => void) {
@@ -196,7 +198,7 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
       meta.seq += 1;
       meta.size += 1;
       this.meta.touch();
-      for (const ix of this.indexers) this.overlay.put(postingKey(this.field, ix.index, ix.of(value), key), 1);
+      for (const ix of this.indexers) this.addPosting(ix, ix.of(value), key);
       const exp = this.expiry(written(i));
       if (exp !== undefined) this.overlay.put(expiryKey(this.field, exp, key), 1);
       this.overlay.put(mk, written(i));
@@ -210,8 +212,8 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
         const from = ix.of(before);
         const to = ix.of(value);
         if (from === to) continue;
-        this.overlay.delete(postingKey(this.field, ix.index, from, key));
-        this.overlay.put(postingKey(this.field, ix.index, to, key), 1);
+        if (from !== undefined) this.overlay.delete(postingKey(this.field, ix.index, from, key));
+        this.addPosting(ix, to, key);
       }
     }
     const was = this.expiry(old);
@@ -237,7 +239,10 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
     this.overlay.delete(mk);
     if (this.indexers.length > 0) {
       const before = this.env(old);
-      for (const ix of this.indexers) this.overlay.delete(postingKey(this.field, ix.index, ix.of(before), key));
+      for (const ix of this.indexers) {
+        const by = ix.of(before);
+        if (by !== undefined) this.overlay.delete(postingKey(this.field, ix.index, by, key));
+      }
     }
     const exp = this.expiry(old);
     if (exp !== undefined) this.overlay.delete(expiryKey(this.field, exp, key));
@@ -281,6 +286,31 @@ export class LazyStoreMap<V> implements StoreMapHandle<V> {
 
   async entries(): Promise<ReadonlyArray<readonly [string, V]>> {
     return (await this.scan()).map(([k, e]) => [k, this.env(e)] as const);
+  }
+
+  /** Stage a posting; a `@unique` index also notes the value, to be checked for a second holder at commit. */
+  private addPosting(ix: Indexer<V>, by: string | undefined, key: string): void {
+    if (by === undefined) return;
+    this.overlay.put(postingKey(this.field, ix.index, by, key), 1);
+    if (ix.unique === true) {
+      const seen = this.touched.get(ix.index) ?? new Set<string>();
+      seen.add(by);
+      this.touched.set(ix.index, seen);
+    }
+  }
+
+  /**
+   * Whether any index value this handler staged under the `@unique` index `index` is now held by
+   * more than one entry (#4038). The postings are read through the overlay, so a committed holder
+   * and a staged one meet; a value that moved from one entry to another leaves one holder.
+   */
+  async hasDuplicate(index: string): Promise<boolean> {
+    if (!this.indexers.some((ix) => ix.index === index)) throw new Error(`store map has no index "${index}"`);
+    for (const by of this.touched.get(index) ?? []) {
+      const holders = await this.overlay.list<unknown>({ prefix: postingPrefix(this.field, index, by), limit: 2 });
+      if (holders.size > 1) return true;
+    }
+    return false;
   }
 
   async byIndex(index: string, by: string): Promise<readonly V[]> {

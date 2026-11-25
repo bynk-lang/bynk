@@ -3883,6 +3883,12 @@ const ANNOTATIONS: &[AnnotationSpec] = &[
         kinds: &["Map"],
         functional: true,
     },
+    // #4038: a value may appear on at most one entry; implies `@indexed(by:)` on the same field.
+    AnnotationSpec {
+        name: "unique",
+        kinds: &["Map"],
+        functional: true,
+    },
     AnnotationSpec {
         name: "bounded",
         kinds: &["Queue", "Log"],
@@ -3955,7 +3961,7 @@ fn validate_store_annotations(
         // v0.93 (ADR 0118): `@indexed(by: k, …)` — each `by:` names a
         // **value-keyable field of the map's value type** to maintain a secondary
         // index on. Validate the keys here, now the kind/value type are known.
-        if name == "indexed" {
+        if name == "indexed" || name == "unique" {
             validate_indexed_keys(f, types, ann, errors);
         }
     }
@@ -3971,6 +3977,7 @@ fn validate_indexed_keys(
     ann: &Annotation,
     errors: &mut Vec<CompileError>,
 ) {
+    let name = ann.name.name.as_str();
     // The map's value type is the second kind argument (`Map[K, V]`).
     let value_fields: Option<&[RecordField]> = f
         .kind
@@ -3985,12 +3992,12 @@ fn validate_indexed_keys(
             _ => None,
         });
     for arg in &ann.args {
-        // Only `by:` labels are admitted on `@indexed`.
+        // Only `by:` labels are admitted on `@indexed` and `@unique`.
         let Some(label) = &arg.label else {
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.span,
-                "`@indexed` arguments are `by: <field>` labels naming a field to index on",
+                format!("`@{name}` arguments are `by: <field>` labels naming a field to index on"),
             ));
             continue;
         };
@@ -3998,7 +4005,7 @@ fn validate_indexed_keys(
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.span,
-                format!("`@indexed` takes `by:` arguments, not `{}:`", label.name),
+                format!("`@{name}` takes `by:` arguments, not `{}:`", label.name),
             ));
             continue;
         }
@@ -4006,7 +4013,7 @@ fn validate_indexed_keys(
             errors.push(CompileError::new(
                 "bynk.index.bad_argument",
                 arg.value.span,
-                "`@indexed(by: …)` names a field of the map's value type",
+                format!("`@{name}(by: …)` names a field of the map's value type"),
             ));
             continue;
         };
@@ -4017,7 +4024,7 @@ fn validate_indexed_keys(
                     "bynk.index.unknown_key",
                     arg.value.span,
                     format!(
-                        "`@indexed(by: {0})` — the map's value type has no field `{0}`",
+                        "`@{name}(by: {0})` — the map's value type has no field `{0}`",
                         key.name
                     ),
                 ));
@@ -4032,7 +4039,7 @@ fn validate_indexed_keys(
                         "bynk.index.unkeyable_key",
                         arg.value.span,
                         format!(
-                            "`@indexed(by: {0})` — field `{0}` is not `Key`, and `{1}` is not",
+                            "`@{name}(by: {0})` — field `{0}` is not `Key`, and `{1}` is not",
                             key.name, blocker.part
                         ),
                     )
@@ -4112,6 +4119,8 @@ fn validate_index_hygiene(
     let mut declared: HashMap<String, Vec<(String, Span)>> = HashMap::new();
     // map → the value type's record fields (for the keyability check)
     let mut value_fields: HashMap<String, Vec<RecordField>> = HashMap::new();
+    // #4038: the (map, field) pairs under `@unique(by:)`, which maintains its index itself.
+    let mut unique: HashSet<(String, String)> = HashSet::new();
     for f in &agent.store_fields {
         if f.kind.head.name != "Map" || f.kind.args.len() != 2 {
             continue;
@@ -4128,6 +4137,16 @@ fn validate_index_hygiene(
             .map(|d| &d.body)
         {
             value_fields.insert(f.name.name.clone(), r.fields.clone());
+        }
+        for arg in f
+            .annotations
+            .iter()
+            .filter(|a| a.name.name == "unique")
+            .flat_map(|a| &a.args)
+        {
+            if let ExprKind::Ident(k) = &arg.value.kind {
+                unique.insert((f.name.name.clone(), k.name.clone()));
+            }
         }
         for an in f.annotations.iter().filter(|a| a.name.name == "indexed") {
             for arg in &an.args {
@@ -4155,7 +4174,8 @@ fn validate_index_hygiene(
             used.insert((map.to_string(), field.to_string()));
             let is_declared = declared
                 .get(map)
-                .is_some_and(|v| v.iter().any(|(f, _)| f == field));
+                .is_some_and(|v| v.iter().any(|(f, _)| f == field))
+                || unique.contains(&(map.to_string(), field.to_string()));
             if is_declared {
                 return;
             }
@@ -4181,6 +4201,19 @@ fn validate_index_hygiene(
     // A declared index no equality filter routes through is dead maintenance.
     for (map, fields) in &declared {
         for (field, span) in fields {
+            if unique.contains(&(map.clone(), field.clone())) {
+                errors.push(
+                    CompileError::new(
+                        "bynk.store.unique_implies_indexed",
+                        *span,
+                        format!(
+                            "`@unique(by: {field})` on `{map}` already maintains the index `@indexed(by: {field})` declares"
+                        ),
+                    )
+                    .with_note("remove the `@indexed`: a unique field is indexed, and its equality filters route through the unique index"),
+                );
+                continue;
+            }
             if !used.contains(&(map.clone(), field.clone())) {
                 errors.push(
                     CompileError::new(

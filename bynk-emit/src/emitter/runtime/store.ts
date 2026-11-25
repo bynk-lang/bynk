@@ -27,7 +27,10 @@ export type Awaitable<T> = T | Promise<T>;
 /** One `@indexed(by:)` index: its name, and the index value a stored value carries. */
 export interface Indexer<V> {
   readonly index: string;
-  readonly of: (value: V) => string;
+  /** The index value of a stored value; `undefined` when it has none (a `None` under `@unique`), so it is not indexed. */
+  readonly of: (value: V) => string | undefined;
+  /** `@unique(by:)` (#4038): no two entries share an index value. Enforced by {@link StoreMapHandle.hasDuplicate} at commit. */
+  readonly unique?: boolean;
 }
 
 /** An agent's `store Map` (and, over `{ v, exp }`, its `store Cache`). */
@@ -55,6 +58,8 @@ export interface StoreMapHandle<V> {
   entries(): Awaitable<ReadonlyArray<readonly [string, V]>>;
   /** The values whose `index` value is `by`, in insertion order. */
   byIndex(index: string, by: string): Awaitable<readonly V[]>;
+  /** Whether any value of the `@unique` index `index` is held by more than one entry (#4038), judged on what this handler has staged. */
+  hasDuplicate(index: string): Awaitable<boolean>;
 }
 
 /** An agent's `store Set`. */
@@ -132,7 +137,7 @@ export class StoreMap<V> implements StoreMapHandle<V> {
       const from = ix.of(old);
       const to = ix.of(value);
       if (from === to) continue;
-      this.dropPosting(ix, from, key);
+      if (from !== undefined) this.dropPosting(ix, from, key);
       this.addPosting(ix, key, existing);
     }
   }
@@ -140,7 +145,10 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   remove(key: string): boolean {
     const slot = this.slots.get(key);
     if (slot === undefined) return false;
-    for (const ix of this.indexers) this.dropPosting(ix, ix.of(slot.value), key);
+    for (const ix of this.indexers) {
+      const by = ix.of(slot.value);
+      if (by !== undefined) this.dropPosting(ix, by, key);
+    }
     this.slots.delete(key);
     return true;
   }
@@ -173,6 +181,13 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     return pks.map((pk) => (this.slots.get(pk) as Slot<V>).value);
   }
 
+  hasDuplicate(index: string): boolean {
+    const buckets = this.postings.get(index);
+    if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
+    for (const pks of buckets.values()) if (pks.length > 1) return true;
+    return false;
+  }
+
   /** A copy of the posting lists of `index`, as an encoded state record holds them. */
   postingsOf(index: string): ReadonlyMap<string, readonly string[]> {
     const buckets = this.postings.get(index) ?? new Map<string, string[]>();
@@ -181,6 +196,7 @@ export class StoreMap<V> implements StoreMapHandle<V> {
 
   private addPosting(ix: Indexer<V>, key: string, slot: Slot<V>): void {
     const by = ix.of(slot.value);
+    if (by === undefined) return;
     const buckets = this.postings.get(ix.index) as Map<string, string[]>;
     const bucket = buckets.get(by) ?? [];
     buckets.set(by, bucket);

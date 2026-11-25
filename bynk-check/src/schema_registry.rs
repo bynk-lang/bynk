@@ -614,7 +614,7 @@ fn key_roots(
         for by in f
             .annotations
             .iter()
-            .filter(|an| an.name.name == "indexed")
+            .filter(|an| matches!(an.name.name.as_str(), "indexed" | "unique"))
             .flat_map(|an| &an.args)
             .filter_map(|arg| match &arg.value.kind {
                 bynk_syntax::ast::ExprKind::Ident(id) => Some(&id.name),

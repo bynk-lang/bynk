@@ -421,3 +421,53 @@ test("a posting key over the storage-key limit faults naming the field and index
     (e: Error) => e.message.includes("`items`") && e.message.includes("`by`") && !e.message.includes("yyyy"),
   );
 });
+
+// #4038: `@unique(by:)` is checked at commit against the staged postings, committed holders included.
+test("a unique index refuses a second holder, committed or staged, and allows a moved value and a None", async () => {
+  interface Row {
+    email: string | undefined;
+  }
+  const UNIQUE: Indexer<Row> = { index: "email", of: (r) => r.email, unique: true };
+  const codec = { read: (e: { v: Row }) => e.v, write: (v: Row, i: number) => ({ i, v }) };
+  const s = new InMemoryStorage();
+  const open = () => {
+    const overlay = new EntryOverlay(s as never);
+    return { overlay, rows: new LazyStoreMap<Row>(overlay, "rows", codec, [UNIQUE]) };
+  };
+  const commit = async (h: { overlay: EntryOverlay; rows: LazyStoreMap<Row> }) => {
+    h.rows.finish();
+    await h.overlay.flush({ state: { __layout: 2 } });
+  };
+
+  const first = open();
+  await first.rows.put("a", { email: "x" });
+  await first.rows.put("n1", { email: undefined });
+  await first.rows.put("n2", { email: undefined });
+  assert.equal(await first.rows.hasDuplicate("email"), false, "two Nones are not duplicates");
+  await commit(first);
+
+  // A staged put collides with a committed holder.
+  const second = open();
+  await second.rows.put("b", { email: "x" });
+  assert.equal(await second.rows.hasDuplicate("email"), true);
+
+  // Moving the value from `a` to `c` in one handler leaves one holder.
+  const third = open();
+  await third.rows.put("a", { email: "y" });
+  await third.rows.put("c", { email: "x" });
+  assert.equal(await third.rows.hasDuplicate("email"), false);
+
+  // Two staged puts of one value collide, and a removal clears the collision.
+  const fourth = open();
+  await fourth.rows.put("d", { email: "z" });
+  await fourth.rows.put("e", { email: "z" });
+  assert.equal(await fourth.rows.hasDuplicate("email"), true);
+  await fourth.rows.remove("e");
+  assert.equal(await fourth.rows.hasDuplicate("email"), false);
+
+  // Overwriting an entry with its own value is not a duplicate.
+  const fifth = open();
+  await fifth.rows.put("a", { email: "x" });
+  assert.equal(await fifth.rows.hasDuplicate("email"), false);
+  await assert.rejects(() => Promise.resolve(fifth.rows.hasDuplicate("nope")), /no index "nope"/);
+});

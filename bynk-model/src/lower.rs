@@ -416,7 +416,7 @@ fn store_field_kind_and_indexed(f: &StoreField, cx: &LowerIrCtx) -> (StoreKindIr
     for arg in f
         .annotations
         .iter()
-        .filter(|a| a.name.name == "indexed")
+        .filter(|a| matches!(a.name.name.as_str(), "indexed" | "unique"))
         .flat_map(|a| &a.args)
     {
         if let (Some(l), ExprKind::Ident(k)) = (&arg.label, &arg.value.kind)

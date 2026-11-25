@@ -4769,7 +4769,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.store.unknown_annotation",
-        blurb: "A `store` field takes one of four annotations: `@indexed`, `@ttl`, `@retain` and `@bounded`. The set is closed, so a name outside it, usually a misspelling or one borrowed from another system, is refused rather than ignored. Use the annotation that says what you mean: `@retain` for how long a `Log` keeps entries, `@ttl` for a `Cache`. A known one on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
+        blurb: "A `store` field takes one of five annotations: `@indexed`, `@unique`, `@ttl`, `@retain` and `@bounded`. The set is closed, so a name outside it, usually a misspelling or one borrowed from another system, is refused rather than ignored. Use the annotation that says what you mean: `@retain` for how long a `Log` keeps entries, `@ttl` for a `Cache`. A known one on the wrong kind is `bynk.store.annotation_kind_mismatch`.",
         example: "store audit: Log[String] @keep(7.days)     // ✗ not a storage annotation\n\nstore audit: Log[String] @retain(7.days)   // ✓ how long a `Log` keeps entries",
     },
     Explain {
@@ -10007,13 +10007,17 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.store.log_needs_clock",
         "A handler calls `Log.append` (which stamps the current time) without declaring `given Clock`.",
     ),
+    warn(d(
+        "bynk.store.unique_implies_indexed",
+        "A `@unique(by: k)` field is also declared `@indexed(by: k)`: `@unique` maintains the index itself (a warning).",
+    )),
     d(
         "bynk.store.unkeyable_key",
-        "A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680).",
+        "A store `Set` element or `Map`/`Cache` key is not a `Key` type (a `Float`, a `Map`, a `Set` or a function appears in it).",
     ),
     d(
         "bynk.store.unknown_annotation",
-        "A `store` field carries an annotation outside the closed `@indexed`/`@ttl`/`@retain`/`@bounded` set.",
+        "A `store` field carries an annotation outside the closed `@indexed`/`@unique`/`@ttl`/`@retain`/`@bounded` set.",
     ),
     d(
         "bynk.store.unknown_kind",

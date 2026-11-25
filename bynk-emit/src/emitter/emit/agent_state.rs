@@ -5,6 +5,7 @@ use super::{
     AgentStoreLayout, MigrateNames, agent_gates_rehydration, declaration_location,
     emit_lazy_field_spec, is_codecable, migrate_dispatcher_decl, migrate_step_dispatch,
     migration_step_decl, step_ranges_expr, store_field_key_type, type_base_is_string,
+    unique_store_indexes,
 };
 use crate::emit_model::EmitProjectCtx;
 use crate::emitter::Pre;
@@ -481,6 +482,7 @@ pub(super) fn emit_agent_load_commit_state(
                 None,
             ));
         }
+        stmts.extend(unique_check(a, commons, ctx, source_text));
         stmts.push(bynk_ts::TsStmt::expr_stmt(
             bynk_ts::TsExpr::Await(Box::new(bynk_ts::TsExpr::Call {
                 callee: Box::new(bynk_ts::TsExpr::Ident("__commitStored".to_string())),
@@ -1350,6 +1352,41 @@ pub(super) fn emit_agent_state_persistence(
         agent_versions,
         lazy_fields,
     }
+}
+
+/// #4038: `await __checkUnique(agent, s, [[field, index, location], …]);`, the commit-time check of
+/// every `@unique(by:)` of the agent, run with the invariants and before the write.
+fn unique_check(
+    a: &AgentDecl,
+    commons: &TypedCommons,
+    ctx: &EmitProjectCtx,
+    source_text: &str,
+) -> Option<bynk_ts::TsStmt> {
+    let unique = unique_store_indexes(a, &commons.types);
+    if unique.is_empty() {
+        return None;
+    }
+    let declared = unique
+        .iter()
+        .map(|u| {
+            bynk_ts::TsExpr::array(vec![
+                str_lit(&u.map),
+                str_lit(&u.field),
+                str_lit(declaration_location(ctx, source_text, u.span)),
+            ])
+        })
+        .collect();
+    Some(bynk_ts::TsStmt::expr_stmt(
+        bynk_ts::TsExpr::Await(Box::new(call(
+            ident("__checkUnique"),
+            vec![
+                str_lit(&a.name.name),
+                ident("s"),
+                bynk_ts::TsExpr::array(declared),
+            ],
+        ))),
+        None,
+    ))
 }
 
 /// #4034: `const <name> = await <call>;`, a collection count bound for a predicate.

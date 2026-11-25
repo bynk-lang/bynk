@@ -1,5 +1,6 @@
 import type { DurableObjectListOptions, DurableObjectStorage, DurableObjectTransaction } from "./storage.ts";
 import { STORAGE_BATCH_LIMIT, utf8Compare } from "./storage.ts";
+import { invariantViolation } from "./errors.ts";
 import { __bynkKeyEncode } from "./keys.ts";
 import { entriesOf, noteOrder } from "./store.ts";
 
@@ -850,5 +851,23 @@ export function then<T, R>(value: T | Promise<T>, f: (value: T) => R | Promise<R
   return isThenable(value) ? value.then(f) : f(value);
 }
 
+/**
+ * The commit-time check of `@unique(by:)` (#4038): for each `[field, index, location]`, no value of the
+ * index may be held by two entries of the staged map. A duplicate refuses the commit, as an invariant
+ * violation does, naming the agent and `field.index`, never the value.
+ */
+export async function checkUnique(
+  agent: string,
+  state: object,
+  declared: ReadonlyArray<readonly [string, string, string]>,
+): Promise<void> {
+  const handles = state as Readonly<Record<string, { hasDuplicate(index: string): boolean | Promise<boolean> }>>;
+  for (const [field, index, location] of declared) {
+    if (await (handles[field] as { hasDuplicate(index: string): boolean | Promise<boolean> }).hasDuplicate(index)) {
+      throw invariantViolation(agent, `${field}.${index}`, "unique", location);
+    }
+  }
+}
+
 // #1653: the `__` aliases emitted code imports.
-export { commitStored as __commitStored, committedSize as __committedSize, storeKey as __bynkStoreKey, noteClock as __noteClock, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };
+export { commitStored as __commitStored, checkUnique as __checkUnique, committedSize as __committedSize, storeKey as __bynkStoreKey, noteClock as __noteClock, readStored as __readStored, readsLazily as __readsLazily, then as __bynkThen };

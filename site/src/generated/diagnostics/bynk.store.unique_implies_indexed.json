@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.unique_implies_indexed",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `@unique(by: k)` field is also declared `@indexed(by: k)`: `@unique` maintains the index itself (a warning)."
+}
