@@ -1,8 +1,17 @@
 context jobs.runner
 
 uses ops.schedules
+uses ops.chained
 
-// The shared constant names the schedule, and this context does not `consumes bynk`.
+// The shared constant names the schedule. This context also consumes `bynk` for
+// `Uuid` itself and passes one through the commons' functions: the type reaches it
+// by two paths and is one type.
+consumes bynk { Uuid }
+
+fn roundTrip(id: Uuid) -> Uuid {
+	echo(chain(id))
+}
+
 service sweeper from cron {
 	on schedule(Nightly) (at: Instant) -> Effect[Result[(), String]] {
 		Ok(())

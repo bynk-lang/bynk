@@ -141,12 +141,14 @@ pub(crate) fn add_implicit_consumes(parsed: &mut [ParsedFile]) {
         }
         let own = pf.unit().name().joined();
         let used: Vec<String> = pf.uses().iter().map(|u| u.target.joined()).collect();
+        // One tokenisation per file, and only for a file that mentions a candidate.
+        let idents = identifier_set(pf.source(), candidates);
         let wanted: Vec<&str> = declaring
             .iter()
             .filter(|(name, units)| {
                 !units.contains(&own)
                     && !used.iter().any(|u| units.contains(u))
-                    && names_identifier(pf.source(), name)
+                    && idents.contains(name.as_str())
             })
             .map(|(name, _)| name.as_str())
             .collect();
@@ -157,13 +159,14 @@ pub(crate) fn add_implicit_consumes(parsed: &mut [ParsedFile]) {
     }
 }
 
-/// Whether the file declares a type or a sum variant called `name`.
+/// Whether the file declares anything called `name`: a type, an event, an
+/// agent or actor (they share the type namespace), or a variant of one of its
+/// sums. Any of them would meet the adapter's type of that name.
 fn declares_name(pf: &ParsedFile, name: &str) -> bool {
-    declares_type(pf, name)
-        || pf.items().iter().any(|item| match item {
-            CommonsItem::Type(t) => type_has_variant(t, name),
-            _ => false,
-        })
+    pf.items().iter().any(|item| {
+        item.name().is_some_and(|n| n.name == name)
+            || matches!(item, CommonsItem::Type(t) if type_has_variant(t, name))
+    })
 }
 
 /// Whether `t` is a sum with a variant called `name`.
@@ -175,19 +178,33 @@ fn type_has_variant(t: &bynk_syntax::ast::TypeDecl, name: &str) -> bool {
     }
 }
 
-/// Whether `name` appears in `source` as an identifier token. Unlike
+/// The candidates that appear in `source` as identifier tokens. Unlike
 /// [`mentions_word`] this skips comments, docs and string text, so a word in
-/// prose never reaches an adapter the unit does not use.
-fn names_identifier(source: &str, name: &str) -> bool {
+/// prose never reaches an adapter the unit does not use. The file is tokenised
+/// once, and only when it mentions a candidate at all.
+fn identifier_set<'a>(
+    source: &str,
+    candidates: &'a [String],
+) -> std::collections::HashSet<&'a str> {
     use bynk_syntax::lexer::{TokenKind, tokenize};
-    if !mentions_word(source, name) {
-        return false;
+    let mut found = std::collections::HashSet::new();
+    let mentioned: Vec<&'a String> = candidates
+        .iter()
+        .filter(|name| mentions_word(source, name))
+        .collect();
+    if mentioned.is_empty() {
+        return found;
     }
-    tokenize(source).is_ok_and(|tokens| {
-        tokens.iter().any(|t| {
-            t.kind == TokenKind::Ident && source.get(t.span.start..t.span.end) == Some(name)
-        })
-    })
+    if let Ok(tokens) = tokenize(source) {
+        for t in tokens.iter().filter(|t| t.kind == TokenKind::Ident) {
+            if let Some(text) = source.get(t.span.start..t.span.end)
+                && let Some(name) = mentioned.iter().find(|n| n.as_str() == text)
+            {
+                found.insert(name.as_str());
+            }
+        }
+    }
+    found
 }
 
 /// Whether the file declares a type called `name`.
@@ -211,7 +228,19 @@ fn mentions_word(source: &str, word: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::mentions_word;
+    use super::{identifier_set, mentions_word};
+
+    /// #4181: a name counts only as an identifier token, not in prose or a string.
+    #[test]
+    fn a_candidate_is_an_identifier_token_not_prose() {
+        let names = vec!["Uuid".to_string(), "Request".to_string()];
+        let src =
+            "commons a.b\n\n// a Request is sent\nfn f(u: Uuid) -> String {\n  \"a Request\"\n}\n";
+        let found = identifier_set(src, &names);
+        assert!(found.contains("Uuid"), "{found:?}");
+        assert!(!found.contains("Request"), "{found:?}");
+        assert!(identifier_set("commons a.b\n", &names).is_empty());
+    }
 
     #[test]
     fn a_word_is_a_whole_identifier() {

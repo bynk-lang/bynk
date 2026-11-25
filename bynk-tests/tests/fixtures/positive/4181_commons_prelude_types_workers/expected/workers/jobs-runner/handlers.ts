@@ -4,6 +4,14 @@
 import { Ok, Err, type Result } from "../../__bynk_runtime/result.js";
 import type { __JsonValue, __BoundaryError } from "../../__bynk_runtime/boundary.js";
 
+import { Uuid } from "../../bynk.js";
+import { chain } from "../../ops/chained.js";
+import { echo } from "../../ops/schedules.js";
+
+export function roundTrip(id: Uuid): Uuid {
+  return echo(chain(id));
+}
+
 export const sweeper = {
   async cron_sweeper_0(at: number, deps: {}): globalThis.Promise<Result<void, string>> {
     return Ok(undefined);

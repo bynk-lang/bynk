@@ -124,11 +124,11 @@ impl CrossContextViewsCache {
 /// *synthetic* harness maps, not `unit_info` — so it keeps its parallel-map
 /// signature. The per-file core only has `unit_info`, so this materialises
 /// the four views that one call needs, once per unit ahead of the file loop
-/// — but only for a context/adapter, `build_cross_context_info`'s only
-/// caller. `UnitTable` owns every declaration body in the unit, so for every
-/// other unit kind (including the seven injected first-party commons) this
-/// would otherwise be a whole-project deep clone, performed and discarded,
-/// once per unit.
+/// — but only for a context/adapter, or a commons that consumes something
+/// (#4181), `build_cross_context_info`'s only caller. `UnitTable` owns every
+/// declaration body in the unit, so for every other unit kind (including the
+/// seven injected first-party commons) this would otherwise be a
+/// whole-project deep clone, performed and discarded, once per unit.
 pub struct UnitCheckCtx {
     cross_context_views: Option<Arc<CrossContextViews>>,
     /// #907: the exact set of type names `emit_context_rebrands` rebrands for
@@ -179,12 +179,17 @@ pub fn prepare_unit_check_ctx(
     reached_types: &crate::project_model::ReachedTypes,
     policy: &Arc<crate::stability::StabilityPolicy>,
 ) -> UnitCheckCtx {
-    let cross_context_views =
-        if kind == UnitKind::Context || kind == UnitKind::Adapter || kind == UnitKind::Commons {
-            Some(views.get(unit_info))
-        } else {
-            None
-        };
+    let cross_context_views = if kind == UnitKind::Context
+        || kind == UnitKind::Adapter
+        // #4181: a commons has the view only when it consumes something, which today
+        // is the type-only clause the toolchain adds for the `bynk` types it names.
+        || (kind == UnitKind::Commons
+            && unit_info.get(name).is_some_and(|i| !i.consumes.is_empty()))
+    {
+        Some(views.get(unit_info))
+    } else {
+        None
+    };
     let uses_commons_type_names: HashSet<String> = imported_from_kind
         .keys()
         .filter(|n| {

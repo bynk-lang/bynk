@@ -5029,3 +5029,36 @@ mod consumes_position_tests {
         assert!(insert(src, None, "as unit", true).is_none());
     }
 }
+
+/// #4181: the unknown-type error tells a capability's name from a type's.
+#[cfg(test)]
+mod unknown_type_note_tests {
+    use super::unknown_type_error;
+    use bynk_syntax::ast::Ident;
+    use bynk_syntax::span::Span;
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    #[test]
+    fn a_capability_name_gets_the_capability_note_and_a_type_name_does_not() {
+        let cap = unknown_type_error(&ident("Clock"));
+        assert!(
+            cap.notes
+                .iter()
+                .any(|n| n.contains("`Clock` is a capability, not a type")),
+            "{:?}",
+            cap.notes
+        );
+        let ty = unknown_type_error(&ident("Nope"));
+        assert!(
+            ty.notes.iter().all(|n| !n.contains("is a capability")),
+            "{:?}",
+            ty.notes
+        );
+    }
+}
