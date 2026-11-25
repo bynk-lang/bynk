@@ -256,9 +256,9 @@ async function test_a_signed_in_user_over_the_limit_is_refused_with_429() {
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const c = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:10:10", 576, 599, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:11:10", 609, 632, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
-    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:12:10", 642, 671, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:11:10", 677, 700, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:12:10", 710, 733, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:13:10", 743, 772, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -276,7 +276,7 @@ async function test_two_users_count_separately() {
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const other = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("bob" as any));
-    if (!(((__c: boolean) => __c)(other.tag === "Handled" && other.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:19:10", 915, 942, "expect other is Handled(NoContent)", "other", () => __bynkShow(other)); }
+    if (!(((__c: boolean) => __c)(other.tag === "Handled" && other.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:20:10", 1016, 1043, "expect other is Handled(NoContent)", "other", () => __bynkShow(other)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -294,12 +294,12 @@ async function test_a_cross_site_request_is_refused_and_never_consumes_the_limit
     const x1 = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), "\"x\"", ("ada" as any));
     const x2 = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), "\"x\"", ("ada" as any));
     const x3 = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: cross-site", "Origin: https://evil.example"]), "\"x\"", ("ada" as any));
-    if (!(((__c: boolean) => __c)(x1.tag === "Handled" && x1.value.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:26:10", 1485, 1509, "expect x1 is Handled(Forbidden)", "x1", () => __bynkShow(x1)); }
-    if (!(((__c: boolean) => __c)(x3.tag === "Handled" && x3.value.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:27:10", 1519, 1543, "expect x3 is Handled(Forbidden)", "x3", () => __bynkShow(x3)); }
+    if (!(((__c: boolean) => __c)(x1.tag === "Handled" && x1.value.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:27:10", 1586, 1610, "expect x1 is Handled(Forbidden)", "x1", () => __bynkShow(x1)); }
+    if (!(((__c: boolean) => __c)(x3.tag === "Handled" && x3.value.tag === "Forbidden"))) { throw __bynkExpectFailure("tests/api.bynk:28:10", 1620, 1644, "expect x3 is Handled(Forbidden)", "x3", () => __bynkShow(x3)); }
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:30:10", 1679, 1702, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1712, 1735, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:31:10", 1780, 1803, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:32:10", 1813, 1836, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -317,10 +317,10 @@ async function test_a_forged_cookie_is_refused_and_never_consumes_the_limiter() 
     const f1 = await __sysdrive_rawforged_api_http_POST_rename("\"x\"", undefined, "");
     const f2 = await __sysdrive_rawforged_api_http_POST_rename("\"x\"", undefined, "");
     const f3 = await __sysdrive_rawforged_api_http_POST_rename("\"x\"", undefined, "");
-    if (!(((__c: boolean) => __c)(f3.tag === "Rejected" && f3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:38:10", 1988, 2016, "expect f3 is Rejected(Unauthorized)", "f3", () => __bynkShow(f3)); }
+    if (!(((__c: boolean) => __c)(f3.tag === "Rejected" && f3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:39:10", 2089, 2117, "expect f3 is Rejected(Unauthorized)", "f3", () => __bynkShow(f3)); }
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:41:10", 2152, 2175, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:42:10", 2253, 2276, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -338,10 +338,10 @@ async function test_an_expired_cookie_is_refused_and_never_consumes_the_limiter(
     const e1 = await __sysdrive_rawexpired_api_http_POST_rename("\"x\"", undefined, "");
     const e2 = await __sysdrive_rawexpired_api_http_POST_rename("\"x\"", undefined, "");
     const e3 = await __sysdrive_rawexpired_api_http_POST_rename("\"x\"", undefined, "");
-    if (!(((__c: boolean) => __c)(e3.tag === "Rejected" && e3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 2433, 2461, "expect e3 is Rejected(Unauthorized)", "e3", () => __bynkShow(e3)); }
+    if (!(((__c: boolean) => __c)(e3.tag === "Rejected" && e3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:49:10", 2534, 2562, "expect e3 is Rejected(Unauthorized)", "e3", () => __bynkShow(e3)); }
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:51:10", 2597, 2620, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:52:10", 2698, 2721, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -359,10 +359,10 @@ async function test_the_window_recovers() {
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const c = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:58:10", 2853, 2882, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:59:10", 2954, 2983, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
     __bynkAdvanceClock(60000);
     const again = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
-    if (!(((__c: boolean) => __c)(again.tag === "Handled" && again.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:61:10", 2989, 3016, "expect again is Handled(NoContent)", "again", () => __bynkShow(again)); }
+    if (!(((__c: boolean) => __c)(again.tag === "Handled" && again.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:62:10", 3090, 3117, "expect again is Handled(NoContent)", "again", () => __bynkShow(again)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -380,9 +380,54 @@ async function test_two_routes_naming_one_limiter_count_together_per_caller() {
     const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
     const c = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: same-origin"]), "\"x\"", ("ada" as any));
-    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:68:10", 3342, 3371, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:69:10", 3443, 3472, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
     const other = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: same-origin"]), "\"x\"", ("bob" as any));
-    if (!(((__c: boolean) => __c)(other.tag === "Handled" && other.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:70:10", 3505, 3532, "expect other is Handled(NoContent)", "other", () => __bynkShow(other)); }
+    if (!(((__c: boolean) => __c)(other.tag === "Handled" && other.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:71:10", 3606, 3633, "expect other is Handled(NoContent)", "other", () => __bynkShow(other)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_revoked_session_is_refused_with_401_even_when_the_limit_is_exhausted() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    const over = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(over.tag === "Rejected" && over.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:78:10", 3920, 3952, "expect over is Rejected(RateLimited(_))", "over", () => __bynkShow(over)); }
+    const revoked = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
+    if (!(((__c: boolean) => __c)(revoked.tag === "Rejected" && revoked.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:80:10", 4025, 4058, "expect revoked is Rejected(Unauthorized)", "revoked", () => __bynkShow(revoked)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_revoked_sessions_never_consume_the_limiter() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const r1 = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
+    const r2 = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
+    const r3 = await __sysdrive_rawrevoked_api_http_POST_rename("\"x\"", undefined, "");
+    if (!(((__c: boolean) => __c)(r1.tag === "Rejected" && r1.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:87:10", 4299, 4327, "expect r1 is Rejected(Unauthorized)", "r1", () => __bynkShow(r1)); }
+    if (!(((__c: boolean) => __c)(r3.tag === "Rejected" && r3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 4337, 4365, "expect r3 is Rejected(Unauthorized)", "r3", () => __bynkShow(r3)); }
+    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:91:10", 4501, 4524, "expect a is Handled(NoContent)", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:92:10", 4534, 4557, "expect b is Handled(NoContent)", "b", () => __bynkShow(b)); }
+    const c = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:94:10", 4630, 4659, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -394,7 +439,7 @@ async function test_two_routes_naming_one_limiter_count_together_per_caller() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a signed-in user over the limit is refused with 429", "two users count separately", "a cross-site request is refused and never consumes the limiter", "a forged cookie is refused and never consumes the limiter", "an expired cookie is refused and never consumes the limiter", "the window recovers", "two routes naming one limiter count together per caller"];
+export const __bynkCases: readonly string[] = ["a signed-in user over the limit is refused with 429", "two users count separately", "a cross-site request is refused and never consumes the limiter", "a forged cookie is refused and never consumes the limiter", "an expired cookie is refused and never consumes the limiter", "the window recovers", "two routes naming one limiter count together per caller", "a revoked session is refused with 401 even when the limit is exhausted", "revoked sessions never consume the limiter"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -438,6 +483,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("two routes naming one limiter count together per caller")) {
     const started = __bynkCaseNow();
     const r = { name: "two routes naming one limiter count together per caller", ...(await test_two_routes_naming_one_limiter_count_together_per_caller()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a revoked session is refused with 401 even when the limit is exhausted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a revoked session is refused with 401 even when the limit is exhausted", ...(await test_a_revoked_session_is_refused_with_401_even_when_the_limit_is_exhausted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("revoked sessions never consume the limiter")) {
+    const started = __bynkCaseNow();
+    const r = { name: "revoked sessions never consume the limiter", ...(await test_revoked_sessions_never_consume_the_limiter()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

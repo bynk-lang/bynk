@@ -1,7 +1,8 @@
 suite shop.api as system {
-	// #3926: the signed-in user is counted after the cookie seam has run in full. (The driver mints a live
-	// session on every call, so a revoked session cannot be driven here: `identity_verify_guard.rs` pins that
-	// the `verify` step holds the session-live check, ahead of the limiter.)
+	// #3926: the signed-in user is counted after the cookie seam has run in full: the cross-site refusal, the
+	// cookie's signature and lifetime, and the session-live check. A caller who fails any of them gets that
+	// refusal and never touches the limiter. (`identity_verify_guard.rs` also pins, structurally, that the
+	// `verify` step holds the session-live check ahead of the limiter.)
 
 	case "a signed-in user over the limit is refused with 429" {
 		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
@@ -68,5 +69,28 @@ suite shop.api as system {
 		expect c is Rejected(RateLimited(_))
 		let other <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: same-origin"]), Wire("\"x\"")) by Member("bob")
 		expect other is Handled(NoContent)
+	}
+
+	case "a revoked session is refused with 401 even when the limit is exhausted" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let over <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect over is Rejected(RateLimited(_))
+		let revoked <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		expect revoked is Rejected(Unauthorized)
+	}
+
+	case "revoked sessions never consume the limiter" {
+		let r1 <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		let r2 <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		let r3 <- api.POST("/rename", Wire("\"x\"")) by Revoked
+		expect r1 is Rejected(Unauthorized)
+		expect r3 is Rejected(Unauthorized)
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect a is Handled(NoContent)
+		expect b is Handled(NoContent)
+		let c <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		expect c is Rejected(RateLimited(_))
 	}
 }
