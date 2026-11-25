@@ -1,0 +1,17 @@
+---
+#3951: an event's field takes a constant bound as a record type's does.
+---
+context shop.placed
+
+uses shop.limits
+consumes bynk { Events }
+exports transparent { Placed }
+
+event Placed = { qty: Int where AtMost(MaxQty) }
+
+service api from http {
+  on POST("/placed") () -> Effect[HttpResult[String]] by Visitor given Events {
+    let _ <- Events.emit[Placed](Placed { qty: 3 })
+    Created("sent")
+  }
+}

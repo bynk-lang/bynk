@@ -31,6 +31,7 @@ use bynk_syntax::ast::{
 use bynk_syntax::error::CompileError;
 
 use crate::index::{RefSink, SymbolKind};
+use crate::refinement_consts::resolve_refinement;
 use crate::symbols::{UnitTable, build_unit_table};
 use bynk_project::{ParsedFile, UnitKind};
 
@@ -80,17 +81,20 @@ const HANDLER_RULES: &[ArgRule] = &[
 ];
 
 /// What the pass reads of the unit it is resolving in.
-struct Scope<'a> {
-    unit: &'a str,
-    tables: &'a HashMap<String, UnitTable>,
-    uses: &'a HashMap<String, Vec<String>>,
+pub(crate) struct Scope<'a> {
+    pub(crate) unit: &'a str,
+    pub(crate) tables: &'a HashMap<String, UnitTable>,
+    pub(crate) uses: &'a HashMap<String, Vec<String>>,
     /// The constants declared in the file being rewritten, so a related span at
     /// one is only offered where it indexes the same source.
-    file_consts: HashSet<String>,
+    pub(crate) file_consts: HashSet<String>,
+    /// #3951: constants declared by the file itself, for a suite, whose own
+    /// constants are in no unit table. Empty for a commons or context.
+    pub(crate) local: Vec<bynk_syntax::ast::ConstDecl>,
 }
 
 impl<'a> Scope<'a> {
-    fn lookup(&self, u: &str) -> Option<(&'a UnitTable, &'a [String])> {
+    pub(crate) fn lookup(&self, u: &str) -> Option<(&'a UnitTable, &'a [String])> {
         let table = self.tables.get(u)?;
         let uses = self.uses.get(u).map(Vec::as_slice).unwrap_or(&[]);
         Some((table, uses))
@@ -206,12 +210,35 @@ fn rewrite_example(
 fn field_base(field: &RecordField, scope: &Scope) -> Option<BaseType> {
     match &field.type_ref {
         TypeRef::Base(b, _) => Some(*b),
-        TypeRef::Named(id) => match &scope.tables.get(scope.unit)?.types.get(&id.name)?.body {
-            TypeBody::Refined { base, .. } => Some(*base),
-            _ => None,
-        },
+        // The unit's own refined type, or one it gets through `uses` (#3951):
+        // the checker composes the same view.
+        TypeRef::Named(id) => std::iter::once(scope.unit)
+            .chain(
+                scope
+                    .uses
+                    .get(scope.unit)
+                    .into_iter()
+                    .flatten()
+                    .map(String::as_str),
+            )
+            .find_map(|u| match &scope.tables.get(u)?.types.get(&id.name)?.body {
+                TypeBody::Refined { base, .. } => Some(*base),
+                _ => None,
+            }),
         _ => None,
     }
+}
+
+/// #3951: the refinements of a record body's fields (an event's fields are the
+/// same shape as a record type's).
+fn rewrite_fields(fields: &mut [RecordField], scope: &Scope, refs: &mut RefSink) -> bool {
+    let mut changed = false;
+    for field in fields {
+        if let Some(base) = field_base(field, scope) {
+            changed |= resolve_refinement(&mut field.refinement, base, None, scope, refs);
+        }
+    }
+    changed
 }
 
 fn rewrite_handlers(handlers: &mut [Handler], scope: &Scope, refs: &mut RefSink) -> bool {
@@ -261,7 +288,7 @@ fn rewrite_schedule(h: &mut Handler, scope: &Scope, refs: &mut RefSink) -> bool 
     }
 }
 
-fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
+pub(crate) fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool {
     let mut changed = false;
     match &mut decl.body {
         TypeBody::Refined {
@@ -269,8 +296,12 @@ fn rewrite_type(decl: &mut TypeDecl, scope: &Scope, refs: &mut RefSink) -> bool 
         }
         | TypeBody::Opaque {
             base, refinement, ..
-        } => changed |= rewrite_example(refinement, *base, scope, refs),
+        } => {
+            changed |= resolve_refinement(refinement, *base, Some(&decl.name.name), scope, refs);
+            changed |= rewrite_example(refinement, *base, scope, refs);
+        }
         TypeBody::Record(rec) => {
+            changed |= rewrite_fields(&mut rec.fields, scope, refs);
             for field in &mut rec.fields {
                 changed |= rewrite_annotations(&mut field.annotations, FIELD_RULES, scope, refs);
                 if let Some(base) = field_base(field, scope) {
@@ -290,6 +321,7 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
         match item {
             CommonsItem::Type(decl) => changed |= rewrite_type(decl, scope, refs),
             CommonsItem::Event(ev) => {
+                changed |= rewrite_fields(&mut ev.body.fields, scope, refs);
                 changed |= rewrite_annotations(&mut ev.annotations, EVENT_RULES, scope, refs);
             }
             CommonsItem::Service(svc) => {
@@ -348,6 +380,7 @@ pub fn resolve_annotation_consts(
                         _ => None,
                     })
                     .collect(),
+                local: Vec::new(),
             };
             unit_changed |= rewrite_items(items, &scope, refs);
         }
@@ -355,6 +388,7 @@ pub fn resolve_annotation_consts(
             changed_units.push(name.clone());
         }
     }
+    crate::refinement_consts::resolve_suite_refinements(parsed, unit_tables, unit_uses, refs);
     for name in changed_units {
         let kind = kinds[&name];
         let mut discarded = Vec::new();
