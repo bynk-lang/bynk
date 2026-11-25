@@ -1,0 +1,5 @@
+commons demo.kit for tests
+
+const Reading: Int = 10
+
+fn reading() -> Int { Reading + 1 }
