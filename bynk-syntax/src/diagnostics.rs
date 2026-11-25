@@ -6800,6 +6800,40 @@ pub fn explain(code: &str) -> Option<&'static Explain> {
     EXPLANATIONS.iter().find(|e| e.code == code)
 }
 
+/// A diagnostic code that no longer exists (#4277): the tombstone `bynk explain` answers with
+/// in place of "unknown", and the generated reference lists under "Retired codes". A user
+/// upgrading, or reading an old CI log or issue, still gets an explanation.
+///
+/// A code added and removed between two releases never shipped, so it needs no tombstone: the
+/// shipped list (`bynk-syntax/shipped-codes.txt`, extended at each release cut) is what holds
+/// a code to being live or retired.
+pub struct Retired {
+    /// The retired code.
+    pub code: &'static str,
+    /// The last release that carried the code, as `X.Y.Z`. The change that removes a code cannot know
+    /// the version that will retire it (the merge-time stamp assigns that), so this is the latest
+    /// release page when the change is written.
+    pub last_release: &'static str,
+    /// One sentence on why it went.
+    pub why: &'static str,
+    /// The code or feature that replaced it, if any.
+    pub replacement: Option<&'static str>,
+}
+
+/// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
+/// code from [`REGISTRY`].
+pub const RETIRED: &[Retired] = &[Retired {
+    code: "bynk.http.multipart_body_unbounded",
+    last_release: "0.661.1",
+    why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+    replacement: Some("the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`"),
+}];
+
+/// The tombstone for a retired `code`, or `None` when it was never retired.
+pub fn retired(code: &str) -> Option<&'static Retired> {
+    RETIRED.iter().find(|r| r.code == code)
+}
+
 /// The hosted diagnostic index page (the generated `reference/diagnostics`
 /// page). Each code's own page is `{INDEX_PATH}<code>/`, which `/d/<code>`
 /// redirects to.
@@ -11150,6 +11184,27 @@ pub fn render_json_per_code() -> Vec<(String, String)> {
             let mut out = serde_json::to_string_pretty(&doc).expect("diagnostic serialises");
             out.push('\n');
             (info.code.to_string(), out)
+        })
+        .collect()
+}
+
+/// Every tombstone as JSON, one document per retired code, as `(code, json)` sorted by code
+/// (#4277). Written to `site/src/generated/diagnostics/retired/<code>.json`, which
+/// `site/scripts/build-diagnostics-index.mjs` lists under "Retired codes".
+pub fn render_retired_json() -> Vec<(String, String)> {
+    let mut all: Vec<&Retired> = RETIRED.iter().collect();
+    all.sort_by_key(|r| r.code);
+    all.iter()
+        .map(|r| {
+            let doc = serde_json::json!({
+                "code": r.code,
+                "lastRelease": r.last_release,
+                "why": r.why,
+                "replacement": r.replacement,
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("tombstone serialises");
+            out.push('\n');
+            (r.code.to_string(), out)
         })
         .collect()
 }
