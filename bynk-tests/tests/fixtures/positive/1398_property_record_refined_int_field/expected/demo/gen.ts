@@ -9,10 +9,10 @@ export type Pct = number & { readonly __brand: "Pct" };
 export const Pct = {
   of(value: number): Result<Pct, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Pct", message: "must be a safe integer", value });
+      return Err({ field: "Pct", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 100)) {
-      return Err({ field: "Pct", message: "must be in range [0, 100]", value });
+      return Err({ field: "Pct", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Pct);
   },

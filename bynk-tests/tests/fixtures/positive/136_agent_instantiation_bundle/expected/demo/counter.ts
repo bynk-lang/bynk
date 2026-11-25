@@ -20,7 +20,7 @@ export type CounterId = string & { readonly __brand: "demo.counter.CounterId" };
 export const CounterId = {
   of(value: string): Result<CounterId, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
-      return Err({ field: "CounterId", message: "must match /[a-z0-9]{1,16}/", value });
+      return Err({ field: "CounterId", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value });
     }
     return Ok(value as CounterId);
   },

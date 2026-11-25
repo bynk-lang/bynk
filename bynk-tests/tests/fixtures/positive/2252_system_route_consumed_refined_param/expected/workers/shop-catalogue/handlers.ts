@@ -11,7 +11,7 @@ export type Sku = string & { readonly __brand: "shop.catalogue.Sku" };
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
-      return Err({ field: "Sku", message: "must match /[a-z0-9]{1,16}/", value });
+      return Err({ field: "Sku", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value });
     }
     return Ok(value as Sku);
   },

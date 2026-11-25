@@ -51,7 +51,7 @@ export function __deserialise_CreateItem(json: __JsonValue, path: string = "$"):
   }
   const __quantity = obj["quantity"];
   if (!(__quantity >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.quantity`, violation: { field: "quantity", message: "must be non-negative", value: __quantity } });
+    return Err({ kind: "RefinementViolation", path: `${path}.quantity`, violation: { field: "quantity", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __quantity } });
   }
   return Ok({ name: __name, quantity: __quantity } as CreateItem);
 }

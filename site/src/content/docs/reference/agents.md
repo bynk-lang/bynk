@@ -583,6 +583,10 @@ violation as a fault and a domain refusal as a `Result`, and a variant would inv
 invariant as validation. A fault turned into a value is still logged once. Wrap an agent call
 in `.outcome` only where a different answer or a compensation is needed.
 
+At `unit`, nothing else makes an agent busy or fault on demand: a test
+[stubs the operation](/reference/testing/#stub-agents), as in `stub Basket.add(_) unreachable`,
+to drive the `Unreachable` and `Faulted` arms (#4215).
+
 ### One handler at a time
 
 An agent instance runs one handler at a time: every handler that reaches an instance,

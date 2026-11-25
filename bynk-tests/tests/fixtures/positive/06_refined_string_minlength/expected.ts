@@ -10,7 +10,7 @@ export type Password = string & { readonly __brand: "Password" };
 export const Password = {
   of(value: string): Result<Password, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 8)) {
-      return Err({ field: "Password", message: "length must be at least 8", value });
+      return Err({ field: "Password", message: "length must be at least 8", rule: { tag: "MinLength", limit: 8 }, value });
     }
     return Ok(value as Password);
   },

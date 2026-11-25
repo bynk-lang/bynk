@@ -16,10 +16,10 @@ export type Token = string & { readonly __brand: "web.api.Token" };
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     if (!(__bynkCodePointLength(value) <= 8)) {
-      return Err({ field: "Token", message: "length must be at most 8", value });
+      return Err({ field: "Token", message: "length must be at most 8", rule: { tag: "MaxLength", limit: 8 }, value });
     }
     return Ok(value as Token);
   },

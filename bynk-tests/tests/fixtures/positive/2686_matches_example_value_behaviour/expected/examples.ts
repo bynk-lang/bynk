@@ -11,7 +11,7 @@ export type Code = string & { readonly __brand: "Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
-      return Err({ field: "Code", message: "must match /[A-Z]{3}/", value });
+      return Err({ field: "Code", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as Code);
   },
@@ -22,7 +22,7 @@ export type Day = string & { readonly __brand: "Day" };
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
     if (!(__bynkIsIsoDate(value))) {
-      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", value });
+      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value });
     }
     return Ok(value as Day);
   },

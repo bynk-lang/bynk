@@ -207,6 +207,10 @@ the consumer's `delivery { }`:
 At the `system` tier the address yields `Undecodable` for such a body
 ([testing](/reference/testing/#cron-queue-system)).
 
+Only a `system` case can see `Undecodable`: a handler, a helper, or a `unit` or `integration` case never
+receives a body that failed to decode. A pattern of it anywhere else is a dead arm and warns
+(`bynk.queue.undecodable_unreachable`); use `_` there.
+
 ## Producers and consumers agree
 
 A queue's name is a string both sides write, so the compiler is the only party that

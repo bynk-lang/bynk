@@ -22,7 +22,7 @@ export type Repo = string & { readonly __brand: "Repo" };
 export const Repo = {
   of(value: string): Result<Repo, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Repo", message: "must be non-empty", value });
+      return Err({ field: "Repo", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Repo);
   },

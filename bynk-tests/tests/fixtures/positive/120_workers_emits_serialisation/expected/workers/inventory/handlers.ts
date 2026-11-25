@@ -11,7 +11,7 @@ export type Sku = string & { readonly __brand: "inventory.Sku" };
 export const Sku = {
   of(value: string): Result<Sku, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z]{3}-[0-9]{4}" + ")$", "u").test(value))) {
-      return Err({ field: "Sku", message: "must match /[A-Z]{3}-[0-9]{4}/", value });
+      return Err({ field: "Sku", message: "must match /[A-Z]{3}-[0-9]{4}/", rule: { tag: "Matches", pattern: "[A-Z]{3}-[0-9]{4}" }, value });
     }
     return Ok(value as Sku);
   },
@@ -105,7 +105,7 @@ export function __deserialise_StockItem(json: __JsonValue, path: string = "$"): 
   }
   const __quantity = obj["quantity"];
   if (!(__quantity >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.quantity`, violation: { field: "quantity", message: "must be non-negative", value: __quantity } });
+    return Err({ kind: "RefinementViolation", path: `${path}.quantity`, violation: { field: "quantity", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __quantity } });
   }
   return Ok({ sku: __sku, quantity: __quantity } as StockItem);
 }
