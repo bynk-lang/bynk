@@ -179,8 +179,11 @@ pub fn build_unit_views<'a>(
                         // bare reference finds nothing and reports the ambiguity; an
                         // ambiguous type stays in (its first provider's), and the
                         // naming gate reports each place it is written.
+                        // Unless the unit also writes it qualified: the qualified
+                        // spelling is then the type, and a second one would be another.
                         (!out.ambiguous.contains_key(k)
-                            || table_of(t).is_some_and(|u| u.types.contains_key(o)))
+                            || (table_of(t).is_some_and(|u| u.types.contains_key(o))
+                                && !es.iter().any(|e| e.qualified.iter().any(|r| r.name == *o))))
                             && winners.get(k).is_some_and(|(wt, wo)| wt == t && wo == o)
                     })
                     .cloned()

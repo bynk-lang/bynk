@@ -441,6 +441,14 @@ pub(super) fn emit_unit(
             .consumed_type_aliases
             .iter()
             .map(|(alias, a)| (alias.clone(), a.original.clone()))
+            // #4045: a name a `uses` clause renames is imported the same way, under
+            // the name its commons declares and bound to the spelling used here.
+            .chain(
+                info.table
+                    .use_views
+                    .values()
+                    .flat_map(|v| v.use_origin.iter().map(|(k, o)| (k.clone(), o.clone()))),
+            )
             .collect(),
         unit_kind: kind,
         owning_context: owning_context_for_emit.clone(),
