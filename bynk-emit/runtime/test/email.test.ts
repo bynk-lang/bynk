@@ -624,6 +624,7 @@ test("replyMime: an explicit subject is used as written", () => {
     html: None,
     attachments: [],
     size: 0,
+    subaddress: None,
   };
   const out = replyMime(mail, replyOf("t", undefined, "Custom"), "support@shop.example");
   assert.match(out, /^Subject: Custom$/m);
