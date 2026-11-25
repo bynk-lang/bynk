@@ -276,6 +276,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
     },
     Explain {
+        code: "bynk.actor.queue_actor_not_enforced",
+        blurb: "A queue consumer may one day narrow who can send to it, with a refinement of `Producer` that admits only named contexts or with a `Foreign` producer, but nothing yet verifies the sender of a queue message. Accepting such a `by` today would read as a restriction while admitting every producer on the account, so the compiler refuses it instead. Write `by Producer`, which says what is true: any producer on the account may send.",
+        example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
+    },
+    Explain {
         code: "bynk.actor.refinement_base_unsupported",
         blurb: "`actor Admin = User where …` adds an authorisation check on a token's claims, and only a `Bearer` actor carries claims. So the base must be a declared `Bearer` actor: not `Visitor`, `Internal` or `Signature`, and not another refinement. Name a `Bearer` actor as the base, declaring it if need be.",
         example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = Visitor where hasClaim(\"admin\")   // ✗ `Visitor` carries no claims\n\nactor Admin = User where hasClaim(\"admin\")   // ✓ a `Bearer` actor",
@@ -7132,6 +7137,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.outside_context",
         "An `actor` was declared outside a context (e.g. in a commons).",
+    ),
+    d(
+        "bynk.actor.queue_actor_not_enforced",
+        "A queue consumer names a `Producer` refinement or a `Foreign` actor, which nothing enforces yet.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",

@@ -1332,6 +1332,7 @@
 /reference/diagnostics/bynk.actor.oidc_trust_from_is_secret/
 /reference/diagnostics/bynk.actor.oidc_trust_from_not_string/
 /reference/diagnostics/bynk.actor.outside_context/
+/reference/diagnostics/bynk.actor.queue_actor_not_enforced/
 /reference/diagnostics/bynk.actor.refinement_base_unsupported/
 /reference/diagnostics/bynk.actor.refinement_in_sum/
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
