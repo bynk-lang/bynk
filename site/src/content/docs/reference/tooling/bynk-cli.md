@@ -150,7 +150,7 @@ bynk <command> [options]
 | [`bynk new`](#bynk-new) | Scaffold a new, runnable project. |
 | [`bynk dev`](#bynk-dev) | Build the project and serve it locally with `wrangler dev`. |
 | [`bynk deploy`](#bynk-deploy) | Provision each context's Cloudflare resources and deploy every Worker, in dependency order. |
-| [`bynk check`](#bynk-check) | Type-check a file or project without writing output. |
+| [`bynk check`](#bynk-check) | Type-check a file or project without writing compiled output. |
 | [`bynk build`](#bynk-build) | Build a project into its output directory with the settings in `bynk.toml`'s `[build]`; no flags needed. |
 | [`bynk compile`](#bynk-compile) | Compile a project to TypeScript in a directory, optionally from unsaved editor buffers. |
 | [`bynk client`](#bynk-client) | Write a typed TypeScript client for the project's `from http` services (experimental). |
@@ -725,8 +725,15 @@ in `bynk.foreign.toml` (`bynk.deploy.foreign_contract_skew`; see
 
 ## `bynk check`
 
-Type-check a `.bynk` file or project without writing output. Runs the compiler
-pipeline **in-process**.
+Type-check a `.bynk` file or project without writing compiled output. Runs the
+compiler pipeline **in-process**.
+
+A project with dependencies is resolved first, as for every command that
+compiles one. The first `bynk check` creates `bynk.lock` (and prints
+`bynk: wrote bynk.lock` on stderr); a later one writes it again only when the
+dependency graph changed, and otherwise leaves the project tree as it was. With
+`--locked` it fails instead of writing the lock, as `cargo check --locked` does
+for `Cargo.lock`.
 
 ```text
 bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--locked] [--offline]
