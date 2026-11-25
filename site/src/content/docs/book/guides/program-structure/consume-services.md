@@ -235,6 +235,10 @@ Each variant is logged once as the fault would have been, so handling `Rejected(
 does not hide a bad deployment from whoever runs it. On the `bundle` target there is no wire:
 only `Handled` and `Faulted` occur.
 
+An agent call has the same form: `Basket(id).add.outcome(item)` returns the same
+`CallOutcome`, with `AgentBusy` as `Unreachable(None)` and a fault in the agent's handler as
+`Faulted`. See [Addressing and calling](/reference/agents/#outcome).
+
 To pass a failure up rather than handle it, `o.handled()` is a `Result[R, CallFailure]`, and
 `CallFailure` can be wrapped into your own error type with `embeds`:
 

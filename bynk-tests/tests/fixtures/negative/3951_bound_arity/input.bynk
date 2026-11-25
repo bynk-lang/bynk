@@ -1,0 +1,9 @@
+---
+#3951: a predicate with a constant argument still takes its own number of
+arguments, as the literal form does.
+---
+commons demo.limits
+
+const MaxNote: Int = 280
+
+type Note = String where MaxLength(MaxNote, 3)

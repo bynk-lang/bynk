@@ -1689,6 +1689,10 @@ impl<'a> Formatter<'a> {
     }
 
     fn format_pred(&mut self, p: &RefinementPred) {
+        if let Some(text) = bynk_syntax::print::pending_pred_to_string(p) {
+            self.push(&text);
+            return;
+        }
         let arg = |n: i64| p.arg_text.clone().unwrap_or_else(|| n.to_string());
         match &p.kind {
             PredKind::Matches(re) => self.push(&format!(

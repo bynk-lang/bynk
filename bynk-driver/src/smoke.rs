@@ -422,7 +422,13 @@ pub fn prepare(
     };
     let mut smoke = Smoke::collect(&sources, methods);
     let check = |overlay: HashMap<PathBuf, String>| {
-        crate::project::check_project(&options.clone().sources(overlay)).errors
+        // Only errors settle the synthesis: a warning or a hint (#3921's
+        // `body_cap_defaulted`) is not a failure.
+        let mut errors = crate::project::check_project(&options.clone().sources(overlay)).errors;
+        errors.retain(|ae| {
+            bynk_syntax::Severity::for_error(&ae.error) == bynk_syntax::Severity::Error
+        });
+        errors
     };
     let overlay = match smoke.settle(&sources, check) {
         Ok(overlay) => overlay,
