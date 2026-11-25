@@ -670,8 +670,8 @@ One `name: value` field of an `errors` policy.
 {{#grammar service_protocol}}
 
 The `from <protocol>` clause: `from http`, `from cron`, `from queue("name")`
-(v0.44), `from websocket(in: I, out: O)` (v0.103), `from email("address")` (#3328;
-`email` is a contextual word, not a reserved one), or `from Events(E)` (v0.238),
+(v0.44), `from websocket(in: I, out: O)` (v0.103), `from email("address")` (#3328, or `from email(Name)`
+naming a `String` constant, #3889; `email` is a contextual word, not a reserved one), or `from Events(E)` (v0.238),
 whose event may carry a delivery pattern and a `via schema(N)` clause
 ([§4.4.7b](#447b-events-subscriptions-v0238)). Absent ⇒ the contract-mediated
 default, which admits only `on call`. Well-formedness: §5.

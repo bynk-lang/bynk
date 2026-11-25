@@ -33,3 +33,39 @@ service support from email("support@shop.example") {
             (identifier))
           (block
             (identifier)))))))
+
+================================================================================
+from email names a constant (#3889)
+================================================================================
+
+context shop.support
+
+service support from email(Support) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Accept
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (service_decl
+      (identifier)
+      (service_protocol
+        (identifier))
+      (handler
+        (queue_handler
+          (param
+            (identifier)
+            (identifier))
+          (generic_type_ref
+            (builtin_type)
+            (identifier))
+          (by_clause
+            (identifier))
+          (block
+            (identifier)))))))

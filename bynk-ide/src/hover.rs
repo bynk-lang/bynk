@@ -1115,6 +1115,14 @@ mod tests {
         })
     }
 
+    /// #3889: the constant named in `from email(Support)` hovers with the address it denotes.
+    #[test]
+    fn an_email_address_constant_hovers_with_its_address() {
+        let src = "context shop.support\n\nconst Support: String = \"support@shop.example\"\n\nservice support from email(Support) {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Accept\n  }\n}\n";
+        let h = hover_at(src, "Support", 1).expect("the address constant hovers");
+        assert!(h.contains("support@shop.example"), "{h}");
+    }
+
     /// #2868: a function that declares `given` hovers with it, at the
     /// declaration and at a call.
     #[test]

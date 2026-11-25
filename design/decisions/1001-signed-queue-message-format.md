@@ -1,0 +1,9 @@
+# 1001 — A signed queue message carries its signature inside the body, over a canonical form bound to the source queue
+
+- **Status:** Accepted (v0.735.1)
+
+**Context.** Part of #3899 (Decisions D, F, G and H, at the library level). A consumer that admits only named senders needs to know who sent a message, and a Cloudflare queue message carries nothing but its body.
+
+**Decision.** (D) The format is the one in the wire-format reference, published ahead of its use and marked there as not yet in effect; the canonical body is RFC 8785 (JCS) and `ts` is a decimal integer. The signature covers the version, the sender, the id, the timestamp, the name of the SOURCE queue and the canonical body (keys sorted at every depth), so a message cannot be moved to another queue and still verify, and a dead-letter consumer can verify a message the platform moved. (F) Verification returns a reason (unsigned, malformed, version, unknown sender, bad signature) and the caller never handles a refused message. (G) A verified id is claimed per consumer and source queue for 15 days (the queue's longest retention plus the longest send delay), because a timestamp window cannot help when messages legitimately wait for days. (H) The verifier tries a sender's current key and then its previous one.
+
+**Consequences.** The runtime library and its tests land first, with no language or emitter change: no program changes meaning, and the refusal of `Producer` refinements and `Foreign` actors on queue consumers stays until the consumer-side slice uses this.

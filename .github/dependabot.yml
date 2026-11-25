@@ -51,6 +51,12 @@ updates:
     schedule:
       interval: weekly
 
+  # Playwright for the system tier's browser test (sse_browser.rs); nothing in it ships.
+  - package-ecosystem: npm
+    directory: "/bynk-tests/tests/system/browser"
+    schedule:
+      interval: weekly
+
   # The Astro/Starlight docs site. Its deploy job holds the Cloudflare token.
   - package-ecosystem: npm
     directory: "/site"

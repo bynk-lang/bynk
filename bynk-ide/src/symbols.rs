@@ -3872,7 +3872,12 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
         ServiceProtocol::Http => " from http".to_string(),
         ServiceProtocol::Cron => " from cron".to_string(),
         ServiceProtocol::Queue { name } => format!(" from queue(\"{name}\")"),
-        ServiceProtocol::Email { address } => format!(" from email(\"{address}\")"),
+        // #3889: a constant names the address; show the name, as the source writes it.
+        ServiceProtocol::Email {
+            address_const: Some(c),
+            ..
+        } => format!(" from email({})", c.name.name),
+        ServiceProtocol::Email { address, .. } => format!(" from email(\"{address}\")"),
         ServiceProtocol::WebSocket { .. } => " from websocket".to_string(),
         // Events track slice 1 (spine #936): a subscription pattern is not
         // rendered in this short suffix, matching how WebSocket's in/out
@@ -4379,6 +4384,7 @@ mod tests {
     fn email_service_header_renders_its_address() {
         let p = ServiceProtocol::Email {
             address: "*@shop.example".to_string(),
+            address_const: None,
         };
         assert_eq!(
             service_protocol_suffix(&p),

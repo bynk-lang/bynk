@@ -410,7 +410,7 @@ fn email_forwards_of(
             let CommonsItem::Service(service) = item else {
                 continue;
             };
-            let ServiceProtocol::Email { address } = &service.protocol else {
+            let ServiceProtocol::Email { address, .. } = &service.protocol else {
                 continue;
             };
             let own = service

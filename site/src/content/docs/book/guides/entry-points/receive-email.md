@@ -45,6 +45,34 @@ you.
 service names. Two services cannot claim the same address; a named address and
 the catch-all together are fine, and the named address wins.
 
+## Share an address through a commons
+
+An address often appears in more than one place: the service header, a `Forward` in
+another service, a test. Write it once as a constant and name it in the header:
+
+```bynk,ignore
+commons shop.addresses
+
+const Support: String = "support@shop.example"
+const Billing: String = "billing@shop.example"
+```
+
+```bynk,ignore
+context shop.support
+uses shop.addresses
+
+service support from email(Support) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Forward(Billing)
+  }
+}
+```
+
+The constant is declared `String`, and the compiler resolves it to its literal, so
+routing and deploy see `support@shop.example` as if you had written it there. A
+change is made in one place, and two services that end up claiming the same address
+are still `bynk.email.duplicate_address`.
+
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The

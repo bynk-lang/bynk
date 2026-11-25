@@ -1877,8 +1877,13 @@ pub enum ServiceProtocol {
     /// domain's catch-all. `email` is a contextual identifier, matched as plain
     /// `Ident` text the way `websocket` is, so no lexer reservation. The
     /// service's handler is `on message(mail: InboundEmail) ->
-    /// Effect[EmailVerdict]`.
-    Email { address: String },
+    /// Effect[EmailVerdict]`. #3889: `address_const` is the constant the header
+    /// named, `from email(Support)`; the resolution pass fills `address` with the
+    /// literal it denotes, so every later reader sees the literal.
+    Email {
+        address: String,
+        address_const: Option<AddressConst>,
+    },
 }
 
 /// An agent declaration (v0.5 §3.6). Agents are state-bearing entities
@@ -2076,6 +2081,31 @@ pub enum ScheduleRefusal {
     Unknown,
     /// A constant that is not declared `String` or `CronSchedule`, or whose
     /// initialiser is not a plain literal; the text names its declared type.
+    Declared(String),
+}
+
+/// #3889: an email service's address written as the name of a constant,
+/// `from email(Support)`. The resolution pass fills the protocol's `address`
+/// with the literal the constant denotes, so every later reader sees the
+/// resolved text; this keeps the reference (its span, for go-to-definition and
+/// rename) and, when the constant was refused, why.
+#[derive(Debug, Clone)]
+pub struct AddressConst {
+    /// The reference as written.
+    pub name: Ident,
+    /// The span of the constant's declaration, when it is in the same file.
+    pub decl_span: Option<Span>,
+    /// Set by the resolution pass when the name does not denote an address.
+    pub refusal: Option<AddressRefusal>,
+}
+
+/// Why an [`AddressConst`] was not resolved.
+#[derive(Debug, Clone)]
+pub enum AddressRefusal {
+    /// No constant of that name is visible in the unit.
+    Unknown,
+    /// A constant that is not declared exactly `String`, or whose initialiser is
+    /// not a plain literal; the text names its declared type.
     Declared(String),
 }
 

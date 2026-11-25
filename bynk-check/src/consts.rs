@@ -726,6 +726,37 @@ pub fn resolve_schedule_literal<'a>(
     at: &'a str,
     name: &str,
 ) -> Result<ResolvedConst<'a>, Option<&'a ConstDecl>> {
+    resolve_literal_accepting(unit, at, name, is_schedule_type)
+}
+
+/// #3889: whether a constant's declared type is one an email address position
+/// takes: exactly `String`. No refined address type exists, so a refined or opaque
+/// constant (`String where MaxLength(40)`) is refused, which keeps named types
+/// distinct inside a context (ADR 0714 B).
+pub fn is_address_type(ty: &TypeRef) -> bool {
+    matches!(ty, TypeRef::Base(BaseType::String, _))
+}
+
+/// #3889: [`resolve_const_literal`] for an email address: the chain's constants are
+/// each exactly `String` ([`is_address_type`]).
+pub fn resolve_address_literal<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+) -> Result<ResolvedConst<'a>, Option<&'a ConstDecl>> {
+    resolve_literal_accepting(unit, at, name, is_address_type)
+}
+
+/// Resolve the bare name `name`, written in unit `at`, to the string literal it
+/// denotes, each constant on the chain satisfying `accepts` (the position's
+/// declared-type test). `Err(None)` is an unknown name; `Err(Some(decl))` a
+/// constant that does not end at an accepted literal.
+fn resolve_literal_accepting<'a>(
+    unit: impl Fn(&str) -> Option<(&'a UnitTable, &'a [String])>,
+    at: &'a str,
+    name: &str,
+    accepts: impl Fn(&TypeRef) -> bool,
+) -> Result<ResolvedConst<'a>, Option<&'a ConstDecl>> {
     let Some((table, uses)) = unit(at) else {
         return Err(None);
     };
@@ -735,7 +766,7 @@ pub fn resolve_schedule_literal<'a>(
     };
     let (decl, owner) = (first.decl, first.owner);
     let mut scope = owner.unwrap_or(at);
-    let literal = chain_literal_with(decl, BaseType::String, is_schedule_type, 64, |n| {
+    let literal = chain_literal_with(decl, BaseType::String, accepts, 64, |n| {
         let (table, uses) = unit(scope)?;
         let vis = visible_consts(table, uses, |u| unit(u).map(|(t, _)| t));
         let found = vis.get(n)?;
