@@ -1507,7 +1507,7 @@
     },
     {
       "code": "bynk.types.question_option_outside_http",
-      "summary": "`?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`."
+      "summary": "`?` on an `Option` needs a function returning `Option` (`None` returns early) or `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`."
     },
     {
       "code": "bynk.types.question_outside_result",

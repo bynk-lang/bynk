@@ -618,10 +618,10 @@ on GET("/links/:code") (code: Slug) -> Effect[HttpResult[String]] by v: Visitor 
 }
 ```
 
-`?` on an `Option` is accepted **only** where the enclosing return is an
-`HttpResult` — elsewhere an `Option` has no error channel, and the checker
-rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
-turn an `Option` into a `Result` in a `Result`-returning function). A `Result`
+In a function returning an `Option`, `?` returns the `None` as it is; here, where the
+enclosing return is an `HttpResult`, it becomes a `404`. In a `Result`-returning function
+the checker rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
+turn an `Option` into a `Result`). A `Result`
 under `?` is unchanged: its `Err` propagates as before. Mapping a **domain
 error** into an `HttpResult` — the `Result → HttpResult` direction — is a
 separate, later capability, tracked with the declared-embedding design

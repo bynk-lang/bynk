@@ -1,0 +1,38 @@
+suite demo.desk {
+  stub Meter.read() returns 10
+
+  fn warm() -> Effect[Int] given Meter {
+    let first <- Meter.read()
+    let second <- Meter.read()
+    Effect.pure(first + second)
+  }
+
+  fn warmTwice() -> Effect[Int] given Meter {
+    let a <- warm()
+    let b <- warm()
+    Effect.pure(a + b)
+  }
+
+  case "a helper runs with the case's stubs" {
+    let total <- warm()
+    expect total == 20
+  }
+
+  case "a helper's calls are observed" {
+    do warm()
+    expect Meter.read called 2 times
+  }
+
+  case "a helper may call another" {
+    let total <- warmTwice()
+    expect total == 40
+    expect Meter.read called 4 times
+  }
+
+  property "a helper runs inside a property" {
+    for all n: Int {
+      let total <- warm()
+      expect total == 20
+    }
+  }
+}
