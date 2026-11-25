@@ -1,0 +1,13 @@
+commons demo.wrappermethod
+
+type Wrap[T] = { v: Effect[T] }
+type Box[A] = { held: A }
+
+fn Box.toWrap(self) -> Wrap[A] {
+	unreachable("a signature only")
+}
+
+fn use(b: Box[Effect[Int]]) -> Int {
+	let w = b.toWrap()
+	0
+}

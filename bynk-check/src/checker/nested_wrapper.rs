@@ -19,24 +19,9 @@ use super::{Ty, TyId, Types};
 
 type Decls = HashMap<String, Arc<TypeDecl>>;
 
-/// The positions of `decl`'s type parameters that its body holds directly under an `Effect`,
-/// through other generic types it applies (`type Outer[U] = { w: Wrap[U] }` wraps `U` too).
-pub(crate) fn wrapped_params(
-    decl: &TypeDecl,
-    types: &Decls,
-    visiting: &mut HashSet<String>,
-) -> HashSet<usize> {
-    let names: HashMap<&str, usize> = decl
-        .type_params
-        .iter()
-        .enumerate()
-        .map(|(i, tp)| (tp.name.name.as_str(), i))
-        .collect();
-    let mut out = HashSet::new();
-    if names.is_empty() {
-        return out;
-    }
-    let refs: Vec<&TypeRef> = match &decl.body {
+/// The type references a declaration's body holds: its fields, or its variants' payloads.
+fn body_refs(decl: &TypeDecl) -> Vec<&TypeRef> {
+    match &decl.body {
         TypeBody::Record(r) => r.fields.iter().map(|f| &f.type_ref).collect(),
         TypeBody::Sum(s) => s
             .variants
@@ -44,11 +29,91 @@ pub(crate) fn wrapped_params(
             .flat_map(|v| v.payload.iter().map(|p| &p.type_ref))
             .collect(),
         TypeBody::Refined { .. } | TypeBody::Opaque { .. } => Vec::new(),
-    };
-    for t in refs {
-        scan(t, &names, types, visiting, &mut out);
     }
-    out
+}
+
+/// The names of the generic types `t` applies, at any depth.
+fn applied_names<'a>(t: &'a TypeRef, out: &mut Vec<&'a str>) {
+    match t {
+        TypeRef::App { name, args, .. } => {
+            out.push(&name.name);
+            args.iter().for_each(|a| applied_names(a, out));
+        }
+        TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+            applied_names(a, out);
+            applied_names(b, out);
+        }
+        TypeRef::Effect(a, _)
+        | TypeRef::Option(a, _)
+        | TypeRef::HttpResult(a, _)
+        | TypeRef::List(a, _)
+        | TypeRef::Set(a, _)
+        | TypeRef::Query(a, _)
+        | TypeRef::Stream(a, _)
+        | TypeRef::Connection(a, _)
+        | TypeRef::History(a, _) => applied_names(a, out),
+        TypeRef::Fn(params, ret, _) => {
+            params.iter().for_each(|p| applied_names(p, out));
+            applied_names(ret, out);
+        }
+        _ => {}
+    }
+}
+
+/// The positions of each generic type's parameters that its body holds directly under an
+/// `Effect`, for `root` and every generic type reachable from it, as a fixpoint. A position is
+/// wrapped when the body puts the parameter directly under an `Effect`, or applies another
+/// generic type to it at a position that type wraps (`type Outer[U] = { w: Wrap[U] }` wraps `U`
+/// too). The iteration starts from nothing and only adds positions, so it ends, whatever cycles
+/// the declarations form, and a recursive type that permutes its own parameters
+/// (`next: Option[Swap[B, A]]`) is answered correctly.
+fn wrapped_table(root: &str, types: &Decls) -> HashMap<String, HashSet<usize>> {
+    let mut decls: Vec<(String, Arc<TypeDecl>)> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut work = vec![root.to_string()];
+    while let Some(name) = work.pop() {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let Some(decl) = crate::prelude_record::lookup(&name, types) else {
+            continue;
+        };
+        let mut applied = Vec::new();
+        body_refs(&decl)
+            .into_iter()
+            .for_each(|t| applied_names(t, &mut applied));
+        work.extend(applied.into_iter().map(str::to_string));
+        decls.push((name, decl));
+    }
+    let mut table: HashMap<String, HashSet<usize>> = decls
+        .iter()
+        .map(|(n, _)| (n.clone(), HashSet::new()))
+        .collect();
+    loop {
+        let mut changed = false;
+        for (name, decl) in &decls {
+            let names: HashMap<&str, usize> = decl
+                .type_params
+                .iter()
+                .enumerate()
+                .map(|(i, tp)| (tp.name.name.as_str(), i))
+                .collect();
+            if names.is_empty() {
+                continue;
+            }
+            let mut found = HashSet::new();
+            for t in body_refs(decl) {
+                scan(t, &names, &table, &mut found);
+            }
+            let entry = table.entry(name.clone()).or_default();
+            let before = entry.len();
+            entry.extend(found);
+            changed |= entry.len() != before;
+        }
+        if !changed {
+            return table;
+        }
+    }
 }
 
 /// A parameter of the declaration that `t` names, as its position.
@@ -62,32 +127,25 @@ fn param_of(t: &TypeRef, names: &HashMap<&str, usize>) -> Option<usize> {
 fn scan(
     t: &TypeRef,
     names: &HashMap<&str, usize>,
-    types: &Decls,
-    visiting: &mut HashSet<String>,
+    table: &HashMap<String, HashSet<usize>>,
     out: &mut HashSet<usize>,
 ) {
     match t {
         TypeRef::Effect(inner, _) => {
             out.extend(param_of(inner, names));
-            scan(inner, names, types, visiting, out);
+            scan(inner, names, table, out);
         }
         TypeRef::App { name, args, .. } => {
-            if let Some(decl) = crate::prelude_record::lookup(&name.name, types)
-                && visiting.insert(name.name.clone())
-            {
-                let inner = wrapped_params(&decl, types, visiting);
-                visiting.remove(&name.name);
-                for i in inner {
-                    out.extend(args.get(i).and_then(|a| param_of(a, names)));
-                }
+            for i in table.get(&name.name).into_iter().flatten() {
+                out.extend(args.get(*i).and_then(|a| param_of(a, names)));
             }
             for a in args {
-                scan(a, names, types, visiting, out);
+                scan(a, names, table, out);
             }
         }
         TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
-            scan(a, names, types, visiting, out);
-            scan(b, names, types, visiting, out);
+            scan(a, names, table, out);
+            scan(b, names, table, out);
         }
         TypeRef::Option(a, _)
         | TypeRef::HttpResult(a, _)
@@ -96,12 +154,12 @@ fn scan(
         | TypeRef::Query(a, _)
         | TypeRef::Stream(a, _)
         | TypeRef::Connection(a, _)
-        | TypeRef::History(a, _) => scan(a, names, types, visiting, out),
+        | TypeRef::History(a, _) => scan(a, names, table, out),
         TypeRef::Fn(params, ret, _) => {
             for p in params {
-                scan(p, names, types, visiting, out);
+                scan(p, names, table, out);
             }
-            scan(ret, names, types, visiting, out);
+            scan(ret, names, table, out);
         }
         _ => {}
     }
@@ -115,23 +173,27 @@ pub(crate) fn check_application(
     args: &[TypeRef],
     types: &Decls,
 ) -> Vec<CompileError> {
-    let mut visiting = HashSet::from([name.name.clone()]);
-    let wrapped = wrapped_params(decl, types, &mut visiting);
+    let wrapped = wrapped_table(&name.name, types)
+        .remove(&name.name)
+        .unwrap_or_default();
     let mut errors = Vec::new();
     for (i, arg) in args.iter().enumerate() {
         if wrapped.contains(&i) && matches!(arg, TypeRef::Effect(..)) {
             let param = &decl.type_params[i].name.name;
             errors.push(
-                nested_effect_error(arg.span(), &format!("{}[Effect[_]]", name.name)).with_note(
-                    format!(
-                        "`{}` holds its parameter `{param}` in an `Effect`, so an `Effect` for `{param}` would be an effect of an effect; use a parameter that is not an effect, or hold the effect in a `List` or `Option`",
-                        name.name
-                    ),
-                ),
+                nested_effect_error(arg.span(), &format!("{}[Effect[_]]", name.name))
+                    .with_note(wrapper_note(&name.name, param)),
             );
         }
     }
     errors
+}
+
+/// Why a wrapper refuses an effect.
+fn wrapper_note(wrapper: &str, param: &str) -> String {
+    format!(
+        "`{wrapper}` holds its parameter `{param}` in an `Effect`, so an `Effect` for `{param}` would be an effect of an effect; use a parameter that is not an effect, or hold the effect in a `List` or `Option`"
+    )
 }
 
 /// The component types of `t`, for the walk below.
@@ -156,21 +218,26 @@ fn children(t: TyId, tys: &Types) -> Vec<TyId> {
 
 /// Does `t` apply a generic type to an `Effect` where that type holds the parameter under an
 /// `Effect`, at any depth? The inferred counterpart of [`check_application`], for the type a
-/// generic call returns.
-pub(crate) fn nests_through_wrapper(t: TyId, tys: &Types, types: &Decls) -> bool {
+/// generic call returns: the note explaining the first wrapper that does, or `None`.
+pub(crate) fn nests_through_wrapper(t: TyId, tys: &Types, types: &Decls) -> Option<String> {
     if let Ty::Named { name, args, .. } = &*tys.get(t)
         && let Some(decl) = crate::prelude_record::lookup(name, types)
     {
-        let mut visiting = HashSet::from([name.clone()]);
-        let wrapped = wrapped_params(&decl, types, &mut visiting);
-        if wrapped.iter().any(|i| {
-            args.get(*i)
+        let wrapped = wrapped_table(name, types).remove(name).unwrap_or_default();
+        for i in wrapped {
+            if args
+                .get(i)
                 .is_some_and(|a| matches!(&*tys.get(*a), Ty::Effect(_)))
-        }) {
-            return true;
+            {
+                let param = decl
+                    .type_params
+                    .get(i)
+                    .map_or("T", |tp| tp.name.name.as_str());
+                return Some(wrapper_note(name, param));
+            }
         }
     }
     children(t, tys)
         .into_iter()
-        .any(|c| nests_through_wrapper(c, tys, types))
+        .find_map(|c| nests_through_wrapper(c, tys, types))
 }
