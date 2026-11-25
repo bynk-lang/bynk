@@ -1,0 +1,12 @@
+{
+  "blurb": "A function value was called with a different number of arguments from the number its type declares. A parameter or local of type `(Int, Int) -> Int` takes exactly two, and the call is checked against that type, so the mismatch is reported where it is made. The same code covers the built-in operations of `Map`, `Set`, `Cell`, `Cache` and `Log`, and `unreachable` and `todo`, which each take one message. Pass exactly the declared number. A declared `fn` called with the wrong number of arguments is the separate code `bynk.resolve.arity_mismatch`, and a method is `bynk.types.method_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.call_arity",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn apply(f: (Int, Int) -> Int) -> Int {\n    f(1)       // ✗ `f` takes 2 arguments\n}\n\nfn apply(f: (Int, Int) -> Int) -> Int {\n    f(1, 2)    // ✓\n}",
+  "severity": "error",
+  "summary": "A function value, a built-in `Map`/`Set`/`Cell`/`Cache`/`Log` operation, or `unreachable`/`todo` was called with the wrong number of arguments (a declared `fn` is `bynk.resolve.arity_mismatch`)."
+}

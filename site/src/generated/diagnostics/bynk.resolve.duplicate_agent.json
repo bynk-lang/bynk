@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent is addressed by its name, and the name is one of the unit's top-level names, so two agents of one name leave a call with nothing to choose between. Rename one, or delete the repeat. The same holds for the other named declarations: `bynk.resolve.duplicate_service`, `bynk.resolve.duplicate_actor` and `bynk.resolve.duplicate_capability`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_agent",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Counter { … }\nagent Counter { … }    // ✗ `Counter` is already declared\n\nagent Counter { … }\nagent Tally { … }      // ✓ a name of its own",
+  "severity": "error",
+  "summary": "Two agents share a name."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A `consumes` clause is how one context states that it depends on another, so it has to name a context in the project, and no unit of that name exists. Check the spelling against the `context` line of the unit you mean.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.unknown_context",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nconsumes paymnet                 // ✗ no context `paymnet`\nconsumes pay                     // ✓ the context's declared name",
+  "severity": "error",
+  "summary": "`consumes` names a context that does not exist."
+}

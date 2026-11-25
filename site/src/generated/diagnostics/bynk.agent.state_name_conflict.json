@@ -1,0 +1,10 @@
+{
+  "blurb": "Inside an agent's handlers and invariants, `<Agent>State` names the record of the agent's `Cell` fields: for agent `Counter`, `CounterState`. A type you declare with that name would be silently replaced there, so the compiler refuses it instead of renaming anything: unlike the names it derives elsewhere, this one can be written in a program. Rename your type.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.state_name_conflict",
+  "constructs": [],
+  "example": "type CounterState = { label: String }   // ✗ the name of `Counter`'s state record\n\ntype CounterLabel = { label: String }   // ✓ any other name\n\nagent Counter {\n  key id: String\n  store n: Cell[Int]\n\n  on call add(k: Int) -> Effect[Int] { k }\n}",
+  "severity": "error",
+  "summary": "A type is named `<Agent>State` beside agent `<Agent>`; that name is the agent's state record (its `Cell` fields), which its handlers and invariants see in place of the type."
+}

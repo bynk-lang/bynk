@@ -1,0 +1,10 @@
+{
+  "blurb": "A pattern that tests a sum-typed field names a variant of that type, and an emission can only carry the variants the type declares. A name it lacks, often a misspelling, could never match. Use a variant the type declares. A variant that carries a payload is refused too, as `bynk.event.pattern_variant_payload`.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.pattern_unknown_variant",
+  "constructs": [],
+  "example": "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Nowhere, .. }) {   // ✗ `Region` has no `Nowhere`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓",
+  "severity": "error",
+  "summary": "A `from Events(E { ... })` subscription pattern's variant value names a variant that does not exist on the field's declared sum type."
+}

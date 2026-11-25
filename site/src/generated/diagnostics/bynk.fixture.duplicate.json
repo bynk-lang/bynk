@@ -1,0 +1,12 @@
+{
+  "blurb": "A fixture is a `String` constant used by its name in the suite, so a suite declares each name once: a second `fixture note` would leave `note` meaning two files. Give each fixture its own name. A fixture whose name is a declaration already in scope is `bynk.resolve.name_conflict` instead.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.duplicate",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": "fixture note = \"fixtures/a.txt\"\nfixture note = \"fixtures/b.txt\"      // ✗ `note` is already declared\n\nfixture note = \"fixtures/a.txt\"\nfixture other = \"fixtures/b.txt\"     // ✓ one name each",
+  "severity": "error",
+  "summary": "A suite declares two `fixture`s of the same name."
+}

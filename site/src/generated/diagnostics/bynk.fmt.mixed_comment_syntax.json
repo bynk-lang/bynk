@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fmt.mixed_comment_syntax",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A file mixes the retired `--` comment or `--|` doc spellings with a line that reads differently under the old and new comment rules (#2203), so the formatter leaves it unchanged."
+}

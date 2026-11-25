@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.schema_registry_corrupt",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk.schema.lock` (the schema registry for events and agent state) is missing its version field, empty, truncated, or otherwise unparseable — restore it from version control rather than deleting it, since deleting it would silently re-baseline every event's and agent's history."
+}

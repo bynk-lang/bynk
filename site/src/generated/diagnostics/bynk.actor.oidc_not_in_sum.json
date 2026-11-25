@@ -1,0 +1,10 @@
+{
+  "blurb": "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.oidc_not_in_sum",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
+  "severity": "error",
+  "summary": "An `Oidc` actor appears as a member of a multi-actor sum."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "An embed's path is joined onto the project root to find the file, so it must stay inside the project: it may not be empty or absolute, and it may not contain a `..` segment, which could climb out of it. Write the path relative to the project root, inside `embeds/`. A relative path that is only outside `embeds/` is `bynk.embed.outside_embeds_dir`.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.unsafe_path",
+  "constructs": [],
+  "example": "embed shell = \"embeds/../page.html\"    // ✗ a `..` segment\n\nembed shell = \"embeds/page.html\"       // ✓",
+  "severity": "error",
+  "summary": "An `embed` path is empty, absolute, or contains a `..` segment."
+}

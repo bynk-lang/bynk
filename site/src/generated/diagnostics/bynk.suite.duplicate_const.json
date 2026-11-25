@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite's constants are used by bare name in its cases, so a suite declares each name once: a second `const Limit` would leave `Limit` meaning two values. A `const` named like one of the suite's `type`s counts as a repeat too. Rename one. The same holds for a suite's types, as `bynk.suite.duplicate_type`, and for helper functions, as `bynk.suite.duplicate_fn`.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.duplicate_const",
+  "constructs": [
+    "const_decl"
+  ],
+  "example": "const Limit: Int = 5\nconst Limit: Int = 9    // ✗ `Limit` again\nconst Cap: Int = 9      // ✓ a name each",
+  "severity": "error",
+  "summary": "A suite declares two `const`s of the same name, or a `const` with the name of one of its `type`s."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`@cache` takes three named arguments: `maxAge`, `scope` and `immutable`. The set is closed, so a misspelt or invented option is refused rather than ignored, which would leave the route with caching you did not ask for. A positional argument is refused too. Rename the argument or remove it. The values are checked by `bynk.http.cache_bad_max_age`, `bynk.http.cache_bad_scope` and `bynk.http.cache_bad_immutable`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_unknown_arg",
+  "constructs": [],
+  "example": "@cache(maxAge: 5.minutes, stale: true)   // ✗ not an argument of `@cache`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)                // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@cache` annotation has an argument outside the closed set (`maxAge`/`scope`/`immutable`)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "The function given to a combinator must return the shape the combinator chains on. `Option.andThen` wants an `Option` back and `Result.andThen` a `Result` whose error type matches the receiver's, so that the result is flattened, not nested. `List.flatMap` wants a `List` and `Query.flatMap` a `Query`. The effectful iterators and `flatMapOk` and `flatMapErr` want an `Effect[Result[…]]`, and `Option.orElse` wants the receiver's own `Option` type. If your function returns a plain value, you want `map`, which wraps it for you. Otherwise wrap the value yourself, as `Some(n + 1)`, or fix the function's result. A callback of the wrong type for the combinator's own signature is `bynk.types.argument_mismatch`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.combinator_return_mismatch",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn bump(o: Option[Int]) -> Option[Int] {\n    o.andThen((n) => n + 1)    // ✗ must return an `Option`, not an `Int`\n}\n\nfn bump(o: Option[Int]) -> Option[Int] {\n    o.map((n) => n + 1)        // ✓ `map` wraps a plain value\n}",
+  "severity": "error",
+  "summary": "A callback passed to a combinator (`map`/`andThen`/`flatMap`/`traverseAll`/…) returns the wrong type."
+}

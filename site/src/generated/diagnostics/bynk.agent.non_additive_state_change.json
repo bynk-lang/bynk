@@ -1,0 +1,10 @@
+{
+  "blurb": "bynk.schema.lock records the stored shape of every agent class, version by version, and a build compares the new shape against it. A deployed instance holds data in the recorded shape, so a change that data can still be read through, such as a new field, is additive and just bumps the version. A change it cannot be read through, such as a field removed, retyped or renamed, would orphan or misread what is stored, so the build refuses it. A rename looks like a removal plus an addition, and the message names the pairing it infers. Give an added record field a default, keep the old field and add the new one, or carry the data across with a `migrate from N` step, which records the change as a non-additive version. For a class that was never deployed, delete its entry from the schema lock, and the next build records the new shape afresh.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.non_additive_state_change",
+  "constructs": [],
+  "example": "agent Cart {                        // ✗ `owner` is gone: its stored value would be orphaned\n  key id: String\n\n  store ownerName: Cell[String]\n}\n\nagent Cart {\n  key id: String\n\n  store owner: Cell[String]\n  store note: Cell[String]        // ✓ a new field is additive\n}",
+  "severity": "error",
+  "summary": "An agent's stored state changed in a way deployed data cannot be read through — a `store` field was removed, retyped (including inside a stored record or sum), or changed storage kind. A renamed field is a removed field plus an added one. If the class was never deployed, delete its `[agents]` entry from `bynk.schema.lock`; otherwise widen rather than narrow, or stage the change through a new field."
+}

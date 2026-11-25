@@ -1,0 +1,10 @@
+{
+  "blurb": "An `ErrorStatus` name such as `Forbidden` stands for a status only as `RawError`'s first argument, where the compiler turns it into the number it answers. It is not a type, so a status can't be stored or passed to a helper. Name the status where the response is built, and let a helper build the body.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.error_status_position",
+  "constructs": [],
+  "example": "let status = ErrorStatus.Forbidden                          // ✗ a status has no value here\n\nfn problem(msg: String) -> Bytes { Bytes.fromUtf8(msg) }\nRawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
+  "severity": "error",
+  "summary": "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument."
+}

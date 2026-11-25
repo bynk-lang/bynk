@@ -1,0 +1,12 @@
+{
+  "blurb": "A `par { … }` block issues all its bindings together and waits for them, so it holds only `let x <- e` and `do e`. Anything else has no effect to overlap, nothing to join, or must stay in order: a plain `let`, `:=` or a `store` write, `expect`, `advance`, a nested `par`, a `let … else`, a bare expression (write `do e`) and an empty block. Store writes stay sequential; for `parTraverse` closures the rule is `bynk.par.store_write_in_closure`. Move the statement before or after the block; the names a block binds are in scope after its closing brace. See also `bynk.par.sibling_name` (a binding reading another binding of the same block) and the warning `bynk.par.single_binding`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.par.invalid_statement",
+  "constructs": [
+    "par_stmt"
+  ],
+  "example": "par {\n  let a <- Users.get(id)\n  let b = 1   // ✗ a plain `let` has no effect to overlap\n}\n\nlet b = 1   // ✓ compute it before the block\npar {\n  let a <- Users.get(id)\n  let c <- Users.get(b)\n}",
+  "severity": "error",
+  "summary": "A `par { … }` block holds a statement other than `let x <- e` or `do e`: a refutable `let … else`, a plain `let`, `:=` or a store write, `expect`, `advance`, a nested `par`, or anything that is not a statement."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.lock_invalid",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk.lock` can't be read: it isn't valid TOML, has no `version`, is a version this toolchain doesn't read, or locks a package to something that isn't a commit."
+}

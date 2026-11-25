@@ -1,0 +1,12 @@
+{
+  "blurb": "A snapshot stores the value as the JSON text `Json.encode` produces, so the value must be `Codable`: base types, named types and the built-in containers over them. A `Stream`, a function, an `Effect` or `()` has no such text. Snapshot a `Codable` value instead, such as a list.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.snapshot_not_codable",
+  "constructs": [
+    "snapshot_expr"
+  ],
+  "example": "expect Stream.of([1, 2]) matches snapshot \"items\"   // ✗ a `Stream`\nexpect [1, 2] matches snapshot \"items\"              // ✓ a `List[Int]`",
+  "severity": "error",
+  "summary": "The value of an `expect … matches snapshot` is not `Codable`: a snapshot stores the value's `Json.encode` text, so it must be in the domain `Json.encode` accepts."
+}

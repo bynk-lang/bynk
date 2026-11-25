@@ -1,0 +1,12 @@
+{
+  "blurb": "A `match`, or the `else match` of a `let … else`, must have at least one arm. Each arm gives the match a value, so one with no arms has none to give. Write an arm for each shape the value can take; a final `_ =>` arm takes whatever the others leave.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.empty_match",
+  "constructs": [
+    "match_expr"
+  ],
+  "example": "match xs {           // ✗ no arms\n}\n\nmatch xs {\n    [x, ..] => x      // ✓ one arm for each shape\n    [] => 0\n}",
+  "severity": "error",
+  "summary": "A `match` has no arms."
+}

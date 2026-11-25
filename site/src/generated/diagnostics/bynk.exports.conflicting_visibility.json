@@ -1,0 +1,12 @@
+{
+  "blurb": "A type is exported `opaque`, so consuming contexts can pass it around but not look inside it, or `transparent`, so they can. It cannot be both, and the compiler will not pick for you. Keep the clause you mean and delete the other. The same visibility twice is `bynk.exports.duplicate_export`.",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.conflicting_visibility",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports opaque { OrderId }\nexports transparent { OrderId }    // ✗ already exported `opaque`\n\ntype OrderId = String where Matches(\"ORD-[0-9]+\")\n\nexports opaque { OrderId }         // ✓ one visibility",
+  "severity": "error",
+  "summary": "A type is exported with conflicting visibilities."
+}

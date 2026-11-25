@@ -1,0 +1,12 @@
+{
+  "blurb": "A lambda parameter pattern must match every value of its type, because a lambda has no `else` for the rest. `Item { status: Paid, qty, .. }` matches only some items. Use bare names, `f: name` or `f: _`; the note names the first field that can fail. To handle the other cases, take a name and `match` on it in the body.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.lambda_pattern_refutable",
+  "constructs": [
+    "lambda_param"
+  ],
+  "example": "items.map((Item { status: Paid, qty, .. }) => qty)   // ✗ not every item is `Paid`\n\nitems.map((i) => match i.status {                    // ✓ every status is handled\n    Paid => i.qty\n    Pending => 0\n})",
+  "severity": "error",
+  "summary": "A lambda parameter's record pattern can fail to match some value of its type, and a lambda has no `else` to fall back on."
+}

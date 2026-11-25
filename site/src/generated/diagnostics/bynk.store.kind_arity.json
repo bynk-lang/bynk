@@ -1,0 +1,10 @@
+{
+  "blurb": "Each storage kind takes a fixed number of type arguments: `Cell[T]`, `Set[T]` and `Log[T]` take one, and `Map[K, V]` and `Cache[K, V]` take two. The checker reads the arguments by position, so a wrong count cannot be guessed at and is refused where the field is declared. Give the kind the arguments it takes. To keep a key with a value use `Map`, and to hold a single value use `Cell[T]`.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.kind_arity",
+  "constructs": [],
+  "example": "store total: Cell[String, Int]   // ✗ a `Cell` takes one type argument\n\nstore total: Cell[Int]   // ✓ one",
+  "severity": "error",
+  "summary": "A storage kind was applied to the wrong number of type arguments (e.g. `Cell[A, B]`)."
+}

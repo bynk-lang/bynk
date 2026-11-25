@@ -1,0 +1,10 @@
+{
+  "blurb": "A scheme's config values are strings and integers, except that a `SignedCookie` also takes a duration (`ttl = 12.hours`) and a bare name (`sameSite = Lax`). Every other scheme reads a string or an integer, so a duration or a bare name would be dropped without a word: a `Signature` `tolerance = 5.minutes` would read as no tolerance at all, and the replay window would be off. Write a `Signature` tolerance in whole seconds, and quote a string.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.scheme_arg_kind",
+  "constructs": [],
+  "example": "actor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 5.minutes) }   // ✗ a duration\n\nactor Hook { auth = Signature(secret = \"K\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }   // ✓ seconds",
+  "severity": "error",
+  "summary": "A scheme config value other than `SignedCookie`'s is a duration or a bare name, which only `SignedCookie` takes."
+}

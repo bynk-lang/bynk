@@ -1,0 +1,10 @@
+{
+  "blurb": "A purge reaches the edge cache only from the Worker's own `fetch`, the entrypoint that serves cached responses. A queue consumer is not that entrypoint, and its purge is not known to reach the cache, so a consumer that reaches `EdgeCache`, with `given Edge` or through a provider that does, is refused. Purge from a service handler instead. An agent and an `on schedule` handler have the same rule: `bynk.cloudflare.edge_cache_in_agent`, `bynk.cloudflare.edge_cache_in_schedule`.",
+  "category": "Cloudflare",
+  "categoryAnchor": "cloudflare",
+  "code": "bynk.cloudflare.edge_cache_in_queue",
+  "constructs": [],
+  "example": "capability Edge = EdgeCache\n\nservice purges from queue(\"purges\") {\n    on message(path: String) -> Effect[QueueResult] given Edge {   // ✗ not the entrypoint the cache serves\n        let purged <- Edge.purge([path])\n        if purged { Ack } else { Retry(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+  "severity": "error",
+  "summary": "A queue consumer reaches an `EdgeCache` instance; purge from a service handler instead."
+}

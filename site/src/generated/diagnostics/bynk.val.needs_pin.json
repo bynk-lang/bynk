@@ -1,0 +1,12 @@
+{
+  "blurb": "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; the same goes for a record or sum that reaches one. A `for all` over such a type is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the refinement, or give the type an `@example` and use bare `Val`. See the `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.needs_pin",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// demo/codes.bynk\ntype Code = String where Matches(\"[a-z]+\")\n\n// tests/codes.test.bynk\nlet c = Val[Code]              // ✗ no value can be made from a pattern\nlet c = Val[Code](\"abc\")      // ✓ pin one",
+  "severity": "error",
+  "summary": "A bare `Val[T]` cannot generate a value (e.g. a `Matches` string); pin one."
+}

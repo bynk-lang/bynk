@@ -1,0 +1,12 @@
+{
+  "blurb": "Adapter dependencies run from adapter to adapter. An adapter sits at the host boundary and is wired in process beside its binding, but a context is a deployment unit with services of its own, so it cannot be consumed from there. Consume a capability that another adapter exports, or put the code that needs a context in a context.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.consumes_context",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// logging.bynk\ncontext logging { … }\n\n// tokens.bynk\nadapter tokens {\n    consumes logging { Log }    // ✗ `logging` is a context\n}\n\n// logging.bynk\nadapter logging { … }         // ✓ an adapter, so it may be consumed",
+  "severity": "error",
+  "summary": "An `adapter` consumed a context; adapter dependencies are adapter-to-adapter."
+}

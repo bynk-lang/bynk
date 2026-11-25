@@ -1,0 +1,12 @@
+{
+  "blurb": "`exports capability { Clock }` offers a capability of this context to the contexts that consume it, so the capability has to be declared in this context, and provided there too (`bynk.exports.capability_not_provided`). A name that is not declared is usually a misspelling. Correct it, or declare the capability here. A name in a type `exports` clause is `bynk.exports.undeclared_type`.",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.undeclared_capability",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports capability { Cloc }      // ✗ no capability `Cloc` in this context\n\ncapability Clock {\n    fn now() -> Effect[Int]\n}\n\nexports capability { Clock }     // ✓ the declared name\n\nprovides Clock = Fixed {\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}",
+  "severity": "error",
+  "summary": "`exports capability` names a capability that is not declared."
+}

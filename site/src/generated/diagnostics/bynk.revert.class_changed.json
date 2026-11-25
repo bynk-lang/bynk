@@ -1,0 +1,10 @@
+{
+  "blurb": "Cloudflare applies Durable Object class additions, removals and renames as migrations, and it cannot roll back across one. If the set of classes differs between the live version and the target, `bynk revert` refuses. Redeploy forward, with the class set you want, instead.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.class_changed",
+  "constructs": [],
+  "example": "bynk revert --dry-run\n  classes   shop-orders  refused: the Durable Object classes differ between the two versions\n\nbynk deploy   # redeploy forward",
+  "severity": "error",
+  "summary": "`bynk revert` refused because a Durable Object class was added, removed or renamed between the live version and the target, and Cloudflare cannot roll back across a class migration."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A service's policies open its body, before any handler, in one fixed order: `cors`, `security`, `limits`, then `json`, each optional. One fixed layout means a reader always finds a service's cross-cutting rules at the top, and the formatter has a single form to write. A policy after a later one, or after a handler, is refused. Reorder them. A policy given twice is a separate error, such as `bynk.parse.duplicate_cors`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.policy_order",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service api from http {\n    limits { maxBody: 1_048_576 }\n    cors { origins: [\"*\"] }               // ✗ `cors` comes before `limits`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    cors { origins: [\"*\"] }               // ✓ policies in order\n    limits { maxBody: 1_048_576 }\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A service's `cors`/`security`/`limits` policy is out of order or follows a handler; they open the body in the order `cors`, `security`, `limits`, `json`."
+}

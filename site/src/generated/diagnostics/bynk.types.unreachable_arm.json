@@ -1,0 +1,12 @@
+{
+  "blurb": "A `match` arm can never run, because the arms before it already match every value it would match. The usual cause is a wildcard `_` placed before more specific arms: arms are tried in order, so the wildcard takes everything and the rest are dead code, which Bynk refuses rather than let hide a mistake. Put the specific arms first and the wildcard last, or delete the arm. A guarded arm covers nothing, since its guard may fail.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.unreachable_arm",
+  "constructs": [
+    "match_arm"
+  ],
+  "example": "type Status = enum { Pending, Active, Done }\n\nfn label(s: Status) -> String {\n    match s {\n        _ => \"other\"\n        Pending => \"waiting\"    // ✗ the `_` above already matches it\n    }\n}\n\nfn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        _ => \"other\"            // ✓ the catch-all last\n    }\n}",
+  "severity": "error",
+  "summary": "A `match` arm is unreachable."
+}

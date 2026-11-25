@@ -1,0 +1,5 @@
+commons demo.j
+
+fn bad(xs: List[Int]) -> String {
+  xs.join(",")
+}

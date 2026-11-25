@@ -1,0 +1,10 @@
+{
+  "blurb": "`Ok(v)` fixes only the success type and `Err(e)` only the error type, so the rest of the `Result` has to come from context: an annotation, a parameter type, or the enclosing function's return type. A bare `let r = Ok(1)` has neither, and the compiler will not guess. Annotate the binding, as in `let r: Result[Int, String] = Ok(1)`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.cannot_infer_result_type_params",
+  "constructs": [],
+  "example": "fn run() -> Int {\n    let r = Ok(1)    // ✗ a `Result` of what error?\n    1\n}\n\nfn run() -> Int {\n    let r: Result[Int, String] = Ok(1)    // ✓\n    1\n}",
+  "severity": "error",
+  "summary": "The type parameters of a `Result` could not be inferred."
+}

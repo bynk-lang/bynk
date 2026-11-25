@@ -1,0 +1,12 @@
+{
+  "blurb": "A `D1.peek` handle is read-only: it offers `all`, `first`, `select[T]` and `firstAs[T]`, and a statement that would write (`INSERT`, `UPDATE`, `DELETE`, a schema change) is refused, as is `run` or `batch`. A case makes the app write by driving the app.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.peek_write",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/orders.test.bynk\nsuite shop.orders as system {\n  case \"peeks\" {\n    let db = D1.peek(shop.orders.Orders)\n    let a <- db.all(\"DELETE FROM orders\", [])   // ✗ the statement writes\n    let r <- db.all(\"SELECT id FROM orders\", [])   // ✓\n    expect true\n  }\n}",
+  "severity": "error",
+  "summary": "A `D1.peek` handle is asked to write, by a write operation (`run`, `batch`) or by a statement that would write; the handle is read-only."
+}

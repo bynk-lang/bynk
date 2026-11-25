@@ -1,0 +1,12 @@
+{
+  "blurb": "A type is in scope under one name, so it is selected once in a file: the alias is that name. Selecting it twice, or both bare and aliased, would leave two names for it. Keep one selection. The bare selection of a type is not needed, since `consumes payment` already brings every exported type into scope.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.type_alias_repeated",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop.bynk\ncontext shop\n\nconsumes payment { AuthId as A, AuthId as B }   // ✗ `AuthId` aliased twice\n\nconsumes payment { AuthId as Auth }             // ✓ one alias",
+  "severity": "error",
+  "summary": "An exported type is aliased more than once, or is selected both bare and aliased, in `consumes U { … }`."
+}

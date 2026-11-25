@@ -904,6 +904,38 @@ export function __bynkRegExp(source: string, flags: string): RegExp {
   return re;
 }
 
+/**
+ * `String.padStart` / `padEnd` (#3978). The width counts code points, not UTF-16 units,
+ * so an astral character is one position; `fill` is cut to fit (by code points too).
+ * An empty `fill` has nothing to repeat and faults.
+ */
+export function __bynkPad(s: string, width: number, fill: string, atStart: boolean): string {
+  const unit = [...fill];
+  if (unit.length === 0) throw new Error("String.padStart/padEnd: `fill` is empty");
+  const need = width - [...s].length;
+  if (need <= 0) return s;
+  let pad = "";
+  for (let i = 0; i < need; i += 1) pad += unit[i % unit.length];
+  return atStart ? pad + s : s + pad;
+}
+
+/** `String.repeat` (#3978): `n` copies; a negative `n` faults. */
+export function __bynkRepeat(s: string, n: number): string {
+  if (n < 0) throw new Error(`String.repeat: a negative count (${n})`);
+  return s.repeat(n);
+}
+
+/**
+ * `String.lines` (#3978): split on `\n` and `\r\n` (not a lone `\r`); a trailing line
+ * break gives no empty last element, and the empty string gives `[]`.
+ */
+export function __bynkLines(s: string): string[] {
+  if (s === "") return [];
+  const parts = s.split(/\r?\n/);
+  if (parts[parts.length - 1] === "") parts.pop();
+  return parts;
+}
+
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
 export type JsonValue =
@@ -928,6 +960,16 @@ export type BoundaryError =
       readonly violation: ValidationError;
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
+
+// #4278: a refinement violation as it goes on the wire in a `400`: the field and the message,
+// never the offending value. A rejected password failing `MinLength` must not be echoed back, so
+// `value` stays runtime-only. Applied to the body of every JSON `400` the generated handlers
+// answer; any body that is not a `RefinementViolation` passes through untouched.
+export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
+  const violation = body.violation as ValidationError | undefined;
+  if (body.kind !== "RefinementViolation" || violation === undefined) return body;
+  return { ...body, violation: { field: violation.field, message: violation.message } };
+}
 
 // v0.177 (#643): the deployed callee's compiled contract is not the one this
 // caller was compiled against — a deploy skew, not a bad payload. The callee

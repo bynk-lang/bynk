@@ -1,0 +1,10 @@
+{
+  "blurb": "A field default, `field: T = expr`, is filled in whenever a literal leaves the field out and whenever a decoded body omits its key, so it has to be a fixed value that has a wire form. The compiler accepts a literal, a variant, `Some`, `None`, `Ok` or `Err`, a record or list literal, `Map.empty()`, `Set.empty()`, and `T.unsafe(lit)` for an opaque type. A call to your own function, or a read of a binding, is refused: a default has to be a value known when the program compiles, not something computed at every construction and decode. In a generic record, a field whose type is the type parameter itself cannot have a default at all, since one value cannot suit every instantiation. Write the value out as a literal, or drop the default and require the field.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.bad_field_default",
+  "constructs": [],
+  "example": "fn three() -> Int { 3 }\n\ntype Config = {\n  retries: Int = three(),    // ✗ a call is not a static value\n}\n\ntype Config = {\n  retries: Int = 3,          // ✓ a literal\n}",
+  "severity": "error",
+  "summary": "A record or event field's default expression (`field: T = expr`) is not a static, wire-representable value of the field's declared type — a literal (including one admitted to a refined type), a sum variant of a type this context may construct (not a `uses`-sourced commons sum, which is `bynk.context.rebrand_construction`), `Some`/`None`/`Ok`/`Err`, a record, a list literal, `Map.empty()`/`Set.empty()`, or `T.unsafe(lit)` for an opaque type whose literal also satisfies the refinement. A field whose type is a generic record's type parameter has no default, and a default may not hold for one instantiation only: for a record field that applies a user generic (`Page[String]`, or `Page[T]` inside a generic record; an event or old-state field may not) it is a closed-form value at the instantiated type, writing nothing of the enclosing record's own type parameters. (Earlier versions reported this as `bynk.event.bad_field_default`.)"
+}

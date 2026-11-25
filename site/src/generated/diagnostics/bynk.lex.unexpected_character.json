@@ -1,0 +1,10 @@
+{
+  "blurb": "The lexer met a character that starts no token in Bynk, such as `#`, `$` or `'` outside a string literal. A comment is `//` (not `#`) and a string takes double quotes (not single). The character is skipped and lexing goes on, so every lexical error in the file is reported together.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.unexpected_character",
+  "constructs": [],
+  "example": "const Limit: Int = 100 # the cap       // ✗ `#` is not a comment\nconst Limit: Int = 100        // ✓ a comment is `//`",
+  "severity": "error",
+  "summary": "An unexpected character in the source."
+}

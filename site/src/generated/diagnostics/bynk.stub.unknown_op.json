@@ -1,0 +1,10 @@
+{
+  "blurb": "`stub Cap.op(…)` overrides one operation of a capability, so `op` must be declared by that capability. A misspelt or renamed operation matches nothing, so the stub is refused instead of leaving the default provider in place unannounced. Use the operation name the capability declares. See `bynk.stub.not_a_seam` when the capability itself is the wrong one.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.unknown_op",
+  "constructs": [],
+  "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.reed() returns 7   // ✗ Meter has no `reed`\nstub Meter.read() returns 7   // ✓",
+  "severity": "error",
+  "summary": "A test `stub` names an operation the capability does not declare."
+}

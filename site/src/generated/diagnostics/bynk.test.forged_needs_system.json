@@ -1,0 +1,12 @@
+{
+  "blurb": "`by Forged`, `by Stale` and the other bad-credential principals send a forged or out-of-date credential to the real auth seam, which only a `system` case reaches. In process the seam is skipped and the identity is simply given, so there is nothing to refuse. Move the case to `system` with `as system`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.forged_needs_system",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\ncase \"a forged token is refused\" {            // ✗ not a system case\ncase \"a forged token is refused\" as system {  // ✓\n    let r <- api.GET(\"/a\") by Forged\n    expect r is Rejected(Unauthorized)\n}",
+  "severity": "error",
+  "summary": "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential."
+}

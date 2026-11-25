@@ -66,6 +66,7 @@ mod expressions;
 mod kernels;
 mod linearity;
 mod list_basics;
+mod list_more;
 mod list_par;
 mod list_par_with;
 mod par;
@@ -88,6 +89,7 @@ pub fn string_refinement_violation<'a>(
     refinements::first_failed_predicate(refinement, &ConstLit::Str(value.to_string()))
 }
 mod regex_ambiguity;
+mod string_more;
 mod usefulness;
 
 use calls::*;

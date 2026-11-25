@@ -1,0 +1,12 @@
+{
+  "blurb": "A derived capability, `capability Name = Kind`, can take options after the kind, each one positional literal that the compiler reads while it checks the program: `Service` takes `@worker(\"name\")`, `R2` an optional `@jurisdiction(\"eu\")`, `RateLimit` a `@limit(n)` and a `@period(d)`, and `Queue` a `@name(\"queue\")`. The value must be a literal of the option's kind, and one the platform accepts: `@limit` a positive `Int`, `@period` `10.seconds` or `60.seconds`, `@jurisdiction` `\"eu\"` or `\"fedramp\"`, `@tls` (on a `MySql`) `\"required\"`, `\"verify-ca\"` or `\"verify-identity\"`, `@worker` a Worker name and `@name` a queue name, each of 1 to 63 lowercase letters, digits and `-` (a Worker name may also hold `_`). Each option is given once, and an `@worker` must name a Worker outside the project, since a context of your own is reached with `consumes`. A bad value would otherwise surface only when the platform refuses the deployment, so it is refused here. Use one of the values the note lists. `RateLimit` is experimental, so the project opts in under `[unstable]` in `bynk.toml`.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.invalid_option",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "// bynk.toml\n[unstable]\nallow = [\"bynk.cloudflare.RateLimit\"]\n\n// login.bynk\ncontext login\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability LoginLimit = RateLimit @limit(20) @period(30.seconds)    // ✗ a window is 10 or 60 seconds\ncapability LoginLimit = RateLimit @limit(20) @period(60.seconds)    // ✓",
+  "severity": "error",
+  "summary": "A derived capability's option is not a single positional literal of its kind (string, positive `Int`, or an offered window), is given twice, or is a value the kind refuses (an `@worker` that is not a well-formed Worker name outside the project, a malformed queue `@name`, an unknown `@jurisdiction`)."
+}
