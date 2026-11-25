@@ -9,6 +9,7 @@
 //! `bynkNoStub` error, which the wrapper takes as "run the real agent".
 
 use super::*;
+use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::test_suites::ResolvedStub;
 use bynk_syntax::ast::{StubClause, StubRhs};
 use bynk_ts::{TsExpr, TsObjectEntry, TsStmt};
@@ -64,17 +65,23 @@ pub(super) fn no_stub_match_stmt(rp: &ResolvedStub, message: String) -> TsStmt {
     TsStmt::throw_stmt(error, None)
 }
 
-/// `__stubAgents({ Basket: new __Stub_Basket(__case) });`: the first statement of the unit
-/// tier's deps factory, which every case and property builds its `deps` with, after the agent
-/// registries are reset (a reset also clears what an earlier case registered). `None` when the
-/// target stubs no agent, and for the `integration` tier's factory, which runs the real agents. A class that holds scoped clauses is told the running case, and the
-/// running suite when one is scoped to a suite, as `stub_overlay` tells a `deps` entry.
+/// `__stubAgents([[__ns_shop_basket.Basket, new __Stub_Basket(__case)]]);`: the first statement
+/// of the unit tier's deps factory, which every case and property builds its `deps` with, after
+/// the agent registries are reset (a reset also clears what an earlier case registered). An agent
+/// is keyed by its class, as the target's namespace exports it, so an agent of the same name in
+/// another context is no match. `None` when the target stubs no agent. The `integration` tier's
+/// factory, which runs the real agents, registers none (`__stubAgents([])`), so a stub an earlier
+/// unit case left cannot reach them. A class that holds scoped clauses is told the running case,
+/// and the running suite when one is scoped to a suite, as `stub_overlay` tells a `deps` entry.
 pub(super) fn agent_stub_registration(
     stubs: &HashMap<String, ResolvedStub>,
     factory: &str,
+    target: &str,
 ) -> Option<TsStmt> {
     let mut agents: Vec<&ResolvedStub> = stubs.values().filter(|rp| rp.agent).collect();
-    if factory != "__makeTestDeps" || agents.is_empty() {
+    if factory == "__makeIntegrationDeps" {
+        agents.clear();
+    } else if factory != "__makeTestDeps" || agents.is_empty() {
         return None;
     }
     agents.sort_by(|a, b| a.cap.cmp(&b.cap));
@@ -88,17 +95,17 @@ pub(super) fn agent_stub_registration(
             if stub_is_suite_scoped(rp) {
                 args.push(ident("__suite"));
             }
-            TsObjectEntry::prop(
-                rp.cap.clone(),
+            TsExpr::array(vec![
+                member(ident(test_ns(target)), &rp.cap),
                 TsExpr::New {
                     callee: Box::new(ident(stub_class_name(&rp.cap))),
                     args,
                 },
-            )
+            ])
         })
         .collect();
     Some(TsStmt::expr_stmt(
-        call(ident("__stubAgents"), vec![TsExpr::object_entries(entries)]),
+        call(ident("__stubAgents"), vec![TsExpr::array(entries)]),
         None,
     ))
 }

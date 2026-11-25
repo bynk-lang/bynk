@@ -1304,7 +1304,8 @@ suite shop.basket {
   `unreachable`, are `bynk.stub.agent_stub`. An operation the agent does not declare is
   `bynk.stub.unknown_op`.
 - **A stub lasts one case.** The agent registries are reset before each case, and the stubs with
-  them.
+  them. A `History[…]` property keeps them across its driven sequences, so a suite-scoped stub
+  applies in each.
 
 ### Sequenced `stub` — `returns each`
 

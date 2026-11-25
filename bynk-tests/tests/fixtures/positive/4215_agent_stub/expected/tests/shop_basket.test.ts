@@ -59,7 +59,7 @@ class __Stub_Basket {
 <<bynk-shared: testing/stub_overlay>>
 
 function __makeTestDeps(__case?: string) {
-  __stubAgents({ Basket: new __Stub_Basket(__case) });
+  __stubAgents([[__ns_shop_basket.Basket, new __Stub_Basket(__case)]]);
   return {};
 }
 

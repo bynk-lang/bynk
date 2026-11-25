@@ -32,20 +32,24 @@ stubbed handlers (as #3892 does for a consumed service), so the argument pattern
 the scoping (case, suite) and the fixtures lower through the existing
 `__Stub_<Agent>` class. That class is not a `deps` entry: the unit tier's deps
 factory, which every case and property builds its `deps` with, registers the
-classes with the runtime (`__stubAgents`), and the bundle-agent wrapper asks the
-class before it runs an operation. A matched clause throws an error marked with the
+classes with the runtime (`__stubAgents`), keyed by the agent's class as the target's
+namespace exports it, not by its name, so an agent of the same name in another context
+is no match; the bundle-agent wrapper asks the class before it runs an operation. A matched clause throws an error marked with the
 outcome it stands for and the agent it is for, which `callAgentOutcome` reads back
 as that outcome, for the called agent only: an unreachable stub of another agent,
 met inside a handler that ran, is that handler's fault, as a nested `AgentBusy` is.
 A call no clause matches throws a `bynkNoStub` error, and the real operation runs.
-A registry reset ends the stubs with the case.
+A registry reset ends the stubs with the case, but a history property's driver, which
+resets a registry before each driven sequence, keeps them; the `integration` tier's
+factory registers none, so a stub an earlier unit case left cannot reach its real agents.
 
 **Consequences.** Production code and the other tiers are unchanged: the table is
 empty unless a unit suite stubs an agent, and the emitted agent modules and the
-Worker entries do not change. An agent stub is by operation, never by key, so a
+Worker entries do not change, but for a history driver's reset call, which keeps the
+stubs. An agent stub is by operation, never by key, so a
 test cannot make one instance busy and leave another working; a key-specific form is
 the extension if it is wanted. The runtime's bundle-agent wrapper awaits the
 stub check only while a stub is registered, so with none (production, and any suite
 that stubs no agent) a call still enqueues synchronously, at call time, in the order
-it was made, as before; a call made while a stub is registered waits one microtask
-first, which can reorder it against an unstubbed call made in the same tick.
+it was made, as before; a call to a stubbed operation waits one microtask first, which
+can reorder it against an unstubbed call made in the same tick.

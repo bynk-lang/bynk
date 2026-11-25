@@ -102,8 +102,9 @@ pub(crate) fn resolve_agent_stub(
                 CODE,
                 pc.rhs.span(),
                 format!(
-                    "an agent operation is stubbed `faulted` or `unreachable`, as in `stub {seam}.{}(_) faulted`",
-                    pc.method.name
+                    "`stub {seam}.{}` can end only in `faulted` or `unreachable`, not `{}`",
+                    pc.method.name,
+                    rhs_word(&pc.rhs)
                 ),
             )
             .with_note(
@@ -157,6 +158,19 @@ pub(crate) fn resolve_agent_stub(
     entry.clause_fns.push(fns);
     entry.clause_types.push(types);
     entry.clause_consts.push(consts);
+}
+
+/// The word a refused agent-stub clause ends in, as it is written.
+fn rhs_word(rhs: &StubRhs) -> &'static str {
+    match rhs {
+        StubRhs::Returns(_) => "returns",
+        StubRhs::Fails(_) => "fails",
+        StubRhs::ReturnsEach(..) => "returns each",
+        StubRhs::Never(_) => "never",
+        StubRhs::Rejected(..) => "rejected",
+        StubRhs::Faulted(_) => "faulted",
+        StubRhs::Unreachable(_) => "unreachable",
+    }
 }
 
 /// An agent stub runs at `unit` only: the other tiers run real agents. A clause in a suite stubs

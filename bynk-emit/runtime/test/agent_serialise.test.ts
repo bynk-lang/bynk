@@ -644,7 +644,7 @@ const stubOutcome = (tag: string, agent: string) => (): never => {
 };
 
 test("agent stubs: unreachable and faulted are the outcomes the stubbed call stands for", async () => {
-  stubAgents({ Stubbed: { add: stubOutcome("Unreachable", "Stubbed") } });
+  stubAgents([[Stubbed, { add: stubOutcome("Unreachable", "Stubbed") }]]);
   assert.deepEqual(await callAgentOutcome(stubbedAgent().add(1), "Stubbed.add"), {
     tag: "Unreachable",
     status: { tag: "None" },
@@ -652,7 +652,7 @@ test("agent stubs: unreachable and faulted are the outcomes the stubbed call sta
   // A plain call to it faults, as a busy agent's does.
   await assert.rejects(() => stubbedAgent().add(1), /stubbed agent call/);
 
-  stubAgents({ Stubbed: { add: stubOutcome("Faulted", "Stubbed") } });
+  stubAgents([[Stubbed, { add: stubOutcome("Faulted", "Stubbed") }]]);
   const logged: unknown[][] = [];
   const log = globalThis.console.error;
   globalThis.console.error = (...a: unknown[]) => void logged.push(a);
@@ -668,24 +668,78 @@ test("agent stubs: a call no clause matches, or that is not in scope, runs the r
   const noMatch = (): never => {
     throw Object.assign(new Error("bynk: no stub clause matched"), { bynkNoStub: true });
   };
-  stubAgents({ Stubbed: { add: noMatch } });
+  stubAgents([[Stubbed, { add: noMatch }]]);
   assert.equal(await stubbedAgent().add(1), 2);
   // `__applies` is the stub class's own answer for the running case.
-  stubAgents({ Stubbed: { __applies: () => false, add: stubOutcome("Faulted", "Stubbed") } });
+  stubAgents([[Stubbed, { __applies: () => false, add: stubOutcome("Faulted", "Stubbed") }]]);
   assert.equal(await stubbedAgent().add(1), 2);
   // An operation the stub does not name is the real one.
-  stubAgents({ Stubbed: {} });
+  stubAgents([[Stubbed, {}]]);
   assert.equal(await stubbedAgent().add(1), 2);
 });
 
 test("agent stubs: they apply to the stubbed agent alone, and a registry reset ends them", async () => {
-  stubAgents({ Other: { add: stubOutcome("Faulted", "Other") } });
+  class Other {}
+  stubAgents([[Other, { add: stubOutcome("Faulted", "Other") }]]);
   assert.equal(await stubbedAgent().add(1), 2);
 
-  stubAgents({ Stubbed: { add: stubOutcome("Faulted", "Stubbed") } });
+  stubAgents([[Stubbed, { add: stubOutcome("Faulted", "Stubbed") }]]);
   await assert.rejects(() => stubbedAgent().add(1));
+  // A history property's driver resets a registry before each sequence: the stubs stay.
+  new StateRegistry<string>().reset(true);
+  await assert.rejects(() => stubbedAgent().add(1));
+  // A case boundary ends them.
   new StateRegistry<string>().reset();
   assert.equal(await stubbedAgent().add(1), 2);
+});
+
+test("agent stubs: the class is the key, so a same-named class of another context is not stubbed", async () => {
+  const make = () => {
+    class Stubbed {
+      state: DurableObjectState;
+      constructor(state: DurableObjectState) {
+        this.state = state;
+      }
+      async add(n: number): Promise<number> {
+        return n + 10;
+      }
+    }
+    const state = makeTestState("k");
+    return serialiseBundleAgent(state, new Stubbed(state));
+  };
+  stubAgents([[Stubbed, { add: stubOutcome("Faulted", "Stubbed") }]]);
+  assert.equal(await make().add(1), 11);
+  await assert.rejects(() => stubbedAgent().add(1));
+  stubAgents([]);
+});
+
+test("agent stubs: a call nothing stubs runs in the same order with a stub registered as without", async () => {
+  const run = async (): Promise<string[]> => {
+    const order: string[] = [];
+    class Order {
+      state: DurableObjectState;
+      constructor(state: DurableObjectState) {
+        this.state = state;
+      }
+      async add(n: number): Promise<number> {
+        order.push(`add${n}`);
+        return n;
+      }
+    }
+    const state = makeTestState("k");
+    const agent = serialiseBundleAgent(state, new Order(state));
+    const first = agent.add(1);
+    order.push("after-call");
+    const second = agent.add(2);
+    await Promise.all([first, second]);
+    return order;
+  };
+  stubAgents([]);
+  const baseline = await run();
+  // A stub of an operation this agent does not run, and a stub of another agent.
+  stubAgents([[Stubbed, { other: stubOutcome("Faulted", "Stubbed") }]]);
+  assert.deepEqual(await run(), baseline);
+  stubAgents([]);
 });
 
 test("agent stubs: an unreachable stub of another agent, met inside a handler, is that handler's fault", async () => {
