@@ -65,6 +65,7 @@ use bynk_syntax::ast::{Case, Visibility};
 // -- v0.7 / v0.118: test declaration processing --
 
 mod case_body;
+mod collection_generators;
 mod harness;
 mod integration_module;
 mod names;
@@ -83,6 +84,7 @@ mod test_deps;
 mod test_main;
 mod test_module;
 mod test_runtime_modules;
+use self::collection_generators::*;
 pub use self::harness::RunnableTest;
 pub use self::harness::discovery_manifest;
 use self::harness::*;

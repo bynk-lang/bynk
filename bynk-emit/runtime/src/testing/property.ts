@@ -15,6 +15,9 @@ export function __bynkMix(a: number, b: number): number {
 }
 export function __bynkRng(seed: number) {
   let s = seed >>> 0;
+  // #4120: how many elements a collection draw may spend, shared by nested collections so a
+  // `List[List[T]]` does not explode.
+  let budget = 16;
   const next = () => {
     s = (s + 0x6d2b79f5) >>> 0;
     let t = s;
@@ -99,6 +102,19 @@ export function __bynkRng(seed: number) {
     },
     // #4121: a member of a `Matches` pattern, or a real calendar date for `IsoDate`.
     matches(spec: string): string { return __matchDraw(__matchSpec(spec), next); },
+    // #4120: a list of up to 8 elements (0, 1 and a few more, with the extremes over-represented);
+    // each element is drawn with a share of what budget is left.
+    list(elem: () => any): any[] {
+      const cap = Math.min(8, budget);
+      const r = next();
+      const size = r < 0.15 ? 0 : r < 0.3 ? Math.min(1, cap) : r < 0.4 ? cap : Math.floor(next() * (cap + 1));
+      const saved = budget;
+      budget = Math.max(1, Math.floor(saved / Math.max(size, 1)));
+      const out: any[] = [];
+      for (let i = 0; i < size; i++) out.push(elem());
+      budget = saved;
+      return out;
+    },
     bool(): boolean { return next() < 0.5; },
     pick(thunks: Array<() => any>): any { return thunks[Math.floor(next() * thunks.length)](); },
   };
@@ -351,6 +367,27 @@ export function __bynkShrinkBytes(v: Uint8Array): Uint8Array[] {
   if (v.length > 1) out.push(v.slice(0, v.length - 1));
   if (v.some((b) => b !== 0)) out.push(new Uint8Array(v.length));
   return out;
+}
+// #4120: a list shrinks by dropping elements (all, each half, then one at a time), then by
+// shrinking each remaining element in place.
+export function __bynkShrinkList(v: readonly any[], elem: (x: any) => any[]): any[][] {
+  const out: any[][] = [];
+  if (v.length === 0) return out;
+  out.push([]);
+  if (v.length > 1) {
+    const mid = Math.floor(v.length / 2);
+    out.push(v.slice(0, mid), v.slice(mid));
+  }
+  for (let i = 0; i < v.length; i++) out.push(v.filter((_, j) => j !== i));
+  for (let i = 0; i < v.length; i++) {
+    for (const c of elem(v[i])) out.push(v.map((x, j) => (j === i ? c : x)));
+  }
+  return out;
+}
+// An `Option` shrinks to `None`, then its payload shrinks.
+export function __bynkShrinkOption(v: any, inner: (x: any) => any[]): any[] {
+  if (v.tag !== "Some") return [];
+  return [{ tag: "None" }, ...inner(v.value).map((c) => ({ tag: "Some", value: c }))];
 }
 export function __bynkIsFailure(e: any): e is Error {
   // A shrinkable property/contract failure: an `expect` assertion, or a v0.115

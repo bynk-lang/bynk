@@ -805,10 +805,15 @@ pub(super) fn gen_ts_for_ty(
                 }
             }
         }
+        // #4120: a collection or an option draws from its element's generator.
+        checker::Ty::List(_)
+        | checker::Ty::Set(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Option(_) => collection_gen_ts(ty, types, depth, tys, site)
+            .unwrap_or_else(|| site.missing_fact("a generator for a collection")),
         checker::Ty::Error
         | checker::Ty::Never
         | checker::Ty::Result(..)
-        | checker::Ty::Option(_)
         | checker::Ty::Effect(_)
         | checker::Ty::HttpResult(_)
         | checker::Ty::QueueResult
@@ -819,9 +824,6 @@ pub(super) fn gen_ts_for_ty(
         | checker::Ty::RequestQuery
         | checker::Ty::RequestCookies
         | checker::Ty::TokenClaims
-        | checker::Ty::List(_)
-        | checker::Ty::Map(..)
-        | checker::Ty::Set(_)
         | checker::Ty::Query(_)
         | checker::Ty::Stream(_)
         | checker::Ty::Connection(_)
@@ -935,10 +937,15 @@ pub(super) fn canon_ts_for_ty(
                 }
             }
         }
+        // #4120: its canonical value is the empty collection, or `None`.
+        checker::Ty::List(_)
+        | checker::Ty::Set(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Option(_) => collection_canon_ts(ty, tys)
+            .unwrap_or_else(|| site.missing_fact("a canonical value for a collection")),
         checker::Ty::Error
         | checker::Ty::Never
         | checker::Ty::Result(..)
-        | checker::Ty::Option(_)
         | checker::Ty::Effect(_)
         | checker::Ty::HttpResult(_)
         | checker::Ty::QueueResult
@@ -949,9 +956,6 @@ pub(super) fn canon_ts_for_ty(
         | checker::Ty::RequestQuery
         | checker::Ty::RequestCookies
         | checker::Ty::TokenClaims
-        | checker::Ty::List(_)
-        | checker::Ty::Map(..)
-        | checker::Ty::Set(_)
         | checker::Ty::Query(_)
         | checker::Ty::Stream(_)
         | checker::Ty::Connection(_)
@@ -1180,10 +1184,15 @@ pub(super) fn binding_gen(
                 TsExpr::array(vec![]),
             ),
         },
+        // #4120: the empty collection and a one-element one; shrinks by dropping, then shrinking.
+        checker::Ty::List(_)
+        | checker::Ty::Set(_)
+        | checker::Ty::Map(..)
+        | checker::Ty::Option(_) => collection_boundaries_shrink(ty, types, tys, site)
+            .unwrap_or_else(|| (Vec::new(), TsExpr::array(vec![]))),
         checker::Ty::Error
         | checker::Ty::Never
         | checker::Ty::Result(..)
-        | checker::Ty::Option(_)
         | checker::Ty::Effect(_)
         | checker::Ty::HttpResult(_)
         | checker::Ty::QueueResult
@@ -1194,9 +1203,6 @@ pub(super) fn binding_gen(
         | checker::Ty::RequestQuery
         | checker::Ty::RequestCookies
         | checker::Ty::TokenClaims
-        | checker::Ty::List(_)
-        | checker::Ty::Map(..)
-        | checker::Ty::Set(_)
         | checker::Ty::Query(_)
         | checker::Ty::Stream(_)
         | checker::Ty::Connection(_)

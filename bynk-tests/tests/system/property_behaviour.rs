@@ -545,3 +545,58 @@ fn for_all_draws_members_of_a_matches_pattern_and_shrinks_to_the_shortest() {
     assert_eq!(c["outcome"], "fail");
     assert_eq!(c["counterexample"], "c = \"aaaaa\"");
 }
+
+/// #4120: `for all` and `Val` work over `List`, `Set`, `Map` and `Option` and over records holding
+/// them; a failing claim shrinks to its smallest counterexample, printed as it is written.
+#[test]
+fn for_all_draws_collections_and_options_and_shrinks_them() {
+    if cfg!(windows) {
+        eprintln!("skipping on Windows: `bynk test` runner detection is Unix-only");
+        return;
+    }
+    if !have_runner() {
+        if std::env::var(REQUIRE_ENV).is_ok() {
+            panic!("no TypeScript runner (tsx or tsc+node) on PATH, but {REQUIRE_ENV} is set");
+        }
+        eprintln!("skipping: no TypeScript runner (tsx or tsc+node) on PATH");
+        return;
+    }
+    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("out-collections")
+        .join("out");
+    let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
+        .arg("test")
+        .arg(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/behaviour/property_collections"),
+        )
+        .arg("--output")
+        .arg(&out_root)
+        .args(["--format", "json", "--seed", "0x5f3a"])
+        .output()
+        .expect("run bynk test");
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        panic!(
+            "a JSON document: {e}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    for name in [
+        "a list is at most eight long",
+        "a record's collections are drawn",
+        "sets and maps are drawn",
+        "Val of a collection or an option is the empty one",
+    ] {
+        assert_eq!(case_named(&doc, name)["outcome"], "pass", "{name}");
+    }
+    let shown = |name: &str| {
+        let c = case_named(&doc, name);
+        assert_eq!(c["outcome"], "fail", "{name}: {c}");
+        c["counterexample"].as_str().unwrap().to_string()
+    };
+    // A list shrinks to the fewest elements that break the claim, each shrunk to `0`.
+    assert_eq!(shown("a list is shorter than three"), "xs = [0,0,0]");
+    // An option shrinks to a `Some` of the smallest payload (`None` satisfies the claim).
+    assert_eq!(shown("an option is none"), "o = Some(0)");
+}
