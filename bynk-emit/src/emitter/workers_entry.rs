@@ -692,11 +692,7 @@ pub fn emit_worker_entry(
     }
     // 1A.38: fixed authored snippet, no interpolation
     program.push(TsStmt::raw_using(
-        fault_helpers(
-            !cron_routes.is_empty(),
-            !queue_routes.is_empty(),
-            queue_routes.iter().any(|r| r.signed.is_some()),
-        ),
+        fault_helpers(!cron_routes.is_empty(), &queue_routes),
         &[],
     ));
     program.push(TsStmt::decl(
