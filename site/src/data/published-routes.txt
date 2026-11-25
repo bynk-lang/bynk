@@ -505,6 +505,7 @@
 /book/reference/diagnostics/bynk.http.cors_not_http/
 /book/reference/diagnostics/bynk.http.cors_unknown_field/
 /book/reference/diagnostics/bynk.http.cors_wildcard_credentials/
+/book/reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
 /book/reference/diagnostics/bynk.http.duplicate_rejected/
 /book/reference/diagnostics/bynk.http.duplicate_route/
 /book/reference/diagnostics/bynk.http.error_status_position/
@@ -545,6 +546,11 @@
 /book/reference/diagnostics/bynk.http.query_field_not_stringy/
 /book/reference/diagnostics/bynk.http.query_not_http/
 /book/reference/diagnostics/bynk.http.query_wrong_type/
+/book/reference/diagnostics/bynk.http.rate_limit_bad_args/
+/book/reference/diagnostics/bynk.http.rate_limit_duplicate/
+/book/reference/diagnostics/bynk.http.rate_limit_key_unavailable/
+/book/reference/diagnostics/bynk.http.rate_limit_not_http/
+/book/reference/diagnostics/bynk.http.rate_limit_unknown_limiter/
 /book/reference/diagnostics/bynk.http.raw_bad_content_type/
 /book/reference/diagnostics/bynk.http.raw_body_not_bytes/
 /book/reference/diagnostics/bynk.http.raw_body_unbounded/
@@ -1673,6 +1679,7 @@
 /reference/diagnostics/bynk.http.cors_not_http/
 /reference/diagnostics/bynk.http.cors_unknown_field/
 /reference/diagnostics/bynk.http.cors_wildcard_credentials/
+/reference/diagnostics/bynk.http.cors_wildcard_expose_credentials/
 /reference/diagnostics/bynk.http.duplicate_rejected/
 /reference/diagnostics/bynk.http.duplicate_route/
 /reference/diagnostics/bynk.http.error_status_position/
@@ -1717,6 +1724,11 @@
 /reference/diagnostics/bynk.http.query_field_not_stringy/
 /reference/diagnostics/bynk.http.query_not_http/
 /reference/diagnostics/bynk.http.query_wrong_type/
+/reference/diagnostics/bynk.http.rate_limit_bad_args/
+/reference/diagnostics/bynk.http.rate_limit_duplicate/
+/reference/diagnostics/bynk.http.rate_limit_key_unavailable/
+/reference/diagnostics/bynk.http.rate_limit_not_http/
+/reference/diagnostics/bynk.http.rate_limit_unknown_limiter/
 /reference/diagnostics/bynk.http.raw_bad_content_type/
 /reference/diagnostics/bynk.http.raw_body_not_bytes/
 /reference/diagnostics/bynk.http.raw_body_unbounded/

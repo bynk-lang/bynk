@@ -1,0 +1,10 @@
+{
+  "blurb": "A route carries at most one `@rateLimit`, because the router asks one limiter, by one key, before it reads the body. Two annotations would leave it two answers, and neither could be said to win. Keep one. A limiter shared by several routes counts across all of them by key, so to limit two routes together, name the same limiter on each.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rate_limit_duplicate",
+  "constructs": [],
+  "example": "@rateLimit(SignupLimit, key: clientIp)\n@rateLimit(SignupLimit, key: clientIp)   // ✗ already set above\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓ one limiter, one key",
+  "severity": "error",
+  "summary": "A route carries more than one `@rateLimit`."
+}

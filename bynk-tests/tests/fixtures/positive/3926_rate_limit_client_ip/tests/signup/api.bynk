@@ -1,0 +1,41 @@
+// #3926: at `system`, the Worker binds an in-memory limiter for `SignupLimit`, counting on the
+// harness clock, and a request carries no `CF-Connecting-IP`, so every case counts one client.
+suite signup.api as system {
+	case "the request past the limit is refused before its body is read" {
+		let a <- api.POST("/signup", Wire("\"ann\""))
+		let b <- api.POST("/signup", Wire("\"bob\""))
+		let c <- api.POST("/signup", Wire("\"cy\""))
+		expect a is Handled(Ok("welcome"))
+		expect b is Handled(Ok("welcome"))
+		expect c is Rejected(RateLimited(_))
+	}
+
+	case "a body over the cap gets 429, not 413, once the limit is spent" {
+		let a <- api.POST("/signup", Wire("\"ann\""))
+		let b <- api.POST("/signup", Wire("\"bob\""))
+		let big <- api.POST("/signup", Wire("\"this body is a good deal longer than sixteen bytes\""))
+		expect big is Rejected(RateLimited(_))
+	}
+
+	case "a body over the cap is a 413 while the limit holds" {
+		let big <- api.POST("/signup", Wire("\"this body is a good deal longer than sixteen bytes\""))
+		expect big is Rejected(PayloadTooLarge(_))
+	}
+
+	case "the window recovers" {
+		let a <- api.POST("/signup", Wire("\"ann\""))
+		let b <- api.POST("/signup", Wire("\"bob\""))
+		let c <- api.POST("/signup", Wire("\"cy\""))
+		expect c is Rejected(RateLimited(_))
+		advance Clock by 60.seconds
+		let again <- api.POST("/signup", Wire("\"dee\""))
+		expect again is Handled(Ok("welcome"))
+	}
+
+	case "a route without the annotation is not counted" {
+		let a <- api.GET("/ping")
+		let b <- api.GET("/ping")
+		let c <- api.GET("/ping")
+		expect c is Ok("pong")
+	}
+}

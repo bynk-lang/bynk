@@ -1,0 +1,21 @@
+context signup.api
+
+// #3926: a limit the router asks before it reads a request body. `clientIp` counts by the
+// caller's address (`CF-Connecting-IP`), ahead of the media-type and body-size checks and
+// of authentication, so a flood of large bodies costs a counter and a `429`.
+
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(2) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  @limit(maxBody: 16)
+  on POST("/signup") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("welcome")
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

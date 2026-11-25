@@ -204,7 +204,6 @@ pub enum CommonsForm {
     Fragment,
 }
 
-/// A `uses other.commons` declaration (v0.3 §3.3).
 /// #4045: one qualified name a unit reads through a `uses` clause.
 #[derive(Debug, Clone)]
 pub struct QualifiedRef {
@@ -216,6 +215,7 @@ pub struct QualifiedRef {
     pub span: Span,
 }
 
+/// A `uses other.commons` declaration (v0.3 §3.3).
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub target: QualifiedName,
@@ -1296,8 +1296,8 @@ pub struct ServiceDecl {
 #[derive(Debug, Clone)]
 pub struct CorsPolicy {
     /// The `cors { }` fields as written, in source order. Field names are
-    /// validated against the closed set (`origins`/`headers`/`credentials`/
-    /// `maxAge`) by the checker, not the parser.
+    /// validated against the closed set (`origins`/`headers`/`expose`/
+    /// `credentials`/`maxAge`) by the checker, not the parser.
     pub fields: Vec<CorsField>,
     pub span: Span,
     /// #1786: comments before the closing `}`, an orphaned doc block among
@@ -1353,6 +1353,19 @@ impl CorsPolicy {
     /// a `headers:` list; `None` leaves the emitter to apply its smart default.
     pub fn allow_headers(&self) -> Option<Vec<String>> {
         self.field("headers").and_then(Self::str_list_of)
+    }
+
+    /// #3925: the `expose:` header names the author listed, in order (empty when
+    /// the field is absent or malformed; the checker has reported the shape).
+    pub fn expose_headers(&self) -> Vec<String> {
+        self.field("expose")
+            .and_then(Self::str_list_of)
+            .unwrap_or_default()
+    }
+
+    /// #3925: `true` iff `expose` is exactly the wildcard `["*"]`.
+    pub fn is_wildcard_expose(&self) -> bool {
+        self.expose_headers() == ["*"]
     }
 
     /// The `Access-Control-Max-Age` in whole seconds, if a `maxAge:` duration was

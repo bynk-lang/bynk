@@ -38,7 +38,7 @@
 //! *project* symbols.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
@@ -250,6 +250,17 @@ fn complete_base(
             })
             .collect();
     }
+    // 1b. #4045: inside `uses U { … <cursor>` — the public names U declares. After `X as`
+    //     the next word is the alias, a name of the user's own: nothing to suggest.
+    if let Some(unit) = uses_brace_unit(line_prefix) {
+        if names_a_brace_alias(line_prefix) {
+            return Vec::new();
+        }
+        let listed = listed_uses_names(line_prefix);
+        let mut names = public_names_of_commons(&unit, doc_text, &split());
+        names.retain(|c| !listed.contains(&c.label));
+        return names;
+    }
     // 2. After `consumes <prefix>` — consumable unit names.
     if is_consumes_target(line_prefix) {
         return consumable_units(doc_text, &split());
@@ -353,7 +364,8 @@ fn complete_base(
         return constraint_candidates();
     }
     // 4g'. #3890: `actor A = Caller where <cursor>` — the `Caller` predicate.
-    if is_caller_refinement_where(line_prefix) {
+    // #3899: a `Producer` refinement takes the same predicate.
+    if is_caller_refinement_where(line_prefix) || is_producer_refinement_where(line_prefix) {
         return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
     }
     // 4g''. #3888: `actor A = Sender where <cursor>` — the `Sender` predicate.
@@ -446,6 +458,80 @@ fn is_snapshot_clause_position(line: &str) -> bool {
                     | "called"
             )
         )
+}
+
+/// #4045: `uses U { … ` with the brace still open at the cursor → `Some(U)`.
+fn uses_brace_unit(line: &str) -> Option<String> {
+    let after = line.trim_start().strip_prefix("uses")?;
+    if !after.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let open = after.find('{')?;
+    if after[open + 1..].contains('}') {
+        return None;
+    }
+    let unit = after[..open].trim();
+    (!unit.is_empty() && is_qualified_name(unit)).then(|| unit.to_string())
+}
+
+/// #4045: the names already written in the open `uses U { … ` list, by the name
+/// the commons declares (`format` in `format as formatMoney`). Listing a name twice
+/// is refused, so completion does not offer it again. Like `consumes`, the list is
+/// read only on the line `uses` starts on.
+fn listed_uses_names(line: &str) -> HashSet<String> {
+    let Some(open) = line.find('{') else {
+        return HashSet::new();
+    };
+    line[open + 1..]
+        .split(',')
+        .filter_map(|item| item.split_whitespace().next())
+        .map(str::to_string)
+        .collect()
+}
+
+/// #4045: the names the commons `unit` declares and does not mark `private`, as
+/// completion items kinded by what they are: a type, a function, or a constant,
+/// asset or embed. Empty when `unit` is not a commons the project knows. A commons
+/// split over several files offers the names of every one of them.
+fn public_names_of_commons(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
+    let mut out: Vec<Completion> = Vec::new();
+    let mut visit = |u: &SourceUnit| {
+        let SourceUnit::Commons(c) = u else { return };
+        if c.name.joined() != unit {
+            return;
+        }
+        for item in &c.items {
+            let (name, kind, what, private) = match item {
+                CommonsItem::Type(t) => (&t.name, CompletionKind::Type, "type", t.private),
+                CommonsItem::Fn(f) if f.name.type_name().is_none() => (
+                    f.name.ident(),
+                    CompletionKind::Function,
+                    "function",
+                    f.private,
+                ),
+                CommonsItem::Const(k) => (&k.name, CompletionKind::Constant, "constant", k.private),
+                CommonsItem::Asset(a) => (&a.name, CompletionKind::Constant, "asset", a.private),
+                CommonsItem::Embed(e) => (&e.name, CompletionKind::Constant, "embed", e.private),
+                _ => continue,
+            };
+            if private.is_none() && !out.iter().any(|o| o.label == name.name) {
+                out.push(Completion::item(
+                    name.name.clone(),
+                    kind,
+                    Some(format!("{what} declared by `{unit}`")),
+                ));
+            }
+        }
+    };
+    let mut in_deps = false;
+    for (_, dep) in split.deps.iter().filter(|(label, _)| label == unit) {
+        in_deps = true;
+        visit(dep);
+    }
+    if !in_deps {
+        for_each_unit(doc_text, split.own(), visit);
+    }
+    out
 }
 
 /// `consumes U { … ` with the brace still open at the cursor → `Some(U)`.
@@ -1085,7 +1171,7 @@ fn record_pattern_receiver(line: &str) -> Option<(String, Vec<String>)> {
 
 /// v0.131: the CORS policy fields, offered at a field-name position inside a
 /// `cors { }` block. `Allow-Methods` is deliberately absent (derived from the
-/// routes), so the closed set is these four.
+/// routes), so the closed set is these five.
 pub const CORS_FIELDS: &[(&str, &str)] = &[
     (
         "origins",
@@ -1094,6 +1180,10 @@ pub const CORS_FIELDS: &[(&str, &str)] = &[
     (
         "headers",
         "the `Access-Control-Allow-Headers` a preflight advertises",
+    ),
+    (
+        "expose",
+        "the response headers a browser script may read, beside the ones Bynk writes for a client",
     ),
     (
         "credentials",
@@ -2022,6 +2112,13 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
 fn is_caller_refinement_where(line_prefix: &str) -> bool {
     let t = line_prefix.trim_start();
     t.starts_with("actor ") && t.contains("= Caller where")
+}
+
+/// #3899: the cursor follows `where` in an `actor <Name> = Producer where …`
+/// refinement, which takes `IsContext(…)` like a `Caller` one.
+fn is_producer_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Producer where")
 }
 
 /// #3888: the cursor follows `where` in an `actor <Name> = Sender where …`
@@ -4736,6 +4833,79 @@ mod tests {
         );
     }
 
+    /// #4045: a braced `uses` list completes the commons' public names, kinded, and
+    /// leaves out what it marks `private`, methods, and the name after `as`.
+    #[test]
+    fn uses_brace_suggests_the_commons_public_names() {
+        let doc = "commons lib.money {\n  type Money = Int where NonNegative\n  private type Cents = Int\n  fn format(m: Money) -> String { \"m\" }\n  fn Money.double(self) -> Money { self }\n  const Limit: Int = 1\n}\n";
+        let files = HashMap::from([(synthetic_path("money"), doc.to_string())]);
+        let got = complete("uses lib.money { ", "commons app.z\n", Some(&files));
+        assert!(
+            find(&got, "Money", CompletionKind::Type).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        assert!(
+            find(&got, "format", CompletionKind::Function).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        assert!(
+            find(&got, "Limit", CompletionKind::Constant).is_some(),
+            "{:?}",
+            got.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            !labels.contains(&"Cents") && !labels.contains(&"double"),
+            "{labels:?}"
+        );
+        // After a comma it still completes; after `as` the name is the user's own.
+        assert!(!complete("uses lib.money { Money, ", "commons app.z\n", Some(&files)).is_empty());
+        assert!(
+            complete(
+                "uses lib.money { Money as ",
+                "commons app.z\n",
+                Some(&files)
+            )
+            .is_empty()
+        );
+        // The whole-commons form still completes commons names, not these.
+        assert!(!is_uses_target("uses lib.money { "));
+    }
+
+    /// #4045: a commons split over two files offers the names of both, and a name
+    /// already in the list is not offered again.
+    #[test]
+    fn uses_brace_offers_every_file_of_a_split_commons_and_skips_listed_names() {
+        let files = HashMap::from([
+            (
+                synthetic_path("money_a"),
+                "commons lib.money\n\nfn format(m: Int) -> String { \"m\" }\n".to_string(),
+            ),
+            (
+                synthetic_path("money_b"),
+                "commons lib.money\n\nconst Limit: Int = 1\n".to_string(),
+            ),
+        ]);
+        let got = complete("uses lib.money { ", "commons app.z\n", Some(&files));
+        let names: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            names.contains(&"format") && names.contains(&"Limit"),
+            "{names:?}"
+        );
+        let got = complete(
+            "uses lib.money { format as f, ",
+            "commons app.z\n",
+            Some(&files),
+        );
+        let names: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert!(
+            names.contains(&"Limit") && !names.contains(&"format"),
+            "{names:?}"
+        );
+    }
+
     #[test]
     fn consumes_with_as_is_not_a_target_completion() {
         // `consumes X as ` is aliasing, not target-name completion.
@@ -6391,6 +6561,15 @@ mod snapshot_completion_tests {
         assert_eq!(labels("actor A = Sender where "), vec!["Dmarc".to_string()]);
         assert_eq!(
             labels("actor A = Caller where "),
+            vec!["IsContext".to_string()]
+        );
+    }
+
+    /// #3899: a refinement over `Producer` offers `IsContext`, as one over `Caller` does.
+    #[test]
+    fn a_producer_refinement_offers_is_context() {
+        assert_eq!(
+            labels("actor A = Producer where "),
             vec!["IsContext".to_string()]
         );
     }

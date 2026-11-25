@@ -1,0 +1,13 @@
+context api
+
+const PartnerOrigin: String = "https://partner.example.com"
+
+service api from http {
+  cors {
+    origins: PartnerOrigin,
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

@@ -446,6 +446,45 @@ service api from http {
 \t\tOk(page.keys.map((o) => o.key))
 \t}
 
+\ton GET(\"/range/:key/:offset/:length\") (key: String, offset: Int, length: Int) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.getRange(key, Span(offset, Some(length)))
+\t\tmatch found {
+\t\t\tSome(p) => Ok(partial(p))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/rangeto/:key/:offset\") (key: String, offset: Int) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.getRange(key, Span(offset, None))
+\t\tmatch found {
+\t\t\tSome(p) => Ok(partial(p))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/suffix/:key/:length\") (key: String, length: Int) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet found <- Archives.getRange(key, Suffix(length))
+\t\tmatch found {
+\t\t\tSome(p) => Ok(partial(p))
+\t\t\tNone => NotFound
+\t\t}
+\t}
+
+\ton GET(\"/ifmatch/:key/:etag\") (key: String, etag: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet r <- Archives.getStreamIf(key, IfEtagMatches(etag))
+\t\tOk(describe(r))
+\t}
+
+\ton GET(\"/ifdiffer/:key/:etag\") (key: String, etag: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet r <- Archives.getStreamIf(key, IfEtagDiffers(etag))
+\t\tOk(describe(r))
+\t}
+
+\ton GET(\"/children/:prefix/:delim\") (prefix: String, delim: String) -> Effect[HttpResult[String]] by Visitor given Archives {
+\t\tlet page <- Archives.listWith(R2List { prefix: Some(prefix), cursor: None, delimiter: Some(delim) })
+\t\tOk(\"\\(page.keys.map((o) => o.key).join(\",\")) | \\(page.prefixes.join(\",\"))\")
+\t}
+
 \ton GET(\"/page1/:prefix\") (prefix: String) -> Effect[HttpResult[List[String]]] by Visitor given Archives {
 \t\tlet first <- Archives.list(Some(prefix), None)
 \t\tOk(first.keys.map((o) => o.key))
@@ -537,6 +576,19 @@ service api from http {
 \t}
 }
 
+// The text of a range, with what R2 served and the object's whole size.
+fn partial(p: R2Partial) -> String {
+\t\"range \\(p.offset)+\\(p.length) of \\(p.object.size)\"
+}
+
+fn describe(r: R2Read) -> String {
+\tmatch r {
+\t\tPresent(b) => \"found \\(b.object.size)\"
+\t\tMissing => \"missing\"
+\t\tNotModified(o) => \"not modified \\(o.size)\"
+\t}
+}
+
 // 2^n copies of `b`: 8 MiB from one byte at n = 23, over R2's 5 MiB minimum part.
 fn grow(b: Bytes, n: Int) -> Bytes {
 \tif n == 0 {
@@ -573,6 +625,26 @@ fn workers_r2_round_trips_on_workerd() {
         ("/delete/a", 200, r#""deleted""#),
         ("/delete/a", 200, r#""deleted""#),
         ("/get/a", 404, ""),
+        // #4049: a byte range is the bytes R2 serves, with the offset and length of the body
+        // (a length past the end is clamped), a suffix is the last bytes, and a missing key is None
+        ("/put/rg/0123456789", 200, ""),
+        ("/range/rg/2/4", 200, r#""range 2+4 of 10""#),
+        ("/range/rg/8/50", 200, r#""range 8+2 of 10""#),
+        ("/rangeto/rg/7", 200, r#""range 7+3 of 10""#),
+        ("/suffix/rg/3", 200, r#""range 7+3 of 10""#),
+        ("/suffix/rg/50", 200, r#""range 0+10 of 10""#),
+        ("/range/absent/0/1", 404, ""),
+        // a range that starts at the end of the object is R2's own refusal, not clamped
+        ("/rangeto/rg/10", 500, ""),
+        ("/range/rg/99/1", 500, ""),
+        // #4049: a delimiter folds keys into prefixes
+        ("/put/d~a~1/x", 200, ""),
+        ("/put/d~a~2/x", 200, ""),
+        ("/put/d~b~1/x", 200, ""),
+        ("/put/d~c/x", 200, ""),
+        ("/children/d~/~", 200, r#""d~c | d~a~,d~b~""#),
+        ("/children/d~a~/~", 200, r#""d~a~1,d~a~2 | ""#),
+        ("/children/d~/-", 200, r#""d~a~1,d~a~2,d~b~1,d~c | ""#),
         // list by prefix, in key order
         ("/put/p~2/x", 200, ""),
         ("/put/p~1/x", 200, ""),
@@ -623,6 +695,25 @@ fn workers_r2_round_trips_on_workerd() {
                 ));
             }
             other => failures.push(format!("/etag/c: {other:?}")),
+        }
+        // #4049: a read gated on the etag R2 minted reads when it holds, and answers
+        // not modified (the object's metadata, no body) when it does not
+        match get(port, "/etag/rg") {
+            Ok((200, body)) => {
+                let etag = body.trim().trim_matches('"').to_string();
+                failures.extend(check_steps(
+                    port,
+                    &[
+                        (&format!("/ifmatch/rg/{etag}"), 200, r#""found 10""#),
+                        ("/ifmatch/rg/not-the-etag", 200, r#""not modified 10""#),
+                        (&format!("/ifdiffer/rg/{etag}"), 200, r#""not modified 10""#),
+                        ("/ifdiffer/rg/not-the-etag", 200, r#""found 10""#),
+                        ("/ifmatch/absent/x", 200, r#""missing""#),
+                        ("/ifdiffer/absent/x", 200, r#""missing""#),
+                    ],
+                ));
+            }
+            other => failures.push(format!("/etag/rg: {other:?}")),
         }
         // P5b (#2626): a streamed body is served as the object's bytes.
         match get(port, "/stream/sc") {

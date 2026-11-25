@@ -1,0 +1,43 @@
+context api
+
+uses app.config
+
+// #3925: `origins` names a `List[String]` constant (a per-environment list), and
+// `expose` lists a header a browser script may read beside the ones Bynk writes
+// for a client (`WWW-Authenticate`, `Retry-After`, `Location`, `ETag`).
+service api from http {
+  cors {
+    origins: AppOrigins,
+    credentials: true,
+    expose: ["x-request-id"],
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}
+
+// A written list may mix a constant and a literal; `expose: ["*"]` exposes every
+// header (refused beside `credentials: true`).
+service partner from http {
+  cors {
+    origins: [PartnerOrigin, "https://other.example.com"],
+    expose: ["*"],
+  }
+
+  on GET("/partner/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}
+
+// A `List[String]` constant bound to a literal list, reached through a second
+// constant that names it.
+service partners from http {
+  cors {
+    origins: AllPartners,
+  }
+
+  on GET("/partners/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

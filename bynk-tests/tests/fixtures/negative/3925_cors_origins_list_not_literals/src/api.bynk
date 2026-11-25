@@ -1,0 +1,14 @@
+context api
+
+const AppOrigin: String = "https://app.example.com"
+const Origins: List[String] = [AppOrigin, "https://b.example.com"]
+
+service api from http {
+  cors {
+    origins: Origins,
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

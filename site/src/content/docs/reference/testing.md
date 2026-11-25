@@ -629,6 +629,7 @@ BoundaryRejection = RefinementViolation(detail: String)
                   | UnsupportedMediaType(detail: String)
                   | MalformedForm(detail: String)
                   | MalformedPath(detail: String)
+                  | RateLimited(detail: String)
 ```
 
 `Rejected` means the request was refused before the handler ran. `Handled`
