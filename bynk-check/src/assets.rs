@@ -1104,7 +1104,7 @@ mod tests {
                 "context app.web\n\nuses lib.a\nuses lib.b\n\nfn f() -> String {\n  style.url\n}\n",
             ),
         ]);
-        a.assert_reports("bynk.uses.name_conflict");
+        a.assert_reports("bynk.uses.ambiguous_name");
     }
 
     /// A unit split across files has one asset namespace: a second
@@ -1149,7 +1149,7 @@ mod tests {
                 "context app.web\n\nuses lib.a\nuses lib.b\n\nasset Style = \"assets/a.css\"\n\ntype Page = { s: Style }\n",
             ),
         ]);
-        a.assert_reports("bynk.uses.name_conflict");
+        a.assert_reports("bynk.uses.ambiguous_name");
     }
 
     #[test]

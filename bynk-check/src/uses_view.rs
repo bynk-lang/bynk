@@ -144,10 +144,40 @@ pub fn build_unit_views<'a>(
     }
     // A bare name two commons bring in is ambiguous where referenced, unless the
     // unit declares it itself, which wins.
-    let mut winners: HashMap<String, (String, String)> = HashMap::new();
+    // Types and values compose into separate tables, so a bare name has a
+    // first provider of each.
+    let as_type = |t: &str, o: &str| table_of(t).is_some_and(|u| u.types.contains_key(o));
+    let as_value = |t: &str, o: &str| {
+        table_of(t).is_some_and(|u| {
+            u.fns.contains_key(o)
+                || u.assets.contains_key(o)
+                || u.embeds.contains_key(o)
+                || u.consts.contains_key(o)
+        })
+    };
+    let mut winners: HashMap<(String, bool), (String, String)> = HashMap::new();
     for (key, providers) in &bare {
-        winners.insert(key.clone(), providers[0].clone());
-        if providers.len() > 1 && !declared_locally(local, key) {
+        for p in providers {
+            if as_type(&p.0, &p.1) {
+                winners
+                    .entry((key.clone(), true))
+                    .or_insert_with(|| p.clone());
+            }
+            if as_value(&p.0, &p.1) {
+                winners
+                    .entry((key.clone(), false))
+                    .or_insert_with(|| p.clone());
+            }
+        }
+        // A declaration of the unit's own hides the imports of its kind: a local
+        // type or function the types, any local value the values.
+        let hides_types = local.types.contains_key(key) || local.fns.contains_key(key);
+        let hides_values = local_value_kind(local, key).is_some();
+        let effective = providers
+            .iter()
+            .filter(|(t, o)| (as_type(t, o) && !hides_types) || (as_value(t, o) && !hides_values))
+            .count();
+        if effective > 1 {
             let forms = providers
                 .iter()
                 .map(|(t, o)| {
@@ -184,7 +214,12 @@ pub fn build_unit_views<'a>(
                         (!out.ambiguous.contains_key(k)
                             || (table_of(t).is_some_and(|u| u.types.contains_key(o))
                                 && !es.iter().any(|e| e.qualified.iter().any(|r| r.name == *o))))
-                            && winners.get(k).is_some_and(|(wt, wo)| wt == t && wo == o)
+                            && [true, false].into_iter().any(|ty| {
+                                (if ty { as_type(t, o) } else { as_value(t, o) })
+                                    && winners
+                                        .get(&(k.clone(), ty))
+                                        .is_some_and(|(wt, wo)| wt == t && wo == o)
+                            })
                     })
                     .cloned()
                     .collect()
@@ -195,10 +230,6 @@ pub fn build_unit_views<'a>(
         out.views.insert(t.to_string(), view);
     }
     out
-}
-
-fn declared_locally(local: &UnitTable, key: &str) -> bool {
-    local.types.contains_key(key) || local_value_kind(local, key).is_some()
 }
 
 /// `bynk.uses.unknown_name`.
@@ -507,13 +538,17 @@ pub fn add_ambiguous_imports(
 ) {
     for (name, forms) in &table.ambiguous_uses {
         let is_type = table.use_views.values().any(|v| v.types.contains_key(name));
-        out.entry(name.clone())
-            .or_insert_with(|| crate::resolver::ShadowedImport {
+        // The ambiguity is the better answer where a local value also hides one of
+        // the imports: the reference is unresolved either way.
+        out.insert(
+            name.clone(),
+            crate::resolver::ShadowedImport {
                 unit: forms.first().cloned().unwrap_or_default(),
                 imported: if is_type { "type" } else { "ambiguous" },
                 local: "ambiguous",
                 local_span: bynk_syntax::span::Span::default(),
                 ambiguous: forms.clone(),
-            });
+            },
+        );
     }
 }

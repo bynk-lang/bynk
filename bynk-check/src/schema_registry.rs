@@ -2132,6 +2132,9 @@ mod tests {
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
             derived: StdHashMap::new(),
+            use_views: Default::default(),
+            ambiguous_uses: Default::default(),
+            use_origin: Default::default(),
         }
     }
 
