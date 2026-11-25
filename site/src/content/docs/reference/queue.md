@@ -185,6 +185,48 @@ Bynk does not expose it until that has been shown on a deployed queue.
 A message whose own type is `QueueDelivery`, or a second `QueueDelivery`, is
 `bynk.queue.bad_params`.
 
+## Who may send
+
+`by Producer` admits any producer on the Cloudflare account, because a queue message carries no
+proof of who sent it. A `Foreign` actor narrows that to one named producer that is not Bynk,
+which signs each message under a secret it shares with the consumer:
+
+```bynk,ignore
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+service fulfil from queue("orders") {
+  on message(order: Order) -> Effect[QueueResult] by Legacy {
+    …
+  }
+}
+```
+
+The consumer admits only messages in the [signed-message format](/reference/wire-format/#signed-queue-messages)
+whose sender is one of the `Foreign` actors it names and whose signature verifies under that actor's
+secret. A message that is unsigned, wrongly signed, from another sender or already delivered is
+acknowledged and reported as a fault, never passed to the handler and never retried or dead-lettered, so
+the dead-letter consumer never receives an injected message. The consumer remembers each message id for
+15 days to recognise a replay, which needs the Worker's `D1_IDEMPOTENCY` database (the compiler declares
+it, as for `Idempotency`). A secret that is missing from the Worker's environment admits nothing.
+
+`bynk deploy` mints the secret, sets it on the consumer's Worker and prints it once for the producer's
+operator. A `Foreign` actor is named alone, with no binder: beside other actors in a sum, with a binder, or
+beside `Producer` or a refinement of it is `bynk.actor.queue_actor_not_enforced` for now. Signing is covered by the format's
+integrity guarantee, not confidentiality: anyone with access to the account can still read a queued body.
+
+A `system` case sends as a foreign producer with `by`, signing the message as the producer would, and
+sending the same message twice replays it:
+
+```bynk,ignore
+suite shop as system {
+  case "a replay is refused" {
+    let first <- fulfil.message(Order { id: "o1" }) by Legacy
+    let again <- fulfil.message(Order { id: "o1" }) by Legacy
+    expect again is Ack
+  }
+}
+```
+
 ## Messages that cannot be decoded
 
 Only the generated entry decodes a message body, so the handler never sees a body that does
