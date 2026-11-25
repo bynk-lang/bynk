@@ -384,7 +384,7 @@ fn normalize_parsed(
     errors: &mut ErrorSink,
 ) {
     project_model::normalize_service_defaults(parsed);
-    project_model::resolve_env_consts(parsed, project_root, overlay, environment, errors);
+    project_model::resolve_env_consts_for(parsed, project_root, overlay, environment, errors);
 }
 
 #[allow(clippy::too_many_arguments)]
