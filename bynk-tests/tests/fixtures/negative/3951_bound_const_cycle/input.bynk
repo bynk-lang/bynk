@@ -1,0 +1,9 @@
+---
+#3951: a constant declared the refined type whose bound it is cannot be that
+bound: the type would need the constant and the constant the type.
+---
+commons demo.limits
+
+const MaxQty: Qty = 5
+
+type Qty = Int where InRange(1, MaxQty)

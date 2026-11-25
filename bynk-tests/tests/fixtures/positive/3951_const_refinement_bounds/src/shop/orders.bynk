@@ -1,0 +1,39 @@
+---
+#3951: constants in refinement bounds, from this unit and from a `uses`d
+commons, check, admit and reject as their literal forms do.
+---
+commons shop.orders
+
+uses shop.limits
+
+const Floor: Int = 1
+
+type Qty = Int where InRange(Floor, MaxQty)
+type Note = String where MaxLength(MaxNote)
+type Slug = String where Matches(SlugPattern)
+type Ratio = Float where InRange(0.0, Ceiling)
+type Wait = Duration where AtMost(Window)
+type Code = String where Length(MinNote)
+
+// A field typed with a refined type from the used commons.
+type Line = { count: Count where AtMost(MaxQty) }
+
+fn tooMany() -> String {
+  "at most \(MaxQty) per order"
+}
+
+fn qty(n: Int) -> Result[Qty, ValidationError] {
+  Qty.of(n)
+}
+
+fn note(s: String) -> Result[Note, ValidationError] {
+  Note.of(s)
+}
+
+fn slug(s: String) -> Result[Slug, ValidationError] {
+  Slug.of(s)
+}
+
+fn ratio(x: Float) -> Result[Ratio, ValidationError] {
+  Ratio.of(x)
+}

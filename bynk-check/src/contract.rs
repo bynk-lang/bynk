@@ -1138,11 +1138,15 @@ mod tests {
                 RefinementPred {
                     kind: PredKind::NonEmpty,
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 },
                 RefinementPred {
                     kind: PredKind::MaxLength(10),
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 },
             ],
@@ -1154,11 +1158,15 @@ mod tests {
                 RefinementPred {
                     kind: PredKind::MaxLength(10),
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 },
                 RefinementPred {
                     kind: PredKind::NonEmpty,
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 },
             ],
@@ -1178,6 +1186,8 @@ mod tests {
             predicates: vec![RefinementPred {
                 kind: PredKind::MaxLength(10),
                 arg_text: None,
+                pending: None,
+                from_const: Vec::new(),
                 span: sp(),
             }],
             span: sp(),
@@ -1187,6 +1197,8 @@ mod tests {
             predicates: vec![RefinementPred {
                 kind: PredKind::MaxLength(11),
                 arg_text: None,
+                pending: None,
+                from_const: Vec::new(),
                 span: sp(),
             }],
             span: sp(),
@@ -1389,11 +1401,15 @@ mod tests {
                 RefinementPred {
                     kind: PredKind::NonEmpty,
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 },
                 RefinementPred {
                     kind: PredKind::MinLength(1),
                     arg_text: None,
+                    pending: None,
+                    from_const: Vec::new(),
                     span: sp(),
                 },
             ],

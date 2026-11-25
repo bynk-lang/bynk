@@ -1,0 +1,1 @@
+bynk.refine.bound_not_literal `MaxQty` cannot stand as an argument of `InRange`: `MaxQty` is declared `Count`, not exactly `Int`

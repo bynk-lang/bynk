@@ -7275,6 +7275,8 @@ mod pure_helper_pins {
         RefinementPred {
             kind,
             arg_text: None,
+            pending: None,
+            from_const: Vec::new(),
             span: sp(),
         }
     }
