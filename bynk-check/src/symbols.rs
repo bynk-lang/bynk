@@ -27,9 +27,30 @@ pub fn assemble_index(
     unit_uses: &HashMap<String, Vec<String>>,
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_type_aliases: &HashMap<String, HashMap<String, ConsumedTypeAlias>>,
+    unit_tables: &HashMap<String, UnitTable>,
     refs: RefSink,
 ) -> ProjectIndex {
     let mut builder = IndexBuilder::default();
+    // #4045: a name a `uses` clause renames or qualifies is its declared name in the
+    // commons it comes from.
+    builder.set_use_renames(
+        unit_tables
+            .iter()
+            .map(|(unit, t)| {
+                let renames = t
+                    .use_views
+                    .iter()
+                    .flat_map(|(target, view)| {
+                        view.use_origin
+                            .iter()
+                            .map(move |(key, orig)| (key.clone(), (target.clone(), orig.clone())))
+                    })
+                    .collect::<HashMap<_, _>>();
+                (unit.clone(), renames)
+            })
+            .filter(|(_, r)| !r.is_empty())
+            .collect(),
+    );
     let mut uses = unit_uses.clone();
     uses.extend(refs.extra_uses);
     builder.set_uses(uses);

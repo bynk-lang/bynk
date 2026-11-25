@@ -1163,6 +1163,7 @@ fn analyse_project_inner(
         &unit_uses,
         &unit_consumes,
         &unit_type_aliases,
+        &unit_tables,
         std::mem::take(&mut refs),
     );
 

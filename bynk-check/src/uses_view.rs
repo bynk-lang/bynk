@@ -586,7 +586,10 @@ mod tests {
         }
         let a = app("uses lib.x\nuses lib.y\n\nfn f(s: Status) -> Int {\n  1\n}\n");
         let msg = a.render();
-        assert!(msg.contains("lib.x.Status") && msg.contains("lib.y.Status"), "{msg}");
+        assert!(
+            msg.contains("lib.x.Status") && msg.contains("lib.y.Status"),
+            "{msg}"
+        );
     }
 
     /// An alias qualifies, and bare names of the other commons still resolve.
@@ -649,5 +652,56 @@ mod tests {
     fn a_selected_declaration_keeps_the_types_it_mentions() {
         app("uses lib.x\nuses lib.y { describe as describeY }\n\nfn f(t: lib.y.Status) -> String {\n  describeY(t)\n}\n")
             .assert_clean();
+    }
+
+    /// A reference through a rename or a qualifier is a reference to the
+    /// declaration in the commons it comes from, so navigation, hover and
+    /// semantic tokens reach it as they do a bare one.
+    #[test]
+    fn a_renamed_or_qualified_reference_resolves_to_the_declaration() {
+        let files = [
+            X,
+            Y,
+            (
+                "lib/billing.bynk",
+                "commons lib.billing\n\ntype Amount = Int where Positive\n",
+            ),
+            (
+                "app/z.bynk",
+                "commons app.z\n\nuses lib.x\nuses lib.y { Status as YStatus }\nuses lib.billing as B\n\n\
+                 fn f(s: Status, t: YStatus, c: B.Amount) -> Int {\n  1\n}\n",
+            ),
+        ];
+        let a = analyse(&files);
+        a.assert_clean();
+        // How many of a declaration's references are in the importing file.
+        let refs_in_app = |unit: &str, name: &str| {
+            a.analysis
+                .index
+                .symbols
+                .iter()
+                .find(|(k, _)| k.unit == unit && k.name == name)
+                .map_or(0, |(_, e)| {
+                    e.refs
+                        .iter()
+                        .filter(|r| r.path.ends_with("app/z.bynk"))
+                        .count()
+                })
+        };
+        assert_eq!(
+            refs_in_app("lib.y", "Status"),
+            1,
+            "the rename reaches lib.y's Status"
+        );
+        assert_eq!(
+            refs_in_app("lib.billing", "Amount"),
+            1,
+            "the alias reaches lib.billing's Amount"
+        );
+        assert_eq!(
+            refs_in_app("lib.x", "Status"),
+            1,
+            "the bare name still reaches lib.x's"
+        );
     }
 }

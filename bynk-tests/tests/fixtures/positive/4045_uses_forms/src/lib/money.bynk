@@ -1,0 +1,7 @@
+commons lib.money
+
+type Money = Int where NonNegative
+
+fn format(m: Money) -> String {
+  "money"
+}
