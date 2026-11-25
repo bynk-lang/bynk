@@ -1,12 +1,6 @@
----
-level: patch
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A SQLite row may hold a `Decimal` read from a `TEXT` column, the checker's admitted row bases are listed explicitly, and a `Decimal` read from a numeric-affinity column warns (`bynk.d1.decimal_numeric_affinity`)
----
+# 0959 — A D1 row admits Decimal, read from a TEXT column
 
-## ADR: d1-row-admits-decimal-from-text
-title: A D1 row admits Decimal, read from a TEXT column
-summary: Replaces ADR 0698's consequence that a Decimal is not admitted in a Json.decodeSql row
+- **Status:** Accepted (v0.696.1)
 
 **Context.** ADR 0698's Consequences say a `Decimal` in a `Json.decodeSql` row is not admitted, and the `bynk.types.sql_row_shape` note listed only `Int`, `Float`, `String`, `Bool` and `Bytes`. The checker admitted `Decimal` anyway, because `is_column_base` ended in a `_ => true` arm, and the documentation (#4050) lists it, with the caveat that a SQLite `DECIMAL`, `NUMERIC` or `REAL` column has numeric affinity, so it arrives as a JSON number and fails the decode.
 

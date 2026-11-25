@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0959](0959-d1-row-admits-decimal-from-text.md) | **A D1 row admits Decimal, read from a TEXT column** (v0.696.1) — Replaces ADR 0698's consequence that a Decimal is not admitted in a Json.decodeSql row | Accepted (v0.696.1) |
 | [0958](0958-effect-map-and-then.md) | **Effect.map and Effect.andThen, as the spec already describes, usable in a pure helper** (v0.696) — Adds map and andThen to every Effect, and replaces the misleading "has no methods" error with method_not_found | Accepted (v0.696) |
 | [0957](0957-refined-pattern-is-range.md) | **A refined pattern on an Int warns, with a fix to the equivalent range pattern** (v0.695) — `_ where InRange(a, b)`, `Positive` and `NonNegative` on an `Int` warn with a quick fix to `a..b`, `1..` and `0..` | Accepted (v0.695) |
 | [0956](0956-queue-producer-message-type.md) | **A producer's message type is checked against the queue's consumer when both are in the project** (v0.694) — A project phase pairs each `Queue` instance's `sendValue*` call sites with the `from queue` consumer of the same name and compares their types by the cross-context boundary comparison | Accepted (v0.694) |
