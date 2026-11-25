@@ -2382,6 +2382,204 @@ pub fn check_body(
     result
 }
 
+/// #4034: the `store` collection fields of an agent that an `invariant` or
+/// `transition` predicate meets. A `Map`, `Set` or `Cache` field may be asked its
+/// `size()` (the commit knows the staged count) and nothing else; a `Log` has no
+/// `size()`, so it may be asked nothing.
+#[derive(Default)]
+pub struct PredicateCollections {
+    /// The `Map`/`Set`/`Cache` fields a predicate calls `size()` on.
+    pub sized: HashMap<String, StoreField>,
+    /// The `Log` fields.
+    pub logs: HashSet<String>,
+    /// The `Cache` fields: a handler's `size()` counts the live entries at its clock, which a
+    /// commit has not fixed, so a predicate may not ask it.
+    pub caches: HashSet<String>,
+}
+
+impl PredicateCollections {
+    /// The collections among an agent's `store` fields (a `Cell` is state, read by
+    /// name as before).
+    pub fn of(fields: &HashMap<String, StoreField>) -> Self {
+        let mut out = Self::default();
+        for (name, f) in fields {
+            match f {
+                StoreField::Cell(_) => {}
+                StoreField::Log(_) => {
+                    out.logs.insert(name.clone());
+                }
+                StoreField::Cache(..) => {
+                    out.caches.insert(name.clone());
+                }
+                StoreField::Map(..) | StoreField::Set(_) => {
+                    out.sized.insert(name.clone(), *f);
+                }
+            }
+        }
+        out
+    }
+}
+
+/// #4034: the collection field `e` names, if it is one: a bare name (in an invariant, where it is
+/// the shape `size()` takes, or in a transition, where it is refused), or `old.<field>` /
+/// `new.<field>`. A name a lambda parameter in `shadowed` binds is that local, not the field.
+fn predicate_collection_ref<'a>(
+    e: &'a Expr,
+    names: &PredicateCollections,
+    shadowed: &[&str],
+) -> Option<&'a Ident> {
+    let known =
+        |n: &str| names.sized.contains_key(n) || names.logs.contains(n) || names.caches.contains(n);
+    match &e.kind {
+        ExprKind::Ident(id) if known(&id.name) && !shadowed.contains(&id.name.as_str()) => Some(id),
+        ExprKind::FieldAccess { receiver, field }
+            if known(&field.name)
+                && matches!(&receiver.kind, ExprKind::Ident(r) if (r.name == "old" || r.name == "new") && !shadowed.contains(&r.name.as_str())) =>
+        {
+            Some(field)
+        }
+        _ => None,
+    }
+}
+
+/// #4034: `Int`, when `receiver.method(args)` is `size()` on a `store` collection
+/// field inside an invariant or transition predicate: a bare field name in an
+/// invariant, `old.<field>`/`new.<field>` in a transition (where `old` is in scope). Both
+/// are pure contexts: a handler is effectful, so its `size()` stays an `Effect[Int]`. A
+/// local of the field's name (a lambda parameter) is that local, and the other shape is
+/// left to the ordinary typing, which refuses it.
+fn predicate_collection_size(
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    ctx: &Ctx,
+) -> Option<TyId> {
+    if ctx.effectful || method.name != "size" || !args.is_empty() || ctx.store_fields.is_empty() {
+        return None;
+    }
+    let step = ctx.lookup("old").is_some();
+    let name = match &receiver.kind {
+        ExprKind::Ident(id) if !step && ctx.lookup(&id.name).is_none() => &id.name,
+        ExprKind::FieldAccess { receiver: r, field }
+            if step
+                && matches!(&r.kind, ExprKind::Ident(o) if (o.name == "old" || o.name == "new") && ctx.lookup(&o.name).is_some()) =>
+        {
+            &field.name
+        }
+        _ => return None,
+    };
+    ctx.store_fields
+        .get(name)
+        .is_some_and(|f| !matches!(f, StoreField::Cell(_)))
+        .then(|| ctx.tys.intern(Ty::Base(BaseType::Int)))
+}
+
+/// #4034: the first read of a collection field that is not `size()`, as the
+/// `collection_scan` error for an `invariant` (`kind` is `"invariant"`) or a
+/// `transition`. A predicate runs at every commit, so `contains`, `get` or a
+/// query would read the collection each time; `size()` reads one count.
+fn collection_scan_error(
+    pred: &Expr,
+    names: &PredicateCollections,
+    step: bool,
+    owner: &str,
+) -> Option<CompileError> {
+    if names.sized.is_empty() && names.logs.is_empty() && names.caches.is_empty() {
+        return None;
+    }
+    let kind = if step { "transition" } else { "invariant" };
+    #[derive(Clone, Copy, PartialEq)]
+    enum ScanKind {
+        Sized,
+        Log,
+        Cache,
+    }
+    fn walk<'a>(
+        e: &'a Expr,
+        names: &PredicateCollections,
+        step: bool,
+        shadowed: &[&'a str],
+    ) -> Option<(&'a Ident, ScanKind)> {
+        if let ExprKind::MethodCall {
+            receiver,
+            method,
+            args,
+            ..
+        } = &e.kind
+            && method.name == "size"
+            && args.is_empty()
+            && let Some(f) = predicate_collection_ref(receiver, names, shadowed)
+            && names.sized.contains_key(&f.name)
+            // The shape `size()` takes: a bare name in an invariant, `old.`/`new.` in a transition.
+            && matches!(&receiver.kind, ExprKind::FieldAccess { .. }) == step
+        {
+            return None;
+        }
+        if let Some(f) = predicate_collection_ref(e, names, shadowed) {
+            let kind = if names.logs.contains(&f.name) {
+                ScanKind::Log
+            } else if names.caches.contains(&f.name) {
+                ScanKind::Cache
+            } else {
+                ScanKind::Sized
+            };
+            return Some((f, kind));
+        }
+        if let ExprKind::Lambda(lam) = &e.kind {
+            let mut inner = shadowed.to_vec();
+            inner.extend(lam.params.iter().map(|p| p.name.name.as_str()));
+            return walk(&lam.body, names, step, &inner);
+        }
+        bynk_syntax::ast::expr_children(e)
+            .into_iter()
+            .find_map(|c| walk(c, names, step, shadowed))
+    }
+    let (field, scan) = walk(pred, names, step, &[])?;
+    let is_log = scan == ScanKind::Log;
+    let what = format!(
+        "{} runs at every commit, so reading `{}` beyond its `size()` would read the collection each time",
+        if step { "a transition" } else { "an invariant" },
+        field.name
+    );
+    let message = if is_log {
+        format!(
+            "{kind} `{owner}` can't read `{}`: a `Log` has no `size()`, and its entries are not read at a commit",
+            field.name
+        )
+    } else if scan == ScanKind::Cache {
+        format!(
+            "{kind} `{owner}` can't read `{}`: a `Cache` counts only its live entries, and a commit has no clock to judge them by",
+            field.name
+        )
+    } else {
+        format!(
+            "{kind} `{owner}` can't read `{}` beyond its `size()`",
+            field.name
+        )
+    };
+    Some(
+        CompileError::new(
+            if step {
+                "bynk.transition.collection_scan"
+            } else {
+                "bynk.invariant.collection_scan"
+            },
+            field.span,
+            message,
+        )
+        .with_note(what)
+        .with_note(format!(
+            "check it in the handler that writes `{}`{}",
+            field.name,
+            if is_log || scan == ScanKind::Cache {
+                String::new()
+            } else {
+                format!(", or bound it with `{}.size()`", field.name)
+            }
+        )),
+    )
+}
+
 /// Check an agent's invariant declarations (v0.80 §14). Each predicate is a pure
 /// `Bool`-typed expression over the agent's state fields (referenced by bare
 /// name), plus `implies`/`is`. The pass enforces:
@@ -2401,6 +2599,7 @@ pub fn check_invariants(
     // A `store`-bearing agent's invariants reference its `Cell` fields by bare
     // name (a pure read of the staged value), so they form the predicate scope.
     store_cells: &HashMap<String, TyId>,
+    collections: &PredicateCollections,
     agent_name: &str,
     input: &ResolvedCommons,
     tys: &Types,
@@ -2436,8 +2635,11 @@ pub fn check_invariants(
     for (name, ty) in store_cells {
         field_scope.insert(name.clone(), *ty);
     }
-
     for inv in invariants {
+        if let Some(e) = collection_scan_error(&inv.predicate, collections, false, &inv.name.name) {
+            errors.push(e);
+            continue;
+        }
         // Reject cross-agent references and impure/effectful constructs before
         // type-checking, so the bespoke diagnostics win over any cascade.
         if let Some(span) = predicate_cross_agent_ref(&inv.predicate, input) {
@@ -2521,7 +2723,7 @@ pub fn check_invariants(
             type_vars: HashSet::new(),
             eq: EqScope::default(),
             last_witness: None,
-            store_fields: HashMap::new(),
+            store_fields: collections.sized.clone(),
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
@@ -2781,6 +2983,7 @@ pub fn check_transitions(
     // it, so `old.field` / `new.field` read as the field's element type.
     state_ty: TyId,
     agent_name: &str,
+    collections: &PredicateCollections,
     // Resolved commons carrying the synthetic `<Agent>State` record so field
     // access on `old`/`new` resolves.
     input: &ResolvedCommons,
@@ -2817,6 +3020,10 @@ pub fn check_transitions(
     scope.insert("new".to_string(), state_ty);
 
     for tr in transitions {
+        if let Some(e) = collection_scan_error(&tr.predicate, collections, true, &tr.name.name) {
+            errors.push(e);
+            continue;
+        }
         // Reject cross-agent references and impure constructs before type-checking,
         // so the bespoke diagnostics win over any cascade.
         if let Some(span) = predicate_cross_agent_ref(&tr.predicate, input) {
@@ -2917,7 +3124,7 @@ pub fn check_transitions(
             type_vars: HashSet::new(),
             eq: EqScope::default(),
             last_witness: None,
-            store_fields: HashMap::new(),
+            store_fields: collections.sized.clone(),
             in_agent_handler: false,
             in_service_handler: false,
             in_fn_body: false,
@@ -5604,6 +5811,11 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
             args,
             ..
         } => {
+            // #4034: `<field>.size()` in an invariant or transition reads the
+            // staged count, a plain `Int`.
+            if let Some(int) = predicate_collection_size(receiver, method, args, ctx) {
+                return Some(int);
+            }
             // `<field>.<op>(…)` on a `store` field — effectful storage
             // operations, dispatched by receiver provenance (a bare ident
             // naming a store field). Finding #36: one lookup into the unified

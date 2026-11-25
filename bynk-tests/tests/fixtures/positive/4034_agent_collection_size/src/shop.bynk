@@ -1,0 +1,43 @@
+// #4034: an invariant or a transition reads a collection's `size()` and nothing
+// else of it. The checked value is the staged count; `old` is the last committed.
+context shop
+
+agent Basket {
+  key id: String
+  store lines: Map[String, Int]
+  store blocked: Set[String]
+  store paid: Cell[Bool] = false
+
+  invariant few_lines:
+    lines.size() <= 2
+
+  invariant few_blocked:
+    blocked.size() <= 1
+
+  // A lambda parameter named like a collection field is that local, not the field.
+  invariant local_shadows_field:
+    [1, 2].any((lines) => lines > 1)
+
+  transition never_shrinks_once_paid:
+    old.paid implies new.lines.size() >= old.lines.size()
+
+  on call add(k: String, n: Int) -> Effect[()] {
+    lines.put(k, n)
+  }
+
+  on call remove(k: String) -> Effect[()] {
+    lines.remove(k)
+  }
+
+  on call block(k: String) -> Effect[()] {
+    blocked.add(k)
+  }
+
+  on call pay() -> Effect[()] {
+    paid := true
+  }
+
+  on call lineCount() -> Effect[Int] {
+    lines.size()
+  }
+}
