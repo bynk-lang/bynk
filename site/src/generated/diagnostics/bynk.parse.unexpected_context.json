@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unexpected_context",
+  "constructs": [
+    "context_decl"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A `context` appeared where it is not allowed."
+}

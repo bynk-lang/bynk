@@ -1,0 +1,12 @@
+{
+  "blurb": "`self` is the receiver of a method, and only the first parameter of a method declaration, written `fn Type.method(self, …)`, may be named `self`. A free function has no receiver. Either name the type the function belongs to, making it a method, or drop `self` and take the value as an ordinary parameter.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.self_outside_method",
+  "constructs": [
+    "self_expr"
+  ],
+  "example": "fn total(self) -> Int {          // ✗ a free function has no `self`\n    self.total\n}\n\nfn Order.total(self) -> Int {    // ✓ a method of `Order`\n    self.total\n}",
+  "severity": "error",
+  "summary": "`self` is the first parameter of a free function; only a method declaration, `fn Type.method(self, …)`, has a receiver."
+}

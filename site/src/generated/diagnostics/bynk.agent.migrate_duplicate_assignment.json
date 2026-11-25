@@ -1,0 +1,10 @@
+{
+  "blurb": "A migration step builds the new state like a record literal: each `store` field takes at most one value. A bare field name in the body reads the value carried over, never an earlier assignment, so a second `:=` to a field cannot build on the first and is refused. Combine the two into one expression of `old` and the carried fields. Two steps for one version is `bynk.agent.migrate_duplicate`.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_duplicate_assignment",
+  "constructs": [],
+  "example": "type CartV1 = { owner: String, total: Int }\n\nmigrate from 1 (old: CartV1) {\n    totalCents := old.total\n    totalCents := old.total * 100    // ✗ `totalCents` again\n}\n\nmigrate from 1 (old: CartV1) {\n    totalCents := old.total * 100    // ✓ one value\n}",
+  "severity": "error",
+  "summary": "A `migrate` step assigns the same `store` field more than once; each field takes at most one value per step (record-literal semantics)."
+}

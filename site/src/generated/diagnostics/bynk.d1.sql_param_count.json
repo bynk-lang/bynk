@@ -1,0 +1,10 @@
+{
+  "blurb": "D1 refuses a statement bound to a different number of values than it has parameters, so Bynk counts them at compile time by SQLite's rule: the highest `?N`, with a bare `?` taking the next number. It checks a list written out in place, or a name `let`-bound to one. Pass one `SqlValue` for each parameter, or change the SQL.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.sql_param_count",
+  "constructs": [],
+  "example": "let _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id)])                 // ✗ two parameters, one value\n\nlet _ <- Orders.all(\"SELECT id FROM orders WHERE id = ?1 AND total > ?2\", [Text(id), Integer(100)])    // ✓",
+  "severity": "error",
+  "summary": "A literal D1 statement uses a different number of bound parameters (`?N`) than the list literal passed with it holds."
+}

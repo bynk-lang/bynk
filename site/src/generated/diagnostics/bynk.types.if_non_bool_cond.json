@@ -1,0 +1,12 @@
+{
+  "blurb": "An `if` chooses a branch on a `Bool`, and Bynk has no truthiness: a number, a string, an `Option` or a list is never read as true or false. Say what you mean with a comparison (`count > 0`), or test an `Option` with `is Some(…)`. A match-arm guard has the same rule, as `bynk.types.guard_not_bool`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.if_non_bool_cond",
+  "constructs": [
+    "if_expr"
+  ],
+  "example": "fn describe(count: Int) -> String {\n    if count { \"some\" } else { \"none\" }    // ✗ an `Int`, not a `Bool`\n}\n\nfn describe(count: Int) -> String {\n    if count > 0 { \"some\" } else { \"none\" }    // ✓\n}",
+  "severity": "error",
+  "summary": "An `if` condition is not a `Bool`."
+}

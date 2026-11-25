@@ -1,0 +1,12 @@
+{
+  "blurb": "A few platform capabilities (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1` and `EdgeCache`) are never used as the bare kind. Each stands for a particular resource of its own: a database, a bucket, a limiter with a limit and a window, a Worker. So you declare a named instance, `capability Orders = D1`, which gets a binding and a double of its own, and a handler asks for that instance in `given` instead of the kind. Two instances of one kind never share data. Some kinds need options on the instance, such as `RateLimit @limit(20) @period(60.seconds)`.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.instance_only",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "on call() -> Effect[()] by Caller given D1 {            // ✗ the bare kind names no database\n\ncapability Orders = D1\non call() -> Effect[()] by Caller given Orders {        // ✓ a named instance",
+  "severity": "error",
+  "summary": "A platform capability that is used only through named instances (`Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `D1`, `EdgeCache`) was used bare, in a `given` clause."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "An invariant is checked at every commit, so what it reads is read at every commit. A `store` `Map`, `Set` or `Cache` field can be asked its `size()`: the commit already knows the staged count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself) would scan the collection each time, and a `Log` has no `size()` at all. Bound the collection with `size()`, or check the property in the handler that writes the collection, where the one entry in hand is known. The mirror rule for steps is `bynk.transition.collection_scan`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.invariant.collection_scan",
+  "constructs": [],
+  "example": "invariant has_x: lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ninvariant few_lines: lines.size() <= 100   // ✓ one count, read at the commit",
+  "severity": "error",
+  "summary": "An invariant reads a `store` collection beyond its `size()`; a predicate runs at every commit."
+}

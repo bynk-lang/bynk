@@ -1,0 +1,10 @@
+{
+  "blurb": "A `from Events(E)` header must name an event declared in this context or in a context it `consumes`. A name that matches neither would be a subscription that never receives anything, and nothing would say so; it is almost always a misspelling, or a `consumes` that is missing. Fix the name, or add `consumes` for the context whose `event` it is.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.unknown_subscription",
+  "constructs": [],
+  "example": "context mailer\n\nconsumes orders\n\nservice onPaid from Events(Payd) {   // ✗ no event `Payd`\n\nservice onPaid from Events(Paid) {   // ✓ the event `orders` declares",
+  "severity": "error",
+  "summary": "A `from Events(E)` subscription named `E`, which is not a declared event in this context or any consumed context."
+}

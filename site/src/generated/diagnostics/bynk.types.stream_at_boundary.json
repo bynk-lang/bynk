@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Stream[T]` is a live, lazily read source, built and consumed where it is made. It cannot be persisted or serialised, so it cannot be a service or agent handler parameter or result, a store field or an event field, nor can a record or sum that carries one in a field, at any depth. Drain it with `collect()` and send or keep the resulting `List`. A capability operation may take or return a stream, since its provider runs in the caller's own isolate, and a `@raw` HTTP handler's `body` may be a `Stream[Bytes]`, the request body as it arrives.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.stream_at_boundary",
+  "constructs": [],
+  "example": "service s {\n    on call(readings: Stream[Int]) -> Effect[Int] by Caller {    // ✗ a stream cannot be a parameter\n        Effect.pure(0)\n    }\n}\n\nservice s {\n    on call(readings: List[Int]) -> Effect[Int] by Caller {      // ✓\n        Effect.pure(readings.length())\n    }\n}",
+  "severity": "error",
+  "summary": "A `Stream` type, or a record or sum carrying one in a field, appears in a storable or boundary-crossing position — a stream is a live value-over-time source, never persisted or sent across a boundary (real-time track slice 0; #2623 admits it in capability signatures and record fields)."
+}

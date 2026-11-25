@@ -1,0 +1,10 @@
+{
+  "blurb": "A refinement actor's `where` is checked against a token's claims, which are untyped JSON, so the predicate is a closed vocabulary: `hasClaim(\"name\")` and `claimEquals(\"name\", \"value\")`, composed with `&&`, `||` and `!`. Express the condition with those. Anything else, such as a call to a function of your own, is refused.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.refinement_predicate_unsupported",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = User where isAdmin(user)   // ✗ not a claim predicate\n\nactor Admin = User where hasClaim(\"admin\")   // ✓",
+  "severity": "error",
+  "summary": "A refinement actor's `where` predicate is outside the closed claim-predicate set."
+}

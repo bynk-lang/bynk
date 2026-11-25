@@ -1,0 +1,10 @@
+{
+  "blurb": "An asset is a name for a file, read as a value (`style.url`), so a unit declares each name once: a second `asset style` would leave `style` meaning two files. Give each asset its own name, or drop the repeat when it names the same file. An asset whose name is a function's or a type's is `bynk.resolve.name_conflict` instead.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.duplicate",
+  "constructs": [],
+  "example": "asset style = \"assets/board.css\"\nasset style = \"assets/print.css\"    // ✗ `style` is already declared\n\nasset style = \"assets/board.css\"\nasset print = \"assets/print.css\"    // ✓ one name each",
+  "severity": "error",
+  "summary": "An `asset` name is declared more than once in the same unit."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "Each predicate checks one kind of value, so it can only refine a base that has such values. `NonEmpty`, `MinLength`, `MaxLength`, `Length`, `Matches` and `IsoDate` apply to a `String`, and `NonNegative`, `Positive`, `InRange`, `AtLeast` and `AtMost` to an `Int`, `Float`, `Decimal` or `Duration`. A mismatch would test something the base cannot have. Change the base type to suit the predicate, or choose the predicate that suits the base.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.predicate_base_mismatch",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = Int where NonEmpty         // ✗ `NonEmpty` is a `String` predicate\n\ntype Code = String where NonEmpty      // ✓",
+  "severity": "error",
+  "summary": "A predicate does not apply to the type's base (e.g. a string predicate on an `Int`)."
+}

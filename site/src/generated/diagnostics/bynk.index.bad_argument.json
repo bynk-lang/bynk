@@ -1,0 +1,10 @@
+{
+  "blurb": "`@indexed` says which field of the map's value type to maintain a secondary index on, and the only form it takes is `by: <field>`. A bare name, another label or an expression leaves the compiler without a field to index. Write `by:` followed by the field's name. A name that is not a field of the value type is `bynk.index.unknown_key`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.index.bad_argument",
+  "constructs": [],
+  "example": "type Order = { id: String, customerId: String }\n\nstore orders: Map[String, Order] @indexed(customerId)       // ✗ not a `by:` label\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓",
+  "severity": "error",
+  "summary": "An `@indexed` argument is not a `by: <field>` label."
+}

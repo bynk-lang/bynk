@@ -1,0 +1,12 @@
+{
+  "blurb": "A wrong-method test, such as `DELETE` on a path declared only for `GET`, expects the `405` the router returns before any handler is chosen. No handler runs, so there is no actor to act as, and a `by` clause would suggest otherwise. Drop the `by` clause. To test who may call a route, address a method it does declare.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.principal_on_wrong_method",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\nlet r <- api.DELETE(\"/a\") by User(\"bob\")   // ✗ no handler runs\nlet r <- api.DELETE(\"/a\")                  // ✓\nexpect r is Rejected(MethodNotAllowed)",
+  "severity": "error",
+  "summary": "A wrong-method `405` test carries a `by <Actor>` clause; it reaches no handler, so a principal is meaningless."
+}

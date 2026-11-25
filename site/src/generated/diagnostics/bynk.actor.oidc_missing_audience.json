@@ -1,0 +1,10 @@
+{
+  "blurb": "A provider signs tokens for many services, and each token is issued for one. An `Oidc` actor therefore names its `audience`, the `aud` claim a token must carry, so a token issued for some other API is refused here even though its signature is valid. Add `audience = \"…\"` with the identifier your provider uses for this API. The issuer and key set have their own codes, `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_jwks`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.oidc_missing_audience",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✗ no audience\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the `aud` this API accepts",
+  "severity": "error",
+  "summary": "An `Oidc` actor does not name its `audience`."
+}

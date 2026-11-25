@@ -1,0 +1,12 @@
+{
+  "blurb": "`Cookie { name: \"theme\", value: \"Dark\" }` is a cookie in no record, but here the record `Prefs` reads that cookie by that name, so the name and the value are written twice with nothing relating them: a renamed field or a changed type leaves the write valid and wrong. It is a warning. Write it from the record, `Prefs.theme.cookie(Dark)`, which is named by the field's wire name and valued as its decoder reads it; keep the attributes by spreading it into a `Cookie` literal. Where the literal is only a name and a value that provably decodes, the quick-fix does the rewrite.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_untyped_has_field",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Ok(\"x\").withCookie(Cookie { name: \"theme\", value: \"Dark\" })   // ⚠ `Prefs` reads this cookie\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))                       // ✓",
+  "severity": "warning",
+  "summary": "An untyped `Cookie` literal is named like a field of a cookie record of the unit (a warning)."
+}

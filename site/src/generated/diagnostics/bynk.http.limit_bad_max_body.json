@@ -1,0 +1,10 @@
+{
+  "blurb": "`@limit` sets the byte ceiling above which the router answers `413`, so it must give a `maxBody`, and only the author can know the right one: it is a positive `Int` literal counting bytes. There is no size literal yet, so `\"1MB\"` or `1.mb` is refused; write the count, `1_048_576` for 1 MiB. The service-wide default is `limits { maxBody: … }`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.limit_bad_max_body",
+  "constructs": [],
+  "example": "@limit(maxBody: \"1MB\")    // ✗ a byte count, not a string\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_048_576)   // ✓ 1 MiB\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst NoteCap: Int = 1_048_576\n@limit(maxBody: NoteCap)   // ✓ an `Int` constant bound to a literal\non POST(\"/drafts\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@limit` annotation's `maxBody` is missing or not a positive `Int` literal."
+}

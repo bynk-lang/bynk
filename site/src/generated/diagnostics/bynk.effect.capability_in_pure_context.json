@@ -1,0 +1,10 @@
+{
+  "blurb": "Calling a capability operation is an effect, and effects are only allowed in a body that is itself effectful, one that returns `Effect[T]`, so that a type tells you whether a body reaches outside. A lambda checked against a plain function type such as `(Int) -> Int` is a pure body, so a capability call inside it is refused even when the handler around it is effectful. Make the call in the handler, bind it with `<-`, and pass the result in. A call the `given` clause does not cover is `bynk.given.undeclared_capability`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.capability_in_pure_context",
+  "constructs": [],
+  "example": "let add: (Int) -> Int = (n) => {\n    let t = Clock.now()          // ✗ a capability call in a pure lambda\n    n\n}\n\nlet t <- Clock.now()             // ✓ the handler is effectful, so it makes the call\nlet add: (Int) -> Int = (n) => n + t",
+  "severity": "error",
+  "summary": "A capability was used in a pure context."
+}

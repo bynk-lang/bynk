@@ -1,0 +1,12 @@
+{
+  "blurb": "`svc.event(e)` hands an event straight to a subscriber. At `system`, an event reaches a subscriber only through its publisher's fan-out across the deployed Workers, so there is no direct delivery to make. Drive the handler that publishes the event, or deliver the event at `unit` or `integration`. For the `on call` equivalent, see `bynk.test.call_needs_in_process`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.event_needs_in_process",
+  "constructs": [
+    "case"
+  ],
+  "example": "// shop/ledger.bynk\nservice OnPlaced from Events(Placed) { … }\n\n// tests/ledger.test.bynk\ncase \"a placed order is booked\" as system {   // ✗ no direct delivery at `system`\ncase \"a placed order is booked\" {             // ✓\n    let _ <- OnPlaced.event(Placed { id: \"o1\" })\n}",
+  "severity": "error",
+  "summary": "A `system`-tier case delivers an event with `svc.event(e)`; at `system` an event reaches a subscriber only through its publisher's fan-out, so the case drives the emitting handler instead, or delivers the event at `unit` or `integration`."
+}

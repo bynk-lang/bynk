@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.refinement_changed",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A stored `store` field's refinement changed while its structure did not. A widening is safe; a narrowing faults on load for any stored value that no longer satisfies it (`RehydrationViolation`), so migrate the data first (warning)."
+}

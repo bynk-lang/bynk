@@ -1,0 +1,10 @@
+{
+  "blurb": "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.unkeyable_key",
+  "constructs": [],
+  "example": "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+  "severity": "error",
+  "summary": "A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680)."
+}

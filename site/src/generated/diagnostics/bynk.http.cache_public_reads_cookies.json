@@ -1,0 +1,12 @@
+{
+  "blurb": "`scope: public` lets a shared cache, such as a CDN, store the response and serve it to anyone who asks for the URL. A handler that reads `cookies` answers for whoever is asking, so a shared cache could replay one user's response to another. Use `scope: private`, the default, which only the user's own browser may keep, or drop the `cookies` parameter. A response that sets a cookie is always sent as private.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_public_reads_cookies",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Session = { sid: Option[String] }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ the answer depends on who asks\non GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
+  "severity": "error",
+  "summary": "A `@cache(scope: public)` handler takes a `cookies` parameter, so a shared cache could replay one user's response to another."
+}

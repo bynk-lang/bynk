@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0940](0940-diagnostics-one-file-per-code.md) | **The diagnostic reference is one generated file per code, with the index assembled at site build time** (v0.678.2) — Per-code JSON committed, the index page built and not committed | Accepted (v0.678.2) |
 | [0939](0939-test-main-shared-delimiters.md) | **The emitter delimits the shared part of `tests/main.ts` for the snapshot harness** (v0.678.1) — Inert begin and end comments around the fixed part of `main()`, with a variant name | Accepted (v0.678.1) |
 | [0938](0938-ord-order-lock.md) | **The order of a `derives Ord` type is recorded in `bynk.schema.lock`** (v0.678) — a new `[orders]` section records each project-owned `derives Ord` type's member order; a reorder is `bynk.types.ord_order_changed` until `bynk lock accept-order` rewrites the entry | Accepted (v0.678) |
 | [0937](0937-suite-view-unaliases-target-signatures.md) | **A suite sees its target's function signatures under declared type names** (v0.677.3) — How a suite resolves a target function written with a consumed-type alias | Accepted (v0.677.3) |

@@ -1,0 +1,12 @@
+{
+  "blurb": "`Val` cannot invent a string that matches a pattern, so a `Matches` or `IsoDate` refinement takes an `@example` for it to use. Every other refinement already has a value `Val` makes, so there is nothing for the example to do and it is refused. Remove the annotation.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.example_unneeded",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Sku = String where NonEmpty @example(\"a\")    // ✗ `Val` already makes one\n\ntype Sku = String where NonEmpty                  // ✓",
+  "severity": "error",
+  "summary": "An `@example` on a refinement `Val` can already generate (only `Matches` and `IsoDate` take one)."
+}

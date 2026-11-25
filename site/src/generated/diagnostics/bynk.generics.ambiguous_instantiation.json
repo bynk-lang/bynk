@@ -1,0 +1,12 @@
+{
+  "blurb": "A generic function with an `Ord` bound, named as a value, is instantiated where it stands, from the function type expected there. When that type is still open, because the receiving parameter's own type is not fixed yet, there is no `T` to choose, and a guess could order by the wrong type. Wrap the function in a lambda, which is checked after the other arguments, or annotate the expected function type.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.ambiguous_instantiation",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "fn same[T: Ord](x: T) -> T { x }\n\nfn wrap[A](g: (A) -> A, x: A) -> A { g(x) }\n\nfn pick() -> Int { wrap(same, 1) }              // ✗ `A` is known only from the later argument\n\nfn pick() -> Int { wrap((n) => same(n), 1) }    // ✓ a lambda is checked after it",
+  "severity": "error",
+  "summary": "A generic function with an `Ord` bound is used as a value, and its type arguments cannot be determined from the type expected at that reference; annotate the expected type (constrained-generics slice 1)."
+}

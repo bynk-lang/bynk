@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.unstable_not_experimental",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`bynk.toml`'s `[unstable] allow` lists an item that nothing experimental lies in or under: it is stable now, so the entry can go (warning)."
+}

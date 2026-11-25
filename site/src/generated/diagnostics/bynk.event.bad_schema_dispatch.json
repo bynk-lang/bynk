@@ -1,0 +1,10 @@
+{
+  "blurb": "`via schema(N)` filters a subscription by the envelope's `schemaVersion`. Versions count up from 1, so every bound must be a positive `Int` literal: `schema(0)` or `schema(0..3)` names a version no event has. Write a version, a range such as `schema(2..4)`, or `_` for every version. A range whose lower bound is above its upper one is `bynk.types.empty_range_pattern`.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.bad_schema_dispatch",
+  "constructs": [],
+  "example": "service OnPaid from Events(Paid) via schema(0) {    // ✗ versions start at 1\nservice OnPaid from Events(Paid) via schema(1) {    // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "A `via schema(...)` dispatch clause's argument is malformed — it must be a positive `Int` literal, a range of positive `Int` literals, or `_`."
+}

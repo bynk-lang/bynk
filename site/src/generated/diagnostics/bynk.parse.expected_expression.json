@@ -1,0 +1,10 @@
+{
+  "blurb": "The parser needed an expression, a value, and found a token that cannot start one. The commonest cause is a record written without its type: `{ x: 0 }` is not an expression, so write `Point { x: 0 }`. Others are an operator with nothing after it (`a +`) and a trailing comma in a call (`f(a, )`). The message names the token it found, where the parser gave up. For an operator or a comma with nothing after it that is the token after the mistake, so read what comes before it.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_expression",
+  "constructs": [],
+  "example": "type Point = { x: Int, y: Int }\n\nfn origin() -> Point {\n    { x: 0, y: 0 }                        // ✗ a record literal needs its type's name\n}\n\nfn origin() -> Point {\n    Point { x: 0, y: 0 }                  // ✓\n}",
+  "severity": "error",
+  "summary": "Expected an expression."
+}

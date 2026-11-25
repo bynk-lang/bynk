@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group folds its members into one Worker, and a Worker has one assets directory. So a fixed asset path (`at \"/…\"`) names one file across the whole group: two members serving different files at one path would leave the Worker unable to say which to send. A path that would be a folder of another member's file is refused for the same reason. Give one of the assets another path, or put the contexts in different groups.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.asset_path_conflict",
+  "constructs": [],
+  "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\nasset terms = \"assets/orders-terms.txt\" at \"/terms.txt\"\n\n// shop/billing.bynk\nasset terms = \"assets/billing-terms.txt\" at \"/terms.txt\"           // ✗ `shop.orders` serves `/terms.txt`\nasset terms = \"assets/billing-terms.txt\" at \"/billing/terms.txt\"   // ✓",
+  "severity": "error",
+  "summary": "Two members of one `[deploy.workers.<key>]` group serve a fixed asset path (`at \"/…\"`) from different files, or one that would be a folder of the other; a group has one assets directory, so each fixed path names one file."
+}

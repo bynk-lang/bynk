@@ -1,0 +1,10 @@
+{
+  "blurb": "A commons that declares `messages` gets a generated `render`, whose signature names `LocaleTag` and `Message` and which falls back through `bynk.locale`. So that commons must `uses` both locale units, as the example shows; add whichever is missing. The context that uses the bundle should not `uses bynk.locale` itself: both export a `render`, which is `bynk.uses.name_conflict`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.missing_locale_dependency",
+  "constructs": [],
+  "example": "commons shop.messages\n\nmessages \"en\" @reference { … }          // ✗ no `uses` of bynk.locale\n\nuses bynk.locale                        // ✓ both lines are needed\nuses bynk.locale.types\nmessages \"en\" @reference { … }",
+  "severity": "error",
+  "summary": "A commons declaring `messages` doesn't `uses bynk.locale` and/or `uses bynk.locale.types`, which its generated `render` and the types its signature names need."
+}

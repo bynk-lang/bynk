@@ -1,0 +1,12 @@
+{
+  "blurb": "A service with an `on call` handler is internal to a deployment: it has no public route, and a `system` case can only send requests through the Worker's front door. So `svc.call(…)` is refused in one. Call it at `unit` or `integration`, or drive an http route that reaches it. For the event equivalent, see `bynk.test.event_needs_in_process`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.call_needs_in_process",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nservice save { … }\n\n// tests/api.test.bynk\ncase \"a key is measured\" as system {   // ✗ `save` has no public route\ncase \"a key is measured\" {             // ✓\n    let n <- save.call(\"abc\")\n}",
+  "severity": "error",
+  "summary": "A `system`-tier case calls an `on call` service with `svc.call(…)`; an `on call` service is internal to a deployment and has no public route for a `system` case to drive, so the case drives an `http` route that reaches it, or calls it at `unit` or `integration`."
+}

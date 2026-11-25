@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent is addressed by its key, so constructing one takes exactly one argument: the value of its single `key` field. `Counter(\"a\")` names the instance with key `\"a\"`. Two arguments or none do not say which instance is meant. Pass the one key. A key of the wrong type is `bynk.agent.key_mismatch`.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.construction_arity",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Counter {\n  key id: String\n  store n: Cell[Int]\n\n  on call get() -> Effect[Int] {\n    n\n  }\n}\n\nlet v <- Counter(\"a\", \"b\").get()   // ✗ one key, two arguments\nlet v <- Counter(\"a\").get()         // ✓ one key",
+  "severity": "error",
+  "summary": "An agent was constructed with the wrong number of key arguments."
+}

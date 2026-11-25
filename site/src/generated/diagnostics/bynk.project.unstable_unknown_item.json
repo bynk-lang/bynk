@@ -1,0 +1,10 @@
+{
+  "blurb": "`[unstable] allow` opts in to experimental standard-library items by path: a unit (`bynk.cloudflare`), an item it exports (`bynk.cloudflare.RateLimit`) or a capability operation (`bynk.cloudflare.Kv.list`). An entry that names nothing in the standard library allows nothing, and is usually a typo, which would leave the `bynk.stability.experimental` error it was meant to clear. Correct the path, or remove the entry. An entry for a real item that is no longer experimental is only a warning.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.unstable_unknown_item",
+  "constructs": [],
+  "example": "[unstable]\nallow = [\"bynk.cloudflare.RateLimt\"]    // ✗ no such item\n\nallow = [\"bynk.cloudflare.RateLimit\"]   // ✓",
+  "severity": "error",
+  "summary": "`bynk.toml`'s `[unstable] allow` lists a path that names no standard-library unit, exported item or operation."
+}

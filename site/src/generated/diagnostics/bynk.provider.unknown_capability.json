@@ -1,0 +1,12 @@
+{
+  "blurb": "A `provides` block implements a capability that the same context declares, and none of that name is declared here, so there is nothing to check the operations against. This is usually a misspelt name, or a capability that lives in another context: a provider cannot implement one from elsewhere. Declare the capability next to its provider, or correct the name.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.unknown_capability",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "provides Clock = Fixed {         // ✗ this context declares no `Clock`\n    fn now() -> Effect[Int] { Effect.pure(0) }\n}\n\ncapability Clock {               // ✓ declared alongside its provider\n    fn now() -> Effect[Int]\n}",
+  "severity": "error",
+  "summary": "`provides` names a capability that does not exist."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "An actor is named by the `by` clause of a handler, and its name is one of the unit's top-level names, so two actors of one name leave a `by` with nothing to choose between. Rename one, or delete the repeat. The same holds for the other named declarations: `bynk.resolve.duplicate_service`, `bynk.resolve.duplicate_agent` and `bynk.resolve.duplicate_capability`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_actor",
+  "constructs": [],
+  "example": "actor Admin { auth = None }\nactor Admin { auth = None }      // ✗ `Admin` is already declared\n\nactor Admin { auth = None }\nactor Support { auth = None }    // ✓ a name of its own",
+  "severity": "error",
+  "summary": "Two actors share a name."
+}

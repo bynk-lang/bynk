@@ -1,0 +1,12 @@
+{
+  "blurb": "A `match` runs the first arm that fits, so a second unguarded arm for a variant that an earlier arm already covers can never run. Bynk refuses the dead arm rather than let it hide a slip, usually a copied arm whose pattern was never changed. Delete it, or change it to the variant you meant. Arms are compared by shape, so `Err(A)` and `Err(B)` are not duplicates. The same mistake with a literal is `bynk.types.duplicate_literal_arm`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.duplicate_variant_arm",
+  "constructs": [
+    "match_arm"
+  ],
+  "example": "type Light = | Red | Green\n\nfn go(l: Light) -> Int {\n    match l {\n        Red => 1\n        Red => 2      // ✗ `Red` is already matched above\n        Green => 3\n    }\n}\n\nfn go(l: Light) -> Int {\n    match l {\n        Red => 1\n        Green => 2    // ✓ each variant once\n    }\n}",
+  "severity": "error",
+  "summary": "A `match` has two arms for the same variant."
+}

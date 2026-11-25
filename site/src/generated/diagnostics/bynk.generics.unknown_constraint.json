@@ -1,0 +1,12 @@
+{
+  "blurb": "A bound after a type parameter, `T: C`, must name one of the four constraints Bynk has: `Eq`, `Ord`, `Key` and `Codable`. There are no user-defined constraints or interfaces, so a name like `Hashable` or `Comparable` is refused rather than silently ignored; ignoring it would let a function compile that promised more than the compiler could check. The same code is reported for a `derives` clause that names anything but `Ord`; naming `Eq`, `Key` or `Codable` there is `bynk.types.derives_automatic`, because they hold automatically. Pick the constraint that matches what the body does: `Eq` for `==`, `Ord` for ordering, `Key` for a `Map` key or `Set` element, `Codable` for `Json`.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.unknown_constraint",
+  "constructs": [
+    "type_param"
+  ],
+  "example": "fn first[A: Hashable](x: A) -> A {       // ✗ `Hashable` is not a constraint\n    x\n}\n\nfn first[A: Key](x: A) -> A {            // ✓ one of `Eq`, `Ord`, `Key`, `Codable`\n    x\n}",
+  "severity": "error",
+  "summary": "A bound, or a `derives` entry, names something that is not a constraint; the constraints are `Eq`, `Ord`, `Key` and `Codable`."
+}

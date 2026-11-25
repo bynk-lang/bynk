@@ -1,0 +1,12 @@
+{
+  "blurb": "An actor that declares an `identity` stands for one particular caller, and the handler reads that identity. A case that acts as the actor must therefore say which caller, as in `by User(\"bob\")`; a bare `by User` leaves the handler nothing to read. A handler that binds its caller (`by c: Caller`) wants the calling context's name the same way. Add the identity. The reverse mistake is `bynk.test.actor_no_identity`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.actor_identity_required",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\ntype UserId = String where NonEmpty\nactor User { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/a\") by User          // ✗ which user?\nlet r <- api.GET(\"/a\") by User(\"bob\")   // ✓",
+  "severity": "error",
+  "summary": "A test omits the identity an identity-carrying actor requires: a bare call-site `by <Actor>`, or no `by` at all on a handler that binds its `Caller`."
+}

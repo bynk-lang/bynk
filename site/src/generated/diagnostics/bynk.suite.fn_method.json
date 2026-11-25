@@ -1,0 +1,12 @@
+{
+  "blurb": "A suite helper is a plain function its cases call by name, so it is a free `fn`, not a method (`fn Type.name`). A method belongs to its type: declare it in the target or in a commons. In a suite, take the value as an ordinary parameter.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.fn_method",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "// demo/desk.bynk\ntype Count = Int where NonNegative\n\n// tests/desk.test.bynk\nfn Count.bump(self) -> Int { 1 }       // ✗ a method\nfn bump(count: Count) -> Int { 1 }     // ✓ a free function",
+  "severity": "error",
+  "summary": "A suite helper `fn` is a method (`fn Type.name`); suite helpers are free functions."
+}

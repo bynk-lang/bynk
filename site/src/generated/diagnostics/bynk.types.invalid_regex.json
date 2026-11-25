@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Matches` pattern, and the pattern of a regex method such as `containsRegex`, must be a valid regular expression. The emitted check runs it under JavaScript's `RegExp`, so the compiler validates it with those rules: a pattern the Rust `regex` crate accepts, such as `(?P<name>…)`, may be refused here, and the compiler would otherwise ship a check that throws at run time. A regex method's pattern may open with one inline-flag group of `i`, `m` and `s`, each at most once. Fix the syntax; the note carries the parser's message. A valid but dangerous pattern is `bynk.types.catastrophic_regex`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.invalid_regex",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = String where Matches(\"[A-Z\")     // ✗ the class is never closed\n\ntype Code = String where Matches(\"[A-Z]+\")   // ✓",
+  "severity": "error",
+  "summary": "A `Matches` predicate, or a regex method's pattern (`containsRegex`, …), contains an invalid regular expression or malformed inline flags."
+}

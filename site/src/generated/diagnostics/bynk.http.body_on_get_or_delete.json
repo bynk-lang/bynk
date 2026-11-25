@@ -1,0 +1,12 @@
+{
+  "blurb": "A `GET` or `DELETE` request carries no body by convention, and proxies and some clients drop one, so a handler for either may not declare a `body` parameter. Send the data in the path or the query string (`query: Filter` decodes a record from it), or make the route a `POST`, `PUT` or `PATCH` if the client has something to upload. `@raw` and `@form` need a body too: `bynk.http.raw_on_bodyless`, `bynk.http.form_on_bodyless`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.body_on_get_or_delete",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Filter = { tag: String }\n\non GET(\"/items\") (body: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ a GET has no body\n\non GET(\"/items\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ read it from the query string",
+  "severity": "error",
+  "summary": "A GET or DELETE handler declares a `body` parameter."
+}

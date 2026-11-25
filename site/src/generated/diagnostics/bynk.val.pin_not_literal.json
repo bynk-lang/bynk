@@ -1,0 +1,12 @@
+{
+  "blurb": "A pin on `Val[T]` is checked against the refinement of `T` when the program compiles, so it must be a literal of `T`'s base type. A name or a call has no value at that point. Write the literal in place. For a computed value, build it with `Age.of(…)` and `?`, which fails the case if the value is not valid.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.pin_not_literal",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// demo/ages.bynk\ntype Age = Int where InRange(0, 150)\n\n// tests/ages.test.bynk\nlet n = 20\nlet a = Val[Age](n)    // ✗ a name, not a literal\nlet a = Val[Age](20)   // ✓ a literal",
+  "severity": "error",
+  "summary": "A `Val[T]` pin argument is not a compile-time literal."
+}

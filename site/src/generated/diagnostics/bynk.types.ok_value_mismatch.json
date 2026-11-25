@@ -1,0 +1,12 @@
+{
+  "blurb": "`Ok(v)` takes its type from where it is used. A return type or annotation of `Result[T, E]` fixes `T`, so `Ok(\"12\")` where `T` is `Int` is refused at the value, with no conversion; so is a value that does not match an `HttpResult[T]` handler's `T`. Pass a `T`, or change the declared type. The error half is `bynk.types.err_value_mismatch`; with nothing to fix `T`, it is `bynk.types.cannot_infer_result_type_params`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.ok_value_mismatch",
+  "constructs": [
+    "ok_expr"
+  ],
+  "example": "fn total() -> Result[Int, String] {\n    Ok(\"12\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn total() -> Result[Int, String] {\n    Ok(12)    // ✓\n}",
+  "severity": "error",
+  "summary": "An `Ok` payload has the wrong type."
+}

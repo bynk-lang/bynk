@@ -1,0 +1,10 @@
+{
+  "blurb": "Contexts may not form a circle of `consumes` clauses, whether directly or through others. `bynk deploy` takes the order in which to upload the Workers from the `consumes` clauses, because Cloudflare resolves a Service Binding when a Worker is uploaded and so the callee must already exist; a cycle has no such order. The error names the cycle and sits on one of its clauses. Remove one clause: usually the callee takes what it needs as an argument instead of calling back. Logic both contexts need can move into a `commons` that each `uses`.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.consumes_cycle",
+  "constructs": [],
+  "example": "// a.bynk\ncontext a\n\nconsumes b                       // ✗ `a` and `b` consume each other (reported on one clause)\n\n// b.bynk\ncontext b\n\nconsumes a                       // ✗\n\nservice quote {                  // ✓ no `consumes a`: `quote` takes `rate` as an argument\n    on call(rate: Int) -> Effect[Int] by Caller {\n        Effect.pure(rate * 2)\n    }\n}",
+  "severity": "error",
+  "summary": "Contexts form a `consumes` dependency cycle."
+}

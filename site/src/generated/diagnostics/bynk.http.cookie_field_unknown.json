@@ -1,0 +1,12 @@
+{
+  "blurb": "`Record.field.cookie(value)` and `Record.field.expire()` name a field of the cookie record, and the field is the one the cookie is named and encoded by. The name given is not a field of the record; the note lists its fields.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_field_unknown",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Ok(\"x\").withCookie(Prefs.mode.cookie(Dark))    // ✗ `Prefs` has no field `mode`\n\nOk(\"x\").withCookie(Prefs.theme.cookie(Dark))   // ✓",
+  "severity": "error",
+  "summary": "A typed cookie write names a field the cookie record does not have."
+}

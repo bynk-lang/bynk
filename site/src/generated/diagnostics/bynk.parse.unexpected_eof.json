@@ -1,0 +1,10 @@
+{
+  "blurb": "The file ended while the parser still needed something: usually a closing `}`, `)` or `]`, or an expression after an operator or a `,`. The message says what it expected, and the position is the end of the file. The commonest cause is a `}` missing at the end of a braced unit or function. A missing brace with further declarations after it is reported as `bynk.parse.expected_token`, at the next `fn` or `type`, so it may be well above the end: check the nesting from the last declaration you edited.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unexpected_eof",
+  "constructs": [],
+  "example": "commons demo {\n    fn one() -> Int { 1 }                 // ✗ the file ends with the unit still open\n\ncommons demo {\n    fn one() -> Int { 1 }\n}                                         // ✓ closed",
+  "severity": "error",
+  "summary": "Unexpected end of input."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`@name(\"…\")` is the only annotation a record field takes: it gives the field the key it has on an HTTP request where that key is not an identifier. Any other annotation is refused rather than ignored, so a misspelt one cannot silently do nothing. Write `@name`, or drop the annotation.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_annotation_unknown",
+  "constructs": [
+    "record_field"
+  ],
+  "example": "type Filter = {\n    @rename(\"page-size\") pageSize: Option[Int],    // ✗ only `@name` exists\n}\n\ntype Filter = {\n    @name(\"page-size\") pageSize: Option[Int],      // ✓\n}",
+  "severity": "error",
+  "summary": "A record field carries an annotation other than `@name(\"…\")`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`@raw` hands the handler the request's octets untouched, so its `body` must be `Bytes` (read whole) or `Stream[Bytes]` (read chunk by chunk); any other type would have to be decoded from them, and decoding is what `@raw` opts out of. Type `body` as `Bytes` and decode it in the handler, or drop `@raw` to have the router decode a JSON body for you. Without `@raw`, a `Bytes` body is base64 inside JSON.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.raw_body_not_bytes",
+  "constructs": [],
+  "example": "@raw(contentType: \"image/png\")\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ raw octets are `Bytes`\n\n@raw(contentType: \"image/png\")\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }    // ✓",
+  "severity": "error",
+  "summary": "The `body` of a `@raw` handler is not typed `Bytes` or `Stream[Bytes]`."
+}

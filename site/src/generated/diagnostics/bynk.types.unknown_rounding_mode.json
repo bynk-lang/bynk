@@ -1,0 +1,10 @@
+{
+  "blurb": "`Decimal`'s `round` and `div` must be told how to break a tie, and the choice is part of the money arithmetic, so it is named, not defaulted: write `RoundingMode.<mode>` as the last argument, where the mode is one of `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` or `HalfEven`. A number, a string or a variable is refused. A mode kept in a binding is `bynk.types.rounding_mode_position`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.unknown_rounding_mode",
+  "constructs": [],
+  "example": "price.round(2, 1)                        // ✗ not a rounding mode\n\nprice.round(2, RoundingMode.HalfEven)    // ✓",
+  "severity": "error",
+  "summary": "A `Decimal` `round` or `div` was not given a rounding mode written `RoundingMode.<mode>`; the modes are `Down`, `Up`, `Floor`, `Ceiling`, `HalfUp`, `HalfDown` and `HalfEven` (#2622)."
+}

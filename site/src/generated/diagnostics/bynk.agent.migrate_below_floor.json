@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_below_floor",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `migrate` step reads a schema version below the agent's floor. A complete `bynk migrate sweep` raised the floor past it, so no stored instance can hold that version: the step emits nothing and can be deleted (warning)."
+}

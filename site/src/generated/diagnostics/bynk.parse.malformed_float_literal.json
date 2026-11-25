@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Float` literal has a digit on each side of the point, as in `1.0` and `0.5`; `1.` and `.5` are refused. This keeps a method call on a number, such as `1.toFloat()` or `2.5.round()`, unambiguous. Write the missing digit; the note gives the corrected literal.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.malformed_float_literal",
+  "constructs": [
+    "float_literal"
+  ],
+  "example": "const Half: Float = .5     // ✗ no digit before the point\nconst Half: Float = 0.5    // ✓",
+  "severity": "error",
+  "summary": "A float literal is missing a digit on one side of the `.` (`1.`, `.5`)."
+}

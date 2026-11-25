@@ -1,0 +1,10 @@
+{
+  "blurb": "The `with` clause of `expect Cap.op called with …` filters the recorded calls, keeping those for which it is true, so it must be a `Bool`. A bare argument name is a value, not a condition. Compare it with something: `with msg == \"x\"`.",
+  "category": "Observation",
+  "categoryAnchor": "observation",
+  "code": "bynk.observe.with_not_bool",
+  "constructs": [],
+  "example": "// tests/t.test.bynk\nexpect Logger.log called with msg           // ✗ a `String`, not a `Bool`\nexpect Logger.log called with msg == \"x\"   // ✓",
+  "severity": "error",
+  "summary": "A `with` predicate does not have type `Bool`."
+}

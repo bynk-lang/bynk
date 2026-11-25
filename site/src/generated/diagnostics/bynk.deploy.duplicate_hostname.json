@@ -1,0 +1,10 @@
+{
+  "blurb": "A route or custom domain sends the requests that match it to one Worker. If two `[deploy.workers.<key>]` groups claimed the same one, only one Worker could have it, and which would depend on the order they were deployed in. So each route and each custom domain is claimed once across all the groups. Hosts are compared without regard to case, and the same host with a different path is a different route. Remove the repeat, or give one group another route.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.duplicate_hostname",
+  "constructs": [],
+  "example": "[deploy.workers.core]\ncontexts = [\"shop.orders\"]\nroutes = [\"shop.example.com/*\"]\n\n[deploy.workers.edge]\ncontexts = [\"shop.billing\"]\nroutes = [\"shop.example.com/*\"]           // ✗ `core` claims it\n\nroutes = [\"shop.example.com/billing/*\"]   // ✓ another path, another route",
+  "severity": "error",
+  "summary": "A route or custom domain is claimed twice across `[deploy.workers.<key>]` groups."
+}

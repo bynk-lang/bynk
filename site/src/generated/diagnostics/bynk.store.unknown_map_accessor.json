@@ -1,0 +1,10 @@
+{
+  "blurb": "A `store Map` field is read as a lazy query through exactly three accessors: `.entries` (each a `MapEntry` with `.key` and `.value`), `.keys` and `.values`. Any other name after the field is refused. Its effectful operations, such as `put` and `get`, are method calls, not accessors. Use one of the three, or call an operation. A wrong method name on a store is `bynk.store.unknown_op`.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.unknown_map_accessor",
+  "constructs": [],
+  "example": "store items: Map[String, Item]\n\nitems.names.collect()   // ✗ a `Map` has no `.names`\n\nitems.keys.collect()   // ✓ the keys, as a query",
+  "severity": "error",
+  "summary": "A `store Map` field access is not one of its query accessors (`entries`/`keys`/`values`)."
+}

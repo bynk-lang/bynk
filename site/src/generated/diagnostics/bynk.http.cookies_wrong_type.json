@@ -1,0 +1,10 @@
+{
+  "blurb": "`cookies` is the name the router reserves for the request's cookies. It decodes the `Cookie` header into the record you name, one field per cookie, and answers `400` when they do not fit, so the parameter must be a record type. Declare the cookies you read as a record, with an `Option` for each that may be absent. A field a cookie cannot carry is `bynk.http.cookies_field_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookies_wrong_type",
+  "constructs": [],
+  "example": "type Session = { sid: Option[String] }\n\non GET(\"/me\") (cookies: String) -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ not a record\n\non GET(\"/me\") (cookies: Session) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "An HTTP handler's `cookies` parameter is not a record type."
+}
