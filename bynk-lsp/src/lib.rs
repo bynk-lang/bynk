@@ -1215,11 +1215,14 @@ impl Backend {
     ) -> Vec<CompletionItem> {
         // #4312: `old.lines.` / `new.lines.` in a transition predicate is a
         // dotted receiver the bare-name rewrite declines.
-        let Some((rewritten, recv_offset)) = completion::value_receiver_rewrite(text, offset)
-            .or_else(|| completion::predicate_field_rewrite(text, offset))
-        else {
-            return Vec::new();
-        };
+        let (rewritten, recv_offset, dotted) =
+            match completion::value_receiver_rewrite(text, offset) {
+                Some((rewritten, recv_offset)) => (rewritten, recv_offset, false),
+                None => match completion::predicate_field_rewrite(text, offset) {
+                    Some((rewritten, recv_offset)) => (rewritten, recv_offset, true),
+                    None => return Vec::new(),
+                },
+            };
         // #4312: a store field in a predicate offers `size` only, whichever
         // form reaches it.
         let locals = self.fast_path_locals(uri, &rewritten).await;
@@ -1227,6 +1230,11 @@ impl Backend {
             completion::predicate_store_member_candidates(&rewritten, recv_offset, &locals)
         {
             return members.into_iter().map(to_completion_item).collect();
+        }
+        // A dotted `old.x.` outside a predicate is no store field: it offered
+        // nothing before, and still does.
+        if dotted {
+            return Vec::new();
         }
         let mut items: Vec<CompletionItem> = Vec::new();
         if let Some((ty, tys)) = self
@@ -11187,6 +11195,24 @@ mod tests {
             backend.run_round().await;
             let labels = complete_at(&backend, &uri, &src, needle).await;
             assert_eq!(labels, ["size"], "after `{needle}`");
+        }
+        // A `Log` offers nothing through `old.`; and `old.lines.` in a handler
+        // body is no predicate, so no store operation is offered there.
+        let src = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n  transition quiet: old.notes.\n\n  on call f() -> Effect[()] {\n    old.lines.\n  }\n}\n";
+        let s = scratch_project(
+            "pred_empty",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/shop.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/shop.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+        for needle in ["quiet: old.notes.", "    old.lines."] {
+            let labels = complete_at(&backend, &uri, src, needle).await;
+            assert!(labels.is_empty(), "after `{needle}`: {labels:?}");
         }
     }
 

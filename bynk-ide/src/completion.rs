@@ -3743,7 +3743,7 @@ pub fn predicate_field_rewrite(text: &str, offset: usize) -> Option<(String, usi
 }
 
 /// #4312: the members of a store field read in an invariant or transition
-/// predicate — `size` for a `Map` or `Set`, nothing for a `Log` or `Cache` —
+/// predicate — `size` for a `Map` or `Set`, nothing for a `Log` —
 /// when the receiver is a store field there; `None` for any other receiver, so
 /// the caller falls back to the general path. A predicate allows no other
 /// member of a collection, so the receiver's kernel vocabulary must not leak in.
