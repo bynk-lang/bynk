@@ -1,0 +1,28 @@
+context docs.api
+
+// #3917: a conditional write. The client sends `If-Match` with the validator it read; the
+// handler answers `428` without one, `412` when it is stale and `204` when it matches.
+type DocHeaders = { @name("if-match") ifMatch: Option[String] }
+
+// The document's current validator, strong (no `W/`), as a `RawTagged` `GET` would serve it.
+const Current: String = "\"v2\""
+
+service api from http {
+  on PUT("/docs/:id") (id: String, headers: DocHeaders, body: String) -> Effect[HttpResult[()]] by v: Visitor {
+    match headers.ifMatch {
+      None => PreconditionRequired("send If-Match with the document's ETag")
+      Some(expected) => {
+        if expected != Current {
+          PreconditionFailed("the document changed since you read it")
+        } else {
+          NoContent
+        }
+      }
+    }
+  }
+
+  // The status is also an `ErrorStatus`, so a handler that owns its error body can use it.
+  on DELETE("/docs/:id") (id: String) -> Effect[HttpResult[()]] by v: Visitor {
+    RawError(PreconditionFailed, Bytes.fromUtf8("{\"error\":\"stale\"}"), "application/json")
+  }
+}
