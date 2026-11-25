@@ -169,7 +169,7 @@ mod idempotency_scoping_tests {
             BodyMode::Method,
         );
         let mut args = vec![ident("orderId")];
-        scope_idempotency_key(true, "dedup", &mut args, &cx);
+        scope_idempotency_key(true, "dedup", &mut args, None, &cx);
     }
 
     /// The mirror case: a real scope present, the call proceeds and the key
@@ -197,7 +197,7 @@ mod idempotency_scoping_tests {
             },
         );
         let mut args = vec![ident("orderId")];
-        scope_idempotency_key(true, "dedup", &mut args, &cx);
+        scope_idempotency_key(true, "dedup", &mut args, None, &cx);
         assert_eq!(
             args[0].clone().printed(),
             "`shop.reserve.ordering.call::${orderId}`"
@@ -228,7 +228,7 @@ mod idempotency_scoping_tests {
             },
         );
         let mut args = vec![ident("id"), num_lit("3600000".to_string())];
-        scope_idempotency_key(true, "claim", &mut args, &cx);
+        scope_idempotency_key(true, "claim", &mut args, None, &cx);
         assert_eq!(args[0].clone().printed(), "`shop.hooks.api.POST::${id}`");
         assert_eq!(args[1].clone().printed(), "3600000");
     }
@@ -271,7 +271,7 @@ mod idempotency_scoping_tests {
             BodyMode::Method,
         );
         let mut args = vec![ident("orderId")];
-        scope_idempotency_key(false, "dedup", &mut args, &cx);
+        scope_idempotency_key(false, "dedup", &mut args, None, &cx);
         assert_eq!(args[0].clone().printed(), "orderId");
     }
 }

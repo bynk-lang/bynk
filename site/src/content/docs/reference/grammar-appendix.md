@@ -117,7 +117,7 @@ actor_decl ::= "actor" identifier ("{" "auth" "=" scheme scheme_config? ("," "id
 scheme ::= "None" | "Internal" | "Bearer" | "Signature" | "Oidc" | "Foreign" | "SignedCookie"
 scheme_config ::= "(" scheme_arg ("," scheme_arg)* ")"
 scheme_duration ::= number_literal "." identifier
-scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier)
+scheme_arg ::= identifier "=" (string_literal | number_literal | scheme_duration | identifier | boolean_literal)
 by_clause ::= "by" (identifier ":")? identifier ("|" identifier)*
 stub_clause ::= "stub" identifier "." (identifier ".")* identifier ("[" type_ref ("," type_ref)* "]")? "(" (("_" | expression) ("," ("_" | expression))* ","?)? ")" ("returns" "each" "[" (("fails" | expression) ("," ("fails" | expression))* ","?)? "]" | "returns" expression ("after" expression)? | "fails" | "never" | "rejected" identifier | "faulted" | "unreachable")
 env_clause ::= "env" "{" (env_entry ","?)* "}"
@@ -145,7 +145,8 @@ par_statement ::= let_stmt | effect_let_stmt | do_stmt | assign_stmt | advance_s
 binding_name ::= identifier | "_"
 expression ::= if_expr | match_expr | is_expr | expect_expr | binary_expr | unary_expr | primary
 expect_expr ::= "expect" (observation_expr | faults_expr | snapshot_expr | expression)
-faults_expr ::= expression call_site_actor? "faults"
+faults_expr ::= expression call_site_actor? ("faults" | "violates" violates_name)
+violates_name ::= identifier ("." identifier)*
 snapshot_expr ::= expression "matches" "snapshot" string_literal
 observation_expr ::= identifier "." identifier ("[" type_ref ("," type_ref)* "]")? ("called" ("once" | number_literal "times")? ("with" expression)? | "never" "called" | "before" identifier "." identifier)
 trace_expr ::= "trace" "(" identifier "." identifier ")"

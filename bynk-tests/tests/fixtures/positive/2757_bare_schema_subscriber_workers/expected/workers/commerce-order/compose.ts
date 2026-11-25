@@ -13,7 +13,7 @@ export interface Env {
 type __DurableObjectNamespace = { idFromName(name: string): { toString(): string }; idFromString(id: string): { toString(): string }; get(id: any): any };
 
 export function compose(env: Env) {
-  const deps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT, events) };
+  const deps = { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => __dispatchToEventsFanout(env.___EVENTS_FANOUT, events) };
   return {
     async markPaid(orderId: string) {
       return handlers.markPaid.call(orderId, deps);

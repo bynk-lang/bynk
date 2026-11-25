@@ -243,6 +243,15 @@ impl ErrorSink {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
+
+    /// Rewrite each error-severity diagnostic pushed since the sink held `from`
+    /// of them (see [`Self::len`]), for a check that wraps another's errors with
+    /// where its input came from (#3942).
+    pub fn map_errors_from(&mut self, from: usize, f: impl Fn(CompileError) -> CompileError) {
+        for entry in self.entries.iter_mut().skip(from) {
+            entry.error = f(entry.error.clone());
+        }
+    }
 }
 
 /// #3431: offer `signed_cookie_unprefixed`'s rename to `__Host-…` only when no
@@ -379,9 +388,20 @@ pub fn resolve_env_consts(
     overlay: &std::collections::HashMap<std::path::PathBuf, String>,
     errors: &mut ErrorSink,
 ) {
+    let default = bynk_project::vars::DEFAULT_ENVIRONMENT;
+    resolve_env_consts_for(parsed, project_root, overlay, default, errors);
+}
+
+/// [`resolve_env_consts`] for the named environment (`bynk deploy --env`).
+pub fn resolve_env_consts_for(
+    parsed: &mut [ParsedFile],
+    project_root: &std::path::Path,
+    overlay: &std::collections::HashMap<std::path::PathBuf, String>,
+    environment: &str,
+    errors: &mut ErrorSink,
+) {
     let vars = bynk_project::vars::try_read_vars_with(project_root, overlay).unwrap_or_default();
-    let outcome =
-        crate::env_consts::resolve(parsed, &vars, bynk_project::vars::DEFAULT_ENVIRONMENT);
+    let outcome = crate::env_consts::resolve(parsed, &vars, environment);
     errors.extend_attributed_by_span(parsed, outcome.source);
     for e in outcome.manifest {
         errors.push_for(Some(std::path::Path::new("bynk.toml")), e);
@@ -884,9 +904,23 @@ pub fn phase_resolve_derived(
                                 )
                                 .with_note("an instance takes each option once"),
                             );
-                        } else if let Some(value) =
-                            instance_option_value(ann, option_kind, &d.base.name, &path, errors)
-                        {
+                        } else if let Some(value) = {
+                            // #3942: an error about a value a constant gave says so.
+                            let mark = errors.len();
+                            let value = instance_option_value(
+                                ann,
+                                option_kind,
+                                &d.base.name,
+                                &path,
+                                errors,
+                            );
+                            if let Some(arg) = ann.args.first() {
+                                errors.map_errors_from(mark, |e| {
+                                    crate::annotation_consts::with_const_origin(e, arg)
+                                });
+                            }
+                            value
+                        } {
                             // A Worker the build itself makes is a Bynk
                             // context: deploy and dev read any build Worker
                             // as a project edge, never a foreign one, so it
@@ -1345,6 +1379,39 @@ fn vectorize_metric_error(
     })
 }
 
+/// #3942 B: the bare name an option was given, when it was one that did not
+/// resolve to a literal (see `annotation_consts::rewrite_instance_options`).
+fn bare_name_arg(ann: &bynk_syntax::ast::Annotation) -> Option<String> {
+    ann.args.first().and_then(|a| match &a.value.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        // A list option's element that did not resolve (`@allowedRecipients([Ops])`).
+        ExprKind::ListLit(items, ..) => items.iter().find_map(|i| match &i.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        }),
+        _ => None,
+    })
+}
+
+/// An instance option's own error, with a note on what a constant must be to
+/// stand there when the option was given a name (#3942 B).
+fn invalid_option_error(
+    option: &str,
+    named: Option<&str>,
+    span: bynk_syntax::span::Span,
+    message: String,
+) -> CompileError {
+    let error = CompileError::new("bynk.capability.invalid_option", span, message).with_note(
+        format!("write `@{option}({})`, for example", option_sample(option)),
+    );
+    match named {
+        Some(name) => error.with_note(format!(
+            "`{name}` is not a constant declared exactly the option's type and bound to a literal, or to another such constant"
+        )),
+        None => error,
+    }
+}
+
 /// Interop I5 (#1972): the value of one instance option: one positional
 /// literal of the option's kind (P3, #2342). `@worker("name")` names a Worker,
 /// so it must be a Worker name as Cloudflare takes one: lowercase letters,
@@ -1362,12 +1429,9 @@ fn instance_option_value(
 ) -> Option<crate::symbols::OptionValue> {
     use crate::symbols::OptionValue;
     let option = ann.name.name.as_str();
-    let invalid = |span, message: String| {
-        CompileError::new("bynk.capability.invalid_option", span, message).with_note(format!(
-            "write `@{option}({})`, for example",
-            option_sample(option)
-        ))
-    };
+    let named = bare_name_arg(ann);
+    let invalid =
+        |span, message: String| invalid_option_error(option, named.as_deref(), span, message);
     let [arg] = ann.args.as_slice() else {
         errors.push_for(
             Some(path),

@@ -2271,6 +2271,7 @@ pub fn build_cross_context_info(
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
+                    key_params: crate::checker::codable::key_op_params(op),
                     reply_policy: crate::checker::codable::op_reply_policy(op),
                 })
                 .collect();
@@ -2947,6 +2948,11 @@ fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDec
                 for f in &mut v.payload {
                     rename_type_ref(&mut f.type_ref, subst);
                 }
+            }
+            // #4397: an `embeds E as V` clause names a type too, and a `?` that
+            // converts an `E` error reads it under the spelling the unit uses.
+            for e in &mut sum.embeds {
+                rename_type_ref(&mut e.source_type, subst);
             }
         }
         TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}

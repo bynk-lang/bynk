@@ -195,7 +195,12 @@ export async function __bynkCapabilityReply<T>(
 ): Promise<T> {
   const decoded = codec.decode((await reply) as JsonValue, "$");
   if (decoded.tag === "Ok") return decoded.value;
-  const message = `${site.capability}.${site.operation} returned a value that does not decode as ${site.type}: ${replyFailure(decoded.error)}`;
+  // #4048: a fault over an `Option` payload names the value read, not the `Option` wrapper its
+  // reply travels in: `Session` at `$.user`, not `Option[Session]` at `$.value.user`.
+  const unwrapped = policy === "fault" && site.type.startsWith("Option[") && site.type.endsWith("]");
+  const type = unwrapped ? site.type.slice("Option[".length, -1) : site.type;
+  const failure = replyFailure(decoded.error);
+  const message = `${site.capability}.${site.operation} returned a value that does not decode as ${type}: ${unwrapped ? failure.replace(/^at \$\.value/, "at $") : failure}`;
   if (policy === "miss") {
     globalThis.console.warn(`bynk: warning: ${message}; read as a miss`);
     return None as unknown as T;

@@ -463,7 +463,7 @@ pub(super) fn emit_stub_class(
             if *scope != StubScope::Every {
                 cond_parts.insert(0, scopes_test(&[scope]));
             }
-            if generic {
+            if generic && !clause.type_args.is_empty() {
                 cond_parts.push(type_key_cond(&clause.type_args, &key_types, tys));
             }
             let cond = cond_parts
@@ -1344,6 +1344,23 @@ pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; m
     },
     async putBytes(key, value, options) {
       write(key, value.slice(), options);
+    },
+    // #4048: the encoded text is stored, so a test runs the round trip production does; the reply
+    // is the encoding of an `Option` over the parsed JSON, which the call site decodes.
+    async getValue(key) {
+      checkKey(key);
+      const e = store.get(key);
+      if (e === undefined) return { kind: "None" };
+      let value: unknown;
+      try {
+        value = globalThis.JSON.parse(dec.decode(e.bytes));
+      } catch {
+        fault("getValue returned a value that is not JSON");
+      }
+      return { kind: "Some", value };
+    },
+    async putValue(key, value, options) {
+      write(key, enc.encode(globalThis.JSON.stringify(value)), options);
     },
     async listPage(options) {
       const limit = options.limit.tag === "Some" ? options.limit.value : 1000;

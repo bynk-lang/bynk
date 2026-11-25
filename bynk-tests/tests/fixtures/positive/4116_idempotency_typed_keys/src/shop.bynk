@@ -1,0 +1,75 @@
+context shop
+
+consumes bynk { Idempotency, Claim }
+
+type DeliveryKey = { repo: String, delivery: String }
+type Channel = | Web | Email
+type Slug = String where MinLength(1)
+type Quote = { total: Int }
+
+service claims {
+  on call(repo: String, delivery: String) -> Effect[Bool] by Caller given Idempotency {
+    let key = DeliveryKey { repo: repo, delivery: delivery }
+    let c <- Idempotency.claim(key, 7.days)
+    match c {
+      Claimed => true
+      AlreadyClaimed => false
+    }
+  }
+}
+
+service sums {
+  on call(web: Bool, total: Int) -> Effect[Int] by Caller given Idempotency {
+    let channel = if web { Web } else { Email }
+    do Idempotency.remember(channel, Quote { total: total }, 1.hour)
+    let found <- Idempotency.dedup[Quote](channel)
+    match found {
+      Some(q) => q.total
+      None => 0
+    }
+  }
+}
+
+service refined {
+  on call(slug: String, total: Int) -> Effect[Int] by Caller given Idempotency {
+    match Slug.of(slug) {
+      Ok(s) => {
+        do Idempotency.remember(s, Quote { total: total }, 1.hour)
+        let found <- Idempotency.dedup[Quote](s)
+        match found {
+          Some(q) => q.total
+          None => 0
+        }
+      }
+      Err(_) => 0
+    }
+  }
+}
+
+service numbers {
+  on call(n: Int, total: Int) -> Effect[Int] by Caller given Idempotency {
+    do Idempotency.remember(n, Quote { total: total }, 1.hour)
+    let found <- Idempotency.dedup[Quote](n)
+    match found {
+      Some(q) => q.total
+      None => 0
+    }
+  }
+}
+
+// A written type argument gives its argument an expected type, with `K` inferred (#4116).
+service contextual {
+  on call(n: Int) -> Effect[Int] by Caller given Idempotency {
+    do Idempotency.remember[List[Quote]](n, [], 1.hour)
+    do Idempotency.remember[Option[Quote]](n + 1, None, 1.hour)
+    let empty <- Idempotency.dedup[List[Quote]](n)
+    let none <- Idempotency.dedup[Option[Quote]](n + 1)
+    match empty {
+      Some(_) => match none {
+        Some(_) => 1
+        None => 0
+      }
+      None => 0
+    }
+  }
+}

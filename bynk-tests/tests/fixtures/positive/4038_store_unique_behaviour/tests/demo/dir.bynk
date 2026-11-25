@@ -1,5 +1,6 @@
 ---
-#4038: uniqueness is enforced at commit, against the staged state.
+#4038: uniqueness is enforced at commit, against the staged state. #4035: each refusal is claimed
+by name, so a case passes only when `@unique` refused the commit, not on any fault.
 ---
 suite demo.dir
 
@@ -12,11 +13,11 @@ case "distinct emails commit" {
 
 case "a duplicate put is refused" {
 	do Directory("b").add("c1", "x@e.com")
-	do Directory("b").add("c2", "x@e.com")
+	expect Directory("b").add("c2", "x@e.com") violates customers.email
 }
 
 case "two puts of one email in one handler are refused" {
-	do Directory("c").addPair("c1", "c2", "x@e.com")
+	expect Directory("c").addPair("c1", "c2", "x@e.com") violates customers.email
 }
 
 case "overwriting an entry with its own email is not a duplicate" {
@@ -62,5 +63,5 @@ case "any number of entries may have no nick" {
 
 case "two entries with the same nick are refused" {
 	do Directory("i").nick("a", Some("n"))
-	do Directory("i").nick("b", Some("n"))
+	expect Directory("i").nick("b", Some("n")) violates byNick.nick
 }

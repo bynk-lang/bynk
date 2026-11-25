@@ -620,6 +620,17 @@ export function __bynkKeyEncode(v: unknown): string {
   return JSON.stringify(canonical(v));
 }
 
+/**
+ * The string a first-party `Idempotency` operation stores a key under (#4116). A key that is text
+ * at run time is stored as it is, so existing entries still match; any other key is `k:` and its
+ * canonical encoding, so two keys of one type share an entry exactly when they are `==`. The call
+ * site skips this call for a key it knows is text; a key of a type variable (a generic helper) or
+ * of an unrecorded type comes here, and gets the same string either way.
+ */
+export function __bynkIdempotencyKey(k: unknown): string {
+  return typeof k === "string" ? k : "k:" + __bynkKeyEncode(k);
+}
+
 /** Whether `k` can key a plain `Map`/`Set` (SameValueZero is value equality). */
 function plainKey(k: unknown): boolean {
   return typeof k !== "object" || k === null;
@@ -978,6 +989,130 @@ export function __bynkLines(s: string): string[] {
   const parts = s.split(/\r?\n/);
   if (parts[parts.length - 1] === "") parts.pop();
   return parts;
+}
+
+// #3895: the W3C `traceparent` that correlates one request's logs across the
+// contexts it crosses (ADR in design/pending/claude-l3-3895.md).
+//
+// A trace is one 32-hex-digit id. Every cross-context call and event delivery
+// carries it as a `traceparent` header (`00-<trace id>-<span id>-01`), so the
+// callee's logs carry the id of the request that caused them. The span id is
+// minted afresh for each hop; the flags are always `01` (sampled), because Bynk
+// never decides sampling.
+//
+// A trace must never fail a request. Every function here that reads the scope
+// or parses a header answers `undefined` when there is nothing usable, and the
+// caller carries on without a trace.
+//
+// The request scope is `AsyncLocalStorage`, found through
+// `process.getBuiltinModule("node:async_hooks")` as `trace.ts` finds it, because
+// a generated project has no `@types/node`. Where it is unavailable (a Worker
+// without `nodejs_als` or `nodejs_compat`) the scope is empty and nothing is
+// carried.
+
+/** The header a caller sends a trace in, and a callee reads it from. */
+export const W3C_TRACEPARENT_HEADER = "traceparent";
+
+const TRACEPARENT_SHAPE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/;
+const ALL_ZERO = /^0+$/;
+
+/** A trace id, as 32 lowercase hex digits that are not all zero. */
+export type TraceId = string;
+
+interface TraceScope {
+  getStore(): TraceId | undefined;
+  run<R>(store: TraceId, fn: () => R): R;
+}
+
+let scope: TraceScope | undefined | null = null;
+
+function traceScope(): TraceScope | undefined {
+  if (scope === null) {
+    try {
+      const host = (globalThis as {
+        process?: { getBuiltinModule?(id: string): unknown };
+      }).process;
+      const hooks = host?.getBuiltinModule?.("node:async_hooks") as
+        | { AsyncLocalStorage?: new () => TraceScope }
+        | undefined;
+      scope = hooks?.AsyncLocalStorage === undefined ? undefined : new hooks.AsyncLocalStorage();
+    } catch {
+      scope = undefined;
+    }
+  }
+  return scope;
+}
+
+function randomHex(bytes: number): string {
+  const buffer = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(buffer);
+  // An all-zero id is invalid, and astronomically unlikely; fix the last digit
+  // rather than loop.
+  if (buffer.every((b) => b === 0)) buffer[bytes - 1] = 1;
+  let out = "";
+  for (const b of buffer) out += (b < 16 ? "0" : "") + b.toString(16);
+  return out;
+}
+
+/** A fresh trace id. */
+export function mintTraceId(): TraceId {
+  return randomHex(16);
+}
+
+/** The trace id in a `traceparent` header value, or `undefined` when it is absent or malformed. */
+export function parseTraceparent(value: string | null | undefined): TraceId | undefined {
+  if (typeof value !== "string") return undefined;
+  const m = TRACEPARENT_SHAPE.exec(value);
+  if (m === null) return undefined;
+  if (ALL_ZERO.test(m[1]) || ALL_ZERO.test(m[2])) return undefined;
+  return m[1];
+}
+
+/** A `traceparent` header value for `trace`, with a fresh span id. */
+export function formatTraceparent(trace: TraceId): string {
+  return `00-${trace}-${randomHex(8)}-01`;
+}
+
+/** Whether `value` is a trace id this module would mint. */
+export function isTraceId(value: unknown): value is TraceId {
+  return typeof value === "string" && /^[0-9a-f]{32}$/.test(value) && !ALL_ZERO.test(value);
+}
+
+/** Run `fn` with `trace` as the current request's trace; runs it plainly where there is no scope. */
+export function runInTrace<R>(trace: TraceId, fn: () => R): R {
+  const s = traceScope();
+  return s === undefined ? fn() : s.run(trace, fn);
+}
+
+/** The current request's trace id, or `undefined` outside a trace or where there is no scope. */
+export function currentTraceId(): TraceId | undefined {
+  try {
+    return traceScope()?.getStore();
+  } catch {
+    return undefined;
+  }
+}
+
+/** The `traceparent` header a call or event delivery from here sends, or `undefined` outside a trace. */
+export function outgoingTraceparent(): string | undefined {
+  const trace = currentTraceId();
+  return trace === undefined ? undefined : formatTraceparent(trace);
+}
+
+// The trace a verified inbound request carried. Only `verifyCall` records here,
+// after the signature holds, so a `traceparent` from anyone who is not a
+// signed Bynk or foreign caller is never read (decision C of #3895).
+const admitted = new WeakMap<Request, TraceId>();
+
+/** Record the trace a request carried; called by `verifyCall` once the request is proved. */
+export function admitTrace(request: Request): void {
+  const trace = parseTraceparent(request.headers.get(W3C_TRACEPARENT_HEADER));
+  if (trace !== undefined) admitted.set(request, trace);
+}
+
+/** The trace an admitted request carried, or `undefined`. */
+export function admittedTrace(request: Request): TraceId | undefined {
+  return admitted.get(request);
 }
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
@@ -1366,6 +1501,24 @@ export async function signature(key: string, fields: SignedFields): Promise<stri
   return hex(await crypto.subtle.sign("HMAC", await hmacKey(key, "sign"), new TextEncoder().encode(signingInput(fields))));
 }
 
+// #3895: the `traceparent` header a call sends from inside a trace, and none
+// outside one. It is not part of the signing input: it is observability
+// metadata, and a callee reads it only from a request that has already proved
+// its caller.
+function traceHeaders(): Record<string, string> {
+  const traceparent = outgoingTraceparent();
+  return traceparent === undefined ? {} : { [W3C_TRACEPARENT_HEADER]: traceparent };
+}
+
+// #3895: the header an event delivery sends, from the envelope's `trace` alone
+// and never from the request scope. The fan-out Durable Object delivers outside
+// the emitting request, and the handler reads the same trace as `env.trace`, so
+// the header and the envelope cannot disagree.
+function eventTraceHeaders(envelope: unknown): Record<string, string> {
+  const trace = (envelope as { trace?: unknown } | null)?.trace;
+  return isTraceId(trace) ? { [W3C_TRACEPARENT_HEADER]: formatTraceparent(trace) } : {};
+}
+
 // The sending side: the headers that prove `caller` sent `body` to `callee`.
 // Throws, naming the unset key, when the Worker holds none for the edge:
 // sending without it would only come back as an opaque 401.
@@ -1480,7 +1633,10 @@ export async function verifyCall(
     sig,
     new TextEncoder().encode(signingInput(fields)),
   );
-  return ok ? new TextDecoder().decode(bytes) : refused;
+  if (!ok) return refused;
+  // #3895: only a request that proved its caller is read for a trace.
+  admitTrace(request);
+  return new TextDecoder().decode(bytes);
 }
 
 // #1969: the published cross-context wire format's version
@@ -1538,6 +1694,7 @@ async function callServiceCore<R>(
       "X-Bynk-Caller": callerContext,
       "X-Bynk-Contract": contractHash,
       [WIRE_VERSION_HEADER]: WIRE_VERSION,
+      ...traceHeaders(),
       ...signed,
     },
     body,
@@ -1736,7 +1893,7 @@ export async function deliverEvent(
   const signed = await signedHeaders(env, publisher, subscriber, path, "", "1", body, `the event delivery to ${servicePath}`);
   const request = new Request(`http://internal/_bynk/event/${servicePath}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...signed },
+    headers: { "content-type": "application/json", ...eventTraceHeaders(envelope), ...signed },
     body,
   });
   const response = await binding.fetch(request);
@@ -1745,7 +1902,18 @@ export async function deliverEvent(
   }
 }
 
-// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion }`)
+// #3895: the envelope a subscriber's handler is handed, from one that was
+// minted in this process. The minting site writes `trace` as a bare id (so it
+// serialises as the wire's optional string, and is absent outside a trace); a
+// handler reads it as an `Option[String]`. An envelope that already carries an
+// `Option` is returned as it is.
+export function eventEnvelopeOf<E extends object>(envelope: E): Omit<E, "trace"> & { trace: Option<string> } {
+  const trace = (envelope as { trace?: unknown }).trace;
+  if (typeof trace === "object" && trace !== null) return envelope as Omit<E, "trace"> & { trace: Option<string> };
+  return { ...envelope, trace: isTraceId(trace) ? Some(trace) : None };
+}
+
+// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion, trace }`)
 // is declared in `adapter bynk`, not by a consumed context, so it never goes
 // through the ordinary `emit_record_codec` machinery a context's own boundary
 // types get (that machinery is rooted at a *consumed context's* exports;
@@ -1761,7 +1929,7 @@ export function deserialiseEventEnvelope(
   json: JsonValue,
   path: string = "$",
 ): Result<
-  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number },
+  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace: Option<string> },
   BoundaryError
 > {
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
@@ -1804,7 +1972,15 @@ export function deserialiseEventEnvelope(
       actual: typeof schemaVersion,
     });
   }
-  return Ok({ eventId, publisherId, emittedAt, schemaVersion });
+  // #3895: optional and additive. Absent, `null` and a malformed id are all
+  // `None`: a trace must never make an event undeliverable. On the wire the
+  // trace is a bare id string, as the fan-out carries it. That is not the
+  // tagged `{ kind: "Some", value }` form the std codec writes for an
+  // `Option` field, which this route reads as `None`: the two shapes do not
+  // round-trip, and nothing sends the std form here.
+  const wireTrace = obj["trace"];
+  const trace = isTraceId(wireTrace) ? Some(wireTrace) : None;
+  return Ok({ eventId, publisherId, emittedAt, schemaVersion, trace });
 }
 
 // I4 (#1970): the part of @bynk/wire-client that is the package's own, beside

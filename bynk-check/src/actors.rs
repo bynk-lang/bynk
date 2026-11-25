@@ -328,6 +328,14 @@ pub struct SignedCookieSeam {
     pub identity_type: String,
     /// The cookie's `SameSite`: `Lax` (the default), `Strict` or `Unrestricted`.
     pub same_site: String,
+    /// #3938: `sessions = true`: the cookie carries a session id the seam checks against the
+    /// generated `<Actor>Sessions` agent.
+    pub sessions: bool,
+}
+
+/// The name of the compiler-generated session agent of `SignedCookie` actor `actor` (#3938).
+pub fn sessions_agent_name(actor: &str) -> String {
+    format!("{actor}Sessions")
 }
 
 /// Resolve a handler's `SignedCookie` seam, if its `by` clause names a single
@@ -378,6 +386,10 @@ pub fn signed_cookie_seam_of(
             .and_then(|a| a.value.as_ident())
             .unwrap_or("Lax")
             .to_string(),
+        sessions: actor
+            .scheme_arg("sessions")
+            .and_then(|a| a.value.as_ident())
+            == Some("true"),
     })
 }
 
@@ -510,12 +522,36 @@ pub fn sender_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     if by.is_sum() {
         return None;
     }
-    let binder = by.binder.as_ref()?;
     let name = &by.primary().name;
-    (name == "Sender"
-        && !actors.contains_key(name)
-        && !handler.params.iter().any(|p| p.name.name == binder.name))
-    .then(|| binder.name.clone())
+    let refined = actors
+        .get(name)
+        .is_some_and(|decl| sender_refinement(decl, actors).is_some());
+    // #3888: the prelude `Sender`, or a local refinement over it, mints the same `SenderIdentity`.
+    let is_sender = (name == "Sender" && !actors.contains_key(name)) || refined;
+    // A refinement checks the identity's verdict before the handler runs, so a binder-less
+    // handler still receives it, under a name no source can write.
+    let binder = match by.binder.as_ref() {
+        Some(b) => b.name.clone(),
+        None if refined => SENDER_REFINEMENT_BINDER.to_string(),
+        None => return None,
+    };
+    (is_sender && !handler.params.iter().any(|p| p.name.name == binder)).then_some(binder)
+}
+
+/// The synthetic binder a binder-less `by <Sender refinement>` handler receives its identity under.
+pub const SENDER_REFINEMENT_BINDER: &str = "__sender";
+
+/// The DMARC verdicts the handler's `Sender` refinement admits, or `None` when its actor is not
+/// one (a plain `by Sender` admits all mail).
+pub fn sender_admits_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<Vec<&'static str>> {
+    // The check reads the identity, so it exists only where the identity is passed.
+    sender_binder_for(handler, actors)?;
+    let by = handler.by_clause.as_ref()?;
+    let decl = actors.get(&by.primary().name)?;
+    sender_refinement(decl, actors).map(|p| p.admitted())
 }
 
 /// I3 (#1971): a declared foreign caller, as a `call` handler admits it: the

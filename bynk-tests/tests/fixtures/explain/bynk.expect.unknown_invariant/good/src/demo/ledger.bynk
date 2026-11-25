@@ -1,0 +1,14 @@
+context demo.ledger
+
+agent Account {
+	key id: String
+
+	store balance: Cell[Int] = 0
+
+	invariant non_negative:
+		balance >= 0
+
+	on call withdraw(n: Int) -> Effect[()] {
+		balance.update((b) => b - n)
+	}
+}

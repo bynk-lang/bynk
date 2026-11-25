@@ -1,0 +1,73 @@
+context sessions
+
+// #4048: `Kv.putValue[T]` and `Kv.getValue[T]` store and read a `Codable` value, encoding and
+// decoding at the call site, so a record, a list and a sum round-trip without a hand-written
+// `Json.encode`/`Json.decode`.
+
+consumes bynk.cloudflare { Kv, KvPut, KvExpiration, KvList }
+
+type Role = enum { Admin, Member }
+
+type Session = {
+	user: String,
+	roles: List[Role],
+	label: Option[String],
+}
+
+type Other = {
+	count: Int,
+}
+
+service save {
+	on call(id: String, s: Session) -> Effect[()] by Caller given Kv {
+		Kv.putValue[Session](id, s, KvPut { expiration: Never, metadata: Map.empty() })
+	}
+}
+
+service load {
+	on call(id: String) -> Effect[Option[Session]] by Caller given Kv {
+		Kv.getValue[Session](id)
+	}
+}
+
+service saveExpiring {
+	on call(id: String, s: Session) -> Effect[Bool] by Caller given Kv {
+		let _ <- Kv.putValue[Session](id, s, KvPut {
+			expiration: After(30.minutes),
+			metadata: Map.empty(),
+		})
+		let page <- Kv.listPage(KvList { prefix: Some(id), cursor: None, limit: None })
+		Effect.pure(page.keys.length() == 1 && page.keys.all((k) => k.expiration.isSome()))
+	}
+}
+
+// Stores `Other`, so a read as `Session` finds a value of the wrong shape.
+service saveOther {
+	on call(id: String) -> Effect[()] by Caller given Kv {
+		Kv.putValue[Other](id, Other { count: 3 }, KvPut {
+			expiration: Never,
+			metadata: Map.empty(),
+		})
+	}
+}
+
+// Writes text that is not JSON at all, as another program might.
+service saveText {
+	on call(id: String, text: String) -> Effect[()] by Caller given Kv {
+		Kv.put(id, text)
+	}
+}
+
+// The stored text is what `Json.encode` writes, so `Json.decode` of a plain `get` reads it.
+service readBack {
+	on call(id: String) -> Effect[Option[Session]] by Caller given Kv {
+		let text <- Kv.get(id)
+		match text {
+			Some(t) => match Json.decode[Session](t) {
+				Ok(s) => Effect.pure(Some(s)),
+				Err(_) => Effect.pure(None),
+			},
+			None => Effect.pure(None),
+		}
+	}
+}

@@ -192,6 +192,11 @@ fn complete_base(
             })
             .collect();
     }
+    // 0'. #4035: after `violates` in a claim — the invariants, transitions and `@unique`
+    //     constraints the project declares.
+    if let Some(names) = crate::violates::name_candidates(line_prefix, doc_text, files) {
+        return names;
+    }
     // 0a. #3875: inside `on schedule(<cursor>` — the in-scope `String` and
     //     `CronSchedule` constants, which name a schedule.
     if in_schedule_argument(line_prefix) {
@@ -439,7 +444,18 @@ fn is_snapshot_clause_position(line: &str) -> bool {
     ends_a_value
         && !matches!(
             last_word,
-            Some("and" | "or" | "not" | "is" | "if" | "else" | "match" | "faults" | "called")
+            Some(
+                "and"
+                    | "or"
+                    | "not"
+                    | "is"
+                    | "if"
+                    | "else"
+                    | "match"
+                    | "faults"
+                    | "violates"
+                    | "called"
+            )
         )
 }
 
@@ -2804,6 +2820,10 @@ fn signed_cookie_key_candidates(line_prefix: &str) -> Option<Vec<Completion>> {
                 "sameSite",
                 "`Lax` (the default), `Strict` or `Unrestricted`",
             ),
+            (
+                "sessions",
+                "`true` keeps each session in a generated agent the seam checks on every request (costs an agent call per request); `expire()` then ends the session server-side",
+            ),
         ]
         .into_iter()
         .filter(|(key, _)| !written.contains(key))
@@ -2825,6 +2845,13 @@ pub fn is_signed_cookie_actor(a: &bynk_syntax::ast::ActorDecl) -> bool {
 
 /// #3386: the members a `SignedCookie` actor has inside its context, as `(name, signature)`.
 pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str, String); 2] {
+    // #3938: with `sessions = true`, `expire` also ends the session in its agent, so it is an effect.
+    let expire_signature =
+        if bynk_check::actors::signed_cookie_seam_of(a, None).is_some_and(|s| s.sessions) {
+            "expire() -> Effect[Cookie]".to_string()
+        } else {
+            "expire() -> Cookie".to_string()
+        };
     let identity = a
         .identity
         .as_ref()
@@ -2834,7 +2861,7 @@ pub fn signed_cookie_members(a: &bynk_syntax::ast::ActorDecl) -> [(&'static str,
             "issue",
             format!("issue(identity: {identity}) -> Effect[Cookie]"),
         ),
-        ("expire", "expire() -> Cookie".to_string()),
+        ("expire", expire_signature),
     ]
 }
 

@@ -505,6 +505,31 @@ fn sum_oidc_arm(tag: &str, seam: &bynk_check::actors::OidcSeam) -> Vec<TsStmt> {
     body
 }
 
+/// #3938: for a `sessions = true` actor, `ok` and the cookie's session id is live in the identity's
+/// session agent (the check the single-actor wrapper makes after the signature); `ok` as it is
+/// otherwise. A cookie without a session id, or whose session was ended, does not resolve the arm.
+fn session_live_guard(seam: &bynk_check::actors::SignedCookieSeam, ok: TsExpr) -> TsExpr {
+    if !seam.sessions {
+        return ok;
+    }
+    let sid = member(member(ident("__session"), "value"), "sid");
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    let factory = member(
+        ident("handlers"),
+        crate::emitter::agent_factory_name(&agent),
+    );
+    let live = await_expr(method_call(
+        call(factory, vec![member(ident("__id"), "value"), ident("env")]),
+        "isLive",
+        vec![
+            sid.clone(),
+            method_call(member(ident("globalThis"), "Date"), "now", vec![]),
+            ident("deps"),
+        ],
+    ));
+    and_expr(and_expr(ok, strict_neq(sid, ident("undefined"))), live)
+}
+
 /// #3936: the statements of a `SignedCookie` sum member. The arm reads the session cookie first:
 /// with none (or a repeated one) it does not resolve, and it raises no refusal, so a token client
 /// that sends no cookie never meets the browser's CSRF rule. With one, a state-changing request
@@ -551,7 +576,10 @@ fn sum_cookie_arm(
                     ),
                 ),
                 if_(
-                    strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
+                    session_live_guard(
+                        seam,
+                        strict_eq(member(ident("__id"), "tag"), str_lit("Ok")),
+                    ),
                     TsStmt::assign(
                         ident("__who"),
                         TsExpr::object(vec![

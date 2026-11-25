@@ -402,12 +402,20 @@ export const StreamResponse = {
  * non-additive change fails the build. An explicit `@schema(N)` annotation
  * (slice 3b) is checked against that computed value rather than trusted
  * outright — a mismatch is a build error, not a silent override.
+ *
+ * `trace` is the id of the trace the emission happened in (32 lowercase hex
+ * digits, the trace id of the W3C `traceparent` the delivery carries), so a
+ * handler can tie what it does to the request that caused the event. It is
+ * `None` when the event was emitted outside a trace, and for an envelope from a
+ * publisher built before traces existed: the field is additive, defaulted, and
+ * never changes whether an event is delivered.
  */
 export interface EventEnvelope {
   readonly eventId: string;
   readonly publisherId: string;
   readonly emittedAt: number;
   readonly schemaVersion: number;
+  readonly trace: Option<string>;
 }
 
 export const EventEnvelope = {
@@ -542,29 +550,29 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  */
 export interface Idempotency {
   /**
-   * Checks for a cached outcome under `key`; a miss is `None`.
+   * Checks for a cached outcome under `key`, any `Key` type; a miss is `None`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  dedup(key: string): globalThis.Promise<unknown>;
+  dedup(key: unknown): globalThis.Promise<unknown>;
   /**
-   * Caches `value` under `key` for `expiresAfter`.
+   * Caches `value` under `key`, any `Key` type, for `expiresAfter`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  remember(key: string, value: unknown, expiresAfter: number): globalThis.Promise<void>;
+  remember(key: unknown, value: unknown, expiresAfter: number): globalThis.Promise<void>;
   /**
-   * Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+   * Claims `key`, any `Key` type, for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
+  claim(key: unknown, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
 export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");

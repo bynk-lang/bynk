@@ -15,8 +15,8 @@ use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{Expr, ExprKind, Ident, TypeBody, TypeRef, test_scaffold_ns};
 use super::codec_statics::{DecodeSource, json_decoder_fn};
 use crate::ts_build::{
-    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, num_lit, paren,
-    ret, str_lit,
+    arrow_with, binary, block_arrow, call, const_typed, expr_stmt, ident, member, method_call,
+    num_lit, paren, ret, str_lit,
 };
 use bynk_ts::TsParam;
 
@@ -197,6 +197,27 @@ pub(in crate::emitter) fn decode_capability_reply(
     )
 }
 
+/// #4116: whether an `Idempotency` key argument is statically text: a `String`, or a refined or
+/// opaque `String`. A type variable is not, and goes through `__bynkIdempotencyKey`, which stores
+/// a run-time string as it is.
+fn key_is_text(key: &Expr, cx: &LowerCtx) -> bool {
+    use bynk_check::checker::{NamedKind, Ty};
+    use bynk_syntax::ast::BaseType;
+    // An unrecorded type is not known to be text: the run-time helper decides.
+    let Some(te) = cx.commons().expr_types.get(&key.id) else {
+        return false;
+    };
+    let ty = te.ty.get(cx.ty_render().types());
+    matches!(
+        &*ty,
+        Ty::Base(BaseType::String)
+            | Ty::Named {
+                kind: NamedKind::Refined(BaseType::String) | NamedKind::Opaque(BaseType::String),
+                ..
+            }
+    )
+}
+
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
 /// `Idempotency.remember[T](key, value, expiresAfter)` and
 /// `Idempotency.claim(key, expiresAfter)` all take the
@@ -222,6 +243,7 @@ pub(in crate::emitter) fn scope_idempotency_key(
     is_first_party: bool,
     method: &str,
     args_lowered: &mut Vec<bynk_ts::TsExpr>,
+    key_arg: Option<&Expr>,
     cx: &LowerCtx,
 ) {
     if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
@@ -230,7 +252,13 @@ pub(in crate::emitter) fn scope_idempotency_key(
     let scope = cx
         .handler_scope()
         .unwrap_or_else(|| panic!("Idempotency.{method} lowered with no handler_scope set"));
-    let key = args_lowered.remove(0);
+    let mut key = args_lowered.remove(0);
+    // #4116: a key that is not text is stored under its canonical encoding. A `String`, a
+    // refined `String` and an opaque `String` are stored as they were, so existing entries match.
+    if key_arg.is_some_and(|k| !key_is_text(k, cx)) {
+        cx.runtime_use().note_cmp("__bynkIdempotencyKey");
+        key = call(ident("__bynkIdempotencyKey"), vec![key]);
+    }
     // `TemplateLit` parts print verbatim, so the scope prints as it is spelled.
     let scoped = TsExpr::template_lit(vec![format!("{scope}::"), String::new()], vec![key]);
     args_lowered.insert(0, scoped);
@@ -452,10 +480,14 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             .and_then(|a| bynk_check::actors::signed_cookie_seam_of(a, None))
     })?;
     if !issue {
-        return Some(call(
+        let expire = call(
             ident("__expireSessionCookie"),
             vec![str_lit(&seam.cookie), str_lit(&seam.same_site)],
-        ));
+        );
+        if !seam.sessions {
+            return Some(expire);
+        }
+        return Some(lower_session_expire(&seam, expire, cx));
     }
     let key = pre.lower_node(args.first()?, cx);
     let deps_node = deps_receiver(cx.in_test_case(), cx);
@@ -466,18 +498,52 @@ pub(in crate::emitter) fn lower_signed_cookie_call(
             chain(deps_node.clone(), &["Clock", "now"]),
             vec![],
         )));
-        let issue = call(
-            ident("__issueSessionCookie"),
-            vec![
-                call(ident("__sessionKeysOf"), vec![deps_node, str_lit(&actor)]),
-                str_lit(&actor),
-                str_lit(&seam.cookie),
-                str_lit(&seam.same_site),
-                key,
-                num_lit(seam.ttl_secs),
-                now,
-            ],
-        );
+        let mut issue_args = vec![
+            call(
+                ident("__sessionKeysOf"),
+                vec![deps_node.clone(), str_lit(&actor)],
+            ),
+            str_lit(&actor),
+            str_lit(&seam.cookie),
+            str_lit(&seam.same_site),
+            key.clone(),
+            num_lit(seam.ttl_secs),
+            now,
+        ];
+        if seam.sessions {
+            // #3938: record the new session in the identity's session agent before the cookie is
+            // signed, so a cookie never exists for a session the agent does not hold.
+            let agent = bynk_check::actors::sessions_agent_name(&actor);
+            cx.record_agent_call(&agent, "add");
+            let instance = cx.agent_construct_node(&agent, ident("__sub"));
+            issue_args[4] = ident("__sub");
+            issue_args.push(arrow_with(
+                vec![
+                    TsParam::new("__sid".to_string(), Some(TsType::named("string"))),
+                    TsParam::new("__exp".to_string(), Some(TsType::named("number"))),
+                    TsParam::new("__now".to_string(), Some(TsType::named("number"))),
+                ],
+                true,
+                method_call(
+                    instance,
+                    "add",
+                    vec![ident("__sid"), ident("__exp"), ident("__now"), deps_node],
+                ),
+            ));
+            let issue = call(ident("__issueSessionCookie"), issue_args);
+            return Some(call(
+                paren(arrow_with(
+                    vec![TsParam::new(
+                        "__sub".to_string(),
+                        Some(TsType::named(seam.identity_type.clone())),
+                    )],
+                    true,
+                    issue,
+                )),
+                vec![key],
+            ));
+        }
+        let issue = call(ident("__issueSessionCookie"), issue_args);
         call(paren(arrow_with(vec![], true, issue)), vec![])
     })
 }
@@ -647,6 +713,9 @@ pub(in crate::emitter) fn lower_events_emit_call(
                 ("publisherId", str_lit(&owner)),
                 ("emittedAt", call(member(global("Date"), "now"), vec![])),
                 ("schemaVersion", num_lit(schema_version)),
+                // #3895: the trace this emission happened in; `undefined` outside
+                // one, which `JSON.stringify` leaves off the wire.
+                ("trace", call(ident("__currentTraceId"), vec![])),
             ]);
             let entry = object(vec![
                 ("type", str_lit(&event_name)),
@@ -740,7 +809,13 @@ pub(in crate::emitter) fn lower_capability_call(
                 ..
             })
         );
-        scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        scope_idempotency_key(
+            is_first_party,
+            &method.name,
+            &mut args_lowered,
+            args.first(),
+            cx,
+        );
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
             let cap_node = member(cx.cap_deps_node(), &recv.name);
             return Some(tracked_claim_call(cap_node, args_lowered, cx));
@@ -786,7 +861,13 @@ pub(in crate::emitter) fn lower_cross_capability_call(
             ..
         })
     );
-    scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
+    scope_idempotency_key(
+        first_party,
+        &method.name,
+        &mut args_lowered,
+        args.first(),
+        cx,
+    );
     if first_party && method.name == "claim" && cx.tracks_claims() {
         let cap_node = member(cx.cap_deps_node(), &cap);
         return Some(tracked_claim_call(cap_node, args_lowered, cx));
@@ -830,6 +911,43 @@ fn capability_op_call(
         }
     };
     call(callee, nodes)
+}
+
+/// #3938: `Actor.expire()` on a `sessions = true` actor: end the verified session in the identity's
+/// session agent (when the handler is guarded by the actor, so the seam threaded one), then return
+/// the deleting cookie. A handler the actor does not guard has no session to end, so only the
+/// cookie is returned.
+fn lower_session_expire(
+    seam: &bynk_check::actors::SignedCookieSeam,
+    expire: bynk_ts::TsExpr,
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsExpr {
+    use crate::ts_build::{as_expr, await_expr, if_, strict_neq};
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    cx.record_agent_call(&agent, "remove");
+    let deps_node = deps_receiver(cx.in_test_case(), cx);
+    let current = ident("__current");
+    let identity = as_expr(
+        member(current.clone(), "sub"),
+        TsType::named(seam.identity_type.clone()),
+    );
+    let instance = cx.agent_construct_node(&agent, identity);
+    let body = vec![
+        crate::ts_build::const_(
+            "__current",
+            call(ident("__currentSession"), vec![deps_node.clone()]),
+        ),
+        if_(
+            strict_neq(current.clone(), crate::ts_build::null_lit()),
+            expr_stmt(await_expr(method_call(
+                instance,
+                "remove",
+                vec![member(current, "sid"), deps_node],
+            ))),
+        ),
+        ret(expire),
+    ];
+    call(paren(block_arrow(vec![], true, body)), vec![])
 }
 
 #[cfg(test)]

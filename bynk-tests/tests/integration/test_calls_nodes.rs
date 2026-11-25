@@ -283,7 +283,7 @@ fn an_inbound_email_message_is_built_with_and_without_a_principal() {
         );
         assert_contains(
             &text,
-            r#"const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example""#,
+            r#"const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example""#,
         );
     }
 }

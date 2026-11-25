@@ -55,6 +55,7 @@ mod diagnostics;
 mod entry;
 #[cfg(test)]
 mod entry_scope_tests;
+mod env_report;
 mod in_memory;
 mod options;
 mod output;
@@ -75,6 +76,7 @@ pub use bynk_emit::emit_model::{
 pub use entry::{
     D1SqlRef, EmailForward, ProjectCheck, check_project, compile_project, parse_own_units,
 };
+pub use env_report::env_const_report;
 pub use in_memory::{
     InMemoryAnalysis, InMemoryProjectAnalysis, analyse_in_memory, analyse_in_memory_project,
     analyse_in_memory_with_types, compile_files_in_memory, compile_files_in_memory_locked,

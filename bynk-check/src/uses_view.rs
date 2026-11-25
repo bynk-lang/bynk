@@ -962,4 +962,25 @@ mod tests {
             "{titles:?}"
         );
     }
+
+    /// #4397: a sum's `embeds E as V` clause names a type, so a `?` that converts an `E`
+    /// error still does when the unit reads the sum and `E` by a commons' full name.
+    #[test]
+    fn an_embeds_clause_follows_the_spelling_a_qualified_sum_is_read_by() {
+        let io = |unit: &str, variant: &str| {
+            format!(
+                "commons {unit}\n\ntype IoError = enum {{ {variant} }}\n\ntype AppError =\n  | Io(reason: IoError)\n  | Other\n  embeds IoError as Io\n"
+            )
+        };
+        let (x, y) = (io("lib.x", "Disk"), io("lib.y", "Net"));
+        analyse(&[
+            ("lib/x.bynk", &x),
+            ("lib/y.bynk", &y),
+            (
+                "app/z.bynk",
+                "commons app.z\n\nuses lib.x\nuses lib.y\n\nfn embed(r: Result[Int, lib.x.IoError]) -> Result[Int, lib.x.AppError] {\n  let n = r?\n  Ok(n)\n}\n",
+            ),
+        ])
+        .assert_clean();
+    }
 }

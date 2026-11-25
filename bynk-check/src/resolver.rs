@@ -400,6 +400,8 @@ pub struct CrossContextCapabilityOp {
     pub return_type: TypeRef,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #4116: the op's type parameters declared `Key`.
+    pub key_params: Vec<String>,
     /// #3458: what an undecodable reply means for a typed read, as declared.
     pub reply_policy: crate::checker::codable::ReplyPolicy,
 }

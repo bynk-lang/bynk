@@ -111,6 +111,7 @@ pub(crate) mod testkit;
 pub mod ty_ref;
 pub mod unit_signature;
 pub mod uses_view;
+mod violates;
 pub mod websocket;
 pub mod wire;
 pub mod wire_default;

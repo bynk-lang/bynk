@@ -1706,8 +1706,13 @@ the same dependency-cycle check.
 `capability_op`'s optional `[T, …]` is resolved from an explicit type
 argument at the call site (`Cap.op[SomeType](…)`), or inferred from the arguments
 when they determine every parameter (#4113); it is never inferred from the
-expected type. Omitting it where the arguments do not determine `T` is rejected (`bynk.generics.uninferable_type_arg`); the wrong number of
-type arguments is `bynk.generics.type_arg_mismatch`. A capability with a
+expected type. Written type arguments bind the operation's **leading** type
+parameters and the arguments determine the rest (#4116): `Cap.op[A](…)` on
+`op[A, B]` fixes `A` and infers `B` from the argument whose parameter is exactly `B`.
+A parameter that neither a written argument nor the arguments determine is rejected
+(`bynk.generics.uninferable_type_arg`); more type arguments than parameters is
+`bynk.generics.type_arg_mismatch`. This rule is for capability operations only: a
+user-defined generic function still takes all of its type arguments or none. A capability with a
 generic operation MUST be implemented by an **external** provider
 (`bynk.provider.generic_op_requires_external`) — a Bynk-bodied provider's `T`
 has no expressive use, since its body can only return a value it already has —
@@ -2644,9 +2649,12 @@ match. A filter does not narrow the handler parameter's type, and two
 subscribers whose filters overlap are not diagnosed.
 
 **The envelope.** `EventEnvelope`, exported by `bynk`, is
-`{ eventId: String, publisherId: String, emittedAt: Instant, schemaVersion: Int }`.
+`{ eventId: String, publisherId: String, emittedAt: Instant, schemaVersion: Int, trace: Option[String] = None }`.
 `eventId` identifies the emission: every subscriber of one emission observes the
-same value. `publisherId` is the emitting context's qualified name.
+same value. `publisherId` is the emitting context's qualified name. `trace` is the
+id of the trace the emission happened in (32 lowercase hex digits), `None` outside
+one; it is additive, so an envelope without it decodes with `None`, and it never
+affects whether an event is delivered.
 
 **Schema versions.** Every build reconciles each event's field shape — names,
 types, and which fields carry a default — against the project's committed
