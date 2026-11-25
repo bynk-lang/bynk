@@ -1,0 +1,7 @@
+suite demo.d {
+  // #4120: the collection field needs nothing of `Val`; the diagnostic names the field that does.
+  case "an order needs a pinned slug" {
+    let o = Val[Order]
+    expect o == o
+  }
+}

@@ -1,0 +1,15 @@
+context demo
+
+// #4291: a name `self` lacks that is not an operation names the agent, never its internal record.
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call add(by: Int) -> Effect[Int] {
+    n
+  }
+  on call twice() -> Effect[Int] {
+    let a = self.nope
+    n
+  }
+}

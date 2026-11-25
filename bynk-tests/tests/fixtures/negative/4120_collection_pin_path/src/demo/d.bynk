@@ -1,0 +1,4 @@
+commons demo.d
+
+type Slug = String where Matches("(?=a)a+")
+type Order = { id: String, lines: List[Slug] }

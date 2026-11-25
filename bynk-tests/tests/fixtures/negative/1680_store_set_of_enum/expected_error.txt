@@ -1,2 +1,2 @@
 bynk.store.unkeyable_key
-a `Set` element must be value-keyable
+a `Set` element must be `Key`

@@ -249,6 +249,10 @@ service fulfil from queue("order-events") {
 
 Changing a consumer's message type while messages are already queued is not caught.
 
+A send can be written in a function, a service or agent handler, or a provider operation. An
+agent's `transition` predicates and `migrate` steps are pure, so a `Queue` capability is not in
+scope there: naming it is `bynk.resolve.unknown_name`, with a note that it is a capability.
+
 ## Example
 
 ```bynk

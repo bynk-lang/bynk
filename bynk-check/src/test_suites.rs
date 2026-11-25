@@ -4708,6 +4708,17 @@ pub fn prop_binding_generable(
                 }),
             }
         }
+        // #4120: a collection or an option is generable when its elements are.
+        // The empty collection, or `None`, ends a recursion through one (`Tree = { children:
+        // List[Tree] }`), so an element out of depth does not refuse the type.
+        checker::Ty::List(t) | checker::Ty::Set(t) | checker::Ty::Option(t) => {
+            depth == 1 || prop_binding_generable(*t, types, depth - 1, tys)
+        }
+        checker::Ty::Map(k, v) => {
+            depth == 1
+                || (prop_binding_generable(*k, types, depth - 1, tys)
+                    && prop_binding_generable(*v, types, depth - 1, tys))
+        }
         _ => false,
     }
 }
@@ -4730,8 +4741,9 @@ fn refinement_pin_reason(refinement: Option<&Refinement>) -> Option<String> {
     })
 }
 
-/// #4121: the reason a `for all` binding's type cannot be generated, for the diagnostic: the first
-/// construct `prop_binding_generable` refuses, when it is a refinement.
+/// #4121/#4120: the reason a `for all` binding's type cannot be generated, for the diagnostic,
+/// with the path to the part that cannot be (`Order.lines: Slug: …`): the first construct
+/// `prop_binding_generable` refuses.
 pub fn prop_binding_pin_reason(
     ty: checker::TyId,
     types: &HashMap<String, Arc<TypeDecl>>,
@@ -4741,24 +4753,32 @@ pub fn prop_binding_pin_reason(
     if depth == 0 {
         return None;
     }
-    let checker::Ty::Named { name, .. } = &*tys.get(ty) else {
-        return None;
-    };
     let component = |t: &bynk_syntax::ast::TypeRef| {
         checker::resolve_type_ref(t, types, tys)
             .and_then(|t| prop_binding_pin_reason(t, types, depth - 1, tys))
     };
-    match &types.get(name)?.body {
-        TypeBody::Refined { refinement, .. } | TypeBody::Opaque { refinement, .. } => {
-            refinement_pin_reason(refinement.as_ref())
+    match &*tys.get(ty) {
+        checker::Ty::Base(_) => None,
+        checker::Ty::List(t) | checker::Ty::Set(t) | checker::Ty::Option(t) => {
+            prop_binding_pin_reason(*t, types, depth - 1, tys)
         }
-        TypeBody::Sum(s) => s
-            .variants
-            .first()
-            .and_then(|v| v.payload.iter().find_map(|f| component(&f.type_ref))),
-        TypeBody::Record(r) => r.fields.iter().find_map(|f| {
-            refinement_pin_reason(f.refinement.as_ref()).or_else(|| component(&f.type_ref))
-        }),
+        checker::Ty::Map(k, v) => prop_binding_pin_reason(*k, types, depth - 1, tys)
+            .or_else(|| prop_binding_pin_reason(*v, types, depth - 1, tys)),
+        checker::Ty::Named { name, .. } => match &types.get(name)?.body {
+            TypeBody::Refined { refinement, .. } | TypeBody::Opaque { refinement, .. } => {
+                refinement_pin_reason(refinement.as_ref()).map(|why| format!("`{name}`: {why}"))
+            }
+            TypeBody::Sum(s) => s
+                .variants
+                .first()
+                .and_then(|v| v.payload.iter().find_map(|f| component(&f.type_ref))),
+            TypeBody::Record(r) => r.fields.iter().find_map(|f| {
+                refinement_pin_reason(f.refinement.as_ref())
+                    .or_else(|| component(&f.type_ref))
+                    .map(|why| format!("`{name}.{}`: {why}", f.name.name))
+            }),
+        },
+        _ => Some(format!("`{}` has no generator", ty.display(tys))),
     }
 }
 
