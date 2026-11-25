@@ -166,7 +166,7 @@ export function __deserialise_Currency(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(json))) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Currency", message: "must match /[A-Z]{3}/", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Currency", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value: json } });
   }
   return Ok(json as unknown as Currency);
 }
@@ -271,7 +271,7 @@ export function __deserialise_Money(json: __JsonValue, path: string = "$"): Resu
   }
   const __cents = obj["cents"];
   if (!(__cents >= 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.cents`, violation: { field: "cents", message: "must be non-negative", value: __cents } });
+    return Err({ kind: "RefinementViolation", path: `${path}.cents`, violation: { field: "cents", message: "must be non-negative", rule: { tag: "NonNegative" }, value: __cents } });
   }
   const __r_currency = __deserialise_Currency(obj["currency"], `${path}.currency`);
   if (__r_currency.tag === "Err") return __r_currency;

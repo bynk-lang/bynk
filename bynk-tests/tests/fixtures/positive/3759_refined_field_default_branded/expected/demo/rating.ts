@@ -12,10 +12,10 @@ export type Rating = number & { readonly __brand: "Rating" };
 export const Rating = {
   of(value: number): Result<Rating, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Rating", message: "must be a safe integer", value });
+      return Err({ field: "Rating", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 5)) {
-      return Err({ field: "Rating", message: "must be in range [1, 5]", value });
+      return Err({ field: "Rating", message: "must be in range [1, 5]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 5 } }, value });
     }
     return Ok(value as Rating);
   },

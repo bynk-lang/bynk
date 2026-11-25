@@ -11,10 +11,10 @@ export type AfterDays = number & { readonly __brand: "AfterDays" };
 export const AfterDays = {
   of(value: number): Result<AfterDays, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "AfterDays", message: "must be a safe integer", value });
+      return Err({ field: "AfterDays", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 30)) {
-      return Err({ field: "AfterDays", message: "must be in range [1, 30]", value });
+      return Err({ field: "AfterDays", message: "must be in range [1, 30]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 30 } }, value });
     }
     return Ok(value as AfterDays);
   },

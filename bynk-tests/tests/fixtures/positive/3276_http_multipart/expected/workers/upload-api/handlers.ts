@@ -15,10 +15,10 @@ export type Title = string & { readonly __brand: "upload.api.Title" };
 export const Title = {
   of(value: string): Result<Title, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Title", message: "must be non-empty", value });
+      return Err({ field: "Title", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     if (!(__bynkCodePointLength(value) <= 40)) {
-      return Err({ field: "Title", message: "length must be at most 40", value });
+      return Err({ field: "Title", message: "length must be at most 40", rule: { tag: "MaxLength", limit: 40 }, value });
     }
     return Ok(value as Title);
   },

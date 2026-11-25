@@ -20,7 +20,7 @@ export type AuthId = string & { readonly __brand: "commerce.payment.AuthId" };
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "AUTH-[0-9]{8}" + ")$", "u").test(value))) {
-      return Err({ field: "AuthId", message: "must match /AUTH-[0-9]{8}/", value });
+      return Err({ field: "AuthId", message: "must match /AUTH-[0-9]{8}/", rule: { tag: "Matches", pattern: "AUTH-[0-9]{8}" }, value });
     }
     return Ok(value as AuthId);
   },

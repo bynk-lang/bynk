@@ -10,10 +10,10 @@ export type Code = number & { readonly __brand: "ev.store.Code" };
 export const Code = {
   of(value: number): Result<Code, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Code", message: "must be a safe integer", value });
+      return Err({ field: "Code", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 99)) {
-      return Err({ field: "Code", message: "must be in range [1, 99]", value });
+      return Err({ field: "Code", message: "must be in range [1, 99]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 99 } }, value });
     }
     return Ok(value as Code);
   },

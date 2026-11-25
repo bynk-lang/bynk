@@ -9,10 +9,10 @@ export type Width = number & { readonly __brand: "Width" };
 export const Width = {
   of(value: number): Result<Width, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Width", message: "must be a safe integer", value });
+      return Err({ field: "Width", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Width", message: "must be positive", value });
+      return Err({ field: "Width", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Width);
   },
@@ -23,10 +23,10 @@ export type Height = number & { readonly __brand: "Height" };
 export const Height = {
   of(value: number): Result<Height, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Height", message: "must be a safe integer", value });
+      return Err({ field: "Height", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Height", message: "must be positive", value });
+      return Err({ field: "Height", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Height);
   },
