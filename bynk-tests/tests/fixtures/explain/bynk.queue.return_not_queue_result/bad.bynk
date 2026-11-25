@@ -3,7 +3,7 @@ context svc
 service worker from queue("jobs") {
 
   delivery { deadLetter: None }
-  on message(message: String) -> Effect[Result[Int, String]] {
+  on message(message: String) -> Effect[Result[Int, String]] by Producer {
     Ok(5)
   }
 }

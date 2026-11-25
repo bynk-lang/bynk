@@ -1137,6 +1137,7 @@ mod tests {
                 panic!("expected a context unit")
             };
             let commons = Commons {
+                test_only: false,
                 name: ctx.name,
                 items: ctx.items,
                 uses: ctx.uses,
@@ -1261,6 +1262,7 @@ fn Bag.pair[B](self, other: B) -> Bag[A] {
             }
         }
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
@@ -2153,7 +2155,7 @@ context demo
 type EmailJob = { to: String }
 
 service Outbox from queue("orders") {
-  on message(m: EmailJob) -> Effect[QueueResult] {
+  on message(m: EmailJob) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -2209,6 +2211,7 @@ agent Widget {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,

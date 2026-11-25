@@ -1,13 +1,13 @@
 context demo
 
 service worker from queue("jobs") {
-    on message(message: String) -> Effect[QueueResult] {
+    on message(message: String) -> Effect[QueueResult] by Producer {
         Effect.pure(Ack)
     }
 }
 
 service audit from queue("audit") {
-    on message(message: String) -> Effect[QueueResult] {
+    on message(message: String) -> Effect[QueueResult] by Producer {
         Effect.pure(Ack)
     }
 }

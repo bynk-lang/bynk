@@ -445,6 +445,7 @@ pub(super) fn integration_typed_commons(
     } = view.clone();
     checker::TypedCommons {
         commons: Arc::new(Commons {
+            test_only: false,
             name: QualifiedName {
                 parts: vec![Ident {
                     name: HARNESS_CALLER.to_string(),

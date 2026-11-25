@@ -6,14 +6,14 @@ type Job = { id: String }
 
 // #3880: the handler may take its delivery metadata beside the message, in either order.
 service plain from queue("plain-jobs") {
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
 
 // It backs off by attempt: it gives up retrying at the third.
 service backoff from queue("backoff-jobs") {
-  on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] {
+  on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] by Producer {
     if delivery.attempts > 2 {
       Ack
     } else {
@@ -24,7 +24,7 @@ service backoff from queue("backoff-jobs") {
 
 // It reads how long the message waited, delivery first.
 service flipped from queue("flipped-jobs") {
-  on message(delivery: QueueDelivery, job: Job) -> Effect[QueueResult] {
+  on message(delivery: QueueDelivery, job: Job) -> Effect[QueueResult] by Producer {
     if delivery.sentAt == Instant.fromEpochMillis(5000) {
       Ack
     } else {

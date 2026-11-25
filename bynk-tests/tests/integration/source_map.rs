@@ -972,7 +972,7 @@ const CRON_QUEUE_FIXTURE: &str = "context reps {
   type Delivery = { id: String, qty: Int }
 
   service deliveries from queue(\"deliveries\") {
-    on message(d: Delivery) -> Effect[QueueResult] {
+    on message(d: Delivery) -> Effect[QueueResult] by Producer {
       let _ <- Counter(\"q\").bump(d.qty)
       Ack
     }

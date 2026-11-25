@@ -6274,7 +6274,7 @@ mod retry_after_tests {
 
     fn verdict(expr: &str) -> Vec<&'static str> {
         let source = format!(
-            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] {{ {expr} }}\n}}\n"
+            "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] by Producer {{ {expr} }}\n}}\n"
         );
         analyse(&[("t/q.bynk", &source)]).categories()
     }

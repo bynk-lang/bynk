@@ -50,7 +50,7 @@ service worker from queue("undec-jobs") {
     batchWait: 1.second,
   }
 
-  on message(m: Job) -> Effect[QueueResult] given Logger {
+  on message(m: Job) -> Effect[QueueResult] by Producer given Logger {
     let _ <- Logger.info("handled \(m.id)")
     Ack
   }
@@ -62,7 +62,7 @@ service review from queue("undec-jobs-dead") {
     batchWait: 1.second,
   }
 
-  on message(m: Job) -> Effect[QueueResult] given Logger {
+  on message(m: Job) -> Effect[QueueResult] by Producer given Logger {
     let _ <- Logger.warn("reviewed \(m.id)")
     Ack
   }
