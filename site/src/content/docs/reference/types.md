@@ -291,6 +291,7 @@ which work on the UTF-8 bytes.
 | `s.containsRegex(pattern)` | `Bool` | a match occurs anywhere |
 | `s.findRegex(pattern)` | `Option[List[Option[String]]]` | the first match and its groups |
 | `s.findAllRegex(pattern)` | `List[List[Option[String]]]` | every match and its groups |
+| `s.findRegexNamed(pattern)` | `Option[Map[String, Option[String]]]` | the first match's **named** groups, by name; see [Regular expressions](#regular-expressions) (#3979) |
 | `s.replaceRegex(pattern, with: String)` | `String` | every match replaced; `with` reads `$1`, `$<name>`, `$&` and `$$` |
 | `s.splitRegex(pattern)` | `List[String]` | the pieces between each match |
 
@@ -328,8 +329,10 @@ A method not in this table is `bynk.types.method_not_found`.
 | `r.mapErr(f: E -> F)` | `Result[T, F]` | `f` applied to the `Err` value |
 | `r.andThen(f: T -> Result[U, E])` | `Result[U, E]` | chain a step that may itself fail |
 | `r.getOrElse(default: T)` | `T` | the `Ok` value, or `default` |
+| `r.orElse(f: E -> Result[T, F])` | `Result[T, F]` | `r` if `Ok`, else `f(e)` (run only on `Err`); recovery can inspect the error and change its type |
 | `r.isOk()` / `r.isErr()` | `Bool` | which outcome it is |
 | `r.ok()` | `Option[T]` | the `Ok` value, dropping the error |
+| `r.err()` | `Option[E]` | the `Err` value, dropping the success |
 
 The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
 shows them in use.
@@ -995,10 +998,18 @@ insertion order. `Map.empty()` takes its types from context.
 | `m.fold(init: U, step: (U, K, V) -> U)` | `U` | `step` applied from `init` across the entries, in insertion order |
 
 Every method that returns a map keeps insertion order, over plain and composite
-keys alike. `entries()` yields the same compiler-known `MapEntry` as a
-`store Map`'s `.entries`, which is not a boundary type, so a handler projects entries into a
-named type before returning them. A `MapEntry` has no literal form, so `Map.of`
-takes the entries of another map, for example `Map.of(m.entries().filter(…))`. The
+keys alike. `entries()` yields the same `MapEntry` as a `store Map`'s `.entries`.
+`MapEntry[K, V]` is a prelude record, `{ key: K, value: V }`, that any unit can
+name and construct, so `Map.of` also builds a map from entries you write:
+`Map.of([MapEntry { key: "a", value: 1 }])`, or
+`Map.of(xs.map((x) => MapEntry { key: x.id, value: x }))`. The type arguments come
+from the fields, as for any generic record. The name is reserved for the
+two-parameter record: declaring your own `type MapEntry[A, B]` is
+`bynk.resolve.duplicate_type`, though a `MapEntry` with no type parameters is an
+ordinary type of your own. A `MapEntry` is built and used in place, so it is not a
+boundary type: a handler projects entries into a named type before returning them,
+and the error `bynk.types.map_entry_at_boundary` refuses one in a record field, a
+store field or a handler signature, even in a record that never leaves memory. The
 `bynk.map` commons is deprecated: `values`, `contains` and `getOr` are the methods
 `m.values()`, `m.contains(key)` and `m.getOrElse(key, default)`, and each call warns
 with `bynk.map.deprecated_function` and a fix. A
@@ -1706,7 +1717,7 @@ A base type plus a predicate. See the [refined-type reference](/reference/refine
 ## Regular expressions
 
 A refined `String where Matches("…")` checks a whole string against a pattern.
-Six `String` methods use the same patterns to look inside one (the full set of
+Seven `String` methods use the same patterns to look inside one (the full set of
 `String` methods is in [String](#string)):
 
 ```bynk,fragment
@@ -1728,6 +1739,28 @@ pattern, and the compiler checks them identically.
   would escape that check, so it is refused (`bynk.types.regex_not_literal`).
 - **Captures** come back as a list: element 0 is the whole match, then each
   group, `None` for a group that did not take part.
+- **Named groups** are read by name with `findRegexNamed`, so a group added to the
+  pattern later does not shift what a name means:
+
+  ```bynk,fragment
+  fn version(s: String) -> String {
+    match s.findRegexNamed(r"v(?<major>\d+)\.(?<minor>\d+)") {
+      None => "no match",
+      Some(v) => match v.get("major") {
+        Some(Some(major)) => major,
+        _ => "no major",
+      },
+    }
+  }
+  ```
+
+  The result is a `Map` keyed by the pattern's group names, each value `None` for a
+  group that did not take part. The whole match and unnamed groups are not in it. The
+  names come from the literal pattern, so a pattern with none is
+  `bynk.types.regex_no_named_groups`, which points at `findRegex`. A name used
+  by two groups, even across alternatives, is `bynk.types.regex_duplicate_group_name`,
+  because the runtimes refuse it when the pattern is built. There is no
+  `findAllRegexNamed` yet.
 - **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
   `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.
 - **Semantics** are JavaScript's `RegExp` in Unicode mode (`u`), as `Matches`

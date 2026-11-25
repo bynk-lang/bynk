@@ -1,0 +1,23 @@
+commons demo.entries
+
+type User = { id: String, age: Int }
+
+fn single() -> Map[String, Int] {
+	Map.of([MapEntry { key: "a", value: 1 }])
+}
+
+fn byId(users: List[User]) -> Map[String, User] {
+	Map.of(users.map((u) => MapEntry { key: u.id, value: u }))
+}
+
+fn fromEntries(entries: List[MapEntry[String, Int]]) -> Map[String, Int] {
+	Map.of(entries)
+}
+
+fn keyOf(e: MapEntry[String, Int]) -> String {
+	e.key
+}
+
+fn doubled(m: Map[String, Int]) -> Map[String, Int] {
+	Map.of(m.entries().map((e) => MapEntry { key: e.key, value: e.value * 2 }))
+}

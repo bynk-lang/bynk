@@ -1,0 +1,1 @@
+bynk.types.combinator_return_mismatch the `Result.orElse` function's success type `Int` does not match the receiver's `Qty`

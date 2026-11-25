@@ -1,0 +1,3 @@
+commons demo.mapentrydeclared
+
+type MapEntry[A, B] = { k: A, v: B }

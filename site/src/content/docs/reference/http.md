@@ -1569,6 +1569,9 @@ The wire behaviour, for any response of the service:
 |---|---|---|
 | `nosniff` | Stamp `X-Content-Type-Options: nosniff`. Set `false` to opt out entirely. | `true` (on) |
 | `hsts` | Opt in to `Strict-Transport-Security`, as a [`Duration`](/reference/types/#duration) — sent as `max-age` seconds. Omit to send no HSTS. | omitted |
+| `frameAncestors` | Who may frame an HTML page, as a list of exact origins or `"self"`. Sent as `Content-Security-Policy: frame-ancestors …` on a `text/html` response. | `'none'`: no site |
+| `referrerPolicy` | The `Referrer-Policy` of an HTML page, one of `noReferrer`, `noReferrerWhenDowngrade`, `origin`, `originWhenCrossOrigin`, `sameOrigin`, `strictOrigin`, `strictOriginWhenCrossOrigin` or `unsafeUrl`. | `strictOriginWhenCrossOrigin` |
+| `csp` | A whole `Content-Security-Policy`, a string sent verbatim on an HTML page. | none |
 
 The headers are stamped uniformly across every response family — the `Ok`/`Raw`/
 redirect/error/stream variants, and the synthesised preflight, `405`/`OPTIONS`,
@@ -1586,13 +1589,51 @@ the edge — so Bynk never enables it for you. `hsts` emits `max-age` only;
 offered. A team terminating HSTS at the edge simply omits `hsts` and keeps the
 default `nosniff`.
 
+### HTML responses
+
+A response whose `Content-Type` is `text/html` (its parameters stripped, so
+`text/html; charset=utf-8` counts) is a page, and a page can be framed by any site
+(clickjacking) and leaks its address through `Referer`. So an HTML response gets two
+more headers by default, and only an HTML response does:
+
+- `Content-Security-Policy: frame-ancestors 'none'`, so no site may frame it;
+- `Referrer-Policy: strict-origin-when-cross-origin`.
+
+A JSON API is unchanged. `X-Frame-Options` is not sent: `frame-ancestors` supersedes it
+in every current browser. The headers go on every HTML response of the service, whatever
+built it: a `Raw` page or a `RawError` HTML error page.
+
+```bynk,ignore
+service site from http by Visitor {
+  security {
+    frameAncestors: ["https://partner.example", "self"],   // default: none
+    referrerPolicy: noReferrer,                            // default: strictOriginWhenCrossOrigin
+    csp: "default-src 'self'; img-src 'self' https://cdn.example",   // opt-in, verbatim
+  }
+  …
+}
+```
+
+- **`frameAncestors`** lists exact origins (`"https://partner.example"`) or `"self"`.
+  A wildcard is refused, as in `cors`. `["*"]` is allowed only alone and beside an explicit
+  `csp`, so that opening framing to every site is never the result of an accident.
+- **`referrerPolicy`** is one of the standard values, written in camel case.
+- **`csp`** is the whole policy, sent as written; Bynk does not parse or validate it beyond
+  refusing a line break. If it has no `frame-ancestors` directive, the `frameAncestors`
+  value (or `'none'`) is appended, so the framing default cannot be lost by declaring a
+  policy. A policy built from the page itself (nonces, hashes) is for a typed-HTML feature,
+  not this section.
+- Each field is **independent**: `nosniff: false` does not turn the HTML headers off. To
+  open framing, name the origins; to drop the referrer policy, name a different one.
+
+A value that is not one of these shapes is `bynk.http.security_invalid_field`.
+
 ### What is deliberately excluded
 
-`Content-Security-Policy` and `X-Frame-Options` constrain the script and framing
-of **markup**. Bynk serves bytes and a content-type; it does not template HTML, so
-those headers would have nothing here to govern — shipping them would be
-cargo-cult. If Bynk ever serves HTML, the `security { }` section is where they
-would land.
+A header that would have nothing to govern is not offered: `X-Frame-Options`
+(superseded by `frame-ancestors`), `includeSubDomains` and `preload` on HSTS, and a
+generated `Content-Security-Policy` for scripts and styles, which needs knowledge of the
+page's own markup that Bynk does not have.
 
 A `security { }` block is only valid on a `from http` service
 (`bynk.http.security_not_http`), and a service declares at most one.
