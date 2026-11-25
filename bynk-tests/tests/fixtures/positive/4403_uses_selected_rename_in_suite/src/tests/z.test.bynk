@@ -1,0 +1,11 @@
+suite app.z {
+  case "a renamed type generates a value" {
+    let s = Val[XStatus]
+    expect s == s
+  }
+
+  case "a name the list leaves out is still reachable" {
+    let p = Val[Point]
+    expect p == p
+  }
+}

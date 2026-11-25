@@ -1669,7 +1669,10 @@ fn emit_path_param_construction(
             let construct = if consumed {
                 method_call(
                     ident("handlers"),
-                    format!("__deserialise_{}", id.name),
+                    format!(
+                        "__deserialise_{}",
+                        bynk_check::emitted_names::codec_key(&id.name)
+                    ),
                     vec![ident(raw), wire_path.clone()],
                 )
             } else {

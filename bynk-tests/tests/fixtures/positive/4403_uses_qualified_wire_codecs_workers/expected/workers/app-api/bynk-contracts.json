@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "provides": {
+    "echo": "8021d012f90e47c4"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "echo": "Svc(\"echo\",P(\"h\",Rec(\"Holder\",F(\"all\",L(N(\"lib.y.Status\"))),F(\"maybe\",O(N(\"lib.x.Level\"))),F(\"p\",N(\"lib.x.Point\")),F(\"s\",N(\"lib.x.Status\")),F(\"t\",N(\"lib.y.Status\")))),Ret(Rec(\"Holder\",F(\"all\",L(N(\"lib.y.Status\"))),F(\"maybe\",O(N(\"lib.x.Level\"))),F(\"p\",N(\"lib.x.Point\")),F(\"s\",N(\"lib.x.Status\")),F(\"t\",N(\"lib.y.Status\")))))"
+  }
+}

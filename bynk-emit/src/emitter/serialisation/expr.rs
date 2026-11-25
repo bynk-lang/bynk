@@ -33,7 +33,10 @@ pub fn serialise_expr_via(t: &TypeRef, value: &TsExpr, ns: &str, ru: &RuntimeUse
 /// identity the caller path used to fall back to.
 pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
     match strip_effect(t) {
-        TypeRef::Named(id) => ident(format!("{ns}__deserialise_{}", id.name)),
+        TypeRef::Named(id) => ident(format!(
+            "{ns}__deserialise_{}",
+            bynk_check::emitted_names::codec_key(&id.name)
+        )),
         t @ (TypeRef::Result(..)
         | TypeRef::Option(..)
         | TypeRef::List(..)
@@ -84,7 +87,10 @@ pub fn deserialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
 /// `Bytes` base64 encoding that `serialise_field_expr_via` already carries.
 pub(crate) fn serialise_ref_via(t: &TypeRef, ns: &str, ru: &RuntimeUse) -> TsExpr {
     match strip_effect(t) {
-        TypeRef::Named(id) => ident(format!("{ns}__serialise_{}", id.name)),
+        TypeRef::Named(id) => ident(format!(
+            "{ns}__serialise_{}",
+            bynk_check::emitted_names::codec_key(&id.name)
+        )),
         t @ (TypeRef::Result(..)
         | TypeRef::Option(..)
         | TypeRef::List(..)
@@ -338,7 +344,7 @@ pub(crate) fn deserialise_expr_via(
     };
     match t {
         TypeRef::Named(id) => call(
-            ident(format!("{ns}__deserialise_{}", id.name)),
+            ident(format!("{ns}__deserialise_{}", bynk_check::emitted_names::codec_key(&id.name))),
             vec![json.clone(), str_lit(path)],
         ),
         TypeRef::Result(..)
