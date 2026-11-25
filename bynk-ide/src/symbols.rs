@@ -1879,6 +1879,25 @@ fn render_handler_annotation_hover(
              - **`options`** — `tagged` (the default) or `plain`. This route: {mode}."
         );
     }
+    // #3916: `@errors` picks the shape of this route's error bodies.
+    if ann.name.name == "errors" {
+        let mode = match handler.error_format() {
+            Some(ErrorFormat::Problem) => "`problem` — RFC 9457 `application/problem+json`",
+            Some(ErrorFormat::Bynk) => {
+                "`bynk` — `{ \"error\": message }` and the router's `{ \"kind\", \"details\" }`"
+            }
+            None => "not a valid format (`bynk.http.errors_invalid_field`)",
+        };
+        return format!(
+            "```bynk\n{sig}\n```\n\n\
+             **`@errors`** — choose the shape of this route's error bodies, overriding the \
+             service's `errors {{ }}` section. With `problem`, an error variant and a router \
+             rejection answer `application/problem+json` with `type`, `title`, `status` and \
+             `detail` (RFC 9457); a rejection adds its `kind` and `path`. `RawError` bodies and \
+             `on rejected` are unchanged.\n\n\
+             - **`format`** — `bynk` (the default) or `problem`. This route: {mode}."
+        );
+    }
     // `@raw` takes the request body as the octets sent, under a declared media type.
     if ann.name.name == "raw" {
         let cap = match handler.limit_max_body().or(service_cap) {
@@ -3679,6 +3698,14 @@ pub(crate) fn describe_service(s: &ServiceDecl) -> String {
             JsonOptions::Tagged => "tagged",
         };
         out.push_str(&format!("\tjson {{ options: {mode} }}\n"));
+    }
+    // #3916: the error-body policy, if declared, renders its format.
+    if let Some(errors) = &s.errors {
+        let format = match errors.format() {
+            ErrorFormat::Problem => "problem",
+            ErrorFormat::Bynk => "bynk",
+        };
+        out.push_str(&format!("\terrors {{ format: {format} }}\n"));
     }
     for h in &s.handlers {
         // #2858: a route whose response `Option`s are plain JSON says so.

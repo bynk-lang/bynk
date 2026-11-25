@@ -587,6 +587,81 @@ fn classify_agent_change(current: &[StoreShape], stored: &[StoreShape]) -> Agent
     AgentChange::Additive { refined, nested }
 }
 
+/// #4037: the path roots of an agent's store *key positions*: a `Map`'s or `Cache`'s key
+/// (`field#0`), a `Set`'s element (`field`), and the subtree of an `@indexed(by:)` field whose type
+/// is not a scalar (`field#1.by`). A composite key's canonical encoding is the stored key, so
+/// anything added beneath one of these changes the encoding of every key already stored.
+fn key_roots(
+    agent: &AgentDecl,
+    types: &std::collections::HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+) -> Vec<String> {
+    let mut roots = Vec::new();
+    for f in &agent.store_fields {
+        let name = &f.name.name;
+        match f.kind.head.name.as_str() {
+            "Map" | "Cache" => roots.push(format!("{name}#0")),
+            "Set" => roots.push(name.clone()),
+            _ => continue,
+        }
+        let Some(bynk_syntax::ast::TypeRef::Named(value)) = f.kind.args.get(1) else {
+            continue;
+        };
+        let Some(bynk_syntax::ast::TypeBody::Record(record)) =
+            types.get(&value.name).map(|d| &d.body)
+        else {
+            continue;
+        };
+        for by in f
+            .annotations
+            .iter()
+            .filter(|an| an.name.name == "indexed")
+            .flat_map(|an| &an.args)
+            .filter_map(|arg| match &arg.value.kind {
+                bynk_syntax::ast::ExprKind::Ident(id) => Some(&id.name),
+                _ => None,
+            })
+        {
+            if let Some(rf) = record.fields.iter().find(|rf| &rf.name.name == by)
+                && !crate::context_checks::type_ref_is_scalar_store_key(&rf.type_ref, types)
+            {
+                roots.push(format!("{name}#1.{by}"));
+            }
+        }
+    }
+    roots
+}
+
+/// [`classify_agent_change`], with #4037's rule: a record field added with a default is additive
+/// anywhere else, but beneath a key position (see [`key_roots`]) it changes the canonical encoding
+/// of every stored key, so every existing entry would become unreachable. A new sum variant stays
+/// additive: no stored key names it.
+fn classify_agent_change_keyed(
+    current: &[StoreShape],
+    stored: &[StoreShape],
+    roots: &[String],
+) -> AgentChange {
+    let change = classify_agent_change(current, stored);
+    let AgentChange::Additive { nested, .. } = &change else {
+        return change;
+    };
+    let under_key: Vec<String> = nested
+        .iter()
+        .filter_map(|n| n.strip_suffix(" added with a default"))
+        .filter(|p| roots.iter().any(|r| is_under(p, r)))
+        .map(|p| format!("{p} (added beneath a key: it would change every stored key's encoding)"))
+        .collect();
+    if under_key.is_empty() {
+        return change;
+    }
+    AgentChange::NonAdditive {
+        removed: Vec::new(),
+        added: Vec::new(),
+        retyped: under_key,
+        rekinded: Vec::new(),
+        unrecorded: false,
+    }
+}
+
 /// #2676: how one stored field's recorded paths relate to its live ones.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct PathChange {
@@ -1170,7 +1245,7 @@ pub fn reconcile_agents(
                         .current()
                         .map(|s| s.fields.as_slice())
                         .expect("a parsed agent entry has a snapshot at its version");
-                    match classify_agent_change(&current, stored) {
+                    match classify_agent_change_keyed(&current, stored, &key_roots(agent, &types)) {
                         AgentChange::Unchanged => {
                             // #2676 (Decision C): see `backfill_paths`.
                             let mut entry = stored_entry.clone();
@@ -1461,7 +1536,8 @@ pub fn diff_against_lock(
                 continue;
             };
             let current = agent_snapshot(agent, &types);
-            let change = classify_agent_change(&current, &stored.fields);
+            let change =
+                classify_agent_change_keyed(&current, &stored.fields, &key_roots(agent, &types));
             if change == AgentChange::Unchanged {
                 continue;
             }

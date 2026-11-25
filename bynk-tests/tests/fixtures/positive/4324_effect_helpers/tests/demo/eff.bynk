@@ -1,0 +1,34 @@
+suite demo.eff
+
+case "a generic helper wraps a plain value" {
+	let n <- wrap(7)
+	expect n == 7
+}
+
+case "a generic helper over two effects keeps the first result" {
+	let n <- first(Effect.pure(1), Effect.pure("ignored"))
+	expect n == 1
+}
+
+case "effects sequence with <-" {
+	let n <- sequenced(Effect.pure(41))
+	expect n == 42
+}
+
+case "a list of effects is not an effect of an effect, and each runs" {
+	let es = effects([1, 2, 3])
+	let a <- es.first().getOrElse(Effect.pure(0))
+	expect a == 2
+	let both = twoEffects(Effect.pure(1), Effect.pure(2))
+	expect both.length() == 2
+}
+
+case "an option of an effect is fine" {
+	let o = maybe(Effect.pure(5))
+	expect o.isSome()
+}
+
+case "andThen chains an effect into a generic helper" {
+	let n <- chained(Effect.pure(1))
+	expect n == 2
+}

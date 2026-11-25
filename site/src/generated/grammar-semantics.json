@@ -1750,6 +1750,10 @@
       "summary": "A service declares more than one `delivery { }` policy."
     },
     {
+      "code": "bynk.parse.duplicate_errors",
+      "summary": "A service declares more than one `errors { }` policy."
+    },
+    {
       "code": "bynk.parse.duplicate_json",
       "summary": "A service declares more than one `json { }` policy."
     },

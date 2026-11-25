@@ -1009,3 +1009,75 @@ fn a_refinement_inside_a_record_is_read_position_by_position() {
     );
     assert_eq!(agent_version(&p.lock()), "3", "{}", p.lock());
 }
+
+/// #4037: a composite store key's canonical encoding is the stored key, so a record field added
+/// beneath a key position, even with a default, would change every stored key's encoding and
+/// orphan the entries. The same addition in the value is additive, and a new sum variant is too.
+#[test]
+fn a_field_added_beneath_a_store_key_is_refused_but_not_one_in_the_value() {
+    let p = Project::new("key-position");
+    let src = |key: &str, value: &str, fields: &str| {
+        with_decl(&format!("{key}\n\n{value}"), &cart(fields))
+    };
+    let fields = "  store stock: Map[StockKey, Item]\n  store seen: Set[StockKey]";
+    p.build_ok(&src(
+        "type StockKey = { region: String, code: Int }",
+        "type Item = { qty: Int }",
+        fields,
+    ));
+    assert_eq!(agent_version(&p.lock()), "1");
+
+    // A defaulted field in the key record is refused, for the Map key and the Set element alike.
+    let err = p.build_err(&src(
+        "type StockKey = { region: String, code: Int, note: String = \"\" }",
+        "type Item = { qty: Int }",
+        fields,
+    ));
+    assert!(err.contains("added beneath a key"), "{err}");
+    assert!(err.contains("stock#0.note"), "{err}");
+    assert!(err.contains("seen.note"), "{err}");
+
+    // The same field in the value record is additive.
+    p.build_ok(&src(
+        "type StockKey = { region: String, code: Int }",
+        "type Item = { qty: Int, note: String = \"\" }",
+        fields,
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+}
+
+#[test]
+fn a_variant_added_to_a_sum_key_is_additive_and_a_field_beneath_an_indexed_record_is_not() {
+    let p = Project::new("key-variant");
+    let src = |slot: &str, at: &str, fields: &str| {
+        with_decl(
+            &format!("{slot}\n\n{at}\n\ntype Order = {{ at: Spot, qty: Int }}"),
+            &cart(fields),
+        )
+    };
+    let fields =
+        "  store slots: Map[Slot, Int]\n  store orders: Map[String, Order] @indexed(by: at)";
+    p.build_ok(&src(
+        "type Slot = | Front(row: Int) | Back(row: Int)",
+        "type Spot = { aisle: String }",
+        fields,
+    ));
+    assert_eq!(agent_version(&p.lock()), "1");
+
+    // A new variant: no stored key names it.
+    p.build_ok(&src(
+        "type Slot = | Front(row: Int) | Back(row: Int) | Side(row: Int)",
+        "type Spot = { aisle: String }",
+        fields,
+    ));
+    assert_eq!(agent_version(&p.lock()), "2");
+
+    // The record an `@indexed` field is over: its encoding is the posting key.
+    let err = p.build_err(&src(
+        "type Slot = | Front(row: Int) | Back(row: Int) | Side(row: Int)",
+        "type Spot = { aisle: String, bay: Int = 0 }",
+        fields,
+    ));
+    assert!(err.contains("added beneath a key"), "{err}");
+    assert!(err.contains("orders#1.at.bay"), "{err}");
+}

@@ -1,2 +1,2 @@
 bynk.store.unkeyable_key
-a `Cache` key must be value-keyable
+a `Cache` key must be `Key`

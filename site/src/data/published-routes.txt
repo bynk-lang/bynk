@@ -259,6 +259,7 @@
 /book/reference/diagnostics/bynk.agent.version_without_path/
 /book/reference/diagnostics/bynk.agents.bad_state_initialiser/
 /book/reference/diagnostics/bynk.agents.non_zeroable_state_field/
+/book/reference/diagnostics/bynk.agents.self_operation/
 /book/reference/diagnostics/bynk.asset.duplicate/
 /book/reference/diagnostics/bynk.asset.invalid_at_path/
 /book/reference/diagnostics/bynk.asset.may_shadow_route/
@@ -502,6 +503,10 @@
 /book/reference/diagnostics/bynk.http.duplicate_rejected/
 /book/reference/diagnostics/bynk.http.duplicate_route/
 /book/reference/diagnostics/bynk.http.error_status_position/
+/book/reference/diagnostics/bynk.http.errors_duplicate/
+/book/reference/diagnostics/bynk.http.errors_invalid_field/
+/book/reference/diagnostics/bynk.http.errors_not_http/
+/book/reference/diagnostics/bynk.http.errors_unknown_field/
 /book/reference/diagnostics/bynk.http.extra_param/
 /book/reference/diagnostics/bynk.http.form_body_not_record/
 /book/reference/diagnostics/bynk.http.form_bool_without_default/
@@ -513,6 +518,7 @@
 /book/reference/diagnostics/bynk.http.header_question_not_found/
 /book/reference/diagnostics/bynk.http.headers_wrong_type/
 /book/reference/diagnostics/bynk.http.invalid_path/
+/book/reference/diagnostics/bynk.http.invalid_response_header/
 /book/reference/diagnostics/bynk.http.json_duplicate/
 /book/reference/diagnostics/bynk.http.json_invalid_arg/
 /book/reference/diagnostics/bynk.http.json_invalid_field/
@@ -543,6 +549,7 @@
 /book/reference/diagnostics/bynk.http.raw_unknown_arg/
 /book/reference/diagnostics/bynk.http.rejected_signature/
 /book/reference/diagnostics/bynk.http.reserved_prefix/
+/book/reference/diagnostics/bynk.http.reserved_response_header/
 /book/reference/diagnostics/bynk.http.reserved_route_syntax/
 /book/reference/diagnostics/bynk.http.return_not_effect_http_result/
 /book/reference/diagnostics/bynk.http.security_invalid_field/
@@ -630,6 +637,7 @@
 /book/reference/diagnostics/bynk.parse.dangling_handler_annotation/
 /book/reference/diagnostics/bynk.parse.doc_block_contains_code/
 /book/reference/diagnostics/bynk.parse.duplicate_cors/
+/book/reference/diagnostics/bynk.parse.duplicate_errors/
 /book/reference/diagnostics/bynk.parse.duplicate_json/
 /book/reference/diagnostics/bynk.parse.duplicate_limits/
 /book/reference/diagnostics/bynk.parse.duplicate_security/
@@ -995,6 +1003,7 @@
 /book/reference/diagnostics/bynk.types.method_on_non_named_type/
 /book/reference/diagnostics/bynk.types.mixed_pattern_bindings/
 /book/reference/diagnostics/bynk.types.negative_length/
+/book/reference/diagnostics/bynk.types.nested_effect/
 /book/reference/diagnostics/bynk.types.never_inferred/
 /book/reference/diagnostics/bynk.types.no_numeric_coercion/
 /book/reference/diagnostics/bynk.types.non_exhaustive_match/
@@ -1386,6 +1395,7 @@
 /reference/diagnostics/bynk.agent.version_without_path/
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
+/reference/diagnostics/bynk.agents.self_operation/
 /reference/diagnostics/bynk.asset.duplicate/
 /reference/diagnostics/bynk.asset.invalid_at_path/
 /reference/diagnostics/bynk.asset.may_shadow_route/
@@ -1636,6 +1646,10 @@
 /reference/diagnostics/bynk.http.duplicate_rejected/
 /reference/diagnostics/bynk.http.duplicate_route/
 /reference/diagnostics/bynk.http.error_status_position/
+/reference/diagnostics/bynk.http.errors_duplicate/
+/reference/diagnostics/bynk.http.errors_invalid_field/
+/reference/diagnostics/bynk.http.errors_not_http/
+/reference/diagnostics/bynk.http.errors_unknown_field/
 /reference/diagnostics/bynk.http.extra_param/
 /reference/diagnostics/bynk.http.form_body_not_record/
 /reference/diagnostics/bynk.http.form_bool_without_default/
@@ -1648,6 +1662,7 @@
 /reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
 /reference/diagnostics/bynk.http.invalid_path/
+/reference/diagnostics/bynk.http.invalid_response_header/
 /reference/diagnostics/bynk.http.json_duplicate/
 /reference/diagnostics/bynk.http.json_invalid_arg/
 /reference/diagnostics/bynk.http.json_invalid_field/
@@ -1679,6 +1694,7 @@
 /reference/diagnostics/bynk.http.raw_unknown_arg/
 /reference/diagnostics/bynk.http.rejected_signature/
 /reference/diagnostics/bynk.http.reserved_prefix/
+/reference/diagnostics/bynk.http.reserved_response_header/
 /reference/diagnostics/bynk.http.reserved_route_syntax/
 /reference/diagnostics/bynk.http.return_not_effect_http_result/
 /reference/diagnostics/bynk.http.security_invalid_field/
@@ -1774,6 +1790,7 @@
 /reference/diagnostics/bynk.parse.doc_block_contains_code/
 /reference/diagnostics/bynk.parse.duplicate_cors/
 /reference/diagnostics/bynk.parse.duplicate_delivery/
+/reference/diagnostics/bynk.parse.duplicate_errors/
 /reference/diagnostics/bynk.parse.duplicate_json/
 /reference/diagnostics/bynk.parse.duplicate_limits/
 /reference/diagnostics/bynk.parse.duplicate_security/
@@ -2152,6 +2169,7 @@
 /reference/diagnostics/bynk.types.method_on_non_named_type/
 /reference/diagnostics/bynk.types.mixed_pattern_bindings/
 /reference/diagnostics/bynk.types.negative_length/
+/reference/diagnostics/bynk.types.nested_effect/
 /reference/diagnostics/bynk.types.never_inferred/
 /reference/diagnostics/bynk.types.no_numeric_coercion/
 /reference/diagnostics/bynk.types.non_exhaustive_match/

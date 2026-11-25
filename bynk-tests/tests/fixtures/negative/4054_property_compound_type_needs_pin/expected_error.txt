@@ -1,2 +1,2 @@
 bynk.val.needs_pin
-for all xs: List[Count]
+for all r: Result[Count, Count]

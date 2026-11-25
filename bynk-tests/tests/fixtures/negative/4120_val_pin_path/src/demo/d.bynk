@@ -1,0 +1,4 @@
+commons demo.d
+
+type Slug = String where Matches("[a-z]+")
+type Order = { id: String, slug: Slug, lines: List[Int] }
