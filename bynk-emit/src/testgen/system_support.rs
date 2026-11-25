@@ -1786,7 +1786,7 @@ impl SessionDriver {
                 call(
                     member(ident(agent.handlers_ns.clone()), agent.factory.clone()),
                     vec![
-                        as_expr(sub.clone(), TsType::named("any")),
+                        as_expr(sub.clone(), TsType::named("never")),
                         member(ident("__h"), agent.env.clone()),
                     ],
                 ),
@@ -1813,7 +1813,7 @@ impl SessionDriver {
             ],
         ));
         TsExpr::template_lit(
-            vec![format!("{}=", self.cookie), String::new()],
+            vec![self.cookie.clone() + "=", String::new()],
             vec![member(paren(issued), "value")],
         )
     }
