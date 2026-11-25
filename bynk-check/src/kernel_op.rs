@@ -417,6 +417,7 @@ kernel_ops! {
         RetryAfter = "retryAfter", "retryAfter(delay: Duration) -> HttpResult[T]";
         At = "at", "at(url: String) -> HttpResult[T]";
         Download = "download", "download(filename: String) -> HttpResult[T]";
+        Heartbeat = "heartbeat", "heartbeat(every: Duration) -> HttpResult[T]";
         Headers = "headers", "headers() -> Map[String, List[String]]";
     }
 /// `RequestQuery` (#2854): an HTTP handler's read-only view of the request's

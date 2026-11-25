@@ -232,7 +232,11 @@ service Updates from http {
 }
 ```
 
-Only `data` is required. See
+Only `data` is required. To keep an idle stream open through a proxy, add
+`.heartbeat(15.seconds)` after `Streaming(…)`, and to let a reconnecting browser pick up where it
+left off, read `Last-Event-ID` through a typed `headers` record and send what followed it; see
+[HTTP → Resuming after a dropped connection](/reference/http/#resuming-after-a-dropped-connection).
+See
 [HTTP → Structured events](/reference/http/#structured-events) for the framing and the
 values the wire cannot carry.
 

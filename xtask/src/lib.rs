@@ -585,6 +585,21 @@ pub fn raised_probes_checked(
     })
 }
 
+/// The growth probes raised by the pending files of a base revision that `root` no longer has:
+/// the `raises:` the stamp consumed. `base` is each base file's `(file name, text)`; a file
+/// `root` still has is not consumed, and one that does not parse is ignored. This is what a
+/// stamp PR's raise-ledger rows must be backed by (see `greenfield_status::check_growth_against`).
+pub fn consumed_raised_probes(
+    base: &[(String, String)],
+    root: &Path,
+) -> std::collections::BTreeSet<String> {
+    base.iter()
+        .filter(|(name, _)| !root.join("design/pending").join(name).exists())
+        .filter_map(|(name, text)| validate(name, text).ok())
+        .flat_map(|p| p.raises.into_iter().map(|r| r.probe))
+        .collect()
+}
+
 /// The gated probes acknowledged by every pending file under `root` — the union
 /// of their `probes` keys. The pending files present in a tree are exactly the
 /// increments not yet stamped (the stamp deletes each one as it rewrites the
@@ -1661,6 +1676,26 @@ mod tests {
         assert_eq!(ids.len(), 2, "expected exactly 2 distinct ids: {ids:?}");
         assert!(ids.contains("R2.3"));
         assert!(ids.contains("R10.11"));
+    }
+
+    #[test]
+    fn consumed_raised_probes_are_the_base_raises_the_tree_lost() {
+        let root = std::env::temp_dir().join("xtask-consumed-raises");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("design/pending")).unwrap();
+        let raising =
+            |probe: &str| format!("---\nlevel: patch\nchangelog: x\nraises: {probe} — why\n---\n");
+        let base = vec![
+            ("gone.md".to_string(), raising("ts_writes")),
+            ("kept.md".to_string(), raising("ts_any")),
+            ("bad.md".to_string(), "no frontmatter\n".to_string()),
+        ];
+        fs::write(root.join("design/pending/kept.md"), raising("ts_any")).unwrap();
+        let consumed = consumed_raised_probes(&base, &root);
+        assert_eq!(
+            consumed,
+            std::collections::BTreeSet::from(["ts_writes".to_string()])
+        );
     }
 
     #[test]

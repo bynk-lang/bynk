@@ -3,6 +3,7 @@
 
 import { Some } from "../../__bynk_runtime/result.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
+import { __withHeartbeat } from "../../__bynk_runtime/http.js";
 
 export const routes = {
   async http_GET_notes(deps: {}): globalThis.Promise<HttpResult<string>> {
@@ -45,6 +46,13 @@ export const routes = {
         yield __e;
       }
     })());
+  },
+  async http_GET_beat(deps: {}): globalThis.Promise<HttpResult<void>> {
+    return __withHeartbeat(HttpResult.Streaming((async function* () {
+      for (const __e of ["x"]) {
+        yield __e;
+      }
+    })()), 15000);
   },
   async http_GET_bad_event(deps: {}): globalThis.Promise<HttpResult<void>> {
     return HttpResult.Streaming((async function* () {
