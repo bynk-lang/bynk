@@ -10,7 +10,7 @@ use crate::ts_build::{
 };
 
 /// How a driver reaches a `sessions = true` actor's session agent: the participant's handlers
-/// namespace, its `env` binding (a field of the harness `__h`), the agent's factory name and the
+/// namespace, its `env` binding (a field of the memoised harness), the agent's factory name and the
 /// actor's own seam settings `issue` takes.
 pub(super) struct SessionAgentRef {
     handlers_ns: String,
@@ -54,7 +54,7 @@ impl SessionAgentRef {
                     member(ident(agent.handlers_ns.clone()), agent.factory.clone()),
                     vec![
                         as_expr(sub.clone(), TsType::named("never")),
-                        member(ident("__h"), agent.env.clone()),
+                        member(call(ident("__makeHarness"), Vec::new()), agent.env.clone()),
                     ],
                 ),
                 "add",

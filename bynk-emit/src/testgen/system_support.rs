@@ -146,84 +146,6 @@ pub(super) fn signing_stmts(
     }
 }
 
-/// #2155: an actor-sum route's per-call credential. The driver takes the
-/// actor the call acts as (`__as`) and builds the matching credential: a
-/// Bearer member's token, a `Signature` member's signature, or nothing for a
-/// member with no scheme.
-pub(super) struct SumAuth {
-    /// Each member with a credential, in declaration order.
-    pub(super) members: Vec<(String, SumCredential)>,
-}
-
-pub(super) enum SumCredential {
-    /// A Bearer member: how the driver reads its secret.
-    Bearer(TsExpr),
-    /// A `Signature` member.
-    Signature(SigDriver),
-}
-
-impl SumAuth {
-    /// The statements building `__auth`, the credential headers for the actor
-    /// the call acts as, signing `body` where a member signs.
-    pub(super) fn stmts(&self, body: &TsExpr) -> Vec<TsStmt> {
-        let auth = |key: &str| index(ident("__auth"), str_lit(key));
-        let mut out = vec![const_typed(
-            "__auth",
-            TsType::named_with_args(
-                "globalThis.Record",
-                vec![TsType::named("string"), TsType::named("string")],
-            ),
-            TsExpr::object(Vec::new()),
-        )];
-        for (name, cred) in &self.members {
-            let set: Vec<TsStmt> = match cred {
-                SumCredential::Bearer(secret_read) => vec![assign(
-                    auth("authorization"),
-                    bearer_token(
-                        object_of(vec![
-                            ("sub", ident("__sub")),
-                            ("exp", binary(TsBinaryOp::Add, now_secs(), num_lit("3600"))),
-                        ]),
-                        secret_read.clone(),
-                    ),
-                )],
-                SumCredential::Signature(z) => {
-                    let mut set = vec![
-                        z.sign(body, SigVariant::Signed),
-                        assign(auth(&z.seam.header), member(ident("__sig"), "signature")),
-                    ];
-                    if let Some(ts) = &z.seam.timestamp_header {
-                        set.push(assign(auth(ts), member(ident("__sig"), "timestamp")));
-                    }
-                    set
-                }
-            };
-            out.push(if_(
-                strict_eq(ident("__as"), str_lit(name.as_str())),
-                block(set),
-            ));
-        }
-        out
-    }
-
-    /// #2864: the first Bearer member's secret read: what `by Forged` and
-    /// `by Expired` sign a token with on a sum with no `Signature` member.
-    pub(super) fn bearer(&self) -> Option<&TsExpr> {
-        self.members.iter().find_map(|(_, c)| match c {
-            SumCredential::Bearer(secret_read) => Some(secret_read),
-            SumCredential::Signature(_) => None,
-        })
-    }
-
-    /// The first `Signature` member: what `by Forged`/`by Stale` sign as.
-    pub(super) fn signature(&self) -> Option<&SigDriver> {
-        self.members.iter().find_map(|(_, c)| match c {
-            SumCredential::Signature(z) => Some(z),
-            SumCredential::Bearer(_) => None,
-        })
-    }
-}
-
 pub(super) fn emit_system_http_support(
     target: &str,
     unit_tables: &HashMap<String, UnitTable>,
@@ -535,7 +457,13 @@ pub(super) fn emit_system_http_support(
             // call acts as, so its drivers take that actor (`__as`) and build
             // the credential per call, rather than the primary member's.
             let route_key = (sname.clone(), method.as_str().to_string(), path.clone());
-            let sum = sum_auth_for(h, &table.actors, &mut secrets, &secret_read_of);
+            let sum = sum_auth_for(
+                (h, &ns),
+                &table.actors,
+                &mut secrets,
+                &secret_read_of,
+                (&mut session_secrets, &mut has_oidc),
+            );
             let is_sum = h.by_clause.as_ref().is_some_and(|by| by.is_sum());
             let (auth_header, signs_claims) = if is_sum {
                 (Vec::new(), false)
@@ -551,6 +479,17 @@ pub(super) fn emit_system_http_support(
                 &mut session_secrets,
                 (&typed_cookie, &raw_cookie),
             );
+            // #3936: a sum's cookie arm sends the same default `Sec-Fetch-Site`; a case's own
+            // header (a cross-site request, say) wins, as it does on a lone cookie route.
+            let csrf_default = if sum.as_ref().is_some_and(|s| {
+                s.members
+                    .iter()
+                    .any(|(_, c)| matches!(c, SumCredential::Cookie(_)))
+            }) {
+                vec![header("sec-fetch-site", str_lit("same-origin"))]
+            } else {
+                csrf_default
+            };
             // #2864: the secret a `by Forged` / `by Expired` Bearer token is
             // signed against — the lone Bearer actor's, or a sum's first
             // Bearer member's.
@@ -621,64 +560,13 @@ pub(super) fn emit_system_http_support(
                     runtime_use,
                 )
             };
-            let (body_stmts, body_init): (Vec<TsStmt>, Entries) = match body_arg {
-                Some(p) if is_multipart => {
-                    let specs: Vec<TsExpr> = crate::emitter::form_body_specs(h, &table.types)
-                        .unwrap_or_default()
-                        .iter()
-                        .map(crate::emitter::field_spec_source)
-                        .map(raw_lit)
-                        .collect();
-                    (
-                        vec![const_(
-                            "__body",
-                            call(
-                                ident("__multipartForm"),
-                                vec![
-                                    serialised(p),
-                                    TsExpr::AsConst(Box::new(TsExpr::array(specs))),
-                                ],
-                            ),
-                        )],
-                        vec![body_entry(ident("__body"))],
-                    )
-                }
-                Some(p) if is_form => (
-                    vec![const_(
-                        "__body",
-                        method_call(
-                            call(
-                                ident("__queryString"),
-                                query_string_args(&p.type_ref, serialised(p), &table.types),
-                            ),
-                            "slice",
-                            vec![num_lit("1")],
-                        ),
-                    )],
-                    vec![body_entry(ident("__body"))],
-                ),
-                Some(p) if raw_type.is_some() && is_stream(&p.type_ref) => {
-                    streamed_typed_body(body_ident(p))
-                }
-                Some(p) if raw_type.is_some() => (
-                    vec![const_("__body", body_ident(p))],
-                    vec![body_entry(TsExpr::As {
-                        expr: Box::new(ident("__body")),
-                        ty: TsType::named("BufferSource"),
-                    })],
-                ),
-                Some(p) => (
-                    vec![const_(
-                        "__body",
-                        call(
-                            member(ident("globalThis.JSON"), "stringify"),
-                            vec![serialised(p)],
-                        ),
-                    )],
-                    vec![body_entry(ident("__body"))],
-                ),
-                None => (Vec::new(), Vec::new()),
-            };
+            let (body_stmts, body_init) = driver_body(
+                h,
+                &table.types,
+                body_arg.copied(),
+                (is_form, is_multipart, raw_type.is_some()),
+                &serialised,
+            );
             // The response payload deserialiser: the `T` of `Effect[HttpResult[T]]`.
             let payload_deser: TsExpr = match strip_effect_httpresult(&h.return_type) {
                 Some(inner) => {
@@ -1654,6 +1542,79 @@ fn register_param_route(
     route_body.insert(key, (idx, param.type_ref.clone()));
 }
 
+/// The typed driver's body: the statements that serialise the body parameter and the request's
+/// body entry: a `@multipart` route's `FormData`, a `@form` route's urlencoded text, a `@raw`
+/// route's octets (or stream), or the JSON of any other.
+fn driver_body(
+    h: &bynk_syntax::ast::Handler,
+    types: &HashMap<String, std::sync::Arc<bynk_syntax::ast::TypeDecl>>,
+    body_arg: Option<&bynk_syntax::ast::Param>,
+    (is_form, is_multipart, is_raw): (bool, bool, bool),
+    serialised: &dyn Fn(&bynk_syntax::ast::Param) -> TsExpr,
+) -> (Vec<TsStmt>, Entries) {
+    match body_arg {
+        Some(p) if is_multipart => {
+            let specs: Vec<TsExpr> = crate::emitter::form_body_specs(h, types)
+                .unwrap_or_default()
+                .iter()
+                .map(crate::emitter::field_spec_source)
+                .map(raw_lit)
+                .collect();
+            (
+                vec![const_(
+                    "__body",
+                    call(
+                        ident("__multipartForm"),
+                        vec![
+                            serialised(p),
+                            TsExpr::AsConst(Box::new(TsExpr::array(specs))),
+                        ],
+                    ),
+                )],
+                vec![body_entry(ident("__body"))],
+            )
+        }
+        Some(p) if is_form => (
+            vec![const_(
+                "__body",
+                method_call(
+                    call(
+                        ident("__queryString"),
+                        query_string_args(&p.type_ref, serialised(p), types),
+                    ),
+                    "slice",
+                    vec![num_lit("1")],
+                ),
+            )],
+            vec![body_entry(ident("__body"))],
+        ),
+        Some(p) if is_raw && is_stream(&p.type_ref) => {
+            streamed_typed_body(ident(crate::emitter::ts_ident(&p.name.name)))
+        }
+        Some(p) if is_raw => (
+            vec![const_(
+                "__body",
+                ident(crate::emitter::ts_ident(&p.name.name)),
+            )],
+            vec![body_entry(TsExpr::As {
+                expr: Box::new(ident("__body")),
+                ty: TsType::named("BufferSource"),
+            })],
+        ),
+        Some(p) => (
+            vec![const_(
+                "__body",
+                call(
+                    member(ident("globalThis.JSON"), "stringify"),
+                    vec![serialised(p)],
+                ),
+            )],
+            vec![body_entry(ident("__body"))],
+        ),
+        None => (Vec::new(), Vec::new()),
+    }
+}
+
 /// #3343: the arguments of `__queryString` for a typed record's wire form `ser`: the
 /// record's field table too when a field is renamed by `@name`.
 fn query_string_args(
@@ -1666,34 +1627,6 @@ fn query_string_args(
         args.push(crate::ts_build::raw_lit(table));
     }
     args
-}
-
-/// #2155: the credentials an actor-sum route's members present, each read against its own secret.
-fn sum_auth_for(
-    h: &bynk_syntax::ast::Handler,
-    actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
-    secrets: &mut std::collections::BTreeSet<String>,
-    secret_read_of: &dyn Fn(&str) -> TsExpr,
-) -> Option<SumAuth> {
-    let members: Vec<(String, SumCredential)> = bynk_check::actors::sum_members_for(h, actors)?
-        .into_iter()
-        .filter_map(|m| {
-            let cred = match m.seam {
-                bynk_check::actors::SumMemberSeam::None => return None,
-                bynk_check::actors::SumMemberSeam::Bearer { secret, .. } => {
-                    secrets.insert(secret.clone());
-                    SumCredential::Bearer(secret_read_of(&secret))
-                }
-                bynk_check::actors::SumMemberSeam::Signature(seam) => {
-                    secrets.insert(seam.secret.clone());
-                    let secret_read = secret_read_of(&seam.secret);
-                    SumCredential::Signature(SigDriver { seam, secret_read })
-                }
-            };
-            Some((m.actor_name, cred))
-        })
-        .collect();
-    (!members.is_empty()).then_some(SumAuth { members })
 }
 
 /// #3225: the two-token principals of an `Oidc` route. The driver presents each token in order
@@ -1741,25 +1674,28 @@ fn push_two_token_principals(routes: &mut Vec<TsStmt>, sname: &str, key: &str, h
 }
 
 /// #3386: what a `system` driver needs to mint a `SignedCookie` actor's session cookie.
-struct SessionDriver {
+pub(super) struct SessionDriver {
     /// The `{ secret: … }` keys expression the cookie is signed with.
-    keys: TsExpr,
+    pub(super) keys: TsExpr,
     /// The declaring actor's name: the cookie's `aud`.
-    actor: String,
+    pub(super) actor: String,
     /// The cookie's name.
-    cookie: String,
+    pub(super) cookie: String,
     /// How long an issued cookie is valid, in seconds.
-    ttl_secs: i64,
+    pub(super) ttl_secs: i64,
     /// #3938: for a `sessions = true` actor, how the acting principal's session is recorded in
     /// its session agent, as `issue` records one, so the seam finds it live.
-    sessions: Option<super::session_driver::SessionAgentRef>,
+    pub(super) sessions: Option<super::session_driver::SessionAgentRef>,
 }
 
 impl SessionDriver {
     /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
     /// (an expression, in seconds) after the epoch.
-    fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+    pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
         use crate::ts_build::{await_expr, binary, call, num_lit, paren, str_lit};
+        if let Some(agent) = &self.sessions {
+            return agent.pair(keys, sub, issued_secs);
+        }
         let signed = await_expr(call(
             ident("__signSessionCookie"),
             vec![
@@ -1803,10 +1739,7 @@ fn session_route(
         ttl_secs: seam.ttl_secs,
         sessions: super::session_driver::SessionAgentRef::of(&seam, ns),
     };
-    let pair = match &session.sessions {
-        Some(agent) => agent.pair(&session.keys, ident("__sub"), now_secs()),
-        None => session.pair(&session.keys, ident("__sub"), now_secs()),
-    };
+    let pair = session.pair(&session.keys, ident("__sub"), now_secs());
     (
         Some(session),
         typed_cookie.render(Some(&pair)),
@@ -1816,7 +1749,7 @@ fn session_route(
 }
 
 /// `__bynkNow()`: the harness clock, in seconds.
-fn now_secs() -> TsExpr {
+pub(super) fn now_secs() -> TsExpr {
     crate::ts_build::call(ident("__bynkNow"), Vec::new())
 }
 
