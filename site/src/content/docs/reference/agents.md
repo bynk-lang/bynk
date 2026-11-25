@@ -123,7 +123,7 @@ field's type type-checks. (Legal-transition tables are a later increment;
 
   `read`/`write` are not callable methods — the bare name reads and `:=` writes.
   A read-modify-write made of separate calls (`get` then `put`) is not atomic across
-  concurrent branches, so a `parTraverse` closure may not write a store at all
+  concurrent branches, so a `parForEach` or `parTraverse` closure may not write a store at all
   (`bynk.par.store_write_in_closure`); a single-call `update` or `upsert` run in a
   sequential `forEach` is atomic per key.
 - **Commit** is implicit: every `store` write a handler makes is collected and
