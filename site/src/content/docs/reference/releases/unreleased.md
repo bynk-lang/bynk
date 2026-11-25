@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.704.0** | A `for all` and a bare `Val` work over `List`, `Set`, `Map` and `Option` and the records and sums that hold them, and `bynk.val.needs_pin` names the path to the part that cannot be generated |
 | **v0.703.0** | A store `Map`, `Set` or `Cache` takes any `Key` type as its key (a record, a sum, an `Option`, a `Decimal`, `Bytes`), held under the canonical key encoding; `String` and `Int` keys are stored exactly as before |
 | **v0.702.1** | A queue send in an agent's transition predicate or migrate step is refused as an unknown name, and the diagnostic now says the name is a capability |
 | **v0.702.0** | A quick fix rewrites a two-arm `match` ending a test case, with an `expect false` fallback, into `expect … is` |
