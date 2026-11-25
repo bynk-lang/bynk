@@ -3341,13 +3341,17 @@ pub(crate) fn check_result_kernel_method(
             }
             Some(tys.intern(Ty::Option(ok)))
         }
+        // #3969: recovery from an `Err`, and the `Err` side as an `Option`.
+        Some(o @ (ResultOp::OrElse | ResultOp::Err)) => {
+            super::result_more::check_result_more(o, method, args, ok, err, span, ctx)
+        }
         None => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_not_found",
                 method.span,
                 format!(
                     "the built-in `Result[{}, {}]` type has no method `{}` — the kernel is \
-                     `map`, `andThen`, `mapErr`, `getOrElse`, `isOk`, `isErr`, `ok`",
+                     `map`, `andThen`, `mapErr`, `orElse`, `getOrElse`, `isOk`, `isErr`, `ok`, `err`",
                     ok.display(tys),
                     err.display(tys),
                     method.name

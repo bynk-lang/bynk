@@ -1,0 +1,1 @@
+bynk.types.combinator_return_mismatch the `Result.orElse` function's success type `String` does not match the receiver's `Int`
