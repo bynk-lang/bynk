@@ -334,6 +334,8 @@ A method not in this table is `bynk.types.method_not_found`.
 The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
 shows them in use.
 
+### `ValidationError` {#validationerror}
+
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
 A `ValidationError` has two `String` fields and the rule that failed:
