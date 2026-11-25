@@ -407,6 +407,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "consumes_decl"
+        },
+        {
+          "type": "SYMBOL",
           "name": "type_decl"
         },
         {

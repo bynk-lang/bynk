@@ -75,7 +75,9 @@ Two relationships wire a program together:
 - **`consumes`** declares a dependency on *another context's services*. The
   consumer calls them by qualified name (optionally through an `as` alias). This
   is the only way one context calls into another, so the dependency graph between
-  contexts is always written down and checkable.
+  contexts is always written down and checkable. A commons may `consumes` too, but
+  only *types* of an adapter, in braces (`consumes bynk { TimedOut }`): never a
+  service, a capability or a context, so it stays pure.
 
 Capabilities and `consumes` together mean dependencies are explicit at two
 levels: what a handler needs (capabilities, injected) and what a context depends

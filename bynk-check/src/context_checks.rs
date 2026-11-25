@@ -2843,6 +2843,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
         }
         return;
     }
+    // #3888: inbound mail states whether it must be authenticated.
+    if matches!(protocol, ServiceProtocol::Email { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_email(handler));
+        }
+        return;
+    }
     // v0.103 (D-A): a WebSocket upgrade authenticates at the edge before the
     // connection is accepted — `on open` must name its actor, no anonymous upgrade.
     let (msg, note) = match protocol {
@@ -2908,6 +2915,26 @@ fn missing_by_on_queue(handler: &Handler) -> CompileError {
     .with_suggestion(
         "add `by Producer`",
         vec![(Span::new_in(handler.span.file, at, at), " by Producer".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3888: an email handler states what mail it acts on. The fix-it inserts `by Sender` (the former
+/// silent default: any mail, whatever its DMARC verdict) after the return type.
+fn missing_by_on_email(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_email",
+        handler.span,
+        "an email `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Sender` admits any mail, whatever its DMARC verdict, which is what an email handler did before the clause \
+         was required. Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_email`",
+    )
+    .with_suggestion(
+        "add `by Sender`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Sender".to_string())],
         Applicability::MachineApplicable,
     )
 }
@@ -3603,6 +3630,7 @@ fn check_service_decls(
     }
 
     validate_error_policies(table, errors);
+    validate_consumed_headers(table, &typed.types, errors);
 
     // #2858: validate each service's `json { }` policy, then refuse the one
     // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
@@ -5565,6 +5593,97 @@ fn validate_json_policy(
             expr.span,
             "`json` `options` must be `tagged` or `plain`",
         ));
+    }
+}
+
+/// #4266: what to do instead of reading a header the route's actor consumes, for the note on the
+/// diagnostic: the credential itself is never the handler's to read, only the identity it proves.
+fn consumed_header_note(wire: &str, session_cookie: bool) -> &'static str {
+    if wire == "cookie" && session_cookie {
+        "read the other cookies through a typed `cookies` record, which the session cookie is also removed from; the signed-in identity is the actor's"
+    } else if wire == "authorization" {
+        "the router verifies the credential and hands the handler the actor's identity instead; use that, or drop the field"
+    } else {
+        "the router verifies this header and the handler never sees it; drop the field"
+    }
+}
+
+/// #4266: a typed `headers` field that reads a header the route's actor seam consumes. The router
+/// hides that header from the record (`authorization` on a `Bearer`, `Oidc` or `Signature` route,
+/// the session cookie out of `cookie` on a `SignedCookie` one), so the field always sees it
+/// absent: a required field answers `400` on every request, and an `Option` or `List` one is
+/// always `None` or empty.
+fn validate_consumed_headers(
+    table: &UnitTable,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            let Some(p) = handler.params.iter().find(|p| p.name.name == "headers") else {
+                continue;
+            };
+            let TypeRef::Named(id) = &p.type_ref else {
+                continue;
+            };
+            let Some(TypeBody::Record(record)) = types.get(&id.name).map(|t| &t.body) else {
+                continue;
+            };
+            let consumed = crate::actors::consumed_credential_headers(handler, &table.actors);
+            let session = crate::actors::signed_cookie_seam_for(handler, &table.actors);
+            for f in &record.fields {
+                let wire = f
+                    .wire_name()
+                    .unwrap_or_else(|| f.name.name.clone())
+                    .to_ascii_lowercase();
+                let (actor, what) = match consumed.iter().find(|(h, _)| *h == wire) {
+                    Some((_, actor)) => (actor.clone(), format!("the `{wire}` header")),
+                    None => match &session {
+                        Some(s) if wire == "cookie" => (
+                            s.actor.clone(),
+                            format!(
+                                "the `cookie` header, less its session cookie `{}`",
+                                s.cookie
+                            ),
+                        ),
+                        _ => continue,
+                    },
+                };
+                let optional = matches!(f.type_ref, TypeRef::Option(..) | TypeRef::List(..));
+                // The session cookie is removed from `cookie`, so that field is absent unless
+                // the request carries another cookie too; the others are always absent.
+                let always = wire != "cookie" || session.is_none();
+                let (code, why) = match (optional, always) {
+                    (true, true) => (
+                        "bynk.http.headers_field_consumed_optional",
+                        "so it is always absent here",
+                    ),
+                    (true, false) => (
+                        "bynk.http.headers_field_consumed_optional",
+                        "so it is absent unless the request carries another cookie",
+                    ),
+                    (false, true) => (
+                        "bynk.http.headers_field_consumed",
+                        "so this field is always absent and every request is answered `400`",
+                    ),
+                    (false, false) => (
+                        "bynk.http.headers_field_consumed",
+                        "so this field is absent, and the request is answered `400`, unless it carries another cookie",
+                    ),
+                };
+                errors.push(
+                    CompileError::new(
+                        code,
+                        f.span,
+                        format!(
+                            "field `{}` of the `headers` record reads {what}, which `{actor}` consumes, {why}",
+                            f.name.name
+                        ),
+                    )
+                    .with_note(consumed_header_note(&wire, session.is_some())),
+                );
+            }
+        }
     }
 }
 

@@ -2288,6 +2288,10 @@
           "named": true
         },
         {
+          "type": "consumes_decl",
+          "named": true
+        },
+        {
           "type": "embed_decl",
           "named": true
         },
