@@ -1,0 +1,10 @@
+{
+  "blurb": "`by` names who is calling and has the compiler verify it at the edge of the program: an HTTP request, a queue message, a cron tick. An agent handler is not an edge. It is reached only from a service or another agent, which has already been through its own check, so there is no caller left to verify and the clause would be silently ignored. The compiler refuses it instead of letting it look like protection. Remove the clause, and put the `by` on the service handler that calls the agent, passing on whatever the agent needs as an argument.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.by_on_agent",
+  "constructs": [],
+  "example": "on call bump() -> Effect[Int] by v: Visitor {   // ✗ an agent handler has no actor\n\non call bump() -> Effect[Int] {                // ✓ the service in front of it holds the `by`",
+  "severity": "error",
+  "summary": "A `by` actor clause was placed on an agent `on call` handler, which has no actor."
+}

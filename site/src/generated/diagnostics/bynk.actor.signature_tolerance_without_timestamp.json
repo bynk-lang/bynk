@@ -1,0 +1,10 @@
+{
+  "blurb": "`tolerance` is how many seconds old a signed request may be before it is refused, which limits replay of a captured one. The age is read from a timestamp header, so `tolerance` needs `timestamp = \"…\"` naming it; alone it has nothing to compare against. Add the `timestamp`, or drop `tolerance` and accept that a captured request can be replayed.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signature_tolerance_without_timestamp",
+  "constructs": [],
+  "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\", tolerance = 300) }   // ✗ age of what?\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\", timestamp = \"X-Time\", tolerance = 300) }   // ✓",
+  "severity": "error",
+  "summary": "A `Signature` actor set `tolerance` without a `timestamp` header."
+}

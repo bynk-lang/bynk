@@ -1,0 +1,12 @@
+{
+  "blurb": "`is` tests a value's variant or refined type, not its value, so `x is 31` would read as a type test while meaning equality. Bynk refuses it rather than let the two readings blur. Compare with `==` instead. In a `match`, a literal is a fine pattern, because a `match` arm tests a value there.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.is_literal_pattern",
+  "constructs": [
+    "is_expr"
+  ],
+  "example": "fn thirty(x: Int) -> Bool {\n    x is 31           // ✗ `is` tests a type, not a value\n}\n\nfn thirty(x: Int) -> Bool {\n    x == 31           // ✓\n}",
+  "severity": "error",
+  "summary": "A literal was used on the right of `is`; `is` tests type/refinement, not value equality (use `==`)."
+}

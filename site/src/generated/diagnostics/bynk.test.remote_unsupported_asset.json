@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.remote_unsupported_asset",
+  "constructs": [
+    "case"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A `system` case fetches an asset with `svc.GET(asset)`, which a run against a real runtime (`bynk test --against`) can't honour: the fetch is answered in process."
+}

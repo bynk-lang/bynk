@@ -72,7 +72,9 @@ pub use bynk_emit::emit_model::{
     RemoteTests, TestLocation, WORKER_ASSETS_DIR, is_worker_asset_path, is_worker_migration_path,
     node_wasm_shim, sibling_path, wasm_shim_path, worker_assets_dir,
 };
-pub use entry::{D1SqlRef, EmailForward, ProjectCheck, check_project, compile_project};
+pub use entry::{
+    D1SqlRef, EmailForward, ProjectCheck, check_project, compile_project, parse_own_units,
+};
 pub use in_memory::{
     InMemoryAnalysis, InMemoryProjectAnalysis, analyse_in_memory, analyse_in_memory_project,
     analyse_in_memory_with_types, compile_files_in_memory, compile_files_in_memory_locked,

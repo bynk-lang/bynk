@@ -1,0 +1,12 @@
+{
+  "blurb": "In a list pattern the `..` (or `..rest`) stands for the elements the pattern does not name, and it must be the last element and appear once. A pattern that matches the end of a list, such as `[.., last]`, is not available, so match from the front. When only `_` patterns follow the `..`, the error offers a machine-applicable fix that moves it to the end.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.list_rest_not_last",
+  "constructs": [
+    "list_pattern"
+  ],
+  "example": "match xs {\n    [.., a, b] => b    // ✗ `..` must come last\n    [_, b, ..] => b    // ✓ match from the front\n    _ => 0\n}",
+  "severity": "error",
+  "summary": "A `..` in a list pattern is not the final element; suffix forms such as `[.., last]` are not available."
+}

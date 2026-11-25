@@ -337,10 +337,7 @@ fn a_par_join_in_an_agent_handler_adds_no_interleaving() {
         "expected {dir:?}"
     );
 
-    // A port band clear of the other workerd tests' (20_000 and up; see the notes in
-    // `callee_faulted_workerd.rs`).
-    let base = 10_000 + 2 * (std::process::id() % 4_000) as u16;
-    let (port, inspector) = (base, base + 1);
+    let [port, inspector] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let spawned = (|| -> std::io::Result<wrangler::Wrangler> {
         let out_log = fs::File::create(&log_path)?;

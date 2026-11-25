@@ -1,0 +1,12 @@
+{
+  "blurb": "A case reaches a service through the address its protocol has. `svc.call(…)` runs an `on call` handler, so it needs one; a `from http` service is driven by route (`api.POST(\"/items\", body)`), a `from cron` service by its schedule, a `from queue` service by message. Use the address the service has. The Book's table of addresses lists each.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.service_no_call_handler",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nservice api from http { … }\n\n// tests/api.test.bynk\nlet r <- api.call(\"x\")                      // ✗ no `on call` handler\nlet r <- api.POST(\"/items\", \"x\") by Visitor // ✓ its route",
+  "severity": "error",
+  "summary": "A test body invokes `svc.call(...)` on a service with no `on call` handler (a `from http`/`cron`/`queue` service)."
+}

@@ -46,6 +46,7 @@ pub mod fmt;
 pub mod http_client;
 #[cfg(windows)]
 pub mod job;
+pub mod lock;
 pub mod logs;
 pub mod mcp;
 pub mod migrate;

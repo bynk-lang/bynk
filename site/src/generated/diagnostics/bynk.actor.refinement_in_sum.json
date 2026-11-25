@@ -1,0 +1,10 @@
+{
+  "blurb": "A refinement actor has its base's scheme and only narrows it, and peers of a sum are told apart by scheme, so it can't stand beside its base as another choice. Name the base as the peer and test the extra condition in its arm, or give the refined route its own `by who: Admin`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.refinement_in_sum",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\nactor Admin = User where hasClaim(\"admin\")\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Admin {   // ✗ `Admin` refines `User`\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Admin {   // ✓ its own route",
+  "severity": "error",
+  "summary": "A refinement actor appears as a member of a multi-actor sum."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "An `Int` is a JavaScript safe integer, from -(2^53 - 1) to 2^53 - 1 (±9007199254740991), the range the runtime holds exactly; a larger literal would round silently. The sign is a separate operator, so the size of the digits decides. For a larger value use a `Float` if rounding is acceptable, or a `String` for the exact digits.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.integer_overflow",
+  "constructs": [
+    "number_literal"
+  ],
+  "example": "const Big: Int = 9007199254740993    // ✗ past 2^53 - 1\nconst Big: Int = 9007199254740991    // ✓ the largest `Int`",
+  "severity": "error",
+  "summary": "An integer literal is outside the `Int` range, the JS safe integers ±(2^53 − 1)."
+}

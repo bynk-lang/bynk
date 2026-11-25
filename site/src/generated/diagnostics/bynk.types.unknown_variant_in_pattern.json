@@ -1,0 +1,12 @@
+{
+  "blurb": "A pattern on a sum value can only name the variants its type declares, so `Square(side)` against a `Shape` with no `Square` could never match and is refused. This is usually a typo, a variant that was never added, or a value of a different type from the one intended. Fix the name, add the variant to the type, or match on the right value. A pattern of the wrong kind altogether is `bynk.types.pattern_type_mismatch`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.unknown_variant_in_pattern",
+  "constructs": [
+    "variant_pattern"
+  ],
+  "example": "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r\n        Square(side) => side    // ✗ `Shape` has no `Square`\n        Dot => 0\n    }\n}\n\nfn size(s: Shape) -> Int {\n    match s {\n        Circle(r) => r\n        Dot => 0    // ✓\n    }\n}",
+  "severity": "error",
+  "summary": "A pattern names a variant the sum type does not have."
+}

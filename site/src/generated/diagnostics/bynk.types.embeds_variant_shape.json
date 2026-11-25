@@ -1,0 +1,10 @@
+{
+  "blurb": "`embeds E as V` has `?` wrap an `E` error into `V`, so `V` must take exactly that: one payload field, of type `E`. A variant with a payload of another type, or with more or fewer fields, has nowhere to put the error. Give `V` a single field of type `E`, or embed a different variant.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.embeds_variant_shape",
+  "constructs": [],
+  "example": "type OrderError =\n    | Payment(reason: String)\n    embeds PayError as Payment    // ✗ the payload is a `String`\n\ntype OrderError =\n    | Payment(reason: PayError)\n    embeds PayError as Payment    // ✓",
+  "severity": "error",
+  "summary": "An `embeds E as V` target variant must have exactly one payload field, of type `E`."
+}

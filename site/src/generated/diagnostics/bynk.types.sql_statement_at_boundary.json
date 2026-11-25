@@ -1,0 +1,10 @@
+{
+  "blurb": "A `SqlStatement`, `PgStatement` or `MySqlStatement` is a statement a database capability runs, whose SQL the compiler requires to be a literal, so that request data is only ever bound as a parameter. One restored from storage or received from a caller would carry SQL that was never a literal, so it is refused as a record, sum or event field, an agent store field, a handler parameter or result, or a `Json` codec target. A capability operation's signature may name one. Keep or send the values instead, and build the statement where it runs.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.sql_statement_at_boundary",
+  "constructs": [],
+  "example": "type Job = {\n    statement: SqlStatement,    // ✗ SQL that was never a literal\n}\n\ntype Job = {\n    id: String,                 // ✓ send the value, build the statement where it runs\n}",
+  "severity": "error",
+  "summary": "A `bynk.cloudflare` `SqlStatement`, `PgStatement` or `MySqlStatement` appears in a storable or boundary-crossing position, or as a `Json` codec target — a statement from outside would carry SQL that was never a literal (standard-library P4c)."
+}

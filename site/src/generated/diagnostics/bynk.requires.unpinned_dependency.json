@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter's `requires` states the npm versions its binding is written against, and the build installs exactly what it says. `*`, `x`, `latest` and a range with no digit in it accept whatever version is newest on the day, so two builds of the same source can differ. Name a range that has a version in it, such as `^5.2.0`.",
+  "category": "npm requirements",
+  "categoryAnchor": "npm-requirements",
+  "code": "bynk.requires.unpinned_dependency",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "binding \"./tokens.binding.ts\" requires { \"jose\": \"*\" }        // ✗ any version at all\n\nbinding \"./tokens.binding.ts\" requires { \"jose\": \"^5.2.0\" }   // ✓ a pinned range",
+  "severity": "error",
+  "summary": "An adapter `binding … requires { … }` entry has an unpinned version range."
+}

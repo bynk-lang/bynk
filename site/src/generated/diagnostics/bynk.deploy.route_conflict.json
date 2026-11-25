@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group folds its members into one Worker, which answers each HTTP method and path with one handler. Two members that declare the same method and path would give the Worker two handlers for one request, so the later one is refused. Change one of the routes, often by giving each context a path prefix of its own, or put the contexts in different groups. Within one context the same clash is `bynk.http.duplicate_route`.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.route_conflict",
+  "constructs": [],
+  "example": "// bynk.toml\n[deploy.workers.core]\ncontexts = [\"shop.orders\", \"shop.billing\"]\n\n// shop/orders.bynk\non GET(\"/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }\n\n// shop/billing.bynk\non GET(\"/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }           // ✗ `shop.orders` answers `GET /status`\non GET(\"/billing/status\") () -> Effect[HttpResult[String]] by who: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "Two members of one `[deploy.workers.<key>]` group declare the same HTTP method and path; a Worker answers a route with one handler."
+}

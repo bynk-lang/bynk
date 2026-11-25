@@ -790,14 +790,18 @@ pub(super) fn emit_websocket_upgrade(
                         method_call(
                             ident("globalThis.JSON"),
                             "stringify",
-                            vec![TsExpr::object(vec![
-                                ("kind".to_string(), str_lit("RefinementViolation")),
-                                ("path".to_string(), str_lit(format!("param.{pn}"))),
-                                (
-                                    "violation".to_string(),
-                                    member(ident(r_name.clone()), "error"),
-                                ),
-                            ])],
+                            // #4278: never the offending value on the wire.
+                            vec![call(
+                                ident("__wireRefusal"),
+                                vec![TsExpr::object(vec![
+                                    ("kind".to_string(), str_lit("RefinementViolation")),
+                                    ("path".to_string(), str_lit(format!("param.{pn}"))),
+                                    (
+                                        "violation".to_string(),
+                                        member(ident(r_name.clone()), "error"),
+                                    ),
+                                ])],
+                            )],
                         ),
                         TsExpr::object(vec![
                             ("status".to_string(), num_lit("400")),

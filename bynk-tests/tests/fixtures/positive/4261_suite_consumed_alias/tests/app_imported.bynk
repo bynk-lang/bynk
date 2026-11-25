@@ -1,0 +1,8 @@
+suite app
+
+consumes shapes { Code }
+
+case "a suite that imports the declared name checks the result" {
+  expect tag("ABC") is Ok(_)
+  expect tag("abc") is Err(_)
+}

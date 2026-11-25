@@ -1,0 +1,12 @@
+{
+  "blurb": "A type or capability is exported once. Naming it again in a second `exports` clause with the same visibility adds nothing, and usually means a clause was pasted twice, or a name was meant for another one. Delete the repeat. Within a single clause the repeat is `bynk.exports.duplicate_in_clause`, and the same type under both `opaque` and `transparent` is `bynk.exports.conflicting_visibility`.",
+  "category": "Exports",
+  "categoryAnchor": "exports",
+  "code": "bynk.exports.duplicate_export",
+  "constructs": [
+    "exports_decl"
+  ],
+  "example": "exports transparent { Order }\nexports transparent { Order }    // ✗ already exported above\n\ntype Order = { total: Int }\n\nexports transparent { Order }    // ✓ exported once",
+  "severity": "error",
+  "summary": "The same name is exported more than once."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.string.deprecated_function",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `bynk.string` free function is deprecated in favour of the `List[String]` method form (warning; auto-fixable)."
+}

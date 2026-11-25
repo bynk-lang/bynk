@@ -1,0 +1,12 @@
+{
+  "blurb": "`Some(v)` takes its type from the surrounding `Option[T]`, the annotation or the function's return type, so `Some(\"a\")` where `T` is `Int` is refused at the value, with no conversion. Pass a `T`, or change the declared type. With nothing to say what the `Option` holds, a bare `None` is `bynk.types.cannot_infer_option_type_param`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.some_value_mismatch",
+  "constructs": [
+    "some_expr"
+  ],
+  "example": "fn first() -> Option[Int] {\n    Some(\"a\")    // ✗ a `String`, where `Int` is expected\n}\n\nfn first() -> Option[Int] {\n    Some(1)    // ✓\n}",
+  "severity": "error",
+  "summary": "A `Some` payload has the wrong type."
+}

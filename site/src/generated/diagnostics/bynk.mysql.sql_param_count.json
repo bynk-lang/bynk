@@ -1,0 +1,10 @@
+{
+  "blurb": "When the project has a `schema.sql`, Bynk counts the parameters of each literal `MySql` statement: each `?` takes the next value. It checks a list written out in place, or a name `let`-bound to one. A `?` inside a single-quoted string literal, a backtick-quoted name or a comment (`-- ` or `/* … */`) is text, not a parameter, as the driver reads it; the driver does not skip a double-quoted string or a `#` comment, so a `?` in one is counted, and string literals are written with single quotes. Pass one `MySqlValue` for each `?`, or change the SQL. `??`, which mysql2 reads as an identifier placeholder, is counted as two parameters and is not supported.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.mysql.sql_param_count",
+  "constructs": [],
+  "example": "let _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id)])                    // ✗ two parameters, one value\n\nlet _ <- Legacy.all(\"SELECT id FROM orders WHERE id = ? AND qty > ?\", [MySqlInteger(id), MySqlInteger(5)])    // ✓",
+  "severity": "error",
+  "summary": "A literal `MySql` statement has a different number of `?` placeholders than the list literal passed with it holds, in a project that has a `schema.sql`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`joinOn` and `leftJoin` pair up rows whose two keys are equal, and equality is only meaningful between values of one type. A `String` key on one side and an `Int` on the other can never match, so the join is refused. Change one key function so that both return the same type. A join on a condition rather than equal keys is `join`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.query.join_key_mismatch",
+  "constructs": [],
+  "example": "type Order = { customerId: String, region: Int }\ntype Customer = { code: String, region: Int }\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.region, (o, c) => c.region).count()   // ✗ `String` against `Int`\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.code, (o, c) => c.region).count()     // ✓ both `String`",
+  "severity": "error",
+  "summary": "A `joinOn`/`leftJoin` left and right key function return different types."
+}

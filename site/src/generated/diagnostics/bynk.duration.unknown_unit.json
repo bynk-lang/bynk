@@ -1,0 +1,10 @@
+{
+  "blurb": "An integer literal has no fields, so a word after one (`5.hr`) is always read as the unit of a `Duration` literal. The units are `millisecond(s)`, `second(s)`, `minute(s)`, `hour(s)` and `day(s)`; there is no `week`. The diagnostic lists them and suggests the nearest one. Write the unit out in full, in the form that agrees with the number (`1.hour`, `5.hours`).",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.duration.unknown_unit",
+  "constructs": [],
+  "example": "fn wait() -> Duration { 5.hr }        // ✗ `hr` is not a unit\n\nfn wait() -> Duration { 5.hours }     // ✓",
+  "severity": "error",
+  "summary": "An integer literal is followed by a word that is not a `Duration` unit."
+}

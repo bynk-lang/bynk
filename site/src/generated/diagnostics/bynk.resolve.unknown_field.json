@@ -1,0 +1,12 @@
+{
+  "blurb": "A record construction names a field the record type does not declare. A record's fields are fixed by its type declaration, and a literal may set only those. This is usually a typo in the field name, or a field meant for a different type. Reading a field a value does not have is the sibling code `bynk.types.unknown_field`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.unknown_field",
+  "constructs": [
+    "record_construction"
+  ],
+  "example": "type User = { name: String, age: Int }\n\nUser { name: \"Ada\", age: 36, admin: true }   // ✗ no field `admin`\nUser { name: \"Ada\", age: 36 }                // ✓ only the declared fields",
+  "severity": "error",
+  "summary": "A record construction names a field the record type does not declare."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `migrate` step carries a stored record from an older schema version to the agent's current shape, so it belongs with the agent's storage and invariants, above the handlers that read the migrated state. One written after a handler is refused. Move it above the first handler. `bynk.parse.invariant_after_handler` and `bynk.parse.transition_after_handler` are the same rule for invariants and transitions.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.migrate_after_handler",
+  "constructs": [],
+  "example": "type CartV1 = { owner: String, total: Int }\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    on call cents() -> Effect[Int] { … }\n\n    migrate from 1 (old: CartV1) {            // ✗ after a handler\n        ownerName := old.owner\n        totalCents := old.total * 100\n    }\n}\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    migrate from 1 (old: CartV1) {            // ✓ before the handlers\n        ownerName := old.owner\n        totalCents := old.total * 100\n    }\n\n    on call cents() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "A `migrate` step is declared after an agent handler; migration steps precede the handlers."
+}

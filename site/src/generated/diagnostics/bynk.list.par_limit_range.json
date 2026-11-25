@@ -1,0 +1,10 @@
+{
+  "blurb": "The `limit` of a `ParOptions` bounds how many steps of `parForEachWith`, `parTraverseWith`, `parTraverseAllWith` or `parTraverseTryWith` are in flight at once. It must be a whole number from 1 to 1000: zero or a negative bound would never start a step, and a bound above 1000 is past what a single invocation can usefully hold open (connection and subrequest limits). The check applies when the limit is a literal or a constant; a limit computed at run time faults the call instead. Pick a value in range, or use the plain form (`parForEach`, `parTraverse`, …) for an unbounded fan-out.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.list.par_limit_range",
+  "constructs": [],
+  "example": "xs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 0 })     // ✗ out of range\n\nxs.parForEachWith((x: Int) => Effect.pure(()), ParOptions { limit: 8 })     // ✓ at most 8 in flight",
+  "severity": "error",
+  "summary": "A `ParOptions` `limit` that is statically known is outside 1 to 1000."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Connection` is a held resource, built and disposed of in place, so it is never stored or sent: it cannot be a record, sum or event field, or part of a service or agent handler signature. An agent may keep one in its own state, as `Cell[Option[Connection[F]]]` or `Map[K, Connection[F]]`. Keep it there, and pass what you need from it, not the connection.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.held_at_boundary",
+  "constructs": [],
+  "example": "type Session = {\n    conn: Connection[Frame],    // ✗ a held resource is not a field\n}\n\nagent Room {\n    key id: String\n\n    store conns: Map[String, Connection[Frame]]    // ✓ held in agent state\n}",
+  "severity": "error",
+  "summary": "A held value (`Connection[F]`) appears in a serialisable or boundary position — a held resource is built and disposed in place, never persisted or sent across a boundary (§2.9, real-time track slice 2)."
+}

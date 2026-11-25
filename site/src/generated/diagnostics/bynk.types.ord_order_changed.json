@@ -1,0 +1,10 @@
+{
+  "blurb": "A `derives Ord` type orders by declaration order: a record by its fields in turn, a sum or enum by its variants and then their payloads. Moving a field or variant changes how every value of the type sorts, and nothing else would notice, so bynk.schema.lock records the order of each of the project's `derives Ord` types under `[orders]` and a build that finds a different one fails until the change is accepted. Swapping two existing fields or variants, or inserting one anywhere but the end, is a change; adding at the end, removing, and renaming in place are not, and the lock follows them. If the new order is intended, run `bynk lock accept-order <Type>` (or `--all`) and commit the lock with the change; otherwise put the declaration back.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.ord_order_changed",
+  "constructs": [],
+  "example": "// tasks.bynk, with `Priority` recorded as Low < Medium < High\ntype Priority = enum { High, Low, Medium } derives Ord    // ✗ the order changed\n\ntype Priority = enum { Low, Medium, High } derives Ord    // ✓ the recorded order",
+  "severity": "error",
+  "summary": "A `derives Ord` type's field or variant order differs from the one `bynk.schema.lock` records under `[orders]`, so every sort, comparison, `min` and `max` on it would change; accept it with `bynk lock accept-order`."
+}

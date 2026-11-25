@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler's `query` parameter is the request's query string, and the router offers two ways to take it: a record type, which it decodes and validates, answering `400` when the string does not fit, or `RequestQuery`, the raw view. Any other type is refused. Declare the keys you expect as a record, or take `RequestQuery`. The record's fields are held to `bynk.http.query_field_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.query_wrong_type",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/items\") (query: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `query` is a record or `RequestQuery`\n\ntype Filter = { tag: Option[String] }\non GET(\"/items\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`."
+}

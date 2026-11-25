@@ -28,6 +28,16 @@ export type BoundaryError =
     }
   | { readonly kind: "Transport"; readonly status: number; readonly details: string };
 
+// #4278: a refinement violation as it goes on the wire in a `400`: the field and the message,
+// never the offending value. A rejected password failing `MinLength` must not be echoed back, so
+// `value` stays runtime-only. Applied to the body of every JSON `400` the generated handlers
+// answer; any body that is not a `RefinementViolation` passes through untouched.
+export function wireRefusal(body: Record<string, unknown>): Record<string, unknown> {
+  const violation = body.violation as ValidationError | undefined;
+  if (body.kind !== "RefinementViolation" || violation === undefined) return body;
+  return { ...body, violation: { field: violation.field, message: violation.message } };
+}
+
 // v0.177 (#643): the deployed callee's compiled contract is not the one this
 // caller was compiled against — a deploy skew, not a bad payload. The callee
 // reports it as a 409 *before* reading the body, since once the contracts
@@ -795,5 +805,5 @@ export function deserialiseEventEnvelope(
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { boundaryError as __boundaryError, callOutcome as __callOutcome, callService as __callService, callServiceOutcome as __callServiceOutcome, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall };
+export { boundaryError as __boundaryError, callOutcome as __callOutcome, callService as __callService, callServiceOutcome as __callServiceOutcome, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall, wireRefusal as __wireRefusal };
 export type { BoundaryError as __BoundaryError, JsonValue as __JsonValue, ServiceBinding as __ServiceBinding };

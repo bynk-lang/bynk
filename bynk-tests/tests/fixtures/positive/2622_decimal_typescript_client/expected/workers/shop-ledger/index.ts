@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkDecimalParseWire, __bynkDecimalToString } from "../../__bynk_runtime/decimal.js";
-import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -29,7 +29,7 @@ export default {
         const __body = await __verifyCall(request, env, "shop.ledger", __FOREIGN_CALLERS);
         if (typeof __body !== "string") return __body;
         const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
+        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
           case "charge": {
@@ -45,15 +45,15 @@ export default {
             try {
               args = globalThis.JSON.parse(__body) as __JsonValue;
             } catch {
-              return new globalThis.Response(globalThis.JSON.stringify({ kind: "MalformedJson", details: "Invalid request body" }), { status: 400, headers: { "content-type": "application/json" } });
+              return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } });
             }
-            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args }), { status: 400, headers: { "content-type": "application/json" } });
+            if (typeof args !== "object" || args === null || globalThis.Array.isArray(args)) return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "StructuralMismatch", path: "$", expected: "object", actual: typeof args })), { status: 400, headers: { "content-type": "application/json" } });
             const argsObj = args as { [k: string]: __JsonValue };
             const __r_c = handlers.__deserialise_Charge(argsObj["c"], "$.c");
-            if (__r_c.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_c.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_c.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_c.error)), { status: 400, headers: { "content-type": "application/json" } });
             const c = __r_c.value;
             const __r_tip = ((__v) => typeof __v === "string" ? ((__b) => __b.tag === "Some" ? Ok(__b.value) : Err({ kind: "StructuralMismatch", path: "$.tip", expected: "decimal string", actual: "invalid decimal" } as __BoundaryError))(__bynkDecimalParseWire(__v)) : Err({ kind: "StructuralMismatch", path: "$.tip", expected: "decimal string", actual: typeof __v } as __BoundaryError))(argsObj["tip"]);
-            if (__r_tip.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__r_tip.error), { status: 400, headers: { "content-type": "application/json" } });
+            if (__r_tip.tag === "Err") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_tip.error)), { status: 400, headers: { "content-type": "application/json" } });
             const tip = __r_tip.value;
             const result = await surface.charge(c, tip);
             const body = __bynkDecimalToString(result) as __JsonValue;

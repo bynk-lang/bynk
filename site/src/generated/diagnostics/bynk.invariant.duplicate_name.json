@@ -1,0 +1,10 @@
+{
+  "blurb": "Invariants are named so that a violation can say which one was broken. Two with the same name in one agent would make that report ambiguous. Rename one, or merge the two predicates if they are one claim. The same rule for steps is `bynk.transition.duplicate_name`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.invariant.duplicate_name",
+  "constructs": [],
+  "example": "invariant bounded: count >= 0\ninvariant bounded: count < 100   // ✗ `bounded` is already declared\n\ninvariant capped: count < 100    // ✓ a distinct name",
+  "severity": "error",
+  "summary": "An agent declares two invariants with the same name."
+}

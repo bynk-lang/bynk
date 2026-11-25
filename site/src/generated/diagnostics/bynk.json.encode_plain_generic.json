@@ -1,0 +1,10 @@
+{
+  "blurb": "`Json.encodePlain` writes an `Option` as its value or `null`, which it can do only when it knows the type. A generic function is compiled once for every `T`, and encodes through its `Codable` witness, which always writes `Option` in the tagged form `{\"kind\":\"Some\",…}`. Encode at a concrete type, or use `Json.encode` if the tagged form will do. A concrete type that is ambiguous in plain form is `bynk.json.nested_option_plain`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.json.encode_plain_generic",
+  "constructs": [],
+  "example": "fn plain[T: Codable](v: T) -> String { Json.encodePlain(v) }   // ✗ `T` could be an `Option`\n\nfn plain(v: Option[Int]) -> String { Json.encodePlain(v) }     // ✓ a concrete type",
+  "severity": "error",
+  "summary": "`Json.encodePlain` is given a value whose type mentions a type parameter. A generic value encodes through its `Codable` witness, which always writes `Option` in the tagged form, so plain encoding is available only at a concrete type."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`consumes payment { Gateway }` brings `Gateway` in by its bare name, so that `given Gateway` reads it. If the context already declares a capability of that name, or a second consumed unit supplies one, the bare name would mean two things. Reach it qualified instead, `given payment.Gateway`, rename the local one, or consume the unit under an alias instead of selecting names from it, `consumes payment as pay`, and write `given pay.Gateway`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.capability_name_clash",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop.bynk\ncontext shop\n\nconsumes payment { Gateway }    // ✗ this context declares a `Gateway` too\n\ncapability Gateway {\n    fn notify() -> Effect[()]\n}\n\nconsumes payment                // ✓ reach it as `payment.Gateway`",
+  "severity": "error",
+  "summary": "Two flattened `consumes U { Cap }` capabilities collide, or one clashes with a local capability."
+}

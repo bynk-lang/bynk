@@ -1,0 +1,12 @@
+{
+  "blurb": "`within` hands the effect it abandons on a timeout to the execution context, and only an effectful body has one: a pure function never runs an effect at all. Change the enclosing function's return type to `Effect[…]` so its body can run it. The same rule holds for `bynk.race.in_pure_context`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.within.in_pure_context",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn bounded(e: Effect[Int]) -> Int {\n    let r = e.within(1.second)   // ✗ the body is pure\n    0\n}\n\nfn bounded(e: Effect[Int]) -> Effect[Result[Int, TimedOut]] {   // ✓ an effectful body\n    e.within(1.second)\n}",
+  "severity": "error",
+  "summary": "`e.within(d)` was used in a pure (non-effectful) context."
+}

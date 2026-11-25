@@ -1,0 +1,2 @@
+bynk.types.method_arity
+0 arguments, or 1 (a predicate)

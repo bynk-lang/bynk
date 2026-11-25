@@ -1,0 +1,10 @@
+{
+  "blurb": "`@raw` takes one argument, `contentType:`, the media type the route accepts. The set is closed, so a misspelt or invented argument is refused rather than ignored, which would leave the route behaving otherwise than you wrote. A size ceiling is not an argument of `@raw`: it is a separate `@limit(maxBody: …)`. Remove the argument. A bad `contentType` is `bynk.http.raw_bad_content_type`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.raw_unknown_arg",
+  "constructs": [],
+  "example": "@raw(contentType: \"image/png\", maxSize: 10)   // ✗ not an argument of `@raw`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"image/png\")                // ✓\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@raw` annotation has an argument outside the closed set (`contentType`)."
+}

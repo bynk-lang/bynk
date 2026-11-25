@@ -1,0 +1,10 @@
+{
+  "blurb": "A capability you `export` is built by each context that consumes it, in that context's own Worker. A provider that reaches `EdgeCache` would purge from there, and a purge reaches only the cache of the Worker it runs in, so this context's cache would keep the stale response. Keep the capability inside the context and have a service route do the purge, which another context can reach by calling that service.",
+  "category": "Cloudflare",
+  "categoryAnchor": "cloudflare",
+  "code": "bynk.cloudflare.edge_cache_exported",
+  "constructs": [],
+  "example": "exports capability { Takedown }\n\ncapability Edge = EdgeCache\n\ncapability Takedown {   // ✗ exported, but its provider purges through `Edge`\n    fn take(path: String) -> Effect[Bool]\n}\n\nprovides Takedown = Purging given Edge {\n    fn take(path: String) -> Effect[Bool] {\n        Edge.purge([path])\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+  "severity": "error",
+  "summary": "An exported capability reaches an `EdgeCache` instance through its provider's `given`; a consuming context would build it in its own Worker, whose purge misses this one's cache."
+}

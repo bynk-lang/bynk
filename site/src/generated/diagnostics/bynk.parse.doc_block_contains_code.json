@@ -1,0 +1,10 @@
+{
+  "blurb": "A line of three or more dashes opens or closes a documentation block, so two dash lines turn the code between them into documentation, and it is never compiled. Use a line comment for a divider. To show code in a documentation block, put it in a Markdown code fence.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.doc_block_contains_code",
+  "constructs": [],
+  "example": "--------                             // ✗ opens a doc block, not a divider\nfn double(n: Int) -> Int { n * 2 }\n--------\nfn triple(n: Int) -> Int { n * 3 }\n\n---\nDoubles a number.                    // ✓ a doc block holds prose\n---\nfn double(n: Int) -> Int { n * 2 }",
+  "severity": "error",
+  "summary": "A documentation block's content (outside Markdown code fences) parses as declarations, so a pair of dash dividers has turned code into documentation."
+}

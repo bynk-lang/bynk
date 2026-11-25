@@ -1,0 +1,10 @@
+{
+  "blurb": "A declaration or member has one doc. Two doc lines in a row are two docs, not one of two lines. For more than one line, write a doc block: a `---` line, the text, and another `---` line. When every doc is a one-line `--- text`, the fix that joins them into a block is machine-applicable, so `bynk check --fix` applies it.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.multiple_docs",
+  "constructs": [],
+  "example": "--- Doubles a number.\n--- Used by the pricing code.          // ✗ a second doc\nfn double(n: Int) -> Int { n * 2 }\n\n---                                    // ✓ one doc block\nDoubles a number.\nUsed by the pricing code.\n---\nfn double(n: Int) -> Int { n * 2 }",
+  "severity": "error",
+  "summary": "A declaration or member has two docs directly above it; a target has one doc, so a doc of more than one line is a `---` block."
+}

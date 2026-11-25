@@ -1,0 +1,10 @@
+{
+  "blurb": "`RequestHeaders` is the view of one request's headers, given to the handler that is answering it. It is read there and dropped: headers can carry credentials such as `Authorization`, and a copy kept or sent on would outlive the request. It is accepted only as an HTTP handler's `headers` parameter, and refused as a record, sum or event field, an agent key or store field, a capability operation, or any other handler parameter or result. Read the header you need (`headers.get(\"…\")`) and keep that `String`. See also `bynk.types.request_query_at_boundary`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.headers_at_boundary",
+  "constructs": [],
+  "example": "type Seen = {\n    headers: RequestHeaders,    // ✗ a request's headers are not data to keep\n}\n\ntype Seen = {\n    userAgent: String,          // ✓ keep the value you read\n}",
+  "severity": "error",
+  "summary": "`RequestHeaders` appears where a value is stored or sent: a field of a type, or a boundary such as a call, a message or an agent."
+}

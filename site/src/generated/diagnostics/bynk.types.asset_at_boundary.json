@@ -1,0 +1,10 @@
+{
+  "blurb": "An `Asset` names a file the platform serves; it is not data to keep or send. So an `Asset` cannot be a record field, a sum payload, an event field, an agent key or store field, or part of a service or agent handler signature. What crosses is its `.url`, a `String`: hold that instead. Other types refused there include `bynk.types.function_at_boundary` and `bynk.types.held_at_boundary`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.asset_at_boundary",
+  "constructs": [],
+  "example": "type Page = {\n    title: String,\n    style: Asset,     // ✗ an asset is not a value to hold\n}\n\ntype Page = {\n    title: String,\n    style: String,    // ✓ keep its `.url`\n}",
+  "severity": "error",
+  "summary": "An `Asset` type appears in a record field, boundary or store position; pass its `.url` instead."
+}

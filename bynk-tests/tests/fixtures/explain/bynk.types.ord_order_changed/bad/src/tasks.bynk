@@ -1,0 +1,3 @@
+commons tasks
+
+type Priority = enum { High, Low, Medium } derives Ord

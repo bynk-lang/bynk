@@ -1,0 +1,12 @@
+{
+  "blurb": "Comparisons (`<`, `<=`, `>`, `>=`) and equality tests (`==`, `!=`) do not chain, so `a < b < c` is refused rather than given a reading you may not have meant. Split a chain of comparisons with `&&`; to test the result of an equality, parenthesise it: `(a == b) == c`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.non_associative",
+  "constructs": [
+    "binary_expr"
+  ],
+  "example": "fn ordered(a: Int, b: Int, c: Int) -> Bool {\n    a < b < c         // ✗ comparisons do not chain\n}\n\nfn ordered(a: Int, b: Int, c: Int) -> Bool {\n    a < b && b < c    // ✓ one comparison on each side of `&&`\n}",
+  "severity": "error",
+  "summary": "A non-associative operator was chained (e.g. `a == b == c`)."
+}

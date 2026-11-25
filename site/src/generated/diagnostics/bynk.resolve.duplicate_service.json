@@ -1,0 +1,12 @@
+{
+  "blurb": "A service is called by its name, and the name is one of the unit's top-level names, so two services of one name leave a call with nothing to choose between. Rename one, or delete the repeat. The same holds for the other named declarations: `bynk.resolve.duplicate_agent`, `bynk.resolve.duplicate_actor`, `bynk.resolve.duplicate_capability` and `bynk.resolve.duplicate_provider`, and for the entries of a message bundle, `bynk.resolve.duplicate_message_code` and `bynk.resolve.duplicate_message_locale`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_service",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service orders { … }\nservice orders { … }     // ✗ `orders` is already declared\n\nservice refunds { … }    // ✓ a name of its own",
+  "severity": "error",
+  "summary": "Two services share a name."
+}

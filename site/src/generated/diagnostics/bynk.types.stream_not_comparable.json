@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Stream` is a source of values over time, read once, so two of them have no value to compare. `==` on one, or on a type that holds one, is refused. Read the streams first, with `collect`, and compare the lists, or compare the data each was built from. Functions and effects have `bynk.types.not_comparable`, and a held connection has `bynk.types.held_not_comparable`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.stream_not_comparable",
+  "constructs": [],
+  "example": "fn same(a: Stream[Int], b: Stream[Int]) -> Bool {\n    a == b                            // ✗ a stream has no value to compare\n}\n\nfn same(a: Stream[Int], b: Stream[Int]) -> Effect[Bool] {\n    let xs <- a.collect()             // ✓ read them first\n    let ys <- b.collect()\n    Effect.pure(xs == ys)\n}",
+  "severity": "error",
+  "summary": "A `Stream` value is compared with `==`/`!=` — a stream is a live value-over-time source, not a comparable value (real-time track slice 0)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `migrate` step carries a stored record from an older schema version to the agent's current shape, so its body is only a list of what happens to each field: `field := value` assigns a current field, `let x = value` binds a local for later lines, and `drop field` discards a stored field on purpose. A step is pure, so nothing else belongs in it. The commonest mistake is `=` where `:=` is meant; a bare expression lands here too. The position is the first token of the line that is none of the three.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.migrate_item",
+  "constructs": [],
+  "example": "type CartV1 = { owner: String, total: Int }\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    migrate from 1 (old: CartV1) {\n        ownerName = old.owner                 // ✗ a step assigns with `:=`\n        totalCents := old.total * 100\n    }\n\n    on call cents() -> Effect[Int] { … }\n}\n\nagent Cart {\n    key id: String\n    store ownerName: Cell[String]\n    store totalCents: Cell[Int]\n\n    migrate from 1 (old: CartV1) {\n        ownerName := old.owner                // ✓\n        totalCents := old.total * 100\n    }\n\n    on call cents() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "A `migrate` step's body holds something other than `field := value`, `let` or `drop field`."
+}

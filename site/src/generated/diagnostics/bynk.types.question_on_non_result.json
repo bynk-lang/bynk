@@ -1,0 +1,12 @@
+{
+  "blurb": "`?` unwraps an `Ok` and returns early from the function on an `Err`, so it needs a `Result[T, E]`: a plain `Int` has no error to return. The one other operand it takes is an `Option`, in an `HttpResult` handler. Apply `?` to the call that produces the `Result`, not to a value already unwrapped. To turn an `Option` into a `Result` elsewhere, use `.okOr(err)`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.question_on_non_result",
+  "constructs": [
+    "question_expr"
+  ],
+  "example": "fn checked(n: Int) -> Result[Int, String] {\n    if n >= 0 { Ok(n) } else { Err(\"negative\") }\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = n?    // ✗ `n` is an `Int`, not a `Result`\n    Ok(v + 1)\n}\n\nfn run(n: Int) -> Result[Int, String] {\n    let v = checked(n)?    // ✓\n    Ok(v + 1)\n}",
+  "severity": "error",
+  "summary": "`?` was applied to a non-`Result` value."
+}

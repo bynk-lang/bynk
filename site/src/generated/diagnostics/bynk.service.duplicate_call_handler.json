@@ -1,0 +1,12 @@
+{
+  "blurb": "A service with no `from` clause is a call service with one entry: exactly one `on call` handler, which another context calls by the service's name (`payment.authorise(…)`) and a test addresses as `svc.call(…)`. A second would never run, since only one of the two can answer the call. To offer a second operation, declare a second service.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.duplicate_call_handler",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service greet {\n    on call(name: String) -> Effect[String] by Caller { … }\n    on call(name: String) -> Effect[String] by Caller { … }   // ✗ a second `on call`\n}\n\nservice greet {\n    on call(name: String) -> Effect[String] by Caller { … }   // ✓ one handler\n}\n\nservice farewell {                                  // ✓ a second operation is a second service\n    on call(name: String) -> Effect[String] by Caller { … }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `on call` handler; it has exactly one."
+}

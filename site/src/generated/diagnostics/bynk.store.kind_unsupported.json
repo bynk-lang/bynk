@@ -1,0 +1,10 @@
+{
+  "blurb": "`Queue` is a recognised storage kind but is not yet implemented. The working kinds are `Cell`, `Map`, `Set`, `Log` and `Cache`, so a `store` of any other known kind is refused. Use one of them: an append-only `Log` is the closest to a queue. A name that is no storage kind at all is `bynk.store.unknown_kind`.",
+  "category": "Agent storage",
+  "categoryAnchor": "agent-storage",
+  "code": "bynk.store.kind_unsupported",
+  "constructs": [],
+  "example": "store pending: Queue[Event]                 // ✗ not yet supported\n\nstore pending: Log[Event] @retain(30.days)   // ✓ an append-only sequence",
+  "severity": "error",
+  "summary": "A known storage kind (`Queue`) is used before the slice that supports it."
+}

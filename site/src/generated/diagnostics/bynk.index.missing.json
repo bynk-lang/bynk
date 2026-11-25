@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.index.missing",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A query filters a map by equality on a field that is not `@indexed` (a perf-hint warning)."
+}

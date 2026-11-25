@@ -1,0 +1,10 @@
+{
+  "blurb": "A `__Host-` cookie name tells the browser to keep the cookie only if it is `Secure`, host-only and `Path=/`, so a sibling subdomain cannot set or overwrite it. An unprefixed session cookie is open to cookie tossing from any subdomain, which is rarely intended. The default is `__Host-session`; drop `cookie` or give it a `__Host-` name.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_unprefixed",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours, cookie = \"session\"), identity = UserId }   // ⚠ not `__Host-`\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓ `__Host-session` by default",
+  "severity": "warning",
+  "summary": "A `SignedCookie` `cookie` does not start with `__Host-` (warning)."
+}

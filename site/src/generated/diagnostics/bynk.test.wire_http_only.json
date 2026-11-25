@@ -1,0 +1,12 @@
+{
+  "blurb": "`Wire(…)` delivers raw text to an http body or path segment. A queue message, a cron tick, an `on call` or an event has no raw text form: it is a typed value, and `Wire` would hand it to a typed decoder as a string and fail confusingly at run time. Pass the typed value. To drive an http route with raw text, see `bynk.test.wire_needs_system`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.wire_http_only",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nservice packer from queue(\"packing\") { … }\n\n// tests/api.test.bynk\nlet r <- packer.message(Wire(\"{}\"))   // ✗ a queue takes a typed message\nlet r <- packer.message(\"{}\")         // ✓",
+  "severity": "error",
+  "summary": "A `Wire(...)` raw argument is passed to a queue, cron, `on call` or event address; `Wire` drives an http body or path segment only, so a queue message, cron tick or event is passed as a typed value."
+}

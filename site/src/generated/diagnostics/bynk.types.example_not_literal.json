@@ -1,0 +1,12 @@
+{
+  "blurb": "`@example` takes exactly one literal of the refinement's base type. It is read where the type is declared, not evaluated, so a call such as `Code.of(\"ABC\")`, a name or a literal of another type is refused. Write the value itself, as a string for a `String` base.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.example_not_literal",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = String where Matches(\"[A-Z]{3}\") @example(Code.of(\"ABC\"))    // ✗ a call, not a literal\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")            // ✓\n\nconst Sample: String = \"ABC\"\ntype Tag = String where Matches(\"[A-Z]{3}\") @example(Sample)   // ✓ a `String` constant bound to a literal",
+  "severity": "error",
+  "summary": "An `@example` is not exactly one literal of the base type."
+}

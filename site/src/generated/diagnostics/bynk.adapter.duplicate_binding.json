@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter's `binding` names the one TypeScript module that supplies its external providers, so there is one clause. With two, the compiler would have no way to say which module a provider comes from. Merge them into one clause; the module it names can import whatever others it needs.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.duplicate_binding",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "adapter weather {\n    binding \"./station.binding.ts\"\n    binding \"./extra.binding.ts\"      // ✗ an adapter has one binding\n}\n\nadapter weather {\n    binding \"./station.binding.ts\"    // ✓ one clause\n}",
+  "severity": "error",
+  "summary": "An `adapter` declared more than one `binding` clause."
+}

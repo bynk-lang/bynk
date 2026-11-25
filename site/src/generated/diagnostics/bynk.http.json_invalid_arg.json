@@ -1,0 +1,10 @@
+{
+  "blurb": "`@json` has one argument, `options:`, whose value is the bare word `tagged` or `plain`: tagged writes `Option` as `{\"kind\": \"Some\", …}` (the default), and plain writes `Some(v)` as `v` and `None` as `null`. The annotation is refused with no `options`, or with any other value. Write `@json(options: plain)` or `@json(options: tagged)`. Another argument name is `bynk.http.json_unknown_arg`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.json_invalid_arg",
+  "constructs": [],
+  "example": "@json(options: compact)   // ✗ `tagged` or `plain`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)     // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@json` annotation's `options` argument is missing or is not `tagged` or `plain`."
+}

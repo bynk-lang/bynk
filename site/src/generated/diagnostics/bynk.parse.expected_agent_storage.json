@@ -1,0 +1,10 @@
+{
+  "blurb": "An agent exists to hold state, and its state is its `store` fields, so one with none is refused. Declare at least one. A `store` field has a kind such as `Cell`, `Map` or `Set`. An agent with storage but no handler is `bynk.parse.empty_agent`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_agent_storage",
+  "constructs": [],
+  "example": "agent Counter {                          // ✗ no `store` field\n    key id: String\n\n    on call get() -> Effect[Int] { … }\n}\n\nagent Counter {\n    key id: String\n    store n: Cell[Int]                   // ✓\n\n    on call get() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "An agent declares no storage — it has no `store` fields."
+}

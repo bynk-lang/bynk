@@ -1,0 +1,10 @@
+{
+  "blurb": "The value a function or handler body ends with does not have the declared return type, and the compiler compares the two exactly. Either change the body so it produces the declared type, or change the declared return type to match what the body produces. A refined type is the same rule with one extra step: an `Int` is not an `Age`, because `Age` carries a rule the `Int` has not been checked against. Build the refined value with `.of`, which checks the predicate and returns a `Result`, and declare that `Result` as the return type.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.return_mismatch",
+  "constructs": [],
+  "example": "fn count() -> Int { \"three\" }       // ✗ a `String` where an `Int` is declared\n\nfn count() -> Int { 3 }              // ✓ the body has the declared type\n\ntype Age = Int where InRange(0, 150)\n\nfn parse(n: Int) -> Age { n }                           // ✗ an `Int` is not an `Age`\n\nfn parse(n: Int) -> Result[Age, ValidationError] {      // ✓ checked by `.of`\n    Age.of(n)\n}",
+  "severity": "error",
+  "summary": "A returned value does not match the declared return type."
+}

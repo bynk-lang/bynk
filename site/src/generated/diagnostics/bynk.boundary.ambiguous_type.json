@@ -1,0 +1,10 @@
+{
+  "blurb": "A context can export a record whose field has a type it does not export. Reading that field through a value you got from it needs the field's type, and if two contexts you consume each declare a type of that name with different shapes, the compiler cannot tell which is meant. Rename one of the two so a name stands for one shape across the contexts you consume.",
+  "category": "Boundaries",
+  "categoryAnchor": "boundaries",
+  "code": "bynk.boundary.ambiguous_type",
+  "constructs": [],
+  "example": "// shop/quotes.bynk\ntype Amount = { cents: Int }\ntype Wrap = { inner: Amount }\n\n// shop/other.bynk\ntype Amount = { dollars: Int }\n\n// shop/till.bynk\nconsumes shop.quotes\nconsumes shop.other\n\n    let w <- shop.quotes.wrap()\n    Effect.pure(w.inner.cents)           // ✗ which `Amount` is `inner`?\n\n// shop/other.bynk\ntype Price = { dollars: Int }            // ✓ one name, one shape",
+  "severity": "error",
+  "summary": "A value's type is declared, with different shapes, by more than one consumed context, so its fields cannot be read."
+}

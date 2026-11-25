@@ -1,0 +1,10 @@
+{
+  "blurb": "A `stub … returns <value>` stands in for a real provider, so the value must have the type the operation declares, as the real result would. `Meter.read` yields an `Int`, so it returns `7`, not a string; the `Effect` is supplied for you. Change the value, or stub the operation you meant. To inject a failure, write `fails` instead of a value.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.rhs_type",
+  "constructs": [],
+  "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.read() returns \"seven\"   // ✗ a String, not an Int\nstub Meter.read() returns 7         // ✓",
+  "severity": "error",
+  "summary": "A test `stub … returns <value>` right-hand side does not match the operation's return type."
+}

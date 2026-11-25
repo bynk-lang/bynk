@@ -1,0 +1,10 @@
+{
+  "blurb": "A caller supplies a message's arguments by name, so every locale's template for a code must use the same set of `{name}` placeholders as the reference locale's. A translation that renames, drops or adds one would ask for an argument the caller never passes. Order is free: translations may reorder placeholders to suit their grammar. Rename the placeholder to match the reference. A placeholder of the right name but a different ICU kind is `bynk.messages.format_mismatch`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.placeholder_mismatch",
+  "constructs": [],
+  "example": "messages \"en\" @reference {\n  \"cart.greeting\" => \"Hello, {name}!\"\n}\n\nmessages \"fr\" {\n  \"cart.greeting\" => \"Bonjour, {prenom} !\"  // ✗ the reference uses {name}\n  \"cart.greeting\" => \"Bonjour, {name} !\"    // ✓\n}",
+  "severity": "error",
+  "summary": "A locale's template for a code uses a different set of `{name}` placeholders than the reference locale's."
+}

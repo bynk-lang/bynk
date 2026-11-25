@@ -1,0 +1,12 @@
+{
+  "blurb": "`on rejected` renders every refusal the router makes for a service's routes, so a service has one and it must handle every case: a second would leave the router choosing between them. Merge the two into one that matches on `why`. Its required shape is `bynk.http.rejected_signature`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.duplicate_rejected",
+  "constructs": [
+    "rejected_handler"
+  ],
+  "example": "on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] { … }   // ✗ already declared above\n\non rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {\n    match why {\n        MethodNotAllowed => RawError(MethodNotAllowed, Bytes.empty(), \"text/plain\")   // ✓ one hook, all cases\n        _ => RawError(BadRequest, Bytes.empty(), \"text/plain\")\n    }\n}",
+  "severity": "error",
+  "summary": "A `from http` service declares `on rejected` more than once."
+}

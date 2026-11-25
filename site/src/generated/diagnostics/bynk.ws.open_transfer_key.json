@@ -1,0 +1,10 @@
+{
+  "blurb": "On Workers the upgrade is routed to the Durable Object that hosts the connection before the `on open` body runs, so the edge has to work out the agent's key on its own. A route parameter, a `const` of the context or of a commons it `uses`, or a literal can be evaluated there. A key computed in the body, such as a `let`, cannot, because the body has not run. Key the agent by a parameter of `on open`, a constant, or a literal. The bundle target runs the body first, so it does not check this.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.open_transfer_key",
+  "constructs": [],
+  "example": "on open () -> Effect[()] by v: Visitor {\n  let room = \"lobby\"\n  let _ <- Room(room).join(connection)          // ✗ `room` is bound in the body, which has not run yet\n  ()\n}\n\non open () -> Effect[()] by v: Visitor {\n  let _ <- Room(\"lobby\").join(connection)       // ✓ a literal\n  ()\n}",
+  "severity": "error",
+  "summary": "On the Workers target, the key of a WebSocket `on open` handler's connection transfer is not a route parameter, a constant of the context or of a commons it uses, or a literal — the upgrade is routed to the hosting Durable Object before the body runs, so the edge must be able to evaluate the key on its own."
+}

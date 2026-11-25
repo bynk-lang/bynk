@@ -1,0 +1,12 @@
+{
+  "blurb": "An asset is served by the platform before the Worker runs, and only to `GET`: it answers every other method with `405`. A case fetches one with `api.GET(asset)`, and a different method is refused, since the answer would be the platform's `405` and nothing your code decides. Use `GET`, and pass the asset alone. A `by` clause on the fetch is `bynk.test.principal_on_asset`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.asset_address_method",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.POST(style)    // ✗ only `GET` fetches an asset\nlet r <- api.GET(style)     // ✓",
+  "severity": "error",
+  "summary": "A suite fetches an asset with a method other than `GET`; the platform serves assets to `GET` and answers other methods with 405."
+}

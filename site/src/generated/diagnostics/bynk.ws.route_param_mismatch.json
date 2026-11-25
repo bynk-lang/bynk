@@ -1,0 +1,10 @@
+{
+  "blurb": "`on message` and `on close` are not given a fresh URL: their route values are recovered, in order, from what `on open` accepted. So the leading parameters of each must have the same types as `on open`'s, in the same order. A different type at some position would reinterpret one route value as another. Match the types of `on open`'s parameters; the names may differ. A missing frame parameter is `bynk.ws.message_frame_param`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.route_param_mismatch",
+  "constructs": [],
+  "example": "on open (room: RoomId) -> Effect[()] by user: Member { … }\non close (who: UserId) -> Effect[()] by user: Member { … }   // ✗ the first route value is a `RoomId`\n\non open (room: RoomId) -> Effect[()] by user: Member { … }\non close (room: RoomId) -> Effect[()] by user: Member { … }   // ✓ same leading types",
+  "severity": "error",
+  "summary": "A WebSocket `on message`/`on close` route parameter does not match the `on open` parameter at the same position — route values are recovered positionally from the connection, so they must be a type-compatible prefix of the `on open` parameters (real-time track slice 3b-iii)."
+}

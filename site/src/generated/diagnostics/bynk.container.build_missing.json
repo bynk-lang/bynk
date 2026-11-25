@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Container` is built from a Dockerfile: `@build(\"dir\")` names the project-relative directory that holds it, and `bynk check` looks for `dir/Dockerfile`. A directory with no Dockerfile would fail only when `wrangler deploy` tried to build the image, so it is refused here. Create the Dockerfile, or correct the path. Bynk does not read or generate the Dockerfile, and the image must be built for `linux/amd64`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.container.build_missing",
+  "constructs": [],
+  "example": "capability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✗ containers/renderer/Dockerfile does not exist\ncapability Renderer = Container @build(\"containers/renderer\") @port(8080)    // ✓ once containers/renderer/Dockerfile exists",
+  "severity": "error",
+  "summary": "A `Container`'s `@build` directory holds no `Dockerfile`, so there is no image to build."
+}
