@@ -40,8 +40,3 @@ fn embed(r: Result[Int, lib.x.IoError]) -> Result[Int, lib.x.AppError] {
   let n = r?
   Ok(n)
 }
-
-type Holder = {
-  status: lib.x.Status,
-  shape: lib.x.Shape,
-}

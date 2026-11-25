@@ -6,14 +6,6 @@ import type { ValidationError } from "../__bynk_runtime/errors.js";
 
 import * as __use_lib_x from "../lib/x.js";
 
-export interface Holder {
-  readonly status: __use_lib_x.Status;
-  readonly shape: __use_lib_x.Shape;
-}
-
-export const Holder = {
-};
-
 export function g(s: __use_lib_x.Status): string {
   return __use_lib_x.describe(s);
 }
