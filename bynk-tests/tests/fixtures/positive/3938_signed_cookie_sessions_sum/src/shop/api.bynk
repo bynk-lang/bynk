@@ -1,5 +1,7 @@
 context shop.api
 
+consumes bynk { Clock }
+
 type UserId = String where NonEmpty && MaxLength(64)
 
 // A web app signs in with a session cookie; CLI and partner clients send an OIDC token.
@@ -33,6 +35,28 @@ service api from http {
 		match who {
 			User(u) => Ok("cookie \(u)")
 			ApiClient(c) => Ok("token \(c)")
+		}
+	}
+
+	// Ending the session from a sum handler: the cookie arm threads the verified session in.
+	on POST("/logout") () -> Effect[HttpResult[()]] by who: User | ApiClient {
+		match who {
+			User(_) => {
+				let c <- User.expire()
+				NoContent.withCookie(c)
+			}
+			ApiClient(_) => NoContent
+		}
+	}
+
+	// Ending every session of one identity.
+	on POST("/revoke-all") () -> Effect[HttpResult[()]] by who: User | ApiClient {
+		match who {
+			User(u) => {
+				let _ <- User.revokeAll(u)
+				NoContent
+			}
+			ApiClient(_) => NoContent
 		}
 	}
 }

@@ -51,6 +51,11 @@ service api from http {
 		NoContent.withCookie(c)
 	}
 
+	on POST("/password") () -> Effect[HttpResult[()]] by u: User {
+		let _ <- User.revokeAll(u.identity)
+		NoContent
+	}
+
 	// The binder is optional: verify the cookie, capture nothing.
 	on DELETE("/session") () -> Effect[HttpResult[()]] by User {
 		NoContent

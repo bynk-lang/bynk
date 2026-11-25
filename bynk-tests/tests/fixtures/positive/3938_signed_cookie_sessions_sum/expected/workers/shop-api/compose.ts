@@ -18,6 +18,7 @@ export function compose(env: Env) {
   return {
     async http_POST_orders(request: globalThis.Request) {
       let __who: any = undefined;
+      let __sess: unknown = undefined;
       let __csrfRefused = false;
       if (__who === undefined) {
         const __cookie = __sessionCookieOf(request, "__Host-session");
@@ -26,7 +27,10 @@ export function compose(env: Env) {
             const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
             if (__session.tag !== "Err") {
               const __id = handlers.UserId.of(__session.value.sub);
-              if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) {
+                __who = { tag: "User", identity: __id.value };
+                __sess = { sid: __session.value.sid, sub: __session.value.sub };
+              }
             }
           }
           else {
@@ -45,10 +49,11 @@ export function compose(env: Env) {
         }
       }
       if (__who === undefined) return __csrfRefused ? HttpResult.Forbidden : HttpResult.Unauthorized;
-      return handlers.api.http_POST_orders({ ...deps, who: __who });
+      return handlers.api.http_POST_orders({ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who });
     },
     async http_POST_orders_token_first(request: globalThis.Request) {
       let __who: any = undefined;
+      let __sess: unknown = undefined;
       let __csrfRefused = false;
       if (__who === undefined) {
         const __authz = request.headers.get("Authorization");
@@ -67,7 +72,10 @@ export function compose(env: Env) {
             const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
             if (__session.tag !== "Err") {
               const __id = handlers.UserId.of(__session.value.sub);
-              if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) __who = { tag: "User", identity: __id.value };
+              if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) {
+                __who = { tag: "User", identity: __id.value };
+                __sess = { sid: __session.value.sid, sub: __session.value.sub };
+              }
             }
           }
           else {
@@ -76,17 +84,21 @@ export function compose(env: Env) {
         }
       }
       if (__who === undefined) return __csrfRefused ? HttpResult.Forbidden : HttpResult.Unauthorized;
-      return handlers.api.http_POST_orders_token_first({ ...deps, who: __who });
+      return handlers.api.http_POST_orders_token_first({ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who });
     },
     async http_GET_orders(request: globalThis.Request) {
       let __who: any = undefined;
+      let __sess: unknown = undefined;
       if (__who === undefined) {
         const __cookie = __sessionCookieOf(request, "__Host-session");
         if (__cookie !== null) {
           const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
           if (__session.tag !== "Err") {
             const __id = handlers.UserId.of(__session.value.sub);
-            if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) __who = { tag: "User", identity: __id.value };
+            if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) {
+              __who = { tag: "User", identity: __id.value };
+              __sess = { sid: __session.value.sid, sub: __session.value.sub };
+            }
           }
         }
       }
@@ -101,7 +113,77 @@ export function compose(env: Env) {
         }
       }
       if (__who === undefined) return HttpResult.Unauthorized;
-      return handlers.api.http_GET_orders({ ...deps, who: __who });
+      return handlers.api.http_GET_orders({ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who });
+    },
+    async http_POST_logout(request: globalThis.Request) {
+      let __who: any = undefined;
+      let __sess: unknown = undefined;
+      let __csrfRefused = false;
+      if (__who === undefined) {
+        const __cookie = __sessionCookieOf(request, "__Host-session");
+        if (__cookie !== null) {
+          if (__csrfAllowed(request, ["https://app.example.com"])) {
+            const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
+            if (__session.tag !== "Err") {
+              const __id = handlers.UserId.of(__session.value.sub);
+              if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) {
+                __who = { tag: "User", identity: __id.value };
+                __sess = { sid: __session.value.sid, sub: __session.value.sub };
+              }
+            }
+          }
+          else {
+            __csrfRefused = true;
+          }
+        }
+      }
+      if (__who === undefined) {
+        const __authz = request.headers.get("Authorization");
+        if (__authz !== null && __authz.startsWith("Bearer ")) {
+          const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
+          if (__claims.tag === "Ok") {
+            const __id = handlers.UserId.of(__claims.value.sub);
+            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value };
+          }
+        }
+      }
+      if (__who === undefined) return __csrfRefused ? HttpResult.Forbidden : HttpResult.Unauthorized;
+      return handlers.api.http_POST_logout({ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who });
+    },
+    async http_POST_revoke_all(request: globalThis.Request) {
+      let __who: any = undefined;
+      let __sess: unknown = undefined;
+      let __csrfRefused = false;
+      if (__who === undefined) {
+        const __cookie = __sessionCookieOf(request, "__Host-session");
+        if (__cookie !== null) {
+          if (__csrfAllowed(request, ["https://app.example.com"])) {
+            const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: undefined }, "User", 43200);
+            if (__session.tag !== "Err") {
+              const __id = handlers.UserId.of(__session.value.sub);
+              if (__id.tag === "Ok" && __session.value.sid !== undefined && await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps)) {
+                __who = { tag: "User", identity: __id.value };
+                __sess = { sid: __session.value.sid, sub: __session.value.sub };
+              }
+            }
+          }
+          else {
+            __csrfRefused = true;
+          }
+        }
+      }
+      if (__who === undefined) {
+        const __authz = request.headers.get("Authorization");
+        if (__authz !== null && __authz.startsWith("Bearer ")) {
+          const __claims = await __verifyOidcJwt(__authz.slice(7), "https://id.example", "api", "https://id.example/jwks");
+          if (__claims.tag === "Ok") {
+            const __id = handlers.UserId.of(__claims.value.sub);
+            if (__id.tag === "Ok") __who = { tag: "ApiClient", identity: __id.value };
+          }
+        }
+      }
+      if (__who === undefined) return __csrfRefused ? HttpResult.Forbidden : HttpResult.Unauthorized;
+      return handlers.api.http_POST_revoke_all({ ...deps, ...(__sess === undefined ? {} : { __sessionOf: __sess }), who: __who });
     },
   };
 }
