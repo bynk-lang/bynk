@@ -1,0 +1,2 @@
+bynk.d1.decimal_numeric_affinity `tax` of `Prices.all`
+bynk.d1.decimal_numeric_affinity `tax` of `Prices.select`

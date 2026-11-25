@@ -2109,7 +2109,8 @@ message. `SqlError` is extensible, so a `match` over it needs a wildcard.
 `Option` of either (`NULL` is `None`), or a `List` of such records. A `Decimal`
 field reads canonical decimal text, so declare its column `TEXT`: a `DECIMAL`,
 `NUMERIC` or `REAL` column has numeric affinity in SQLite, arrives as a JSON
-number and fails the decode. Anything else is
+number and fails the decode, so the compiler warns where it can see the declared
+type (`bynk.d1.decimal_numeric_affinity`). Anything else is
 `bynk.types.sql_row_shape`. Only `0` and `1` become booleans: a `Bool` column
 holding `2` still fails the decode. `Json.decode` itself is unchanged and
 still refuses `0`/`1` for a `Bool`, at every boundary.

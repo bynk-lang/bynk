@@ -30,6 +30,7 @@ pub mod release_pages;
 pub mod site_page;
 pub mod sorted_lists;
 pub mod stamp;
+pub mod stamped;
 pub mod tiers;
 
 /// The bump level an increment declares. The stamp turns this into the next
@@ -125,7 +126,35 @@ pub fn pending_dir() -> PathBuf {
 /// number of pending files validated, or every error found across all files
 /// (each prefixed with its filename) so one run reports the whole picture.
 pub fn check_all() -> Result<usize, Vec<String>> {
-    validated_pending_in(&repo_root()).map(|ps| ps.len())
+    check_all_in(&repo_root())
+}
+
+/// [`check_all`] over `root`. Besides the per-file validation, a pending file whose slug and
+/// content the stamp ledger already holds fails (#4319): `main` has consumed it, so the branch
+/// carries a stale copy that would be stamped a second time.
+pub fn check_all_in(root: &Path) -> Result<usize, Vec<String>> {
+    let pending = validated_pending_in(root)?;
+    let ledger = stamped::read(root).map_err(|e| {
+        vec![format!(
+            "cannot read {}: {e}",
+            root.join(stamped::LEDGER_PATH).display()
+        )]
+    })?;
+    let mut errors = Vec::new();
+    for (file, _) in &pending {
+        let Ok(bytes) = fs::read(root.join("design/pending").join(file)) else {
+            continue;
+        };
+        let slug = file.strip_suffix(".md").unwrap_or(file);
+        if let Some(entry) = stamped::find(&ledger, slug, &stamped::content_hash(&bytes)) {
+            errors.push(stamped::already_stamped_message(file, entry));
+        }
+    }
+    if errors.is_empty() {
+        Ok(pending.len())
+    } else {
+        Err(errors)
+    }
 }
 
 /// Read and validate the pending files under `root/design/pending` (skipping
@@ -195,6 +224,36 @@ pub fn validated_pending_in(root: &Path) -> Result<Vec<(String, Pending)>, Vec<S
     } else {
         Err(errors)
     }
+}
+
+/// Warnings for pending files whose slug the stamp ledger holds with different content (#4319):
+/// a reused slug, or an edited near-copy of a consumed file. They never fail the check.
+pub fn check_warnings_in(root: &Path) -> Vec<String> {
+    let Ok(ledger) = stamped::read(root) else {
+        return Vec::new();
+    };
+    let Ok(names) = fs::read_dir(root.join("design/pending")) else {
+        return Vec::new();
+    };
+    let mut files: Vec<String> = names
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".md") && n != "README.md")
+        .collect();
+    files.sort();
+    let mut warnings = Vec::new();
+    for file in files {
+        let Ok(bytes) = fs::read(root.join("design/pending").join(&file)) else {
+            continue;
+        };
+        let slug = file.strip_suffix(".md").unwrap_or(&file);
+        let hash = stamped::content_hash(&bytes);
+        let same_slug = ledger.iter().rev().find(|e| e.slug == slug);
+        if let Some(entry) = same_slug.filter(|_| stamped::find(&ledger, slug, &hash).is_none()) {
+            warnings.push(stamped::reused_slug_warning(&file, entry));
+        }
+    }
+    warnings
 }
 
 /// Validate a single pending file's `content`. `filename` is used to check the
