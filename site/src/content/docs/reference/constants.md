@@ -209,5 +209,8 @@ case) keeps its own name and meaning.
   `*_PASSWORD` warns (`bynk.env.secret_like_name`): keep secrets in `Secrets`.
 
 A plain build, `bynk check`, `bynk test` and `bynk dev` use the `default`
-environment's values. `--env` on those commands comes in a following increment;
-today `bynk deploy --env` is the way to build another environment's values.
+environment's values. `--env <name>` on `bynk check`, `build`, `compile`, `test`
+and `dev`, as on `bynk deploy`, builds with another environment's: a required
+variable with no value in that environment (and none in `[vars]`) is
+`bynk.env.missing` there, so `bynk check --env staging` finds it before a deploy
+does. A suite's `env { … }` is run-time and unaffected.

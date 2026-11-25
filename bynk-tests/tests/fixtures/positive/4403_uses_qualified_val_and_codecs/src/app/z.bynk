@@ -1,0 +1,14 @@
+commons app.z
+
+// #4403: a record whose fields name two used commons' types by full name must check,
+// and `Val[...]` must accept a full-name qualified type.
+uses lib.x
+uses lib.y
+
+type Holder = {
+  s: lib.x.Status,
+  t: lib.y.Status,
+  p: lib.x.Point,
+}
+
+fn sx(h: Holder) -> lib.x.Status { h.s }
