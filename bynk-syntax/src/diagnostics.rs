@@ -2738,7 +2738,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.security_invalid_field",
-        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. Write the value out. A field other than these two is `bynk.http.security_unknown_field`.",
+        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. `frameAncestors` must be a list of exact origins (`\"https://partner.example\"`) or `\"self\"`, with no wildcard, except `[\"*\"]`, which stands alone and needs an explicit `csp` beside it so that opening framing to every site is never an accident. `referrerPolicy` must be one of the standard values written in camel case (`noReferrer`, `sameOrigin`, `strictOriginWhenCrossOrigin`, and so on). `csp` must be a non-empty string literal with no line break. Write the value out. A field other than these is `bynk.http.security_unknown_field`.",
         example: "service api from http {\n    security { hsts: 180 }         // ✗ a `Duration`, not a number\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }    // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -2748,8 +2748,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.security_unknown_field",
-        blurb: "A `security { }` section has two fields, `hsts` and `nosniff`, and each becomes a response header. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
-        example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ `hsts` and `nosniff` only\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        blurb: "A `security { }` section has five fields: `hsts`, `nosniff`, `frameAncestors`, `referrerPolicy` and `csp`, and each becomes a response header (the last three on an HTML response). The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
+        example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ not a field of `security`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.stream_body_not_raw",
@@ -2795,6 +2795,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.internal.missing_checker_fact",
         blurb: "This is a compiler fault, not a mistake in your program. The code generator needs a fact the checker should have recorded about a construct (its type, the callee it resolves to, how many arguments it takes, a field's default value) and did not find one. Every program the checker accepts carries these facts, so no source you write can cause this on purpose. The diagnostic points at the construct being compiled when the fact was missing. Please report it at https://github.com/bynk-lang/bynk/issues with the source around that location, which is all that is needed to reproduce it. The compiler stops before it writes any output for the unit, rather than emit a program that might mean something other than what you wrote.",
         example: "// bynk internal error: the checker recorded no type for a `fold` call, which the code generator needs here.\n// This is a compiler fault, not a problem in your program; please report it at https://github.com/bynk-lang/bynk/issues\n//\n// There is no program to fix: the report is the fix.",
+    },
+    Explain {
+        code: "bynk.invariant.collection_scan",
+        blurb: "An invariant is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()`: the commit already knows the staged count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Bound the collection with `size()`, or check the property in the handler that writes the collection, where the one entry in hand is known. The mirror rule for steps is `bynk.transition.collection_scan`.",
+        example: "invariant has_x: lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ninvariant few_lines: lines.size() <= 100   // ✓ one count, read at the commit",
     },
     Explain {
         code: "bynk.invariant.cross_agent_reference",
@@ -3336,7 +3341,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.parse.duplicate_security",
-        blurb: "A service has one `security` policy, and it sets the security headers (`hsts`, `nosniff`) stamped on every response. Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
+        blurb: "A service has one `security` policy, and it sets the security headers stamped on responses (`hsts` and `nosniff` on every response, and `frameAncestors`, `referrerPolicy` and `csp` on an HTML page). Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
         example: "service api from http {\n    security { hsts: 180.days }\n    security { nosniff: true }                       // ✗ a second `security`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days, nosniff: true }       // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
     },
     Explain {
@@ -5523,6 +5528,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
     },
     Explain {
+        code: "bynk.transition.collection_scan",
+        blurb: "A transition is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()` in `old` and `new`: the commit knows the staged count, and the last committed one is a single stored count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself, a bare field name) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Compare the sizes, or check the property in the handler that writes the collection. The mirror rule for states is `bynk.invariant.collection_scan`.",
+        example: "transition keeps_x: old.lines.contains(\"x\") implies new.lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ntransition never_shrinks: new.lines.size() >= old.lines.size()   // ✓ one count each",
+    },
+    Explain {
         code: "bynk.transition.cross_agent_reference",
         blurb: "A transition is checked inside one agent's commit, between that agent's own old and new states. Reading another agent would mean a call out to it, whose value could change before the commit lands, so the claim could not be held. A property that spans agents belongs in a saga or a scenario. Keep the transition to this agent's `old` and `new`. The mirror rule for states is `bynk.invariant.cross_agent_reference`.",
         example: "transition within_total: new.count <= Total(\"all\").get()   // ✗ reads another agent\n\ntransition grows: new.count >= old.count                   // ✓ this agent's own step",
@@ -6060,6 +6070,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   fn first(s: List[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✓\n        _ => 0\n    }\n}",
     },
     Explain {
+        code: "bynk.types.map_entry_at_boundary",
+        blurb: "`MapEntry[K, V]` is the record a map's `entries()` yields and `Map.of` takes: `{ key: K, value: V }`. It is built and used in place, so it has no codec: it is refused as a record, sum or event field, an agent key or store field, a capability operation, or a handler's parameter or result. A helper may take or return one. Where the pair must cross a boundary, declare a record of your own with the fields you need, and convert with `map`.",
+        example: "type Index = {\n    entries: List[MapEntry[String, Int]],   // ✗ a map entry is not boundary data\n}\n\ntype Pair = { key: String, value: Int }\n\ntype Index = {\n    entries: List[Pair],                    // ✓ a record of your own\n}",
+    },
+    Explain {
         code: "bynk.types.match_arm_mismatch",
         blurb: "A `match` is an expression, so its arms must produce one type: the least upper \
                 bound of their types, where a refined type and its base agree at the base. If \
@@ -6320,6 +6335,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.types.record_pattern_on_non_record",
         blurb: "A record pattern, `Order { total, .. }`, takes a record apart by its fields, so the name before the braces must be a record type. A sum, an enum, a refined or opaque type and a built-in have no fields to name. Match a sum or an enum by its variants, and read an opaque or built-in value through its methods.",
         example: "type Status = enum { Open, Paid }\n\nfn code(s: Status) -> Int {\n    match s {\n        Status { .. } => 1    // ✗ `Status` is an enum, not a record\n        _ => 2\n    }\n}\n\nfn code(s: Status) -> Int {\n    match s {\n        Open => 1             // ✓ name the variants\n        Paid => 2\n    }\n}",
+    },
+    Explain {
+        code: "bynk.types.regex_duplicate_group_name",
+        blurb: "`findRegexNamed` keys its result by the pattern's group names, and a name may belong to one group only: the runtimes refuse a repeated name, even across alternatives, when the pattern is built, so the program would fail at run time. Give each group its own name.",
+        example: "fn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<side>a)|(?<side>b)\")          // ✗ `side` names two groups\n}\n\nfn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<left>a)|(?<right>b)\")         // ✓\n}",
+    },
+    Explain {
+        code: "bynk.types.regex_no_named_groups",
+        blurb: "`findRegexNamed` returns the first match's capture groups keyed by their names, and the names come from the pattern, which is a literal checked when the program compiles. A pattern with no named group, `(?<name>…)`, has nothing to key the result by, so it is refused. Name the groups you want, or use `findRegex`, which returns the groups by position (the whole match first).",
+        example: "fn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(\\\\d{4})-(\\\\d{2})\")                 // ✗ no group is named\n}\n\nfn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<year>\\\\d{4})-(?<month>\\\\d{2})\")  // ✓\n}",
     },
     Explain {
         code: "bynk.types.regex_not_literal",
@@ -8579,7 +8604,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.security_invalid_field",
-        "A `security` policy field (`hsts`/`nosniff`) has the wrong value shape.",
+        "A `security` policy field (`hsts`, `nosniff`, `frameAncestors`, `referrerPolicy`, `csp`) has the wrong value shape.",
     ),
     d(
         "bynk.http.security_not_http",
@@ -8637,6 +8662,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.internal.missing_checker_fact",
         "A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues.",
+    ),
+    d(
+        "bynk.invariant.collection_scan",
+        "An invariant reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
     ),
     d(
         "bynk.invariant.cross_agent_reference",
@@ -10297,6 +10326,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
     ),
     d(
+        "bynk.transition.collection_scan",
+        "A transition reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
+    ),
+    d(
         "bynk.transition.cross_agent_reference",
         "A transition predicate references another agent; step invariants are per-agent.",
     ),
@@ -10639,6 +10672,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`).",
         &["list_pattern"],
     ),
+    d(
+        "bynk.types.map_entry_at_boundary",
+        "A `MapEntry` type appears in a storable or boundary-crossing position: a map entry is built and consumed in place, never persisted or sent.",
+    ),
     dg(
         "bynk.types.match_arm_mismatch",
         "A `match` arm has a different type from the others.",
@@ -10795,8 +10832,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["record_pattern"],
     ),
     dg(
+        "bynk.types.regex_duplicate_group_name",
+        "`findRegexNamed`'s pattern names a capture group more than once, which the runtimes refuse when the pattern is built.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.types.regex_no_named_groups",
+        "`findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.regex_not_literal",
-        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
+        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
         &["method_call"],
     ),
     d(

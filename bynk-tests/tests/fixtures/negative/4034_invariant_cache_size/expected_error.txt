@@ -1,0 +1,2 @@
+bynk.invariant.collection_scan
+a `Cache` counts only its live entries

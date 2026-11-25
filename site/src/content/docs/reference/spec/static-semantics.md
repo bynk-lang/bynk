@@ -973,7 +973,11 @@ references the agent's `store` fields by bare name and is a *pure, agent-local
 - it MUST NOT reference another agent (`bynk.invariant.cross_agent_reference`) —
   invariants constrain a single agent's reachable states; a property that spans
   agents belongs in a saga or scenario;
-- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`).
+- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`);
+- it MAY read a `store` `Map` or `Set` field only through `size()`, written on the bare
+  field name, which denotes the staged entry count; any other read of a collection field
+  is refused (`bynk.invariant.collection_scan`), and a `Log` or `Cache` field may not be
+  read at all (a `Cache` counts only its live entries, which a commit has no clock to judge);
 
 The predicate language is ordinary expressions plus `implies` (logical
 implication, `P implies Q` ≡ `!P || Q`) and `is` (pattern-matching as a `Bool`
@@ -999,6 +1003,11 @@ agent-local `Bool` expression* in the same predicate language:
 - it MUST NOT reference another agent (`bynk.transition.cross_agent_reference`);
 - transition names MUST be distinct within an agent
   (`bynk.transition.duplicate_name`);
+- it MAY read a `store` `Map` or `Set` field only through `size()` on `old` or `new`:
+  `new.<field>.size()` is the staged entry count and `old.<field>.size()` the last
+  committed one; any other read of a collection field, a bare field name included, is
+  refused (`bynk.transition.collection_scan`), and a `Log` or `Cache` field may not be
+  read at all;
 - it MUST reference `old` or `new` (`bynk.transition.no_step_reference`) — a
   predicate over neither is a snapshot claim, which is an `invariant`.
 
@@ -2046,6 +2055,16 @@ checker enforces the closed field set — an unknown field is
 - **`hsts`** — OPTIONAL; a **positive** `Duration` literal
   (`bynk.http.security_invalid_field`). Opts in to `Strict-Transport-Security`,
   lowered to `max-age` in whole seconds. Absent ⇒ no HSTS.
+- **`frameAncestors`** — OPTIONAL; a list of string literals
+  (`bynk.http.security_invalid_field`), each an exact origin (`http://` or `https://`
+  and a host, with no path and no wildcard) or `"self"`. The list `["*"]` MUST stand
+  alone and MUST be accompanied by a `csp`. Absent or empty ⇒ `'none'`.
+- **`referrerPolicy`** — OPTIONAL; one of the identifiers `noReferrer`,
+  `noReferrerWhenDowngrade`, `origin`, `originWhenCrossOrigin`, `sameOrigin`,
+  `strictOrigin`, `strictOriginWhenCrossOrigin`, `unsafeUrl`
+  (`bynk.http.security_invalid_field`). Absent ⇒ `strictOriginWhenCrossOrigin`.
+- **`csp`** — OPTIONAL; a non-empty string literal with no CR or LF
+  (`bynk.http.security_invalid_field`), the whole `Content-Security-Policy`.
 
 Unlike `cors`, the safe header is **on by default**: a `from http` service with no
 `security { }` policy (or one that omits `nosniff`) still stamps
@@ -2054,8 +2073,15 @@ default policy (`nosniff: true`, no HSTS) for **every** `from http` service. Onl
 explicit `nosniff: false` suppresses it. The headers are stamped uniformly across
 every response family and the synthesised preflight, `405`/`OPTIONS`, and `304`,
 composing with the CORS headers (the two sets are disjoint, so the stamping order is
-not observable). `Content-Security-Policy` and `X-Frame-Options` are **not** emitted
-— they constrain markup, which the Bynk HTTP surface does not serve. See
+not observable. A response whose `Content-Type` has the media type `text/html`
+(parameters removed, compared without case) additionally carries a
+`Content-Security-Policy` and a `Referrer-Policy`: the `csp` as written, with
+`frame-ancestors <sources>` appended when it names none (the `frameAncestors` sources,
+or `'none'`), or `frame-ancestors <sources>` alone without a `csp`; and the
+`referrerPolicy` as its header token. These are independent of `nosniff` and of each
+other, apply to every response of the service whatever built it, and overwrite a header
+of the same name set earlier. A response of any other media type carries neither.
+`X-Frame-Options` is **not** emitted, `frame-ancestors` superseding it. See
 [§7.4.3](/reference/spec/runtime-library/#743-httpresult) for the runtime lowering.
 
 ### §5.7.4 Request body-size limits (v0.142) {#body-limits}

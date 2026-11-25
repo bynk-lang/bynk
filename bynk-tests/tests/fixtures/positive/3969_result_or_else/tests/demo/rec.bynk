@@ -1,0 +1,32 @@
+suite demo.rec
+
+case "orElse leaves an Ok untouched and does not run the fallback" {
+	expect parseAny("12") == Ok(12)
+}
+
+case "orElse runs the fallback on Err, and its own Err wins when it fails too" {
+	expect parseAny("ff") == Ok(255)
+	expect parseAny("zz") == Err("not hex")
+}
+
+case "orElse can change the error type, using what failed" {
+	expect withRow(3, "7") == Ok(7)
+	expect withRow(3, "x") == Err(RowError { row: 3, reason: "not a decimal" })
+}
+
+case "orElse can recover with a value" {
+	expect recover(Ok(5)) == Ok(5)
+	expect recover(Err("bad")) == Ok(0)
+}
+
+case "err gives the error as an Option, and None for an Ok" {
+	let good: Result[Int, String] = Ok(1)
+	let bad: Result[Int, String] = Err("boom")
+	expect good.err() == None
+	expect bad.err() == Some("boom")
+}
+
+case "err collects the problems from a list of results" {
+	let rs: List[Result[Int, String]] = [Ok(1), Err("a"), Ok(2), Err("b")]
+	expect problems(rs) == ["a", "b"]
+}

@@ -1,0 +1,1 @@
+bynk.types.method_arity `Result.err` takes 0 arguments, got 1

@@ -140,9 +140,9 @@ For the small cases a `match` is too much for, both types carry methods:
 | `Result[T, E]` | |
 | --- | --- |
 | `map(f)`, `andThen(f)`, `mapErr(f)` | transform the value or the error, or chain a fallible step |
-| `getOrElse(x)` | a default value |
+| `getOrElse(x)`, `orElse(f)` | a default value, or a fallback `Result` (`f: E -> Result[T, F]`, run only on `Err`, so it can see what failed and change the error type) |
 | `isOk()`, `isErr()` | test the outcome |
-| `ok()` | keep the value, dropping the error (`Option[T]`) |
+| `ok()`, `err()` | keep the value, or the error, dropping the other (`Option[T]`, `Option[E]`) |
 
 There is one name per operation: chaining a step is `andThen` (not `flatMap`)
 on `Option` and `Result`.

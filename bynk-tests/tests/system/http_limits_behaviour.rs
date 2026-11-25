@@ -190,7 +190,7 @@ const TSCONFIG_JSON: &str = r#"{
 
 /// Compiles `fixture` (a `positive/` directory) for Workers, then type-checks and runs
 /// `driver` against its entry under Node.
-fn run_driver(fixture_dir: &str, driver: &str) {
+pub(super) fn run_driver(fixture_dir: &str, driver: &str) {
     let runner = match discover_tsc() {
         Some(r) => r,
         None => {
