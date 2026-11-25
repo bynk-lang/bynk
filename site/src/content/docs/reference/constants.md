@@ -213,5 +213,10 @@ does. A suite's `env { … }` is run-time and unaffected.
 In the editor, hovering `env(NAME)` lists what each environment resolves the
 variable to and where each value comes from; completing inside `env(` offers the
 variables `bynk.toml` defines, with their `default` value; and signature help
-shows `env(NAME, default)`. These read `bynk.toml` from disk, so a saved change
-to it shows on the next request.
+shows `env(NAME, default)`. The variable name is a `property` semantic token.
+Renaming it (F2 on the name) renames it in every constant that reads it and in
+each `[vars]` and `[env.<name>.vars]` table of `bynk.toml` that sets it, and is
+refused when the new name is already a variable or when a `bynk.toml` key is
+written in a form the rename cannot edit (a dotted key, an inline table). Hover
+and completion read `bynk.toml` from disk, so a saved change to it shows on the
+next request.
