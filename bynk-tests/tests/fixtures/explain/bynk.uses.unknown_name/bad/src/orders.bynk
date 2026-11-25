@@ -1,6 +1,5 @@
 commons orders
 
-uses billing
-uses shipping
+uses billing { Amont }
 
 type Order = { id: Int }

@@ -884,10 +884,13 @@ bynk.types.unreachable_arm
 bynk.types.variant_arity
 bynk.types.variant_missing_payload
 bynk.types.variant_payload_mismatch
+bynk.uses.ambiguous_name
 bynk.uses.name_conflict
+bynk.uses.second_spelling
 bynk.uses.self_reference
 bynk.uses.target_is_context
 bynk.uses.unknown_commons
+bynk.uses.unknown_name
 bynk.val.agent_not_generable
 bynk.val.arity
 bynk.val.generic_type
