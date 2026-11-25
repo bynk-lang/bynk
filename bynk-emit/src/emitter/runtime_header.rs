@@ -214,6 +214,7 @@ const WORKER_ORDER: &[&str] = &[
     "__bynkDecimalParseWire",
     "__bynkDecimalToString",
     "__bynkQueueAdmit",
+    "__dmarcVerdictOf",
     "__handleEmail",
     "__matchPath",
     "__mysqlExecute",

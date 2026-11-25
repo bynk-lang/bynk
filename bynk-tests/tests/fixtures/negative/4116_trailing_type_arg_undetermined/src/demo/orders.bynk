@@ -1,0 +1,12 @@
+context demo.orders {
+  capability Probe {
+    fn pair[A, B](a: A) -> Effect[Option[B]]
+  }
+
+  service reserve {
+    on call() -> Effect[Option[Int]] by Caller given Probe {
+      let cached <- Probe.pair[Int](1)
+      cached
+    }
+  }
+}

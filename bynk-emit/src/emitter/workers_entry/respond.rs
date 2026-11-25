@@ -152,15 +152,18 @@ pub(super) const RETRY_MESSAGE_HELPER: &str = "function __bynkRetryMessage(queue
 /// The fault helpers a Worker entry carries: `__bynkReportFault`, with cron handlers (#3872)
 /// `__bynkCronRun`, which reports through it, and with queue consumers (#3878) `__bynkUndecodable`.
 /// One raw snippet, so the entry's text writes do not grow.
-pub(super) fn fault_helpers(has_cron: bool, has_queue: bool) -> String {
+pub(super) fn fault_helpers(has_cron: bool, has_queue: bool, has_signed_queue: bool) -> String {
     let mut all: Vec<&str> = vec![REPORT_FAULT_HELPER];
     if has_cron {
         all.push(CRON_RUN_HELPER);
     }
     if has_queue {
         all.push(UNDECODABLE_HELPER);
-        all.push(QUEUE_REFUSED_HELPER);
         all.push(RETRY_MESSAGE_HELPER);
+    }
+    // #3899: only a Worker with a signed consumer carries the refusal helper.
+    if has_signed_queue {
+        all.push(QUEUE_REFUSED_HELPER);
     }
     all.join("\n")
 }

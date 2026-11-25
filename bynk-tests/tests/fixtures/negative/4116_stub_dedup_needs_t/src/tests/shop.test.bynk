@@ -1,0 +1,10 @@
+suite shop {
+  consumes bynk { Idempotency }
+
+  stub Idempotency.dedup(_) returns None
+
+  case "a stub of dedup must name T" {
+    let n <- sums.call(true, 1)
+    expect n == 0
+  }
+}

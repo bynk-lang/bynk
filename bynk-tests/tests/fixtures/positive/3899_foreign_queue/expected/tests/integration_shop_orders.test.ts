@@ -3,7 +3,7 @@
 
 import type { __ServiceBinding } from "../__bynk_runtime/boundary.js";
 import { canonicalJson, signQueueMessage } from "../__bynk_runtime/queue_signing.js";
-import { __makeIntegrationD1 } from "../__bynk_runtime/testing/bindings.js";
+import { __makeIntegrationD1, __makeIntegrationDoNamespace } from "../__bynk_runtime/testing/bindings.js";
 import * as __ns_shop_orders from "../workers/shop-orders/handlers.js";
 import worker___ns_shop_orders from "../workers/shop-orders/index.js";
 
@@ -16,6 +16,7 @@ function __buildHarness() {
   env___ns_shop_orders.BYNK_CALL_FROM_INTEGRATION = "bynk-local-call-key";
   env___ns_shop_orders.LEGACY_QUEUE_KEY = "bynk-local-call-key";
   env___ns_shop_orders.D1_IDEMPOTENCY = __makeIntegrationD1([["0001_idempotency_claims.sql", "CREATE TABLE idempotency_claims (\n  key TEXT PRIMARY KEY NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_claims_expires_at ON idempotency_claims (expires_at);\n"], ["0002_idempotency_values.sql", "CREATE TABLE idempotency_values (\n  key TEXT PRIMARY KEY NOT NULL,\n  value TEXT NOT NULL,\n  expires_at INTEGER NOT NULL\n);\n\nCREATE INDEX idempotency_values_expires_at ON idempotency_values (expires_at);\n"]]);
+  env___ns_shop_orders.TALLY = __makeIntegrationDoNamespace(__ns_shop_orders.Tally, env___ns_shop_orders);
   const rootEnv: any = {};
   rootEnv.BYNK_CALL_TO_SHOP__ORDERS = "bynk-local-call-key";
   rootEnv.SHOP_ORDERS = { fetch: (req: globalThis.Request) => worker___ns_shop_orders.fetch(req, env___ns_shop_orders) } as __ServiceBinding;
@@ -39,7 +40,7 @@ async function test_a_message_signed_by_the_foreign_producer_reaches_the_handler
     __bynkClockNow = 0;
     const deps = __makeHarness();
     const r = await __sysdrive_message_fulfil({ id: "o1" }, undefined, "Legacy");
-    if (!(((__c: boolean) => __c)(r.tag === "Retry" && r.reason === "reached the handler"))) { throw __bynkExpectFailure("tests/orders_system.bynk:4:12", 171, 204, "expect r is Retry(\"reached the handler\")", "r", () => __bynkShow(r)); }
+    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:4:12", 171, 179, "expect r is Ack", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -54,8 +55,10 @@ async function test_an_unsigned_message_is_refused_and_never_handled() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_message_fulfil({ id: "o2" });
-    if (!(((__c: boolean) => __c)(r.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:9:12", 329, 337, "expect r is Ack", "r", () => __bynkShow(r)); }
+    const unsigned = await __sysdrive_message_fulfil({ id: "o2" });
+    const signed = await __sysdrive_message_fulfil({ id: "o2" }, undefined, "Legacy");
+    if (!(((__c: boolean) => __c)(unsigned.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:12:12", 581, 596, "expect unsigned is Ack", "unsigned", () => __bynkShow(unsigned)); }
+    if (!(((__c: boolean) => __c)(signed.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:13:12", 608, 621, "expect signed is Ack", "signed", () => __bynkShow(signed)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -73,9 +76,27 @@ async function test_a_replayed_message_is_refused_the_second_time() {
     const first = await __sysdrive_message_fulfil({ id: "o3" }, undefined, "Legacy");
     const again = await __sysdrive_message_fulfil({ id: "o3" }, undefined, "Legacy");
     const other = await __sysdrive_message_fulfil({ id: "o4" }, undefined, "Legacy");
-    if (!(((__c: boolean) => __c)(first.tag === "Retry" && first.reason === "reached the handler"))) { throw __bynkExpectFailure("tests/orders_system.bynk:18:12", 771, 808, "expect first is Retry(\"reached the handler\")", "first", () => __bynkShow(first)); }
-    if (!(((__c: boolean) => __c)(again.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:19:12", 820, 832, "expect again is Ack", "again", () => __bynkShow(again)); }
-    if (!(((__c: boolean) => __c)(other.tag === "Retry" && other.reason === "reached the handler"))) { throw __bynkExpectFailure("tests/orders_system.bynk:20:12", 844, 881, "expect other is Retry(\"reached the handler\")", "other", () => __bynkShow(other)); }
+    if (!(((__c: boolean) => __c)(first.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:23:12", 1106, 1118, "expect first is Ack", "first", () => __bynkShow(first)); }
+    if (!(((__c: boolean) => __c)(again.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:24:12", 1130, 1142, "expect again is Ack", "again", () => __bynkShow(again)); }
+    if (!(((__c: boolean) => __c)(other.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:25:12", 1154, 1166, "expect other is Ack", "other", () => __bynkShow(other)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_message_whose_handler_asked_for_a_retry_is_admitted_again() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const first = await __sysdrive_message_fulfil({ id: "flaky" }, undefined, "Legacy");
+    const again = await __sysdrive_message_fulfil({ id: "flaky" }, undefined, "Legacy");
+    if (!(((__c: boolean) => __c)(first.tag === "Retry" && first.reason === "try again"))) { throw __bynkExpectFailure("tests/orders_system.bynk:33:12", 1549, 1576, "expect first is Retry(\"try again\")", "first", () => __bynkShow(first)); }
+    if (!(((__c: boolean) => __c)(again.tag === "Ack"))) { throw __bynkExpectFailure("tests/orders_system.bynk:34:12", 1588, 1600, "expect again is Ack", "again", () => __bynkShow(again)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -87,7 +108,7 @@ async function test_a_replayed_message_is_refused_the_second_time() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a message signed by the foreign producer reaches the handler", "an unsigned message is refused and never handled", "a replayed message is refused the second time"];
+export const __bynkCases: readonly string[] = ["a message signed by the foreign producer reaches the handler", "an unsigned message is refused and never handled", "a replayed message is refused the second time", "a message whose handler asked for a retry is admitted again"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -107,6 +128,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a replayed message is refused the second time")) {
     const started = __bynkCaseNow();
     const r = { name: "a replayed message is refused the second time", ...(await test_a_replayed_message_is_refused_the_second_time()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a message whose handler asked for a retry is admitted again")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a message whose handler asked for a retry is admitted again", ...(await test_a_message_whose_handler_asked_for_a_retry_is_admitted_again()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

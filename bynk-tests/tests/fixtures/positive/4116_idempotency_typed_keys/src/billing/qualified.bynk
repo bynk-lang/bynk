@@ -1,0 +1,21 @@
+context billing.qualified
+
+// The qualified form infers `K` (and `T`) from the arguments and encodes a record key the same
+// way the bare form does (#4116).
+
+consumes bynk
+
+type DeliveryKey = { repo: String, delivery: String }
+type Quote = { total: Int }
+
+service api {
+  on call(repo: String, delivery: String) -> Effect[Int] by Caller given bynk.Idempotency {
+    let key = DeliveryKey { repo: repo, delivery: delivery }
+    do bynk.Idempotency.remember(key, Quote { total: 4 }, 1.hour)
+    let found <- bynk.Idempotency.dedup[Quote](key)
+    match found {
+      Some(q) => q.total
+      None => 0
+    }
+  }
+}

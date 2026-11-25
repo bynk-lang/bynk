@@ -10,6 +10,14 @@ database_name = "shop-orders-idempotency"
 database_id = "<D1_IDEMPOTENCY_ID>" # set at deploy time
 migrations_dir = "migrations/shop-orders-idempotency"
 
+[[durable_objects.bindings]]
+name = "TALLY"
+class_name = "Tally"
+
+[exports.Tally]
+type = "durable-object"
+storage = "sqlite"
+
 [[queues.consumers]]
 queue = "orders"
 max_batch_size = 10
