@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: An `invariant` or `transition` may read the `size()` of a `Map` or `Set` store field, and any other read of a collection is the targeted `bynk.invariant.collection_scan` / `bynk.transition.collection_scan`
----
+# 0951 — An invariant or transition reads a store collection's size, and nothing else of it
 
-## ADR: predicates-read-collection-size
-title: An invariant or transition reads a store collection's size, and nothing else of it
-summary: What a predicate may read of a Map, Set, Cache or Log store field, and which count it sees
+- **Status:** Accepted (v0.689)
 
 **Context.** An invariant that mentioned a `Map`, `Set` or `Cache` store field failed with `bynk.resolve.unknown_name`, although the reference says a predicate reads the agent's store fields by bare name. Excluding scans is right, since a scan in a predicate would read the whole collection at every commit. But `size()` reads one count, and bounding a collection ("at most 100 lines") is among the commonest invariants.
 
