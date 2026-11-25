@@ -1,13 +1,6 @@
----
-level: minor
-changelog: A queue consumer can return `RetryAfter(reason, delay)` to redeliver a message after a delay (whole seconds, 1 second to 24 hours: a literal outside that range is `bynk.queue.retry_delay_out_of_range`, a computed delay is rounded up and clamped with the clamp logged); `Retry` keeps retrying after the consumer's `retryDelay`
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: `QueueResult` has a third variant, `RetryAfter`, so a `match` over a `QueueResult` (in a test case or elsewhere) must now name it or have a wildcard
----
+# 0941 — A queue handler retries a message after a delay with RetryAfter(reason, delay)
 
-## ADR: queue-retry-after
-title: A queue handler retries a message after a delay with RetryAfter(reason, delay)
-summary: A new built-in QueueResult variant carries a delay, checked at compile time when written as a literal and clamped at run time when computed
+- **Status:** Accepted (v0.679)
 
 **Context.** `Retry(reason)` always called `msg.retry()` with no delay, so a message that failed because a dependency was down came straight back and failed again. Cloudflare supports `msg.retry({ delaySeconds })`, a positive whole number of seconds, up to 24 hours. A handler returns a verdict and never calls the platform itself (ADR 0078), so the delay has to be expressible in the verdict.
 

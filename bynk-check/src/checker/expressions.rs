@@ -3696,7 +3696,7 @@ pub(crate) fn check_field_access(
                 "bynk.held.query_accessor_on_held_map",
                 field.span,
                 format!(
-                    "`.{}` is not available on a held `Map[K, {}]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`/`traverseAll`), not a key query",
+                    "`.{}` is not available on a held `Map[K, {}]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`/`traverseAll`), not a key query",
                     field.name,
                     v.display(tys)
                 ),

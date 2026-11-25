@@ -39,6 +39,6 @@ agent Room {
   }
 
   on call say(name: String, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[Frame]) => c.send(Frame { text: "\(name): \(text)" }))
+    let _ <- conns.parForEach((c: Connection[Frame]) => c.send(Frame { text: "\(name): \(text)" }))
   }
 }

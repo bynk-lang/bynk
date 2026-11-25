@@ -51,7 +51,7 @@ agent Room {
   // `conns.parTraverse` borrows each held connection and `send`s concurrently —
   // the held-aware iteration borrow surface, the track's final piece.
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }

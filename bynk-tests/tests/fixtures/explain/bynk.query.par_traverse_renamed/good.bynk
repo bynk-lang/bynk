@@ -1,0 +1,13 @@
+context room
+
+type Frame = { text: String }
+
+agent Room {
+  key id: String
+
+  store conns: Map[String, Connection[Frame]]
+
+  on call fan(text: String) -> Effect[()] {
+    conns.parForEach((c) => c.send(Frame { text: text }))
+  }
+}
