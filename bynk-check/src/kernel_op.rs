@@ -11,7 +11,17 @@
 #[derive(Debug, Clone, Copy)]
 pub struct KernelMethod {
     pub name: &'static str,
+    /// The first (or only) form's display signature.
     pub signature: &'static str,
+    /// #4262: every form, one entry per arity (`signature` is the first).
+    pub signatures: &'static [&'static str],
+}
+
+impl KernelMethod {
+    /// The completion `detail`: every form on one line, joined with ", or ".
+    pub fn detail(&self) -> String {
+        self.signatures.join(", or ")
+    }
 }
 
 /// Declare the per-receiver operation enums. Each operation names its source
@@ -21,7 +31,7 @@ macro_rules! kernel_ops {
     ($(
         $(#[$meta:meta])*
         $Enum:ident {
-            $( $(#[$vmeta:meta])* $Var:ident = $name:literal, $sig:literal; )*
+            $( $(#[$vmeta:meta])* $Var:ident = $name:literal, $sig:literal $(, $more:literal)*; )*
             $( @hidden $( $(#[$hmeta:meta])* $HVar:ident = $hname:literal; )* )?
         }
     )*) => {
@@ -40,7 +50,7 @@ macro_rules! kernel_ops {
                 ];
                 /// The completion table for this receiver kind (no hidden operations).
                 pub const TABLE: &'static [KernelMethod] =
-                    &[ $( KernelMethod { name: $name, signature: $sig }, )* ];
+                    &[ $( KernelMethod { name: $name, signature: $sig, signatures: &[$sig $(, $more)*] }, )* ];
 
                 /// The operation spelt `name` on this receiver kind, if any.
                 pub fn from_name(name: &str) -> Option<Self> {
@@ -107,7 +117,7 @@ kernel_ops! {
         Skip = "skip", "skip(n: Int) -> List[T]";
         Distinct = "distinct", "distinct() -> List[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> List[T]";
-        Count = "count", "count() -> Int, or count(p: T -> Bool) -> Int";
+        Count = "count", "count() -> Int", "count(p: T -> Bool) -> Int";
         Any = "any", "any(p: T -> Bool) -> Bool";
         All = "all", "all(p: T -> Bool) -> Bool";
         First = "first", "first() -> Option[T]";
@@ -123,8 +133,8 @@ kernel_ops! {
         Sort = "sort", "sort() -> List[T]";
         Traverse = "traverse", "traverse(f: T -> Effect[U]) -> Effect[List[U]]";
         Sum = "sum", "sum(key: T -> K) -> K";
-        Min = "min", "min(key: T -> K) -> Option[K], or min() -> Option[T] for an Ord element";
-        Max = "max", "max(key: T -> K) -> Option[K], or max() -> Option[T] for an Ord element";
+        Min = "min", "min(key: T -> K) -> Option[K]", "min() -> Option[T] for an Ord element";
+        Max = "max", "max(key: T -> K) -> Option[K]", "max() -> Option[T] for an Ord element";
         Average = "average", "average(key: T -> K) -> Option[Float]";
         // #3963: the combinators a language without tuples needs most.
         FilterMap = "filterMap", "filterMap(f: T -> Option[U]) -> List[U]";
@@ -135,7 +145,7 @@ kernel_ops! {
         // QUERY_METHODS' lazy `Query[V]` forms below, but returns `List[V]`).
         JoinOn = "joinOn", "joinOn(other: List[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> List[V]";
         LeftJoin = "leftJoin", "leftJoin(other: List[U], left: T -> K, right: U -> K, into: (T, Option[U]) -> V) -> List[V]";
-        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V], or join(sep: String) -> String for a List[String]";
+        Join = "join", "join(other: List[U], on: (T, U) -> Bool, into: (T, U) -> V) -> List[V]", "join(sep: String) -> String for a List[String]";
         GroupBy = "groupBy", "groupBy(key: T -> K, into: (K, List[T]) -> V) -> List[V]";
         @hidden
         // v0.119 (ADR 0155): `run.upTo(step)` on a synthesised history `Step`
