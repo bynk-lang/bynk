@@ -235,6 +235,27 @@ suite shop.orders {
           (string_literal))))))
 
 ================================================================================
+a test-only commons carries the `for tests` marker (#3984)
+================================================================================
+
+commons demo.kit for tests
+
+const Start: Int = 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    (qualified_name
+      (identifier)
+      (identifier))
+    (test_only_marker)
+    (const_decl
+      (identifier)
+      (base_type)
+      (number_literal))))
+
+================================================================================
 stub and observation of a generic operation name the type argument (#3945)
 ================================================================================
 

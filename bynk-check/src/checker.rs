@@ -63,6 +63,7 @@ pub mod keying;
 pub mod ordering;
 use equality::EqScope;
 mod effect_more;
+mod erase;
 mod expressions;
 mod kernels;
 mod linearity;
@@ -934,6 +935,9 @@ pub enum Callee {
     AgentInit(String),
     /// `agent.handler(args)` — agent handler dispatch.
     Agent { agent: String, handler: String },
+    /// #3931: `self.erase()` in an agent handler — the instance's stored state is deleted when the
+    /// handler commits, instead of the handler's other writes.
+    AgentErase,
     /// A test-body service address (`svc.call`/`svc.<VERB>("/path", …)`/
     /// `svc.schedule(...)`/`svc.message(...)`). `check_test_service_address`
     /// always returns `None` by design (the runner recovers the outcome
@@ -1291,6 +1295,7 @@ impl TypedCommons {
     pub fn empty() -> Self {
         TypedCommons {
             commons: Arc::new(Commons {
+                test_only: false,
                 name: QualifiedName {
                     parts: Vec::new(),
                     span: Default::default(),
@@ -2191,6 +2196,8 @@ pub fn check_handler_body(
     let Some(body_ty) = type_of_block(body, Some(return_ty), &mut ctx) else {
         return;
     };
+    // #3931: a `:=` after `self.erase()` is dropped by the commit.
+    erase::warn_writes_after_erase(body, false, &mut ctx);
     // v0.102 (§3 step 11): the held-resource linearity pass, now that
     // `expr_types` is fully populated by the body walk above.
     linearity::check(

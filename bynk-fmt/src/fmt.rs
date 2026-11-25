@@ -1198,7 +1198,11 @@ impl<'a> Formatter<'a> {
         if let Some(doc) = &c.documentation {
             self.emit_doc(doc);
         }
-        let header = format!("commons {}", c.name.joined());
+        let header = format!(
+            "commons {}{}",
+            c.name.joined(),
+            if c.test_only { " for tests" } else { "" }
+        );
         match c.form {
             CommonsForm::Brace => {
                 self.push(&header);

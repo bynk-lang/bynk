@@ -910,6 +910,7 @@ pub(super) fn synthetic_typed_commons_for_target(
     }
     checker::TypedCommons {
         commons: Arc::new(Commons {
+            test_only: false,
             name: QualifiedName {
                 parts: target_name
                     .split('.')

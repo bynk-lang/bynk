@@ -1,5 +1,5 @@
 {
-  "blurb": "An HTTP handler can be reached by anyone, and Bynk has no safe default for who is calling, so each one must say, with a `by` clause, which actor it expects. The compiler then emits the verification before the body runs. A public route writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set it once on the header, `service api from http by Visitor`, and every handler without its own `by` inherits it. A WebSocket `on open` handler needs one too. `call` handlers need one too (`bynk.actor.missing_by_on_call`); cron and queue have a default.",
+  "blurb": "An HTTP handler can be reached by anyone, and Bynk has no safe default for who is calling, so each one must say, with a `by` clause, which actor it expects. The compiler then emits the verification before the body runs. A public route writes `by v: Visitor`; an authenticated one names an `actor` it declares. Set it once on the header, `service api from http by Visitor`, and every handler without its own `by` inherits it. A WebSocket `on open` handler needs one too. `call` handlers (`bynk.actor.missing_by_on_call`) and queue handlers (`bynk.actor.missing_by_on_queue`) need one too; cron has a default.",
   "category": "Actors",
   "categoryAnchor": "actors",
   "code": "bynk.actor.missing_by_on_http",

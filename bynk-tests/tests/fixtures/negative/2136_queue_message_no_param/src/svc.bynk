@@ -3,7 +3,7 @@
 context svc
 
 service worker from queue("q") {
-  on message() -> Effect[QueueResult] {
+  on message() -> Effect[QueueResult] by Producer {
     Ack
   }
 }

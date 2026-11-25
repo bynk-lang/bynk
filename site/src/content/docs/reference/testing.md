@@ -1422,7 +1422,8 @@ case "an issue event is recorded" {
   type, constant, embed, asset, service or agent of the target or of a commons
   it `uses`) is `bynk.suite.fn_name_clash`. Two helpers of one suite with one
   name are `bynk.suite.duplicate_fn`.
-- **Not exported.** There is no way to share helpers across suites.
+- **Not exported.** A suite's helpers are private to it; to share them across suites,
+  put them in a [test-only commons](#test-only-commons).
 
 ## Types and constants in a suite {#suite-types-consts}
 
@@ -1467,6 +1468,46 @@ case "a count reads back as a typed row" {
   `stub … returns` may name the suite's types and constants, whether the stub is
   written before or after them (the order of a suite's items does not matter), and
   for a stub of a consumed service as for one of a capability.
+
+
+## Sharing between suites {#test-only-commons}
+
+A commons marked **`for tests`** holds what several suites share: helpers, types,
+constants, and test-only values such as `Val[T]` and `RequestHeaders.of`.
+
+```bynk,fragment
+commons shop.testkit for tests
+
+fn gh(event: String, delivery: String) -> RequestHeaders {
+	RequestHeaders.of(["X-GitHub-Event: \(event)", "X-GitHub-Delivery: \(delivery)"])
+}
+
+const Repo: String = "bynk-lang/bynk"
+```
+
+```bynk,fragment
+suite hooks.github
+
+uses shop.testkit
+
+case "an issue event is recorded" {
+	let r <- github.POST("/github", gh("issues", "d-1"), Bytes.fromUtf8("{}")) by GitHub
+	expect r is Ok("accepted")
+}
+```
+
+- **Marker.** `for tests` is a contextual suffix on the commons header. It is part of
+  the file, so moving the file does not change what it means.
+- **Who may use it.** A suite and another test-only commons. A context, a production
+  commons or an adapter that `uses` one is `bynk.uses.test_only_commons`. A
+  test-only commons may itself `uses` production commons.
+- **What it holds.** What a commons holds: helpers, types and constants, checked as a
+  suite's are, with the test-only forms allowed. It has no services, agents,
+  providers or `stub`s. A helper that declares `given` is not available in it (a
+  commons has no one capability set), so keep effectful setup in the suite.
+- **Build.** A deployable build leaves a test-only commons out, as it does a suite;
+  `bynk test` emits it, and `bynk check` checks it. Its names reach every suite of the
+  target that `uses` it.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 

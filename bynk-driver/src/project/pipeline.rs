@@ -400,10 +400,8 @@ pub(super) fn run_checks(
     typed_capability_calls: bool,
     // #1821 (ADR 0147 D3): check and emit `suite`s. Off for a deployable build.
     tests: bool,
-    // Events track, slice 3c (#980): `On` turns on `bynk.schema.lock`
-    // reconciliation, with its pre-read content; `Off` (every in-memory/
-    // test/LSP caller) skips it entirely. See `CompileOptions::schema_registry`
-    // and `SchemaLock`. #1078: no disk access here — the caller pre-reads.
+    // Events track, slice 3c (#980): `On` reconciles `bynk.schema.lock` from its pre-read
+    // content (#1078: no disk access here); `Off` skips it. See `CompileOptions::schema_registry`.
     schema_registry: &SchemaLock,
     // #2138: a remote test build (`CompileOptions::remote_tests`); `None`
     // for every other build.
@@ -546,6 +544,7 @@ pub(super) fn run_checks(
     if !tests {
         parsed.retain(|pf| !matches!(pf.kind(), UnitKind::Test | UnitKind::Integration));
     }
+    project_model::phase_test_only_commons(&mut parsed, tests, &mut errors); // #3984
     // #3243: `parsed` is final here. Register its files once, so the per-unit
     // attribution in `check_unit_files` does not re-register every file for every unit.
     errors.register_parsed(&parsed);
@@ -1142,6 +1141,8 @@ pub(super) fn run_checks(
     // (K4): its binding is Web Crypto over the test's own bytes, deterministic and
     // I/O-free, so a test runs it for real and a fake would check nothing.
     let test_binding_modules = test_binding_modules(&adapter_bindings);
+    // #3984: a suite's test-only commons are reached through its target's view.
+    let test_uses = project_model::unit_uses_with_suite_uses(&unit_uses, &parsed);
     let (test_outputs, runnable_tests) = process_tests(
         &test_groups,
         &parsed,
@@ -1150,7 +1151,7 @@ pub(super) fn run_checks(
         &exports_visibility,
         &unit_consumes,
         &unit_consumes_aliases,
-        &unit_uses,
+        &test_uses,
         &broken,
         &unit_flattened,
         &groups,
