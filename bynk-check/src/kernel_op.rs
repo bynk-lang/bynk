@@ -241,6 +241,8 @@ kernel_ops! {
         IsOk = "isOk", "isOk() -> Bool";
         IsErr = "isErr", "isErr() -> Bool";
         Ok = "ok", "ok() -> Option[T]";
+        OrElse = "orElse", "orElse(f: E -> Result[T, F]) -> Result[T, F]";
+        Err = "err", "err() -> Option[E]";
     }
 /// The `String` kernel (v0.22a; UTF-16 code units, except `chars`).
     StringOp {

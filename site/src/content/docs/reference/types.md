@@ -328,8 +328,10 @@ A method not in this table is `bynk.types.method_not_found`.
 | `r.mapErr(f: E -> F)` | `Result[T, F]` | `f` applied to the `Err` value |
 | `r.andThen(f: T -> Result[U, E])` | `Result[U, E]` | chain a step that may itself fail |
 | `r.getOrElse(default: T)` | `T` | the `Ok` value, or `default` |
+| `r.orElse(f: E -> Result[T, F])` | `Result[T, F]` | `r` if `Ok`, else `f(e)` (run only on `Err`); recovery can inspect the error and change its type |
 | `r.isOk()` / `r.isErr()` | `Bool` | which outcome it is |
 | `r.ok()` | `Option[T]` | the `Ok` value, dropping the error |
+| `r.err()` | `Option[E]` | the `Err` value, dropping the success |
 
 The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
 shows them in use.

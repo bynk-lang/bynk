@@ -72,6 +72,7 @@ mod list_par_with;
 mod par;
 mod query_par;
 mod refinements;
+mod result_more;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
