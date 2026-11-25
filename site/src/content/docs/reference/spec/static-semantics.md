@@ -2397,8 +2397,7 @@ MUST name its `issuer` (`bynk.actor.oidc_missing_issuer`), its `audience`
 (`bynk.actor.oidc_missing_jwks`) — public trust parameters, **no secret** — and
 MUST declare a string-constructible `identity`, minted from the verified `sub`
 claim (`bynk.actor.oidc_identity_not_string_constructible`); `Oidc` is admissible
-only on `from http` handlers and, this slice, only as a **single** actor — never a
-sum member (`bynk.actor.oidc_not_in_sum`) and not a refinement base. A declared
+only on `from http` handlers and may be a sum member (#3936), but is not a refinement base. A declared
 `identity = T` MUST be a context-ownable
 value type, so the verified identity is sealed — minted only inside the owning
 context (`bynk.actor.identity_not_sealed`). A **`Foreign`** actor (#1971) is a
@@ -2425,7 +2424,7 @@ secret (`bynk.actor.signed_cookie_secret_shared`); and its `identity` MUST be
 string-constructible (`bynk.actor.signed_cookie_identity_not_string_constructible`).
 A `ttl` over 30 days (`bynk.actor.signed_cookie_ttl_long`) and a `cookie` without the
 `__Host-` prefix (`bynk.actor.signed_cookie_unprefixed`) are warnings. It is `http`
-only, MUST NOT be a sum member (`bynk.actor.signed_cookie_not_in_sum`) or a refinement
+only, MAY be a sum member (#3936) but MUST NOT be a refinement
 base, and MUST NOT guard a `@cache(scope: public)` route
 (`bynk.actor.signed_cookie_public_cache`). Inside the declaring context, `Actor.issue(identity)`
 (an `Effect[Cookie]`; `identity` is the actor's identity type) and `Actor.expire()` (a `Cookie`) are the
@@ -2510,6 +2509,15 @@ with a handler parameter (`bynk.actor.binder_shadows_param`).
 
 ### §5.7a.1 Multi-actor sum dispatch (v0.52)
 
+An `Oidc` or a `SignedCookie` actor MAY be a member (#3936). Each member runs its own scheme's check,
+in declared order, the first verifying member winning. A `SignedCookie` member reads the session cookie
+first: with none (or a repeated one) it does not resolve and refuses nothing. With one, on a
+state-changing method it applies its cross-site check (`Sec-Fetch-Site: same-origin`, or an `Origin` among
+the service's credentialed `cors` origins) before verifying the cookie; a request it refuses that no
+other member resolves is `403`, not `401`. A request carrying a token and a cookie is the first
+listed member's. A sum arm binds its identity only; reading `.claims` of an `Oidc` or `Bearer` arm is
+not part of this rule (#4344).
+
 A `by` clause MAY name an **ordered sum of peer actors**
 (`by who: A | B | …`): distinct parties distinguished by **scheme**, resolved
 **first-wins**. The boundary tries each peer's scheme in declared order and binds
@@ -2535,8 +2543,8 @@ A sum is well-formed when:
 
 The reachability checks are **decidable and scheme-level**; the compiler does not
 reason about predicate-level disjointness. Total verification failure (no member
-verifies) is **fail-closed → 401**; a sum's members carry no invariants, so there
-is no 403 path. Verification is side-effect-free and idempotent: first-wins
+verifies) is **fail-closed → 401**; a sum's members carry no invariants, so the
+only 403 is a `SignedCookie` member's cross-site refusal below. Verification is side-effect-free and idempotent: first-wins
 short-circuits, so the set and order of verifications attempted is observable, and
 audit/logging belongs *after* resolution.
 

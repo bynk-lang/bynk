@@ -420,8 +420,13 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         return None;
     }
     let actor = actors.get(&by.primary().name)?;
-    // A refinement's `auth` is `None`; it falls through here and follows the
-    // Bearer refinement path (or is rejected). An Oidc base is not narrowed.
+    oidc_seam_of(actor, by.binder.as_ref().map(|b| b.name.clone()))
+}
+
+/// The seam of one `Oidc` actor declaration (a handler's single actor, or a member of a sum, #3936).
+/// A refinement's `auth` is `None`, so it follows the Bearer refinement path; an `Oidc` base is not
+/// narrowed.
+pub fn oidc_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<OidcSeam> {
     if Scheme::from_name(actor.auth.as_ref()?.name.as_str()) != Some(Scheme::Oidc) {
         return None;
     }
@@ -432,7 +437,7 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         return None;
     };
     Some(OidcSeam {
-        binder: by.binder.as_ref().map(|b| b.name.clone()),
+        binder,
         issuer,
         audience,
         jwks,
@@ -730,7 +735,13 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
             .get(&a.name)
             .and_then(|d| d.auth.as_ref())
             .and_then(|auth| Scheme::from_name(auth.name.as_str()))
-            .is_some_and(|s| matches!(s, Scheme::Bearer | Scheme::Signature))
+            .is_some_and(|s| {
+                // #3936: an `Oidc` or `SignedCookie` member refuses a missing credential too.
+                matches!(
+                    s,
+                    Scheme::Bearer | Scheme::Signature | Scheme::Oidc | Scheme::SignedCookie
+                )
+            })
     })
 }
 
@@ -824,6 +835,12 @@ pub enum SumMemberSeam {
         identity_type: String,
     },
     Signature(SignatureSeam),
+    /// #3936: an `Oidc` member, verified by the same JWKS seam as a single-actor route (no binder:
+    /// the sum's `who` carries the identity).
+    Oidc(OidcSeam),
+    /// #3936: a `SignedCookie` member. Its CSRF check belongs to this arm: it runs when the arm is
+    /// tried and a session cookie is present.
+    SignedCookie(SignedCookieSeam),
 }
 
 impl SumMember {
@@ -836,7 +853,9 @@ impl SumMember {
     pub fn identity_type(&self) -> Option<&str> {
         match &self.seam {
             SumMemberSeam::Bearer { identity_type, .. } => Some(identity_type),
-            _ => None,
+            SumMemberSeam::Oidc(seam) => Some(&seam.identity_type),
+            SumMemberSeam::SignedCookie(seam) => Some(&seam.identity_type),
+            SumMemberSeam::None | SumMemberSeam::Signature(_) => None,
         }
     }
 }
@@ -869,17 +888,12 @@ pub fn sum_members_for(
                     }
                 }
                 Scheme::Signature => SumMemberSeam::Signature(signature_seam_from_decl(decl)?),
-                // v0.151: `Oidc` is single-actor only this slice — the checker
-                // rejects it as a sum member (`bynk.actor.oidc_not_in_sum`), so
-                // a well-formed program never reaches here with an Oidc peer.
-                // Return `None` (fail closed → no sum emission) defensively.
-                Scheme::Oidc => return None,
+                Scheme::Oidc => SumMemberSeam::Oidc(oidc_seam_of(decl, None)?),
+                Scheme::SignedCookie => {
+                    SumMemberSeam::SignedCookie(signed_cookie_seam_of(decl, None)?)
+                }
                 // I3: a `Foreign` sum is a `call` sum (`call_admission_for`).
                 Scheme::Internal | Scheme::Foreign => return None,
-                // #3386: `SignedCookie` is single-actor only in its first slice
-                // (`bynk.actor.signed_cookie_not_in_sum`), so a well-formed
-                // program never reaches here with one; fail closed.
-                Scheme::SignedCookie => return None,
             }
         } else {
             // A prelude actor: only `Visitor` (scheme `None`) is an HTTP peer.

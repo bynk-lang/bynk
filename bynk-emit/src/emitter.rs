@@ -86,6 +86,7 @@ pub(crate) mod workers;
 pub mod workers_emit;
 pub(crate) mod workers_entry;
 pub mod workers_group;
+mod workers_sum;
 pub mod wrangler;
 
 pub use bindings::WorkerBindings;

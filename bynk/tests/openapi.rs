@@ -817,6 +817,62 @@ service api from http {
     assert!(open.get("security").is_none(), "{open:?}");
 }
 
+/// #3936: a route guarded by `by who: User | ApiClient` lists both actors' schemes as alternatives
+/// (any one admits), documents the `401`, and on a state-changing method the cookie arm's `403`.
+#[test]
+fn a_sum_of_a_cookie_and_a_token_actor_lists_both_schemes_as_alternatives() {
+    let dir = scratch("sum-cookie-token");
+    write(&dir.join("bynk.toml"), "[project]\nname = \"p\"\n");
+    write(
+        &dir.join("src/p.bynk"),
+        r#"context p
+
+type UserId = String where NonEmpty
+
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+actor ApiClient {
+  auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"),
+  identity = UserId
+}
+
+service api from http {
+  cors { origins: ["https://app.example.com"], credentials: true }
+
+  on GET("/orders") () -> Effect[HttpResult[String]] by who: User | ApiClient {
+    match who {
+      User(u) => Ok(u)
+      ApiClient(c) => Ok(c)
+    }
+  }
+
+  on POST("/orders") () -> Effect[HttpResult[String]] by who: User | ApiClient {
+    match who {
+      User(u) => Ok(u)
+      ApiClient(c) => Ok(c)
+    }
+  }
+}
+"#,
+    );
+    let d = doc(&dir, &[]);
+    assert_valid(&d);
+    let schemes = &d["components"]["securitySchemes"];
+    assert_eq!(schemes["User"]["in"], "cookie");
+    assert_eq!(schemes["ApiClient"]["scheme"], "bearer");
+    let post = &d["paths"]["/orders"]["post"];
+    assert_eq!(
+        post["security"],
+        serde_json::json!([{ "User": [] }, { "ApiClient": [] }])
+    );
+    assert!(post["responses"]["401"].is_object() && post["responses"]["403"].is_object());
+    let get = &d["paths"]["/orders"]["get"];
+    assert!(get["responses"]["401"].is_object());
+    assert!(
+        get["responses"].get("403").is_none(),
+        "a safe method skips the CSRF check: {get:?}"
+    );
+}
+
 /// #3631: a user sum variant spelled like an `HttpResult` variant is the sum's constructor, so it
 /// adds no response; a genuine `HttpResult.Found` still documents the `302`.
 #[test]

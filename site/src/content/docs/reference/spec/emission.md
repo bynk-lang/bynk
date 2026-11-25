@@ -546,8 +546,12 @@ as text; it then tries each member's scheme in declared order — a `Bearer` pee
 against the `Authorization` header, a `Signature` peer against those held bytes, a
 `None` peer accepting unconditionally — and binds the first success into a tagged
 `{ tag: "<Actor>", identity?: … }` value threaded through `deps.who`, which the
-body `match`es. If no member verifies, the wrapper returns
-`HttpResult.Unauthorized` (401) fail-closed, before the body; otherwise it parses
+body `match`es. An `Oidc` member verifies `Authorization: Bearer` against the issuer's JWKS
+(awaited, as in the single-actor wrapper, with `trustFrom` replacing the declared roots); a
+`SignedCookie` member reads its cookie and, on a state-changing method, applies the cross-site check
+before verifying, recording a refusal in `__csrfRefused` instead of resolving. If no member verifies,
+the wrapper returns `HttpResult.Unauthorized` (401) fail-closed, before the body, or
+`HttpResult.Forbidden` (403) when a cookie arm's cross-site check refused the request; otherwise it parses
 the `body` param from the same bytes and dispatches. No member re-reads the
 request — composing a header member with a body member never re-reads or
 re-serialises.

@@ -585,10 +585,29 @@ fn operation(
     let mut responses = responses_of(r_resp, components, handler, model);
     if let Some(seam) = bynk_check::actors::signed_cookie_seam_for(handler, &sel.info.actors) {
         signed_cookie_security(&mut op, &mut responses, components, &seam, method);
+    } else if let Some(members) = bynk_check::actors::sum_members_for(handler, &sel.info.actors) {
+        sum_security(&mut op, &mut responses, components, &members, method);
     }
     op.insert("responses".into(), responses);
     Value::Object(op)
 }
+
+/// The `apiKey` scheme of a `SignedCookie` actor, in the cookie the seam reads.
+fn cookie_scheme(seam: &bynk_check::actors::SignedCookieSeam) -> Value {
+    json!({
+        "type": "apiKey",
+        "in": "cookie",
+        "name": seam.cookie,
+        "description": format!(
+            "A session cookie the `{}` actor issues and verifies. It is signed, not encrypted, and \
+             expires after {} seconds.",
+            seam.actor, seam.ttl_secs
+        ),
+    })
+}
+
+/// The `403` a `SignedCookie` arm answers a cross-site state-changing request with.
+const CROSS_SITE_REFUSAL: &str = "A cross-site request: its `Sec-Fetch-Site` is not `same-origin` and its `Origin` is not one of the service's credentialed CORS origins.";
 
 /// #3386: a route guarded by a `SignedCookie` actor needs that actor's cookie: an `apiKey` security
 /// scheme `in: cookie`, named after the cookie, with the seam's refusals documented: `401` for a
@@ -600,27 +619,93 @@ fn signed_cookie_security(
     seam: &bynk_check::actors::SignedCookieSeam,
     method: IrHttpMethod,
 ) {
-    components.security.entry(seam.actor.clone()).or_insert_with(|| {
-        json!({
-            "type": "apiKey",
-            "in": "cookie",
-            "name": seam.cookie,
-            "description": format!(
-                "A session cookie the `{}` actor issues and verifies. It is signed, not encrypted, and \
-                 expires after {} seconds.",
-                seam.actor, seam.ttl_secs
-            ),
-        })
-    });
+    components
+        .security
+        .entry(seam.actor.clone())
+        .or_insert_with(|| cookie_scheme(seam));
     op.insert("security".into(), json!([{ (seam.actor.clone()): [] }]));
     let mut refusals = vec![(
         "401",
         "No session cookie, or one that is forged, expired or for another actor.",
     )];
     if !matches!(method, IrHttpMethod::Get) {
+        refusals.push(("403", CROSS_SITE_REFUSAL));
+    }
+    if let Value::Object(map) = responses {
+        for (status, description) in refusals {
+            map.entry(status.to_string())
+                .or_insert_with(|| json!({ "description": description }));
+        }
+    }
+}
+
+/// #3936: a route guarded by an actor sum accepts any one of its members, so its `security` lists
+/// each as an alternative (a `Visitor` member is the empty requirement `{}`: the route is open). A
+/// `Bearer` or `Oidc` member is an `http` `bearer` JWT scheme and a `Signature` member an `apiKey`
+/// in its header. The `401` is documented unless a member is open; the `403` of the cookie arm's
+/// CSRF check is, on a state-changing method, when the sum has one.
+fn sum_security(
+    op: &mut Map<String, Value>,
+    responses: &mut Value,
+    components: &mut Components,
+    members: &[bynk_check::actors::SumMember],
+    method: IrHttpMethod,
+) {
+    use bynk_check::actors::SumMemberSeam;
+    let mut alternatives: Vec<Value> = Vec::new();
+    let mut open = false;
+    let mut cross_site = false;
+    for m in members {
+        let scheme = match &m.seam {
+            SumMemberSeam::None => {
+                open = true;
+                alternatives.push(json!({}));
+                continue;
+            }
+            SumMemberSeam::Bearer { .. } => json!({
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": format!("An HS256 bearer token the `{}` actor verifies.", m.actor_name),
+            }),
+            SumMemberSeam::Oidc(seam) => json!({
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": format!(
+                    "An OIDC token issued by {} for the audience `{}`, verified against its JWKS.",
+                    seam.issuer, seam.audience
+                ),
+            }),
+            SumMemberSeam::Signature(seam) => json!({
+                "type": "apiKey",
+                "in": "header",
+                "name": seam.header,
+                "description": format!("An HMAC signature over the body, verified by the `{}` actor.", m.actor_name),
+            }),
+            SumMemberSeam::SignedCookie(seam) => {
+                cross_site = !matches!(method, IrHttpMethod::Get);
+                cookie_scheme(seam)
+            }
+        };
+        components
+            .security
+            .entry(m.actor_name.clone())
+            .or_insert(scheme);
+        alternatives.push(json!({ (m.actor_name.clone()): [] }));
+    }
+    op.insert("security".into(), Value::Array(alternatives));
+    let mut refusals: Vec<(&str, &str)> = Vec::new();
+    if !open {
+        refusals.push((
+            "401",
+            "No credential that any of the route's actors accepts.",
+        ));
+    }
+    if cross_site {
         refusals.push((
             "403",
-            "A cross-site request: its `Sec-Fetch-Site` is not `same-origin` and its `Origin` is not one of the service's credentialed CORS origins.",
+            "A cross-site request carrying only a session cookie: the cookie arm's CSRF check refuses it. A request that presents a token instead is admitted.",
         ));
     }
     if let Value::Object(map) = responses {

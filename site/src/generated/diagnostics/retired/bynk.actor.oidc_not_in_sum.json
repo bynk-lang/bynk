@@ -1,0 +1,6 @@
+{
+  "code": "bynk.actor.oidc_not_in_sum",
+  "lastRelease": "0.661.1",
+  "replacement": "a sum such as `by who: User | ApiClient`, whose members are tried in declared order",
+  "why": "An `Oidc` actor may now be a member of a multi-actor sum (#3936): the sum's seam checks its members in order, asynchronously, so a JWKS fetch fits."
+}
