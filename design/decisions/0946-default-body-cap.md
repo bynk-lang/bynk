@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-breaking: A body-taking HTTP route with no `@limit` or `limits { maxBody }` now answers `413` for a body over 1 MiB; the build hints `bynk.http.body_cap_defaulted` name those routes, and `@limit(maxBody: …)` on a route or `limits { maxBody: … }` on the service raises the cap.
-changelog: Every body-taking HTTP route has a 1 MiB request-body cap by default (JSON, `@form` and `@multipart`; `@raw` still declares its own); `@limit` and `limits { maxBody }` raise it up to 524,288,000 bytes, there is no unlimited setting, the `413` says how to raise the cap, and a build hint lists the routes that rely on the default
----
+# 0946 — Every body-taking HTTP route has a 1 MiB request-body cap by default
 
-## ADR: default-body-cap
-title: Every body-taking HTTP route has a 1 MiB request-body cap by default
-summary: A route that takes a body is capped at 1,048,576 bytes unless it or its service says otherwise, with no unlimited setting and a build hint for routes on the default
+- **Status:** Accepted (v0.684)
 
 **Context.** Body limits were opt-in: a JSON or `@form` route with no `limits { }` read an arbitrarily large body into memory before it could reject it, in a Worker with 128 MB for everything. Only `@raw` and `@multipart` routes had to declare a cap. A cap the author forgets cannot be added in the handler, because the generated router reads the body before the handler exists.
 

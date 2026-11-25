@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A constant can stand as a refinement predicate's argument (`InRange(1, MaxQty)`, `MaxLength(MaxNote)`, `Matches(SlugPattern)`), substituted as the literal it is bound to
-probes: explained_codes, diagnostic_coverage, emit_diagnostics
----
+# 0945 — A constant stands as a refinement predicate's argument under ADR 0826's rule
 
-## ADR: const-refinement-bounds
-title: A constant stands as a refinement predicate's argument under ADR 0826's rule
-summary: A predicate argument may name a constant; the checker substitutes its literal before the refinement is read
+- **Status:** Accepted (v0.683)
 
 **Context.** A refinement bound is the commonest place a limit is written, and the one place ADR 0826's constant substitution did not reach: `InRange(1, 100)` had to repeat the literal wherever the limit was also needed (an error message, a test, a `@limit`).
 
