@@ -95,6 +95,7 @@ pub fn string_refinement_violation<'a>(
 mod regex_ambiguity;
 mod string_more;
 mod usefulness;
+mod validation_rule;
 
 use calls::*;
 use expressions::*;

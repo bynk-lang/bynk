@@ -9,10 +9,10 @@ export type Debt = number & { readonly __brand: "Debt" };
 export const Debt = {
   of(value: number): Result<Debt, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Debt", message: "must be a safe integer", value });
+      return Err({ field: "Debt", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= -5 && value <= -1)) {
-      return Err({ field: "Debt", message: "must be in range [-5, -1]", value });
+      return Err({ field: "Debt", message: "must be in range [-5, -1]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -5 }, hi: { tag: "IntBound", value: -1 } }, value });
     }
     return Ok(value as Debt);
   },
@@ -23,10 +23,10 @@ export type Pinned = number & { readonly __brand: "Pinned" };
 export const Pinned = {
   of(value: number): Result<Pinned, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Pinned", message: "must be a safe integer", value });
+      return Err({ field: "Pinned", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= -3 && value <= -3)) {
-      return Err({ field: "Pinned", message: "must be in range [-3, -3]", value });
+      return Err({ field: "Pinned", message: "must be in range [-3, -3]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -3 }, hi: { tag: "IntBound", value: -3 } }, value });
     }
     return Ok(value as Pinned);
   },
@@ -37,10 +37,10 @@ export type Single = number & { readonly __brand: "Single" };
 export const Single = {
   of(value: number): Result<Single, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Single", message: "must be a safe integer", value });
+      return Err({ field: "Single", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 7 && value <= 7)) {
-      return Err({ field: "Single", message: "must be in range [7, 7]", value });
+      return Err({ field: "Single", message: "must be in range [7, 7]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 7 }, hi: { tag: "IntBound", value: 7 } }, value });
     }
     return Ok(value as Single);
   },
@@ -51,10 +51,10 @@ export type Window = number & { readonly __brand: "Window" };
 export const Window = {
   of(value: number): Result<Window, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Window", message: "must be a safe integer", value });
+      return Err({ field: "Window", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 2 && value <= 9)) {
-      return Err({ field: "Window", message: "must be in range [2, 9]", value });
+      return Err({ field: "Window", message: "must be in range [2, 9]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 2 }, hi: { tag: "IntBound", value: 9 } }, value });
     }
     return Ok(value as Window);
   },
@@ -65,10 +65,10 @@ export type Low = number & { readonly __brand: "Low" };
 export const Low = {
   of(value: number): Result<Low, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Low", message: "must be a safe integer", value });
+      return Err({ field: "Low", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= -9 && value <= 4)) {
-      return Err({ field: "Low", message: "must be in range [-9, 4]", value });
+      return Err({ field: "Low", message: "must be in range [-9, 4]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -9 }, hi: { tag: "IntBound", value: 4 } }, value });
     }
     return Ok(value as Low);
   },
@@ -79,13 +79,13 @@ export type Tight = number & { readonly __brand: "Tight" };
 export const Tight = {
   of(value: number): Result<Tight, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Tight", message: "must be a safe integer", value });
+      return Err({ field: "Tight", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Tight", message: "must be positive", value });
+      return Err({ field: "Tight", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     if (!(value >= -4 && value <= 3)) {
-      return Err({ field: "Tight", message: "must be in range [-4, 3]", value });
+      return Err({ field: "Tight", message: "must be in range [-4, 3]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -4 }, hi: { tag: "IntBound", value: 3 } }, value });
     }
     return Ok(value as Tight);
   },
@@ -96,13 +96,13 @@ export type Neg = number & { readonly __brand: "Neg" };
 export const Neg = {
   of(value: number): Result<Neg, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Neg", message: "must be a safe integer", value });
+      return Err({ field: "Neg", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Neg", message: "must be non-negative", value });
+      return Err({ field: "Neg", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     if (!(value >= -8 && value <= 0)) {
-      return Err({ field: "Neg", message: "must be in range [-8, 0]", value });
+      return Err({ field: "Neg", message: "must be in range [-8, 0]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -8 }, hi: { tag: "IntBound", value: 0 } }, value });
     }
     return Ok(value as Neg);
   },

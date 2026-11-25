@@ -16,7 +16,7 @@ export type Day = string & { readonly __brand: "Day" };
 export const Day = {
   of(value: string): Result<Day, ValidationError> {
     if (!(__bynkIsIsoDate(value))) {
-      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", value });
+      return Err({ field: "Day", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value });
     }
     return Ok(value as Day);
   },
@@ -72,7 +72,7 @@ export function __deserialise_Event(json: __JsonValue, path: string = "$"): Resu
   }
   const __on = obj["on"];
   if (!(__bynkIsIsoDate(__on))) {
-    return Err({ kind: "RefinementViolation", path: `${path}.on`, violation: { field: "on", message: "must be a calendar date (YYYY-MM-DD)", value: __on } });
+    return Err({ kind: "RefinementViolation", path: `${path}.on`, violation: { field: "on", message: "must be a calendar date (YYYY-MM-DD)", rule: { tag: "IsoDate" }, value: __on } });
   }
   return Ok({ on: __on } as Event);
 }

@@ -15,13 +15,13 @@ export type DisplayName = string & { readonly __brand: "DisplayName" };
 export const DisplayName = {
   of(value: string): Result<DisplayName, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 1)) {
-      return Err({ field: "DisplayName", message: "length must be at least 1", value });
+      return Err({ field: "DisplayName", message: "length must be at least 1", rule: { tag: "MinLength", limit: 1 }, value });
     }
     if (!(__bynkCodePointLength(value) <= 40)) {
-      return Err({ field: "DisplayName", message: "length must be at most 40", value });
+      return Err({ field: "DisplayName", message: "length must be at most 40", rule: { tag: "MaxLength", limit: 40 }, value });
     }
     if (!(__bynkRegExp("^(?:" + "[\\p{L}\\p{M}' -]+" + ")$", "u").test(value))) {
-      return Err({ field: "DisplayName", message: "must match /[\\p{L}\\p{M}' -]+/", value });
+      return Err({ field: "DisplayName", message: "must match /[\\p{L}\\p{M}' -]+/", rule: { tag: "Matches", pattern: "[\\p{L}\\p{M}' -]+" }, value });
     }
     return Ok(value as DisplayName);
   },
@@ -32,7 +32,7 @@ export type OneChar = string & { readonly __brand: "OneChar" };
 export const OneChar = {
   of(value: string): Result<OneChar, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "." + ")$", "u").test(value))) {
-      return Err({ field: "OneChar", message: "must match /./", value });
+      return Err({ field: "OneChar", message: "must match /./", rule: { tag: "Matches", pattern: "." }, value });
     }
     return Ok(value as OneChar);
   },
@@ -43,7 +43,7 @@ export type Code = string & { readonly __brand: "Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[a-z]{3}-\\d{4}" + ")$", "iu").test(value))) {
-      return Err({ field: "Code", message: "must match /(?i)[a-z]{3}-\\d{4}/", value });
+      return Err({ field: "Code", message: "must match /(?i)[a-z]{3}-\\d{4}/", rule: { tag: "Matches", pattern: "(?i)[a-z]{3}-\\d{4}" }, value });
     }
     return Ok(value as Code);
   },

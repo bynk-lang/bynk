@@ -11,7 +11,7 @@ export type UserId = string & { readonly __brand: "reg.api.UserId" };
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as UserId);
   },

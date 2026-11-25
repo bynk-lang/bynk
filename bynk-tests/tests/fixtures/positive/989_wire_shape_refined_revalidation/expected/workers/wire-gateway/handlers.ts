@@ -108,10 +108,10 @@ export function __deserialise_ClientId(json: __JsonValue, path: string = "$"): R
     return Err({ kind: "StructuralMismatch", path, expected: "string", actual: typeof json });
   }
   if (!(__bynkCodePointLength(json) > 0)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "must be non-empty", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value: json } });
   }
   if (!(__bynkCodePointLength(json) <= 20)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "length must be at most 20", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "ClientId", message: "length must be at most 20", rule: { tag: "MaxLength", limit: 20 }, value: json } });
   }
   return Ok(json as unknown as wire_auth.ClientId);
 }

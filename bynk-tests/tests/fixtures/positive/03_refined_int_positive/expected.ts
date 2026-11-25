@@ -9,10 +9,10 @@ export type Count = number & { readonly __brand: "Count" };
 export const Count = {
   of(value: number): Result<Count, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Count", message: "must be a safe integer", value });
+      return Err({ field: "Count", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value > 0)) {
-      return Err({ field: "Count", message: "must be positive", value });
+      return Err({ field: "Count", message: "must be positive", rule: { tag: "Positive" }, value });
     }
     return Ok(value as Count);
   },

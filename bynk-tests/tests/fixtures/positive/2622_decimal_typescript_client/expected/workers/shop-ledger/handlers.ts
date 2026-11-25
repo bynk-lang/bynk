@@ -11,7 +11,7 @@ export type Price = { readonly coefficient: bigint; readonly scale: number } & {
 export const Price = {
   of(value: { readonly coefficient: bigint; readonly scale: number }): Result<Price, ValidationError> {
     if (!((value).coefficient > 0n)) {
-      return Err({ field: "Price", message: "must be positive", value: __bynkDecimalToString(value) });
+      return Err({ field: "Price", message: "must be positive", rule: { tag: "Positive" }, value: __bynkDecimalToString(value) });
     }
     return Ok(value as Price);
   },

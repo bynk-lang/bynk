@@ -10,10 +10,10 @@ export type Cents = number & { readonly __brand: "Cents" };
 export const Cents = {
   of(value: number): Result<Cents, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Cents", message: "must be a safe integer", value });
+      return Err({ field: "Cents", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 1000)) {
-      return Err({ field: "Cents", message: "must be in range [1, 1000]", value });
+      return Err({ field: "Cents", message: "must be in range [1, 1000]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 1000 } }, value });
     }
     return Ok(value as Cents);
   },
@@ -24,10 +24,10 @@ export type Delta = number & { readonly __brand: "Delta" };
 export const Delta = {
   of(value: number): Result<Delta, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Delta", message: "must be a safe integer", value });
+      return Err({ field: "Delta", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= -10 && value <= 10)) {
-      return Err({ field: "Delta", message: "must be in range [-10, 10]", value });
+      return Err({ field: "Delta", message: "must be in range [-10, 10]", rule: { tag: "InRange", lo: { tag: "IntBound", value: -10 }, hi: { tag: "IntBound", value: 10 } }, value });
     }
     return Ok(value as Delta);
   },

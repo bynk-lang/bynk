@@ -17,7 +17,7 @@ export type EntryId = string & { readonly __brand: "shop.ledger.EntryId" };
 export const EntryId = {
   of(value: string): Result<EntryId, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "E-[0-9]+" + ")$", "u").test(value))) {
-      return Err({ field: "EntryId", message: "must match /E-[0-9]+/", value });
+      return Err({ field: "EntryId", message: "must match /E-[0-9]+/", rule: { tag: "Matches", pattern: "E-[0-9]+" }, value });
     }
     return Ok(value as EntryId);
   },

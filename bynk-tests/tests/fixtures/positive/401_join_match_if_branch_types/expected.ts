@@ -10,7 +10,7 @@ export type Email = string & { readonly __brand: "Email" };
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Email", message: "must be non-empty", value });
+      return Err({ field: "Email", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as Email);
   },

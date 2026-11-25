@@ -33,7 +33,7 @@ export type Tag = number & { readonly __brand: "demo.gaps.Tag" };
 export const Tag = {
   of(value: number): Result<Tag, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Tag", message: "must be a safe integer", value });
+      return Err({ field: "Tag", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     return Ok(value as Tag);
   },
