@@ -3,6 +3,7 @@ context shop.support
 consumes bynk.cloudflare {
   InboundEmail,
   EmailVerdict,
+  DmarcVerdict,
 }
 
 actor Authenticated = Sender where Dmarc(DmarcPass)
@@ -10,7 +11,7 @@ actor NotFailed = Sender where !Dmarc(DmarcFail)
 
 service orders from email("orders@shop.example") {
   on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Authenticated {
-    Accept
+    if s.identity.dmarc == DmarcPass { Accept } else { Reject("sender not verified") }
   }
 }
 

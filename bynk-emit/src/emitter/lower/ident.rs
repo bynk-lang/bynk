@@ -11,7 +11,7 @@ use super::super::lower_call::query::{held_values_source, path_values_source};
 use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::{TyRender, ts_base, ts_ty_to_ts_type};
 use super::super::{RAW, map_query, ts_ident};
-use super::{Lowered, Pre, consumed_variant_literal, member_node, one};
+use super::{Lowered, Pre, consumed_variant_literal, member_node, one, type_member_node};
 use crate::ts_build::ident;
 
 /// `(() => values)`: a store read used as a value, the deferred `Query` thunk (1A.23, #3724).
@@ -191,7 +191,7 @@ pub(super) fn lower_ident(e: &Expr, id: &Ident, cx: &mut LowerCtx) -> bynk_ts::T
         if let Ok(built) = consumed_variant_literal(e, type_name, &id.name, Vec::new(), cx) {
             return built;
         }
-        return member_node(type_name, &id.name);
+        return type_member_node(type_name, &id.name);
     }
     // v0.52: the multi-actor sum binder is not a runtime local — the resolved
     // actor is threaded through `deps.who` at the boundary wrapper, so the

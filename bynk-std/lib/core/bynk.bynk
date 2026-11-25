@@ -426,29 +426,29 @@ adapter bynk {
 	---
 	capability Idempotency {
 		---
-		Checks for a cached outcome under `key`; a miss is `None`.
+		Checks for a cached outcome under `key`, any `Key` type; a miss is `None`.
 
 		The provider follows the build's platform: D1-backed on Cloudflare
 		(durable and shared across isolates, in the Worker's `<worker>-idempotency`
 		database), in-memory on Node and in the browser (lost on restart).
 		---
-		fn dedup[T: Codable](key: String) -> Effect[Option[T]] @onUndecodable(miss)
+		fn dedup[T: Codable, K: Key](key: K) -> Effect[Option[T]] @onUndecodable(miss)
 		---
-		Caches `value` under `key` for `expiresAfter`.
+		Caches `value` under `key`, any `Key` type, for `expiresAfter`.
 
 		The provider follows the build's platform: D1-backed on Cloudflare
 		(durable and shared across isolates, in the Worker's `<worker>-idempotency`
 		database), in-memory on Node and in the browser (lost on restart).
 		---
-		fn remember[T: Codable](key: String, value: T, expiresAfter: Duration) -> Effect[()]
+		fn remember[T: Codable, K: Key](key: K, value: T, expiresAfter: Duration) -> Effect[()]
 		---
-		Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+		Claims `key`, any `Key` type, for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
 
 		The provider follows the build's platform: D1-backed on Cloudflare
 		(durable and shared across isolates, in the Worker's `<worker>-idempotency`
 		database), in-memory on Node and in the browser (lost on restart).
 		---
-		fn claim(key: String, expiresAfter: Duration) -> Effect[Claim]
+		fn claim[K: Key](key: K, expiresAfter: Duration) -> Effect[Claim]
 	}
 
 	---
