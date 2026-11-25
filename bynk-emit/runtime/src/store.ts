@@ -89,6 +89,8 @@ export class StoreMap<V> implements StoreMapHandle<V> {
   readonly indexers: readonly Indexer<V>[];
   // index name -> index value -> primary keys in rank (insertion) order.
   private readonly postings = new Map<string, Map<string, string[]>>();
+  /** The values staged under each `@unique` index since the handle was loaded, to check at commit (#4038). */
+  private readonly touched = new Map<string, Set<string>>();
   private nextRank = 0;
 
   constructor(indexers: ReadonlyArray<Indexer<V>> = []) {
@@ -105,6 +107,8 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     // `new this`, so a subclass (`StoreCache`) builds an instance of itself.
     const handle = new this(indexers);
     for (const [k, v] of entries) handle.put(k, v);
+    // What a handle is loaded with is not something a handler staged (#4038).
+    handle.touched.clear();
     return handle;
   }
 
@@ -183,10 +187,11 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     return pks.map((pk) => (this.slots.get(pk) as Slot<V>).value);
   }
 
+  /** Only the values this handler staged are judged, as a storage-backed handle judges them: a duplicate it never touched is not its to refuse. */
   hasDuplicate(index: string): boolean {
     const buckets = this.postings.get(index);
     if (buckets === undefined) throw new Error(`store map has no index "${index}"`);
-    for (const pks of buckets.values()) if (pks.length > 1) return true;
+    for (const by of this.touched.get(index) ?? []) if ((buckets.get(by)?.length ?? 0) > 1) return true;
     return false;
   }
 
@@ -206,6 +211,11 @@ export class StoreMap<V> implements StoreMapHandle<V> {
     const buckets = this.postings.get(ix.index) as Map<string, string[]>;
     const bucket = buckets.get(by) ?? [];
     buckets.set(by, bucket);
+    if (ix.unique === true) {
+      const seen = this.touched.get(ix.index) ?? new Set<string>();
+      seen.add(by);
+      this.touched.set(ix.index, seen);
+    }
     // A posting list is in insertion order: the entry goes after every member that was
     // inserted before it. A new key is the newest, so that is the end; a key whose
     // indexed value changed is older than some members, so it goes in at its rank.

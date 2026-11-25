@@ -103,6 +103,8 @@ export function postingKey(field: string, index: string, by: string, pk: string)
   }
   return key;
 }
+/** Every posting of every index of a map field. */
+export const postingFieldPrefix = (field: string): string => `i/${encodeKeyPart(field)}/`;
 /** Every posting of one indexed value; with `by` omitted, every posting of the index. */
 export const postingPrefix = (field: string, index: string, by?: string): string =>
   `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${by === undefined ? "" : `${encodeKeyPart(by)}/`}`;
@@ -309,7 +311,26 @@ export type WholesaleField =
 export interface WholesaleIndex {
   readonly index: string;
   readonly recordField: string;
+  /** A `@unique` index (#4038): its postings key an `Option` by its payload, not the whole option. */
+  readonly unique?: boolean;
 }
+
+/**
+ * The index set a map's metadata records (#4038): each index and its key scheme, sorted. A handle
+ * whose declared set differs from the recorded one rebuilds the field's postings before writing.
+ */
+export function indexSignature(indexes: ReadonlyArray<{ readonly index: string; readonly unique?: boolean }>): string {
+  return indexes
+    .map((ix) => `${ix.index}:${ix.unique === true ? "u" : "i"}`)
+    .sort()
+    .join(",");
+}
+
+/** A map's metadata record: its size and sequence, and its index set when it has one. */
+const mapMeta = (size: number, seq: number | undefined, indexes: ReadonlyArray<WholesaleIndex> | undefined): Record<string, unknown> => {
+  const ix = indexSignature(indexes ?? []);
+  return { size, ...(seq === undefined ? {} : { seq }), ...(ix === "" ? {} : { ix }) };
+};
 
 /** What splitting a wholesale record produces. */
 export interface SplitRecord {
@@ -355,7 +376,7 @@ export function splitWholesale(stored: Readonly<Record<string, unknown>>, fields
             for (const pk of pks) entries[postingKey(f.name, ix.index, by, pk)] = 1;
           }
         }
-        entries[metaKey(f.name)] = { size: Object.keys(inline as object).length };
+        entries[metaKey(f.name)] = mapMeta(Object.keys(inline as object).length, undefined, f.indexes);
         break;
       }
       case "set": {
@@ -743,7 +764,7 @@ function planEntries(
       }
     }
     const size = collection.length;
-    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = { size, seq };
+    if (size > 0 || meta !== undefined) entries[metaKey(f.name)] = f.kind === "map" ? mapMeta(size, seq, f.indexes) : { size, seq };
   }
   record[LAYOUT_KEY] = LAYOUT_PER_ENTRY;
   return { record, entries };

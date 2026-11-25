@@ -32,7 +32,7 @@ export interface DirectoryState {
 const __DirectoryRegistry = new __StateRegistry();
 function __zeroOfDirectoryState(): DirectoryState { return { customers: new __StoreMap<Customer>([{ index: "email", of: (__v) => String(__v.email), unique: true }]), byNick: new __StoreMap<Customer>([{ index: "nick", of: (__v) => __v.nick.tag === "Some" ? String(__v.nick.value) : undefined, unique: true }]), both: new __StoreMap<Customer>([{ index: "email", of: (__v) => String(__v.email), unique: true }]) }; }
 
-const __entryFieldsOfDirectory = [{ name: "customers", kind: "map", indexes: [{ index: "email", recordField: "customers__idx_email" }] }, { name: "byNick", kind: "map", indexes: [{ index: "nick", recordField: "byNick__idx_nick" }] }, { name: "both", kind: "map", indexes: [{ index: "email", recordField: "both__idx_email" }] }] as const;
+const __entryFieldsOfDirectory = [{ name: "customers", kind: "map", indexes: [{ index: "email", recordField: "customers__idx_email", unique: true }] }, { name: "byNick", kind: "map", indexes: [{ index: "nick", recordField: "byNick__idx_nick", unique: true }] }, { name: "both", kind: "map", indexes: [{ index: "email", recordField: "both__idx_email", unique: true }] }] as const;
 
 function __rehydrateDirectoryState(s: DirectoryState, stored: DirectoryState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "customers")) {

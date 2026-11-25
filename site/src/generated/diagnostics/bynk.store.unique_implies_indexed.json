@@ -1,10 +1,10 @@
 {
-  "blurb": null,
+  "blurb": "`@unique(by: k)` already maintains the index `@indexed(by: k)` would: the same postings, and equality filters on `k` route through them. Declaring both on one field adds nothing, so this warns. Drop the `@indexed`.",
   "category": "Agent storage",
   "categoryAnchor": "agent-storage",
   "code": "bynk.store.unique_implies_indexed",
   "constructs": [],
-  "example": null,
+  "example": "context shop\n\ntype Customer = { id: String, email: String }\n\nagent Directory {\n    key id: String\n    store customers: Map[String, Customer] @unique(by: email) @indexed(by: email)   // ⚠ `@unique` implies the index\n    store byEmail: Map[String, Customer] @unique(by: email)                          // ✓\n}",
   "severity": "warning",
   "summary": "A `@unique(by: k)` field is also declared `@indexed(by: k)`: `@unique` maintains the index itself (a warning)."
 }

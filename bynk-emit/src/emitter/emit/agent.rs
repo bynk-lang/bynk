@@ -536,8 +536,18 @@ fn emit_agent_state_record(
                 fs.sort();
                 fs.into_iter()
                     .map(|f| {
+                        // #4038: a `@unique` index says so, so the recorded index set tells it from `@indexed`.
+                        let unique = if layout
+                            .unique_indexes
+                            .iter()
+                            .any(|u| u.map == name.name && &u.field == f)
+                        {
+                            ", unique: true"
+                        } else {
+                            ""
+                        };
                         format!(
-                            "{{ index: \"{f}\", recordField: \"{}__idx_{f}\" }}",
+                            "{{ index: \"{f}\", recordField: \"{}__idx_{f}\"{unique} }}",
                             name.name
                         )
                     })

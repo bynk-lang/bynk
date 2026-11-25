@@ -331,9 +331,18 @@ entry, refuse the commit, while moving a value from one entry to another within 
 allowed. The refusal is an `InvariantViolation` fault with the declaration `unique`, named
 `<field>.<k>` (`customers.email`), and never carries the value. An `Option` field is unique among its
 `Some` values: a `None` is not indexed, so any number of entries may hold one (an equality filter
-on such a field is a scan, as the index is keyed by the payload). Adding `@unique` to a field that
-already holds duplicates cannot be checked at build time: the first commit that touches a
-duplicated value is refused.
+on such a field is a scan, as the index is keyed by the payload).
+
+**Adding `@unique` to a map that already holds entries.** The check reads the index, so the first
+handler to touch the map after the change rebuilds its postings from its entries, in its own
+commit (one pass over the map, once; the same happens when an index is added, removed or changes
+its key scheme, as `@indexed` to `@unique` does on an `Option` field). Entries written before the
+annotation are then found, and a put that collides with one is refused. Existing duplicates cannot
+be checked at build time: a commit that touches a duplicated value is refused, and one that does
+not is unaffected.
+
+`@unique` takes one `by:` field. `@unique(by: first, by: last)` is refused rather than read as a
+constraint over the pair, which is not supported; a bare `@unique` is refused too.
 
 ## Invariants
 

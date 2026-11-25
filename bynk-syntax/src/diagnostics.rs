@@ -4828,6 +4828,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "consumes bynk { Clock }\n\nstore trail: Log[String]\n\non call opened() -> Effect[()] {\n    let _ <- trail.append(\"opened\")   // ✗ the stamp reads the clock\n    Effect.pure(())\n}\n\non call opened() -> Effect[()] given Clock {   // ✓ declare the clock\n    let _ <- trail.append(\"opened\")\n    Effect.pure(())\n}",
     },
     Explain {
+        code: "bynk.store.unique_implies_indexed",
+        blurb: "`@unique(by: k)` already maintains the index `@indexed(by: k)` would: the same postings, and equality filters on `k` route through them. Declaring both on one field adds nothing, so this warns. Drop the `@indexed`.",
+        example: "context shop\n\ntype Customer = { id: String, email: String }\n\nagent Directory {\n    key id: String\n    store customers: Map[String, Customer] @unique(by: email) @indexed(by: email)   // ⚠ `@unique` implies the index\n    store byEmail: Map[String, Customer] @unique(by: email)                          // ✓\n}",
+    },
+    Explain {
         code: "bynk.store.unkeyable_key",
         blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be a `Key` type, as for a value `Map` or `Set`: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. Two keys are one entry exactly when they are `==`. A `Float` is never a key at any depth, because `NaN` is not equal to itself and a key holding one could never be found again; a `Map`, a `Set` and a function are not keys either. Key by a field that is a `Key`, or store the value as an `Int` or a `String` (a `Float` price as whole cents, say). A value `Map` or `Set` follows the same rule, `bynk.types.not_keyable`.",
         example: "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",

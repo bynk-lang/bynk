@@ -4117,6 +4117,26 @@ fn validate_indexed_keys(
             TypeBody::Record(r) => Some(r.fields.as_slice()),
             _ => None,
         });
+    // #4038: `@unique` is a constraint, so a form that would silently enforce nothing, or something other
+    // than what it reads as, is refused: a bare one has no field, and a second `by:` would make each
+    // field unique alone, not the pair.
+    if name == "unique" && ann.args.is_empty() {
+        errors.push(CompileError::new(
+            "bynk.index.bad_argument",
+            ann.span,
+            "`@unique` needs a field: `@unique(by: <field>)`",
+        ));
+    }
+    if name == "unique" && ann.args.len() > 1 {
+        errors.push(
+            CompileError::new(
+                "bynk.index.bad_argument",
+                ann.args[1].span,
+                "`@unique` takes one `by:` field",
+            )
+            .with_note("each `by:` would make its field unique on its own, not the pair; a constraint over several fields is not supported"),
+        );
+    }
     for arg in &ann.args {
         // Only `by:` labels are admitted on `@indexed` and `@unique`.
         let Some(label) = &arg.label else {
