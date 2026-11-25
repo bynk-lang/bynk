@@ -102,6 +102,8 @@ service outbox from queue("outbound-email") {
           (generic_type_ref
             (builtin_type)
             (identifier))
+          (by_clause
+            (identifier))
           (block
             (identifier)))))))
 
