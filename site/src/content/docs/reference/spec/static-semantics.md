@@ -1938,8 +1938,8 @@ seconds, 0 to 60) and `concurrency` (1 to 250), each written once, with a litera
 of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 `bynk.queue.delivery_not_queue`. A consumer with no `deadLetter` key warns
 (`bynk.queue.no_dead_letter`; `deadLetter: None` silences it). The dead-letter queue MUST NOT be
-the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
-receives from (`bynk.queue.dead_letter_type_mismatch`).
+the consumer's own, and a Bynk consumer of it MUST accept the message type of the consumer it
+receives from (`bynk.queue.dead_letter_type_mismatch`), by the comparison of the next paragraph.
 
 A `sendValue`, `sendValueWith` or `sendValueBatch` call on a `Queue` instance whose queue some
 context of the project consumes (`from queue("q")`) MUST send a type, or for a batch an element

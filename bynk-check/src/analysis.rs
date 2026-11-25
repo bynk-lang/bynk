@@ -756,6 +756,7 @@ fn analyse_project_inner(
         &groups,
         &kinds,
         &unit_tables,
+        (&unit_uses, &unit_consumes),
         &mut errors,
     );
     // #2959: Workers-only as well.

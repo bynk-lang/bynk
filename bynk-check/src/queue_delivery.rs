@@ -15,13 +15,15 @@ use std::collections::{BTreeMap, HashMap};
 
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::{
-    CommonsItem, DeliveryPolicy, ExprKind, Handler, HandlerKind, ServiceDecl, ServiceProtocol,
-    SourceUnit,
+    CommonsItem, DeliveryPolicy, ExprKind, ServiceDecl, ServiceProtocol, SourceUnit,
 };
 use bynk_syntax::error::CompileError;
 
 use crate::context_checks::ts_type_ref_display;
+use crate::contract_compat::Verdict;
 use crate::project_model::{ErrorSink, is_queue_name};
+use crate::queue_producers::{consumers_of, message_compat};
+use crate::symbols::{UnitTable, contract_types_for};
 
 /// The keys of a `delivery { }` section, with what each takes.
 const KEYS: &[(&str, &str)] = &[
@@ -171,36 +173,22 @@ fn check_dead_letter(expr: &bynk_syntax::ast::Expr, queue: &str, errors: &mut Ve
     }
 }
 
-/// One consumer: its context's name, its service, and its message type.
-struct Consumer<'a> {
-    context: &'a str,
-    handler: &'a Handler,
-    file: usize,
-    ty: String,
-}
-
-/// The message parameter's type of a consumer's `on message` handler, as written.
-fn message_type(handler: &Handler) -> Option<String> {
-    // The message is the parameter that is not the `QueueDelivery` (#3880), so
-    // a handler that takes the delivery first still has its message type read.
-    handler
-        .params
-        .iter()
-        .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
-        .map(|p| ts_type_ref_display(&p.type_ref))
-}
-
 /// A dead-letter queue is an ordinary queue, so a Bynk consumer may read it
-/// (`from queue("outbound-email-dlq")`): its message type must be the source
-/// consumer's, since the dead letter is the same body, unchanged.
+/// (`from queue("outbound-email-dlq")`): it must be able to decode every
+/// message of the source consumer's type, since the dead letter is the same
+/// body, unchanged. That is the comparison a producer's send gets (#3879,
+/// ADR 0714), so an alias of the same type and a weaker refinement are
+/// accepted, and a different type is refused (#4305).
 pub fn phase_dead_letter_consumers(
     parsed: &[ParsedFile],
     groups: &BTreeMap<String, Vec<usize>>,
     kinds: &BTreeMap<String, UnitKind>,
+    (unit_tables, unit_uses, unit_consumes): ProjectTables<'_>,
     errors: &mut ErrorSink,
 ) {
-    let mut consumers: HashMap<&str, Consumer> = HashMap::new();
-    let mut sources: Vec<(&str, &ServiceDecl, usize, &str)> = Vec::new();
+    let consumers = consumers_of(parsed, groups, kinds);
+    let types_of =
+        |context: &str| contract_types_for(context, unit_tables, unit_uses, unit_consumes).0;
     for (ctx_name, indices) in groups {
         if kinds.get(ctx_name) != Some(&UnitKind::Context) {
             continue;
@@ -210,72 +198,75 @@ pub fn phase_dead_letter_consumers(
                 continue;
             };
             for item in &ctx.items {
-                let CommonsItem::Service(s) = item else {
+                let CommonsItem::Service(service) = item else {
                     continue;
                 };
-                let ServiceProtocol::Queue { name } = &s.protocol else {
+                let ServiceProtocol::Queue { name: queue } = &service.protocol else {
                     continue;
                 };
-                let Some(handler) = s
-                    .handlers
-                    .iter()
-                    .find(|h| matches!(h.kind, HandlerKind::Message))
+                let Some(bynk_syntax::ast::DeadLetter::Queue(dlq)) =
+                    service.delivery.as_ref().and_then(|d| d.dead_letter())
                 else {
                     continue;
                 };
-                let Some(ty) = message_type(handler) else {
+                let (Some(source), Some(dead)) =
+                    (consumers.get(queue.as_str()), consumers.get(dlq))
+                else {
                     continue;
                 };
-                consumers.entry(name.as_str()).or_insert(Consumer {
-                    context: ctx_name,
-                    handler,
-                    file: i,
-                    ty,
-                });
-                sources.push((name.as_str(), s, i, ctx_name));
+                let verdict = message_compat(
+                    &source.param.type_ref,
+                    &types_of(source.context),
+                    &dead.param.type_ref,
+                    &types_of(dead.context),
+                );
+                if verdict.verdict != Verdict::Breaking {
+                    continue;
+                }
+                let delivery = service
+                    .delivery
+                    .as_ref()
+                    .expect("a dead letter has a delivery");
+                let span = delivery
+                    .fields
+                    .iter()
+                    .rev()
+                    .find(|f| f.name.name == "deadLetter")
+                    .map_or(delivery.span, |f| f.value.span);
+                let mut err = CompileError::new(
+                    "bynk.queue.dead_letter_type_mismatch",
+                    span,
+                    format!(
+                        "the consumer of dead-letter queue `{dlq}` takes `{}`, but `{queue}` (context `{ctx_name}`) takes `{}`",
+                        ts_type_ref_display(&dead.param.type_ref),
+                        ts_type_ref_display(&source.param.type_ref),
+                    ),
+                )
+                .with_label(
+                    dead.param.span,
+                    format!("consumed here, in context `{}`", dead.context),
+                );
+                for f in verdict.findings.iter().filter(|f| f.breaking) {
+                    err = err.with_note(format!("{}: {}", f.path, f.message));
+                }
+                errors.push_for(
+                    Some(&parsed[i].identity_path()),
+                    err.with_note(
+                        "a dead letter is the original message body, unchanged, so its consumer must accept the source consumer's type",
+                    ),
+                );
             }
         }
     }
-    for (queue, service, file, ctx_name) in sources {
-        let Some(delivery) = &service.delivery else {
-            continue;
-        };
-        let Some(bynk_syntax::ast::DeadLetter::Queue(dlq)) = delivery.dead_letter() else {
-            continue;
-        };
-        let (Some(source), Some(dead)) = (consumers.get(queue), consumers.get(dlq)) else {
-            continue;
-        };
-        if source.ty == dead.ty {
-            continue;
-        }
-        let span = delivery
-            .fields
-            .iter()
-            .rev()
-            .find(|f| f.name.name == "deadLetter")
-            .map_or(delivery.span, |f| f.value.span);
-        errors.push_for(
-            Some(&parsed[file].identity_path()),
-            CompileError::new(
-                "bynk.queue.dead_letter_type_mismatch",
-                span,
-                format!(
-                    "the consumer of dead-letter queue `{dlq}` takes `{}`, but `{queue}` (context `{ctx_name}`) takes `{}`",
-                    dead.ty, source.ty
-                ),
-            )
-            .with_label(
-                dead.handler.span,
-                format!("consumed here, in context `{}`", dead.context),
-            )
-            .with_note(
-                "a dead letter is the original message body, unchanged, so its consumer must take the same type",
-            ),
-        );
-        let _ = dead.file;
-    }
 }
+
+/// The project tables a type namespace is built from: each unit's symbol table, and what it
+/// `uses` and `consumes`.
+pub type ProjectTables<'a> = (
+    &'a HashMap<String, UnitTable>,
+    &'a HashMap<String, Vec<String>>,
+    &'a HashMap<String, Vec<String>>,
+);
 
 #[cfg(test)]
 mod tests {
