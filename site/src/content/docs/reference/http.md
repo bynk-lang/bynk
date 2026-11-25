@@ -1227,7 +1227,8 @@ on GET("/feed") () -> Effect[HttpResult[()]] by v: Visitor {
 ```
 
 It is written on the `Streaming` variant itself, optionally after other response methods, and an
-interval under one second is refused. A heartbeat is only written while the stream is waiting: an
+interval under one second is refused: at compile time for a duration written out, and by
+faulting the request for one computed at run time. A heartbeat is only written while the stream is waiting: an
 event that is ready is never delayed, and no event is dropped or repeated. A heartbeat keeps the
 Worker invocation alive for as long as the connection is open, which is why it is opt-in, and it
 does not extend any platform limit on the response's total duration.

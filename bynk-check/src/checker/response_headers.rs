@@ -149,7 +149,7 @@ pub(crate) fn check_response_header_method(
         HttpResultOp::RetryAfter => vec![(duration, "delay")],
         HttpResultOp::At => vec![(string, "url")],
         HttpResultOp::Download => vec![(string, "filename")],
-        HttpResultOp::Heartbeat => vec![(duration, "interval")],
+        HttpResultOp::Heartbeat => vec![(duration, "every")],
         _ => vec![],
     };
     if args.len() != params.len() {
