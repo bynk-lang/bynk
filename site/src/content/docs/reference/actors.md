@@ -23,7 +23,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
 | `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
-| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
+| `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite`, `sessions` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
 | `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Internal` | — | `()`, or `CallerId` for `Caller` | `call`/`cron`/`queue` | a call's per-edge signature proves the calling context; cron and queue are platform-dispatched |
 | `Foreign` | `secret = "<ENV>"`, optional `worker = "<name>"` | none | `call` | the caller, a Worker that is not Bynk, signs the call as the actor under the secret ([wire format](/reference/wire-format/#foreign-callers)); `401` unsigned, `403` where the handler does not admit it |
@@ -78,6 +78,7 @@ actor User {
 | `cookie` | the cookie's name; defaults to `__Host-session`; a name without the `__Host-` prefix warns |
 | `previous` | the key being rotated out, accepted for verification only |
 | `sameSite` | `Lax` (the default), `Strict` or `Unrestricted` |
+| `sessions` | `true` keeps each session in a generated agent the seam checks on every request, so a session can be ended on the server (see [Revocable sessions](#revocable-sessions)); `false`, the default, keeps the cookie stateless |
 
 The cookie's `Domain` and `Path` are not configurable: it is always host-only with `Path=/`.
 The identity is minted from the cookie's `sub` and must be a string-constructible type the
@@ -101,6 +102,9 @@ context owns, as for `Bearer`. A `SignedCookie` secret may not be any other acto
    never a quiet accept.
 4. **Minting the identity** from the verified `sub`; a `sub` that violates the identity type's
    refinement is `401`.
+5. **Checking the session**, only with `sessions = true`: the cookie must carry a session id, and the
+   identity's session agent must hold it live. A cookie without one, or one the agent has dropped, is
+   `401`. The check runs after the signature, so a forged cookie never costs an agent call.
 
 ## Issuing and deleting the cookie
 
@@ -129,9 +133,33 @@ There are no attributes to get wrong, so you attach it with `withCookie` and not
 `User.expire()` is the matching deletion (same name and path, empty, `Max-Age=0`), so a logout cannot
 miss the cookie it set.
 
-A stateless cookie **cannot be revoked** before it expires: a copy a user already took keeps working
-until then. `expire` removes it from this browser; it does not invalidate the cookie. Keep the `ttl` short,
-or keep the session on the server (see `examples/sessions`) if you need to log out everywhere.
+A stateless cookie (the default) **cannot be revoked** before it expires: a copy a user already took keeps
+working until then. `expire` removes it from this browser; it does not invalidate the cookie. Keep the `ttl`
+short, or set `sessions = true` (below) so a session can be ended on the server.
+
+### Revocable sessions
+
+`SignedCookie(…, sessions = true)` makes each session a server-side record. The cookie carries a session id
+(`sid`), and the compiler generates an agent, `<Actor>Sessions`, keyed by the identity, that holds that
+identity's live sessions with their expiry. It appears in the schema lock and is deployed and migrated like
+any agent you write; its shape is the compiler's to evolve.
+
+- `User.issue(identity)` adds a session to the identity's agent before it signs the cookie, so a cookie
+  never exists for a session the agent does not know. Expired sessions are dropped as new ones are added.
+- `User.expire()` ends the *current* session in the agent, then answers the deleting cookie. With
+  `sessions = true` it is an `Effect[Cookie]` (bind it with `<-`) and, like `issue`, can only be called in
+  a service handler. A handler the actor does not guard has no session to end and only gets the cookie.
+- The seam asks the agent on every request, after the signature check. A session that was ended, has
+  expired in the agent, or never existed is `401`, so a copy of an `expire`d cookie replayed from another
+  browser is refused.
+
+Because every authenticated request makes one agent call, `sessions` is opt-in and the stateless cookie stays
+the default. A hot identity is one user's own sessions, so contention is unlikely. A cookie signed before
+`sessions` was switched on carries no session id and is refused (`401`): switching it on logs everyone out.
+
+Revocation takes effect on the next request, not on the response that ends it, and an agent that cannot
+answer faults the request (`500`) rather than admitting it. Ending every session of an identity at once
+(`revokeAll`) is the next increment.
 
 The handler never sees the credential: the router leaves the session cookie out of the handler's
 `cookies` record and raw `RequestCookies` view, and a record that names it is refused
