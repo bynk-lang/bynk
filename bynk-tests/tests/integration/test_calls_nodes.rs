@@ -36,8 +36,12 @@ fn emit(fixture: &str, rewrite: &[(&str, &str)]) -> String {
     let (dir, copy) = if rewrite.is_empty() {
         (original, None)
     } else {
+        // Unique per call: tests sharing a fixture run in parallel, and one removing the copy
+        // while another compiles it was the flake (#4405).
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let tmp =
-            std::env::temp_dir().join(format!("bynk_tcalls_{}_{fixture}", std::process::id()));
+            std::env::temp_dir().join(format!("bynk_tcalls_{}_{n}_{fixture}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         copy_dir(&original, &tmp);
         for (path, text) in rewrite {
