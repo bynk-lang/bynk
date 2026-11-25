@@ -1,0 +1,40 @@
+context ops.mail
+
+consumes bynk.cloudflare { QueueDelivery }
+
+type Job = { id: String }
+
+fn doubling(n: Int) -> Int {
+  if n <= 0 { 1 } else { 2 * doubling(n - 1) }
+}
+
+// #3881: an exponential backoff, from the attempt count: 10, 20, 40 seconds, and so on.
+service backoff from queue("backoff-jobs") {
+  delivery { deadLetter: None }
+  on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] {
+    RetryAfter("dependency down", 10.seconds * doubling(delivery.attempts - 1))
+  }
+}
+
+// A computed delay outside Cloudflare's range is clamped: 25 hours to 24, none to 1 second,
+// and a part second rounds up.
+service clamped from queue("clamped-jobs") {
+  delivery { deadLetter: None }
+  on message(job: Job, delivery: QueueDelivery) -> Effect[QueueResult] {
+    if delivery.attempts == 1 {
+      RetryAfter("too long", 1.hour * 25)
+    } else if delivery.attempts == 2 {
+      RetryAfter("too short", 0.seconds * 3)
+    } else {
+      RetryAfter("part second", 1500.milliseconds)
+    }
+  }
+}
+
+// `Retry` keeps its meaning: no delay of its own, so the consumer's `retryDelay` applies.
+service plain from queue("plain-jobs") {
+  delivery { retryDelay: 45.seconds, deadLetter: None }
+  on message(job: Job) -> Effect[QueueResult] {
+    Retry("again")
+  }
+}

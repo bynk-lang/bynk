@@ -1,0 +1,27 @@
+suite shop.orders as integration {
+  consumes shop.pay { Receipt }
+
+  case "a value the wire cannot carry fails at integration" {
+    stub Pay.authorise(_, _) returns Ok(Receipt { id: "r1", rate: 0.0 / 0.0 })
+    let r <- placeOrder.call(10)
+    expect r is Ok("r1")
+  }
+
+  case "an ordinary value passes through the wire" {
+    stub Pay.authorise(_, _) returns Ok(Receipt { id: "r2", rate: 0.5 })
+    let r <- placeOrder.call(10)
+    expect r is Ok("r2")
+  }
+
+  case "a bare Float result the wire cannot carry fails at integration" {
+    stub Pay.rate(_) returns 0.0 / 0.0
+    let r <- quote.call(1.0)
+    expect r == r
+  }
+
+  case "a bare Float argument the wire cannot carry fails at integration" {
+    stub Pay.rate(_) returns 1.0
+    let r <- quote.call(0.0 / 0.0)
+    expect r == r
+  }
+}

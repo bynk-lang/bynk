@@ -206,7 +206,7 @@ fn lower_store_held_map_call(
     // commit as any other persisted field.
     // P6.21 (partial, continued): the receiver test reads the checker's own
     // `Callee::Store`/`Callee::Query` (P6.0): entry ops (`put`/`remove`/`contains`/`size`/
-    // `get`) are `Callee::Store`, lifted query ops (e.g. `parTraverse`) `Callee::Query`.
+    // `get`) are `Callee::Store`, lifted query ops (e.g. `parForEach`) `Callee::Query`.
     // `agent_held_map_frame` stays: it answers which *kind* of store field this is (held vs
     // ordinary), not the shadowing question `Callee` already settles.
     if let ExprKind::Ident(id_) = &receiver.kind

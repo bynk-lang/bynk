@@ -724,6 +724,7 @@
 /book/reference/diagnostics/bynk.provider.signature_mismatch/
 /book/reference/diagnostics/bynk.provider.unknown_capability/
 /book/reference/diagnostics/bynk.query.join_key_mismatch/
+/book/reference/diagnostics/bynk.query.par_traverse_renamed/
 /book/reference/diagnostics/bynk.query.sum_needs_numeric/
 /book/reference/diagnostics/bynk.queue.bad_params/
 /book/reference/diagnostics/bynk.queue.duplicate_consumer/
@@ -1859,6 +1860,7 @@
 /reference/diagnostics/bynk.provider.signature_mismatch/
 /reference/diagnostics/bynk.provider.unknown_capability/
 /reference/diagnostics/bynk.query.join_key_mismatch/
+/reference/diagnostics/bynk.query.par_traverse_renamed/
 /reference/diagnostics/bynk.query.sum_needs_numeric/
 /reference/diagnostics/bynk.queue.bad_params/
 /reference/diagnostics/bynk.queue.dead_letter_type_mismatch/
@@ -1867,6 +1869,7 @@
 /reference/diagnostics/bynk.queue.duplicate_consumer/
 /reference/diagnostics/bynk.queue.invalid_name/
 /reference/diagnostics/bynk.queue.no_dead_letter/
+/reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/

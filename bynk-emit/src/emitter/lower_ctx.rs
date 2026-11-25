@@ -1705,8 +1705,12 @@ impl<'a> LowerCtx<'a> {
         // #1934: the payloads a case binds from a queue verdict and a
         // boundary rejection, named as `queue.ts` and `http.ts` name them.
         match disc_node.as_deref() {
-            Some(Ty::QueueResult) if variant == "Retry" && idx == 0 => {
+            Some(Ty::QueueResult) if matches!(variant, "Retry" | "RetryAfter") && idx == 0 => {
                 return "reason".to_string();
+            }
+            // #3881: `RetryAfter(reason, delay)`.
+            Some(Ty::QueueResult) if variant == "RetryAfter" && idx == 1 => {
+                return "delay".to_string();
             }
             Some(Ty::BoundaryRejection) if idx == 0 => return "detail".to_string(),
             _ => {}
