@@ -1,12 +1,6 @@
----
-level: patch
-changelog: The dead-letter consumer check compares message types structurally, as a producer's send does, so a type with the same fields under another name and a weaker refinement are accepted
-probes: emit_diagnostics
----
+# 0969 — The dead-letter consumer check uses the producer check's comparison
 
-## ADR: queue-dead-letter-structural
-title: The dead-letter consumer check uses the producer check's comparison
-summary: A dead-letter queue's consumer is compared with the source consumer by ADR 0714's structural comparison, not by the types as written
+- **Status:** Accepted (v0.704.1)
 
 **Context.** #3877 compared the two consumers' message types as display strings, so `Job` and a record with the same fields under another name were reported as different, while #3879's producer check, which uses ADR 0714's comparison, accepted the same pair. The two checks could disagree about whether two queue message types match.
 
