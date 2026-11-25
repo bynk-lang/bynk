@@ -1,0 +1,10 @@
+{
+  "blurb": "`@cache(noStore: true)` sends `Cache-Control: no-store`, which tells every cache to keep nothing, and drops the automatic `ETag`, because nothing is stored to revalidate. `maxAge`, `scope` and `immutable` describe how a stored response may be reused, so they contradict it and are refused. Keep `noStore: true` alone to forbid storing, or drop it and declare the freshness you want.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_no_store_conflict",
+  "constructs": [],
+  "example": "@cache(noStore: true, maxAge: 5.minutes)   // ✗ no-store and a freshness window\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)                          // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`."
+}

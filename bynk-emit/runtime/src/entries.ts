@@ -114,6 +114,22 @@ export function expiredRange(field: string, now: number): DurableObjectListOptio
 /** Per-collection metadata: the entry count for `size()` and a `Log`'s counter. */
 export const metaKey = (field: string): string => `c/${encodeKeyPart(field)}`;
 
+/**
+ * The committed entry count of a collection field, for `old.<field>.size()` in a
+ * `transition`: the stored count, or for a record still in the wholesale layout
+ * the entries its inline collection holds. A collection with neither is empty.
+ */
+export async function committedSize(
+  storage: DurableObjectStorage,
+  field: string,
+  prior: object,
+): Promise<number> {
+  const meta = await storage.get<{ size?: number }>(metaKey(field));
+  if (meta !== undefined) return meta.size ?? 0;
+  const inline = (prior as Readonly<Record<string, unknown>>)[field];
+  return inline === undefined || inline === null ? 0 : Object.keys(inline as object).length;
+}
+
 /** The entry key a listed storage key carries, given the prefix it was listed under. */
 export function entryKeyOf(prefix: string, storageKey: string): string {
   return decodeKeyPart(storageKey.slice(prefix.length));

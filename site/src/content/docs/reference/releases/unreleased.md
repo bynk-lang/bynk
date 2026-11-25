@@ -7,6 +7,11 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.689.0** | An `invariant` or `transition` may read the `size()` of a `Map` or `Set` store field, and any other read of a collection is the targeted `bynk.invariant.collection_scan` / `bynk.transition.collection_scan` |
+| **v0.688.0** | A `Queue` send delay is a refined `QueueDelay` (0 seconds to 24 hours): a literal out of range is a compile error and a computed span goes through `QueueDelay.of`; the documented maximum is 24 hours, not 12 (a part second still rounds up); a literal delay between 12 and 24 hours, a run-time fault before, is now accepted |
+| **v0.687.0** | A route guarded by a credential-carrying actor (`Bearer`, `Oidc`, `SignedCookie`, `Signature`, or a sum with one) sends `Cache-Control: private` on every response by default, `@cache(scope: public)` on it is refused, and `@cache(noStore: true)` sends `no-store` with no `ETag` on any route |
+| **v0.686.0** | `bynk explain` on a retired diagnostic code says when it was retired, why, and what replaced it, and the diagnostics reference lists retired codes |
+| **v0.685.0** | A `for all` over a `String where Matches(…)` draws members of the pattern and shrinks to shorter ones, and one over `IsoDate` draws real calendar dates |
 | **v0.684.0** | Every body-taking HTTP route has a 1 MiB request-body cap by default (JSON, `@form` and `@multipart`; `@raw` still declares its own); `@limit` and `limits { maxBody }` raise it up to 524,288,000 bytes, there is no unlimited setting, the `413` says how to raise the cap, and a build hint lists the routes that rely on the default |
 | **v0.683.1** | `bynk test --smoke` no longer stops on a hint, so a project with a hint-level diagnostic synthesises its smoke suite as before |
 | **v0.683.0** | A constant can stand as a refinement predicate's argument (`InRange(1, MaxQty)`, `MaxLength(MaxNote)`, `Matches(SlugPattern)`), substituted as the literal it is bound to |
