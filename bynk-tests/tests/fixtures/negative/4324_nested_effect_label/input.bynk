@@ -1,0 +1,10 @@
+commons demo.nestedlabel
+
+fn tag[T](n: Effect[Int], x: T) -> Effect[T] {
+	Effect.pure(x)
+}
+
+fn lift(n: Effect[Int], e: Effect[Int]) -> Int {
+	let w = tag(n, e)
+	0
+}

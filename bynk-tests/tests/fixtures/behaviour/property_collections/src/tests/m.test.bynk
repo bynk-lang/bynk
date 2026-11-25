@@ -1,0 +1,42 @@
+// #4120: `for all` and `Val` work over `List`, `Set`, `Map` and `Option`, and over records
+// containing them; a failing claim shrinks to its smallest counterexample.
+suite demo.m {
+  property "a list is at most eight long" {
+    for all xs: List[Int] {
+      expect xs.length() <= 8
+    }
+  }
+
+  property "a record's collections are drawn" {
+    for all o: Order {
+      expect o.lines.length() <= 8
+    }
+  }
+
+  property "sets and maps are drawn" {
+    for all t: Tagged {
+      expect t.tags.toList().length() <= 8
+      expect t.counts.keys().length() <= 8
+    }
+  }
+
+  property "a list is shorter than three" {
+    for all xs: List[Int] {
+      expect xs.length() < 3
+    }
+  }
+
+  property "an option is none" {
+    for all o: Option[Int] {
+      expect o is None
+    }
+  }
+
+  case "Val of a collection or an option is the empty one" {
+    let xs = Val[List[Int]]
+    expect xs.length() == 0
+    let o = Val[Order]
+    expect o.lines.length() == 0
+    expect o.note is None
+  }
+}

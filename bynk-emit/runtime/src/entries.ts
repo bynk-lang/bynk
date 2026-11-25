@@ -1,5 +1,6 @@
 import type { DurableObjectListOptions, DurableObjectStorage, DurableObjectTransaction } from "./storage.ts";
 import { STORAGE_BATCH_LIMIT, utf8Compare } from "./storage.ts";
+import { __bynkKeyEncode } from "./keys.ts";
 import { entriesOf, noteOrder } from "./store.ts";
 
 // Per-entry agent storage: the runtime half (#3189, track #3195,
@@ -90,8 +91,17 @@ export function parseLogKey(key: string): { t: number; seq: number } {
 }
 
 /** One posting of a secondary index: `by` is the indexed value, `pk` the primary key. */
-export const postingKey = (field: string, index: string, by: string, pk: string): string =>
-  `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
+export function postingKey(field: string, index: string, by: string, pk: string): string {
+  const key = `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
+  // The indexed value and the entry key sit in one storage key (#4037): fault here, naming the
+  // field and the index, rather than at the commit flush with the platform's error.
+  if (key.length * 3 > MAX_STORAGE_KEY_BYTES && new TextEncoder().encode(key).length > MAX_STORAGE_KEY_BYTES) {
+    throw new Error(
+      `store \`${field}\`: an index \`${index}\` key, its value and the entry's key together, is over the ${MAX_STORAGE_KEY_BYTES}-byte storage-key limit`,
+    );
+  }
+  return key;
+}
 /** Every posting of one indexed value; with `by` omitted, every posting of the index. */
 export const postingPrefix = (field: string, index: string, by?: string): string =>
   `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${by === undefined ? "" : `${encodeKeyPart(by)}/`}`;
@@ -113,6 +123,24 @@ export function expiredRange(field: string, now: number): DurableObjectListOptio
 
 /** Per-collection metadata: the entry count for `size()` and a `Log`'s counter. */
 export const metaKey = (field: string): string => `c/${encodeKeyPart(field)}`;
+
+/** The longest a Durable Object storage key may be, in bytes. */
+export const MAX_STORAGE_KEY_BYTES = 2048;
+
+/**
+ * The entry key of a store collection's non-scalar key (#4037): its canonical encoding, the one
+ * a value `Map` indexes by, so two keys are one entry exactly when they are `==`. The encoding
+ * counts towards the platform's key size, and the longest key it appears in is a `Cache`'s expiry
+ * entry, so a key over the limit faults here, naming the field and never the key's value.
+ */
+export function storeKey(field: string, key: unknown): string {
+  const enc = __bynkKeyEncode(key);
+  if (new TextEncoder().encode(expiryKey(field, 0, enc)).length > MAX_STORAGE_KEY_BYTES) {
+    throw new Error(`store \`${field}\`: a key's encoding is over the ${MAX_STORAGE_KEY_BYTES}-byte storage-key limit`);
+  }
+  return enc;
+}
+
 
 /**
  * The committed entry count of a collection field, for `old.<field>.size()` in a
@@ -797,6 +825,36 @@ export async function commitStored(
 // notes what it read against the state object the handler commits; the commit reaps with it.
 // A handler that never touched a `Cache` notes nothing, and its commit reaps nothing.
 const clocks = new WeakMap<object, number>();
+
+/**
+ * #3931: `self.erase()`. A handler that calls it carries an `Erasure`, marked by the call, and its commit
+ * deletes the instance's storage instead of writing the handler's state.
+ */
+export interface Erasure {
+  erased: boolean;
+}
+
+export function newErasure(): Erasure {
+  return { erased: false };
+}
+
+/** The erasure `self.erase()` marks: an effect, so `do self.erase()` and a tail `self.erase()` read as any other. */
+export function markErased(erasure: Erasure): Promise<void> {
+  erasure.erased = true;
+  return Promise.resolve();
+}
+
+/**
+ * The commit of a handler that erased: delete every key of the instance's storage (the `"state"` record, the
+ * layout and schema markers, each per-entry key and index posting), and forget what was read of it, so the next
+ * call finds a key it has never seen. Nothing of the handler's own writes is kept, and no invariant is checked
+ * against the initial state the instance returns to.
+ */
+export async function eraseStored(self: object, storage: DurableObjectStorage): Promise<void> {
+  await storage.deleteAll();
+  bases.delete(self);
+  lazyReads.delete(self);
+}
 
 /** The most expired entries one commit deletes, across all of an agent's `Cache` fields. */
 export const CACHE_REAP_LIMIT = 64;

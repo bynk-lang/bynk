@@ -1,0 +1,46 @@
+context shop.account
+
+agent Account {
+	key id: String
+
+	store closed: Cell[Bool]
+	store note: Cell[String]
+	store tags: Map[String, String]
+
+	// A `:=` after `do self.erase()` in the same block has nothing to write to.
+	on call close() -> Effect[()] {
+		do self.erase()
+		closed := true
+		Effect.pure(())
+	}
+
+	// The same in a branch of an `if`.
+	on call closeIf(flag: Bool) -> Effect[()] {
+		if flag {
+			do self.erase()
+			note := "gone"
+			Effect.pure(())
+		} else {
+			note := "kept"
+			Effect.pure(())
+		}
+	}
+
+	// Erasing and writing in different branches is fine, and so is a write before the erase.
+	on call replace(text: String) -> Effect[()] {
+		note := text
+		self.erase()
+	}
+
+	// A nested block after the erase is just as dead, and so is a store operation.
+	on call closeNested(flag: Bool) -> Effect[()] {
+		do self.erase()
+		do tags.put("closed", "yes")
+		if flag {
+			note := "nested"
+			Effect.pure(())
+		} else {
+			Effect.pure(())
+		}
+	}
+}

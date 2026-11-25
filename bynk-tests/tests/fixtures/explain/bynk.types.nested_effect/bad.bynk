@@ -1,0 +1,10 @@
+commons demo
+
+fn wrap[T](x: T) -> Effect[T] {
+	Effect.pure(x)
+}
+
+fn nested(e: Effect[Int]) -> Int {
+	let w = wrap(e)
+	0
+}

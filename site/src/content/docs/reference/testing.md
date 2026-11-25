@@ -1780,6 +1780,8 @@ case "placing an order stores it" {
 | `String where MinLength(k)` / `Length(k)` | a string of length `k` |
 | `String where Matches(…)` / `IsoDate` | its `@example` ([below](#val-example)); **error** without one — must pin (`bynk.val.needs_pin`) |
 | sum | the first variant (payloads recursively fabricated) |
+| `List[T]`, `Set[T]`, `Map[K, V]` | the empty collection (#4120) |
+| `Option[T]` | `None` (#4120) |
 | record | every field fabricated, an inline `where` on a field narrowing it as a refined type's does (`qty: Int where Positive` is `1`; a field `where Matches(…)` takes its `@example`, or must pin) |
 | opaque | `.unsafe(<base zero>)` |
 
@@ -1866,6 +1868,9 @@ Generation draws from `T`'s **refinement domain** and includes boundary values:
 | `String where Matches(…)` | members of the pattern's language, drawn by a random walk of the pattern that includes the shortest member and members at each repeat's bounds (`{3,8}` gives 3- and 8-character runs); shrinks to shorter members, then to earlier characters. Length predicates bound the walk; any other predicate (a second `Matches`, `IsoDate`) filters the draws, and a draw budget that runs out fails the property naming the combination. Every draw is re-checked against the pattern, so a disagreement fails loudly. A pattern the walk cannot honour (a lookaround, a backreference, a word boundary or an anchor inside the pattern, a Unicode property escape, a negated class under `(?i)`) is `bynk.val.needs_pin`, naming the construct |
 | `String where IsoDate` | real calendar dates across 0000 to 9999, mostly the present era, biased to leap days, month ends and the first and last years; shrinks toward `0000-01-01` |
 | sum | each variant |
+| `List[T]`, `Set[T]` | up to eight elements, each drawn from `T`: the empty and the one-element collection lead, and a `Set` keeps distinct members. Nested collections share a size budget, so a `List[List[T]]` stays small. Shrinks by dropping elements (all, each half, one at a time) and then shrinking those left (#4120) |
+| `Map[K, V]` | as a `Set[K]`, each key with a value drawn from `V` (#4120) |
+| `Option[T]` | `None` or `Some` of a `T`; shrinks to `None`, then shrinks its payload (#4120) |
 | record | each field generated; under `for all`, a field with an inline `where` (`qty: Int where Positive`) draws from that refinement, as the rows above |
 | opaque | over the base type |
 | plain `Bool` | `true` and `false` |
@@ -1893,6 +1898,11 @@ is led by its all-default value and is not shrunk. A refined `Decimal`, `Float` 
 
 Widening the draws changed which counterexamples a given seed finds, so a seed
 recorded from an earlier version may now reproduce a different failure (or none).
+
+Records and sums containing these types are generable too, including a type that recurses through one (`Tree = { children: List[Tree] }`): the empty collection and `None` end the recursion. A counterexample prints as it is
+written (`[0,0,0]`, `Some(0)`, `Set.of([…])`, `Map.of([…])`). When a binding cannot be generated,
+`bynk.val.needs_pin` names the path to the part that cannot, for example
+``Order.lines`: `Slug`: `Matches("…")` uses a lookahead``.
 
 A type must be **refinement-generable** to appear in `for all` (or `Val`): a
 `String where Matches(re)` whose pattern the walk cannot honour, and a `Cron`

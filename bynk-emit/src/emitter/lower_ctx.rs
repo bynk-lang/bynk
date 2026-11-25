@@ -807,6 +807,21 @@ impl<'a> LowerCtx<'a> {
             .is_some_and(|s| s.held_maps.contains_key(name))
     }
 
+    /// #4037: whether the `Map`, `Set` or `Cache` field `name` has a key that is not a scalar,
+    /// and is keyed by the canonical encoding.
+    pub(crate) fn agent_store_key_is_composite(&self, name: &str) -> bool {
+        self.agent_store()
+            .is_some_and(|s| s.composite_keys.contains(name))
+    }
+
+    /// #4037: whether the `@indexed(by: field)` index of `map` is over a non-scalar field.
+    pub(crate) fn agent_store_index_is_composite(&self, map: &str, field: &str) -> bool {
+        self.agent_store().is_some_and(|s| {
+            s.composite_indexes
+                .contains(&(map.to_string(), field.to_string()))
+        })
+    }
+
     /// 1A.33: whether the plain `store Map` field `name` holds `Connection` values, by its
     /// resolved model type.
     pub(crate) fn agent_store_map_holds_connections(&self, name: &str) -> bool {

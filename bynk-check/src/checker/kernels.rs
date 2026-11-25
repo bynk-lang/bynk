@@ -1626,7 +1626,9 @@ pub(crate) fn check_duration_kernel_method(
             | DurationOp::ToHours
             | DurationOp::ToDays,
         ) => Some((vec![], Ty::Base(BaseType::Int))),
-        Some(DurationOp::ToString) => Some((vec![], Ty::Base(BaseType::String))),
+        Some(DurationOp::ToString | DurationOp::ToIso) => {
+            Some((vec![], Ty::Base(BaseType::String)))
+        }
         None => None,
     };
     let Some((params, ret)) = sig else {
@@ -1634,7 +1636,7 @@ pub(crate) fn check_duration_kernel_method(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`",
+                "the built-in `Duration` type has no method `{}` — the kernel is `toMillis`, `toSeconds`, `toMinutes`, `toHours`, `toDays`, `toString`, `toIso`",
                 method.name
             ),
         ));
@@ -2256,18 +2258,25 @@ pub(crate) fn check_cookie_field_call(
 pub(crate) fn check_http_result_method(
     method: &Ident,
     op: Option<HttpResultOp>,
+    receiver: &Expr,
     recv_ty: TyId,
     args: &[Expr],
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    // #3915: the response-header methods have their own rules.
+    if let Some(op) = op.filter(|op| super::response_headers::is_response_header_op(*op)) {
+        return super::response_headers::check_response_header_method(
+            op, method, receiver, recv_ty, args, span, ctx,
+        );
+    }
     let Some(op) = op else {
         ctx.errors.push(CompileError::new(
             "bynk.types.method_not_found",
             method.span,
             format!(
-                "`HttpResult` has no method `{}` — it has `withCookie(c)`, `clearCookie(c)` and `cookies()`",
+                "`HttpResult` has no method `{}` — it has `withCookie(c)`, `clearCookie(c)`, `cookies()`, `withHeader(name, value)`, `retryAfter(d)`, `at(url)`, `download(filename)` and `headers()`",
                 method.name
             ),
         ));
@@ -2323,8 +2332,9 @@ pub(crate) fn check_http_result_method(
         lint_cookie_literal(a, ctx);
     }
     Some(match op {
-        HttpResultOp::WithCookie | HttpResultOp::ClearCookie => recv_ty,
         HttpResultOp::Cookies => tys.intern(Ty::List(cookie)),
+        // The response-header methods returned above.
+        _ => recv_ty,
     })
 }
 
