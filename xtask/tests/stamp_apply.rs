@@ -937,3 +937,61 @@ fn a_reverted_ledger_era_stamp_can_be_stamped_again() {
         "the reverted stamp can be redone"
     );
 }
+
+#[test]
+fn a_batch_is_numbered_in_merge_order_with_each_increments_own_pr() {
+    // A batched stamp sees several pending files at once. They are numbered in the order their
+    // commits landed on `main`, not in filename order, and each rule-ledger row names the PR
+    // that added its own file.
+    let root = fixture("merge-order");
+    fs::write(
+        root.join("design/bynk-greenfield-compiler.md"),
+        "**R2.3 — A rule.**\n**R2.4 — Another.**\n",
+    )
+    .unwrap();
+    git(&root, &["init", "-q"]);
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-q", "-m", "the tree before the batch"]);
+    fs::write(
+        root.join("design/pending/l2-second-name.md"),
+        "---\nlevel: minor\nchangelog: Merged first\ncloses_rule: R2.3\n---\n",
+    )
+    .unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-q", "-m", "Merged first (#20)"]);
+    fs::write(
+        root.join("design/pending/l11-first-name.md"),
+        "---\nlevel: patch\nchangelog: Merged second\ncloses_rule: R2.4\n---\n",
+    )
+    .unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-q", "-m", "Merged second (#21)"]);
+
+    let plan = stamp::plan(&root).expect("plan");
+    let order: Vec<(&str, String, Option<u32>)> = plan
+        .increments
+        .iter()
+        .map(|s| (s.file.as_str(), s.version.to_string(), s.pr))
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            ("l2-second-name.md", "0.186.0".to_string(), Some(20)),
+            ("l11-first-name.md", "0.186.1".to_string(), Some(21)),
+        ],
+        "filename order would put l11 first"
+    );
+
+    // The run's own PR (999) is not trusted for a batch; each row carries its file's PR.
+    stamp::apply(&root, &plan, Some(999), bumper(&root)).expect("apply");
+    let ledger = fs::read_to_string(root.join("design/greenfield-status-rules.md")).unwrap();
+    assert!(!ledger.contains("#999"), "{ledger}");
+    assert!(
+        ledger.contains("| R2.3 | v0.186.0 | #20 | Merged first |"),
+        "{ledger}"
+    );
+    assert!(
+        ledger.contains("| R2.4 | v0.186.1 | #21 | Merged second |"),
+        "{ledger}"
+    );
+}

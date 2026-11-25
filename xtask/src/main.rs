@@ -449,7 +449,10 @@ fn stamp(apply: bool) -> ExitCode {
     println!("stamp: from v{}", plan.base_version);
     let mut adr_number = plan.first_adr_number;
     for inc in &plan.increments {
-        println!("  {}  →  v{}", inc.file, inc.version);
+        match inc.pr {
+            Some(pr) => println!("  {} (#{pr})  →  v{}", inc.file, inc.version),
+            None => println!("  {}  →  v{}", inc.file, inc.version),
+        }
         println!("      changelog: {}", inc.changelog);
         for adr in &inc.adrs {
             println!("      ADR {adr_number:04}-{}: {}", adr.slug, adr.title);
