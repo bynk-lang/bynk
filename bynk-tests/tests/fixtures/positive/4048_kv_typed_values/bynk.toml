@@ -1,0 +1,13 @@
+[project]
+name = "kv-typed-values"
+version = "0.1.0"
+
+[paths]
+include = ["src", "tests"]
+
+[unstable]
+allow = [
+	"bynk.cloudflare.Kv.getValue",
+	"bynk.cloudflare.Kv.listPage",
+	"bynk.cloudflare.Kv.putValue",
+]

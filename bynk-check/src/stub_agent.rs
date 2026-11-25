@@ -143,8 +143,11 @@ pub(crate) fn resolve_agent_stub(
         clause_fns: Vec::new(),
         clause_types: Vec::new(),
         clause_consts: Vec::new(),
-        identity_path,
+        clause_paths: Vec::new(),
+        clause_suite_uses: Vec::new(),
+        identity_path: identity_path.clone(),
     });
+    entry.clause_paths.push(identity_path);
     if !entry
         .cap_decl
         .ops

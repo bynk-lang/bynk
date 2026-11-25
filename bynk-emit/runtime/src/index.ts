@@ -17,6 +17,7 @@ export * from "./storage.ts";
 export * from "./vectorize.ts";
 export * from "./store.ts";
 export * from "./entries.ts";
+export * from "./traceparent.ts";
 export * from "./boundary.ts";
 export * from "./yaml.ts";
 export * from "./codec.ts";

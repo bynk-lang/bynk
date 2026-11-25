@@ -838,6 +838,7 @@
 /book/reference/diagnostics/bynk.store.log_needs_clock/
 /book/reference/diagnostics/bynk.store.unkeyable_key/
 /book/reference/diagnostics/bynk.store.unknown_annotation/
+/book/reference/diagnostics/bynk.store.unique_implies_indexed/
 /book/reference/diagnostics/bynk.store.unknown_kind/
 /book/reference/diagnostics/bynk.store.unknown_map_accessor/
 /book/reference/diagnostics/bynk.store.unknown_op/
@@ -2024,6 +2025,7 @@
 /reference/diagnostics/bynk.store.log_needs_clock/
 /reference/diagnostics/bynk.store.unkeyable_key/
 /reference/diagnostics/bynk.store.unknown_annotation/
+/reference/diagnostics/bynk.store.unique_implies_indexed/
 /reference/diagnostics/bynk.store.unknown_kind/
 /reference/diagnostics/bynk.store.unknown_map_accessor/
 /reference/diagnostics/bynk.store.unknown_op/

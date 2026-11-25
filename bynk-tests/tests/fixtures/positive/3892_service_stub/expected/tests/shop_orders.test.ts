@@ -33,6 +33,7 @@ class __Stub_Pay {
     const { PaymentError, Receipt } = __ns_shop_pay;
     type PaymentError = __ns_shop_pay.PaymentError;
     type Receipt = __ns_shop_pay.Receipt;
+    const __arg_0 = total;
     if (this.__case === "an order is placed when payment succeeds") {
       return Ok({ id: "r1" });
     }
@@ -54,7 +55,7 @@ class __Stub_Pay {
     const __pv_3_0 = await (async () => {
       return 5;
     })();
-    if (this.__case === "the first matching pattern answers" && __bynkEq(total, __pv_3_0)) {
+    if (this.__case === "the first matching pattern answers" && __bynkEq(__arg_0, __pv_3_0)) {
       return Err(PaymentError.Declined);
     }
     if (this.__case === "the first matching pattern answers") {
@@ -90,10 +91,11 @@ class __Stub_shop_stock {
   }
 
   async reserve(sku: string): globalThis.Promise<Result<void, string>> {
+    const __arg_0 = sku;
     const __pv_0_0 = await (async () => {
       return "gone";
     })();
-    if (this.__case === "an unreserved sku never reaches payment" && __bynkEq(sku, __pv_0_0)) {
+    if (this.__case === "an unreserved sku never reaches payment" && __bynkEq(__arg_0, __pv_0_0)) {
       return Err("sold out");
     }
     if (this.__suite === 0) {

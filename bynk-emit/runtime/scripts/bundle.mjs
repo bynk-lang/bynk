@@ -50,6 +50,7 @@ const MODULES = [
   "entries",
   "lazy",
   "scan",
+  "traceparent",
   "boundary",
   "yaml",
   "codec",
