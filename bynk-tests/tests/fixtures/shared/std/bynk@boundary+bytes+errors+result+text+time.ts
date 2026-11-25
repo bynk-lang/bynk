@@ -552,29 +552,29 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  */
 export interface Idempotency {
   /**
-   * Checks for a cached outcome under `key`; a miss is `None`.
+   * Checks for a cached outcome under `key`, any `Key` type; a miss is `None`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  dedup(key: string): globalThis.Promise<unknown>;
+  dedup(key: unknown): globalThis.Promise<unknown>;
   /**
-   * Caches `value` under `key` for `expiresAfter`.
+   * Caches `value` under `key`, any `Key` type, for `expiresAfter`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  remember(key: string, value: unknown, expiresAfter: number): globalThis.Promise<void>;
+  remember(key: unknown, value: unknown, expiresAfter: number): globalThis.Promise<void>;
   /**
-   * Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+   * Claims `key`, any `Key` type, for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
+  claim(key: unknown, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
 export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");
