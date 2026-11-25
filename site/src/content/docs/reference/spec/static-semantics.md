@@ -1283,7 +1283,8 @@ refused wherever a type is written, at any depth and inside any type argument
 (`Option[Effect[Effect[Int]]]`). A call that would *build* one is refused too: when a type
 variable is instantiated with an `Effect` where the signature wraps it in another, as
 `Effect.pure(e)` with `e: Effect[_]` and `wrap(e)` for `fn wrap[T](x: T) -> Effect[T]` do,
-the call is refused at the argument that carried the effect. A generic signature such as
+the call is refused at the argument whose parameter mentions that type variable; so is
+a kernel method that builds one (`q.fold(e0, f)` with `e0: Effect[Int]`), at the call. A generic signature such as
 `fn mapE[T, U](e: Effect[T], f: T -> U) -> Effect[U]` stays legal; only an instantiation that
 nests is refused. A `List[Effect[T]]` or an `Option[Effect[T]]` is not a nested effect and
 is unaffected. To sequence effects, use `andThen` or `<-`.

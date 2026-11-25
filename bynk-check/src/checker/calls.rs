@@ -1570,7 +1570,7 @@ fn check_generic_call(
     // parameters* — a generic fn calling another generic fn (bynk.list's
     // `map` calling `reverse`) legitimately instantiates the callee at its
     // own rigid vars, which flow through `compatible` by name-equality.
-    super::nested_effect::instantiated(ret_pattern, &subst, args, &arg_tys, name.span, ctx)
+    super::nested_effect::instantiated(ret_pattern, &subst, args, &var_params, name.span, ctx)
 }
 
 fn check_call_against_fn(
@@ -3010,8 +3010,27 @@ fn receiver_names_capability(receiver: &Expr, ctx: &Ctx) -> bool {
         })
 }
 
+/// Every method call, kernel or user: refuses a result that nests an `Effect` (#4324), whichever
+/// kernel method (`Query.fold`, `List.foldEff`, …) built it from a caller-chosen type.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_method_call(
+    receiver: &Expr,
+    method: &Ident,
+    type_args: &[TypeRef],
+    args: &[Expr],
+    span: Span,
+    expected: Option<TyId>,
+    expr_id: ExprId,
+    ctx: &mut Ctx,
+) -> Option<TyId> {
+    let r = check_method_call_inner(
+        receiver, method, type_args, args, span, expected, expr_id, ctx,
+    );
+    super::nested_effect::method_result(r, span, ctx)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_method_call_inner(
     receiver: &Expr,
     method: &Ident,
     type_args: &[TypeRef],
@@ -4214,7 +4233,7 @@ fn check_generic_method_call(
                 .record(method.span, format!("[{}]", parts.join(", ")));
         }
     }
-    super::nested_effect::instantiated(ret_pattern, &subst, args, &arg_tys, method.span, ctx)
+    super::nested_effect::instantiated(ret_pattern, &subst, args, &var_params, method.span, ctx)
 }
 
 /// v0.178 (#662) / v0.182 (#664): resolve a test-body service invocation against

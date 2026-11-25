@@ -1,0 +1,14 @@
+context shop.inv
+
+type Item = {
+  id: Int,
+}
+
+agent A {
+  key sku: String
+  store items: Map[String, Item]
+  on call bad(e0: Effect[Int]) -> Effect[Int] {
+    let w <- items.entries.fold(e0, (acc, it) => acc)
+    Effect.pure(1)
+  }
+}

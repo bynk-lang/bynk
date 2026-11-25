@@ -77,14 +77,37 @@ pub(super) fn pure(inner_ty: TyId, inner_span: Span, ctx: &mut Ctx) -> Option<Ty
     None
 }
 
-/// A generic call's instantiated return type `ret` (from the signature's `pattern`): refused when
-/// the instantiation, not the signature, nests an effect. The error is at the argument that
-/// carried the effect, else at `at`.
+/// The type variables of `t` that `subst` fills with a type carrying an `Effect`.
+fn effect_vars(t: TyId, subst: &HashMap<String, TyId>, tys: &Types, out: &mut Vec<String>) {
+    match &*tys.get(t) {
+        Ty::Var(n) if subst.get(n).is_some_and(|s| mentions_effect(*s, tys)) => {
+            out.push(n.clone());
+        }
+        Ty::Result(a, b) | Ty::Map(a, b) => {
+            effect_vars(*a, subst, tys, out);
+            effect_vars(*b, subst, tys, out);
+        }
+        Ty::Effect(a) | Ty::Option(a) | Ty::List(a) | Ty::Set(a) | Ty::Query(a) | Ty::Stream(a) => {
+            effect_vars(*a, subst, tys, out)
+        }
+        Ty::Fn { params, ret } => {
+            params.iter().for_each(|p| effect_vars(*p, subst, tys, out));
+            effect_vars(*ret, subst, tys, out);
+        }
+        Ty::Named { args, .. } => args.iter().for_each(|a| effect_vars(*a, subst, tys, out)),
+        _ => {}
+    }
+}
+
+/// A generic call's instantiated return type, from the signature's return `pattern` under
+/// `subst`: refused when the instantiation, not the signature, nests an effect. The error is at
+/// the first argument whose parameter (in `params`) mentions a type variable that `subst` fills
+/// with an effect, else at `at`.
 pub(super) fn instantiated(
     pattern: TyId,
     subst: &HashMap<String, TyId>,
     args: &[Expr],
-    arg_tys: &[Option<TyId>],
+    params: &[Option<TyId>],
     at: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
@@ -93,12 +116,33 @@ pub(super) fn instantiated(
     if !has_nested_effect(ret, tys) || has_nested_effect(pattern, tys) {
         return Some(ret);
     }
+    let mut carriers = Vec::new();
+    effect_vars(pattern, subst, tys, &mut carriers);
     let span = args
         .iter()
-        .zip(arg_tys)
-        .find(|(_, t)| t.is_some_and(|t| mentions_effect(t, tys)))
+        .zip(params)
+        .find(|(_, p)| {
+            p.is_some_and(|p| {
+                let mut vs = Vec::new();
+                effect_vars(p, subst, tys, &mut vs);
+                vs.iter().any(|v| carriers.contains(v))
+            })
+        })
         .map_or(at, |(a, _)| a.span);
     ctx.errors
         .push(nested_effect_error(span, &ret.display(tys)));
+    None
+}
+
+/// A method call's result `r`: refused when it nests an effect, which a kernel method builds
+/// when it wraps a caller-chosen type in an `Effect` (`q.fold(e0, ..)` with `e0: Effect[Int]`).
+/// The error is at the call, `at`; a call already refused returns `None` and is left alone.
+pub(super) fn method_result(r: Option<TyId>, at: Span, ctx: &mut Ctx) -> Option<TyId> {
+    let tys = ctx.tys;
+    let t = r?;
+    if !has_nested_effect(t, tys) {
+        return Some(t);
+    }
+    ctx.errors.push(nested_effect_error(at, &t.display(tys)));
     None
 }
