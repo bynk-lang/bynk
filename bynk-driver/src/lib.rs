@@ -2009,6 +2009,22 @@ mod tests {
                 "{bad}"
             );
         }
+        // A bad group value takes the worker-group error path instead.
+        for bad in [
+            "[deploy.workers.core]\ncpu_ms = 0\n",
+            "[deploy.workers.core]\nplacement = \"nearby\"\n",
+        ] {
+            let dir = workers_project("tuning_bad_group", bad);
+            assert!(
+                matches!(
+                    try_project_options(&dir.0),
+                    Err(ProjectOptionsError::Paths(
+                        ProjectPathsError::BadWorkerGroup { .. }
+                    ))
+                ),
+                "{bad}"
+            );
+        }
     }
 
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.
