@@ -1,0 +1,16 @@
+context page
+  uses bynk.html
+
+// #3924: the two escapes by context, in a page built by replacement.
+
+fn title(t: String) -> String {
+	"<h1>\(escapeText(t))</h1>"
+}
+
+fn image(src: String, alt: String) -> String {
+	"<img src=\"\(src)\" alt=\"\(escapeAttr(alt))\">"
+}
+
+fn imageSingle(src: String, alt: String) -> String {
+	"<img src='\(src)' alt='\(escapeAttr(alt))'>"
+}
