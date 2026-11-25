@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.685.0** | A `for all` over a `String where Matches(…)` draws members of the pattern and shrinks to shorter ones, and one over `IsoDate` draws real calendar dates |
 | **v0.684.0** | Every body-taking HTTP route has a 1 MiB request-body cap by default (JSON, `@form` and `@multipart`; `@raw` still declares its own); `@limit` and `limits { maxBody }` raise it up to 524,288,000 bytes, there is no unlimited setting, the `413` says how to raise the cap, and a build hint lists the routes that rely on the default |
 | **v0.683.1** | `bynk test --smoke` no longer stops on a hint, so a project with a hint-level diagnostic synthesises its smoke suite as before |
 | **v0.683.0** | A constant can stand as a refinement predicate's argument (`InRange(1, MaxQty)`, `MaxLength(MaxNote)`, `Matches(SlugPattern)`), substituted as the literal it is bound to |

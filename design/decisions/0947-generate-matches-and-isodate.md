@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `for all` over a `String where Matches(…)` draws members of the pattern and shrinks to shorter ones, and one over `IsoDate` draws real calendar dates
----
+# 0947 — A for all draws members of a Matches pattern and real IsoDate dates
 
-## ADR: generate-matches-and-isodate
-title: A for all draws members of a Matches pattern and real IsoDate dates
-summary: How the pattern is walked, what filters the draws, and what stays pinned
+- **Status:** Accepted (v0.685)
 
 **Context.** A `String where Matches(…)` could not be generated, so `for all` over a patterned id, slug or code, and over any record holding one, was `bynk.val.needs_pin`, and `@example` served `Val` only (#4121). The compiler already parses every pattern, which is always a literal.
 
