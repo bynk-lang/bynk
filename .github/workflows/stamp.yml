@@ -61,6 +61,8 @@ concurrency:
 # The App token does the writing; GITHUB_TOKEN needs nothing beyond read.
 permissions:
   contents: read
+  # To list open `stamp/*` PRs (see "Refuse while a batch is open").
+  pull-requests: read
 
 jobs:
   stamp:
@@ -99,6 +101,23 @@ jobs:
             echo "Pending on main@$(git rev-parse --short HEAD):"
             echo "$files"
             echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A batch PR from stamp-batch.yml already assigned versions to the
+      # pending files. Stamping them again here would push `main` to other
+      # versions, leaving that PR conflicting, or handing the versions out
+      # twice if someone resolved it. Close the batch PR first.
+      - name: Refuse while a batch is open
+        if: steps.pending.outputs.any == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          open="$(gh pr list --repo "$REPO" --state open --base main --limit 100 \
+            --json number,headRefName --jq '[.[] | select(.headRefName | startswith("stamp/")) | "#\(.number)"] | join(", ")')"
+          if [ -n "$open" ]; then
+            echo "::error::stamp batch PR $open is open and has already stamped the pending files. Close it first, then re-run this."
+            exit 1
           fi
 
       - if: steps.pending.outputs.any == 'true'

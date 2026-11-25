@@ -17,9 +17,12 @@ name: Stamp batch
 # One batch at a time. Two open stamp PRs would hand out the same versions, so
 # a run does nothing while a `stamp/*` PR is open. The pending files stay on
 # `main` until the open PR merges and the next run stamps them. A stamp PR
-# open for more than STALE_HOURS fails the run, so a batch stuck in review, CI
-# or the queue is noticed: look at that PR, fix or close it, and the next run
-# goes ahead.
+# still open after two more slots (STALE_HOURS, a little under the 6 h that
+# spans, since the PR opens some minutes after its run starts) fails the run,
+# so a batch stuck in review, CI or the queue is noticed: look at that PR, fix
+# or close it, and the next run goes ahead. Do not reach for stamp.yml's
+# emergency push while it is open: that would stamp the same files twice.
+# stamp.yml refuses to run while a `stamp/*` PR is open.
 #
 # Merge order. `xtask stamp` numbers the pending files by the commit on
 # `main`'s first-parent line that added each one, and gives each increment its
@@ -48,11 +51,13 @@ on:
         default: false
 
 # The same group as stamp.yml's emergency dispatch, so the two never stamp at
-# once. A group keeps one pending run and a newer pending run replaces it;
-# that is harmless here, because every run stamps the tip of `main`, whatever
-# fired it.
+# once. A group keeps one pending run and a newer pending run replaces it. A
+# dry run writes nothing, so it gets a group of its own: queued here, it would
+# cancel a waiting real stamp (the 2026-10-22 failure in stamp.yml's header).
+# A scheduled batch can still replace a pending emergency stamp.yml dispatch;
+# re-dispatch it if that happens.
 concurrency:
-  group: stamp-main
+  group: ${{ inputs.dry_run && 'stamp-batch-dry-run' || 'stamp-main' }}
   cancel-in-progress: false
 
 # The App token does the writing; the GITHUB_TOKEN only reads.
@@ -62,7 +67,7 @@ permissions:
   pull-requests: read
 
 env:
-  STALE_HOURS: "6"
+  STALE_HOURS: "5"
 
 jobs:
   stamp:
@@ -117,7 +122,7 @@ jobs:
           stale="$(jq -r --argjson h "$STALE_HOURS" \
             '[.[] | select((now - (.createdAt | fromdate)) > ($h * 3600)) | "#\(.number)"] | join(", ")' <<< "$open")"
           if [ -n "$stale" ]; then
-            echo "::error::stamp PR $stale has been open for more than $STALE_HOURS hours, so pending increments are not being stamped. Get it merged, or close it so the next run opens a fresh batch."
+            echo "::error::stamp PR $stale has been open for more than $STALE_HOURS hours, so pending increments are not being stamped. Get it merged, or close it so the next run opens a fresh batch. Do not use stamp.yml's emergency push while it is open: that would stamp the same files twice."
             exit 1
           fi
 
