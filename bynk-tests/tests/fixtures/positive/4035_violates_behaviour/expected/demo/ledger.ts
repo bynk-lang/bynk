@@ -32,7 +32,7 @@ export interface AccountState {
 const __AccountRegistry = new __StateRegistry();
 function __zeroOfAccountState(): AccountState { return { balance: 0, entries: 0, contacts: new __StoreMap<Contact>([{ index: "email", of: (__v) => String(__v.email), unique: true }]) }; }
 
-const __entryFieldsOfAccount = [{ name: "contacts", kind: "map", indexes: [{ index: "email", recordField: "contacts__idx_email" }] }] as const;
+const __entryFieldsOfAccount = [{ name: "contacts", kind: "map", indexes: [{ index: "email", recordField: "contacts__idx_email", unique: true }] }] as const;
 
 function __rehydrateAccountState(s: AccountState, stored: AccountState): void {
   if (globalThis.Object.prototype.hasOwnProperty.call(stored, "balance")) {
