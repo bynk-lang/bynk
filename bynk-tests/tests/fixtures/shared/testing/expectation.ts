@@ -47,8 +47,8 @@ function __bynkViolates(e: any, name: string, location: string, start: number, e
     const kind = v.declaration === "transition" ? "transition" : v.declaration === "unique" ? "unique constraint" : "invariant";
     what = `the commit was refused by ${kind} ${v.invariant}, not ${name}`;
   } else {
-    const fault = e && typeof e === "object" && typeof e.kind === "string" ? e.kind : e instanceof Error ? (e.message === "" ? e.name : `${e.name}: ${e.message}`) : typeof e;
-    what = `the call faulted with a different fault: ${fault}`;
+    const raised = e && typeof e === "object" && typeof e.kind === "string" ? e.kind : e instanceof Error ? (e.message === "" ? e.name : `${e.name}: ${e.message}`) : typeof e;
+    what = `the call faulted, but not with a refusal: ${raised}`;
   }
   throw new ExpectationError(location, start, end, `${src}\n  ${what}`);
 }

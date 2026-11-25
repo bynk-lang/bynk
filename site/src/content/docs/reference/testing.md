@@ -1031,7 +1031,7 @@ It fails with what happened instead:
 | What happened | The failure says |
 |---|---|
 | The call returned | `the call returned without faulting` |
-| Another fault | `the call faulted with a different fault: <kind>` |
+| Another fault | `the call faulted, but not with a refusal: <kind>` |
 | Another declaration refused the commit | `the commit was refused by invariant few_lines, not paid_has_payment_ref` |
 
 - **The name is one declaration.** An invariant or a transition is named by its own
