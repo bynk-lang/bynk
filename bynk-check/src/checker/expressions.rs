@@ -901,14 +901,29 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
 /// parameter types as declared, and counts every call. The wrong number of them, or any on an
 /// operation that is not generic, is `bynk.generics.type_arg_mismatch`.
 fn observation_type_args(
-    info: CapabilityOpInfo,
+    mut info: CapabilityOpInfo,
     o: &ObservationExpr,
     ctx: &mut Ctx,
 ) -> CapabilityOpInfo {
+    let tys = ctx.tys;
+    // #4116: the key a first-party `Idempotency` provider receives is the call site's encoded
+    // `String`, so `with key == "…"` reads it as one whatever `K` the call has.
+    if super::calls::local_first_party(&o.cap.name, ctx)
+        == Some(crate::firstparty::FirstPartyCap::Idempotency)
+        && let Some(first) = info.params.first().copied()
+        && let Ty::Var(name) = &*first.get(tys)
+    {
+        let text = HashMap::from([(name.clone(), tys.intern(Ty::Base(BaseType::String)))]);
+        info.params = info
+            .params
+            .iter()
+            .map(|p| crate::checker::substitute(*p, &text, tys))
+            .collect();
+    }
     if o.type_args.is_empty() {
         return info;
     }
-    if info.type_params.len() != o.type_args.len() {
+    if o.type_args.len() > info.type_params.len() {
         ctx.errors.push(CompileError::new(
             "bynk.generics.type_arg_mismatch",
             o.op.span,
@@ -922,7 +937,6 @@ fn observation_type_args(
         ));
         return info;
     }
-    let tys = ctx.tys;
     let mut subst: HashMap<String, TyId> = HashMap::new();
     for (name, t) in info.type_params.iter().zip(&o.type_args) {
         match resolve_type_ref(t, &ctx.input.types, tys) {

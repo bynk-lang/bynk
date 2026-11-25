@@ -276,9 +276,13 @@ service reserve {
 }
 ```
 
-Omitting `[T]` when no parameter's type mentions it is
-`bynk.generics.uninferable_type_arg`; the wrong number of type arguments is
-`bynk.generics.type_arg_mismatch`. The operation is emitted as a genuine
+Written type arguments bind the operation's **leading** type parameters, and the arguments
+determine the rest: for `fn dedup[T: Codable, K: Key](key: K)`, `Idempotency.dedup[Quote](id)`
+names `T` and takes `K` from `id` (#4116). Omitting a type argument that no argument determines is
+`bynk.generics.uninferable_type_arg`; more type arguments than parameters is
+`bynk.generics.type_arg_mismatch`. A qualified cross-context call (`B.Cap.op(…)`) infers a
+left-out type parameter only from an argument whose parameter is exactly that parameter
+(`key: K`). The operation is emitted as a genuine
 generic TypeScript interface method (`dedup<T>(key: string): Promise<Option<T>>`)
 — no monomorphisation, no erasure — and the call site names the type argument
 explicitly in the emitted TypeScript too, since nothing else at the call site

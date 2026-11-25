@@ -1,0 +1,1 @@
+bynk.generics.uninferable_type_arg capability operation `Probe.pair` takes a type parameter, but none of its arguments determine it

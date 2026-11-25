@@ -609,7 +609,10 @@ fn stub_type_args_error(
             ),
         ));
     }
-    if pc.type_args.is_empty() {
+    // #4116: only the leading type parameters no operation parameter mentions need writing; the
+    // rest (`K` in `claim[K: Key](key: K, …)`) stay open and the clause matches any of them.
+    let need = stub_type_args_needed(op_decl);
+    if pc.type_args.is_empty() && need > 0 {
         return Some(
             CompileError::new(
                 "bynk.stub.generic_op",
@@ -625,18 +628,41 @@ fn stub_type_args_error(
             )),
         );
     }
-    if pc.type_args.len() != want {
+    if pc.type_args.len() > want || (!pc.type_args.is_empty() && pc.type_args.len() < need) {
+        let takes = if need == want {
+            need.to_string()
+        } else {
+            format!("{need} to {want}")
+        };
         return Some(CompileError::new(
             "bynk.generics.type_arg_mismatch",
             pc.method.span,
             format!(
-                "`{cap_name}.{}` takes {want} type argument(s), but the `stub` gives {}",
+                "`{cap_name}.{}` takes {takes} type argument(s), but the `stub` gives {}",
                 pc.method.name,
                 pc.type_args.len()
             ),
         ));
     }
     None
+}
+
+/// #4116: how many leading type arguments a `stub` or call must write: up to the last type
+/// parameter that no parameter of the operation mentions (nothing else determines it).
+pub fn stub_type_args_needed(op: &CapabilityOp) -> usize {
+    op.type_params
+        .iter()
+        .enumerate()
+        .rev()
+        .find(|(_, tp)| {
+            !op.params.iter().any(|p| {
+                crate::checker::codable::mentions_any(
+                    &p.type_ref,
+                    std::slice::from_ref(&tp.name.name),
+                )
+            })
+        })
+        .map_or(0, |(i, _)| i + 1)
 }
 
 impl ResolvedStub {
@@ -651,7 +677,7 @@ impl ResolvedStub {
             .ops
             .iter()
             .find(|o| o.name.name == clause.method.name)?;
-        if op.type_params.is_empty() || op.type_params.len() != clause.type_args.len() {
+        if op.type_params.is_empty() || clause.type_args.is_empty() {
             return Some(op.clone());
         }
         let subst: HashMap<String, TypeRef> = op
@@ -661,7 +687,12 @@ impl ResolvedStub {
             .map(|(p, a)| (p.name.name.clone(), a.clone()))
             .collect();
         let mut out = op.clone();
-        out.type_params = Vec::new();
+        out.type_params = op
+            .type_params
+            .iter()
+            .skip(clause.type_args.len())
+            .cloned()
+            .collect();
         for p in &mut out.params {
             p.type_ref = crate::wire::subst_type_ref(&p.type_ref, &subst);
         }
@@ -4109,6 +4140,26 @@ fn check_bad_signature_tier(
     }
 }
 
+/// #4116: the type a call record's field holds for an operation parameter: the parameter's own,
+/// except a first-party `Idempotency` key (`key: K`), which the call site encodes to a `String`.
+fn call_record_field_type(
+    cap: &str,
+    op: &CapabilityOp,
+    declared: &TypeRef,
+    text_keys: &HashSet<&String>,
+) -> TypeRef {
+    if let TypeRef::Named(id) = declared
+        && text_keys.iter().any(|c| c.as_str() == cap)
+        && op
+            .type_params
+            .iter()
+            .any(|tp| tp.name.name == id.name && tp.bounds.iter().any(|b| b.name == "Key"))
+    {
+        return TypeRef::Base(BaseType::String, id.span);
+    }
+    declared.clone()
+}
+
 /// Register a synthetic call-record type per capability operation of the target
 /// context (v0.117, testing track slice 5), so `trace(Cap.op)` — typed
 /// `List[<CallRecord>]` — supports field access on its records. The record's
@@ -4124,8 +4175,14 @@ pub fn register_call_record_types(
     // #291: a consumed adapter's capabilities are seams too (its `trace` and
     // `with` records); the target's own wins a name clash.
     let mut caps: Vec<(&String, &CapabilityDecl)> = table.capabilities.iter().collect();
+    // #4116: the first-party `Idempotency`'s key parameter is a `Key` the call site has already
+    // encoded, so what a record of its calls holds is a `String`.
+    let mut text_keys: HashSet<&String> = HashSet::new();
     for (n, d) in flattened_platform_capabilities(unit_tables, resolved) {
         if !table.capabilities.contains_key(n) {
+            if n == "Idempotency" {
+                text_keys.insert(n);
+            }
             caps.push((n, d));
         }
     }
@@ -4151,7 +4208,7 @@ pub fn register_call_record_types(
                     documentation: None,
                     trivia: Default::default(),
                     name: p.name.clone(),
-                    type_ref: p.type_ref.clone(),
+                    type_ref: call_record_field_type(cap_name, op, &p.type_ref, &text_keys),
                     refinement: None,
                     init: None,
                     span: p.span,
