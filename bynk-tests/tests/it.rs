@@ -327,6 +327,8 @@ mod system {
     mod binding_scaffold;
     #[path = "binding_workerd.rs"]
     mod binding_workerd;
+    #[path = "body_cap_hint.rs"]
+    mod body_cap_hint;
     #[path = "callee_faulted_workerd.rs"]
     mod callee_faulted_workerd;
     #[path = "case_filter.rs"]

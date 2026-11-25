@@ -1026,9 +1026,6 @@
   "bynk.http.limits_unknown_field": [
     "/reference/http/#request-body-limits"
   ],
-  "bynk.http.multipart_body_unbounded": [
-    "/reference/http/#multipart-bodies"
-  ],
   "bynk.http.path_param_not_stringy": [
     "/reference/http/#handler-form"
   ],

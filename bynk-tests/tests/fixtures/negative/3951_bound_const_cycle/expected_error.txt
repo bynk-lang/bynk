@@ -1,0 +1,1 @@
+bynk.resolve.const_cycle constant `MaxQty` refers to itself: `MaxQty` → `Qty` → `MaxQty`

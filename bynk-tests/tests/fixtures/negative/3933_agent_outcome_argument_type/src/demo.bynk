@@ -1,0 +1,20 @@
+context demo
+
+consumes bynk { CallOutcome }
+
+// #3933: `.outcome` with an argument of the wrong type.
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call add(by: Int) -> Effect[Int] {
+    n
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] by Caller {
+    let o <- Counter("a").add.outcome("x")
+    Effect.pure(0)
+  }
+}

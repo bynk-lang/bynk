@@ -623,6 +623,7 @@ fn the_todo_example_analyses_cleanly() {
         .files
         .iter()
         .flat_map(|f| f.diagnostics.iter())
+        .filter(|d| bynk_syntax::Severity::for_error(&d.error) != bynk_syntax::Severity::Hint)
         .map(|d| d.error.category)
         .collect();
     assert!(

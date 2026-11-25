@@ -510,13 +510,52 @@ let n <- c.increment()
 The same form works from a service handler or from another agent's handler. There
 is no separate agent-reference type to declare.
 
+### A call that fails — `.outcome(…)` {#outcome}
+
+A failed agent call is a fault in the caller: a service that calls `Basket(id).add(item)`
+cannot tell "busy, try again" from "the handler faulted", cannot answer differently, and its
+`let … else` compensation does not run. Writing `.outcome` after the operation (#3933)
+returns the failure as a value instead, the same `CallOutcome` a
+[cross-context call](/reference/wire-format/#what-a-caller-makes-of-a-failure) returns:
+
+```bynk,fragment
+let o <- Basket(id).add.outcome(item)
+match o {
+	Handled(total) => Effect.pure(Ok(total))
+	Unreachable(_) => Effect.pure(Err("basket busy, try again"))
+	Faulted => Effect.pure(Err("could not add the item"))
+	Rejected(_) => Effect.pure(Err("rejected"))
+}
+```
+
+`Basket(id).add.outcome(item)` is `Effect[CallOutcome[R]]` for the handler's `R`, with the same
+`o.handled()` for `?` and `embeds`. It is grammar on the operation reference, not a method of
+`Effect`, so it is legal wherever the plain call is, an agent handler calling *another* agent
+included. A call to the handler's own instance through `self` is part of the same handler and
+stays a plain call.
+
+| What happened to the agent call | The outcome |
+|---|---|
+| it answered | `Handled(result)` |
+| `AgentBusy`: the call waited past the queue limit, so it never started | `Unreachable(None)` |
+| a fault in the handler (it ran; it committed nothing) | `Faulted` |
+| an invariant violation (it ran; it committed nothing) | `Faulted` |
+| a rehydration violation (the stored state did not load) | `Faulted` |
+| `ReentrantAgentCall` | stays a fault: a call cycle is a bug, and a value would invite retrying it |
+
+`Rejected` never occurs for an agent call: there is no wire to refuse it. An invariant violation
+is deliberately not a variant of its own: the [invariants](/reference/agent-invariants/) treat a
+violation as a fault and a domain refusal as a `Result`, and a variant would invite using an
+invariant as validation. A fault turned into a value is still logged once. Wrap an agent call
+in `.outcome` only where a different answer or a compensation is needed.
+
 ### One handler at a time
 
 An agent instance runs one handler at a time: every handler that reaches an instance,
 read-only ones included, waits for the handlers ahead of it, so a handler's load, body
 and commit are never interleaved with another's on the same instance. Instances with
 different keys run independently, and a handler that calls another handler on its own
-agent through `this` is part of the same handler, not a second call. This is what makes
+agent through `self` is part of the same handler, not a second call. This is what makes
 "persisted atomically when the handler returns" true when a handler awaits another
 agent or a capability partway through.
 

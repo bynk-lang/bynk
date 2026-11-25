@@ -340,6 +340,14 @@ fn normalise_seed(raw: &str) -> Option<String> {
     Some(hex.to_string())
 }
 
+/// #4190: does the test module at `path` import a consumed context's wire codecs, which live in
+/// the `workers` output (a case's stubbed cross-context call crosses them at `integration`)?
+fn imports_wire_codecs(rel: &str, path: &Path) -> bool {
+    rel.starts_with("tests/")
+        && std::fs::read_to_string(path)
+            .is_ok_and(|t| t.contains(bynk_emit::testgen::WIRE_IMPORT_MARK))
+}
+
 /// In `--format json` mode the deterministic surface is the document on stdout,
 /// so a `<program> test:` line on stderr is fine but must never reach stdout.
 /// `program` prefixes stderr messages (`"bynk"`) so they read the
@@ -815,6 +823,7 @@ pub fn run_test(program: &str, args: TestArgs) -> ExitCode {
         if rel.starts_with("tests/integration_") {
             has_integration = true;
         }
+        has_integration |= imports_wire_codecs(&rel, &output_root.join(path));
     }
 
     // v0.16: integration tests stand their participants up as real Workers, so

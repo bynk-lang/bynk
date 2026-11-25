@@ -101,6 +101,7 @@ export type PostOrdersResponse =
     { readonly status: 201; readonly kind: "Created"; readonly body: Order }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
   | { readonly status: 409; readonly kind: "Conflict"; readonly error: string }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly error: { readonly kind: "PayloadTooLarge"; readonly details: string } }
   | { readonly status: 500; readonly kind: "ServerError"; readonly error: string };
 
 /**
