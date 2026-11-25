@@ -1,0 +1,6 @@
+suite shop {
+  case "the case names who sends" {
+    let r <- fulfil.message(Order { id: "o1" })
+    expect r is Ack
+  }
+}
