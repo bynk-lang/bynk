@@ -834,27 +834,17 @@ fn qualifier_stmts(qualifier: &str, from: &str) -> Vec<bynk_ts::TsStmt> {
             None,
         )];
     };
-    let private = ["__use_", &qualifier.replace('.', "_")].concat();
+    let private = format!("__use_{}", qualifier.replace('.', "_"));
     let segments: Vec<&str> = rest.split('.').collect();
     // `namespace a { export namespace b { export import c = __use_a_b_c; } }`
-    let mut text = ["namespace ", head, " { "].concat();
+    let mut open = format!("namespace {head} {{ ");
     let mut close = String::from("}");
     for seg in &segments[..segments.len() - 1] {
-        text.push_str("export namespace ");
-        text.push_str(seg);
-        text.push_str(" { ");
+        open.push_str(&format!("export namespace {seg} {{ "));
         close.push_str(" }");
     }
-    for part in [
-        "export import ",
-        segments[segments.len() - 1],
-        " = ",
-        &private,
-        "; ",
-        &close,
-    ] {
-        text.push_str(part);
-    }
+    let last = segments[segments.len() - 1];
+    let text = format!("{open}export import {last} = {private}; {close}");
     vec![
         bynk_ts::TsStmt::decl(
             bynk_ts::TsDecl::ImportNamespace {
