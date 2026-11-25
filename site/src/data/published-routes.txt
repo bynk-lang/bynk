@@ -1677,6 +1677,8 @@
 /reference/diagnostics/bynk.http.form_on_sum_route/
 /reference/diagnostics/bynk.http.form_unknown_arg/
 /reference/diagnostics/bynk.http.header_question_not_found/
+/reference/diagnostics/bynk.http.headers_field_consumed/
+/reference/diagnostics/bynk.http.headers_field_consumed_optional/
 /reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
 /reference/diagnostics/bynk.http.invalid_path/

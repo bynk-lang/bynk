@@ -909,6 +909,45 @@ pub fn sum_members_for(
     Some(members)
 }
 
+/// #3994, #4266: the credential headers a route's seam consumes, each with the actor that consumes
+/// it, in a stable order and each header once: `authorization` for a `Bearer` or `Oidc` actor, the
+/// signature header for a `Signature` one. An actor sum hides what any member reads, because the
+/// entry builds the request's header view before the sum's wrapper resolves which member matched.
+pub fn consumed_credential_headers(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut hide = |name: &str, actor: &str| {
+        let name = name.to_ascii_lowercase();
+        if !out.iter().any(|(h, _)| *h == name) {
+            out.push((name, actor.to_string()));
+        }
+    };
+    if let Some(members) = sum_members_for(handler, actors) {
+        for m in &members {
+            match &m.seam {
+                SumMemberSeam::Bearer { .. } => hide("authorization", &m.actor_name),
+                SumMemberSeam::Signature(s) => hide(&s.header, &m.actor_name),
+                SumMemberSeam::None => {}
+            }
+        }
+        return out;
+    }
+    let primary = handler
+        .by_clause
+        .as_ref()
+        .map(|by| by.primary().name.clone())
+        .unwrap_or_default();
+    if bearer_seam_for(handler, actors).is_some() || oidc_seam_for(handler, actors).is_some() {
+        hide("authorization", &primary);
+    }
+    if let Some(s) = signature_seam_for(handler, actors) {
+        hide(&s.header, &primary);
+    }
+    out
+}
+
 /// Whether `scheme` is admissible on `protocol` (the admissible-scheme-per-
 /// protocol check). HTTP admits `None` (public routes) and `Bearer` (an
 /// `Authorization` header is an HTTP concept); the internal protocols

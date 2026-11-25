@@ -2634,6 +2634,16 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.headers_field_consumed",
+        blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
+        example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
+    },
+    Explain {
+        code: "bynk.http.headers_field_consumed_optional",
+        blurb: "A `headers` field reads a header the route's actor consumes (`authorization` on a `Bearer` or `Oidc` route, the signature header, the session cookie out of `cookie`), so the router hides it from the record and the field is always `None` or empty. It does no harm, but it never carries anything, which is rarely what the author meant. Read the value through the actor's principal, or drop the field. A required field is the error `bynk.http.headers_field_consumed`.",
+        example: "type Auth = { authorization: Option[String] }   // ⚠ always `None` on a `Bearer` route",
+    },
+    Explain {
         code: "bynk.http.headers_field_not_stringy",
         blurb: "A header is a single text value (or a comma-separated list of them), so each field of the `headers` record must be one a header can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` (a header that may be absent) or a `List` (a comma-separated value, split respecting quoted strings). A nested record or any other type is refused. Flatten the record, or keep structured data in a `String` and decode it yourself. `query` and `cookies` records follow the same rule: `bynk.http.query_field_not_stringy`, `bynk.http.cookies_field_not_stringy`.",
         example: "type Range = { from: Int, to: Int }\n\ntype Upload = { range: Range }   // ✗ a header is one value, not a record\n\ntype Upload = { from: Int, to: Int }   // ✓\n\non PUT(\"/files\") (headers: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -8661,6 +8671,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
+    )),
+    dg(
+        "bynk.http.headers_field_consumed",
+        "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.headers_field_consumed_optional",
+        "An `Option` or `List` `headers` field reads a header the route's actor consumes, so it is always `None` or empty (warning).",
+        &["http_handler"],
     )),
     dg(
         "bynk.http.headers_field_not_stringy",
