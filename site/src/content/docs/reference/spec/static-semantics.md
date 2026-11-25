@@ -1275,6 +1275,20 @@ effectful position and MUST be applied to an `Effect`
 capability call or a cross-context call MUST NOT occur in a pure context
 (`bynk.effect.capability_in_pure_context`, `bynk.effect.cross_context_in_pure_context`).
 
+**An effect cannot wrap another effect** (#4324). An `Effect` is a promise at runtime, and a
+promise that returns a promise is merged into one, so `Effect[Effect[T]]` has no runtime
+form: the value after `<-` would be a `T` while the type said `Effect[T]`. The shape is
+refused with `bynk.types.nested_effect` in two places. A written `Effect[Effect[_]]` is
+refused wherever a type is written, at any depth and inside any type argument
+(`Option[Effect[Effect[Int]]]`). A call that would *build* one is refused too: when a type
+variable is instantiated with an `Effect` where the signature wraps it in another, as
+`Effect.pure(e)` with `e: Effect[_]` and `wrap(e)` for `fn wrap[T](x: T) -> Effect[T]` do,
+the call is refused at the argument whose parameter mentions that type variable; so is
+a kernel method that builds one (`q.fold(e0, f)` with `e0: Effect[Int]`), at the call. A generic signature such as
+`fn mapE[T, U](e: Effect[T], f: T -> U) -> Effect[U]` stays legal; only an instantiation that
+nests is refused. A `List[Effect[T]]` or an `Option[Effect[T]]` is not a nested effect and
+is unaffected. To sequence effects, use `andThen` or `<-`.
+
 A **detached effect** (`e.detach()`, #3437) stops waiting for an effect that is already
 running. `detach` is a kernel method on every `Effect[T]` that returns `Effect[()]`, so it is an
 ordinary effect: `do e.detach()` and `let _ <- e.detach()` are statements, and it may be the body
@@ -1938,8 +1952,8 @@ seconds, 0 to 60) and `concurrency` (1 to 250), each written once, with a litera
 of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 `bynk.queue.delivery_not_queue`. A consumer with no `deadLetter` key warns
 (`bynk.queue.no_dead_letter`; `deadLetter: None` silences it). The dead-letter queue MUST NOT be
-the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
-receives from (`bynk.queue.dead_letter_type_mismatch`).
+the consumer's own, and a Bynk consumer of it MUST accept the message type of the consumer it
+receives from (`bynk.queue.dead_letter_type_mismatch`), by the comparison of the next paragraph.
 
 A `sendValue`, `sendValueWith` or `sendValueBatch` call on a `Queue` instance whose queue some
 context of the project consumes (`from queue("q")`) MUST send a type, or for a batch an element
@@ -3354,8 +3368,8 @@ to an **index lookup** when an `@indexed` field routes it (below).
 *(v0.93, [ADR 0118](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0118-indexed-indexing-model.md))*
 A `store Map[K, V]` field may carry `@indexed(by: f, …)` to maintain a **secondary
 index** on one or more of its value type's fields. Each `by:` target MUST name a
-**value-keyable field** of `V` (the `Map`-key rule — `String`/`Int`, incl.
-refined/opaque over them); a non-`by:` argument is `bynk.index.bad_argument`, a
+**`Key` field** of `V` (the `Map`-key rule, [§6.2.1](/reference/spec/type-system/#621-the-key-constraint));
+a non-`by:` argument is `bynk.index.bad_argument`, a
 field the value type lacks is `bynk.index.unknown_key`, and a non-keyable field
 is `bynk.index.unkeyable_key`. The runtime maintains a sibling posting-list
 `Record` per indexed field **inside the same atomic commit** (ADR 0109) as the
@@ -3379,7 +3393,9 @@ sum or enum of keys; anything else is `bynk.types.not_keyable`, checked at every
 written `Map[K, V]` reference. A type parameter in key position MUST be declared
 `K: Key`, on the function, on the type, or in a method's `where` clause
 (`bynk.generics.missing_key_bound`, with a machine-applicable fix). A store
-`Map`'s key is still `String`/`Int` (`bynk.store.unkeyable_key`).
+`Map`'s, `Set`'s or `Cache`'s key is `Key` too (`bynk.store.unkeyable_key` for a type that is not):
+a `String`/`Int` key, or a refined or opaque type over one, is persisted as its own text, any
+other key under its canonical encoding, whose length counts towards the platform's storage-key size.
 
 **Order.** A `List` is ordered by construction. A `Map` is
 **insertion-ordered**, normatively: `keys()` enumerates in insertion order,

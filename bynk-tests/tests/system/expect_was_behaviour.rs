@@ -107,7 +107,7 @@ fn a_failed_is_and_a_match_arm_report_the_value_tested() {
     );
     assert!(case(&doc, "a redacted subject").get("actual").is_none());
 
-    // A long value is cut at 2,000 characters in the message; `actual` keeps all of it.
+    // (#4120: an `Option` prints as `Some(…)`.) A long value is cut at 2,000 characters in the message; `actual` keeps all of it.
     let long = case(&doc, "a long subject");
     let text = long["message"].as_str().unwrap();
     assert!(
@@ -118,13 +118,12 @@ fn a_failed_is_and_a_match_arm_report_the_value_tested() {
     assert!(text.len() < 2400, "{} characters", text.len());
     assert_eq!(
         long["actual"].as_str().unwrap().len(),
-        r#"{"tag":"Some","value":""#.len() + 2100 + 2
+        r#"Some(""#.len() + 2100 + r#"")"#.len()
     );
 
     // #4229: a `Duration` inside the subject prints as a Bynk literal, not as milliseconds.
     assert!(
-        message("a duration inside the subject")
-            .contains("p was {\"tag\":\"Some\",\"value\":3.seconds}"),
+        message("a duration inside the subject").contains("p was Some(3.seconds)"),
         "{}",
         message("a duration inside the subject")
     );

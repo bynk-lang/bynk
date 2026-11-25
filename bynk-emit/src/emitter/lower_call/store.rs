@@ -139,6 +139,17 @@ fn query_op(
     })
 }
 
+/// #4037: the entry key of `k` in the store field `field`. A scalar key (`String`, `Int` or a
+/// refined or opaque type over one) is `String(k)`, as it always was; any other `Key` type is its
+/// canonical encoding, which faults naming the field when it is over the platform's key size.
+fn key_of(cx: &LowerCtx, field: &str, k: TsExpr) -> TsExpr {
+    if cx.agent_store_key_is_composite(field) {
+        call(ident("__bynkStoreKey"), vec![str_lit(field), k])
+    } else {
+        string_of(k)
+    }
+}
+
 /// The persisted-store receivers of a method call: a `store` field of the
 /// current agent used as `<field>.<op>(…)`. Each kind has its own function, tried
 /// in order; `None` means the receiver is none of them.
@@ -229,7 +240,7 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     const_typed("__new", None, call(ident("__connIdOf"), vec![v])),
                     const_typed(
                         "__old",
@@ -255,7 +266,7 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     const_typed(
                         "__cid",
                         None,
@@ -275,7 +286,7 @@ fn lower_store_held_map_call(
             "contains" => {
                 let c = a;
                 let [k] = take(c);
-                op(&m.node, "has", vec![string_of(k)])
+                op(&m.node, "has", vec![key_of(cx, &id_.name, k)])
             }
             "size" => {
                 let _ = a;
@@ -285,7 +296,11 @@ fn lower_store_held_map_call(
                 let c = a;
                 let [k] = take(c);
                 sync_iife(vec![
-                    const_typed("__cid", None, op(&m.node, "get", vec![string_of(k)])),
+                    const_typed(
+                        "__cid",
+                        None,
+                        op(&m.node, "get", vec![key_of(cx, &id_.name, k)]),
+                    ),
                     ret(TsExpr::Conditional {
                         test: Box::new(strict_neq(ident("__cid"), undefined())),
                         consequent: Box::new(resolve_connection(&f_node, ident("__cid"))),
@@ -354,7 +369,8 @@ fn lower_store_map_call(
         if method.name == "filter"
             && let [arg] = args
             && let ExprKind::Lambda(lam) = &arg.kind
-            && let Some(routed) = pre.absorb_built(route_indexed_filter(&m, &idx_fields, lam, cx))
+            && let Some(routed) =
+                pre.absorb_built(route_indexed_filter(&m, &id_.name, &idx_fields, lam, cx))
         {
             return Some(routed);
         }
@@ -373,7 +389,7 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     const_typed("__new", None, v),
                     const_typed(
                         "__old",
@@ -398,7 +414,7 @@ fn lower_store_map_call(
                 let c = a;
                 let [k, v] = take(c);
                 async_iife(vec![
-                    awaited(op(&m.node, "put", vec![string_of(k), v])),
+                    awaited(op(&m.node, "put", vec![key_of(cx, &id_.name, k), v])),
                     done(),
                 ])
             }
@@ -412,7 +428,7 @@ fn lower_store_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     const_typed(
                         "__o",
                         None,
@@ -432,14 +448,14 @@ fn lower_store_map_call(
                 let c = a;
                 let [k] = take(c);
                 async_iife(vec![
-                    awaited(op(&m.node, "remove", vec![string_of(k)])),
+                    awaited(op(&m.node, "remove", vec![key_of(cx, &id_.name, k)])),
                     done(),
                 ])
             }
             "contains" => {
                 let c = a;
                 let [k] = take(c);
-                op(&m.node, "has", vec![string_of(k)])
+                op(&m.node, "has", vec![key_of(cx, &id_.name, k)])
             }
             "size" => {
                 let _ = a;
@@ -460,7 +476,7 @@ fn lower_store_map_call(
                     alternate: Box::new(ident("None")),
                 };
                 async_iife(vec![
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     ret(call(
                         ident("__bynkThen"),
                         vec![
@@ -488,7 +504,11 @@ fn lower_store_map_call(
                     ],
                 );
                 async_iife(vec![
-                    awaited(op(&m.node, "modify", vec![string_of(k), modify])),
+                    awaited(op(
+                        &m.node,
+                        "modify",
+                        vec![key_of(cx, &id_.name, k), modify],
+                    )),
                     done(),
                 ])
             }
@@ -505,7 +525,11 @@ fn lower_store_map_call(
                     apply(f, cur),
                 );
                 async_iife(vec![
-                    awaited(op(&m.node, "modify", vec![string_of(k), modify])),
+                    awaited(op(
+                        &m.node,
+                        "modify",
+                        vec![key_of(cx, &id_.name, k), modify],
+                    )),
                     done(),
                 ])
             }
@@ -570,7 +594,7 @@ fn lower_store_set_call(
                     let c = a;
                     let [k] = take(c);
                     async_iife(vec![
-                        awaited(op(&s.node, which, vec![string_of(k)])),
+                        awaited(op(&s.node, which, vec![key_of(cx, &id_.name, k)])),
                         done(),
                     ])
                 }
@@ -578,7 +602,7 @@ fn lower_store_set_call(
             "contains" => {
                 let c = a;
                 let [k] = take(c);
-                op(&s.node, "has", vec![string_of(k)])
+                op(&s.node, "has", vec![key_of(cx, &id_.name, k)])
             }
             "size" => {
                 let _ = a;
@@ -673,7 +697,7 @@ fn lower_store_cache_call(
                 let c_ = a;
                 let [k] = take(c_);
                 async_iife(vec![
-                    awaited(op(&c.node, "remove", vec![string_of(k)])),
+                    awaited(op(&c.node, "remove", vec![key_of(cx, &id_.name, k)])),
                     done(),
                 ])
             }
@@ -682,7 +706,11 @@ fn lower_store_cache_call(
                 let [k, v] = take(c_);
                 async_iife(vec![
                     now(),
-                    awaited(op(&c.node, "put", vec![string_of(k), stamped(v, ttl)])),
+                    awaited(op(
+                        &c.node,
+                        "put",
+                        vec![key_of(cx, &id_.name, k), stamped(v, ttl)],
+                    )),
                     done(),
                 ])
             }
@@ -694,7 +722,7 @@ fn lower_store_cache_call(
                     const_typed(
                         "__e",
                         None,
-                        TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
+                        TsExpr::Await(Box::new(op(&c.node, "get", vec![key_of(cx, &id_.name, k)]))),
                     ),
                     ret(TsExpr::Conditional {
                         test: Box::new(paren(is_live())),
@@ -711,7 +739,7 @@ fn lower_store_cache_call(
                     const_typed(
                         "__e",
                         None,
-                        TsExpr::Await(Box::new(op(&c.node, "get", vec![string_of(k)]))),
+                        TsExpr::Await(Box::new(op(&c.node, "get", vec![key_of(cx, &id_.name, k)]))),
                     ),
                     ret(is_live()),
                 ])
@@ -746,7 +774,7 @@ fn lower_store_cache_call(
                 );
                 async_iife(vec![
                     now(),
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
@@ -769,7 +797,7 @@ fn lower_store_cache_call(
                 );
                 async_iife(vec![
                     now(),
-                    const_typed("__k", None, string_of(k)),
+                    const_typed("__k", None, key_of(cx, &id_.name, k)),
                     awaited(op(&c.node, "modify", vec![ident("__k"), modify])),
                     done(),
                 ])
@@ -936,6 +964,7 @@ fn lower_store_cell_call(
 /// `None` (fall back to scan).
 fn route_indexed_filter(
     m: &Receiver,
+    map_name: &str,
     fields: &[String],
     lam: &LambdaExpr,
     cx: &mut LowerCtx,
@@ -967,7 +996,14 @@ fn route_indexed_filter(
             vec![],
             call(
                 member(m.node.clone(), "byIndex"),
-                vec![str_lit(field), string_of(v)],
+                vec![
+                    str_lit(field),
+                    if cx.agent_store_index_is_composite(map_name, field) {
+                        call(ident("__bynkKeyEncode"), vec![v])
+                    } else {
+                        string_of(v)
+                    },
+                ],
             ),
         ))
     };

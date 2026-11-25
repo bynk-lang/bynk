@@ -1,10 +1,10 @@
 {
-  "blurb": "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
+  "blurb": "A store `Map` or `Cache` key, or a store `Set` element, must be a `Key` type, as for a value `Map` or `Set`: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. Two keys are one entry exactly when they are `==`. A `Float` is never a key at any depth, because `NaN` is not equal to itself and a key holding one could never be found again; a `Map`, a `Set` and a function are not keys either. Key by a field that is a `Key`, or store the value as an `Int` or a `String` (a `Float` price as whole cents, say). A value `Map` or `Set` follows the same rule, `bynk.types.not_keyable`.",
   "category": "Agent storage",
   "categoryAnchor": "agent-storage",
   "code": "bynk.store.unkeyable_key",
   "constructs": [],
-  "example": "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+  "example": "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",
   "severity": "error",
   "summary": "A store `Set` element or `Map`/`Cache` key is not value-keyable — it must be `String`, `Int`, or a refined/opaque type over them (#1680)."
 }

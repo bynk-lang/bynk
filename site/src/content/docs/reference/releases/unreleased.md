@@ -7,6 +7,15 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.704.0** | A `for all` and a bare `Val` work over `List`, `Set`, `Map` and `Option` and the records and sums that hold them, and `bynk.val.needs_pin` names the path to the part that cannot be generated |
+| **v0.703.0** | A store `Map`, `Set` or `Cache` takes any `Key` type as its key (a record, a sum, an `Option`, a `Decimal`, `Bytes`), held under the canonical key encoding; `String` and `Int` keys are stored exactly as before |
+| **v0.702.1** | A queue send in an agent's transition predicate or migrate step is refused as an unknown name, and the diagnostic now says the name is a capability |
+| **v0.702.0** | A quick fix rewrites a two-arm `match` ending a test case, with an `expect false` fallback, into `expect … is` |
+| **v0.701.0** | An `Effect` can no longer wrap another `Effect`, as written or through a call's instantiation: `bynk.types.nested_effect` |
+| **v0.700.2** | `self.op(…)` inside an agent handler is refused as `bynk.agents.self_operation`, naming the agent and the operation and showing `Agent(key).op(…)`, where it reported a field of the internal `__<Agent>Self` record (#4291) |
+| **v0.700.1** | Signature help shows one signature per arity for `min`, `max`, `count` and `List.join`, and highlights the form that fits the arguments typed |
+| **v0.700.0** | An HttpResult takes withHeader, retryAfter, at and download for response headers, a router-owned name or a malformed literal is refused, and headers() reads them in a test |
+| **v0.699.1** | The stamp numbers several pending files in the order they merged rather than by filename, and records each increment's own PR; a dry-run `stamp-batch` workflow shows what a batched stamp would do |
 | **v0.699.0** | A test stubs an agent operation at `unit`: `stub Basket.add(_) faulted` or `unreachable` makes the calls it matches, whatever the key, end as `Faulted` or `Unreachable(None)` in `Basket(k).add.outcome(x)`, and fault a plain call; only an agent of the context under test, only at `unit`, and only those two words (`bynk.stub.agent_stub`) |
 | **v0.698.0** | A pattern of `Undecodable` over a `QueueResult` warns (`bynk.queue.undecodable_unreachable`) outside a `system` case, where the verdict can never be it |
 | **v0.697.0** | A `ValidationError` names the failed predicate as `e.rule`, a closed `ValidationRule` sum with typed arguments, and the `400 RefinementViolation` body carries it beside `field` and `message` |

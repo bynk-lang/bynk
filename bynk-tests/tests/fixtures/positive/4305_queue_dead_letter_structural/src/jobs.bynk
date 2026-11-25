@@ -1,0 +1,38 @@
+context jobs
+
+type Job = { id: String }
+type Retried = { id: String }
+
+type Small = Int where InRange(1, 10)
+type Wide = Int where InRange(1, 100)
+
+// #4305: a dead letter is the source consumer's message body, unchanged, so its consumer
+// is compared as a producer's send is. A type with the same fields under another name is the same type.
+service work from queue("jobs") {
+  delivery { deadLetter: "jobs-dlq" }
+  on message(message: Job) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+service review from queue("jobs-dlq") {
+  delivery { deadLetter: None }
+  on message(message: Retried) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+// A consumer of a weaker refinement accepts every message of a stronger one.
+service count from queue("counts") {
+  delivery { deadLetter: "counts-dlq" }
+  on message(message: Small) -> Effect[QueueResult] {
+    Ack
+  }
+}
+
+service recount from queue("counts-dlq") {
+  delivery { deadLetter: None }
+  on message(message: Wide) -> Effect[QueueResult] {
+    Ack
+  }
+}

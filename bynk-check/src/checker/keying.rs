@@ -22,8 +22,9 @@
 //! The runtime holds a composite key under a canonical encoding
 //! (`__bynkKeyEncode`); `Key` needs no witness, so it adds no hidden argument.
 //!
-//! The store rule (`store m: Map[K, V]`, `Cache`, `@indexed`) keeps its own
-//! `String`/`Int` predicate: those keys persist through `String(k)`.
+//! The store rule (`store m: Map[K, V]`, `Set`, `Cache`, `@indexed`) is this rule too (#4037): a
+//! `String`/`Int` key (or a refined or opaque type over one) persists through `String(k)`, as it
+//! always has, and any other `Key` type under its canonical encoding.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

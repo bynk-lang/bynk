@@ -817,6 +817,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
     },
     Explain {
+        code: "bynk.agents.self_operation",
+        blurb: "Inside an agent's handler, `self` is the agent's key (`self.id`), not a handle to the agent, so `self.add(…)` and `self.add.outcome(…)` do not call the agent's own operation. Call it the way any other code does, on the agent by key: `Counter(self.id).add(…)`, or `.outcome(…)` for a `CallOutcome`. To share work between two handlers, write it as a function and call that from both.",
+        example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
+    },
+    Explain {
         code: "bynk.asset.duplicate",
         blurb: "An asset is a name for a file, read as a value (`style.url`), so a unit declares each \
                 name once: a second `asset style` would leave `style` meaning two files. Give each \
@@ -2594,6 +2599,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"items\") () -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ no leading `/`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.invalid_response_header",
+        blurb: "A header name is an RFC 9110 token, so it cannot hold a space, a colon or other separator; a header value, a `Location` URL and a download filename cannot carry a line break or another control character, which would let a value forge a second header. `retryAfter` is whole seconds, so a delay under a second cannot be written. These checks run on a literal at compile time; a computed value is checked when the response is built, and a bad one answers `500` rather than sending a malformed header. See also `bynk.http.reserved_response_header`.",
+        example: "Ok(\"x\").withHeader(\"X Request Id\", \"1\")   // ✗ a name has no spaces\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+    },
+    Explain {
         code: "bynk.http.json_duplicate",
         blurb: "`@json(options: …)` chooses how one route's response bodies write an `Option`. A handler has one, because two would give the same body two encodings with nothing to say which wins, so the second is refused. Keep the one you mean. To set the encoding for every route of a service, use a `json { }` section instead. A handler may likewise carry only one `@cache` (`bynk.http.cache_duplicate`), `@limit` or `@raw`.",
         example: "@json(options: plain)\n@json(options: tagged)    // ✗ a second `@json`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)     // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -2747,6 +2757,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.reserved_response_header",
+        blurb: "`withHeader` adds a header of the handler's own, so it cannot set one the router writes itself: the caching headers (`Cache-Control`, `ETag`, `Vary`, `Expires` and the CDN directives), `Content-Type` and `Content-Length`, `Location`, `Retry-After`, `Content-Disposition`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers, `WWW-Authenticate` and `Allow`, and the hop-by-hop headers. Each has its own way in: `@cache`, a body, `.at(url)`, `withCookie`, `security { }`, `cors { }`. A name computed at run time is checked when the response is built, and a reserved one answers `500`. See also `bynk.http.invalid_response_header`.",
+        example: "Ok(\"x\").withHeader(\"Set-Cookie\", \"a=1\")   // ✗ use `withCookie`\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+    },
+    Explain {
         code: "bynk.http.reserved_route_syntax",
         blurb: "`*`, `{` and `}` are reserved in a route, both in a literal segment and in a `:name` parameter, for a future form that matches the rest of a path. Matched literally, such a segment would quietly change meaning when that form arrives, so it is refused now. To match a literal `*` or brace, take the segment as a `:name` parameter and check its value in the handler. A route that does not start with `/` is `bynk.http.invalid_path`.",
         example: "on GET(\"/files/*key\") () -> Effect[HttpResult[String]] by v: Visitor { … }             // ✗ `*` is reserved\n\non GET(\"/files/:key\") (key: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -2808,8 +2823,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.index.unkeyable_key",
-        blurb: "An index is looked up by equality on its key, so the field has to be a value the store can compare and key on: `Int`, `String`, or a refined or opaque type over one of them. A `Bool`, a record or a list cannot be. Index another field, or add a field of a keyable type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
-        example: "type Order = { id: String, paid: Bool, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: paid)         // ✗ a `Bool` is not keyable\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
+        blurb: "An index is looked up by equality on its key, so the field has to be a `Key` type: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. A `Float` is never a key, at any depth, because `NaN` is not equal to itself. Index another field, or add a field of a key type to look up by. The same rule for a `Map` key is `bynk.store.unkeyable_key`.",
+        example: "type Order = { id: String, weight: Float, customerId: String }\n\nstore orders: Map[String, Order] @indexed(by: weight)       // ✗ a `Float` is not a key\n\nstore orders: Map[String, Order] @indexed(by: customerId)   // ✓ a `String`",
     },
     Explain {
         code: "bynk.internal.missing_checker_fact",
@@ -4147,7 +4162,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
-        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
     },
     Explain {
@@ -4749,8 +4764,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.store.unkeyable_key",
-        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be `String`, `Int` or a refined or opaque type over them. A store collection is saved as a JSON object keyed by the key's string form, and a record has no stable string form, so it cannot be a key (a composite key is not supported yet). Key by one of the record's id fields, or by an enum's name as a `String`. A value `Map` or `Set` follows a wider rule, `bynk.types.not_keyable`.",
-        example: "type Point = { x: Int, y: Int }\n\nstore cells: Map[Point, Int]   // ✗ a record has no stable string key\n\nstore cells: Map[String, Int]   // ✓ key by a string, such as an id",
+        blurb: "A store `Map` or `Cache` key, or a store `Set` element, must be a `Key` type, as for a value `Map` or `Set`: a `String`, an `Int`, a `Bool`, an `Instant`, a `Duration`, a `Decimal` or `Bytes`, an `Option` or `List` of a key, a refined or opaque type over one, or a record, sum or enum made only of keys. Two keys are one entry exactly when they are `==`. A `Float` is never a key at any depth, because `NaN` is not equal to itself and a key holding one could never be found again; a `Map`, a `Set` and a function are not keys either. Key by a field that is a `Key`, or store the value as an `Int` or a `String` (a `Float` price as whole cents, say). A value `Map` or `Set` follows the same rule, `bynk.types.not_keyable`.",
+        example: "type Reading = { at: Int, level: Float }\n\nstore seen: Map[Reading, Int]   // ✗ a `Float` inside the key is never a key\n\ntype Reading = { at: Int, level: Int }\n\nstore seen: Map[Reading, Int]   // ✓ a record of keys is a key",
     },
     Explain {
         code: "bynk.store.unknown_annotation",
@@ -6181,6 +6196,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
     },
     Explain {
+        code: "bynk.types.nested_effect",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
+    },
+    Explain {
         code: "bynk.types.never_inferred",
         blurb: "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the \
                 bottom type `never returns`, which stands in for any type. If an unannotated \
@@ -6666,8 +6686,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
                 most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
                 but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; \
-                the same goes for a record or sum that reaches one. A `for all` over such a type \
-                is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
+                the same goes for a record or sum that reaches one, and the message names the \
+                field that does. A `for all` is different: it draws a `Matches` or `IsoDate` \
+                string, and pins only a `Cron` or a pattern it cannot walk. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
                 refinement, or give the type an `@example` and use bare `Val`. See the \
                 `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
         example: "// demo/codes.bynk\n\
@@ -7344,6 +7365,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agents.non_zeroable_state_field",
         "An agent `store` field has no initialiser and no implicit zero value.",
         &["store_field"],
+    ),
+    d(
+        "bynk.agents.self_operation",
+        "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
     ),
     d(
         "bynk.asset.duplicate",
@@ -8533,6 +8558,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     d(
+        "bynk.http.invalid_response_header",
+        "A response header method is given a malformed name, value, URL, filename or delay.",
+    ),
+    d(
         "bynk.http.json_duplicate",
         "A handler carries more than one `@json` annotation.",
     ),
@@ -8657,6 +8686,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.reserved_prefix",
         "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.reserved_response_header",
+        "`withHeader` names a header the router owns, such as `Set-Cookie`, `Cache-Control` or `Location`.",
     ),
     dg(
         "bynk.http.reserved_route_syntax",
@@ -10803,6 +10836,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.negative_length",
         "A length predicate was given a negative value.",
         &["refinement"],
+    ),
+    d(
+        "bynk.types.nested_effect",
+        "An `Effect` wraps another `Effect`, as written or through a call's instantiation; effects are promises and flatten, so the shape cannot exist (use `andThen`).",
     ),
     dg(
         "bynk.types.never_inferred",
