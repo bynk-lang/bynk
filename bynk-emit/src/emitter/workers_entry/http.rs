@@ -1264,7 +1264,7 @@ pub(super) fn emit_http_route_dispatch(
             vec![cached, ident("request")],
         )
     } else {
-        no_stored(route, plain_response(ser_fn))
+        no_stored(route, plain_response(route, ser_fn))
     };
     // #3914: a `401` carries the route's `WWW-Authenticate` challenge (inside CORS, so the
     // header is exposed to a browser client).
@@ -1408,12 +1408,17 @@ pub(super) fn route_challenges(h: &Handler, table: &UnitTable, context: &str) ->
     vec![format!("Bynk realm=\"{realm}\"")]
 }
 
-/// The response of a route that is not a `GET`: the result, serialised, with no validator.
-fn plain_response(ser_fn: TsExpr) -> TsExpr {
-    call(
-        ident("__httpResultToResponse"),
-        vec![ident("result"), ser_fn],
-    )
+/// The response of a route that is not a `GET`: the result, serialised, with no validator. A route that
+/// answers its errors as problem details says so (#3916), and one that does not is unchanged.
+fn plain_response(route: &HttpRoute, ser_fn: TsExpr) -> TsExpr {
+    let mut args = vec![ident("result"), ser_fn];
+    if route.error_problem {
+        args.push(TsExpr::object(vec![(
+            "problem".to_string(),
+            bool_lit(true),
+        )]));
+    }
+    call(ident("__httpResultToResponse"), args)
 }
 
 /// #3922: `@cache(noStore: true)` sends `no-store`, on a route of any method.
