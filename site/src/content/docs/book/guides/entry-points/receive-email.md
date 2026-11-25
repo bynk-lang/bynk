@@ -45,6 +45,27 @@ you.
 service names. Two services cannot claim the same address; a named address and
 the catch-all together are fine, and the named address wins.
 
+## Route by tag
+
+A plus-address such as `support+1234@shop.example` is mail to `support@shop.example`
+with a tag. Your `support` service receives it, and `mail.subaddress` holds the tag:
+
+```bynk,ignore
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    match mail.subaddress {
+      Some(ticket) => Forward("tickets@shop.example"),
+      None => Accept,
+    }
+  }
+}
+```
+
+Claim a tagged address yourself (`from email("support+vip@shop.example")`) and that
+service takes that exact address; every other tag still goes to `support`. Turn
+subaddressing on for the domain in Email Routing, or Cloudflare will not deliver
+tagged mail to the Worker at all.
+
 ## Do not trust `from`
 
 `mail.from` is the envelope sender, and anyone can write any address there. The

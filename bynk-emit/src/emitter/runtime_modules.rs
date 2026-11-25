@@ -873,6 +873,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("splitWholesale", "entries"),
     ("storeKey", "entries"),
     ("stubAgents", "agent"),
+    ("subaddressTag", "email"),
     ("sweepAgentInstances", "agent"),
     ("then", "entries"),
     ("tokenClaims", "auth"),

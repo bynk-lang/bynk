@@ -17,6 +17,7 @@ import {
   rejectReason,
   replyMime,
   replySubject,
+  subaddressTag,
 } from "../src/email.ts";
 import type { EmailReply, EmailRoute, EmailVerdict, InboundEmail, InboundMessage } from "../src/email.ts";
 import { None, Some } from "../src/result.ts";
@@ -102,6 +103,43 @@ test("pickRoute: a catch-all claims only its own domain, and nothing is claimed 
   assert.equal(pickRoute([], "a@shop.example"), undefined);
   // the last `@` decides the domain, so a quoted local part cannot slip past
   assert.equal(pickRoute([catchAll], '"x@shop.example"@other.example'), undefined);
+});
+
+test("pickRoute: a plus-addressed recipient reaches its base address's claim (#3884)", () => {
+  const support = route("support@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([support], "support+1234@shop.example"), support);
+  // case is ignored, in the tag's neighbourhood as everywhere
+  assert.equal(pickRoute([support], "SUPPORT+X@shop.example"), support);
+});
+
+test("pickRoute: an exact claim on a tagged address wins over the base address (#3884)", () => {
+  const base = route("support@shop.example", { tag: "Accept" });
+  const vip = route("support+vip@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([base, vip], "support+vip@shop.example"), vip);
+  assert.equal(pickRoute([vip, base], "support+vip@shop.example"), vip);
+  // another tag still falls to the base address
+  assert.equal(pickRoute([base, vip], "support+other@shop.example"), base);
+});
+
+test("pickRoute: a tagged recipient with no base claim falls to the catch-all, or is not claimed (#3884)", () => {
+  const catchAll = route("*@shop.example", { tag: "Accept" });
+  const sales = route("sales@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([catchAll, sales], "support+1@shop.example"), catchAll);
+  assert.equal(pickRoute([sales], "support+1@shop.example"), undefined);
+  // the base is taken at the first `+`, and only at the recipient's own domain
+  assert.equal(pickRoute([route("a@shop.example", { tag: "Accept" })], "a+b+c@other.example"), undefined);
+  const a = route("a@shop.example", { tag: "Accept" });
+  assert.equal(pickRoute([a], "a+b+c@shop.example"), a);
+  // a local part that starts with `+` has no base
+  assert.equal(pickRoute([route("@shop.example", { tag: "Accept" })], "+x@shop.example"), undefined);
+});
+
+test("subaddressTag: the text after the first `+`, the sender's case kept (#3884)", () => {
+  assert.equal(subaddressTag("support+1234@shop.example"), "1234");
+  assert.equal(subaddressTag("Support+VIP+x@shop.example"), "VIP+x");
+  assert.equal(subaddressTag("support+@shop.example"), "");
+  assert.equal(subaddressTag("support@shop.example"), undefined);
+  assert.equal(subaddressTag("+x@shop.example"), undefined);
 });
 
 test("an unclaimed recipient is rejected with the fixed reason, before the message is read", async () => {
@@ -321,6 +359,24 @@ test("limits: oversized headers are a parse failure", async () => {
   const r = await parseInbound({ from: "a@b.example", to: "c@d.example" }, enc.encode(body));
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.code, "EMAXHEADERSIZE");
+});
+
+test("parseInbound reads the tag of a plus-addressed recipient; the handler sees it as `subaddress` (#3884)", async () => {
+  const body = `${CF}Subject: hi\r\n\r\nx`;
+  const tagged = await parseInbound({ from: "a@b.example", to: "Support+1234@shop.example" }, enc.encode(body));
+  assert.equal(tagged.ok, true);
+  if (tagged.ok) {
+    assert.deepEqual(tagged.mail.subaddress, Some("1234"));
+    assert.equal(tagged.mail.to, "Support+1234@shop.example");
+  }
+  const plain = await parseInbound({ from: "a@b.example", to: "support@shop.example" }, enc.encode(body));
+  assert.equal(plain.ok, true);
+  if (plain.ok) assert.deepEqual(plain.mail.subaddress, None);
+  // through the dispatcher: the service claiming the base address is handed the tag
+  const seen: { mail?: InboundEmail } = {};
+  const { message } = fake(mime(), { to: "support+1234@shop.example" });
+  await handleEmail(message, [route("support@shop.example", { tag: "Accept" }, seen)], factory, () => {});
+  assert.deepEqual(seen.mail?.subaddress, Some("1234"));
 });
 
 // ------------------------------------------------------------------ verdicts
