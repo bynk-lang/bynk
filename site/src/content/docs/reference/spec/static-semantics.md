@@ -653,6 +653,15 @@ instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
 
+**`?` on an `Option`** (#3966). `?` on an `Option[T]` has type `T` and returns early on `None`
+where the enclosing body returns an `Option[_]` or an `Effect[Option[_]]`: the `None` is the
+result, so `Option` never converts to `Result` or the reverse. Where the body returns an
+`HttpResult[_]` (or an `Effect` of one) the `None` answers `NotFound` instead (v0.153, ADR 0177).
+Anywhere else, a `Result`-returning body included, it is
+`bynk.types.question_option_outside_http`, with a quick fix that applies `.okOr(todo("…"))`, to be completed with the error. A lambda is
+its own return scope, as for `Result`, and `bynk.par.question_in_join` applies to an `Option`
+as to a `Result`.
+
 **`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
 rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
 route, [§5.7.5](/reference/spec/static-semantics/#response-json)). It is refused when the type
