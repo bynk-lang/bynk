@@ -14,6 +14,10 @@ agent Basket {
   invariant few_blocked:
     blocked.size() <= 1
 
+  // A lambda parameter named like a collection field is that local, not the field.
+  invariant local_shadows_field:
+    [1, 2].any((lines) => lines > 1)
+
   transition never_shrinks_once_paid:
     old.paid implies new.lines.size() >= old.lines.size()
 

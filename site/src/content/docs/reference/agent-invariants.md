@@ -59,7 +59,7 @@ Predicates may call **pure value methods** (`Option.isSome`/`isNone`, sum
 |---|---|
 | A non-`Bool` predicate | `bynk.invariant.not_bool` |
 | Effects, capabilities, or test-only constructs | `bynk.invariant.impure_predicate` |
-| Reading a `Map`, `Set`, `Cache` or `Log` field beyond its `size()` | `bynk.invariant.collection_scan` |
+| Reading a `Map` or `Set` field beyond its `size()`, or a `Log` or `Cache` field at all | `bynk.invariant.collection_scan` |
 | Referencing another agent | `bynk.invariant.cross_agent_reference` |
 | Two invariants with the same name | `bynk.invariant.duplicate_name` |
 | An `invariant` after a handler | `bynk.parse.invariant_after_handler` |
@@ -71,7 +71,7 @@ saga or a scenario, not an invariant.
 ## Collections: only `size()` {#collection-size}
 
 An invariant runs at every commit, so what it reads is read at every commit. A
-`Map`, `Set` or `Cache` field can be asked its **`size()`**: the commit already
+`Map` or `Set` field can be asked its **`size()`**: the commit already
 knows the staged count, so that reads one count and nothing more. A bound on a
 collection, "at most 100 lines", is one of the most common invariants:
 
@@ -95,7 +95,7 @@ agent Basket {
 Any other read of a collection field (`lines.contains(…)`, `lines.get(…)`, a query,
 or the field on its own) would scan the collection at every commit, so it is
 `bynk.invariant.collection_scan` (`bynk.transition.collection_scan` in a
-transition). A `Log` has no `size()`, so it may not be read at all. Check such a
+transition). A `Log` has no `size()`, and a `Cache` counts only its live entries, which a commit has no clock to judge, so neither may be read at all. In an invariant `size()` is written on the bare field name, and in a transition on `old` or `new`; the other shape is refused. Check such a
 property in the handler that writes the collection, where the entry in hand is
 known, or bound the collection with `size()`.
 
@@ -169,7 +169,7 @@ methods; pure `Bool`), with the same restrictions:
 |---|---|
 | A non-`Bool` predicate | `bynk.transition.not_bool` |
 | Effects, capabilities, or test-only constructs | `bynk.transition.impure_predicate` |
-| Reading a `Map`, `Set`, `Cache` or `Log` field beyond its `size()` | `bynk.transition.collection_scan` |
+| Reading a `Map` or `Set` field beyond its `size()`, or a `Log` or `Cache` field at all | `bynk.transition.collection_scan` |
 | Referencing another agent | `bynk.transition.cross_agent_reference` |
 | Two transitions with the same name | `bynk.transition.duplicate_name` |
 | A predicate mentioning neither `old` nor `new` | `bynk.transition.no_step_reference` |

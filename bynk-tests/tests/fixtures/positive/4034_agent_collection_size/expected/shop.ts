@@ -102,6 +102,10 @@ export class Basket {
       globalThis.console.error("InvariantViolation Basket.few_blocked", { agent: "Basket", invariant: "few_blocked" });
       throw __invariantViolation("Basket", "few_blocked", "invariant", "src/shop.bynk:14:13");
     }
+    if (!(([1, 2]).some((__x: number) => ((lines: number) => lines > 1)(__x)))) {
+      globalThis.console.error("InvariantViolation Basket.local_shadows_field", { agent: "Basket", invariant: "local_shadows_field" });
+      throw __invariantViolation("Basket", "local_shadows_field", "invariant", "src/shop.bynk:18:13");
+    }
     const __prior = await this.state.storage.get<BasketState>("state");
     if (__prior !== undefined) {
       const __old = { ...__zeroOfBasketState(), ...__prior };
@@ -110,7 +114,7 @@ export class Basket {
       const __size_old_lines = await __committedSize(this.state.storage, "lines", __prior);
       if (!((!(__old.paid) || __size_new_lines >= __size_old_lines))) {
         globalThis.console.error("InvariantViolation Basket.never_shrinks_once_paid", { agent: "Basket", invariant: "never_shrinks_once_paid" });
-        throw __invariantViolation("Basket", "never_shrinks_once_paid", "transition", "src/shop.bynk:17:14");
+        throw __invariantViolation("Basket", "never_shrinks_once_paid", "transition", "src/shop.bynk:21:14");
       }
     }
     await __commitStored(this, this.state.storage, __encodeBasketState(s), __entryFieldsOfBasket, s);
