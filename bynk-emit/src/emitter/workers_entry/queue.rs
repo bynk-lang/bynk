@@ -4,8 +4,8 @@ use super::respond::{case_, default_case, fault_detail, report_fault};
 use super::wire::deserialise_call;
 use crate::emitter::RuntimeUse;
 use crate::ts_build::{
-    as_expr, await_expr, block, call, const_, expr_stmt, ident, if_, member, method_call, return_,
-    str_lit, strict_eq, switch_stmt,
+    as_expr, assign, await_expr, block, bool_lit, call, const_, expr_stmt, ident, if_, member,
+    method_call, not_expr, return_, str_lit, strict_eq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ServiceProtocol, TypeRef};
@@ -81,11 +81,16 @@ fn emit_queue_handler(
     let mut cases: Vec<TsSwitchCase> = Vec::new();
     for route in queue_routes {
         let method_key = crate::emitter::queue_handler_method_name(&route.service, route.index);
+        // #3899: a signed consumer decodes the body inside the envelope its admission unwrapped.
+        let body = member(
+            ident(if route.signed.is_some() { "__a" } else { "msg" }),
+            "body",
+        );
         let dser = match &route.msg_type {
             Some(t) => deserialise_call(
                 t,
                 &TsExpr::Paren(Box::new(as_expr(
-                    member(ident("msg"), "body"),
+                    body.clone(),
                     TsType::named("__JsonValue"),
                 ))),
                 "$",
@@ -95,21 +100,23 @@ fn emit_queue_handler(
             // signature above — no cast needed at all when there's no declared type
             // to (dis)trust it against.
             None => as_expr(
-                call(ident("Ok"), vec![member(ident("msg"), "body")]),
+                call(ident("Ok"), vec![body]),
                 TsType::named("Result<unknown, __BoundaryError>"),
             ),
         };
-        let try_stmts = vec![
+        let mut try_stmts = admission_stmts(route);
+        try_stmts.extend([
             const_("__r", dser),
             // #3878: an undecodable body is never retried (no retry changes the
             // bytes): it is dead-lettered or dropped visibly, then skipped.
             if_(
                 strict_eq(member(ident("__r"), "tag"), str_lit("Err")),
                 TsStmt::inline_block(
-                    vec![
-                        expr_stmt(await_expr(undecodable_call(route))),
-                        TsStmt::continue_stmt(None),
-                    ],
+                    [expr_stmt(await_expr(undecodable_call(route)))]
+                        .into_iter()
+                        .chain(settle_stmts(route, false))
+                        .chain([TsStmt::continue_stmt(None)])
+                        .collect(),
                     None,
                 ),
             ),
@@ -122,39 +129,44 @@ fn emit_queue_handler(
             ),
             TsStmt::if_else_stmt(
                 strict_eq(member(ident("result"), "tag"), str_lit("Ack")),
-                expr_stmt(method_call(ident("msg"), "ack", vec![])),
+                // #3899: a signed consumer keeps the message's id for the replay window once it
+                // is handled, before it is acknowledged, so a failure to keep it retries.
+                ack_stmt(route),
                 TsStmt::inline_block(
-                    vec![
-                        expr_stmt(method_call(
-                            ident("globalThis.console"),
-                            "error",
-                            vec![
-                                str_lit(format!("queue {} retry", route.name)),
-                                // Past the `Ack` test the verdict is a `Retry` or a
-                                // `RetryAfter`: a handler cannot return `Undecodable` (#3878).
-                                member(
-                                    as_expr(
-                                        ident("result"),
-                                        TsType::Object(vec![TsTypeMember::readonly_prop(
-                                            "reason",
-                                            TsType::named("string"),
-                                        )]),
+                    settle_stmts(route, false)
+                        .into_iter()
+                        .chain([
+                            expr_stmt(method_call(
+                                ident("globalThis.console"),
+                                "error",
+                                vec![
+                                    str_lit(format!("queue {} retry", route.name)),
+                                    // Past the `Ack` test the verdict is a `Retry` or a
+                                    // `RetryAfter`: a handler cannot return `Undecodable` (#3878).
+                                    member(
+                                        as_expr(
+                                            ident("result"),
+                                            TsType::Object(vec![TsTypeMember::readonly_prop(
+                                                "reason",
+                                                TsType::named("string"),
+                                            )]),
+                                        ),
+                                        "reason",
                                     ),
-                                    "reason",
-                                ),
-                            ],
-                        )),
-                        // #3881: a `RetryAfter` retries after its delay.
-                        expr_stmt(call(
-                            ident("__bynkRetryMessage"),
-                            vec![str_lit(route.name.clone()), ident("msg"), ident("result")],
-                        )),
-                    ],
+                                ],
+                            )),
+                            // #3881: a `RetryAfter` retries after its delay.
+                            expr_stmt(call(
+                                ident("__bynkRetryMessage"),
+                                vec![str_lit(route.name.clone()), ident("msg"), ident("result")],
+                            )),
+                        ])
+                        .collect(),
                     None,
                 ),
                 None,
             ),
-        ];
+        ]);
         // The catch clause's own real content packs both statements onto
         // one compact line (`console.error(...); msg.retry();`) inside the
         // usual braces-on-their-own-lines shape — `TsStmt::try_catch`
@@ -176,7 +188,10 @@ fn emit_queue_handler(
                     )),
                     report_fault(),
                     expr_stmt(method_call(ident("msg"), "retry", vec![])),
-                ],
+                ]
+                .into_iter()
+                .chain(release_on_throw(route))
+                .collect(),
                 None,
             ),
             None,
@@ -193,7 +208,12 @@ fn emit_queue_handler(
                 // diff: `render_inline_stmt`'s own `TryCatch` arm falls back
                 // to `render_stmt(out, stmt, 0)`, matching neither this
                 // loop's real nesting nor the original's own braced shape).
-                block(vec![for_of_body]),
+                block(
+                    signed_decl(route)
+                        .into_iter()
+                        .chain([for_of_body])
+                        .collect(),
+                ),
                 None,
             ),
             return_(None),
@@ -254,6 +274,135 @@ pub(super) struct QueueRoute {
     pub(super) delivery_at: Option<usize>,
     /// #3878: the consumer's dead-letter queue, if its `delivery { }` names one.
     pub(super) dead_letter: Option<String>,
+    /// #3899: set when the consumer admits only signed messages.
+    pub(super) signed: Option<SignedRoute>,
+}
+
+/// #3899: a signed consumer's admission: the foreign senders it admits as (actor, secret name), and
+/// the queues that dead-letter into it, whose messages it also verifies (they were signed for their
+/// source queue, not this one).
+#[derive(Debug, Clone)]
+pub(super) struct SignedRoute {
+    pub(super) secrets: Vec<(String, String)>,
+    pub(super) sources: Vec<String>,
+}
+
+/// `const __a = await __bynkQueueAdmit(msg.body, <queue>, [<sources>], env, { <actor>: <secret> });`
+/// then, on a refusal, `__bynkQueueRefused(ctx, <queue>, __a.reason, msg); continue;`: the message
+/// is acknowledged and reported and never reaches the handler. Nothing for an unsigned consumer.
+fn admission_stmts(route: &QueueRoute) -> Vec<TsStmt> {
+    let Some(signed) = &route.signed else {
+        return Vec::new();
+    };
+    let sources = TsExpr::Array {
+        items: signed.sources.iter().map(|q| str_lit(q.clone())).collect(),
+        multiline: false,
+    };
+    let secrets = TsExpr::object(
+        signed
+            .secrets
+            .iter()
+            .map(|(actor, secret)| (actor.clone(), str_lit(secret.clone())))
+            .collect(),
+    );
+    vec![
+        const_(
+            "__a",
+            await_expr(call(
+                ident("__bynkQueueAdmit"),
+                vec![
+                    member(ident("msg"), "body"),
+                    str_lit(route.name.clone()),
+                    sources,
+                    ident("env"),
+                    secrets,
+                ],
+            )),
+        ),
+        if_(
+            not_expr(member(ident("__a"), "ok")),
+            TsStmt::inline_block(
+                vec![
+                    expr_stmt(call(
+                        ident("__bynkQueueRefused"),
+                        vec![
+                            ident("ctx"),
+                            str_lit(route.name.clone()),
+                            ident("__a"),
+                            ident("msg"),
+                        ],
+                    )),
+                    TsStmt::continue_stmt(None),
+                ],
+                None,
+            ),
+        ),
+        // Kept for the catch, which releases the claim if the handler throws.
+        assign(ident("__s"), ident("__a")),
+    ]
+}
+
+/// `msg.ack();`, preceded for a signed consumer by keeping the message's id (`await __a.settle(true);`).
+fn ack_stmt(route: &QueueRoute) -> TsStmt {
+    let ack = expr_stmt(method_call(ident("msg"), "ack", vec![]));
+    if route.signed.is_none() {
+        return ack;
+    }
+    TsStmt::inline_block(
+        settle_stmts(route, true).into_iter().chain([ack]).collect(),
+        None,
+    )
+}
+
+/// `let __s: { settle(handled: boolean): globalThis.Promise<void> } | undefined;` before a signed
+/// consumer's `try`, so its `catch` can release the id's claim: the admission is bound inside the `try`.
+fn signed_decl(route: &QueueRoute) -> Option<TsStmt> {
+    route.signed.as_ref()?;
+    Some(TsStmt::let_stmt(
+        bynk_ts::TsBindingName::Ident("__s".to_string()),
+        Some(TsType::Union {
+            members: vec![
+                TsType::Object(vec![TsTypeMember::method(
+                    "settle",
+                    vec![TsParam::new("handled", Some(TsType::named("boolean")))],
+                    TsType::named_with_args("globalThis.Promise", vec![TsType::named("void")]),
+                )]),
+                TsType::named("undefined"),
+            ],
+            multiline: false,
+        }),
+        None,
+        None,
+    ))
+}
+
+/// `await __a.settle(<handled>);`: a signed consumer keeps the message's id for the replay window
+/// when it was handled (`true`), and releases it when it was not (`false`), so the platform's
+/// redelivery of a message that failed is admitted again. Nothing for an unsigned consumer.
+fn settle_stmts(route: &QueueRoute, handled: bool) -> Vec<TsStmt> {
+    if route.signed.is_none() {
+        return Vec::new();
+    }
+    vec![expr_stmt(await_expr(method_call(
+        ident("__a"),
+        "settle",
+        vec![bool_lit(handled)],
+    )))]
+}
+
+/// `if (__s !== undefined) await __s.settle(false);`: the claim of a message whose handler threw.
+fn release_on_throw(route: &QueueRoute) -> Vec<TsStmt> {
+    if route.signed.is_none() {
+        return Vec::new();
+    }
+    vec![if_(
+        not_expr(strict_eq(ident("__s"), ident("undefined"))),
+        expr_stmt(await_expr(method_call(
+            ident("__s"),
+            "settle",
+            vec![bool_lit(false)],
+        ))),
+    )]
 }
 
 /// The binding a consumer of `queue` reads its dead-letter producer from (#3878). It is keyed
@@ -324,6 +473,16 @@ pub(super) fn collect_queue_routes(
                     .iter()
                     .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
                     .map(|p| p.type_ref.clone());
+                let signed =
+                    bynk_check::actors::queue_admission_for(h, &service.protocol, &table.actors)
+                        .map(|a| SignedRoute {
+                            secrets: a.foreign.into_iter().map(|f| (f.actor, f.secret)).collect(),
+                            sources: deliveries
+                                .iter()
+                                .filter(|d| d.dead_letter.as_deref() == Some(name.as_str()))
+                                .map(|d| d.queue.clone())
+                                .collect(),
+                        });
                 queue_routes.push(QueueRoute {
                     service: (*sname).clone(),
                     index: queue_idx,
@@ -334,6 +493,7 @@ pub(super) fn collect_queue_routes(
                         .iter()
                         .find(|d| &d.queue == name)
                         .and_then(|d| d.dead_letter.clone()),
+                    signed,
                 });
                 queue_idx += 1;
             }

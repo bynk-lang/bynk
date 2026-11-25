@@ -277,11 +277,13 @@ mod tests {
                 actor: "Ledger".into(),
                 binding: "LEDGER_CALL_KEY".into(),
                 worker: Some("ledger-svc".into()),
+                queue: false,
             },
             ForeignCaller {
                 actor: "Legacy".into(),
                 binding: "LEGACY_CALL_KEY".into(),
                 worker: None,
+                queue: false,
             },
         ];
         out.push_str(&plan_report(
@@ -778,6 +780,7 @@ mod tests {
             actor: "Ledger".into(),
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
+            queue: false,
         };
         let rotating: BTreeMap<Edge, EdgeKey> = [(
             edge.clone(),

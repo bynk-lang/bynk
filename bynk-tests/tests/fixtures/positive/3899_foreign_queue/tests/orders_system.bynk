@@ -1,0 +1,36 @@
+suite shop.orders as system {
+  case "a message signed by the foreign producer reaches the handler" {
+    let r <- fulfil.message(Order { id: "o1" }) by Legacy
+    expect r is Ack
+  }
+
+  // A refused message is acknowledged and never handled: the next delivery of that order, signed,
+  // is the handler's first (an `Ack`; a handler that had seen the unsigned one would say "handled twice").
+  case "an unsigned message is refused and never handled" {
+    let unsigned <- fulfil.message(Order { id: "o2" })
+    let signed <- fulfil.message(Order { id: "o2" }) by Legacy
+    expect unsigned is Ack
+    expect signed is Ack
+  }
+
+  // The test producer gives a message the id of its content, so sending the same message twice
+  // replays it: the second is refused (acknowledged, and the handler never sees it), while a
+  // different message is its own.
+  case "a replayed message is refused the second time" {
+    let first <- fulfil.message(Order { id: "o3" }) by Legacy
+    let again <- fulfil.message(Order { id: "o3" }) by Legacy
+    let other <- fulfil.message(Order { id: "o4" }) by Legacy
+    expect first is Ack
+    expect again is Ack
+    expect other is Ack
+  }
+
+  // The handler asks for a retry, so the id's claim is released: the redelivery is the same message,
+  // and it is admitted again rather than refused as a replay.
+  case "a message whose handler asked for a retry is admitted again" {
+    let first <- fulfil.message(Order { id: "flaky" }) by Legacy
+    let again <- fulfil.message(Order { id: "flaky" }) by Legacy
+    expect first is Retry("try again")
+    expect again is Ack
+  }
+}

@@ -1145,6 +1145,12 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// #3899: whether the queue service `service` admits only signed messages, so its driver
+    /// takes the foreign actor a case acts as.
+    pub(crate) fn system_queue_signed(&self, service: &str) -> bool {
+        matches!(&self.mode, BodyMode::IntegrationCase { system_jobs, .. } if system_jobs.signed_queue.contains(service))
+    }
+
     /// #2136: the `__sysdrive_message_<q>` driver for a queue address
     /// `q.message(m)` in a `system` case, when `q` is a queue service of the
     /// target.

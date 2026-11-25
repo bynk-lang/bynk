@@ -1,0 +1,14 @@
+context shop.review
+
+type Order = { id: String }
+
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+// Signed too, but in another context: it verifies under the queues that dead-letter into its own
+// context, so it cannot tell which queue these dead letters were signed for.
+service review from queue("orders-dead") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Legacy {
+    Ack
+  }
+}
