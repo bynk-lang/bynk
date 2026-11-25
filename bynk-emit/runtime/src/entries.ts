@@ -91,8 +91,17 @@ export function parseLogKey(key: string): { t: number; seq: number } {
 }
 
 /** One posting of a secondary index: `by` is the indexed value, `pk` the primary key. */
-export const postingKey = (field: string, index: string, by: string, pk: string): string =>
-  `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
+export function postingKey(field: string, index: string, by: string, pk: string): string {
+  const key = `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${encodeKeyPart(by)}/${encodeKeyPart(pk)}`;
+  // The indexed value and the entry key sit in one storage key (#4037): fault here, naming the
+  // field and the index, rather than at the commit flush with the platform's error.
+  if (key.length * 3 > MAX_STORAGE_KEY_BYTES && new TextEncoder().encode(key).length > MAX_STORAGE_KEY_BYTES) {
+    throw new Error(
+      `store \`${field}\`: an index \`${index}\` key, its value and the entry's key together, is over the ${MAX_STORAGE_KEY_BYTES}-byte storage-key limit`,
+    );
+  }
+  return key;
+}
 /** Every posting of one indexed value; with `by` omitted, every posting of the index. */
 export const postingPrefix = (field: string, index: string, by?: string): string =>
   `i/${encodeKeyPart(field)}/${encodeKeyPart(index)}/${by === undefined ? "" : `${encodeKeyPart(by)}/`}`;

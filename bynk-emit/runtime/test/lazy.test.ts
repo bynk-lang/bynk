@@ -411,3 +411,13 @@ test("a key over the storage-key limit faults naming the field, never the key", 
   );
   assert.doesNotThrow(() => storeKey("stock", { note: "x".repeat(200) }));
 });
+
+test("a posting key over the storage-key limit faults naming the field and index, never the values", async () => {
+  const s = new InMemoryStorage();
+  const l = loadLazy(s);
+  const long = "y".repeat(MAX_STORAGE_KEY_BYTES);
+  await assert.rejects(
+    () => l.items.put("k", { team: long, n: 1 }),
+    (e: Error) => e.message.includes("`items`") && e.message.includes("`by`") && !e.message.includes("yyyy"),
+  );
+});

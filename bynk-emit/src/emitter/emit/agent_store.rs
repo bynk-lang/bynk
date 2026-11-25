@@ -484,7 +484,7 @@ pub(super) fn composite_store_keys(
     a: &AgentDecl,
     types: &HashMap<String, Arc<TypeDecl>>,
 ) -> (HashSet<String>, HashSet<(String, String)>) {
-    let scalar = |t: &TypeRef| bynk_check::context_checks::type_ref_is_keyable(t, types);
+    let scalar = |t: &TypeRef| bynk_check::context_checks::type_ref_is_scalar_store_key(t, types);
     let mut keys = HashSet::new();
     let mut indexes = HashSet::new();
     for f in &a.store_fields {

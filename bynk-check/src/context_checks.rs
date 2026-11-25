@@ -4021,7 +4021,7 @@ fn validate_indexed_keys(
                 ));
             }
             Some(field)
-                if !type_ref_is_keyable(&field.type_ref, types)
+                if !type_ref_is_scalar_store_key(&field.type_ref, types)
                     && let Some(blocker) =
                         crate::checker::keying::typeref_not_key(&field.type_ref, &[], types) =>
             {
@@ -4059,7 +4059,7 @@ fn check_store_keyable(
     {
         return;
     }
-    if type_ref_is_keyable(t, types) {
+    if type_ref_is_scalar_store_key(t, types) {
         return;
     }
     if let Some(blocker) = crate::checker::keying::typeref_not_key(t, &[], types) {
@@ -4077,7 +4077,7 @@ fn check_store_keyable(
 /// Whether a `TypeRef` is a *scalar* store key (ADR 0110 D5): `Int`/`String`, including a
 /// refined/opaque named type over them. Such a key persists as `String(k)`, as it always has;
 /// every other `Key` type persists under its canonical encoding (#4037).
-pub fn type_ref_is_keyable(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
+pub fn type_ref_is_scalar_store_key(t: &TypeRef, types: &HashMap<String, Arc<TypeDecl>>) -> bool {
     match t {
         TypeRef::Base(BaseType::Int | BaseType::String, _) => true,
         TypeRef::Named(id) => matches!(
@@ -4158,8 +4158,9 @@ fn validate_index_hygiene(
                 return;
             }
             let keyable = value_fields.get(map).is_some_and(|fs| {
-                fs.iter()
-                    .any(|rf| rf.name.name == field && type_ref_is_keyable(&rf.type_ref, types))
+                fs.iter().any(|rf| {
+                    rf.name.name == field && type_ref_is_scalar_store_key(&rf.type_ref, types)
+                })
             });
             if keyable && missing_seen.insert((map.to_string(), field.to_string())) {
                 errors.push(

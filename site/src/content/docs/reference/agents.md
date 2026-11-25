@@ -149,11 +149,14 @@ type, as for a value `Map` or `Set`: a record, a sum, an `Option`, a `Decimal`, 
 Two keys are the same entry exactly when they are `==`. A `String` or `Int` key (or a refined
 or opaque type over one) is stored under its own text, as it always has been, so existing
 state reads unchanged. Any other key is stored under its canonical encoding, which counts
-towards the platform's 2 KiB limit on one storage key: a write whose key encodes over it
-faults with a message naming the field, never the key's value. A type that is not a `Key`
+towards the platform's 2 KiB limit on one storage key: an operation whose key encodes over it,
+a read (`get`, `contains`) as much as a write, faults with a message naming the field, never the
+key's value, as does an index posting whose indexed value and entry key together are over it. A type that is not a `Key`
 (a `Float` at any depth, a `Map`, a `Set`, a function) is `bynk.store.unkeyable_key`. Changing
 an existing field's key type from a scalar to a composite one is not an additive schema change,
-and the schema lock refuses it. An `@indexed(by:)` field may itself be any `Key` type, encoded the
+and the schema lock refuses it. Nor is adding a field to a key record, even with a default: the
+encoding is the stored key, so it would change every stored key and orphan the entries. A new
+variant of a sum key is additive, and so is a new field in the map's value. An `@indexed(by:)` field may itself be any `Key` type, encoded the
 same way.
 
 ```bynk
