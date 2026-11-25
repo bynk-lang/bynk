@@ -1351,6 +1351,7 @@ fn check_integration_body(
     refs: &mut RefSink,
     tys: &Arc<Types>,
 ) -> HashMap<ExprId, checker::Callee> {
+    crate::violates::check_violates_names(body.case, body.unit_tables, body.participants, errors);
     let callees = typecheck_integration_case_body(
         body.participants,
         body.view,
@@ -3268,7 +3269,7 @@ fn blocks_deep(block: &Block) -> Vec<&Block> {
 /// as an error response, never a throw at the harness, so the claim could
 /// never hold there (`bynk.test.faults_needs_in_process`).
 fn block_uses_faults(block: &Block) -> bool {
-    !faults_claims(block).is_empty()
+    faults_claims(block).iter().any(|f| f.violates.is_none())
 }
 
 /// Every fault claim (`expect <call> faults`) in `block`, at any depth, in
@@ -3949,6 +3950,7 @@ fn check_faults_tier(
     tier: bynk_syntax::ast::TestTier,
     errors: &mut Vec<CompileError>,
 ) {
+    crate::violates::check_violates_tier(case, tier, errors);
     if tier != bynk_syntax::ast::TestTier::System {
         for p in faults_claims(&case.body)
             .into_iter()
@@ -4664,6 +4666,7 @@ fn check_test_case_body(
     // guard and the runner attack already check it. Conservative: under-flagging
     // is acceptable, over-flagging is not.
     check_restated_contract(&case.body, &resolved, errors);
+    crate::violates::check_violates_names(case, unit_tables, &[target_name.to_string()], errors);
     case_callees
 }
 

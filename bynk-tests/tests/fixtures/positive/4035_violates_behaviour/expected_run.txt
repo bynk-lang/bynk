@@ -1,0 +1,6 @@
+# #4035: run by bynkc/tests/behaviour_fixtures.rs; see that file for the format.
+# `violates` passes for the named refusal and fails, with what happened, otherwise.
+passed=4 failed=3
+fail a different invariant is not the one named
+fail a fault that is not a refusal is not a violation
+fail a call that returns does not violate

@@ -467,7 +467,7 @@ pub(crate) fn lower_expr(e: &Expr, cx: &mut LowerCtx) -> Lowered {
             pre.finish(built)
         }
         ExprKind::Faults(f) => {
-            let built = lower_faults(f, cx);
+            let built = lower_faults(f, e.span, cx);
             pre.finish(built)
         }
         // `trace(Cap.op)` → the recorded calls mapped to per-call records
