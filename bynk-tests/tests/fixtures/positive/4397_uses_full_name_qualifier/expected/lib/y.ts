@@ -43,13 +43,6 @@ export const Level = {
   },
 };
 
-export interface Box<T> {
-  readonly item: T;
-}
-
-export const Box = {
-};
-
 export type IoError =
     { readonly tag: "Net" };
 

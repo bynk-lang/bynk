@@ -28,8 +28,6 @@ fn r(s: lib.x.Shape) -> Int {
   }
 }
 
-fn p() -> lib.x.Point { lib.x.Point { x: 1, y: 2 } }
-
 fn px(q: lib.x.Point) -> Int { q.x }
 
 fn l(items: List[lib.x.Status]) -> Option[lib.x.Status] { items.first() }
@@ -37,10 +35,6 @@ fn l(items: List[lib.x.Status]) -> Option[lib.x.Status] { items.first() }
 fn lv(n: Int) -> Result[lib.x.Level, ValidationError] { lib.x.Level.of(n) }
 
 fn ar(s: lib.x.Shape) -> Int { lib.x.area(s) }
-
-fn bx(b: lib.x.Box[Int]) -> Int { b.value }
-
-fn mk() -> lib.x.Box[Int] { lib.x.Box { value: 1 } }
 
 fn embed(r: Result[Int, lib.x.IoError]) -> Result[Int, lib.x.AppError] {
   let n = r?

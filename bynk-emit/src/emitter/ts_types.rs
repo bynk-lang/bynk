@@ -572,6 +572,25 @@ mod ts_type_ref_tests {
         assert_eq!(ts_type_ref(&r), "MyGeneric<number, Order>");
     }
 
+    /// #4397: a generic applied through a commons' full name (`lib.x.Box[Int]`) and a
+    /// plain named type through one (`lib.x.Status`) read through the namespace import
+    /// the unit binds that commons to, and an alias qualifier (`Y.Box`) is left alone.
+    #[test]
+    fn a_full_name_qualified_type_reads_through_its_namespace_import() {
+        let app = |name: &str| TypeRef::App {
+            name: Ident {
+                name: name.to_string(),
+                span: sp(),
+            },
+            args: vec![base(BaseType::Int)],
+            span: sp(),
+        };
+        assert_eq!(ts_type_ref(&app("lib.x.Box")), "__use_lib_x.Box<number>");
+        assert_eq!(ts_type_ref(&app("Y.Box")), "Y.Box<number>");
+        assert_eq!(ts_type_ref(&named("lib.x.Status")), "__use_lib_x.Status");
+        assert_eq!(ts_type_ref(&named("Y.Status")), "Y.Status");
+    }
+
     #[test]
     fn real_function_type_uses_positional_parameter_names() {
         let r = TypeRef::Fn(

@@ -10,10 +10,6 @@ type Point = {
 
 type Level = Int where NonNegative
 
-type Box[T] = {
-  item: T,
-}
-
 type IoError = enum { Net }
 
 type AppError =

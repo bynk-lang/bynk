@@ -11,10 +11,6 @@ type Point = {
 
 type Level = Int where Positive
 
-type Box[T] = {
-  value: T,
-}
-
 type IoError = enum { Disk }
 
 type AppError =

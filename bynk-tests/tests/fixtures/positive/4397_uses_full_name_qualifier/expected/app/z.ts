@@ -55,10 +55,6 @@ export function r(s: __use_lib_x.Shape): number {
   throw new globalThis.Error("non-exhaustive match");
 }
 
-export function p(): __use_lib_x.Point {
-  return { x: 1, y: 2 };
-}
-
 export function px(q: __use_lib_x.Point): number {
   return q.x;
 }
@@ -73,14 +69,6 @@ export function lv(n: number): Result<__use_lib_x.Level, ValidationError> {
 
 export function ar(s: __use_lib_x.Shape): number {
   return __use_lib_x.area(s);
-}
-
-export function bx(b: __use_lib_x.Box<number>): number {
-  return b.value;
-}
-
-export function mk(): __use_lib_x.Box<number> {
-  return { value: 1 };
 }
 
 export function embed(r: Result<number, __use_lib_x.IoError>): Result<number, __use_lib_x.AppError> {
