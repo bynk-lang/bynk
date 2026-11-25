@@ -8,7 +8,9 @@ use crate::ts_build::{
     method_call, null_lit, num_lit, or_expr, paren, return_, str_lit, strict_eq, strict_neq,
 };
 use bynk_check::symbols::UnitTable;
-use bynk_syntax::ast::ServiceProtocol;
+use bynk_syntax::ast::{
+    DEFAULT_REFERRER_POLICY, REFERRER_POLICIES, SecurityPolicy, ServiceProtocol,
+};
 use bynk_ts::{TsExpr, TsStmt};
 
 /// Count the number of `:param` segments in a path pattern.
@@ -239,6 +241,53 @@ pub(super) struct SecurityService {
     pub(super) literal: TsExpr,
 }
 
+/// #3923: whether `csp` already carries a `frame-ancestors` directive.
+fn csp_has_frame_ancestors(csp: &str) -> bool {
+    csp.split(';').any(|directive| {
+        let d = directive.trim_start().to_ascii_lowercase();
+        d.strip_prefix("frame-ancestors")
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+    })
+}
+
+/// #3923: the `Content-Security-Policy` and `Referrer-Policy` an HTML response gets.
+///
+/// With no `csp`, the policy is `frame-ancestors` alone: `'none'` by default, or the
+/// declared `frameAncestors` (`"self"` as `'self'`). A declared `csp` is sent verbatim,
+/// except that when it names no `frame-ancestors` of its own, the framing source list is
+/// appended, so the framing default cannot be lost by writing a policy. The referrer
+/// policy is the declared one, or `strict-origin-when-cross-origin`.
+pub(super) fn html_security_values(policy: Option<&SecurityPolicy>) -> (String, String) {
+    let sources = match policy.and_then(SecurityPolicy::frame_ancestors) {
+        Some(list) if !list.is_empty() => list
+            .iter()
+            .map(|s| {
+                if s == "self" {
+                    "'self'".to_string()
+                } else {
+                    s.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => "'none'".to_string(),
+    };
+    let framing = format!("frame-ancestors {sources}");
+    let csp = match policy.and_then(SecurityPolicy::csp) {
+        Some(csp) if csp_has_frame_ancestors(csp) => csp.to_string(),
+        Some(csp) => format!(
+            "{}; {framing}",
+            csp.trim_end().trim_end_matches(';').trim_end()
+        ),
+        None => framing,
+    };
+    let referrer = policy
+        .and_then(SecurityPolicy::referrer_policy)
+        .and_then(|camel| REFERRER_POLICIES.iter().find(|(c, _)| *c == camel))
+        .map_or(DEFAULT_REFERRER_POLICY, |(_, header)| *header);
+    (csp, referrer.to_string())
+}
+
 /// Build the per-service security policies. Every `from http` service with at
 /// least one route gets a `__security_<service>` constant: the author's
 /// `security { }` values, or the defaults (`nosniff: true`, no HSTS) when the
@@ -268,9 +317,12 @@ pub(super) fn build_security_services(
             Some(n) => num_lit(n.to_string()),
             None => null_lit(),
         };
+        let (html_csp, html_referrer) = html_security_values(service.security.as_ref());
         let literal = TsExpr::object(vec![
             ("nosniff".to_string(), bool_lit(nosniff)),
             ("hstsMaxAgeSecs".to_string(), hsts_expr),
+            ("htmlCsp".to_string(), str_lit(html_csp)),
+            ("htmlReferrerPolicy".to_string(), str_lit(html_referrer)),
         ]);
         out.push(SecurityService {
             service: (*sname).clone(),
@@ -442,6 +494,32 @@ pub(super) fn method_fall_through(pm: &PathMethods, member_mode: bool) -> TsStmt
 mod tests {
     use super::*;
     use bynk_model::IrHttpMethod;
+
+    #[test]
+    fn a_csp_with_its_own_frame_ancestors_is_left_alone() {
+        assert!(csp_has_frame_ancestors("frame-ancestors 'self'"));
+        assert!(csp_has_frame_ancestors(
+            "default-src 'self'; Frame-Ancestors https://a.example"
+        ));
+        assert!(csp_has_frame_ancestors(
+            "default-src 'self'; frame-ancestors"
+        ));
+        assert!(!csp_has_frame_ancestors(
+            "default-src 'self'; img-src 'self'"
+        ));
+        // A directive that merely starts with the name is another directive.
+        assert!(!csp_has_frame_ancestors("frame-ancestors-extra 'self'"));
+        assert!(!csp_has_frame_ancestors(
+            "default-src 'self' frame-ancestors"
+        ));
+    }
+
+    #[test]
+    fn a_service_with_no_security_block_frames_nothing_and_sends_the_default_referrer_policy() {
+        let (csp, referrer) = html_security_values(None);
+        assert_eq!(csp, "frame-ancestors 'none'");
+        assert_eq!(referrer, "strict-origin-when-cross-origin");
+    }
 
     #[test]
     fn param_count_counts_named_segments_only() {

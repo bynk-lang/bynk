@@ -1,0 +1,15 @@
+context shop
+
+type Index = {
+    entries: List[MapEntry[String, Int]],
+}
+
+agent Counts {
+    key shop: String
+
+    store all: Map[String, Int]
+
+    on call total() -> Effect[Int] {
+        all.values.count()
+    }
+}

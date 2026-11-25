@@ -1,0 +1,5 @@
+commons demo
+
+fn year(s: String) -> Option[Map[String, Option[String]]] {
+    s.findRegexNamed("(?<year>\\d{4})-(?<month>\\d{2})")
+}
