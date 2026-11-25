@@ -5355,6 +5355,10 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
 pub struct FaultsExpr {
     pub call: Expr,
     pub principal: Option<CallSiteActor>,
+    /// #4035: `expect <call> violates <name>`: the claim names the invariant, transition or
+    /// `@unique` constraint that refused the call's commit (a dotted path: `name`,
+    /// `Agent.name` or `field.index`). `None` is the bare `faults` claim, which any fault meets.
+    pub violates: Option<Vec<Ident>>,
 }
 
 /// An observation of a capability operation's recorded calls (v0.117, testing
@@ -6189,7 +6193,9 @@ fn f(x: Int) -> Int {
                 }
             }
             ExprKind::Faults(f) => {
-                let FaultsExpr { call, principal } = f.as_ref();
+                let FaultsExpr {
+                    call, principal, ..
+                } = f.as_ref();
                 if let Some(CallSiteActor {
                     actor: _,
                     identity,

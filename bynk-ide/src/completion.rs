@@ -428,7 +428,18 @@ fn is_snapshot_clause_position(line: &str) -> bool {
     ends_a_value
         && !matches!(
             last_word,
-            Some("and" | "or" | "not" | "is" | "if" | "else" | "match" | "faults" | "called")
+            Some(
+                "and"
+                    | "or"
+                    | "not"
+                    | "is"
+                    | "if"
+                    | "else"
+                    | "match"
+                    | "faults"
+                    | "violates"
+                    | "called"
+            )
         )
 }
 

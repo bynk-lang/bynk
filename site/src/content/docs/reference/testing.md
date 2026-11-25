@@ -1007,6 +1007,46 @@ case "the store recovers" {
 }
 ```
 
+### Claiming a refused commit — `expect <call> violates <name>` {#violates}
+
+`expect <call> faults` holds for any fault, so a case meant to prove that
+`paid_has_payment_ref` refuses a bad state also passes when a stub fails or a
+different invariant refuses the commit. `violates` names what refused it:
+
+```bynk,fragment
+case "an unpaid order can't become paid without a reference" {
+  expect Order(Val[OrderId]).markPaid() violates paid_has_payment_ref
+}
+
+case "a paid order can't go back" {
+  do Order(o).pay(ref)
+  expect Order(o).reopen() violates paid_is_terminal
+}
+```
+
+The claim awaits the call and holds only when the commit was refused by the named
+[invariant or transition](/reference/agent-invariants/) of an agent the suite reaches.
+It fails with what happened instead:
+
+| What happened | The failure says |
+|---|---|
+| The call returned | `the call returned without faulting` |
+| Another fault | `the call faulted with a different fault: <kind>` |
+| Another declaration refused the commit | `the commit was refused by invariant few_lines, not paid_has_payment_ref` |
+
+- **The name is one declaration.** An invariant or a transition is named by its own
+  name. A `@unique` constraint is named by its field and key: `violates customers.email`
+  for `store customers: Map[…] @unique(by: email)`. An unknown name is
+  `bynk.expect.unknown_invariant`, which lists the reachable names. When several
+  declarations would refuse the commit at once, the runtime reports the first in
+  declaration order, and the claim matches that one.
+- **Two agents with one name need the agent.** If two agents the suite reaches declare
+  the same name, write `Agent.name`; the bare name is `bynk.expect.ambiguous_invariant`.
+- **It needs an in-process call**, as `faults` does: at `system` a refused commit is a
+  `500` with no payload, so a `system`-tier case cannot claim one
+  (`bynk.test.violates_needs_in_process`).
+- **It takes a call-site `by` clause** between the call and `violates`, as `faults` does.
+
 ### Snapshotting a value — `expect <value> matches snapshot "<name>"` {#snapshots}
 
 Asserting a large structured value field by field is unreviewable when it is big and

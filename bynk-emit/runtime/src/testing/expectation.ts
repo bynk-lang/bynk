@@ -35,6 +35,26 @@ export function __bynkViolationOf(e: any): { kind: string, agent: string, name: 
   const v = e && e.invariantViolation;
   return v === undefined ? undefined : { kind: v.declaration, agent: v.agent, name: v.invariant, location: v.location };
 }
+// #4035: `expect <call> violates <name>`. The claim holds when the call faulted with an
+// `InvariantViolation` for the named declaration. `name` is `name`, `Agent.name` or `field.index`
+// (an `@unique` constraint is named by its field and key), so a violation matches when the name
+// is its own, or the agent's name before it. Anything else fails with what actually happened.
+export function __bynkViolates(e: any, name: string, location: string, start: number, end: number, src: string): boolean {
+  const v = e && e.invariantViolation;
+  if (v !== undefined && (v.invariant === name || `${v.agent}.${v.invariant}` === name)) return true;
+  let what: string;
+  if (v !== undefined) {
+    const kind = v.declaration === "transition" ? "transition" : v.declaration === "unique" ? "unique constraint" : "invariant";
+    what = `the commit was refused by ${kind} ${v.invariant}, not ${name}`;
+  } else {
+    const fault = e && typeof e === "object" && typeof e.kind === "string" ? e.kind : e instanceof Error ? (e.message === "" ? e.name : `${e.name}: ${e.message}`) : typeof e;
+    what = `the call faulted with a different fault: ${fault}`;
+  }
+  throw new ExpectationError(location, start, end, `${src}\n  ${what}`);
+}
+export function __bynkViolatesNone(location: string, start: number, end: number, src: string): never {
+  throw new ExpectationError(location, start, end, `${src}\n  the call returned without faulting`);
+}
 // #4198: a `Decimal` (`{ coefficient: bigint, scale }`) and a `Bytes` (`Uint8Array`) print in
 // Bynk's own form, wherever they sit, instead of throwing in `JSON.stringify` or printing
 // as a bare object. `Duration` and `Instant` are plain numbers at runtime.

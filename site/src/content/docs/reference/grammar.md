@@ -2364,9 +2364,24 @@ call throws (an injected `stub … fails`, a real provider's failure, an invaria
 violation) rather than returns. The subject is the call itself, not a value bound
 from it. An optional [`call_site_actor`](#rule-call_site_actor) between the call
 and `faults` supplies the caller identity the addressed handler reads (#1812).
-`faults` is a contextual keyword.
+`faults` is a contextual keyword. `expect <call> violates <name>` (#4035) takes the
+same position and holds only when the named invariant, transition or `@unique`
+constraint refused the call's commit; `violates` is contextual too, and the name is
+a dotted path (`name`, `Agent.name` or `field.index`).
 
-**See also.** [Claiming a fault](/reference/testing/#faults).
+**See also.** [Claiming a fault](/reference/testing/#faults),
+[Claiming a refused commit](/reference/testing/#violates).
+
+### violates_name {#rule-violates_name}
+
+{{#grammar violates_name}}
+
+The name a [`faults_expr`](#rule-faults_expr) claim `violates`: an invariant or
+transition (`name`, or `Agent.name` when two agents declare it) or a `@unique`
+constraint, named by its field and key (`customers.email`). The first `identifier`
+is the name; each further one narrows it.
+
+**See also.** [Claiming a refused commit](/reference/testing/#violates).
 
 ### trace_expr {#rule-trace_expr}
 
