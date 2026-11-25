@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.709.0
+
+An `on message` handler with no `by` clause, and no `by` on its service header, is now a compile error (`bynk.actor.missing_by_on_queue`). It meant "any producer on the Cloudflare account" before; the fix inserts `by Producer`, which means the same, so behaviour is unchanged once migrated
+
 ## v0.706.0
 
 `Instant.toString()` and `Duration.toString()` no longer give the bare millisecond count. They give RFC 3339 UTC text (`2026-11-22T10:00:00.000Z`) and unit text (`1h30m`). Code that read the old text back as a number should call `toEpochMillis()` or `toMillis()`. No diagnostic marks it, because the new text names its units and cannot be mistaken for the old number.

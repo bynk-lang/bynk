@@ -1,0 +1,10 @@
+suite demo.desk
+
+uses demo.kit
+
+stub Meter.read() returns reading()
+
+case "a stub value may name what the suite's test-only commons declares" {
+  let n <- local.call(1)
+  expect n == 12
+}

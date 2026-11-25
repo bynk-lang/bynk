@@ -1,13 +1,6 @@
----
-level: minor
-probes: ts_writes
-raises: ts_writes — the generated client declares a `Problem` type and decodes a `problem` reply body (#3916)
-changelog: bynk openapi describes the errors of an errors { format: problem } route as application/problem+json, and bynk client types them as problem details
----
+# 0975 — OpenAPI and the typed client follow a route's problem-details error format
 
-## ADR: problem-details-in-openapi-and-client
-title: OpenAPI and the typed client follow a route's problem-details error format
-summary: What bynk openapi and bynk client generate for a route that answers errors as RFC 9457 problem details
+- **Status:** Accepted (v0.711)
 
 **Context.** The opt-in `errors { format: problem }` makes a route answer its error variants and router rejections as `application/problem+json`. A document or client that still described `{ "error": … }` and `{ "kind", "details" }` for such a route would be wrong about the very routes that opted in.
 
