@@ -4110,6 +4110,26 @@ fn refuse_peek_in_fn(receiver: &Expr, method: &Ident, cx: &mut RefCheckCtx) -> b
     true
 }
 
+/// A call nothing in scope answers: an unknown function, or, for `env`, the
+/// refusal that says it is only ever a constant's whole initialiser (#3941).
+/// Returns whether the call was `env`, whose bare first argument is no reference.
+fn report_unknown_call(name: &bynk_syntax::ast::Ident, cx: &mut RefCheckCtx) -> bool {
+    if name.name == "env" {
+        cx.errors
+            .push(crate::env_consts::not_initialiser(name.span));
+        return true;
+    }
+    cx.errors.push(
+        CompileError::new(
+            "bynk.resolve.unknown_function",
+            name.span,
+            format!("unknown function `{}`", name.name),
+        )
+        .with_note(unknown_function_note(&name.name)),
+    );
+    false
+}
+
 #[allow(clippy::too_many_lines)]
 fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
     match &expr.kind {
@@ -4406,27 +4426,13 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
                         // judgment (and `bynk.resolve.param_as_function` for
                         // non-function-typed values) lives in the checker's
                         // call dispatch. Silent pass.
-                    } else if name.name == "env" {
-                        // #3941: `env(…)` outside a constant's initialiser is not
-                        // an unknown function: say what it is and where it goes.
-                        cx.errors
-                            .push(crate::env_consts::not_initialiser(name.span));
-                        env_refused = true;
                     } else {
-                        cx.errors.push(
-                            CompileError::new(
-                                "bynk.resolve.unknown_function",
-                                name.span,
-                                format!("unknown function `{}`", name.name),
-                            )
-                            .with_note(unknown_function_note(&name.name)),
-                        );
+                        env_refused = report_unknown_call(name, cx);
                     }
                 }
             }
             // #3941: `env(NAME, …)` names a variable bare; it is no reference.
-            let skip = usize::from(env_refused);
-            for a in args.iter().skip(skip) {
+            for a in args.iter().skip(usize::from(env_refused)) {
                 check_expr_references(a, cx);
             }
         }
