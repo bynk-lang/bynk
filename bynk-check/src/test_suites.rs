@@ -2171,6 +2171,7 @@ fn check_test_bodies(
         let Some(test_decl) = parsed[i].test() else {
             continue;
         };
+        let unit_uses = &suite_view_uses(unit_uses, parsed, i);
         let maps = (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases);
         errors.extend(suite_naming_errors(
             test_decl,
@@ -2207,7 +2208,6 @@ fn check_test_bodies(
         );
         // #2517: and so do the case and property locals.
         locals.enter_file(&parsed[i].identity_path(), parsed[i].is_synthetic());
-        // #2834/#2841: the suite's fixtures and helpers, checked once in the target's view.
         if !SuiteItems::of(test_decl).is_empty()
             && let Some((mut helper_view, _)) = build_privileged_resolved(
                 target_name,
@@ -2322,6 +2322,16 @@ fn check_test_bodies(
     }
 
     errors
+}
+
+/// #4348: the `uses` map suite `i` is checked against: a test-only commons is in scope only
+/// where that suite `uses` it.
+fn suite_view_uses(
+    unit_uses: &HashMap<String, Vec<String>>,
+    parsed: &[ParsedFile],
+    i: usize,
+) -> HashMap<String, Vec<String>> {
+    crate::project_model::unit_uses_with_suite_uses(unit_uses, parsed, &[i])
 }
 
 /// Every `expect … matches snapshot` in `block`, at any depth, in source order
