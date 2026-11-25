@@ -135,7 +135,7 @@ function __bynkTest_Videos(): __ns_bynk_cloudflare.R2 {
     async getStreamIf(key, onlyIf) {
       const e = store.get(key);
       if (e === undefined) return { tag: "Missing" };
-      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
         return { tag: "NotModified", object: meta(key) };
       }
       const bytes = e.body.slice();
@@ -337,7 +337,7 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
     async getStreamIf(key, onlyIf) {
       const e = store.get(key);
       if (e === undefined) return { tag: "Missing" };
-      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
         return { tag: "NotModified", object: meta(key) };
       }
       const bytes = e.body.slice();
@@ -419,7 +419,7 @@ function __makeTestDeps() {
 async function test_a_byte_range_is_read_as_a_stream_with_the_offset_and_length_served() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -526,7 +526,7 @@ async function test_a_byte_range_is_read_as_a_stream_with_the_offset_and_length_
 async function test_a_length_past_the_end_is_clamped__and_a_start_past_the_end_faults() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -650,10 +650,146 @@ async function test_a_length_past_the_end_is_clamped__and_a_start_past_the_end_f
 }
 
 // case tier: unit
+async function test_a_negative_range_faults__whatever_the_client_sent() {
+  try {
+    const deps = __makeTestDeps();
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
+    type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
+    type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
+    type AnalyticsSqlStatistics = __ns_bynk_cloudflare.AnalyticsSqlStatistics;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
+    type ContainerError = __ns_bynk_cloudflare.ContainerError;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
+    type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
+    type EmailError = __ns_bynk_cloudflare.EmailError;
+    type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
+    type ImageFit = __ns_bynk_cloudflare.ImageFit;
+    type ImageFormat = __ns_bynk_cloudflare.ImageFormat;
+    type ImageInfo = __ns_bynk_cloudflare.ImageInfo;
+    type ImageResult = __ns_bynk_cloudflare.ImageResult;
+    type ImageStream = __ns_bynk_cloudflare.ImageStream;
+    type ImagesError = __ns_bynk_cloudflare.ImagesError;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
+    type MySqlError = __ns_bynk_cloudflare.MySqlError;
+    type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
+    type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
+    type MySqlStatement = __ns_bynk_cloudflare.MySqlStatement;
+    type MySqlValue = __ns_bynk_cloudflare.MySqlValue;
+    type OutputOptions = __ns_bynk_cloudflare.OutputOptions;
+    type Overlay = __ns_bynk_cloudflare.Overlay;
+    type PgError = __ns_bynk_cloudflare.PgError;
+    type PgReadError = __ns_bynk_cloudflare.PgReadError;
+    type PgRun = __ns_bynk_cloudflare.PgRun;
+    type PgStatement = __ns_bynk_cloudflare.PgStatement;
+    type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelay = __ns_bynk_cloudflare.QueueDelay;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RequestCf = __ns_bynk_cloudflare.RequestCf;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type TransformOptions = __ns_bynk_cloudflare.TransformOptions;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
+    const __r0 = await put.call("v", "0123456789", deps);
+    if (!((await (async () => {
+      try {
+        await (range.call("v", -3, None, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/store.bynk:20:10", 702, 734, "expect range.call(\"v\", -3, None) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (range.call("v", 2, Some(-1), deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/store.bynk:21:10", 744, 779, "expect range.call(\"v\", 2, Some(-1)) faults\n  the call returned without faulting"); }
+    if (!((await (async () => {
+      try {
+        await (tail.call("v", -5, deps));
+        return false;
+      } catch (__e) {
+        if (__e instanceof ExpectationError) {
+          throw __e;
+        }
+        return true;
+      }
+    })()))) { throw __bynkExpectFailure("tests/store.bynk:22:10", 789, 814, "expect tail.call(\"v\", -5) faults\n  the call returned without faulting"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
 async function test_a_suffix_is_the_last_bytes__clamped_to_the_object() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -744,9 +880,9 @@ async function test_a_suffix_is_the_last_bytes__clamped_to_the_object() {
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await put.call("v", "0123456789", deps);
     const last = await tail.call("v", 3, deps);
-    if (!(__bynkEq(last, Some("789 @7+3")))) { throw __bynkExpectFailure("tests/store.bynk:21:10", 734, 758, "expect last == Some(\"789 @7+3\")\n  expected: last == Some(\"789 @7+3\")\n  actual:   " + __bynkShow((last)) + " == " + __bynkShow((Some("789 @7+3")))); }
+    if (!(__bynkEq(last, Some("789 @7+3")))) { throw __bynkExpectFailure("tests/store.bynk:28:10", 959, 983, "expect last == Some(\"789 @7+3\")\n  expected: last == Some(\"789 @7+3\")\n  actual:   " + __bynkShow((last)) + " == " + __bynkShow((Some("789 @7+3")))); }
     const whole = await tail.call("v", 50, deps);
-    if (!(__bynkEq(whole, Some("0123456789 @0+10")))) { throw __bynkExpectFailure("tests/store.bynk:23:10", 802, 835, "expect whole == Some(\"0123456789 @0+10\")\n  expected: whole == Some(\"0123456789 @0+10\")\n  actual:   " + __bynkShow((whole)) + " == " + __bynkShow((Some("0123456789 @0+10")))); }
+    if (!(__bynkEq(whole, Some("0123456789 @0+10")))) { throw __bynkExpectFailure("tests/store.bynk:30:10", 1027, 1060, "expect whole == Some(\"0123456789 @0+10\")\n  expected: whole == Some(\"0123456789 @0+10\")\n  actual:   " + __bynkShow((whole)) + " == " + __bynkShow((Some("0123456789 @0+10")))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -760,7 +896,7 @@ async function test_a_suffix_is_the_last_bytes__clamped_to_the_object() {
 async function test_a_range_of_a_missing_key_is_None() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -850,7 +986,7 @@ async function test_a_range_of_a_missing_key_is_None() {
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const none = await range.call("absent", 0, None, deps);
-    if (!(((__c: boolean) => __c)(none.tag === "None"))) { throw __bynkExpectFailure("tests/store.bynk:28:10", 936, 948, "expect none is None", "none", () => __bynkShow(none)); }
+    if (!(((__c: boolean) => __c)(none.tag === "None"))) { throw __bynkExpectFailure("tests/store.bynk:35:10", 1161, 1173, "expect none is None", "none", () => __bynkShow(none)); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -864,7 +1000,7 @@ async function test_a_range_of_a_missing_key_is_None() {
 async function test_a_read_that_needs_the_etag_to_match_reads__or_answers_not_modified() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -955,9 +1091,9 @@ async function test_a_read_that_needs_the_etag_to_match_reads__or_answers_not_mo
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const etag = await put.call("v", "0123456789", deps);
     const hit = await readMatching.call("v", etag, deps);
-    if (!(hit === "found 10")) { throw __bynkExpectFailure("tests/store.bynk:34:10", 1123, 1140, "expect hit == \"found 10\"\n  expected: hit == \"found 10\"\n  actual:   " + __bynkShow((hit)) + " == " + __bynkShow(("found 10"))); }
+    if (!(hit === "found 10")) { throw __bynkExpectFailure("tests/store.bynk:41:10", 1348, 1365, "expect hit == \"found 10\"\n  expected: hit == \"found 10\"\n  actual:   " + __bynkShow((hit)) + " == " + __bynkShow(("found 10"))); }
     const miss = await readMatching.call("v", "other", deps);
-    if (!(miss === "not modified 10")) { throw __bynkExpectFailure("tests/store.bynk:36:10", 1196, 1221, "expect miss == \"not modified 10\"\n  expected: miss == \"not modified 10\"\n  actual:   " + __bynkShow((miss)) + " == " + __bynkShow(("not modified 10"))); }
+    if (!(miss === "not modified 10")) { throw __bynkExpectFailure("tests/store.bynk:43:10", 1421, 1446, "expect miss == \"not modified 10\"\n  expected: miss == \"not modified 10\"\n  actual:   " + __bynkShow((miss)) + " == " + __bynkShow(("not modified 10"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -971,7 +1107,7 @@ async function test_a_read_that_needs_the_etag_to_match_reads__or_answers_not_mo
 async function test_a_read_that_needs_the_etag_to_differ_reads__or_answers_not_modified() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -1062,9 +1198,9 @@ async function test_a_read_that_needs_the_etag_to_differ_reads__or_answers_not_m
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const etag = await put.call("v", "0123456789", deps);
     const same = await readDiffering.call("v", etag, deps);
-    if (!(same === "not modified 10")) { throw __bynkExpectFailure("tests/store.bynk:42:10", 1399, 1424, "expect same == \"not modified 10\"\n  expected: same == \"not modified 10\"\n  actual:   " + __bynkShow((same)) + " == " + __bynkShow(("not modified 10"))); }
+    if (!(same === "not modified 10")) { throw __bynkExpectFailure("tests/store.bynk:49:10", 1624, 1649, "expect same == \"not modified 10\"\n  expected: same == \"not modified 10\"\n  actual:   " + __bynkShow((same)) + " == " + __bynkShow(("not modified 10"))); }
     const changed = await readDiffering.call("v", "other", deps);
-    if (!(changed === "found 10")) { throw __bynkExpectFailure("tests/store.bynk:44:10", 1484, 1505, "expect changed == \"found 10\"\n  expected: changed == \"found 10\"\n  actual:   " + __bynkShow((changed)) + " == " + __bynkShow(("found 10"))); }
+    if (!(changed === "found 10")) { throw __bynkExpectFailure("tests/store.bynk:51:10", 1709, 1730, "expect changed == \"found 10\"\n  expected: changed == \"found 10\"\n  actual:   " + __bynkShow((changed)) + " == " + __bynkShow(("found 10"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1078,7 +1214,7 @@ async function test_a_read_that_needs_the_etag_to_differ_reads__or_answers_not_m
 async function test_an_unconditional_read_reads__and_a_missing_key_is_Missing_under_any_condition() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -1169,11 +1305,11 @@ async function test_an_unconditional_read_reads__and_a_missing_key_is_Missing_un
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
     const __r0 = await put.call("v", "0123456789", deps);
     const always = await readAlways.call("v", deps);
-    if (!(always === "found 10")) { throw __bynkExpectFailure("tests/store.bynk:50:10", 1683, 1703, "expect always == \"found 10\"\n  expected: always == \"found 10\"\n  actual:   " + __bynkShow((always)) + " == " + __bynkShow(("found 10"))); }
+    if (!(always === "found 10")) { throw __bynkExpectFailure("tests/store.bynk:57:10", 1908, 1928, "expect always == \"found 10\"\n  expected: always == \"found 10\"\n  actual:   " + __bynkShow((always)) + " == " + __bynkShow(("found 10"))); }
     const none = await readAlways.call("absent", deps);
-    if (!(none === "missing")) { throw __bynkExpectFailure("tests/store.bynk:52:10", 1753, 1770, "expect none == \"missing\"\n  expected: none == \"missing\"\n  actual:   " + __bynkShow((none)) + " == " + __bynkShow(("missing"))); }
+    if (!(none === "missing")) { throw __bynkExpectFailure("tests/store.bynk:59:10", 1978, 1995, "expect none == \"missing\"\n  expected: none == \"missing\"\n  actual:   " + __bynkShow((none)) + " == " + __bynkShow(("missing"))); }
     const none2 = await readMatching.call("absent", "x", deps);
-    if (!(none2 === "missing")) { throw __bynkExpectFailure("tests/store.bynk:54:10", 1828, 1846, "expect none2 == \"missing\"\n  expected: none2 == \"missing\"\n  actual:   " + __bynkShow((none2)) + " == " + __bynkShow(("missing"))); }
+    if (!(none2 === "missing")) { throw __bynkExpectFailure("tests/store.bynk:61:10", 2053, 2071, "expect none2 == \"missing\"\n  expected: none2 == \"missing\"\n  actual:   " + __bynkShow((none2)) + " == " + __bynkShow(("missing"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1187,7 +1323,7 @@ async function test_an_unconditional_read_reads__and_a_missing_key_is_Missing_un
 async function test_a_delimited_listing_folds_the_keys_under_a_path_into_its_prefixes() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -1282,9 +1418,9 @@ async function test_a_delimited_listing_folds_the_keys_under_a_path_into_its_pre
     const __r3 = await put.call("photos/cover.jpg", "d", deps);
     const __r4 = await put.call("notes.txt", "e", deps);
     const inside = await children.call("photos/", deps);
-    if (!(inside === "photos/cover.jpg | photos/2024/,photos/2025/")) { throw __bynkExpectFailure("tests/store.bynk:64:10", 2198, 2254, "expect inside == \"photos/cover.jpg | photos/2024/,photos/2025/\"\n  expected: inside == \"photos/cover.jpg | photos/2024/,photos/2025/\"\n  actual:   " + __bynkShow((inside)) + " == " + __bynkShow(("photos/cover.jpg | photos/2024/,photos/2025/"))); }
+    if (!(inside === "photos/cover.jpg | photos/2024/,photos/2025/")) { throw __bynkExpectFailure("tests/store.bynk:71:10", 2423, 2479, "expect inside == \"photos/cover.jpg | photos/2024/,photos/2025/\"\n  expected: inside == \"photos/cover.jpg | photos/2024/,photos/2025/\"\n  actual:   " + __bynkShow((inside)) + " == " + __bynkShow(("photos/cover.jpg | photos/2024/,photos/2025/"))); }
     const top = await children.call("", deps);
-    if (!(top === "notes.txt | photos/")) { throw __bynkExpectFailure("tests/store.bynk:66:10", 2295, 2323, "expect top == \"notes.txt | photos/\"\n  expected: top == \"notes.txt | photos/\"\n  actual:   " + __bynkShow((top)) + " == " + __bynkShow(("notes.txt | photos/"))); }
+    if (!(top === "notes.txt | photos/")) { throw __bynkExpectFailure("tests/store.bynk:73:10", 2520, 2548, "expect top == \"notes.txt | photos/\"\n  expected: top == \"notes.txt | photos/\"\n  actual:   " + __bynkShow((top)) + " == " + __bynkShow(("notes.txt | photos/"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1298,7 +1434,7 @@ async function test_a_delimited_listing_folds_the_keys_under_a_path_into_its_pre
 async function test_a_listing_with_no_delimiter_has_no_prefixes() {
   try {
     const deps = __makeTestDeps();
-    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, tail } = __ns_media_store;
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
@@ -1390,7 +1526,116 @@ async function test_a_listing_with_no_delimiter_has_no_prefixes() {
     const __r0 = await put.call("a/1", "x", deps);
     const __r1 = await put.call("a/2", "y", deps);
     const n = await everything.call(deps);
-    if (!(n === 2)) { throw __bynkExpectFailure("tests/store.bynk:73:10", 2484, 2490, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    if (!(n === 2)) { throw __bynkExpectFailure("tests/store.bynk:80:10", 2709, 2715, "expect n == 2\n  expected: n == 2\n  actual:   " + __bynkShow((n)) + " == " + __bynkShow((2))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_EtagMatches_stays_R2Condition_s__bound_or_not__beside_the_read_side_conditions() {
+  try {
+    const deps = __makeTestDeps();
+    const { answer, children, everything, put, range, readAlways, readDiffering, readMatching, swap, tail } = __ns_media_store;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    type AiError = __ns_bynk_cloudflare.AiError;
+    type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
+    type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
+    type AnalyticsSqlStatistics = __ns_bynk_cloudflare.AnalyticsSqlStatistics;
+    type ChatMessage = __ns_bynk_cloudflare.ChatMessage;
+    type ChatRole = __ns_bynk_cloudflare.ChatRole;
+    type Condition = __ns_bynk_cloudflare.Condition;
+    type ContainerError = __ns_bynk_cloudflare.ContainerError;
+    type DataPoint = __ns_bynk_cloudflare.DataPoint;
+    type DmarcVerdict = __ns_bynk_cloudflare.DmarcVerdict;
+    type EmailAttachment = __ns_bynk_cloudflare.EmailAttachment;
+    type EmailError = __ns_bynk_cloudflare.EmailError;
+    type EmailMessage = __ns_bynk_cloudflare.EmailMessage;
+    type EmailReply = __ns_bynk_cloudflare.EmailReply;
+    type EmailVerdict = __ns_bynk_cloudflare.EmailVerdict;
+    type FilterOp = __ns_bynk_cloudflare.FilterOp;
+    type GenerateRequest = __ns_bynk_cloudflare.GenerateRequest;
+    type Generation = __ns_bynk_cloudflare.Generation;
+    type ImageFit = __ns_bynk_cloudflare.ImageFit;
+    type ImageFormat = __ns_bynk_cloudflare.ImageFormat;
+    type ImageInfo = __ns_bynk_cloudflare.ImageInfo;
+    type ImageResult = __ns_bynk_cloudflare.ImageResult;
+    type ImageStream = __ns_bynk_cloudflare.ImageStream;
+    type ImagesError = __ns_bynk_cloudflare.ImagesError;
+    type InboundAttachment = __ns_bynk_cloudflare.InboundAttachment;
+    type InboundEmail = __ns_bynk_cloudflare.InboundEmail;
+    type IndexInfo = __ns_bynk_cloudflare.IndexInfo;
+    type KvCacheTtl = __ns_bynk_cloudflare.KvCacheTtl;
+    type KvEntry = __ns_bynk_cloudflare.KvEntry;
+    type KvExpiration = __ns_bynk_cloudflare.KvExpiration;
+    type KvGet = __ns_bynk_cloudflare.KvGet;
+    type KvKey = __ns_bynk_cloudflare.KvKey;
+    type KvList = __ns_bynk_cloudflare.KvList;
+    type KvListing = __ns_bynk_cloudflare.KvListing;
+    type KvPut = __ns_bynk_cloudflare.KvPut;
+    type KvTtl = __ns_bynk_cloudflare.KvTtl;
+    type MetaValue = __ns_bynk_cloudflare.MetaValue;
+    type MetadataScope = __ns_bynk_cloudflare.MetadataScope;
+    type Mutation = __ns_bynk_cloudflare.Mutation;
+    type MySqlError = __ns_bynk_cloudflare.MySqlError;
+    type MySqlReadError = __ns_bynk_cloudflare.MySqlReadError;
+    type MySqlRun = __ns_bynk_cloudflare.MySqlRun;
+    type MySqlStatement = __ns_bynk_cloudflare.MySqlStatement;
+    type MySqlValue = __ns_bynk_cloudflare.MySqlValue;
+    type OutputOptions = __ns_bynk_cloudflare.OutputOptions;
+    type Overlay = __ns_bynk_cloudflare.Overlay;
+    type PgError = __ns_bynk_cloudflare.PgError;
+    type PgReadError = __ns_bynk_cloudflare.PgReadError;
+    type PgRun = __ns_bynk_cloudflare.PgRun;
+    type PgStatement = __ns_bynk_cloudflare.PgStatement;
+    type PgValue = __ns_bynk_cloudflare.PgValue;
+    type QueryOptions = __ns_bynk_cloudflare.QueryOptions;
+    type QueueDelay = __ns_bynk_cloudflare.QueueDelay;
+    type QueueDelivery = __ns_bynk_cloudflare.QueueDelivery;
+    type QueueSend = __ns_bynk_cloudflare.QueueSend;
+    type R2Body = __ns_bynk_cloudflare.R2Body;
+    type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
+    type R2Listing = __ns_bynk_cloudflare.R2Listing;
+    type R2Object = __ns_bynk_cloudflare.R2Object;
+    type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
+    type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
+    type R2Upload = __ns_bynk_cloudflare.R2Upload;
+    type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
+    type RequestCf = __ns_bynk_cloudflare.RequestCf;
+    type RetrievalType = __ns_bynk_cloudflare.RetrievalType;
+    type SearchAnswer = __ns_bynk_cloudflare.SearchAnswer;
+    type SearchError = __ns_bynk_cloudflare.SearchError;
+    type SearchHit = __ns_bynk_cloudflare.SearchHit;
+    type SearchOptions = __ns_bynk_cloudflare.SearchOptions;
+    type SenderIdentity = __ns_bynk_cloudflare.SenderIdentity;
+    type SqlError = __ns_bynk_cloudflare.SqlError;
+    type SqlReadError = __ns_bynk_cloudflare.SqlReadError;
+    type SqlRun = __ns_bynk_cloudflare.SqlRun;
+    type SqlStatement = __ns_bynk_cloudflare.SqlStatement;
+    type SqlValue = __ns_bynk_cloudflare.SqlValue;
+    type TokenUsage = __ns_bynk_cloudflare.TokenUsage;
+    type TransformOptions = __ns_bynk_cloudflare.TransformOptions;
+    type Vector = __ns_bynk_cloudflare.Vector;
+    type VectorError = __ns_bynk_cloudflare.VectorError;
+    type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
+    type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
+    type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
+    const etag = await put.call("v", "one", deps);
+    const stale = await swap.call("v", "not-the-etag", "two", deps);
+    if (!(!stale)) { throw __bynkExpectFailure("tests/store.bynk:86:10", 2906, 2912, "expect !stale"); }
+    const fresh = await swap.call("v", etag, "three", deps);
+    if (!(fresh)) { throw __bynkExpectFailure("tests/store.bynk:88:10", 2967, 2972, "expect fresh"); }
+    const same = await readDiffering.call("v", etag, deps);
+    if (!(same === "found 5")) { throw __bynkExpectFailure("tests/store.bynk:90:10", 3026, 3043, "expect same == \"found 5\"\n  expected: same == \"found 5\"\n  actual:   " + __bynkShow((same)) + " == " + __bynkShow(("found 5"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -1402,7 +1647,7 @@ async function test_a_listing_with_no_delimiter_has_no_prefixes() {
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a byte range is read as a stream with the offset and length served", "a length past the end is clamped, and a start past the end faults", "a suffix is the last bytes, clamped to the object", "a range of a missing key is None", "a read that needs the etag to match reads, or answers not modified", "a read that needs the etag to differ reads, or answers not modified", "an unconditional read reads, and a missing key is Missing under any condition", "a delimited listing folds the keys under a path into its prefixes", "a listing with no delimiter has no prefixes"];
+export const __bynkCases: readonly string[] = ["a byte range is read as a stream with the offset and length served", "a length past the end is clamped, and a start past the end faults", "a negative range faults, whatever the client sent", "a suffix is the last bytes, clamped to the object", "a range of a missing key is None", "a read that needs the etag to match reads, or answers not modified", "a read that needs the etag to differ reads, or answers not modified", "an unconditional read reads, and a missing key is Missing under any condition", "a delimited listing folds the keys under a path into its prefixes", "a listing with no delimiter has no prefixes", "EtagMatches stays R2Condition's, bound or not, beside the read-side conditions"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -1416,6 +1661,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a length past the end is clamped, and a start past the end faults")) {
     const started = __bynkCaseNow();
     const r = { name: "a length past the end is clamped, and a start past the end faults", ...(await test_a_length_past_the_end_is_clamped__and_a_start_past_the_end_faults()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a negative range faults, whatever the client sent")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a negative range faults, whatever the client sent", ...(await test_a_negative_range_faults__whatever_the_client_sent()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }
@@ -1458,6 +1709,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a listing with no delimiter has no prefixes")) {
     const started = __bynkCaseNow();
     const r = { name: "a listing with no delimiter has no prefixes", ...(await test_a_listing_with_no_delimiter_has_no_prefixes()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("EtagMatches stays R2Condition's, bound or not, beside the read-side conditions")) {
+    const started = __bynkCaseNow();
+    const r = { name: "EtagMatches stays R2Condition's, bound or not, beside the read-side conditions", ...(await test_EtagMatches_stays_R2Condition_s__bound_or_not__beside_the_read_side_conditions()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

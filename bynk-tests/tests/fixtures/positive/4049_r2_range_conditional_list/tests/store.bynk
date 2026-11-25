@@ -15,6 +15,13 @@ suite media.store {
 		expect range.call("v", 99, Some(1)) faults
 	}
 
+	case "a negative range faults, whatever the client sent" {
+		let _ <- put.call("v", "0123456789")
+		expect range.call("v", -3, None) faults
+		expect range.call("v", 2, Some(-1)) faults
+		expect tail.call("v", -5) faults
+	}
+
 	case "a suffix is the last bytes, clamped to the object" {
 		let _ <- put.call("v", "0123456789")
 		let last <- tail.call("v", 3)
@@ -71,5 +78,15 @@ suite media.store {
 		let _ <- put.call("a/2", "y")
 		let n <- everything.call()
 		expect n == 2
+	}
+
+	case "EtagMatches stays R2Condition's, bound or not, beside the read-side conditions" {
+		let etag <- put.call("v", "one")
+		let stale <- swap.call("v", "not-the-etag", "two")
+		expect !stale
+		let fresh <- swap.call("v", etag, "three")
+		expect fresh
+		let same <- readDiffering.call("v", etag)
+		expect same == "found 5"
 	}
 }

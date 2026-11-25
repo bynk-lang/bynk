@@ -294,7 +294,7 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
     async getStreamIf(key, onlyIf) {
       const e = store.get(key);
       if (e === undefined) return { tag: "Missing" };
-      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
         return { tag: "NotModified", object: meta(key) };
       }
       const bytes = e.body.slice();
@@ -496,7 +496,7 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
     async getStreamIf(key, onlyIf) {
       const e = store.get(key);
       if (e === undefined) return { tag: "Missing" };
-      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
         return { tag: "NotModified", object: meta(key) };
       }
       const bytes = e.body.slice();
@@ -698,7 +698,7 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
     async getStreamIf(key, onlyIf) {
       const e = store.get(key);
       if (e === undefined) return { tag: "Missing" };
-      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
         return { tag: "NotModified", object: meta(key) };
       }
       const bytes = e.body.slice();

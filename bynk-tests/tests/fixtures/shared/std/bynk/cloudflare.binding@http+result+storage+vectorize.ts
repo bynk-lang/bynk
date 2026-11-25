@@ -565,7 +565,11 @@ export class WorkersR2 implements R2 {
     });
     if (o === null) return None;
     const body = o as R2Read2;
-    const served = body.range ?? (range.tag === "Suffix" ? { offset: Math.max(0, o.size - range.length), length: Math.min(o.size, range.length) } : { offset: range.offset, length: o.size - range.offset });
+    const served =
+      body.range ??
+      (range.tag === "Suffix"
+        ? { offset: Math.max(0, o.size - range.length), length: Math.min(o.size, range.length) }
+        : { offset: range.offset, length: range.length.tag === "Some" ? Math.min(range.length.value, o.size - range.offset) : o.size - range.offset });
     return Some({ object: this.object(o), offset: served.offset, length: served.length, body: r2Chunks(body.body as ReadableStream<Uint8Array>) });
   }
 
@@ -573,9 +577,9 @@ export class WorkersR2 implements R2 {
   // metadata (R2 resolves the object with no body), a missing key is `Missing`.
   async getStreamIf(key: string, onlyIf: R2GetIf): Promise<R2Read> {
     const gate =
-      onlyIf.tag === "EtagMatches"
+      onlyIf.tag === "IfEtagMatches"
         ? { etagMatches: onlyIf.etag }
-        : onlyIf.tag === "EtagDiffers"
+        : onlyIf.tag === "IfEtagDiffers"
           ? { etagDoesNotMatch: onlyIf.etag }
           : undefined;
     const o = await this.bucket().get(key, gate === undefined ? {} : { onlyIf: gate });

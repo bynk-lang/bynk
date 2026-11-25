@@ -180,6 +180,11 @@ export function makeIntegrationR2(): R2Bucket {
       const range = options?.range;
       if (range !== undefined) {
         ranged = true;
+        // R2 refuses a negative offset, length or suffix, as the unit-tier double does; a handler usually
+        // takes these from a client's `Range` header.
+        if (("suffix" in range && range.suffix < 0) || ("offset" in range && (range.offset < 0 || (range.length ?? 0) < 0))) {
+          throw new Error("R2: a range offset, length and suffix are not negative");
+        }
         if ("suffix" in range) {
           const length = Math.min(range.suffix, s.body.length);
           served = { offset: s.body.length - length, length };

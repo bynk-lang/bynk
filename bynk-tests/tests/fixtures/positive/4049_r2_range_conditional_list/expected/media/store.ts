@@ -4,7 +4,7 @@
 import { Some, None, type Option } from "../__bynk_runtime/result.js";
 import { __bynkBytesDecodeUtf8, __bynkBytesConcat } from "../__bynk_runtime/bytes.js";
 
-import { R2GetIf, R2Object, R2Range, R2Read } from "../bynk/cloudflare.js";
+import { R2Condition, R2GetIf, R2Object, R2Range, R2Read } from "../bynk/cloudflare.js";
 
 import * as bynk_cloudflare from "../bynk/cloudflare.js";
 
@@ -104,14 +104,14 @@ export const tail = {
 
 export const readMatching = {
   async call(key: string, etag: string, deps: { Videos: Videos }): globalThis.Promise<string> {
-    const r = await deps.Videos.getStreamIf(key, R2GetIf.EtagMatches(etag));
+    const r = await deps.Videos.getStreamIf(key, R2GetIf.IfEtagMatches(etag));
     return answer(r);
   },
 };
 
 export const readDiffering = {
   async call(key: string, etag: string, deps: { Videos: Videos }): globalThis.Promise<string> {
-    const r = await deps.Videos.getStreamIf(key, R2GetIf.EtagDiffers(etag));
+    const r = await deps.Videos.getStreamIf(key, R2GetIf.IfEtagDiffers(etag));
     return answer(r);
   },
 };
@@ -120,6 +120,14 @@ export const readAlways = {
   async call(key: string, deps: { Videos: Videos }): globalThis.Promise<string> {
     const r = await deps.Videos.getStreamIf(key, R2GetIf.Unconditional);
     return answer(r);
+  },
+};
+
+export const swap = {
+  async call(key: string, etag: string, text: string, deps: { Videos: Videos }): globalThis.Promise<boolean> {
+    const cond = R2Condition.EtagMatches(etag);
+    const stored = await deps.Videos.putWith(key, new globalThis.TextEncoder().encode(text), { contentType: None, metadata: new globalThis.Map<string, string>(), onlyIf: cond });
+    return (stored.tag === "Some");
   },
 };
 
@@ -161,6 +169,9 @@ export function __makeSurface(deps: __MediaStoreDeps) {
     },
     async readAlways(key: string): globalThis.Promise<string> {
       return readAlways.call(key, deps);
+    },
+    async swap(key: string, etag: string, text: string): globalThis.Promise<boolean> {
+      return swap.call(key, etag, text, deps);
     },
     async children(prefix: string): globalThis.Promise<string> {
       return children.call(prefix, deps);

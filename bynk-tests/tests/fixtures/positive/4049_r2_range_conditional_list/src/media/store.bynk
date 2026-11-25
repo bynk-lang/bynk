@@ -57,14 +57,14 @@ service tail {
 // "found", "missing" or "not modified", for a read that needs the etag to match / to differ.
 service readMatching {
 	on call(key: String, etag: String) -> Effect[String] by Caller given Videos {
-		let r <- Videos.getStreamIf(key, EtagMatches(etag))
+		let r <- Videos.getStreamIf(key, IfEtagMatches(etag))
 		answer(r)
 	}
 }
 
 service readDiffering {
 	on call(key: String, etag: String) -> Effect[String] by Caller given Videos {
-		let r <- Videos.getStreamIf(key, EtagDiffers(etag))
+		let r <- Videos.getStreamIf(key, IfEtagDiffers(etag))
 		answer(r)
 	}
 }
@@ -73,6 +73,20 @@ service readAlways {
 	on call(key: String) -> Effect[String] by Caller given Videos {
 		let r <- Videos.getStreamIf(key, Unconditional)
 		answer(r)
+	}
+}
+
+// `EtagMatches` is `R2Condition`'s alone, so binding it first still compiles (the read-side variants are
+// `IfEtagMatches` and `IfEtagDiffers`, which do not share its name).
+service swap {
+	on call(key: String, etag: String, text: String) -> Effect[Bool] by Caller given Videos {
+		let cond = EtagMatches(etag)
+		let stored <- Videos.putWith(key, Bytes.fromUtf8(text), R2Put {
+			contentType: None,
+			metadata: Map.empty(),
+			onlyIf: cond,
+		})
+		stored.isSome()
 	}
 }
 

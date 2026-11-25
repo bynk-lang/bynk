@@ -471,12 +471,12 @@ service api from http {
 \t}
 
 \ton GET(\"/ifmatch/:key/:etag\") (key: String, etag: String) -> Effect[HttpResult[String]] by Visitor given Archives {
-\t\tlet r <- Archives.getStreamIf(key, EtagMatches(etag))
+\t\tlet r <- Archives.getStreamIf(key, IfEtagMatches(etag))
 \t\tOk(describe(r))
 \t}
 
 \ton GET(\"/ifdiffer/:key/:etag\") (key: String, etag: String) -> Effect[HttpResult[String]] by Visitor given Archives {
-\t\tlet r <- Archives.getStreamIf(key, EtagDiffers(etag))
+\t\tlet r <- Archives.getStreamIf(key, IfEtagDiffers(etag))
 \t\tOk(describe(r))
 \t}
 

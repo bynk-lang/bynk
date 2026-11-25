@@ -239,20 +239,20 @@ export const R2Range = {
 
 /**
  * The condition of an `R2.getStreamIf` read, the read-side counterpart of
- * `R2Condition`. `Unconditional` always reads; `EtagMatches(etag)` reads only
- * when the object's etag is `etag`; `EtagDiffers(etag)` reads only when it
+ * `R2Condition`. `Unconditional` always reads; `IfEtagMatches(etag)` reads only
+ * when the object's etag is `etag`; `IfEtagDiffers(etag)` reads only when it
  * is not (revalidating a cached copy). R2 has further conditions, so a
  * `match` over this type needs a wildcard.
  */
 export type R2GetIf =
     { readonly tag: "Unconditional" }
-  | { readonly tag: "EtagMatches"; readonly etag: string }
-  | { readonly tag: "EtagDiffers"; readonly etag: string };
+  | { readonly tag: "IfEtagMatches"; readonly etag: string }
+  | { readonly tag: "IfEtagDiffers"; readonly etag: string };
 
 export const R2GetIf = {
   Unconditional: { tag: "Unconditional" } as R2GetIf,
-  EtagMatches: (etag: string): R2GetIf => ({ tag: "EtagMatches", etag }),
-  EtagDiffers: (etag: string): R2GetIf => ({ tag: "EtagDiffers", etag }),
+  IfEtagMatches: (etag: string): R2GetIf => ({ tag: "IfEtagMatches", etag }),
+  IfEtagDiffers: (etag: string): R2GetIf => ({ tag: "IfEtagDiffers", etag }),
 };
 
 /**
@@ -275,7 +275,9 @@ export const R2Partial = {
 /**
  * The answer of an `R2.getStreamIf` read: `Present` with the object, `Missing`
  * when the key holds none, and `NotModified` with the object's metadata when
- * the condition did not hold (a handler maps it to `304`).
+ * the condition did not hold. For `IfEtagDiffers` that is a cache hit
+ * (HTTP `304`); a failed `IfEtagMatches` is HTTP `412 Precondition Failed`,
+ * which the name fits less well.
  */
 export type R2Read =
     { readonly tag: "Present"; readonly body: R2Body }
@@ -4495,11 +4497,11 @@ export function __serialise_R2GetIf(value: R2GetIf): __JsonValue {
   switch (value.tag) {
     case "Unconditional":
       return { kind: "Unconditional" };
-    case "EtagMatches": {
-      return { kind: "EtagMatches", etag: value.etag as __JsonValue };
+    case "IfEtagMatches": {
+      return { kind: "IfEtagMatches", etag: value.etag as __JsonValue };
     }
-    case "EtagDiffers": {
-      return { kind: "EtagDiffers", etag: value.etag as __JsonValue };
+    case "IfEtagDiffers": {
+      return { kind: "IfEtagDiffers", etag: value.etag as __JsonValue };
     }
   }
 }
@@ -4513,19 +4515,19 @@ export function __deserialise_R2GetIf(json: __JsonValue, path: string = "$"): Re
   switch (kind) {
     case "Unconditional":
       return Ok({ tag: "Unconditional" } as R2GetIf);
-    case "EtagMatches": {
+    case "IfEtagMatches": {
       if (typeof obj["etag"] !== "string") {
         return Err({ kind: "StructuralMismatch", path: `${path}.etag`, expected: "string", actual: typeof obj["etag"] });
       }
       const __etag = obj["etag"];
-      return Ok({ tag: "EtagMatches", etag: __etag } as R2GetIf);
+      return Ok({ tag: "IfEtagMatches", etag: __etag } as R2GetIf);
     }
-    case "EtagDiffers": {
+    case "IfEtagDiffers": {
       if (typeof obj["etag"] !== "string") {
         return Err({ kind: "StructuralMismatch", path: `${path}.etag`, expected: "string", actual: typeof obj["etag"] });
       }
       const __etag = obj["etag"];
-      return Ok({ tag: "EtagDiffers", etag: __etag } as R2GetIf);
+      return Ok({ tag: "IfEtagDiffers", etag: __etag } as R2GetIf);
     }
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });

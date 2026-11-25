@@ -876,22 +876,22 @@ t("WorkersR2.getStreamIf: reads when the condition holds, NotModified with the m
   const o = await r2.put("k", bytes(1, 2, 3), { httpMetadata: { contentType: "text/plain" } });
   const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
   assert.deepEqual(await store.getStreamIf("absent", { tag: "Unconditional" }), { tag: "Missing" });
-  assert.deepEqual(await store.getStreamIf("absent", { tag: "EtagMatches", etag: "x" }), { tag: "Missing" });
+  assert.deepEqual(await store.getStreamIf("absent", { tag: "IfEtagMatches", etag: "x" }), { tag: "Missing" });
   const always = await store.getStreamIf("k", { tag: "Unconditional" });
   assert.equal(always.tag, "Present");
   assert.deepEqual(await drain(always.body.body), [1, 2, 3]);
   assert.deepEqual(r2.reads.at(-1).options, {});
-  const hit = await store.getStreamIf("k", { tag: "EtagMatches", etag: o.etag });
+  const hit = await store.getStreamIf("k", { tag: "IfEtagMatches", etag: o.etag });
   assert.equal(hit.tag, "Present");
   assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagMatches: o.etag } });
-  const miss = await store.getStreamIf("k", { tag: "EtagMatches", etag: "other" });
+  const miss = await store.getStreamIf("k", { tag: "IfEtagMatches", etag: "other" });
   assert.equal(miss.tag, "NotModified");
   assert.equal(miss.object.size, 3);
   assert.deepEqual(miss.object.contentType, Some("text/plain"));
-  const same = await store.getStreamIf("k", { tag: "EtagDiffers", etag: o.etag });
+  const same = await store.getStreamIf("k", { tag: "IfEtagDiffers", etag: o.etag });
   assert.equal(same.tag, "NotModified");
   assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagDoesNotMatch: o.etag } });
-  const changed = await store.getStreamIf("k", { tag: "EtagDiffers", etag: "other" });
+  const changed = await store.getStreamIf("k", { tag: "IfEtagDiffers", etag: "other" });
   assert.equal(changed.tag, "Present");
 });
 

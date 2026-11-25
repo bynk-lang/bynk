@@ -697,12 +697,15 @@ objects stream, or are uploaded in parts (below).
   `head`'s `size` first to answer such a request with `416`. The body is still
   streamed, never buffered.
 - `getStreamIf(key, onlyIf)` reads only when an etag condition holds. `R2GetIf` is
-  `Unconditional`, `EtagMatches(etag)` or `EtagDiffers(etag)` (the read-side
-  counterpart of `R2Condition`; `Absent` means nothing for a read), and is extensible.
+  `Unconditional`, `IfEtagMatches(etag)` or `IfEtagDiffers(etag)` (the read-side
+  counterpart of `R2Condition`, with distinct names so that `EtagMatches(etag)` stays
+  `R2Condition`'s alone; `Absent` means nothing for a read), and is extensible.
   The answer is an `R2Read`: `Present(body)` (an `R2Body`, as `getStream` gives),
   `Missing` for a key that holds nothing, or `NotModified(object)` with the object's
-  metadata when the condition did not hold, so a cache revalidation (`EtagDiffers`
-  with the etag the client already has) does not transfer an unchanged object.
+  metadata when the condition did not hold, so a cache revalidation (`IfEtagDiffers`
+  with the etag the client already has) does not transfer an unchanged object. A
+  failed `IfEtagDiffers` is a cache hit (HTTP `304`); a failed `IfEtagMatches` is
+  HTTP `412 Precondition Failed`, which the name `NotModified` fits less well.
 - `putStream(key, body, size)` writes a stream of exactly `size` bytes. R2 needs
   a stream's length up front (on Workers it goes through a
   `FixedLengthStream`), so a stream holding more or fewer bytes faults the

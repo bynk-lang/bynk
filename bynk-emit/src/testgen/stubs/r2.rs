@@ -130,7 +130,7 @@ pub(super) const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<st
     async getStreamIf(key, onlyIf) {
       const e = store.get(key);
       if (e === undefined) return { tag: "Missing" };
-      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
         return { tag: "NotModified", object: meta(key) };
       }
       const bytes = e.body.slice();

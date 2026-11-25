@@ -349,15 +349,15 @@ adapter bynk.cloudflare {
 
 	---
 	The condition of an `R2.getStreamIf` read, the read-side counterpart of
-	`R2Condition`. `Unconditional` always reads; `EtagMatches(etag)` reads only
-	when the object's etag is `etag`; `EtagDiffers(etag)` reads only when it
+	`R2Condition`. `Unconditional` always reads; `IfEtagMatches(etag)` reads only
+	when the object's etag is `etag`; `IfEtagDiffers(etag)` reads only when it
 	is not (revalidating a cached copy). R2 has further conditions, so a
 	`match` over this type needs a wildcard.
 	---
 	type R2GetIf =
 		| Unconditional
-		| EtagMatches(etag: String)
-		| EtagDiffers(etag: String)
+		| IfEtagMatches(etag: String)
+		| IfEtagDiffers(etag: String)
 
 	---
 	A byte range of an object, as `R2.getRange` reads it: the object's
@@ -376,7 +376,9 @@ adapter bynk.cloudflare {
 	---
 	The answer of an `R2.getStreamIf` read: `Present` with the object, `Missing`
 	when the key holds none, and `NotModified` with the object's metadata when
-	the condition did not hold (a handler maps it to `304`).
+	the condition did not hold. For `IfEtagDiffers` that is a cache hit
+	(HTTP `304`); a failed `IfEtagMatches` is HTTP `412 Precondition Failed`,
+	which the name fits less well.
 	---
 	type R2Read =
 		| Present(body: R2Body)
