@@ -305,10 +305,14 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
         "NoSubject",
         "Sends an `Oidc` route two tokens that are correctly signed by the test issuer and unexpired, one with an empty `sub` and one with no `sub` claim, so the real seam refuses both before the handler runs (`Rejected(Unauthorized)`), whatever the identity's refinement. Needs an `Oidc` actor. `system` tier only.",
     ),
+    (
+        "Revoked",
+        "Sends a `SignedCookie` route a cookie correctly signed for a session that was issued and then revoked in the actor's session agent (`revokeAll`), so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `SignedCookie` actor declared with `sessions = true`. `system` tier only.",
+    ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`, `Revoked`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -3636,12 +3640,41 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
     }
 }
 
+/// #3925: the `origins` as the source writes them. The hover's declaration is read
+/// from the source text, ahead of the pass that replaces a constant with its
+/// literal, so a name stays a name here (hover on it shows the constant); a
+/// literal list reads as before.
+fn origins_as_written(cors: &CorsPolicy) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let item = |e: &bynk_syntax::ast::Expr| match &e.kind {
+        ExprKind::StrLit(s) => format!("{s:?}"),
+        ExprKind::Ident(id) => id.name.clone(),
+        _ => "…".to_string(),
+    };
+    match cors.field("origins").map(|e| (&e.kind, e)) {
+        Some((ExprKind::ListLit(items, ..), _)) => {
+            format!(
+                "[{}]",
+                items.iter().map(item).collect::<Vec<_>>().join(", ")
+            )
+        }
+        Some((_, e)) => item(e),
+        None => "[]".to_string(),
+    }
+}
+
 /// v0.131: a one-line summary of a `cors { }` policy for hover — the origins
 /// (always present), then `credentials`/`maxAge` when set.
 fn cors_summary(cors: &CorsPolicy) -> String {
-    let mut parts = vec![format!("origins: {:?}", cors.origins())];
+    let mut parts = vec![format!("origins: {}", origins_as_written(cors))];
     if cors.credentials() {
         parts.push("credentials: true".to_string());
+    }
+    // #3925: the headers a browser script may read, beside the ones Bynk writes
+    // for a client (`WWW-Authenticate`, `Retry-After`, `Location`, `ETag`).
+    let expose = cors.expose_headers();
+    if !expose.is_empty() {
+        parts.push(format!("expose: {expose:?} + Bynk's own headers"));
     }
     if let Some(secs) = cors.max_age_secs() {
         parts.push(format!("maxAge: {secs}s"));

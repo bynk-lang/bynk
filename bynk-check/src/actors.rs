@@ -270,6 +270,16 @@ pub fn by_clause_is_signed_cookie(by: &ByClause, actors: &HashMap<String, ActorD
             == Some(Scheme::SignedCookie)
 }
 
+/// #3938: whether a `by` clause names a single local `SignedCookie` actor with `sessions = true`
+/// (never a sum member), whose seam can refuse a cookie for a revoked session.
+pub fn by_clause_has_sessions(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    by_clause_is_signed_cookie(by, actors)
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| signed_cookie_seam_of(a, None))
+            .is_some_and(|s| s.sessions)
+}
+
 pub fn bearer_seam_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -1566,11 +1576,14 @@ pub enum BadCredential {
     WrongAudience,
     WrongAlgorithm,
     NoSubject,
+    /// #3938: a cookie correctly signed for a session that was then revoked (`revokeAll`), so
+    /// only a `SignedCookie` actor with `sessions = true` can refuse it.
+    Revoked,
 }
 
 impl BadCredential {
     /// Every bad-credential principal.
-    pub const ALL: [BadCredential; 7] = [
+    pub const ALL: [BadCredential; 8] = [
         BadCredential::Forged,
         BadCredential::Stale,
         BadCredential::Expired,
@@ -1578,6 +1591,7 @@ impl BadCredential {
         BadCredential::WrongAudience,
         BadCredential::WrongAlgorithm,
         BadCredential::NoSubject,
+        BadCredential::Revoked,
     ];
 
     /// The name written after `by`.
@@ -1590,6 +1604,7 @@ impl BadCredential {
             BadCredential::WrongAudience => "WrongAudience",
             BadCredential::WrongAlgorithm => "WrongAlgorithm",
             BadCredential::NoSubject => "NoSubject",
+            BadCredential::Revoked => "Revoked",
         }
     }
 
@@ -1603,6 +1618,7 @@ impl BadCredential {
             BadCredential::WrongAudience => "wrongaudience",
             BadCredential::WrongAlgorithm => "wrongalgorithm",
             BadCredential::NoSubject => "nosubject",
+            BadCredential::Revoked => "revoked",
         }
     }
 
@@ -1673,6 +1689,7 @@ mod call_site_principal_tests {
             ("WrongAudience", "wrongaudience"),
             ("WrongAlgorithm", "wrongalgorithm"),
             ("NoSubject", "nosubject"),
+            ("Revoked", "revoked"),
         ];
         assert_eq!(drivers.len(), BadCredential::ALL.len());
         for (name, driver) in drivers {

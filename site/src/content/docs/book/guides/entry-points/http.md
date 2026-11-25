@@ -314,10 +314,27 @@ allow cookies / `Authorization`, and `maxAge: 1.hour` to let the browser cache
 the preflight. A request from an origin *not* on the list simply gets no grant, so
 the browser blocks it — the same fail-closed posture as authentication.
 
+A script on that page can read only the CORS-safelisted response headers, plus the ones
+Bynk writes for a client: `WWW-Authenticate`, `Retry-After`, `Location` and `ETag`. List
+another header you set yourself in `expose`, and write an origin once as a constant when
+more than one service, or a staging build, needs it:
+
+```bynk,ignore
+const AppOrigins: List[String] = env(APP_ORIGINS, ["https://app.example.com"])
+
+service api from http {
+  cors {
+    origins: AppOrigins,
+    expose:  ["x-request-id"],
+  }
+  …
+}
+```
+
 > **Wildcard + credentials is a compile error.** `origins: ["*"]` opens the service
 > to any origin, but you cannot combine it with `credentials: true` — the browser
 > rejects that pair at runtime, so Bynk rejects it at compile time. With
-> credentials, name the exact origins.
+> credentials, name the exact origins. The same goes for `expose: ["*"]`.
 
 See [HTTP → CORS](/reference/http/#cors) for the full field table and matching
 rules.

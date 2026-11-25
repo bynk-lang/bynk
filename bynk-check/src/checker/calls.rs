@@ -4992,7 +4992,10 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
             "tokens with an empty and with a missing `sub`",
             "; only an `Oidc` seam is driven with these tokens",
         ),
-        BadCredential::Forged | BadCredential::Stale | BadCredential::Expired => return None,
+        BadCredential::Forged
+        | BadCredential::Stale
+        | BadCredential::Expired
+        | BadCredential::Revoked => return None,
     };
     Some(OidcOnlyPrincipal {
         code,
@@ -5485,6 +5488,15 @@ pub(crate) fn check_effect_let_principal(
                 ctx.errors.push(with_open_sum_note(err, &handler, ctx));
             }
             (BadCredential::Expired, _) => {}
+            (BadCredential::Revoked, _)
+                if !by.is_some_and(|by| {
+                    crate::actors::by_clause_has_sessions(by, &ctx.test_actors)
+                }) =>
+            {
+                let err = super::session_calls::revoked_needs_sessions(p.span);
+                ctx.errors.push(with_open_sum_note(err, &handler, ctx));
+            }
+            (BadCredential::Revoked, _) => {}
             (n, _) if !oidc && oidc_only_principal(n).is_some() => {
                 let kind = oidc_only_principal(n).expect("matched above");
                 ctx.errors.push(
@@ -5836,7 +5848,14 @@ fn report_principal_actor(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
             let CallSitePrincipal::BadCredential(bad) = kind else {
                 unreachable!("matched above")
             };
-            let err = if bad == BadCredential::Expired {
+            let err = if bad == BadCredential::Revoked {
+                CompileError::new(
+                    "bynk.test.revoked_needs_sessions_route",
+                    p.span,
+                    "`by Revoked` sends a cookie for a revoked session, but this address reaches no http route guarded by a `SignedCookie` actor with `sessions = true`",
+                )
+                .with_note("use `by Revoked` on an http route guarded by a `SignedCookie` actor declared with `sessions = true`")
+            } else if bad == BadCredential::Expired {
                 CompileError::new(
                     "bynk.test.expired_needs_bearer_route",
                     p.span,

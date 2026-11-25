@@ -22,7 +22,7 @@ export default {
     const path = url.pathname;
     const method = request.method;
     const surface = compose(env);
-    const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS", "POST"], allowHeaders: ["content-type"], credentials: true, maxAgeSecs: null };
+    const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS", "POST"], allowHeaders: ["content-type"], exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag"], credentials: true, maxAgeSecs: null };
     const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
     let __route: string = "request";
     try {
@@ -39,7 +39,7 @@ export default {
         }
       }
 
-      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/orders", path) !== null || __matchPath("/orders/token-first", path) !== null)) {
+      if (method === "OPTIONS" && request.headers.get("access-control-request-method") !== null && (__matchPath("/orders", path) !== null || __matchPath("/logout", path) !== null || __matchPath("/orders/token-first", path) !== null || __matchPath("/revoke-all", path) !== null)) {
         return __applySecurityHeaders(__corsPreflightResponse(__cors_api, request.headers.get("origin")), __security_api);
       }
       {
@@ -48,6 +48,13 @@ export default {
           const result = await surface.http_GET_orders(request);
           const __response = __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
+      {
+        if (method === "POST" && __matchPath("/logout", path) !== null) {
+          __route = "POST /logout";
+          const result = await surface.http_POST_logout(request);
+          return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
       {
@@ -64,12 +71,29 @@ export default {
           return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"shop.api\"", "Bynk-Cookie realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
         }
       }
+      {
+        if (method === "POST" && __matchPath("/revoke-all", path) !== null) {
+          __route = "POST /revoke-all";
+          const result = await surface.http_POST_revoke_all(request);
+          return __applySecurityHeaders(__applyCors(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: void) => null), request, ["Bynk-Cookie realm=\"shop.api\"", "Bearer realm=\"shop.api\""])), __cors_api, request.headers.get("origin")), __security_api);
+        }
+      }
+      if (__matchPath("/logout", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+      }
       if (__matchPath("/orders", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
       }
       if (__matchPath("/orders/token-first", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);
+      }
+      if (__matchPath("/revoke-all", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
         return __applySecurityHeaders(__applyCors(__res, __cors_api, request.headers.get("origin")), __security_api);

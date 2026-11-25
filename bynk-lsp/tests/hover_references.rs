@@ -1215,3 +1215,69 @@ fn a_prelude_type_in_a_commons_hovers_as_its_declaration() {
     .expect("`CronSchedule` hovers in a commons");
     assert!(c.contains("String where Cron"), "{c}");
 }
+
+/// #3925 — a constant named in `cors { origins: … }` hovers as its declaration
+/// (the pass records the reference as a use), and the service's header line shows
+/// the origins as written (the constant's name) and the `expose` names.
+#[test]
+fn a_cors_origins_constant_hovers_as_its_declaration() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3925_cors_expose_constants",
+        "src/api.bynk",
+    );
+    let (r, rel, text, root) = (&r, rel.as_path(), text.as_str(), root.as_path());
+    let h = hover_at(
+        r,
+        rel,
+        text,
+        root,
+        at(text, "origins: AppOrigins", "AppOrigins"),
+    )
+    .expect("the origins constant hovers");
+    assert!(h.contains("AppOrigins"), "{h}");
+    assert!(h.contains("List[String]"), "{h}");
+    let svc = hover_at(r, rel, text, root, at(text, "service api from", "api"))
+        .expect("the service hovers");
+    assert!(
+        svc.contains("origins: AppOrigins"),
+        "the origins as written: {svc}"
+    );
+    assert!(
+        svc.contains("expose: [\"x-request-id\"]"),
+        "the expose names: {svc}"
+    );
+}
+
+/// #3925 — a constant named in `cors { origins: … }` is coloured as a constant,
+/// like any other reference to one: the pass records the reference as a use.
+#[test]
+fn a_cors_origins_constant_gets_the_constant_semantic_token() {
+    let (r, rel, text, _) = analysed(
+        "../bynk-tests/tests/fixtures/positive/3925_cors_expose_constants",
+        "src/api.bynk",
+    );
+    let legend = bynk_lsp::index_queries::semantic_tokens_legend();
+    let constant = legend
+        .token_types
+        .iter()
+        .position(|t| t.as_str() == "constant")
+        .expect("`constant` is in the legend") as u32;
+    let tokens = bynk_lsp::index_queries::semantic_tokens(&r.index, &[], &[], &rel, &text, None);
+    let off = at(&text, "origins: [PartnerOrigin", "PartnerOrigin");
+    let want_line = text[..off].matches('\n').count() as u32;
+    let want_col = (off - text[..off].rfind('\n').map_or(0, |n| n + 1)) as u32;
+    let (mut line, mut col) = (0u32, 0u32);
+    let mut found = Vec::new();
+    for t in &tokens {
+        if t.delta_line > 0 {
+            line += t.delta_line;
+            col = t.delta_start;
+        } else {
+            col += t.delta_start;
+        }
+        if (line, col) == (want_line, want_col) {
+            found.push((t.length, t.token_type));
+        }
+    }
+    assert_eq!(found, vec![("PartnerOrigin".len() as u32, constant)]);
+}
