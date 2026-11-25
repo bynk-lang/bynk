@@ -20,7 +20,7 @@ export type Code = string & { readonly __brand: "shop.consts.Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[A-Z]{3}" + ")$", "u").test(value))) {
-      return Err({ field: "Code", message: "must match /[A-Z]{3}/", value });
+      return Err({ field: "Code", message: "must match /[A-Z]{3}/", rule: { tag: "Matches", pattern: "[A-Z]{3}" }, value });
     }
     return Ok(value as Code);
   },

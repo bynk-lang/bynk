@@ -10,7 +10,7 @@ export type City = string & { readonly __brand: "City" };
 export const City = {
   of(value: string): Result<City, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[a-z]+(-[a-z]+)*" + ")$", "u").test(value))) {
-      return Err({ field: "City", message: "must match /[a-z]+(-[a-z]+)*/", value });
+      return Err({ field: "City", message: "must match /[a-z]+(-[a-z]+)*/", rule: { tag: "Matches", pattern: "[a-z]+(-[a-z]+)*" }, value });
     }
     return Ok(value as City);
   },
@@ -21,7 +21,7 @@ export type Version = string & { readonly __brand: "Version" };
 export const Version = {
   of(value: string): Result<Version, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[0-9]+(\\.[0-9]+)*" + ")$", "u").test(value))) {
-      return Err({ field: "Version", message: "must match /[0-9]+(\\.[0-9]+)*/", value });
+      return Err({ field: "Version", message: "must match /[0-9]+(\\.[0-9]+)*/", rule: { tag: "Matches", pattern: "[0-9]+(\\.[0-9]+)*" }, value });
     }
     return Ok(value as Version);
   },

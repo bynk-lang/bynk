@@ -11,10 +11,10 @@ export type Token = string & { readonly __brand: "auth.api.Token" };
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "Token", message: "must be non-empty", value });
+      return Err({ field: "Token", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     if (!(__bynkCodePointLength(value) <= 64)) {
-      return Err({ field: "Token", message: "length must be at most 64", value });
+      return Err({ field: "Token", message: "length must be at most 64", rule: { tag: "MaxLength", limit: 64 }, value });
     }
     return Ok(value as Token);
   },

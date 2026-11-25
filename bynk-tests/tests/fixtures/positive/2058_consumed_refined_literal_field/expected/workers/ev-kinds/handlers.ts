@@ -9,10 +9,10 @@ export type Kind = number & { readonly __brand: "ev.kinds.Kind" };
 export const Kind = {
   of(value: number): Result<Kind, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Kind", message: "must be a safe integer", value });
+      return Err({ field: "Kind", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 9)) {
-      return Err({ field: "Kind", message: "must be in range [1, 9]", value });
+      return Err({ field: "Kind", message: "must be in range [1, 9]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 9 } }, value });
     }
     return Ok(value as Kind);
   },

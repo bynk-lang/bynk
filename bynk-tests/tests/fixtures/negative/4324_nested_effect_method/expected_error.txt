@@ -1,0 +1,1 @@
+bynk.types.nested_effect `Effect[Effect[Int]]` nests an `Effect` in another `Effect`

@@ -15,7 +15,7 @@ export type AuthId = string & { readonly __brand: "commerce.order.AuthId" };
 export const AuthId = {
   of(value: string): Result<AuthId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "AuthId", message: "must be non-empty", value });
+      return Err({ field: "AuthId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     return Ok(value as AuthId);
   },

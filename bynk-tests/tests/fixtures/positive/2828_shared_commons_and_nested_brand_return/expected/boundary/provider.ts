@@ -26,7 +26,7 @@ export type Reply = string & { readonly __brand: "boundary.provider.Reply" };
 export const Reply = {
   of(value: string): Result<Reply, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 8)) {
-      return Err({ field: "Reply", message: "length must be at most 8", value });
+      return Err({ field: "Reply", message: "length must be at most 8", rule: { tag: "MaxLength", limit: 8 }, value });
     }
     return Ok(value as Reply);
   },
@@ -53,7 +53,7 @@ export type Token = string & { readonly __brand: "boundary.provider.Token" };
 export const Token = {
   of(value: string): Result<Token, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 8)) {
-      return Err({ field: "Token", message: "length must be at most 8", value });
+      return Err({ field: "Token", message: "length must be at most 8", rule: { tag: "MaxLength", limit: 8 }, value });
     }
     return Ok(value as Token);
   },

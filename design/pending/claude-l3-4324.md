@@ -1,0 +1,16 @@
+---
+level: minor
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
+changelog: An `Effect` can no longer wrap another `Effect`, as written or through a call's instantiation: `bynk.types.nested_effect`
+breaking: a program that writes `Effect[Effect[T]]`, or that instantiates a generic function so it wraps one effect in another (`wrap(e)` with `e: Effect[_]`, or `Effect.pure(e)`), now gets `bynk.types.nested_effect`; such a program type-checked before but failed at run time when a method was called on the flattened value. Sequence the effects with `andThen` or `<-` instead.
+---
+
+## ADR: no-nested-effect
+title: An Effect cannot wrap another Effect
+summary: Refuses Effect[Effect[T]], written or built by instantiation, because effects are promises and flatten at runtime
+
+**Context.** An `Effect` lowers to a promise, and promises flatten, so `Effect[Effect[T]]` cannot exist at runtime. The type could nevertheless be written and constructed (`fn nested(e: Effect[Int]) -> Effect[Effect[Int]] { Effect.pure(e) }`, or through a generic `wrap[T](x: T) -> Effect[T]` instantiated with an effect): after `let inner <- nested(e)` the checker called `inner` an `Effect[Int]` while at runtime it was already the `Int`, so a method called on it threw. A well-typed program crashed. Found reviewing #3965.
+
+**Decision.** Refuse the shape in the type system rather than box it. Boxing would put a wrapper and an allocation on every generic effect path for a shape nobody needs: to sequence effects you write `andThen` or `<-`. `bynk.types.nested_effect` is raised in two places. At type resolution, a written `Effect[Effect[_]]` is refused at any depth and inside any type argument. At instantiation, a call whose type variable is filled with an `Effect` where the signature wraps it in another is refused, `Effect.pure(e)` with `e: Effect[_]`, and a generic `wrap(e)`, for functions and for methods of a generic type, labelled at the first argument whose parameter mentions the type variable the effect filled. A kernel method that wraps a caller-chosen type in an `Effect` (`q.fold(e0, ..)` with `e0: Effect[Int]`) is covered by one check on the result of every method call, labelled at the call, so no kernel path is missed. The refusal is about the instantiated type, not the signature, so `fn mapE[T, U](e: Effect[T], f: T -> U) -> Effect[U]` stays legal and a `List[Effect[T]]` or `Option[Effect[T]]` is unaffected. The note names `andThen` (the issue said `flatMap`; the method is `andThen`).
+
+**Consequences.** Breaking only for a program that was already unsound at run time, which is why it lands before 1.0. The check is structural on the checked type, so it also covers an effect nested inside another type argument. The checker does not crash on the refused shapes: the resolver stops at the written type, and an instantiation yields no type for the call. No repository fixture or example relied on the shape. One gap remains: a user generic type whose field wraps its parameter in an `Effect` (`type Wrap[T] = { v: Effect[T] }`), instantiated with an effect (`Wrap[Effect[Int]]`), has a nested effect in its field type that a structural check on the type's arguments does not see. That would be a separate decision if it ever matters.

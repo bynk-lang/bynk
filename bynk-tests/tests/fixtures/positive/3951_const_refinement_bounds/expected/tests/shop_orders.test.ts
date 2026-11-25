@@ -30,10 +30,10 @@ async function test_a_quantity_is_bounded_by_the_constants() {
     const Batch = {
       of(value: number): Result<Batch, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Batch", message: "must be a safe integer", value });
+          return Err({ field: "Batch", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value >= 1 && value <= 100)) {
-          return Err({ field: "Batch", message: "must be in range [1, 100]", value });
+          return Err({ field: "Batch", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
         }
         return Ok(value as Batch);
       },
@@ -42,10 +42,10 @@ async function test_a_quantity_is_bounded_by_the_constants() {
     const Handful = {
       of(value: number): Result<Handful, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Handful", message: "must be a safe integer", value });
+          return Err({ field: "Handful", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value <= 3)) {
-          return Err({ field: "Handful", message: "must be at most 3", value });
+          return Err({ field: "Handful", message: "must be at most 3", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 3 } }, value });
         }
         return Ok(value as Handful);
       },
@@ -222,10 +222,10 @@ async function test_a_note_is_bounded_by_a_length_constant() {
     const Batch = {
       of(value: number): Result<Batch, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Batch", message: "must be a safe integer", value });
+          return Err({ field: "Batch", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value >= 1 && value <= 100)) {
-          return Err({ field: "Batch", message: "must be in range [1, 100]", value });
+          return Err({ field: "Batch", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
         }
         return Ok(value as Batch);
       },
@@ -234,10 +234,10 @@ async function test_a_note_is_bounded_by_a_length_constant() {
     const Handful = {
       of(value: number): Result<Handful, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Handful", message: "must be a safe integer", value });
+          return Err({ field: "Handful", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value <= 3)) {
-          return Err({ field: "Handful", message: "must be at most 3", value });
+          return Err({ field: "Handful", message: "must be at most 3", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 3 } }, value });
         }
         return Ok(value as Handful);
       },
@@ -412,10 +412,10 @@ async function test_a_pattern_constant_is_the_pattern() {
     const Batch = {
       of(value: number): Result<Batch, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Batch", message: "must be a safe integer", value });
+          return Err({ field: "Batch", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value >= 1 && value <= 100)) {
-          return Err({ field: "Batch", message: "must be in range [1, 100]", value });
+          return Err({ field: "Batch", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
         }
         return Ok(value as Batch);
       },
@@ -424,10 +424,10 @@ async function test_a_pattern_constant_is_the_pattern() {
     const Handful = {
       of(value: number): Result<Handful, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Handful", message: "must be a safe integer", value });
+          return Err({ field: "Handful", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value <= 3)) {
-          return Err({ field: "Handful", message: "must be at most 3", value });
+          return Err({ field: "Handful", message: "must be at most 3", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 3 } }, value });
         }
         return Ok(value as Handful);
       },
@@ -602,10 +602,10 @@ async function test_a_float_bound_constant() {
     const Batch = {
       of(value: number): Result<Batch, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Batch", message: "must be a safe integer", value });
+          return Err({ field: "Batch", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value >= 1 && value <= 100)) {
-          return Err({ field: "Batch", message: "must be in range [1, 100]", value });
+          return Err({ field: "Batch", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
         }
         return Ok(value as Batch);
       },
@@ -614,10 +614,10 @@ async function test_a_float_bound_constant() {
     const Handful = {
       of(value: number): Result<Handful, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Handful", message: "must be a safe integer", value });
+          return Err({ field: "Handful", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value <= 3)) {
-          return Err({ field: "Handful", message: "must be at most 3", value });
+          return Err({ field: "Handful", message: "must be at most 3", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 3 } }, value });
         }
         return Ok(value as Handful);
       },
@@ -792,10 +792,10 @@ async function test_a_literal_at_the_constant_s_value_is_admitted_at_compile_tim
     const Batch = {
       of(value: number): Result<Batch, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Batch", message: "must be a safe integer", value });
+          return Err({ field: "Batch", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value >= 1 && value <= 100)) {
-          return Err({ field: "Batch", message: "must be in range [1, 100]", value });
+          return Err({ field: "Batch", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
         }
         return Ok(value as Batch);
       },
@@ -804,10 +804,10 @@ async function test_a_literal_at_the_constant_s_value_is_admitted_at_compile_tim
     const Handful = {
       of(value: number): Result<Handful, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Handful", message: "must be a safe integer", value });
+          return Err({ field: "Handful", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value <= 3)) {
-          return Err({ field: "Handful", message: "must be at most 3", value });
+          return Err({ field: "Handful", message: "must be at most 3", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 3 } }, value });
         }
         return Ok(value as Handful);
       },
@@ -982,10 +982,10 @@ async function test_a_suite_s_own_types_take_constant_bounds_too() {
     const Batch = {
       of(value: number): Result<Batch, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Batch", message: "must be a safe integer", value });
+          return Err({ field: "Batch", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value >= 1 && value <= 100)) {
-          return Err({ field: "Batch", message: "must be in range [1, 100]", value });
+          return Err({ field: "Batch", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
         }
         return Ok(value as Batch);
       },
@@ -994,10 +994,10 @@ async function test_a_suite_s_own_types_take_constant_bounds_too() {
     const Handful = {
       of(value: number): Result<Handful, ValidationError> {
         if (!globalThis.Number.isSafeInteger(value)) {
-          return Err({ field: "Handful", message: "must be a safe integer", value });
+          return Err({ field: "Handful", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
         }
         if (!(value <= 3)) {
-          return Err({ field: "Handful", message: "must be at most 3", value });
+          return Err({ field: "Handful", message: "must be at most 3", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 3 } }, value });
         }
         return Ok(value as Handful);
       },

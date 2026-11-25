@@ -2,6 +2,7 @@
 // test target: app
 
 import { Some, None, type Option } from "../__bynk_runtime/result.js";
+import { __stubAgents } from "../__bynk_runtime/agent.js";
 import * as __ns_app from "./../app.js";
 import * as __ns_bynk from "./../bynk.js";
 import * as __ns_greet from "./../greet.js";
@@ -116,6 +117,7 @@ function __makeTestDeps(__case?: string) {
   return { Greeter: __bynkOverlay(undefined, new __Stub_Greeter(__case), "Greeter") as __ns_greet.Greeter, Secrets: __bynkOverlay(__bynkTest_Secrets(), new __Stub_Secrets(__case), "Secrets") as __ns_bynk.Secrets };
 }
 function __makeIntegrationDeps(__case?: string) {
+  __stubAgents([]);
   const __dep_Secrets = __bynkOverlay(__bynkTest_Secrets(), new __Stub_Secrets(__case), "Secrets") as __ns_bynk.Secrets;
   return { Greeter: __bynkOverlay(new greet__binding.PlainGreeter({ Clock: __bynkTest_Clock(), Secrets: __dep_Secrets }), new __Stub_Greeter(__case), "Greeter") as __ns_greet.Greeter, Secrets: __dep_Secrets };
 }

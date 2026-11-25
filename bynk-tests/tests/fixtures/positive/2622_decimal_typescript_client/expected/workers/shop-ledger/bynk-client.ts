@@ -143,7 +143,7 @@ export function __deserialise_Price(json: __JsonValue, path: string = "$"): Resu
   }
   const __v = __d.value;
   if (!((__v).coefficient > 0n)) {
-    return Err({ kind: "RefinementViolation", path, violation: { field: "Price", message: "must be positive", value: json } });
+    return Err({ kind: "RefinementViolation", path, violation: { field: "Price", message: "must be positive", rule: { tag: "Positive" }, value: json } });
   }
   return Ok(__d.value as unknown as Price);
 }

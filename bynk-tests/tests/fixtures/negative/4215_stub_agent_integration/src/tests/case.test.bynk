@@ -1,0 +1,8 @@
+// #4215: a case-scoped agent stub in an `integration` case is refused too.
+suite shop.basket as integration {
+	case "a stubbed agent over the real tier" {
+		stub Basket.add(_) unreachable
+		let r <- place.call("a", 1)
+		expect r is Err("busy")
+	}
+}

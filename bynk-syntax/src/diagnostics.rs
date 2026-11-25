@@ -817,6 +817,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   store secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
     },
     Explain {
+        code: "bynk.agents.self_operation",
+        blurb: "Inside an agent's handler, `self` is the agent's key (`self.id`), not a handle to the agent, so `self.add(…)` and `self.add.outcome(…)` do not call the agent's own operation. Call it the way any other code does, on the agent by key: `Counter(self.id).add(…)`, or `.outcome(…)` for a `CallOutcome`. To share work between two handlers, write it as a function and call that from both.",
+        example: "on call twice() -> Effect[Int] {\n\x20 let a <- self.add(1)   // ✗ `self` is the key, not a handle to `Counter`\n\x20 a\n}\n\non call twice() -> Effect[Int] {\n\x20 let a <- Counter(self.id).add(1)   // ✓ the agent, by key\n\x20 a\n}",
+    },
+    Explain {
         code: "bynk.asset.duplicate",
         blurb: "An asset is a name for a file, read as a value (`style.url`), so a unit declares each \
                 name once: a second `asset style` would leave `style` meaning two files. Give each \
@@ -2574,6 +2579,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"items\") () -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ no leading `/`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.invalid_response_header",
+        blurb: "A header name is an RFC 9110 token, so it cannot hold a space, a colon or other separator; a header value, a `Location` URL and a download filename cannot carry a line break or another control character, which would let a value forge a second header. `retryAfter` is whole seconds, so a delay under a second cannot be written. These checks run on a literal at compile time; a computed value is checked when the response is built, and a bad one answers `500` rather than sending a malformed header. See also `bynk.http.reserved_response_header`.",
+        example: "Ok(\"x\").withHeader(\"X Request Id\", \"1\")   // ✗ a name has no spaces\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+    },
+    Explain {
         code: "bynk.http.json_duplicate",
         blurb: "`@json(options: …)` chooses how one route's response bodies write an `Option`. A handler has one, because two would give the same body two encodings with nothing to say which wins, so the second is refused. Keep the one you mean. To set the encoding for every route of a service, use a `json { }` section instead. A handler may likewise carry only one `@cache` (`bynk.http.cache_duplicate`), `@limit` or `@raw`.",
         example: "@json(options: plain)\n@json(options: tagged)    // ✗ a second `@json`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)     // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -2725,6 +2735,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.reserved_prefix",
         blurb: "Two path prefixes belong to the platform. `/_bynk/` is reserved for Bynk's own dispatch, and `/_assets/` is where content-hashed static assets are served before the Worker runs, so a handler there could be shadowed by any asset. A route at either, or at the bare `/_bynk` or `/_assets`, is refused. Choose another path.",
         example: "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.reserved_response_header",
+        blurb: "`withHeader` adds a header of the handler's own, so it cannot set one the router writes itself: the caching headers (`Cache-Control`, `ETag`, `Vary`, `Expires` and the CDN directives), `Content-Type` and `Content-Length`, `Location`, `Retry-After`, `Content-Disposition`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers, `WWW-Authenticate` and `Allow`, and the hop-by-hop headers. Each has its own way in: `@cache`, a body, `.at(url)`, `withCookie`, `security { }`, `cors { }`. A name computed at run time is checked when the response is built, and a reserved one answers `500`. See also `bynk.http.invalid_response_header`.",
+        example: "Ok(\"x\").withHeader(\"Set-Cookie\", \"a=1\")   // ✗ use `withCookie`\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
     },
     Explain {
         code: "bynk.http.reserved_route_syntax",
@@ -4166,6 +4181,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
     },
     Explain {
+        code: "bynk.queue.undecodable_unreachable",
+        blurb: "`Undecodable` is the verdict a `system` case reads when a message reached a real queue and its body did not decode. Only that path can produce it: a handler builds `Ack`, `Retry` or `RetryAfter`, and a `unit` or `integration` case calls the consumer with a value that is already typed, so no message can fail to decode there. A pattern of `Undecodable` anywhere else is a dead arm that looks as if it handled something. Replace the arm with `_`, since a `match` must still be exhaustive, or, if the decode failure is what you want to test, make the case `as system` and address the queue by its context path. It is only a warning, since the arm does no harm.",
+        example: "case \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false   // ⚠ a unit case never sees this verdict\n      _ => expect false\n    }\n}\n\ncase \"a message is handled\" {\n    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack   // ✓ the verdicts a unit case can see\n}",
+    },
+    Explain {
         code: "bynk.queue.untyped_send",
         blurb: "`send`, `sendWith` and `sendBatch` take JSON text, which the compiler cannot check against the consumer's message type, so a body that does not decode is found only at run time. When a context in the project consumes the queue, they warn and name the typed form: `sendValue`, `sendValueWith` and `sendValueBatch` encode a value at the call site, put exactly the same message on the queue, and are checked against the consumer (`bynk.queue.message_type_mismatch`). The untyped forms stay legal, because they are how to forward a body that is already encoded. A queue no context in the project consumes is not warned about.",
         example: "capability OrderEvents = Queue @name(\"order-events\")\n\nlet _ <- OrderEvents.send(Json.encode(order))   // ⚠ not checked against the consumer\n\nlet _ <- OrderEvents.sendValue(order)   // ✓ checked against the consumer",
@@ -4759,6 +4779,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/meter.test.bynk\n\
                   stub Meter.read() returns 7 after 3           // ✗ no unit\n\
                   stub Meter.read() returns 7 after 3.seconds   // ✓",
+    },
+    Explain {
+        code: "bynk.stub.agent_stub",
+        blurb: "An agent operation can be stubbed with `stub <Agent>.<op>(<args>) faulted` or `unreachable`, which make every matching call to it, whatever the key, end as `Faulted` or `Unreachable(None)` in `Agent(key).op.outcome(…)`, and make a plain call fault. It is limited to what the unit-test runtime can stand in for: an agent the context under test declares (another context's agents are reached through its services, which can be stubbed), in a `unit` suite or case (an `integration` case runs the real agent), and only those two words. There is no `returns <value>`, since a stubbed value would bypass the agent's state and invariants; test those through the real agent.",
+        example: "// demo/basket.bynk\nagent Basket { … on call add(n: Int) -> Effect[Int] { … } }\n\n// tests/basket.test.bynk\nstub Basket.add(_) returns 5    // ✗ an agent is stubbed `faulted` or `unreachable`\n\nstub Basket.add(_) unreachable  // ✓ `Basket(k).add.outcome(x)` is `Unreachable(None)`",
     },
     Explain {
         code: "bynk.stub.at_system",
@@ -6146,6 +6171,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
     },
     Explain {
+        code: "bynk.types.nested_effect",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
+    },
+    Explain {
         code: "bynk.types.never_inferred",
         blurb: "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the \
                 bottom type `never returns`, which stands in for any type. If an unannotated \
@@ -7309,6 +7339,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.agents.non_zeroable_state_field",
         "An agent `store` field has no initialiser and no implicit zero value.",
         &["store_field"],
+    ),
+    d(
+        "bynk.agents.self_operation",
+        "An agent handler calls one of the agent's own operations through `self`, which is its key and not a handle.",
     ),
     d(
         "bynk.asset.duplicate",
@@ -8482,6 +8516,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     d(
+        "bynk.http.invalid_response_header",
+        "A response header method is given a malformed name, value, URL, filename or delay.",
+    ),
+    d(
         "bynk.http.json_duplicate",
         "A handler carries more than one `@json` annotation.",
     ),
@@ -8606,6 +8644,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.reserved_prefix",
         "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.reserved_response_header",
+        "`withHeader` names a header the router owns, such as `Set-Cookie`, `Cache-Control` or `Location`.",
     ),
     dg(
         "bynk.http.reserved_route_syntax",
@@ -9479,6 +9521,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["handler"],
     ),
     warn(d(
+        "bynk.queue.undecodable_unreachable",
+        "An `Undecodable` pattern of a `QueueResult` appears where the value is not a `system` case's queue verdict, so it can never match (warning).",
+    )),
+    warn(d(
         "bynk.queue.untyped_send",
         "`send`, `sendWith` or `sendBatch` sends JSON text to a queue the project consumes, which the compiler cannot check against the consumer (warning).",
     )),
@@ -9945,6 +9991,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.stub.after_type",
         "A test `stub … returns <value> after <d>` latency is not a `Duration`.",
+    ),
+    dg(
+        "bynk.stub.agent_stub",
+        "A test `stub` on an agent operation is not `faulted` or `unreachable`, is in an `integration`-tier case or suite, or names an agent of another context than the one under test.",
+        &["stub_clause"],
     ),
     dg(
         "bynk.stub.at_system",
@@ -10738,6 +10789,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.negative_length",
         "A length predicate was given a negative value.",
         &["refinement"],
+    ),
+    d(
+        "bynk.types.nested_effect",
+        "An `Effect` wraps another `Effect`, as written or through a call's instantiation; effects are promises and flatten, so the shape cannot exist (use `andThen`).",
     ),
     dg(
         "bynk.types.never_inferred",

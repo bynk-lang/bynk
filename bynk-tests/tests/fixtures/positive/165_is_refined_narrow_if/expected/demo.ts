@@ -9,10 +9,10 @@ export type Quantity = number & { readonly __brand: "Quantity" };
 export const Quantity = {
   of(value: number): Result<Quantity, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Quantity", message: "must be a safe integer", value });
+      return Err({ field: "Quantity", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 100)) {
-      return Err({ field: "Quantity", message: "must be in range [1, 100]", value });
+      return Err({ field: "Quantity", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Quantity);
   },
