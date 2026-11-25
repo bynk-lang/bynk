@@ -1371,7 +1371,11 @@ impl Backend {
         offset: usize,
         line_prefix: &str,
     ) -> Vec<CompletionItem> {
-        if !completion::is_expression_position(line_prefix) {
+        // A call argument on its own line has a whitespace-only prefix, which
+        // reads as keyword position: it counts when a call is open there.
+        let in_open_call = completion::is_keyword_position(line_prefix)
+            && bynk_ide::signature_help::call_context(text, offset).is_some();
+        if !completion::is_expression_position(line_prefix) && !in_open_call {
             return Vec::new();
         }
         let files = self.project_content(uri).await;
@@ -3909,6 +3913,12 @@ impl LanguageServer for Backend {
             .expected_type_completions(&uri, &text, offset, &line_prefix)
             .await;
         if !expected.is_empty() {
+            // `Ok`/`Err`/`Some`/`None` are also offered as constructors at an
+            // expression position: the ranked variant replaces that copy.
+            items.retain(|i| {
+                i.kind != Some(CompletionItemKind::CONSTRUCTOR)
+                    || !expected.iter().any(|e| e.label == i.label)
+            });
             expected.append(&mut items);
             items = expected;
         }
@@ -11206,7 +11216,7 @@ mod tests {
     /// list; elsewhere a value position gets no such ranking.
     #[tokio::test]
     async fn expected_type_variants_lead_in_comparison_let_and_argument() {
-        let src = "context shop\n\ntype Level = | Low | High\n\nfn pick(n: Int, l: Level) -> Int { n }\n\nfn cmp(e: Level) -> Bool {\n  e == \n}\n\nfn ann() -> Int {\n  let x: Level = \n  0\n}\n\nfn arg() -> Int {\n  pick(1, \n}\n\nfn plain() -> Int {\n  let y = \n  0\n}\n";
+        let src = "context shop\n\ntype Level = | Low | High\n\nfn pick(n: Int, l: Level) -> Int { n }\n\nfn cmp(e: Level) -> Bool {\n  e == \n}\n\nfn ann() -> Int {\n  let x: Level = \n  0\n}\n\nfn arg() -> Int {\n  pick(1, \n}\n\nfn res() -> Int {\n  let r: Result[Int, String] = \n  0\n}\n\nfn own() -> Int {\n  pick(\n    1,\n    \n}\n\nfn plain() -> Int {\n  let y = \n  0\n}\n";
         let s = scratch_project(
             "expected_type_variants",
             &[
@@ -11234,6 +11244,31 @@ mod tests {
                 "the variants lead the list after `{needle}`"
             );
         }
+        // `Result`'s variants replace, rather than repeat, the constructors.
+        let r = complete_items(&backend, &uri, src, "let r: Result[Int, String] = ", None).await;
+        for label in ["Ok", "Err"] {
+            assert_eq!(
+                r.iter().filter(|i| i.label == label).count(),
+                1,
+                "`{label}` is offered once: {:?}",
+                r.iter().map(|i| &i.label).collect::<Vec<_>>()
+            );
+            assert!(
+                r.iter()
+                    .find(|i| i.label == label)
+                    .and_then(|i| i.sort_text.as_deref())
+                    .is_some_and(|s| s.starts_with("0_")),
+                "`{label}` is ranked"
+            );
+        }
+        // An argument on its own line is ranked too.
+        let own_line = complete_items(&backend, &uri, src, "pick(\n    1,\n    ", None).await;
+        assert!(
+            own_line
+                .iter()
+                .any(|i| i.label == "Low" && i.sort_text.as_deref() == Some("0_Low")),
+            "an argument on its own line is ranked"
+        );
         let plain = complete_items(&backend, &uri, src, "let y = ", None).await;
         assert!(
             plain.iter().all(|i| i.sort_text.is_none()),

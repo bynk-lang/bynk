@@ -73,6 +73,13 @@ pub fn argument_type(
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Option<String> {
     let ctx = call_context(text, offset)?;
+    // Only where the argument is just being started: after an operator the
+    // operand being typed is not of the parameter's type.
+    let typed = text.get(ctx.open_paren + 1..offset)?;
+    let current = typed.rsplit(',').next().unwrap_or(typed).trim();
+    if !current.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
     let label = resolve_label(&ctx.callee, text, files)?;
     let (start, end) = *param_ranges(&label).get(ctx.active_param)?;
     let param = label.get(start..end)?;
@@ -133,6 +140,9 @@ mod tests {
             argument_type(doc, doc.len(), None).as_deref(),
             Some("Level")
         );
+        // After an operator the operand is not of the parameter's type.
+        let after_op = format!("{doc}n + ");
+        assert_eq!(argument_type(&after_op, after_op.len(), None), None);
         let first = doc.replace("pick(1, ", "pick(");
         assert_eq!(
             argument_type(&first, first.len(), None).as_deref(),
