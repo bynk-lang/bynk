@@ -1,0 +1,42 @@
+================================================================================
+a commons consumes types in braces (#4044)
+================================================================================
+
+commons app.errors
+
+consumes bynk { TimedOut }
+consumes bynk.cloudflare { SqlError, KvEntry as Entry }
+
+fn id(x: Int) -> Int {
+  x
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (commons_decl
+    name: (qualified_name
+      (identifier)
+      (identifier))
+    (consumes_decl
+      target: (qualified_name
+        (identifier))
+      (consumes_item
+        name: (identifier)))
+    (consumes_decl
+      target: (qualified_name
+        (identifier)
+        (identifier))
+      (consumes_item
+        name: (identifier))
+      (consumes_item
+        name: (identifier)
+        alias: (identifier)))
+    (fn_decl
+      name: (identifier)
+      (param
+        name: (identifier)
+        type: (base_type))
+      return_type: (base_type)
+      body: (block
+        tail: (identifier)))))

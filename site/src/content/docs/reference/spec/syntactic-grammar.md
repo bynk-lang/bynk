@@ -194,7 +194,8 @@ names that merely share a leading segment.
 
 {{#grammar uses_decl}}
 
-`uses` followed by a qualified name. Well-formedness: §5.
+`uses` followed by a qualified name, and optionally an alias (`as Y`) or a braced list of
+names, each optionally renamed (`{ Status as YStatus, describe }`). Well-formedness: §5.
 
 ### §4.1.17 consumes_decl
 
@@ -428,6 +429,13 @@ arguments — `Paginated[User]`, `Keyed[String, Int]`. The head is a user type
 name declared `type Name[T, …] = { … }` (a record). A generic type must be
 applied to exactly its declared number of arguments, and a generic record is a
 **non-boundary** value. Well-formedness: §5; the type system: §6.
+
+### §4.2.20b qualified_type_ref
+
+{{#grammar qualified_type_ref}}
+
+A type named through a `uses` clause: `Y.Status` by an alias, `lib.y.Status` by the
+commons' full name. Well-formedness: §5; the type system: §6.
 
 ## §4.3 Functions, capabilities & providers
 

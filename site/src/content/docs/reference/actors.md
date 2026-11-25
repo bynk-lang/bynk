@@ -41,8 +41,8 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 - A `Signature` actor takes **no** `identity` and a handler using it **must** take
   a `body`; it is HTTP-only.
 - An **`Oidc`** actor names **no secret** — its trust root is the provider's
-  public JWKS. It is HTTP-only and, this slice, single-actor only (not a sum
-  member, not a refinement base); `alg: none` and symmetric `HS*` are rejected, as is a
+  public JWKS. It is HTTP-only and may be a member of a sum ([a cookie or a token on one route](#a-cookie-or-a-token-on-one-route)), but
+  not a refinement base; `alg: none` and symmetric `HS*` are rejected, as is a
   token whose `sub` is empty or missing. A `system` suite can show the seam does so
   (`by WrongAlgorithm`, `by NoSubject`; see
   [the failure principals](/reference/testing/#failure-principals)).
@@ -158,9 +158,44 @@ cookie can read its `sub`, so never put a secret in an identity. It cannot be re
 stolen device. Rotating `secret` (moving the old value to `previous`, then dropping it) is how every
 cookie is ended at once.
 
-A `SignedCookie` actor stands alone on its route, like `Oidc`
-(`bynk.actor.signed_cookie_not_in_sum`), cannot be the base of a refinement actor, and cannot guard
-a `@cache(scope: public)` route (`bynk.actor.signed_cookie_public_cache`).
+A `SignedCookie` actor may be a member of a sum, so one route admits a browser's session cookie or an
+API client's token (below). It cannot be the base of a refinement actor, and cannot guard a
+`@cache(scope: public)` route (`bynk.actor.signed_cookie_public_cache`).
+
+### A cookie or a token on one route
+
+```bynk,fragment
+actor User      { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
+actor ApiClient { auth = Oidc(issuer = "https://id.example", audience = "api", jwks = "https://id.example/jwks"), identity = UserId }
+
+service api from http {
+  on POST("/orders") (body: NewOrder) -> Effect[HttpResult[Order]] by who: ApiClient | User {
+    match who {
+      ApiClient(c) => Ok(c)
+      User(u)      => Ok(u)
+    }
+  }
+}
+```
+
+The members are checked **in the order they are written**, and the first that verifies is the actor the
+body matches on. Each arm runs its own seam, so the cookie arm's cross-site check belongs to the cookie arm:
+
+- A request with **no session cookie** never meets it. A token client that sends only `Authorization`
+  is checked by the token arm, whichever is listed first.
+- A **state-changing** request with a session cookie must pass the cross-site check
+  (`Sec-Fetch-Site: same-origin`, or an `Origin` among the service's credentialed `cors` origins) for
+  the cookie arm to resolve. A cross-site request carrying **only** a cookie is refused `403`, and the
+  same request carrying a valid token is admitted by the token arm.
+- A request that no arm resolves is `401`, as for any sum, unless the cookie arm refused it as cross-site,
+  which is `403`.
+- A request carrying **both** a cookie and a token is resolved by the order. List the token arm first
+  when clients may hold both, so an explicit token wins over an ambient cookie, and a cross-site
+  page cannot succeed through the cookie by attaching a forged token.
+
+An arm's identity is its `identity`, as in any sum. A sum arm does not read `.claims` yet (#4344). Two
+cookie members, or two members of one scheme, are still refused (`bynk.actor.duplicate_sum_scheme`), as is
+a refinement in a sum (`bynk.actor.refinement_in_sum`).
 
 ## Reading claims
 
@@ -276,12 +311,15 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   inserts it. A refinement of `Producer` (`actor Shop = Producer where IsContext(shop)`)
   and a `Foreign` actor are valid declarations, but naming one on an `on message`
   handler is `bynk.actor.queue_actor_not_enforced` until queue delivery verifies the
-  sender. The platform-only protocols default: cron → `Scheduler`,
-  email → `Sender`. An agent's `on call` operations are reached only from inside
+  sender. An email `on message` handler writes at least `by Sender`, the explicit
+  "any mail" (`bynk.actor.missing_by_on_email`); `bynk check --fix=bynk.actor.missing_by_on_email`
+  inserts it. The platform-only protocol defaults: cron → `Scheduler`. An agent's
+  `on call` operations are reached only from inside
   their own context, so they name no caller.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.
   Peers are distinguished by scheme (no duplicates), a `None` catch-all is last,
-  `Bearer` refinements are not members, and total failure is `401`. On `call`, a
+  refinements are not members, and total failure is `401`. `SignedCookie` and `Oidc` actors may be
+  members ([a cookie or a token on one route](#a-cookie-or-a-token-on-one-route)). On `call`, a
   sum admits a Bynk context (`Caller`, or one refinement over it) and declared
   foreign callers, each told apart by name: `by who: Caller | Legacy | Ledger`.
   A sum has at most one `Internal` member (`bynk.actor.duplicate_sum_scheme`).
@@ -304,6 +342,16 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   `bynk.actor.caller_not_admitted` at the call, in a case's `by Admin("…")` too;
   the callee also answers such a call `403` (wire format check 6). See
   [Restrict who may call](/book/guides/actors/cross-context-callers/#restrict-who-may-call).
+- **Refinements over `Sender`** (`actor Authenticated = Sender where Dmarc(DmarcPass)`)
+  admit only mail whose DMARC verdict is one of those listed, and the Worker
+  refuses other mail with the reason `sender not authenticated` before the handler
+  runs (a refusal, not a fault, so it is logged by outcome only). `Dmarc(<verdict>, …)`
+  takes `DmarcPass`, `DmarcFail` or `DmarcNone`, composes with `&&`, `||` and `!`
+  (`!Dmarc(DmarcFail)` admits a pass or no verdict), and is admissible only over
+  `Sender`; over another base it is `bynk.actor.refinement_predicate_unsupported`.
+  The refinement inherits `Sender`'s scheme and `SenderIdentity`, so `by s: Authenticated`
+  binds the same record. `Sender` and its refinements share the `Internal` scheme, so at
+  most one of them appears in a sum.
 - **`Caller`** (on `on call`) yields the calling context's qualified name as
   `CallerId`. It admits Bynk contexts only: a foreign caller is admitted by its
   own actor, never by `Caller`, so a handler that names only `Caller` refuses
@@ -327,7 +375,7 @@ them `missing_by_on_http`, `scheme_not_admissible`, `signature_requires_body`,
 `caller_not_admitted`, `unknown_context`,
 `refinement_base_unsupported`, `refinement_predicate_unsupported`,
 `oidc_missing_issuer`, `oidc_missing_audience`, `oidc_missing_jwks`,
-`oidc_identity_not_string_constructible`, `oidc_not_in_sum`,
+`oidc_identity_not_string_constructible`,
 `foreign_missing_secret`, `foreign_reserved_secret`,
 `foreign_name_is_context_name`, `foreign_identity_unsupported`,
 `foreign_secret_not_string`, `foreign_duplicate_secret`, and the `signed_cookie_*` family.

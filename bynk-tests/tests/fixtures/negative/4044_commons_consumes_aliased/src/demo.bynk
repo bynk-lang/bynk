@@ -1,0 +1,10 @@
+---
+#4044: nor an aliased one.
+---
+commons demo
+
+consumes bynk as B
+
+fn id(x: Int) -> Int {
+	x
+}

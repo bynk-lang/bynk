@@ -173,13 +173,11 @@ pub fn prelude_actor(name: &str) -> Option<Contract> {
 /// The default actor a handler inherits when it omits `by`, by protocol (ADR
 /// Q5). HTTP and WebSocket have no safe default — `by` is required there — and
 /// neither has `call` (#3891, superseding ADR 0082's `Caller` default) nor `queue`
-/// (#3899: who may send to a consumer is an access decision).
+/// (#3899: who may send to a consumer is an access decision) nor email (#3888:
+/// whether to act on mail that failed DMARC is a written decision).
 pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
     match protocol {
         ServiceProtocol::Cron => Some("Scheduler"),
-        // #3328 (DECISION E): inbound mail's default actor is the envelope
-        // sender, carrying its address and the platform's DMARC verdict.
-        ServiceProtocol::Email { .. } => Some("Sender"),
         // Events track, slice 0 (spine #936): delivery is runtime-triggered,
         // not an external caller — like `Queue`'s "Producer", the default
         // actor names the event's originating publisher.
@@ -189,7 +187,8 @@ pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
         ServiceProtocol::Call
         | ServiceProtocol::Http
         | ServiceProtocol::Queue { .. }
-        | ServiceProtocol::WebSocket { .. } => None,
+        | ServiceProtocol::WebSocket { .. }
+        | ServiceProtocol::Email { .. } => None,
     }
 }
 
@@ -420,8 +419,13 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         return None;
     }
     let actor = actors.get(&by.primary().name)?;
-    // A refinement's `auth` is `None`; it falls through here and follows the
-    // Bearer refinement path (or is rejected). An Oidc base is not narrowed.
+    oidc_seam_of(actor, by.binder.as_ref().map(|b| b.name.clone()))
+}
+
+/// The seam of one `Oidc` actor declaration (a handler's single actor, or a member of a sum, #3936).
+/// A refinement's `auth` is `None`, so it follows the Bearer refinement path; an `Oidc` base is not
+/// narrowed.
+pub fn oidc_seam_of(actor: &ActorDecl, binder: Option<String>) -> Option<OidcSeam> {
     if Scheme::from_name(actor.auth.as_ref()?.name.as_str()) != Some(Scheme::Oidc) {
         return None;
     }
@@ -432,7 +436,7 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
         return None;
     };
     Some(OidcSeam {
-        binder: by.binder.as_ref().map(|b| b.name.clone()),
+        binder,
         issuer,
         audience,
         jwks,
@@ -744,7 +748,13 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
             .get(&a.name)
             .and_then(|d| d.auth.as_ref())
             .and_then(|auth| Scheme::from_name(auth.name.as_str()))
-            .is_some_and(|s| matches!(s, Scheme::Bearer | Scheme::Signature))
+            .is_some_and(|s| {
+                // #3936: an `Oidc` or `SignedCookie` member refuses a missing credential too.
+                matches!(
+                    s,
+                    Scheme::Bearer | Scheme::Signature | Scheme::Oidc | Scheme::SignedCookie
+                )
+            })
     })
 }
 
@@ -838,6 +848,12 @@ pub enum SumMemberSeam {
         identity_type: String,
     },
     Signature(SignatureSeam),
+    /// #3936: an `Oidc` member, verified by the same JWKS seam as a single-actor route (no binder:
+    /// the sum's `who` carries the identity).
+    Oidc(OidcSeam),
+    /// #3936: a `SignedCookie` member. Its CSRF check belongs to this arm: it runs when the arm is
+    /// tried and a session cookie is present.
+    SignedCookie(SignedCookieSeam),
 }
 
 impl SumMember {
@@ -850,7 +866,9 @@ impl SumMember {
     pub fn identity_type(&self) -> Option<&str> {
         match &self.seam {
             SumMemberSeam::Bearer { identity_type, .. } => Some(identity_type),
-            _ => None,
+            SumMemberSeam::Oidc(seam) => Some(&seam.identity_type),
+            SumMemberSeam::SignedCookie(seam) => Some(&seam.identity_type),
+            SumMemberSeam::None | SumMemberSeam::Signature(_) => None,
         }
     }
 }
@@ -883,17 +901,12 @@ pub fn sum_members_for(
                     }
                 }
                 Scheme::Signature => SumMemberSeam::Signature(signature_seam_from_decl(decl)?),
-                // v0.151: `Oidc` is single-actor only this slice — the checker
-                // rejects it as a sum member (`bynk.actor.oidc_not_in_sum`), so
-                // a well-formed program never reaches here with an Oidc peer.
-                // Return `None` (fail closed → no sum emission) defensively.
-                Scheme::Oidc => return None,
+                Scheme::Oidc => SumMemberSeam::Oidc(oidc_seam_of(decl, None)?),
+                Scheme::SignedCookie => {
+                    SumMemberSeam::SignedCookie(signed_cookie_seam_of(decl, None)?)
+                }
                 // I3: a `Foreign` sum is a `call` sum (`call_admission_for`).
                 Scheme::Internal | Scheme::Foreign => return None,
-                // #3386: `SignedCookie` is single-actor only in its first slice
-                // (`bynk.actor.signed_cookie_not_in_sum`), so a well-formed
-                // program never reaches here with one; fail closed.
-                Scheme::SignedCookie => return None,
             }
         } else {
             // A prelude actor: only `Visitor` (scheme `None`) is an HTTP peer.
@@ -908,6 +921,48 @@ pub fn sum_members_for(
         });
     }
     Some(members)
+}
+
+/// #3994, #4266: the credential headers a route's seam consumes, each with the actor that consumes
+/// it, in a stable order and each header once: `authorization` for a `Bearer` or `Oidc` actor, the
+/// signature header for a `Signature` one. An actor sum hides what any member reads, because the
+/// entry builds the request's header view before the sum's wrapper resolves which member matched.
+pub fn consumed_credential_headers(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut hide = |name: &str, actor: &str| {
+        let name = name.to_ascii_lowercase();
+        if !out.iter().any(|(h, _)| *h == name) {
+            out.push((name, actor.to_string()));
+        }
+    };
+    if let Some(members) = sum_members_for(handler, actors) {
+        for m in &members {
+            match &m.seam {
+                SumMemberSeam::Bearer { .. } | SumMemberSeam::Oidc(_) => {
+                    hide("authorization", &m.actor_name)
+                }
+                SumMemberSeam::Signature(s) => hide(&s.header, &m.actor_name),
+                // #3936: the cookie arm's cookie is hidden by name, not by header.
+                SumMemberSeam::SignedCookie(_) | SumMemberSeam::None => {}
+            }
+        }
+        return out;
+    }
+    let primary = handler
+        .by_clause
+        .as_ref()
+        .map(|by| by.primary().name.clone())
+        .unwrap_or_default();
+    if bearer_seam_for(handler, actors).is_some() || oidc_seam_for(handler, actors).is_some() {
+        hide("authorization", &primary);
+    }
+    if let Some(s) = signature_seam_for(handler, actors) {
+        hide(&s.header, &primary);
+    }
+    out
 }
 
 /// Whether `scheme` is admissible on `protocol` (the admissible-scheme-per-
@@ -1048,6 +1103,95 @@ impl CallerPredicate {
             CallerPredicate::Not(inner) => inner.mentioned(),
         }
     }
+}
+
+/// #3888: the closed predicate vocabulary for a refinement over `Sender`
+/// (`actor Authenticated = Sender where Dmarc(DmarcPass)`). `Dmarc` is a fixed,
+/// compiler-known check (capitalised, as `IsContext` is). The DMARC verdict
+/// has three values, so a predicate is decided by evaluating it against each
+/// one: the emitted route carries the verdicts it admits, and the Worker
+/// refuses other mail before the handler runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SenderPredicate {
+    /// `Dmarc(DmarcPass, …)` — the verdict is one of those listed.
+    Dmarc(Vec<String>),
+    And(Box<SenderPredicate>, Box<SenderPredicate>),
+    Or(Box<SenderPredicate>, Box<SenderPredicate>),
+    Not(Box<SenderPredicate>),
+}
+
+/// The `DmarcVerdict` variants, as a handler's `s.identity.dmarc` reads them.
+pub const DMARC_VERDICTS: [&str; 3] = ["DmarcPass", "DmarcFail", "DmarcNone"];
+
+impl SenderPredicate {
+    /// Whether mail with the named verdict passes the predicate.
+    pub fn admits(&self, verdict: &str) -> bool {
+        match self {
+            SenderPredicate::Dmarc(names) => names.iter().any(|n| n == verdict),
+            SenderPredicate::And(l, r) => l.admits(verdict) && r.admits(verdict),
+            SenderPredicate::Or(l, r) => l.admits(verdict) || r.admits(verdict),
+            SenderPredicate::Not(inner) => !inner.admits(verdict),
+        }
+    }
+
+    /// The verdicts the predicate admits, in `DMARC_VERDICTS` order.
+    pub fn admitted(&self) -> Vec<&'static str> {
+        DMARC_VERDICTS
+            .into_iter()
+            .filter(|v| self.admits(v))
+            .collect()
+    }
+}
+
+/// Recognise the `Sender` predicate vocabulary in a refinement `where`
+/// expression. `Err(span)` points at the first sub-expression outside it,
+/// including a `Dmarc` argument that is not a `DmarcVerdict` variant.
+pub fn parse_sender_predicate(e: &Expr) -> Result<SenderPredicate, Span> {
+    match &e.kind {
+        ExprKind::Paren(inner) => parse_sender_predicate(inner),
+        ExprKind::BinOp(BinOp::And, l, r) => Ok(SenderPredicate::And(
+            Box::new(parse_sender_predicate(l)?),
+            Box::new(parse_sender_predicate(r)?),
+        )),
+        ExprKind::BinOp(BinOp::Or, l, r) => Ok(SenderPredicate::Or(
+            Box::new(parse_sender_predicate(l)?),
+            Box::new(parse_sender_predicate(r)?),
+        )),
+        ExprKind::UnaryOp(UnaryOp::Not, inner) => Ok(SenderPredicate::Not(Box::new(
+            parse_sender_predicate(inner)?,
+        ))),
+        ExprKind::Call {
+            name,
+            type_args,
+            args,
+            ..
+        } if type_args.is_empty() && name.name == "Dmarc" && !args.is_empty() => args
+            .iter()
+            .map(|a| match &a.kind {
+                ExprKind::Ident(id) if DMARC_VERDICTS.contains(&id.name.as_str()) => {
+                    Ok(id.name.clone())
+                }
+                _ => Err(a.span),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(SenderPredicate::Dmarc),
+        ExprKind::Call { name, .. } => Err(name.span),
+        _ => Err(e.span),
+    }
+}
+
+/// #3888: the predicate of a refinement over the prelude `Sender` actor, or
+/// `None` for any other actor (a malformed predicate reads as `None` too: the
+/// checker reports it).
+pub fn sender_refinement(
+    decl: &ActorDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<SenderPredicate> {
+    let r = decl.refinement.as_ref()?;
+    if r.base.name != "Sender" || actors.contains_key("Sender") {
+        return None;
+    }
+    parse_sender_predicate(&r.predicate).ok()
 }
 
 /// A qualified name written as an expression: `shop.admin` is a field access

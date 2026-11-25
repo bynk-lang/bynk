@@ -1,0 +1,5 @@
+commons lib.util
+
+fn total() -> Int {
+  1
+}

@@ -6,7 +6,7 @@ consumes bynk.cloudflare {
 }
 
 service sales from email("HELP@shop.example") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     Accept
   }
 }

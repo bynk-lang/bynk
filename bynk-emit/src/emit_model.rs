@@ -1005,6 +1005,11 @@ pub enum ExtraImport {
         from: String,
         type_only: bool,
     },
+    /// #4045: the qualifier a `uses` clause introduces, so `Y.Status` and
+    /// `Y.describe(x)` (or `lib.y.Status` by the full commons name) read as written
+    /// in TypeScript. `qualifier` is `Y` or `lib.y`: the first imports the module as
+    /// a namespace, the second also declares `namespace lib { export import y = … }`.
+    Qualifier { qualifier: String, from: String },
 }
 
 pub struct EmitProjectCtx {

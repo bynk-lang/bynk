@@ -73,6 +73,7 @@ mod list_more;
 mod list_par;
 mod list_par_with;
 pub(crate) mod nested_effect;
+pub(crate) mod nested_wrapper;
 mod par;
 mod query_more;
 mod query_par;

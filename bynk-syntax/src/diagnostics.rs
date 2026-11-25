@@ -210,6 +210,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "context shop\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] {   // ✗ who may call this?\n\x20   total\n\x20 }\n}\n\nservice authorise {\n\x20 on call(total: Int) -> Effect[Int] by Caller {   // ✓ any consuming context, said outright\n\x20   total\n\x20 }\n}",
     },
     Explain {
+        code: "bynk.actor.missing_by_on_email",
+        blurb: "Inbound mail comes from the internet, and the platform reports a DMARC verdict on it that can be a pass, a fail or absent. Whether a handler acts on mail that failed authentication is a decision, so an email `on message` handler states its actor with a `by` clause instead of inheriting one. `by Sender` is the explicit \"any mail\", which is what an email handler meant before the clause was required, and `s.identity.dmarc` carries the verdict for a handler that wants to check it. The error's fix inserts `by Sender`, and `bynk check --fix=bynk.actor.missing_by_on_email` migrates a whole project. A header default, `service support from email(\"support@shop.example\") by Sender`, covers a handler without its own `by`.",
+        example: "context shop\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✗ what mail does this act on?\n    Accept\n  }\n}\n\nservice support from email(\"support@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓ any mail, said outright\n    Accept\n  }\n}",
+    },
+    Explain {
         code: "bynk.actor.missing_by_on_http",
         blurb: "An HTTP handler can be reached by anyone, and Bynk has no safe default for who \
                 is calling, so each one must say, with a `by` clause, which actor it expects. \
@@ -254,11 +259,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.oidc_missing_jwks",
         blurb: "An `Oidc` actor holds no shared secret. It checks a token's signature against the provider's public keys, a JSON Web Key Set that the verifier fetches from a URL, so the actor must say where it is. Add `jwks = \"…\"`, for example the provider's `/.well-known/jwks.json`. The `issuer` and `audience` are required as well, under `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_audience`.",
         example: "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
-    },
-    Explain {
-        code: "bynk.actor.oidc_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn on a request it reads once. An `Oidc` actor must first fetch the provider's keys, which that path does not yet support, so an `Oidc` actor stands alone on its route. Give the route a single `by who: Member`, and serve any anonymous route separately.",
-        example: "type UserId = String where NonEmpty\nactor Member { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member | Visitor {   // ✗ an `Oidc` peer in a sum\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by who: Member {   // ✓ alone",
     },
     Explain {
         code: "bynk.actor.oidc_trust_from_is_secret",
@@ -320,6 +320,11 @@ pub const EXPLANATIONS: &[Explain] = &[
                   \x20   Ok(())\n\
                   \x20 }\n\
                   }",
+    },
+    Explain {
+        code: "bynk.actor.sender_admits_nothing",
+        blurb: "A refinement of `Sender` admits mail by its DMARC verdict, which is one of `DmarcPass`, `DmarcFail` or `DmarcNone`. The compiler decides the predicate against each of the three, and a refinement that is false for all of them would make the Worker refuse every message to an address, with nothing to tell the author it is dead. Check the `&&` and `!` the predicate combines: `Dmarc(DmarcPass) && Dmarc(DmarcFail)` can never hold, because no message has both verdicts.",
+        example: "context shop\n\nactor Never = Sender where Dmarc(DmarcPass) && Dmarc(DmarcFail)   // ✗ no verdict is both\n\nactor Verified = Sender where Dmarc(DmarcPass)   // ✓ admits a pass",
     },
     Explain {
         code: "bynk.actor.signature_identity_unsupported",
@@ -390,11 +395,6 @@ pub const EXPLANATIONS: &[Explain] = &[
         code: "bynk.actor.signed_cookie_missing_ttl",
         blurb: "A session cookie that never expires is the failure a language should not allow by omission, so `ttl` is required. It is how long an issued cookie is valid: the browser's `Max-Age` and the signed expiry both come from it. A stateless cookie cannot be revoked before it expires, so keep it short.",
         example: "actor User { auth = SignedCookie(secret = \"SESSION_KEY\"), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
-    },
-    Explain {
-        code: "bynk.actor.signed_cookie_not_in_sum",
-        blurb: "A multi-actor `by` clause tries its peers in turn. A cookie is an ambient credential, so the CSRF check must apply only when the cookie is what authenticated the request, and that per-arm rule is not built yet. A `SignedCookie` actor therefore stands alone on its route: give it a single `by who: User` and serve any anonymous route separately.",
-        example: "on POST(\"/x\") () -> Effect[HttpResult[String]] by who: User | Visitor {   // ✗ a `SignedCookie` peer in a sum\n\non POST(\"/x\") () -> Effect[HttpResult[String]] by who: User {   // ✓ alone",
     },
     Explain {
         code: "bynk.actor.signed_cookie_public_cache",
@@ -1194,6 +1194,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }   // ✗ one member's response, shared with all\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }",
     },
     Explain {
+        code: "bynk.commons.consumes_not_types",
+        blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
+        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+    },
+    Explain {
         code: "bynk.consumes.alias_conflict",
         blurb: "`consumes payment as Pay` gives a context one name to call a unit by, and a name for one unit. Two clauses with the same alias, a unit consumed under two aliases, or an alias that is also a type, function, capability, service or agent of this context, would leave a call such as `Pay.charge(…)` with no single meaning. Give each clause its own alias, or drop it. The same clause in another file of the context is fine.",
         example: "// shop.bynk\ncontext shop\n\nconsumes payment as Pay\nconsumes shipping as Pay     // ✗ `Pay` already names `payment`\n\nconsumes payment as Pay\nconsumes shipping as Ship    // ✓ one name each",
@@ -1754,7 +1759,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.bad_params",
         blurb: "An email `on message` handler takes the message as one `InboundEmail` parameter: inbound email delivers one message per call, so the handler is `on message(mail: InboundEmail) -> Effect[EmailVerdict]`. A parameter of another type, or none, or more than one, is refused. Import `InboundEmail` and `EmailVerdict` from `bynk.cloudflare`.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n        Accept\n    }\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: String) -> Effect[EmailVerdict] by Sender {   // ✗ not an `InboundEmail`\n        Accept\n    }\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n        Accept\n    }\n}",
     },
     Explain {
         code: "bynk.email.duplicate_address",
@@ -1764,7 +1769,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.duplicate_handler",
         blurb: "A `from email` service claims one address and decides each message it is given, so it has exactly one `on message` handler. To treat two addresses differently, declare two services, each with its own address.",
-        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] { Accept }   // ✓ one handler\n}",
+        example: "service support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✗ a second handler\n}\n\nservice support from email(\"support@shop.example\") {\n    on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender { Accept }   // ✓ one handler\n}",
     },
     Explain {
         code: "bynk.email.invalid_address",
@@ -1774,7 +1779,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.email.return_not_email_verdict",
         blurb: "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
-        example: "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+        example: "on message(mail: InboundEmail) -> Effect[String] by Sender {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {   // ✓\n    Accept\n}",
     },
     Explain {
         code: "bynk.embed.binary_content",
@@ -2627,6 +2632,16 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.form_unknown_arg",
         blurb: "`@form` takes no arguments. A form body is always `application/x-www-form-urlencoded`, so there is no media type to name, and a size ceiling belongs to `@limit` or a `limits { }` section, not to the annotation. An argument is refused rather than ignored, which would leave the route behaving otherwise than you wrote. Write `@form` bare. `@multipart` takes none either. `@raw` takes `contentType:`: `bynk.http.raw_unknown_arg`.",
         example: "type Signup = { email: String }\n\n@form(contentType: \"application/x-www-form-urlencoded\")    // ✗ `@form` takes no argument\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }\n\n@form    // ✓\non POST(\"/signup\") (body: Signup) -> Effect[HttpResult[()]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.headers_field_consumed",
+        blurb: "A route guarded by an actor consumes the credential it carries before the handler runs: `authorization` for a `Bearer` or `Oidc` actor, the signature header for a `Signature` one, and the session cookie out of `cookie` for a `SignedCookie` one. The typed `headers` record is built from what is left, so a field that reads one of them is always absent, and a required field makes every request a `400`. The route compiles but can never succeed, so it is refused. Read the credential through the actor's principal instead, or drop the field. An `Option` or `List` field is allowed, because it is merely always empty, but it draws `bynk.http.headers_field_consumed_optional`.",
+        example: "type Auth = { authorization: String }          // ✗ the Bearer actor consumes `authorization`\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }\n\ntype Auth = { accept: String }                 // ✓ a header the actor does not consume\non GET(\"/me\") (headers: Auth) -> Effect[HttpResult[String]] by u: User { … }",
+    },
+    Explain {
+        code: "bynk.http.headers_field_consumed_optional",
+        blurb: "A `headers` field reads a header the route's actor consumes (`authorization` on a `Bearer` or `Oidc` route, the signature header, the session cookie out of `cookie`), so the router hides it from the record and the field is always `None` or empty. It does no harm, but it never carries anything, which is rarely what the author meant. Read the value through the actor's principal, or drop the field. A required field is the error `bynk.http.headers_field_consumed`.",
+        example: "type Auth = { authorization: Option[String] }   // ⚠ always `None` on a `Bearer` route",
     },
     Explain {
         code: "bynk.http.headers_field_not_stringy",
@@ -6255,7 +6270,7 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.nested_effect",
-        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic type that holds its parameter directly under an `Effect` (`type Wrap[T] = { v: Effect[T] }`) cannot be given an effect either: `Wrap[Effect[Int]]` has a field `Effect[Effect[Int]]`. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
         example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
     },
     Explain {
@@ -6660,25 +6675,67 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
     },
     Explain {
-        code: "bynk.uses.name_conflict",
+        code: "bynk.uses.ambiguous_name",
         blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
-                and embeds) in scope under their own names, with no prefix. If two commons it uses \
-                both declare the same name, a mention of it could mean either, so the compiler \
-                refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the \
-                declarations, drop one of the `uses`, or mark the declaration `private` if only \
-                its own commons needs it, since a `private` declaration is never imported and so \
-                never conflicts.",
+                and embeds) in scope under their own names. Two commons it uses may declare the same \
+                name, and that is fine until the name is written bare: then it could mean either, so \
+                the compiler refuses that reference and lists the qualified spellings. Choose one: give \
+                a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean \
+                (`uses billing { Amount }`), which also brings in only the names you list. A \
+                declaration of the unit's own wins over a used name, and a `private` declaration is \
+                never imported, so neither can be ambiguous.",
         example: "// billing.bynk\n\
                   commons billing\n\n\
                   type Amount = Int where Positive\n\n\
                   // shipping.bynk\n\
                   commons shipping\n\n\
-                  type Amount = Int where NonNegative    // both declare `Amount`\n\
-                  type Postage = Int where NonNegative   // ✓ renamed\n\n\
+                  type Amount = Int where NonNegative    // both declare `Amount`\n\n\
                   // orders.bynk\n\
                   commons orders\n\n\
                   uses billing\n\
-                  uses shipping                          // ✗ `Amount` is also declared by `billing`",
+                  uses shipping as S                     // ✓ `S.Amount` is `shipping`'s\n\n\
+                  type Order = { total: Amount }         // ✗ `Amount` is declared by `billing` and `shipping`\n\
+                  type Order = { total: Amount, postage: S.Amount }    // ✓ the second one by its alias",
+    },
+    Explain {
+        code: "bynk.uses.name_conflict",
+        blurb: "A unit's own declaration shadows a `uses`-imported one of the same name, as it does in \
+                the emitted module, and a reference the local declaration cannot answer cannot mean \
+                the import either: a call to a type, a bare service name, a name written where the \
+                local declaration hides a type. Rename the local declaration, or `uses` the commons \
+                with an alias or a braced list that renames the import (`uses lib.util { total as \
+                totalOf }`). Two used commons that declare one name are not this: that is \
+                `bynk.uses.ambiguous_name`, reported where the name is written.",
+        example: "// lib/util.bynk\n\
+                  commons lib.util\n\n\
+                  fn total() -> Int {\n\
+                  \x20 1\n\
+                  }\n\n\
+                  // app/main.bynk\n\
+                  context app\n\n\
+                  uses lib.util\n\n\
+                  type total = { n: Int }\n\
+                  type Totals = { n: Int }               // ✓ a name of its own\n\n\
+                  fn sum() -> Int {\n\
+                  \x20 total()                              // ✗ the local type `total` hides the imported function\n\
+                  }",
+    },
+    Explain {
+        code: "bynk.uses.second_spelling",
+        blurb: "A unit reaches each declaration of a used commons by one spelling: the bare name \
+                its `uses` brings in, the alias (`uses lib.billing as B`, then `B.Amount`), or the \
+                full name (`lib.billing.Amount`). Reading the same declaration by a second spelling \
+                would make two names for one type, so the compiler refuses the second and names the \
+                one to keep. Use that spelling everywhere, or change the `uses` clauses so that only \
+                one spelling reaches it.",
+        example: "// lib/billing.bynk\n\
+                  commons lib.billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses lib.billing { Amount }\n\n\
+                  type Order = { a: Amount, b: lib.billing.Amount }    // ✗ `Amount` is already in scope\n\
+                  type Order = { a: Amount, b: Amount }                // ✓ one spelling",
     },
     Explain {
         code: "bynk.uses.self_reference",
@@ -6699,6 +6756,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.uses.unknown_commons",
         blurb: "`uses` brings a commons' types, functions and constants into scope, so it must name a commons in the project, and no unit of that name exists. Check the spelling against the `commons` line of the unit you mean. If the unit is a context, `uses` is the wrong clause: that is `bynk.uses.target_is_context`.",
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nuses mony                        // ✗ no commons `mony`\nuses money                       // ✓ the commons' declared name",
+    },
+    Explain {
+        code: "bynk.uses.unknown_name",
+        blurb: "A braced `uses` list, or a name written through a `uses` qualifier, names something the \
+                commons does not declare publicly. A type, function, constant, asset or embed that the \
+                commons marks `private` is never imported, so it cannot be listed either. Check the \
+                spelling against the commons' own declarations.",
+        example: "// billing.bynk\n\
+                  commons billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses billing { Amont }                   // ✗ `billing` declares no `Amont`\n\
+                  uses billing { Amount }                  // ✓ the declared name\n\n\
+                  type Order = { id: Int }",
     },
     Explain {
         code: "bynk.val.agent_not_generable",
@@ -6986,12 +7058,32 @@ pub struct Retired {
 
 /// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
 /// code from [`REGISTRY`].
-pub const RETIRED: &[Retired] = &[Retired {
-    code: "bynk.http.multipart_body_unbounded",
-    last_release: "0.661.1",
-    why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
-    replacement: Some("the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`"),
-}];
+pub const RETIRED: &[Retired] = &[
+    Retired {
+        code: "bynk.actor.oidc_not_in_sum",
+        last_release: "0.661.1",
+        why: "An `Oidc` actor may now be a member of a multi-actor sum (#3936): the sum's seam checks its members in order, asynchronously, so a JWKS fetch fits.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose members are tried in declared order",
+        ),
+    },
+    Retired {
+        code: "bynk.actor.signed_cookie_not_in_sum",
+        last_release: "0.661.1",
+        why: "A `SignedCookie` actor may now be a member of a multi-actor sum (#3936): its CSRF check belongs to the cookie arm, so a token client that sends no cookie never meets it.",
+        replacement: Some(
+            "a sum such as `by who: User | ApiClient`, whose cookie arm applies the CSRF check only when it is tried",
+        ),
+    },
+    Retired {
+        code: "bynk.http.multipart_body_unbounded",
+        last_release: "0.661.1",
+        why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+        replacement: Some(
+            "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+        ),
+    },
+];
 
 /// The tombstone for a retired `code`, or `None` when it was never retired.
 pub fn retired(code: &str) -> Option<&'static Retired> {
@@ -7100,6 +7192,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `on call` handler lacks the required `by` actor clause.",
     ),
     d(
+        "bynk.actor.missing_by_on_email",
+        "An email `on message` handler lacks the required `by` actor clause.",
+    ),
+    d(
         "bynk.actor.missing_by_on_http",
         "An HTTP handler lacks the required `by` actor clause.",
     ),
@@ -7122,10 +7218,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.oidc_missing_jwks",
         "An `Oidc` actor does not name its `jwks` endpoint.",
-    ),
-    d(
-        "bynk.actor.oidc_not_in_sum",
-        "An `Oidc` actor appears as a member of a multi-actor sum.",
     ),
     d(
         "bynk.actor.oidc_trust_from_is_secret",
@@ -7162,6 +7254,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.scheme_not_admissible",
         "An actor's scheme is not admissible on this handler's protocol.",
+    ),
+    d(
+        "bynk.actor.sender_admits_nothing",
+        "A refinement of `Sender` admits no DMARC verdict, so it would refuse every message.",
     ),
     d(
         "bynk.actor.signature_identity_unsupported",
@@ -7218,10 +7314,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.actor.signed_cookie_missing_ttl",
         "A `SignedCookie` actor does not declare a `ttl`.",
-    ),
-    d(
-        "bynk.actor.signed_cookie_not_in_sum",
-        "A `SignedCookie` actor appears as a member of a multi-actor sum.",
     ),
     d(
         "bynk.actor.signed_cookie_public_cache",
@@ -7605,6 +7697,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.codegen.tsc_failed",
         "`tsc` rejected the TypeScript the compiler generated for a program that passed the checker. This is a bug in the Bynk compiler, not in the program: the diagnostic points at the Bynk code the failing generated line came from, with the TypeScript error attached (#3068).",
+    ),
+    dg(
+        "bynk.commons.consumes_not_types",
+        "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context.",
+        &["consumes_decl"],
     ),
     dg(
         "bynk.consumes.alias_conflict",
@@ -8652,6 +8749,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     warn(d(
         "bynk.http.header_question_not_found",
         "`?` on `RequestHeaders.get(…)` in an `HttpResult` handler answers `404 NotFound` for a missing header, where `400` is meant (warning; auto-fixable to a `let … else` that answers `BadRequest`).",
+    )),
+    dg(
+        "bynk.http.headers_field_consumed",
+        "A required `headers` field reads a header the route's actor consumes (`authorization`, a signature header, or the session cookie out of `cookie`), so it is always absent and every request answers `400`.",
+        &["http_handler"],
+    ),
+    warn(dg(
+        "bynk.http.headers_field_consumed_optional",
+        "An `Option` or `List` `headers` field reads a header the route's actor consumes, so it is always `None` or empty (warning).",
+        &["http_handler"],
     )),
     dg(
         "bynk.http.headers_field_not_stringy",
@@ -11209,8 +11316,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A variant payload has the wrong type.",
     ),
     dg(
+        "bynk.uses.ambiguous_name",
+        "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one.",
+        &["uses_decl"],
+    ),
+    dg(
         "bynk.uses.name_conflict",
-        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.second_spelling",
+        "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type.",
         &["uses_decl"],
     ),
     dg(
@@ -11231,6 +11348,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.unknown_commons",
         "`uses` names a commons that does not exist.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.unknown_name",
+        "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly.",
         &["uses_decl"],
     ),
     dg(

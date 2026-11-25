@@ -1,0 +1,7 @@
+commons demo.wrappersum
+
+type Later[T] = | Pending | Done(value: Effect[T])
+
+fn wait(l: Option[Later[Effect[Int]]]) -> Int {
+	0
+}

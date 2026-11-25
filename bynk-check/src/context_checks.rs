@@ -2147,7 +2147,11 @@ fn check_by_clause_contracts(
         // A refinement actor (`actor A = B where …`) is never a peer: every `A`
         // is a `B`, so the arm is dead (Q3/Q4).
         if by.is_sum()
-            && local.is_some_and(|a| a.refinement.is_some() && !is_caller_refinement(a, table))
+            && local.is_some_and(|a| {
+                a.refinement.is_some()
+                    && !is_caller_refinement(a, table)
+                    && !is_sender_refinement(a, table)
+            })
         {
             errors.push(
                 CompileError::new(
@@ -2165,35 +2169,10 @@ fn check_by_clause_contracts(
             );
             continue;
         }
-        let contract = if let Some(a) = local {
+        if local.is_some() {
             refs.record(actor_ref.span, SymbolKind::Actor, &actor_ref.name);
-            // v0.53: a refinement actor's contract is its base's scheme
-            // (refinement elimination — an `Admin` is-a `User`); the invariant
-            // rides the seam, not the scheme. A malformed refinement already
-            // errored at its decl (pass 1).
-            let scheme_actor = match &a.refinement {
-                Some(r) => table.actors.get(&r.base.name),
-                None => Some(a),
-            };
-            if is_caller_refinement(a, table) {
-                // #3890: a refinement over `Caller` inherits its scheme and identity.
-                actors::prelude_actor("Caller")
-            } else if is_producer_refinement(a, table) {
-                // #3899: a refinement over `Producer` inherits its contract.
-                actors::prelude_actor("Producer")
-            } else {
-                scheme_actor
-                    .and_then(|sa| sa.auth.as_ref())
-                    .and_then(|au| Scheme::from_name(&au.name))
-                    .filter(|s| s.admitted())
-                    .map(|scheme| actors::Contract {
-                        scheme,
-                        identity: actors::Identity::Unit,
-                    })
-            }
-        } else {
-            actors::prelude_actor(&actor_ref.name)
-        };
+        }
+        let contract = by_actor_contract(&actor_ref.name, local, table);
         let Some(contract) = contract else {
             if local.is_none() {
                 errors.push(
@@ -2210,10 +2189,15 @@ fn check_by_clause_contracts(
             }
             continue;
         };
-        errors.extend(queue_actor_narrowing(
+        errors.extend(actor_narrowing_refusal(
             protocol,
             by,
-            local.is_some_and(|a| is_producer_refinement(a, table)),
+            local.map(|a| {
+                (
+                    is_producer_refinement(a, table),
+                    is_sender_refinement(a, table),
+                )
+            }),
             contract.scheme,
         ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
@@ -2261,44 +2245,6 @@ fn check_by_clause_contracts(
                 .with_note(
                     "`Caller` carries the calling context's identity — it is only \
                      admissible on `on call`; cron takes `Scheduler`, queue takes `Producer`",
-                ),
-            );
-        }
-        // v0.151: `Oidc` is single-actor only this slice — a multi-actor sum owns
-        // the whole boundary and reads the body once, a shape the OIDC seam (JWKS
-        // fetch + async key import) does not yet fit. Reject it as a peer.
-        if by.is_sum() && contract.scheme == actors::Scheme::Oidc {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.oidc_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `Oidc` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "OIDC is single-actor this slice — give the route a single \
-                     `by user: <OidcActor>` clause",
-                ),
-            );
-        }
-        // #3386: `SignedCookie` is single-actor only in its first slice, as
-        // `Oidc` was: the per-arm CSRF rule is the part that gets harder in a
-        // sum, so a route guarded by one takes a single `by u: <Actor>`.
-        if by.is_sum() && contract.scheme == actors::Scheme::SignedCookie {
-            errors.push(
-                CompileError::new(
-                    "bynk.actor.signed_cookie_not_in_sum",
-                    actor_ref.span,
-                    format!(
-                        "the `SignedCookie` actor `{}` cannot be a peer in a multi-actor sum",
-                        actor_ref.name
-                    ),
-                )
-                .with_note(
-                    "a signed cookie is single-actor in this slice — give the route a single \
-                     `by user: <SignedCookieActor>` clause",
                 ),
             );
         }
@@ -2755,6 +2701,51 @@ pub(crate) fn is_caller_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &
         .is_some_and(|r| r.base.name == "Caller" && !table.actors.contains_key("Caller"))
 }
 
+/// The contract a `by` clause's actor resolves to: a local declaration (a refinement's contract is
+/// its base's scheme, refinement elimination, v0.53; the invariant rides the seam, not the scheme;
+/// a malformed refinement already errored at its decl) or a prelude actor. A refinement over a
+/// prelude actor (`Caller` #3890, `Sender` #3888, `Producer` #3899) has that actor's contract.
+fn by_actor_contract(
+    name: &str,
+    local: Option<&bynk_syntax::ast::ActorDecl>,
+    table: &UnitTable,
+) -> Option<crate::actors::Contract> {
+    use crate::actors::{self, Scheme};
+    let Some(a) = local else {
+        return actors::prelude_actor(name);
+    };
+    if is_caller_refinement(a, table) {
+        return actors::prelude_actor("Caller");
+    }
+    if is_sender_refinement(a, table) {
+        return actors::prelude_actor("Sender");
+    }
+    if is_producer_refinement(a, table) {
+        return actors::prelude_actor("Producer");
+    }
+    let scheme_actor = match &a.refinement {
+        Some(r) => table.actors.get(&r.base.name),
+        None => Some(a),
+    };
+    scheme_actor
+        .and_then(|sa| sa.auth.as_ref())
+        .and_then(|au| Scheme::from_name(&au.name))
+        .filter(|s| s.admitted())
+        .map(|scheme| actors::Contract {
+            scheme,
+            identity: actors::Identity::Unit,
+        })
+}
+
+/// #3888: whether an actor declaration refines the prelude `Sender` (no local
+/// actor named `Sender` shadows it).
+pub(crate) fn is_sender_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &UnitTable) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Sender" && !table.actors.contains_key("Sender"))
+}
+
 /// #3899: whether an actor declaration refines the prelude `Producer` (no local
 /// actor named `Producer` shadows it).
 pub(crate) fn is_producer_refinement(
@@ -2771,13 +2762,32 @@ pub(crate) fn is_producer_refinement(
 /// actor, but nothing yet enforces either on delivery (the signed message
 /// format is a later part of #3899), so naming one is refused rather than
 /// accepted unenforced.
-fn queue_actor_narrowing(
+fn actor_narrowing_refusal(
     protocol: &ServiceProtocol,
     by: &bynk_syntax::ast::ByClause,
-    producer_refinement: bool,
+    refinement: Option<(bool, bool)>,
     scheme: crate::actors::Scheme,
 ) -> Option<CompileError> {
     use crate::actors::Scheme;
+    let (producer_refinement, sender_refinement) = refinement.unwrap_or_default();
+    // #3888: likewise a refinement over `Sender` narrows inbound mail, and only an email
+    // handler can name one: elsewhere its `Dmarc(…)` is never checked.
+    if sender_refinement && !matches!(protocol, ServiceProtocol::Email { .. }) {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Sender` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Sender` refinements narrow which mail an email handler acts on — name one \
+                 only on `on message` of a `from email` service",
+            ),
+        );
+    }
     let on_queue = matches!(protocol, ServiceProtocol::Queue { .. });
     // A refinement over `Producer` narrows a queue's senders, and only a queue
     // consumer can name one; elsewhere nothing would enforce its `IsContext(…)`,
@@ -2831,6 +2841,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
     if matches!(protocol, ServiceProtocol::Queue { .. }) {
         if handler.kind == HandlerKind::Message {
             errors.push(missing_by_on_queue(handler));
+        }
+        return;
+    }
+    // #3888: inbound mail states whether it must be authenticated.
+    if matches!(protocol, ServiceProtocol::Email { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_email(handler));
         }
         return;
     }
@@ -2903,6 +2920,26 @@ fn missing_by_on_queue(handler: &Handler) -> CompileError {
     )
 }
 
+/// #3888: an email handler states what mail it acts on. The fix-it inserts `by Sender` (the former
+/// silent default: any mail, whatever its DMARC verdict) after the return type.
+fn missing_by_on_email(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_email",
+        handler.span,
+        "an email `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Sender` admits any mail, whatever its DMARC verdict, which is what an email handler did before the clause \
+         was required. Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_email`",
+    )
+    .with_suggestion(
+        "add `by Sender`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Sender".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
 /// Once per context, after every actor declaration is read: the checks on foreign callers' secrets.
 fn check_foreign_secret_dupes(table: &UnitTable, errors: &mut Vec<CompileError>) {
     use crate::actors::Scheme;
@@ -2966,6 +3003,41 @@ fn check_refinement_actor(
     // an authorisation invariant. Its base MUST be a declared `Bearer` actor
     // (only Bearer carries claims to authorise against), and its `where`
     // predicate MUST be in the closed claim-predicate set.
+    if let Some(r) = &actor.refinement
+        && is_sender_refinement(actor, table)
+    {
+        // #3888: a refinement over `Sender` narrows which mail is admitted, by
+        // the closed `Dmarc(…)` vocabulary.
+        match actors::parse_sender_predicate(&r.predicate) {
+            Ok(pred) if pred.admitted().is_empty() => errors.push(
+                CompileError::new(
+                    "bynk.actor.sender_admits_nothing",
+                    r.predicate.span,
+                    format!(
+                        "the refinement `{}` admits no DMARC verdict, so every message would be refused",
+                        actor.name.name
+                    ),
+                )
+                .with_note(
+                    "the predicate is false for `DmarcPass`, `DmarcFail` and `DmarcNone` alike — \
+                     check the `&&` and `!` it combines",
+                ),
+            ),
+            Ok(_) => {}
+            Err(span) => errors.push(
+                CompileError::new(
+                    "bynk.actor.refinement_predicate_unsupported",
+                    span,
+                    "a refinement over `Sender` must be `Dmarc(<DmarcVerdict>, …)`, composed with `&&`, `||`, `!`",
+                )
+                .with_note(
+                    "the DMARC verdict is the only thing a `Sender` refinement tests: name \
+                     `DmarcPass`, `DmarcFail` or `DmarcNone`",
+                ),
+            ),
+        }
+        return;
+    }
     if let Some(r) = &actor.refinement
         && (is_caller_refinement(actor, table) || is_producer_refinement(actor, table))
     {
@@ -3594,6 +3666,7 @@ fn check_service_decls(
     }
 
     validate_error_policies(table, errors);
+    validate_consumed_headers(table, &typed.types, errors);
 
     // #2858: validate each service's `json { }` policy, then refuse the one
     // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
@@ -3918,6 +3991,10 @@ fn actor_identity_ty_guarded<'a>(
             // #3890: a refinement over the prelude `Caller` yields a `CallerId`.
             if is_caller_refinement(local, table) {
                 return tys.intern(checker::Ty::Base(bynk_syntax::ast::BaseType::String));
+            }
+            // #3888: a refinement over the prelude `Sender` yields its identity.
+            if is_sender_refinement(local, table) {
+                return actor_identity_ty_guarded("Sender", table, resolved, seen, tys);
             }
             return tys.intern(checker::Ty::Unit);
         }
@@ -5556,6 +5633,97 @@ fn validate_json_policy(
             expr.span,
             "`json` `options` must be `tagged` or `plain`",
         ));
+    }
+}
+
+/// #4266: what to do instead of reading a header the route's actor consumes, for the note on the
+/// diagnostic: the credential itself is never the handler's to read, only the identity it proves.
+fn consumed_header_note(wire: &str, session_cookie: bool) -> &'static str {
+    if wire == "cookie" && session_cookie {
+        "read the other cookies through a typed `cookies` record, which the session cookie is also removed from; the signed-in identity is the actor's"
+    } else if wire == "authorization" {
+        "the router verifies the credential and hands the handler the actor's identity instead; use that, or drop the field"
+    } else {
+        "the router verifies this header and the handler never sees it; drop the field"
+    }
+}
+
+/// #4266: a typed `headers` field that reads a header the route's actor seam consumes. The router
+/// hides that header from the record (`authorization` on a `Bearer`, `Oidc` or `Signature` route,
+/// the session cookie out of `cookie` on a `SignedCookie` one), so the field always sees it
+/// absent: a required field answers `400` on every request, and an `Option` or `List` one is
+/// always `None` or empty.
+fn validate_consumed_headers(
+    table: &UnitTable,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Vec<CompileError>,
+) {
+    for service in table.services.values() {
+        for handler in &service.handlers {
+            let Some(p) = handler.params.iter().find(|p| p.name.name == "headers") else {
+                continue;
+            };
+            let TypeRef::Named(id) = &p.type_ref else {
+                continue;
+            };
+            let Some(TypeBody::Record(record)) = types.get(&id.name).map(|t| &t.body) else {
+                continue;
+            };
+            let consumed = crate::actors::consumed_credential_headers(handler, &table.actors);
+            let session = crate::actors::signed_cookie_seam_for(handler, &table.actors);
+            for f in &record.fields {
+                let wire = f
+                    .wire_name()
+                    .unwrap_or_else(|| f.name.name.clone())
+                    .to_ascii_lowercase();
+                let (actor, what) = match consumed.iter().find(|(h, _)| *h == wire) {
+                    Some((_, actor)) => (actor.clone(), format!("the `{wire}` header")),
+                    None => match &session {
+                        Some(s) if wire == "cookie" => (
+                            s.actor.clone(),
+                            format!(
+                                "the `cookie` header, less its session cookie `{}`",
+                                s.cookie
+                            ),
+                        ),
+                        _ => continue,
+                    },
+                };
+                let optional = matches!(f.type_ref, TypeRef::Option(..) | TypeRef::List(..));
+                // The session cookie is removed from `cookie`, so that field is absent unless
+                // the request carries another cookie too; the others are always absent.
+                let always = wire != "cookie" || session.is_none();
+                let (code, why) = match (optional, always) {
+                    (true, true) => (
+                        "bynk.http.headers_field_consumed_optional",
+                        "so it is always absent here",
+                    ),
+                    (true, false) => (
+                        "bynk.http.headers_field_consumed_optional",
+                        "so it is absent unless the request carries another cookie",
+                    ),
+                    (false, true) => (
+                        "bynk.http.headers_field_consumed",
+                        "so this field is always absent and every request is answered `400`",
+                    ),
+                    (false, false) => (
+                        "bynk.http.headers_field_consumed",
+                        "so this field is absent, and the request is answered `400`, unless it carries another cookie",
+                    ),
+                };
+                errors.push(
+                    CompileError::new(
+                        code,
+                        f.span,
+                        format!(
+                            "field `{}` of the `headers` record reads {what}, which `{actor}` consumes, {why}",
+                            f.name.name
+                        ),
+                    )
+                    .with_note(consumed_header_note(&wire, session.is_some())),
+                );
+            }
+        }
     }
 }
 

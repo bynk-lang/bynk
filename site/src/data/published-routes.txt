@@ -89,6 +89,7 @@
 /book/guides/entry-points/call-from-a-front-end/
 /book/guides/entry-points/cron/
 /book/guides/entry-points/http/
+/book/guides/entry-points/map-a-domain-error-to-a-status/
 /book/guides/entry-points/queue/
 /book/guides/entry-points/receive-email/
 /book/guides/entry-points/serve-a-page/
@@ -1058,11 +1059,14 @@
 /book/reference/diagnostics/bynk.types.variant_arity/
 /book/reference/diagnostics/bynk.types.variant_missing_payload/
 /book/reference/diagnostics/bynk.types.variant_payload_mismatch/
+/book/reference/diagnostics/bynk.uses.ambiguous_name/
 /book/reference/diagnostics/bynk.uses.name_conflict/
+/book/reference/diagnostics/bynk.uses.second_spelling/
 /book/reference/diagnostics/bynk.uses.self_reference/
 /book/reference/diagnostics/bynk.uses.target_is_context/
 /book/reference/diagnostics/bynk.uses.test_only_commons/
 /book/reference/diagnostics/bynk.uses.unknown_commons/
+/book/reference/diagnostics/bynk.uses.unknown_name/
 /book/reference/diagnostics/bynk.val.agent_not_generable/
 /book/reference/diagnostics/bynk.val.arity/
 /book/reference/diagnostics/bynk.val.generic_type/
@@ -1322,6 +1326,7 @@
 /reference/diagnostics/bynk.actor.foreign_secret_not_string/
 /reference/diagnostics/bynk.actor.identity_not_sealed/
 /reference/diagnostics/bynk.actor.missing_by_on_call/
+/reference/diagnostics/bynk.actor.missing_by_on_email/
 /reference/diagnostics/bynk.actor.missing_by_on_http/
 /reference/diagnostics/bynk.actor.missing_by_on_queue/
 /reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/
@@ -1338,6 +1343,7 @@
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
 /reference/diagnostics/bynk.actor.scheme_arg_kind/
 /reference/diagnostics/bynk.actor.scheme_not_admissible/
+/reference/diagnostics/bynk.actor.sender_admits_nothing/
 /reference/diagnostics/bynk.actor.signature_identity_unsupported/
 /reference/diagnostics/bynk.actor.signature_missing_header/
 /reference/diagnostics/bynk.actor.signature_missing_secret/
@@ -1441,6 +1447,7 @@
 /reference/diagnostics/bynk.cloudflare.edge_cache_in_schedule/
 /reference/diagnostics/bynk.cloudflare.edge_cache_public_authenticated/
 /reference/diagnostics/bynk.codegen.tsc_failed/
+/reference/diagnostics/bynk.commons.consumes_not_types/
 /reference/diagnostics/bynk.consumes.alias_conflict/
 /reference/diagnostics/bynk.consumes.capability_name_clash/
 /reference/diagnostics/bynk.consumes.capability_not_selected/
@@ -1676,6 +1683,8 @@
 /reference/diagnostics/bynk.http.form_on_sum_route/
 /reference/diagnostics/bynk.http.form_unknown_arg/
 /reference/diagnostics/bynk.http.header_question_not_found/
+/reference/diagnostics/bynk.http.headers_field_consumed/
+/reference/diagnostics/bynk.http.headers_field_consumed_optional/
 /reference/diagnostics/bynk.http.headers_field_not_stringy/
 /reference/diagnostics/bynk.http.headers_wrong_type/
 /reference/diagnostics/bynk.http.invalid_path/
@@ -2242,11 +2251,14 @@
 /reference/diagnostics/bynk.types.variant_arity/
 /reference/diagnostics/bynk.types.variant_missing_payload/
 /reference/diagnostics/bynk.types.variant_payload_mismatch/
+/reference/diagnostics/bynk.uses.ambiguous_name/
 /reference/diagnostics/bynk.uses.name_conflict/
+/reference/diagnostics/bynk.uses.second_spelling/
 /reference/diagnostics/bynk.uses.self_reference/
 /reference/diagnostics/bynk.uses.target_is_context/
 /reference/diagnostics/bynk.uses.test_only_commons/
 /reference/diagnostics/bynk.uses.unknown_commons/
+/reference/diagnostics/bynk.uses.unknown_name/
 /reference/diagnostics/bynk.val.agent_not_generable/
 /reference/diagnostics/bynk.val.arity/
 /reference/diagnostics/bynk.val.generic_type/

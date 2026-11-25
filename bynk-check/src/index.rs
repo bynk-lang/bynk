@@ -524,6 +524,9 @@ pub struct IndexBuilder {
     /// (`consumes U { T as Alias }`) names, so a reference to the alias reaches
     /// the real declaration.
     type_aliases: HashMap<String, HashMap<String, (String, String)>>,
+    /// #4045: per unit, a name a `uses` clause renames or qualifies, to the commons
+    /// and the name it declares it as.
+    use_renames: HashMap<String, HashMap<String, (String, String)>>,
     /// v0.129 (#259): refined/opaque-type → builtin-base edges, accumulated at
     /// the type-def walk (no ref-resolution needed). Assembled in [`build`].
     refinements: Vec<RefineEdge>,
@@ -639,6 +642,13 @@ impl IndexBuilder {
 
     pub fn set_consumes(&mut self, consumes: HashMap<String, Vec<String>>) {
         self.consumes = consumes;
+    }
+
+    pub fn set_use_renames(
+        &mut self,
+        use_renames: HashMap<String, HashMap<String, (String, String)>>,
+    ) {
+        self.use_renames = use_renames;
     }
 
     pub fn set_type_aliases(
@@ -811,6 +821,22 @@ impl IndexBuilder {
         };
         if has(&local) {
             return Some(local);
+        }
+        // #4045: a name a `uses` clause renames or qualifies is the declaration of
+        // the commons it comes from, under the name that commons gives it.
+        if let Some((target, original)) = self
+            .use_renames
+            .get(ns)
+            .and_then(|renames| renames.get(&edge.name))
+        {
+            let key = SymbolKey {
+                unit: target.clone(),
+                kind: edge.kind,
+                name: original.clone(),
+            };
+            if has(&key) {
+                return Some(key);
+            }
         }
         for target in self.uses.get(ns).into_iter().flatten() {
             let imported = SymbolKey {

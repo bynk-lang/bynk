@@ -14,7 +14,7 @@ Inbound email is **experimental** ([#3328](https://github.com/bynk-lang/bynk/iss
 
 ```bynk,ignore
 service <Name> from email("<address>") {
-  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
     …
   }
 }
@@ -118,7 +118,7 @@ is `DmarcPass`, `DmarcFail` or `DmarcNone` for the opposite reason: a bare
 
 ## The sender
 
-A handler runs as the **`Sender`** actor unless it names another with `by`. Its
+A handler names its actor with `by`, and `by Sender` is the **`Sender`** actor. Omitting it is `bynk.actor.missing_by_on_email`, and `bynk check --fix=bynk.actor.missing_by_on_email` inserts `by Sender`. Its
 scheme is the platform's own (`Internal`): Email Routing delivers and
 authenticates the mail before the handler runs. Its identity is a
 `SenderIdentity`, the envelope `address` and a `DmarcVerdict`, read only from
@@ -128,6 +128,12 @@ sits below it. If the topmost header is another server's, or there is none, the
 verdict is `DmarcNone`; the search never goes further down, because every lower
 header can be the sender's.
 Treat `InboundEmail.from` as a claim, and `dmarc` as the evidence.
+
+To act only on authenticated mail, refine `Sender` rather than testing the verdict
+by hand: `actor Authenticated = Sender where Dmarc(DmarcPass)`, then `by s: Authenticated`.
+Mail with any other verdict is refused with `sender not authenticated` before the
+handler runs, and `!Dmarc(DmarcFail)` is the more lenient rule that also admits mail
+from a domain with no DMARC policy. See [Refinements over `Sender`](/reference/actors/).
 
 Bind it to read it, and import the types it names:
 

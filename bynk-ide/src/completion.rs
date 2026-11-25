@@ -221,6 +221,19 @@ fn complete_base(
         if names_a_brace_alias(line_prefix) {
             return Vec::new();
         }
+        // #4044: a commons lists the types an adapter exports, never a capability.
+        if current_unit_is_commons(doc_text) {
+            return exported_types_of_unit(&unit, doc_text, &split())
+                .into_iter()
+                .map(|t| {
+                    let detail = format!(
+                        "type exported by `{unit}`{}",
+                        stability_suffix(experimental(&format!("{unit}.{t}")))
+                    );
+                    Completion::item(t, CompletionKind::Type, Some(detail))
+                })
+                .collect();
+        }
         return capabilities_of_unit(&unit, doc_text, &split())
             .into_iter()
             .map(|c| {
@@ -337,6 +350,10 @@ fn complete_base(
     // 4g'. #3890: `actor A = Caller where <cursor>` — the `Caller` predicate.
     if is_caller_refinement_where(line_prefix) {
         return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
+    }
+    // 4g''. #3888: `actor A = Sender where <cursor>` — the `Sender` predicate.
+    if is_sender_refinement_where(line_prefix) {
+        return vec![Completion::snippet("Dmarc", "Dmarc(${1:DmarcPass})")];
     }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
@@ -1989,6 +2006,13 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
 fn is_caller_refinement_where(line_prefix: &str) -> bool {
     let t = line_prefix.trim_start();
     t.starts_with("actor ") && t.contains("= Caller where")
+}
+
+/// #3888: the cursor follows `where` in an `actor <Name> = Sender where …`
+/// refinement, whose predicate is `Dmarc(…)` over the `DmarcVerdict` variants.
+fn is_sender_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Sender where")
 }
 
 /// v0.124 (slice 3): the cursor is completing the argument to a leading clause
@@ -3705,6 +3729,46 @@ fn consumable_units(doc_text: &str, split: &SplitFiles<'_>) -> Vec<Completion> {
 /// Finding #62: a first-wins guard, for the same buffer-vs-stale-disk-copy
 /// reason as [`record_field_names`] — the `BTreeSet` still dedups a single
 /// matching unit's own (possibly repeated) export clauses.
+/// #4044: whether the document is a `commons`, which may list types, not
+/// capabilities, in a braced `consumes`.
+fn current_unit_is_commons(doc_text: &str) -> bool {
+    let Ok(tokens) = lexer::tokenize(doc_text) else {
+        return false;
+    };
+    matches!(
+        parser::parse_unit_with_recovery(&tokens, doc_text).0,
+        Some(SourceUnit::Commons(_))
+    )
+}
+
+/// #4044: the types the adapter `unit` exports (`opaque` or `transparent`), what
+/// a commons may list in `consumes unit { … }`.
+fn exported_types_of_unit(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<String> {
+    let mut out: BTreeSet<String> = BTreeSet::new();
+    let mut collect = |exports: &[bynk_syntax::ast::ExportsDecl]| {
+        for clause in exports {
+            if matches!(clause.kind, ExportKind::Type(_)) {
+                out.extend(clause.names.iter().map(|e| e.name.name.clone()));
+            }
+        }
+    };
+    if let Some((_, SourceUnit::Adapter(a))) = split.deps.iter().find(|(label, _)| label == unit) {
+        collect(&a.exports);
+        return out.into_iter().collect();
+    }
+    let mut found = false;
+    for_each_unit(doc_text, split.own(), |u| {
+        if let SourceUnit::Adapter(a) = u
+            && !found
+            && a.name.joined() == unit
+        {
+            found = true;
+            collect(&a.exports);
+        }
+    });
+    out.into_iter().collect()
+}
+
 fn capabilities_of_unit(unit: &str, doc_text: &str, split: &SplitFiles<'_>) -> Vec<String> {
     // #2223: `<alias>.<unit>` names a dependency's adapter, declared there
     // under its own name.
@@ -4289,6 +4353,20 @@ mod tests {
         assert!(got.contains(&"Clock".to_string()), "{got:?}");
         assert!(got.contains(&"Random".to_string()), "{got:?}");
         assert!(got.contains(&"Logger".to_string()), "{got:?}");
+    }
+
+    /// #4044: in a commons the braces list types, so the exported types are
+    /// offered and the capabilities are not.
+    #[test]
+    fn a_commons_consumes_brace_suggests_exported_types_not_capabilities() {
+        let got = labels(
+            "consumes bynk { ",
+            "commons a.b
+",
+        );
+        assert!(got.contains(&"TimedOut".to_string()), "{got:?}");
+        assert!(got.contains(&"Uuid".to_string()), "{got:?}");
+        assert!(!got.contains(&"Clock".to_string()), "{got:?}");
     }
 
     /// #2868: a context function's `given` completes capability names, as a
@@ -6268,6 +6346,17 @@ mod snapshot_completion_tests {
             .into_iter()
             .map(|c| c.label)
             .collect()
+    }
+
+    /// #3888: a refinement over `Sender` offers `Dmarc`, and a refinement over
+    /// `Caller` still offers only `IsContext`.
+    #[test]
+    fn a_sender_refinement_offers_dmarc() {
+        assert_eq!(labels("actor A = Sender where "), vec!["Dmarc".to_string()]);
+        assert_eq!(
+            labels("actor A = Caller where "),
+            vec!["IsContext".to_string()]
+        );
     }
 
     /// #2842: `matches snapshot` is offered after the value of an `expect`, while

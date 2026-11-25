@@ -53,9 +53,6 @@
   "bynk.actor.oidc_missing_jwks": [
     "/reference/actors/#schemes"
   ],
-  "bynk.actor.oidc_not_in_sum": [
-    "/reference/actors/#the-by-clause"
-  ],
   "bynk.actor.oidc_trust_from_is_secret": [
     "/reference/actors/#trust-roots-from-the-environment"
   ],
@@ -120,9 +117,6 @@
     "/reference/actors/#signed-cookies"
   ],
   "bynk.actor.signed_cookie_missing_ttl": [
-    "/reference/actors/#signed-cookies"
-  ],
-  "bynk.actor.signed_cookie_not_in_sum": [
     "/reference/actors/#signed-cookies"
   ],
   "bynk.actor.signed_cookie_public_cache": [
