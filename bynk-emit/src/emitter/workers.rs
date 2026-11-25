@@ -983,11 +983,6 @@ pub(super) struct SeamPrincipal {
 /// returns it as the `Err` of its outcome.
 pub(super) type Failure<'a> = &'a dyn Fn(TsExpr) -> TsStmt;
 
-/// A wrapper's own refusal: `return <result>`.
-pub(super) fn return_failure(result: TsExpr) -> TsStmt {
-    return_(Some(result))
-}
-
 /// A `verify` step's refusal (#3926): `return { tag: "Err", error: <result> }`.
 pub(super) fn err_failure(result: TsExpr) -> TsStmt {
     return_(Some(TsExpr::object(vec![
@@ -997,7 +992,8 @@ pub(super) fn err_failure(result: TsExpr) -> TsStmt {
 }
 
 fn refused(failure: Failure, status: &str) -> TsStmt {
-    failure(member(ident("HttpResult"), status))
+    let result = member(ident("HttpResult"), status);
+    failure(result)
 }
 
 /// The call of the handler a verified wrapper ends with: the route's params, then
@@ -1162,7 +1158,7 @@ pub(super) fn emit_http_wrapper(
                 Some(qualified_ts_type_ref(&p.type_ref)),
             )
         }));
-        let (mut stmts, principal) = bearer_seam_stmts(seam, &return_failure);
+        let (mut stmts, principal) = bearer_seam_stmts(seam, &|result| return_(Some(result)));
         stmts.push(handler_return(
             sname,
             &method_key,
@@ -1228,7 +1224,7 @@ fn identity_split_wrapper(
 ) -> Vec<TsObjectEntry> {
     let method_key = http_handler_method_name_ir(method, path);
     let verify_return = TsType::named(
-        "globalThis.Promise<{ tag: \"Err\"; error: any } | { tag: \"Ok\"; value: { key: string; principal: any } }>",
+        "globalThis.Promise<{ tag: \"Err\"; error: unknown } | { tag: \"Ok\"; value: { key: string; principal: object } }>",
     );
     stmts.push(return_(Some(TsExpr::object(vec![
         ("tag".to_string(), str_lit("Ok")),
@@ -1272,7 +1268,7 @@ fn identity_split_wrapper(
         .collect();
     params.push(TsParam::new(
         "principal".to_string(),
-        Some(TsType::named("any")),
+        Some(TsType::named("object")),
     ));
     let mut args: Vec<TsExpr> = h
         .params
@@ -1487,7 +1483,7 @@ pub(super) fn emit_http_oidc_wrapper(
             Some(qualified_ts_type_ref(&p.type_ref)),
         )
     }));
-    let (mut stmts, principal) = oidc_seam_stmts(seam, &return_failure);
+    let (mut stmts, principal) = oidc_seam_stmts(seam, &|result| return_(Some(result)));
     stmts.push(handler_return(
         sname,
         &method_key,
@@ -1715,7 +1711,7 @@ fn emit_http_signed_cookie_wrapper(
         )
     }));
     let (mut stmts, principal) =
-        signed_cookie_seam_stmts(method, seam, csrf_origins, &return_failure);
+        signed_cookie_seam_stmts(method, seam, csrf_origins, &|result| return_(Some(result)));
     stmts.push(handler_return(
         sname,
         &method_key,
