@@ -67,8 +67,27 @@ test("a malformed or future-version envelope is refused", async () => {
   const good = await signQueueMessage("current-secret", parts);
   assert.deepEqual(await verifyQueueMessage({ bynk: { ...good.bynk, v: 2 }, body: good.body }, "orders", keys), { ok: false, reason: "version" });
   assert.deepEqual(await verifyQueueMessage({ bynk: { ...good.bynk, sig: "zz" }, body: good.body }, "orders", keys), { ok: false, reason: "malformed" });
-  assert.deepEqual(await verifyQueueMessage({ bynk: { from: "shop.orders" }, body: 1 }, "orders", keys), { ok: false, reason: "malformed" });
+  assert.deepEqual(await verifyQueueMessage({ bynk: { v: 1, from: "shop.orders" }, body: 1 }, "orders", keys), { ok: false, reason: "malformed" });
+  assert.deepEqual(await verifyQueueMessage({ bynk: { from: "shop.orders" }, body: 1 }, "orders", keys), { ok: false, reason: "version" });
   assert.deepEqual(await verifyQueueMessage({ bynk: good.bynk }, "orders", keys), { ok: false, reason: "malformed" });
+});
+
+test("a fractional timestamp, or a line feed in from or id, is refused as malformed", async () => {
+  const good = await signQueueMessage("current-secret", parts);
+  assert.deepEqual(await verifyQueueMessage({ bynk: { ...good.bynk, ts: 1.5 }, body: good.body }, "orders", keys), { ok: false, reason: "malformed" });
+  assert.deepEqual(await verifyQueueMessage({ bynk: { ...good.bynk, from: "shop.orders\n" }, body: good.body }, "orders", keys), { ok: false, reason: "malformed" });
+  assert.deepEqual(await verifyQueueMessage({ bynk: { ...good.bynk, id: "m\n1" }, body: good.body }, "orders", keys), { ok: false, reason: "malformed" });
+});
+
+test("a future version is reported as a version even when its other fields are reshaped", async () => {
+  assert.deepEqual(await verifyQueueMessage({ bynk: { v: 2, sig64: "abc" }, body: 1 }, "orders", keys), { ok: false, reason: "version" });
+});
+
+test("a body with a toJSON is signed as the transport would carry it", async () => {
+  const when = new Date(Date.UTC(2026, 10, 25));
+  const envelope = await signQueueMessage("current-secret", { ...parts, body: { at: when } });
+  const carried = JSON.parse(JSON.stringify(envelope));
+  assert.equal((await verifyQueueMessage(carried, "orders", keys)).ok, true);
 });
 
 test("a replay key is per consumer, source queue and message id", () => {

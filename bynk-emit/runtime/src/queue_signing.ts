@@ -26,8 +26,16 @@ export interface SignedQueueEnvelope {
   readonly body: unknown;
 }
 
-/** `JSON.stringify` with object keys in sorted order, recursively, so both ends sign the same text. */
+/**
+ * The canonical form of a body: JSON Canonicalization Scheme (RFC 8785). Object keys are sorted
+ * (by UTF-16 code unit) at every depth, with no whitespace, strings escaped as `JSON.stringify`
+ * does, and numbers written as ECMAScript does. The input must be JSON data; a value with a
+ * `toJSON` (a `Date`) is converted first, as the transport's own `JSON.stringify` would.
+ */
 export function canonicalJson(value: unknown): string {
+  if (value !== null && typeof value === "object" && typeof (value as { toJSON?: unknown }).toJSON === "function") {
+    return canonicalJson((value as { toJSON(): unknown }).toJSON());
+  }
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const entries = Object.entries(value as Record<string, unknown>)
@@ -96,10 +104,18 @@ export async function verifyQueueMessage(
   if (envelope === undefined) return { ok: false, reason: "unsigned" };
   if (envelope === null || typeof envelope !== "object" || !("body" in (received as object))) return { ok: false, reason: "malformed" };
   const { v, from, id, ts, sig } = envelope as Record<string, unknown>;
-  if (typeof from !== "string" || typeof id !== "string" || typeof ts !== "number" || typeof sig !== "string") {
+  // The version first: a later version may reshape the other fields, and "version" is the useful reason.
+  if (v !== QUEUE_SIGNING_VERSION) return { ok: false, reason: "version" };
+  // `ts` is an integer written in decimal. `from` and `id` carry no line feed, because the signing
+  // input is newline-separated and must split unambiguously whatever the field order.
+  if (
+    typeof from !== "string" || from.includes("\n") ||
+    typeof id !== "string" || id.includes("\n") ||
+    typeof ts !== "number" || !Number.isSafeInteger(ts) ||
+    typeof sig !== "string"
+  ) {
     return { ok: false, reason: "malformed" };
   }
-  if (v !== QUEUE_SIGNING_VERSION) return { ok: false, reason: "version" };
   const secrets = keysFor(from);
   if (secrets.length === 0) return { ok: false, reason: "unknown_sender" };
   const signature = fromHex(sig);
