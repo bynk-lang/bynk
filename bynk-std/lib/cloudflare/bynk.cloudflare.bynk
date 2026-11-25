@@ -365,12 +365,12 @@ adapter bynk.cloudflare {
 	}
 
 	---
-	The answer of an `R2.getStreamIf` read: `Found` with the object, `Missing`
+	The answer of an `R2.getStreamIf` read: `Present` with the object, `Missing`
 	when the key holds none, and `NotModified` with the object's metadata when
 	the condition did not hold (a handler maps it to `304`).
 	---
 	type R2Read =
-		| Found(body: R2Body)
+		| Present(body: R2Body)
 		| Missing
 		| NotModified(object: R2Object)
 

@@ -271,17 +271,17 @@ export const R2Partial = {
 };
 
 /**
- * The answer of an `R2.getStreamIf` read: `Found` with the object, `Missing`
+ * The answer of an `R2.getStreamIf` read: `Present` with the object, `Missing`
  * when the key holds none, and `NotModified` with the object's metadata when
  * the condition did not hold (a handler maps it to `304`).
  */
 export type R2Read =
-    { readonly tag: "Found"; readonly body: R2Body }
+    { readonly tag: "Present"; readonly body: R2Body }
   | { readonly tag: "Missing" }
   | { readonly tag: "NotModified"; readonly object: R2Object };
 
 export const R2Read = {
-  Found: (body: R2Body): R2Read => ({ tag: "Found", body }),
+  Present: (body: R2Body): R2Read => ({ tag: "Present", body }),
   Missing: { tag: "Missing" } as R2Read,
   NotModified: (object: R2Object): R2Read => ({ tag: "NotModified", object }),
 };

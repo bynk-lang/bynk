@@ -665,7 +665,7 @@ objects stream, or are uploaded in parts (below).
 - `getStreamIf(key, onlyIf)` reads only when an etag condition holds. `R2GetIf` is
   `Unconditional`, `EtagMatches(etag)` or `EtagDiffers(etag)` (the read-side
   counterpart of `R2Condition`; `Absent` means nothing for a read), and is extensible.
-  The answer is an `R2Read`: `Found(body)` (an `R2Body`, as `getStream` gives),
+  The answer is an `R2Read`: `Present(body)` (an `R2Body`, as `getStream` gives),
   `Missing` for a key that holds nothing, or `NotModified(object)` with the object's
   metadata when the condition did not hold, so a cache revalidation (`EtagDiffers`
   with the etag the client already has) does not transfer an unchanged object.

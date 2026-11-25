@@ -556,7 +556,7 @@ export class WorkersR2 implements R2 {
     if (o === null) return { tag: "Missing" };
     const read = o as R2Read2;
     if (read.body === undefined) return { tag: "NotModified", object: this.object(o) };
-    return { tag: "Found", body: { object: this.object(o), body: r2Chunks(read.body) } };
+    return { tag: "Present", body: { object: this.object(o), body: r2Chunks(read.body) } };
   }
 
   async putStream(key: string, body: AsyncIterable<Uint8Array>, size: number): Promise<R2Object> {

@@ -10,7 +10,7 @@ import * as bynk_cloudflare from "../bynk/cloudflare.js";
 
 export function answer(r: R2Read): string {
   switch (r.tag) {
-    case "Found": {
+    case "Present": {
       const b = r.body;
       return `found ${String(b.object.size)}`;
     }

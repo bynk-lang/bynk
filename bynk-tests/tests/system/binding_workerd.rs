@@ -583,7 +583,7 @@ fn partial(p: R2Partial) -> String {
 
 fn describe(r: R2Read) -> String {
 \tmatch r {
-\t\tFound(b) => \"found \\(b.object.size)\"
+\t\tPresent(b) => \"found \\(b.object.size)\"
 \t\tMissing => \"missing\"
 \t\tNotModified(o) => \"not modified \\(o.size)\"
 \t}

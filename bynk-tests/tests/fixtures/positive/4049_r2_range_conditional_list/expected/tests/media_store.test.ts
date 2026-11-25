@@ -142,7 +142,7 @@ function __bynkTest_Videos(): __ns_bynk_cloudflare.R2 {
       const chunks = async function* () {
         for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
       };
-      return { tag: "Found", body: { object: meta(key), body: chunks() } };
+      return { tag: "Present", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);
@@ -344,7 +344,7 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
       const chunks = async function* () {
         for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
       };
-      return { tag: "Found", body: { object: meta(key), body: chunks() } };
+      return { tag: "Present", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);

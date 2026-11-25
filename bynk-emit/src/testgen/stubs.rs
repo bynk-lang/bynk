@@ -1428,7 +1428,7 @@ pub(super) const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<st
       const chunks = async function* () {
         for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
       };
-      return { tag: "Found", body: { object: meta(key), body: chunks() } };
+      return { tag: "Present", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);

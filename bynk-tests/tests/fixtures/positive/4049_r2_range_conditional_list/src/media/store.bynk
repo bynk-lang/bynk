@@ -78,7 +78,7 @@ service readAlways {
 
 fn answer(r: R2Read) -> String {
 	match r {
-		Found(b) => "found \(b.object.size)",
+		Present(b) => "found \(b.object.size)",
 		Missing => "missing",
 		NotModified(o) => "not modified \(o.size)",
 	}

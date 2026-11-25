@@ -878,11 +878,11 @@ t("WorkersR2.getStreamIf: reads when the condition holds, NotModified with the m
   assert.deepEqual(await store.getStreamIf("absent", { tag: "Unconditional" }), { tag: "Missing" });
   assert.deepEqual(await store.getStreamIf("absent", { tag: "EtagMatches", etag: "x" }), { tag: "Missing" });
   const always = await store.getStreamIf("k", { tag: "Unconditional" });
-  assert.equal(always.tag, "Found");
+  assert.equal(always.tag, "Present");
   assert.deepEqual(await drain(always.body.body), [1, 2, 3]);
   assert.deepEqual(r2.reads.at(-1).options, {});
   const hit = await store.getStreamIf("k", { tag: "EtagMatches", etag: o.etag });
-  assert.equal(hit.tag, "Found");
+  assert.equal(hit.tag, "Present");
   assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagMatches: o.etag } });
   const miss = await store.getStreamIf("k", { tag: "EtagMatches", etag: "other" });
   assert.equal(miss.tag, "NotModified");
@@ -892,7 +892,7 @@ t("WorkersR2.getStreamIf: reads when the condition holds, NotModified with the m
   assert.equal(same.tag, "NotModified");
   assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagDoesNotMatch: o.etag } });
   const changed = await store.getStreamIf("k", { tag: "EtagDiffers", etag: "other" });
-  assert.equal(changed.tag, "Found");
+  assert.equal(changed.tag, "Present");
 });
 
 t("WorkersR2.listWith: a delimiter folds keys into prefixes, and no delimiter gives none; list is the short form", async () => {
