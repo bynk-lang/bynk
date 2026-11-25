@@ -3362,9 +3362,9 @@ fn check_type_ref_resolves_in(
                         );
                     } else {
                         // A bound the type declares (`type Set2[T: Eq]`) is checked
-                        // against each argument written here. A bare type
-                        // parameter argument is not checked (slice 0: no body
-                        // requires a type's bound).
+                        // against each concrete argument written here; a type
+                        // parameter standing for (or inside) the argument is checked
+                        // by `check_applied_bounds_at` (#3958).
                         let scope: Vec<&str> = type_params.iter().map(String::as_str).collect();
                         for (tp, arg) in decl.type_params.iter().zip(args) {
                             // Slice 1: an `Ord` bound requires an orderable argument.

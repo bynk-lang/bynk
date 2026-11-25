@@ -55,20 +55,22 @@ fn walk(
         TypeRef::App { name, args, .. } => {
             if let Some(decl) = types.get(&name.name) {
                 for (tp, arg) in decl.type_params.iter().zip(args) {
-                    let TypeRef::Named(id) = arg else { continue };
-                    if !params.contains(&id.name) {
-                        continue;
-                    }
-                    for constraint in CONSTRAINTS {
-                        if !tp.bounds.iter().any(|b| b.name == constraint)
-                            || scope.carries(&id.name, constraint)
-                            || !scope.first_report(&id.name, constraint)
-                        {
-                            continue;
+                    // A bound passes through `List`, `Option`, `Map` and the like, so
+                    // every parameter the argument mentions must carry it.
+                    let mut mentioned = Vec::new();
+                    mentioned_params(arg, params, &mut mentioned);
+                    for id in mentioned {
+                        for constraint in CONSTRAINTS {
+                            if !tp.bounds.iter().any(|b| b.name == constraint)
+                                || scope.carries(&id.name, constraint)
+                                || !scope.first_report(&id.name, constraint)
+                            {
+                                continue;
+                            }
+                            out.push(missing_bound(
+                                name, tp, &id.name, id.span, constraint, scope,
+                            ));
                         }
-                        out.push(missing_bound(
-                            name, tp, &id.name, id.span, constraint, scope,
-                        ));
                     }
                 }
             }
@@ -107,6 +109,26 @@ fn walk(
         | TypeRef::ValidationError(_)
         | TypeRef::DecodeError(_)
         | TypeRef::Unit(_) => {}
+    }
+}
+
+/// The identifiers in `r` that name one of `params`, in source order.
+fn mentioned_params<'r>(
+    r: &'r TypeRef,
+    params: &HashSet<String>,
+    out: &mut Vec<&'r bynk_syntax::ast::Ident>,
+) {
+    match r {
+        TypeRef::Named(id) if params.contains(&id.name) => out.push(id),
+        TypeRef::App { args, .. } => args.iter().for_each(|a| mentioned_params(a, params, out)),
+        TypeRef::Result(a, b, _) | TypeRef::Map(a, b, _) => {
+            mentioned_params(a, params, out);
+            mentioned_params(b, params, out);
+        }
+        TypeRef::Option(a, _) | TypeRef::List(a, _) | TypeRef::Set(a, _) => {
+            mentioned_params(a, params, out)
+        }
+        _ => {}
     }
 }
 
@@ -273,5 +295,47 @@ mod tests {
                    fn mk[U: Ord](xs: List[U]) -> Sorted[U] {\n  Sorted { items: xs }\n}\n\n\
                    fn use() -> Int {\n  let s = mk([true])\n  s.items.length()\n}\n";
         body(src).assert_reports("bynk.types.not_orderable");
+    }
+
+    /// A bound passes through `List` and `Option`, so a parameter inside the
+    /// argument needs it too.
+    #[test]
+    fn a_compound_argument_needs_the_bound_on_the_parameters_it_mentions() {
+        for arg in ["List[U]", "Option[U]"] {
+            let src = format!(
+                "commons app.a\n\ntype Sorted[T: Ord] = {{ items: List[T] }}\n\nfn f[U](s: Sorted[{arg}]) -> Int {{\n  1\n}}\n"
+            );
+            body(&src).assert_reports("bynk.generics.missing_ord_bound");
+        }
+        let ok = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\nfn f[U: Ord](s: Sorted[List[U]]) -> Int {\n  1\n}\n";
+        assert!(
+            !body(ok)
+                .categories()
+                .contains(&"bynk.generics.missing_ord_bound")
+        );
+    }
+
+    /// A variant literal is an inferred instantiation too, and an annotation in a
+    /// body applies the type to the function's parameter.
+    #[test]
+    fn a_variant_literal_and_a_body_annotation_hold_the_bound() {
+        let variant = "commons app.a\n\ntype Tree[T: Ord] =\n  | Leaf\n  | Node(v: T)\n\nfn f() -> Int {\n  let t = Node(true)\n  1\n}\n";
+        body(variant).assert_reports("bynk.types.not_orderable");
+        let annotated = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\nfn g[U](s: List[U]) -> Int {\n  let t: Sorted[U] = Sorted { items: [] }\n  1\n}\n";
+        body(annotated).assert_reports("bynk.generics.missing_ord_bound");
+    }
+
+    /// One missing bound is one diagnostic, though the signature and the body
+    /// that builds the value both see it.
+    #[test]
+    fn a_missing_bound_is_reported_once() {
+        let src = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\nfn mk[A](xs: List[A]) -> Sorted[A] {\n  Sorted { items: xs }\n}\n";
+        let a = body(src);
+        let n = a
+            .categories()
+            .iter()
+            .filter(|c| **c == "bynk.generics.missing_ord_bound")
+            .count();
+        assert_eq!(n, 1, "{}", a.render());
     }
 }
