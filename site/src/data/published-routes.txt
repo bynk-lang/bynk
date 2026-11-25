@@ -998,6 +998,7 @@
 /book/reference/diagnostics/bynk.types.method_on_non_named_type/
 /book/reference/diagnostics/bynk.types.mixed_pattern_bindings/
 /book/reference/diagnostics/bynk.types.negative_length/
+/book/reference/diagnostics/bynk.types.nested_effect/
 /book/reference/diagnostics/bynk.types.never_inferred/
 /book/reference/diagnostics/bynk.types.no_numeric_coercion/
 /book/reference/diagnostics/bynk.types.non_exhaustive_match/
@@ -2158,6 +2159,7 @@
 /reference/diagnostics/bynk.types.method_on_non_named_type/
 /reference/diagnostics/bynk.types.mixed_pattern_bindings/
 /reference/diagnostics/bynk.types.negative_length/
+/reference/diagnostics/bynk.types.nested_effect/
 /reference/diagnostics/bynk.types.never_inferred/
 /reference/diagnostics/bynk.types.no_numeric_coercion/
 /reference/diagnostics/bynk.types.non_exhaustive_match/

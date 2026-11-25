@@ -6171,6 +6171,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
     },
     Explain {
+        code: "bynk.types.nested_effect",
+        blurb: "An `Effect` cannot wrap another `Effect`. An effect is a promise when it runs, and a promise that returns a promise is merged into one, so an `Effect[Effect[T]]` cannot exist there: the value after `<-` would be a `T` while the type said `Effect[T]`, and calling a method on it would fail. The type is refused wherever it appears, as written (`Effect[Effect[Int]]`, also inside another type such as `Option[Effect[Effect[Int]]]`) and where a call would build it: `Effect.pure(e)` with `e` an effect, or a generic function whose type parameter is filled with an effect and wrapped in another, such as `wrap(e)` below. A generic signature that could be instantiated that way stays legal; only the instantiation is refused. To sequence effects, use `andThen` (or `<-` in an effectful body), and return an `Effect[T]`. A list or option of effects is fine: it is not an effect wrapped in an effect.",
+        example: "fn wrap[T](x: T) -> Effect[T] {\n    Effect.pure(x)\n}\n\nfn nested(e: Effect[Int]) -> Int {\n    let w = wrap(e)   // ✗ `Effect[Effect[Int]]`\n    0\n}\n\nfn sequenced(e: Effect[Int]) -> Effect[Int] {\n    let n <- e                      // ✓ one effect after the other\n    wrap(n + 1)\n}",
+    },
+    Explain {
         code: "bynk.types.never_inferred",
         blurb: "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the \
                 bottom type `never returns`, which stands in for any type. If an unannotated \
@@ -10784,6 +10789,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.negative_length",
         "A length predicate was given a negative value.",
         &["refinement"],
+    ),
+    d(
+        "bynk.types.nested_effect",
+        "An `Effect` wraps another `Effect`, as written or through a call's instantiation; effects are promises and flatten, so the shape cannot exist (use `andThen`).",
     ),
     dg(
         "bynk.types.never_inferred",

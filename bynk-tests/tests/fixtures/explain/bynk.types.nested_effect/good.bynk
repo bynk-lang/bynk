@@ -1,0 +1,10 @@
+commons demo
+
+fn wrap[T](x: T) -> Effect[T] {
+	Effect.pure(x)
+}
+
+fn sequenced(e: Effect[Int]) -> Effect[Int] {
+	let n <- e
+	wrap(n + 1)
+}

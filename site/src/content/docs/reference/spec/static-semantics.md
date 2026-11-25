@@ -1275,6 +1275,20 @@ effectful position and MUST be applied to an `Effect`
 capability call or a cross-context call MUST NOT occur in a pure context
 (`bynk.effect.capability_in_pure_context`, `bynk.effect.cross_context_in_pure_context`).
 
+**An effect cannot wrap another effect** (#4324). An `Effect` is a promise at runtime, and a
+promise that returns a promise is merged into one, so `Effect[Effect[T]]` has no runtime
+form: the value after `<-` would be a `T` while the type said `Effect[T]`. The shape is
+refused with `bynk.types.nested_effect` in two places. A written `Effect[Effect[_]]` is
+refused wherever a type is written, at any depth and inside any type argument
+(`Option[Effect[Effect[Int]]]`). A call that would *build* one is refused too: when a type
+variable is instantiated with an `Effect` where the signature wraps it in another, as
+`Effect.pure(e)` with `e: Effect[_]` and `wrap(e)` for `fn wrap[T](x: T) -> Effect[T]` do,
+the call is refused at the argument whose parameter mentions that type variable; so is
+a kernel method that builds one (`q.fold(e0, f)` with `e0: Effect[Int]`), at the call. A generic signature such as
+`fn mapE[T, U](e: Effect[T], f: T -> U) -> Effect[U]` stays legal; only an instantiation that
+nests is refused. A `List[Effect[T]]` or an `Option[Effect[T]]` is not a nested effect and
+is unaffected. To sequence effects, use `andThen` or `<-`.
+
 A **detached effect** (`e.detach()`, #3437) stops waiting for an effect that is already
 running. `detach` is a kernel method on every `Effect[T]` that returns `Effect[()]`, so it is an
 ordinary effect: `do e.detach()` and `let _ <- e.detach()` are statements, and it may be the body
