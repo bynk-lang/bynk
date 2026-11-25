@@ -239,7 +239,10 @@ itself is unchanged.) If any fails:
 A transition needs a prior committed state to compare against, so it is checked
 from the **second commit onward**: the **genesis commit** (an agent's first) has
 no `old` and is skipped — the snapshot invariants still constrain it. Because both
-checks live at the commit boundary, they fire at *every* test tier for free.
+checks live at the commit boundary, they fire at *every* test tier for free. A test
+claims that a named one refused a call with
+[`expect <call> violates <name>`](/reference/testing/#violates), not merely that
+something faulted.
 
 Intermediate states *within* a handler are not constrained — a handler may
 briefly hold an inconsistent state while transitioning, as long as the committed

@@ -1564,6 +1564,18 @@ awaiting the call throws rather than returns. `faults` is contextual: outside an
 `expect` subject it is an ordinary identifier. Well-formedness — the subject is a
 call of type `Effect[_]`, and the claim is not made at the `system` tier: §5.
 
+A refusal claim (#4035) takes `violates <name>` in place of `faults`, claiming that
+the call's commit was refused by the named declaration; `violates` is contextual too.
+Well-formedness — the name resolves against the agents the suite reaches, and the
+claim is not made at the `system` tier: §5.
+
+### §4.8.9ab violates_name (#4035)
+
+{{#grammar violates_name}}
+
+The declaration a refusal claim names: an invariant or transition (`name`, or
+`Agent.name`) or a `@unique` constraint by its field and key (`field.index`).
+
 ### §4.8.9aa snapshot_expr (#2842)
 
 {{#grammar snapshot_expr}}

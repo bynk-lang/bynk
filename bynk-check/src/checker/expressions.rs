@@ -982,7 +982,9 @@ fn impure_with_error(span: Span) -> CompileError {
 /// `bynk.test.faults_needs_in_process` and it is not validated here — the
 /// route-shape diagnostics would only bury that one.
 pub(crate) fn check_faults(faults: &FaultsExpr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
-    let FaultsExpr { call, principal } = faults;
+    let FaultsExpr {
+        call, principal, ..
+    } = faults;
     let tys = ctx.tys;
     let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
     if !ctx.in_test_body {
