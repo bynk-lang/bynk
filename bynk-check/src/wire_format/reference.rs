@@ -514,7 +514,7 @@ A Cloudflare queue message carries only a body, with no headers, so a signature 
 | `v` | The format's version. This page describes `1`; a message with another version is refused. |
 | `from` | The sender: a Bynk context's qualified name, or a `Foreign` actor's name. The consumer looks up the keys it admits for it, and refuses a sender it does not know. |
 | `id` | A unique message id, minted by the producer. The consumer claims it once, so a replay is recognised (below). |
-| `ts` | When the producer signed it, as an integer number of seconds since the epoch, written in decimal. Anything else is refused as malformed. It is covered by the signature and is not a validity window, because a queued message can wait for days. |
+| `ts` | When the producer signed it, as an integer number of seconds since the epoch, written in decimal. Anything else is refused as malformed. It is covered by the signature. A consumer refuses a message signed more than 15 days ago (the longest a queued message can wait, with its replay window) or more than 5 minutes ahead of its own clock, as stale; within that range a message can still wait for days. |
 | `sig` | The lower-case hex HMAC-SHA256 of the signing input, keyed by the secret shared between the producer and the consumer. |
 | `body` | The message itself, exactly as an unsigned producer would send it. |
 

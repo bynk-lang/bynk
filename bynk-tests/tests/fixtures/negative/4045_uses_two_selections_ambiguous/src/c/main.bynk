@@ -1,0 +1,8 @@
+commons c
+
+// Two braced lists that both select `Conflict` are as ambiguous as two whole `uses`:
+// neither outranks the other.
+uses a { Conflict }
+uses b { Conflict }
+
+type X = { c: Conflict }

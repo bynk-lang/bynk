@@ -200,13 +200,10 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         if let Some(content) = store_op_hover(a).or_else(|| violates_hover(a)) {
             return Some(content);
         }
-        // 2b. #2839: the `?` of an `Option` — `None` answers `404 NotFound`. Ahead of the locals rung, which
-        //     would otherwise describe the operand the `?` abuts.
-        if let Some(text) = a.snapshots.get(a.rel)
-            && let Some(entries) = a.expr_types.get(a.rel)
-            && let Some(content) =
-                crate::symbols::describe_question_at(text, a.offset, entries, tys)
-        {
+        // 2b. #2839: the `?` of an `Option`; #4363: an interpolation hole's delimiters.
+        //     Ahead of the locals rung, which would otherwise describe the operand the
+        //     `?` abuts.
+        if let Some(content) = operator_hover(a, tys) {
             return Some(content);
         }
         // 3. v0.122 (slice 1): a local / parameter → its inferred type, and
@@ -457,6 +454,15 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| describe_fault_builtin(&name, &text[span.end..]))
         // #2867: the `IsoDate` refinement predicate, in a `where` clause.
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
+}
+
+/// #2839, #4363: the hover of a `?` on an `Option`, or of an interpolation hole's
+/// own delimiters. Both read the buffer text and the expression types.
+fn operator_hover(a: &HoverAnalysis<'_>, tys: &bynk_check::checker::Types) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    let entries = a.expr_types.get(a.rel)?;
+    crate::symbols::describe_question_at(text, a.offset, entries, tys)
+        .or_else(|| crate::symbols::describe_interpolation_hole_at(text, a.offset, entries, tys))
 }
 
 /// A `store` field's operation hover (#611) and, on the terminal of a `Map`/`Log` pipeline
