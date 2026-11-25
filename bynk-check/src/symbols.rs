@@ -3166,6 +3166,8 @@ mod detect_context_message_bundle_tests {
                 uses: targets
                     .iter()
                     .map(|t| UsesDecl {
+                        alias: None,
+                        selected: None,
                         target: qualified(t),
                         span: Span::default(),
                         trivia: Trivia::default(),

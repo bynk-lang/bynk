@@ -169,6 +169,15 @@ pub enum CommonsForm {
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub target: QualifiedName,
+    /// #4045: `uses lib.y as Y` — the commons' public names are reached
+    /// qualified, `Y.Status`, and not bare. Mutually exclusive with `selected`.
+    pub alias: Option<Ident>,
+    /// #4045: `uses lib.y { Status as YStatus, describe }` — only the listed
+    /// names are in scope, each optionally under another name. A commons
+    /// exports types, functions and constants, so an item may name any of them;
+    /// renaming a type leaves its variants' names as they are. `None` for the
+    /// whole-commons forms; `Some` (possibly empty) for the braced form.
+    pub selected: Option<Vec<ConsumesItem>>,
     pub span: Span,
     pub trivia: Trivia,
     /// A blank line separated this header line's leading comment from the

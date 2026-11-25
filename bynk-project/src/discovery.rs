@@ -335,6 +335,8 @@ impl ParsedFile {
         }
         let span = Span::default();
         uses.push(UsesDecl {
+            alias: None,
+            selected: None,
             target: QualifiedName {
                 parts: target
                     .split('.')

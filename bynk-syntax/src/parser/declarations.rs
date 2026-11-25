@@ -480,9 +480,43 @@ impl<'a> Parser<'a> {
         let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Uses, "to start a `uses` declaration")?;
         let target = self.parse_qualified_name()?;
-        let span = kw.span.merge(target.span);
+        let mut span = kw.span.merge(target.span);
+        let mut alias = None;
+        let mut selected = None;
+        match self.peek_kind() {
+            // #4045: `uses lib.y as Y`.
+            Some(TokenKind::As) => {
+                self.bump();
+                let id = self.expect_ident("as an alias for the used commons")?;
+                span = span.merge(id.span);
+                alias = Some(id);
+            }
+            // #4045: `uses lib.y { Status as YStatus, describe }`.
+            Some(TokenKind::LBrace) => {
+                self.bump();
+                let mut names = Vec::new();
+                while self.peek_kind() != Some(TokenKind::RBrace) {
+                    let id = self.expect_ident("a name in `uses U { … }`")?;
+                    let alias = if self.eat(TokenKind::As).is_some() {
+                        Some(self.expect_ident("a name after `as` in `uses U { … }`")?)
+                    } else {
+                        None
+                    };
+                    names.push(ConsumesItem { name: id, alias });
+                    if self.eat(TokenKind::Comma).is_none() {
+                        break;
+                    }
+                }
+                let close = self.expect(TokenKind::RBrace, "to close the `uses` list")?;
+                span = span.merge(close.span);
+                selected = Some(names);
+            }
+            _ => {}
+        }
         Ok(UsesDecl {
             target,
+            alias,
+            selected,
             span,
             trivia: Trivia::default(),
             blank_before,

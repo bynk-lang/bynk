@@ -898,7 +898,7 @@ impl<'a> Formatter<'a> {
         for u in &a.uses {
             self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
@@ -1008,7 +1008,7 @@ impl<'a> Formatter<'a> {
                 self.newline();
             }
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             first = false;
         }
@@ -1229,7 +1229,7 @@ impl<'a> Formatter<'a> {
         for u in uses {
             self.header_comment_gap(any_uses, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_uses = true;
         }
@@ -1339,7 +1339,7 @@ impl<'a> Formatter<'a> {
         for u in uses {
             self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
@@ -3690,6 +3690,28 @@ fn holds_comments(e: &Expr) -> bool {
     ) || bynk_syntax::ast::expr_children(e)
         .into_iter()
         .any(holds_comments)
+}
+
+/// #4045: the text of a `uses` clause in any of its three forms: the whole
+/// commons, `uses lib.y as Y`, or the braced `uses lib.y { Status as YStatus, f }`.
+fn uses_text(u: &UsesDecl) -> String {
+    match (&u.alias, &u.selected) {
+        (Some(alias), _) => format!("uses {} as {}", u.target.joined(), alias.name),
+        (None, Some(selected)) if selected.is_empty() => {
+            format!("uses {} {{ }}", u.target.joined())
+        }
+        (None, Some(selected)) => {
+            let names: Vec<String> = selected
+                .iter()
+                .map(|i| match &i.alias {
+                    Some(a) => format!("{} as {}", i.name.name, a.name),
+                    None => i.name.name.clone(),
+                })
+                .collect();
+            format!("uses {} {{ {} }}", u.target.joined(), names.join(", "))
+        }
+        (None, None) => format!("uses {}", u.target.joined()),
+    }
 }
 
 #[cfg(test)]
