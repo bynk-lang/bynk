@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { __bynkBytesToBase64 } from "../../__bynk_runtime/bytes.js";
-import { type __JsonValue, __verifyCall, __faultResponse } from "../../__bynk_runtime/boundary.js";
+import { type __JsonValue, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
@@ -28,7 +28,7 @@ export default {
         const __body = await __verifyCall(request, env, "api");
         if (typeof __body !== "string") return __body;
         const __wire = request.headers.get("X-Bynk-Wire");
-        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedWireVersion", accepted: [1] }), { status: 400, headers: { "content-type": "application/json" } });
+        if (__wire !== null && __wire !== "1") return new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "UnsupportedWireVersion", accepted: [1] })), { status: 400, headers: { "content-type": "application/json" } });
         const servicePath = path.slice("/_bynk/call/".length);
         switch (servicePath) {
           default:

@@ -1,0 +1,12 @@
+{
+  "blurb": "`detach` stops waiting for an effect and hands it to the execution context, so something must keep the effect alive after the handler returns. A service handler has an execution context that does. An agent handler runs inside the agent's own object, with no such context, and its effects are awaited so that they finish with the handler. So `detach` is refused there, and in a closure there. Await the effect instead, with `do` or `let _ <-`, or move the `detach` to the service handler that calls the agent. A `detach` of a store operation is `bynk.detach.store_op`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.detach.in_agent_handler",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "on call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\").detach()   // ✗ an agent handler cannot detach\n    do count.update((n) => n + 1)\n}\n\non call bump() -> Effect[()] given Logger {\n    do Logger.info(\"bump\")             // ✓ awaited, so it finishes with the handler\n    do count.update((n) => n + 1)\n}",
+  "severity": "error",
+  "summary": "A `detach` was used in an agent handler, which has no execution context to keep a detached effect alive."
+}

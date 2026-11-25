@@ -1,0 +1,12 @@
+{
+  "blurb": "A service has one `limits` policy, and it sets the body-size cap for its body-taking routes. Two blocks could name different caps, and the reader would not know which holds, so the second is refused. Merge them into one, keeping the cap you mean. A single route can still differ with `@limit` on its handler. `cors`, `security` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_security`, `bynk.parse.duplicate_json`).",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.duplicate_limits",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service api from http {\n    limits { maxBody: 1_048_576 }\n    limits { maxBody: 4_194_304 }                    // ✗ a second `limits`\n    on POST(\"/a\") (body: Int) -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 4_194_304 }                    // ✓ one cap\n    on POST(\"/a\") (body: Int) -> Effect[HttpResult[Int]] by Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A service declares more than one `limits { }` policy."
+}

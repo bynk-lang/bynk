@@ -1,0 +1,10 @@
+{
+  "blurb": "A `stub` substitutes one of the capabilities the unit under test depends on: one the context declares, or reaches through a `consumes`. Any other name, including a misspelt one, leaves nothing to substitute. A commons has no capabilities, so it cannot be stubbed at all. Name a capability of the target, or add the `consumes` it needs. See `bynk.stub.unknown_op` for a wrong operation.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.not_a_seam",
+  "constructs": [],
+  "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Gauge.read() returns 7   // ✗ the context has no `Gauge`\nstub Meter.read() returns 7   // ✓",
+  "severity": "error",
+  "summary": "A test `stub` overrides a capability the unit under test does not consume."
+}

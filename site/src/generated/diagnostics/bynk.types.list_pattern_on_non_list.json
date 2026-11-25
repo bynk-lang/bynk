@@ -1,0 +1,12 @@
+{
+  "blurb": "A list pattern such as `[x, ..]` matches a value by its length and its elements, so the value must be a `List[T]`. A `Set`, a `Map`, an `Int` or a record has no such shape, and a record or sum is matched by its own pattern. Convert the value first, as `s.toList()` does for a `Set`, or match on what the value actually is. The same rule applies to a list pattern after `is` and in `let … else`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.list_pattern_on_non_list",
+  "constructs": [
+    "list_pattern"
+  ],
+  "example": "fn first(s: Set[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✗ a `Set` is not a `List`\n        _ => 0\n    }\n}\n\nfn first(s: List[Int]) -> Int {\n    match s {\n        [x, ..] => x    // ✓\n        _ => 0\n    }\n}",
+  "severity": "error",
+  "summary": "A list pattern is matched against a value that is not a `List` (a record, sum, base type, `Set` or `Map`)."
+}

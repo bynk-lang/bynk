@@ -1,0 +1,10 @@
+{
+  "blurb": "A rounding mode is written `RoundingMode.<mode>` where the rounding happens, as the mode argument of a `Decimal`'s `round` or `div`. It is not a value: it cannot be bound to a name, stored or passed around, so the rounding at each call is visible at that call. Write the mode at the call. A mode that is not a `RoundingMode.<mode>` at all is `bynk.types.unknown_rounding_mode`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.rounding_mode_position",
+  "constructs": [],
+  "example": "let mode = RoundingMode.HalfUp         // ✗ a mode is not a value\n\nprice.round(2, RoundingMode.HalfUp)    // ✓ written where it rounds",
+  "severity": "error",
+  "summary": "`RoundingMode.<mode>` was used outside the mode argument of a `Decimal`'s `round` or `div`. A mode is read where the rounding happens and is not a first-class value (#2622)."
+}

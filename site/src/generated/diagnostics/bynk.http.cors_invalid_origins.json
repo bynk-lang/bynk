@@ -1,0 +1,10 @@
+{
+  "blurb": "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. A single string, an empty list, a computed entry or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cors_invalid_origins",
+  "constructs": [],
+  "example": "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
+  "severity": "error",
+  "summary": "A `cors` policy's `origins` is missing, empty, or not a list of string literals."
+}

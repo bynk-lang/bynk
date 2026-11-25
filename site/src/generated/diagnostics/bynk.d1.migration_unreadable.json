@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.d1.migration_unreadable",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A `D1` migration in the project's `migrations/` folder can't be read, or isn't UTF-8 text."
+}

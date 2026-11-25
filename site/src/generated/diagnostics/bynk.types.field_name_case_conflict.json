@@ -1,0 +1,12 @@
+{
+  "blurb": "A `cookies` or `query` record is read by name, and names that differ only in case are easily confused: a client that sends `page` would not match `Page`, yet both look like the same parameter. So two fields of such a record may not have wire names that differ only in case. Rename one. Two fields with exactly the same wire name are `bynk.types.field_name_duplicate`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_name_case_conflict",
+  "constructs": [
+    "record_field"
+  ],
+  "example": "type Filter = {\n    @name(\"Page\") a: Option[Int],\n    @name(\"page\") b: Option[Int],    // ✗ differs from `Page` only in case\n}\n\ntype Filter = {\n    @name(\"Page\") a: Option[Int],\n    @name(\"size\") b: Option[Int],    // ✓\n}",
+  "severity": "error",
+  "summary": "Two fields of a `cookies` or `query` record have wire names that differ only in case."
+}

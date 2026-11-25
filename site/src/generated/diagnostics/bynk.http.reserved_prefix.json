@@ -1,0 +1,12 @@
+{
+  "blurb": "Two path prefixes belong to the platform. `/_bynk/` is reserved for Bynk's own dispatch, and `/_assets/` is where content-hashed static assets are served before the Worker runs, so a handler there could be shadowed by any asset. A route at either, or at the bare `/_bynk` or `/_assets`, is refused. Choose another path.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.reserved_prefix",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets)."
+}

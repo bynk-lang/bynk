@@ -1,0 +1,12 @@
+{
+  "blurb": "Each module is listed once: the compiler generates one loader, `./x.wasm.js`, per file. Two entries for one file add nothing, and `./a.wasm` and `a.wasm` are the same file once the path is normalised. Remove the repeat, or correct the name if a different module was meant.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.include_duplicate",
+  "constructs": [
+    "binding_decl"
+  ],
+  "example": "adapter math {\n    binding \"./math.binding.ts\" includes [\"./a.wasm\", \"a.wasm\"]    // ✗ the same file twice\n}\n\nadapter math {\n    binding \"./math.binding.ts\" includes [\"./a.wasm\"]              // ✓ listed once\n}",
+  "severity": "error",
+  "summary": "An adapter `binding … includes [ … ]` list names one file more than once."
+}

@@ -7,6 +7,14 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.678.2** | The diagnostic reference is generated one file per code, and its index is assembled at site build time, so two changes that add different diagnostics no longer conflict |
+| **v0.678.1** | The generated `tests/main.ts` marks the fixed part of its `main()` with comments, so the snapshot harness can share it between fixtures |
+| **v0.678.0** | `bynk.schema.lock` records each `derives Ord` type's field and variant order, and a reorder is an error until `bynk lock accept-order` accepts it |
+| **v0.677.3** | `bynk test` no longer panics when a suite checks a function that returns a consumed type renamed with `as` |
+| **v0.677.2** | A `400 RefinementViolation` body no longer echoes the rejected value; `violation` carries `field` and `message` only |
+| **v0.677.1** | A type selected from a consumed context now wins over an unselected `bynk` export of the same name (`Refusal`, `CallOutcome`, `CallFailure`) |
+| **v0.677.0** | `List` gains `filterMap`, `zipWith`, `takeWhile`, `skipWhile` and `count(p)` |
+| **v0.676.0** | `String` gains `isEmpty`, `trimStart`, `trimEnd`, `padStart`, `padEnd`, `repeat`, `lines`, `lastIndexOf` and `replaceFirst`, `List[String]` gains `join(sep)`, and `bynk.string` is deprecated |
 | **v0.675.0** | A queue message whose body cannot be decoded is no longer retried: it is sent unchanged to the consumer's dead-letter queue and acked, or, with none, acked and reported as a fault, with one log line naming the queue, type and decode error but never the body; a `system` case reads it as `Undecodable` |
 | **v0.674.0** | An HTTP handler's `headers` parameter may be a record, decoded and validated at the boundary as `query` and `cookies` are (`@name("if-match")` names a header, names match without case, a `List` field splits a comma-separated value), and `RequestHeaders` remains the raw view |
 | **v0.673.0** | A `for all` draws each plain type across its realistic domain (a wide `Int`, a `String` with whitespace and astral characters, and `Decimal`, `Instant`, `Duration`, `Bytes` and `Float` with boundaries), so a seed recorded earlier may now find a different counterexample |

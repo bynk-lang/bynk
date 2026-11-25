@@ -1,0 +1,10 @@
+{
+  "blurb": "A package lists in `exports` the units it offers to its users, and keeps the rest free to change, as a library keeps its internals. A unit that exists but is not listed is refused, so a consumer cannot come to rely on it. Use one of the exported units, or ask the package to export it. Leaving `exports` out shares every commons and adapter. A name the package does not declare at all is `bynk.package.unknown_unit`.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.unit_not_exported",
+  "constructs": [],
+  "example": "exports = [\"notify\"]      // in the package's `bynk.toml`\n\nuses lib.internal     // ✗ not in `exports`\n\nuses lib.notify       // ✓ an exported unit",
+  "severity": "error",
+  "summary": "A `uses` or `consumes` reaches a unit its dependency declares but doesn't list in `[package] exports`."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "An embed is a `String` constant used by its name, so a unit declares each name once: a second `embed shell` would leave `shell` meaning two files. Give each embed its own name. An embed whose name is an asset's, a function's or a type's is `bynk.resolve.name_conflict` instead.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.duplicate",
+  "constructs": [],
+  "example": "embed shell = \"embeds/page.html\"\nembed shell = \"embeds/other.html\"     // ✗ `shell` is already declared\n\nembed shell = \"embeds/page.html\"\nembed footer = \"embeds/other.html\"    // ✓ one name each",
+  "severity": "error",
+  "summary": "An `embed` name is declared more than once in the same unit."
+}

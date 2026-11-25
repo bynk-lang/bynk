@@ -1,0 +1,12 @@
+{
+  "blurb": "Both branches of an `if` can be its value, so they must have one type: their common supertype, where a refined type and its base agree at the base. With a `String` in one branch and an `Int` in the other, the caller has no single type to rely on. Make the branches agree, converting where needed. A `match` whose arms disagree is `bynk.types.match_arm_mismatch`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.if_branch_mismatch",
+  "constructs": [
+    "if_expr"
+  ],
+  "example": "fn grade(score: Int) -> String {\n    if score >= 50 { \"pass\" } else { 0 }    // ✗ a `String` branch and an `Int` branch\n}\n\nfn grade(score: Int) -> String {\n    if score >= 50 { \"pass\" } else { \"fail\" }    // ✓\n}",
+  "severity": "error",
+  "summary": "The branches of an `if` have different types."
+}

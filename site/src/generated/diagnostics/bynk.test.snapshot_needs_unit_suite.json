@@ -1,0 +1,12 @@
+{
+  "blurb": "A snapshot is stored in a file beside its unit suite and compared by the unit harness, so `matches snapshot` works only in a unit-tier `case` of a suite that tests a unit. A `system` case, or an integration or system suite, has no store to compare against. Take the snapshot in a unit case. See `bynk.test.snapshot_in_property` for the other place it is refused.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.snapshot_needs_unit_suite",
+  "constructs": [
+    "snapshot_expr"
+  ],
+  "example": "// tests/api.test.bynk\nsuite demo.api as system {\n    case \"one n\" {\n        expect 3 matches snapshot \"n\"   // ✗ no snapshot store at `system`\n    }\n}\n\nsuite demo.api {                             // ✓ a unit suite\n    case \"one n\" {\n        expect 3 matches snapshot \"n\"\n    }\n}",
+  "severity": "error",
+  "summary": "A snapshot is taken in a `system`-tier case or in an integration or system suite; snapshots are stored per unit suite file and compared in the unit harness."
+}

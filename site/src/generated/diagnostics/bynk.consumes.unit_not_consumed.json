@@ -1,0 +1,12 @@
+{
+  "blurb": "Imports are per file. A call to another unit's service (`pay.charge(…)`, or through the alias of `consumes pay as P`) is in scope only in a file that itself `consumes` that unit, in any form, even when another file of the same context does. A call from a file that does not is an error; `bynk check --fix=bynk.consumes.unit_not_consumed` adds `consumes <unit>` to this file. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.unit_not_consumed",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop/checkout.bynk\nconsumes pay\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(1)\n    }\n}\n\n// shop/refund.bynk, another file of the same context\nservice refund {\n    on call() -> Effect[Int] by Caller {\n        pay.charge(2)   // ✗ this file does not consume `pay`\n    }\n}\n\nconsumes pay            // ✓ each file consumes what it names",
+  "severity": "error",
+  "summary": "A call to another unit's service is written in a file whose own `consumes` does not name that unit."
+}

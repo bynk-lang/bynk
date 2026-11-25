@@ -1,0 +1,12 @@
+{
+  "blurb": "`consumes` declares that a context depends on a different one. A context's own declarations are already in scope, so consuming itself adds nothing, and a context that depends on itself is a cycle of length one. Delete the clause, or, if you meant another context, name it. A cycle through several contexts is `bynk.context.consumes_cycle`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.self_reference",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nconsumes shop                    // ✗ a context cannot consume itself\nconsumes pay                     // ✓ a different context",
+  "severity": "error",
+  "summary": "A context `consumes` itself."
+}

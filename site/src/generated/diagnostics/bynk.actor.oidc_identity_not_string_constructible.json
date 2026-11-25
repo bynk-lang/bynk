@@ -1,0 +1,10 @@
+{
+  "blurb": "An `Oidc` actor's identity is minted from the verified token's `sub` claim, which is a string, so the identity type must be a refined or opaque `String`. An actor with no `identity` is refused too. Declare a type over `String`, such as `type UserId = String where NonEmpty`, and name it. A `Bearer` actor has the same rule under `bynk.actor.bearer_identity_not_string_constructible`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.oidc_identity_not_string_constructible",
+  "constructs": [],
+  "example": "type Age = Int where NonNegative\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = Age }   // ✗ `sub` is a string, not an `Int`\n\ntype UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ minted from `sub`",
+  "severity": "error",
+  "summary": "An `Oidc` actor's identity is not a string-constructible type."
+}

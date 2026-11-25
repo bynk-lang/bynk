@@ -1,0 +1,12 @@
+{
+  "blurb": "`MinLength`, `MaxLength` and `Length` count the characters of a string, and a length cannot be below zero, so `MinLength(-1)` would hold for every string and `MaxLength(-1)` for none. The compiler takes a negative argument to be a mistake and refuses it. Give a length of zero or more. A set of predicates that no value can satisfy is `bynk.types.empty_refinement`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.negative_length",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Short = String where MinLength(-1)    // ✗ a length is never negative\n\ntype Short = String where MinLength(8)     // ✓",
+  "severity": "error",
+  "summary": "A length predicate was given a negative value."
+}

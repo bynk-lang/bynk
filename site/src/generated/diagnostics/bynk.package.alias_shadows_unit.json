@@ -1,0 +1,10 @@
+{
+  "blurb": "The key of a `[dependencies]` entry is the alias a unit reaches the package by, as in `lib.notify`. If one of the project's own units also starts with that word, `shop.cart` for an alias `shop`, then `shop.…` could mean the package or the unit, and the compiler will not choose. Rename the alias, which is the key, or rename the unit.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.alias_shadows_unit",
+  "constructs": [],
+  "example": "[dependencies]\nshop = { package = \"acme/lib\", path = \"pkg/lib\" }   // ✗ the project has a unit `shop`\n\nlib = { package = \"acme/lib\", path = \"pkg/lib\" }    // ✓ an alias no unit starts with",
+  "severity": "error",
+  "summary": "A dependency alias in `[dependencies]` is also the first segment of one of the project's own units, so `<alias>.…` would be ambiguous."
+}

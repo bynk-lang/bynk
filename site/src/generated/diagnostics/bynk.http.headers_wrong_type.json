@@ -1,0 +1,12 @@
+{
+  "blurb": "`headers` is the name the router reserves for the request's headers, so a parameter called `headers` is either a record the router decodes and validates (`headers: UploadHeaders`, one field per header, named by the field or by `@name(\"if-match\")`, answering `400` when the request does not fit), or `RequestHeaders`, the read-only view with `get(name)`, `bearer()` and `clientIp()`. Any other type has nothing to be filled from. Retype the parameter. An input of your own needs another name, and a name that is neither a path parameter nor one of the reserved ones is `bynk.http.extra_param`. The record's fields are held to `bynk.http.headers_field_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.headers_wrong_type",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/whoami\") (headers: String) -> Effect[HttpResult[String]] by v: Visitor { … }           // ✗\n\non GET(\"/whoami\") (headers: RequestHeaders) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "An HTTP handler's `headers` parameter is neither a record type nor `RequestHeaders`."
+}

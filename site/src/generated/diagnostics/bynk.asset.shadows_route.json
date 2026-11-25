@@ -1,0 +1,10 @@
+{
+  "blurb": "The platform answers a fixed asset's path before the Worker runs, and it does so for every method, so an HTTP handler at exactly that path can never be reached. The compiler refuses it rather than ship a route that never runs. Move the route, or give the asset another path. A route with a parameter that matches the asset's path, such as `/:page`, still serves every other path, and is only the warning `bynk.asset.may_shadow_route`. The members of a `[deploy.workers.<key>]` group share one assets directory, so an asset in one member shadows a route of the same path in another.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.shadows_route",
+  "constructs": [],
+  "example": "asset favicon = \"assets/favicon.ico\" at \"/favicon.ico\"\n\nservice web from http {\n    on GET(\"/favicon.ico\") () -> Effect[HttpResult[String]] by Visitor {    // ✗ the asset answers first\n        Ok(\"never reached\")\n    }\n}\n\nservice web from http {\n    on GET(\"/health\") () -> Effect[HttpResult[String]] by Visitor {    // ✓\n        Ok(\"ok\")\n    }\n}",
+  "severity": "error",
+  "summary": "A fixed asset path equals a literal HTTP route, in the same context or in another member of the same `[deploy.workers.<key>]` group, which the platform-served asset makes unreachable."
+}

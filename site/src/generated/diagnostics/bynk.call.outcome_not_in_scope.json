@@ -1,0 +1,12 @@
+{
+  "blurb": "`<context>.<service>.outcome(args)` returns `CallOutcome[_]`, and `CallOutcome` is declared in `bynk`, so a unit that wants `outcome` has to consume it. Without that the result type names a type the unit cannot see, and its `Handled`, `Rejected`, `Faulted` and `Unreachable` cases could not be matched. Add `consumes bynk { CallOutcome }` to the unit, or add `CallOutcome` to its existing `consumes bynk { … }` list.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.call.outcome_not_in_scope",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "// shop/orders.bynk\nlet o <- Pay.authorise.outcome(total)   // ✗ `CallOutcome` is not in scope\n\nconsumes bynk { CallOutcome }            // ✓ in the unit's header\nlet o <- Pay.authorise.outcome(total)",
+  "severity": "error",
+  "summary": "`<context>.<service>.outcome(args)` yields `CallOutcome[_]`, but the unit does not consume `bynk`, so `CallOutcome` is not in scope."
+}

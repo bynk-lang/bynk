@@ -1,0 +1,12 @@
+{
+  "blurb": "`is` tests a value's variant or refined type, not whether a number lies in a range, so `age is 13..19` would read as a type test while comparing values. Bynk refuses it. Compare the bounds, write a `match` arm `13..19`, or declare a refined type with `InRange(13, 19)` and test against that. The literal case is `bynk.types.is_literal_pattern`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.is_range_pattern",
+  "constructs": [
+    "is_expr"
+  ],
+  "example": "fn teen(age: Int) -> Bool {\n    age is 13..19                // ✗ `is` tests a type, not a range\n}\n\nfn teen(age: Int) -> Bool {\n    age >= 13 && age <= 19       // ✓\n}",
+  "severity": "error",
+  "summary": "A range pattern was used directly on the right of `is`; `is` tests type/refinement, not value ranges (use `match`, a guard or `InRange`)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`expect Cap.op called` checks the calls recorded for one operation of a capability, so `op` must be declared by that capability. A misspelt or renamed operation would match no call, so it is refused instead of leaving the check vacuous. Use the name the capability declares. A capability the unit does not consume is `bynk.observe.not_a_seam`.",
+  "category": "Observation",
+  "categoryAnchor": "observation",
+  "code": "bynk.observe.unknown_op",
+  "constructs": [],
+  "example": "// demo/pay.bynk\ncapability Logger { … }\n\n// tests/pay.test.bynk\nexpect Logger.nope called    // ✗ Logger has no `nope`\nexpect Logger.log called     // ✓",
+  "severity": "error",
+  "summary": "An observation names an operation the capability does not declare."
+}

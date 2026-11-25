@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.class_removed",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An agent class recorded in `bynk.schema.lock` is no longer declared, so a deployment's stored instances of it would be orphaned. If the class was never deployed, delete its `[agents]` entry from the lock; renaming or removing a deployed class gets its own declaration in a later state-migrations slice."
+}

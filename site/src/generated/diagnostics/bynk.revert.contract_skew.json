@@ -1,0 +1,10 @@
+{
+  "blurb": "Contexts call each other under contract hashes. Reverting one Worker can leave it expecting, or providing, a contract that another live Worker does not, and the runtime would refuse the calls. The check judges the result as if every selected Worker were reverted together, using the post-revert lock. Revert the whole project, or redeploy forward. See `bynk.deploy.contract_skew` for the same skew at deploy time.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.contract_skew",
+  "constructs": [],
+  "example": "bynk revert --dry-run --context shop.orders\n  contracts shop-orders  refused: the target no longer matches shop-payment\n\nbynk revert   # the whole project, so the contexts revert together",
+  "severity": "error",
+  "summary": "`bynk revert` refused because the target's contracts would no longer match another live Worker, judged as if every selected Worker were reverted together."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.deprecated_json_error",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`JsonError` is the deprecated spelling of `DecodeError` (warning; auto-fixable)."
+}

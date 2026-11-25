@@ -1,0 +1,10 @@
+{
+  "blurb": "A function's `ensures` is checked at every call, in production and in every test that reaches it. A test that calls the function and `expect`s the same predicate adds nothing and has to be kept in step with the contract. The compiler flags the repeat. The check is narrow: it fires only on a syntactic restatement over the same arguments. Delete the test, or keep a case only for a specific value a reader should see, such as `expect discount(100, 10) == 90`.",
+  "category": "Contracts",
+  "categoryAnchor": "contracts",
+  "code": "bynk.contract.restated_by_test",
+  "constructs": [],
+  "example": "// demo/c.bynk\nfn discount(p: Int, pct: Int) -> Int\n    ensures never_above: result <= p\n    { … }\n\n// tests/c.test.bynk\nlet r = discount(100, 10)\nexpect r <= 100    // ✗ repeats `never_above`\nexpect r == 90     // ✓ a specific witnessed value",
+  "severity": "error",
+  "summary": "A `case`/`property` merely restates a contract clause already declared at the function; the test is redundant."
+}

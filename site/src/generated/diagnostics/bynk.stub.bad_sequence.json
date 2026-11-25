@@ -1,0 +1,10 @@
+{
+  "blurb": "`returns each […]` gives one outcome per call, in order, and the last outcome repeats once the list runs out. An empty list has no outcome to repeat, so the first call would have nothing to return. List at least one. To return an empty list as a single value, write `returns []`, without `each`.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.bad_sequence",
+  "constructs": [],
+  "example": "// demo/meter.bynk\ncapability Meter { … }\n\n// tests/meter.test.bynk\nstub Meter.read() returns each []    // ✗ no outcomes\nstub Meter.read() returns each [7]   // ✓ at least one",
+  "severity": "error",
+  "summary": "A `stub … returns each […]` sequence is malformed (e.g. empty)."
+}

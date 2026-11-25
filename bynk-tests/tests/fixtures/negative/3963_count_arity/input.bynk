@@ -1,0 +1,5 @@
+commons demo.c
+
+fn bad(xs: List[Int]) -> Int {
+  xs.count((x: Int) => x > 1, (x: Int) => x > 2)
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A snapshot is stored under its case and its name, so each `matches snapshot` in one case needs a name of its own. Two with the same name would compare against, and update, the same stored value. Give the repeat a distinct name.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.snapshot_duplicate_name",
+  "constructs": [
+    "snapshot_expr"
+  ],
+  "example": "expect read(\"a\") matches snapshot \"delivery\"\nexpect read(\"b\") matches snapshot \"delivery\"   // ✗ name already taken\nexpect read(\"b\") matches snapshot \"second\"     // ✓",
+  "severity": "error",
+  "summary": "A case takes two snapshots (`expect v matches snapshot \"name\"`) under one name; a snapshot is keyed by its case and name."
+}

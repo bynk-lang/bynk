@@ -1,0 +1,10 @@
+{
+  "blurb": "A subscription pattern filters on the event's own fields, so each name in it must be one the event declares. A name that matches none could never filter anything, and is usually a misspelling; the diagnostic lists the declared fields. Use one of them.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.pattern_unknown_field",
+  "constructs": [],
+  "example": "event Paid = { id: String, amount: Int }\n\nservice onPaid from Events(Paid { total: 10, .. }) {   // ✗ `Paid` has no field `total`\n\nservice onPaid from Events(Paid { amount: 10, .. }) {   // ✓",
+  "severity": "error",
+  "summary": "A `from Events(E { ... })` subscription pattern named a field that `E` does not declare."
+}

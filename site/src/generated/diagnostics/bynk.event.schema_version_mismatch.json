@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.schema_version_mismatch",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An event's `@schema(N)` annotation disagrees with the version the schema registry computes from the event's build history."
+}

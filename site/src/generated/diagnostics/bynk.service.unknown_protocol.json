@@ -1,0 +1,12 @@
+{
+  "blurb": "The protocol after `from` is one of a closed set: `http`, `cron`, `queue`, `websocket` or `Events`. Kafka and MQTT are transports, not protocols: use `from queue(\"…\")` and bind the broker at the platform layer. A service with no `from` takes `on call` handlers.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.unknown_protocol",
+  "constructs": [
+    "service_decl"
+  ],
+  "example": "service worker from kafka {                // ✗ not a protocol\n\nservice worker from queue(\"jobs\") {        // ✓ the queue protocol",
+  "severity": "error",
+  "summary": "A `from <protocol>` names an unknown protocol (e.g. a transport like Kafka)."
+}

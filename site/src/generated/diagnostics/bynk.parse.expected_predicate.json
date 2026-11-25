@@ -1,0 +1,12 @@
+{
+  "blurb": "After `where`, and after each `&&`, a refinement takes the name of a predicate from a fixed list (`NonNegative`, `InRange(0, 150)` and so on, which the note gives), not a comparison. The list is closed, so the compiler can check a literal against the refinement at compile time. The commonest cause is a comparison such as `where >= 0`; a name that is not on the list, as in `where n > 0`, is `bynk.parse.unknown_predicate`. The position is the token that is not a predicate name.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_predicate",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Age = Int where >= 0                 // ✗ a predicate is a name, not a comparison\ntype Age = Int where NonNegative          // ✓",
+  "severity": "error",
+  "summary": "Expected a refinement predicate."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Signature` is an HMAC over the raw request body, so the handler must take that body: one with no `body` parameter would vouch for data it never reads. Add `(body: T)`, where `T` is the payload's type. A route that takes no payload has nothing for a signature to protect.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signature_requires_body",
+  "constructs": [],
+  "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }\n\nservice api from http {\n  on POST(\"/x\") () -> Effect[HttpResult[String]] by Hook {   // ✗ no `body` parameter\n  on POST(\"/x\") (body: String) -> Effect[HttpResult[String]] by Hook {   // ✓ the signed payload",
+  "severity": "error",
+  "summary": "A `Signature` handler does not take a `body` parameter."
+}

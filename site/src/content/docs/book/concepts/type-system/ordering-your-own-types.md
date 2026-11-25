@@ -89,6 +89,27 @@ A store `Query` takes the same keys, so the order holds before a `skip` or `take
 jobs.sortBy((j) => j.priority).skip(1).take(2).collect()
 ```
 
+## Reordering is a decision
+
+Because the declaration order is the order, tidying a declaration can change what
+every sort, `<`, `min` and `max` on the type returns. Bynk records the order of
+each of your `derives Ord` types in `bynk.schema.lock`, and a build that finds a
+different one stops:
+
+```text
+error[bynk.types.ord_order_changed]: the order of `Priority` has changed
+  recorded order: Low < Medium < High
+  new order:      High < Low < Medium
+  help: if this is intended, run `bynk lock accept-order Priority`; otherwise restore the order
+```
+
+If the new order is what you meant, run `bynk lock accept-order Priority` and
+commit the lock with the change. Otherwise put the declaration back (the editor
+offers "Restore the recorded order"). Adding a field or variant at the end,
+removing one, or renaming one in place is not a change. If you want a sort that
+does not depend on declaration order at all, say its order with `sortWith`
+below.
+
 ## Largest first
 
 `sortByDescending` takes the same keys and puts the largest first, on a `List` and on a

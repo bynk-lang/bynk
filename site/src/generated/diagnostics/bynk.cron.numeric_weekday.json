@@ -1,0 +1,12 @@
+{
+  "blurb": "Standard cron numbers the days `0` or `7` for Sunday, so `5` is Friday. Cloudflare's cron triggers number them `1`-`7` with `1` as Sunday, so `5` is Thursday. A schedule that was copied from standard cron, or written from habit, then runs a day early. Both forms are valid, so this is only a warning; name the day (`FRI`) or list the days explicitly to say what is meant, which also silences it.",
+  "category": "Cron",
+  "categoryAnchor": "cron",
+  "code": "bynk.cron.numeric_weekday",
+  "constructs": [
+    "cron_handler"
+  ],
+  "example": "on schedule(\"0 9 * * 5\") () -> Effect[Result[(), String]] { … }     // ⚠ Thursday on Cloudflare, not Friday\n\non schedule(\"0 9 * * FRI\") () -> Effect[Result[(), String]] { … }   // ✓ unambiguous",
+  "severity": "warning",
+  "summary": "A cron schedule names a day of the week by number, where Cloudflare's `1` is Sunday, not standard cron's `0`/`7` (warning)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`removed agent Cart` tells the next deploy to delete the class `Cart` and all of its stored data. While `Cart` is still declared, that would delete the data of a class the code still uses, so the two together are refused. Delete the `agent Cart` declaration; the data goes at the next deploy, once you confirm it by name. If the class should stay, delete the `removed agent` line instead.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.removed_live",
+  "constructs": [],
+  "example": "removed agent Cart    // ✗ `Cart` is still declared\nagent Cart { … }\n\nremoved agent Cart\nagent Basket { … }    // ✓ `Cart` is gone",
+  "severity": "error",
+  "summary": "A `removed agent` declaration names a class that is still declared; removing a class deletes its stored data."
+}

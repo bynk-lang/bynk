@@ -1,0 +1,10 @@
+{
+  "blurb": "`ttl` must be a `Duration` literal that is positive and a whole number of seconds, because it becomes both a `Max-Age` and a signed expiry in seconds. Write `12.hours` or `30.minutes`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_bad_ttl",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 1500.milliseconds), identity = UserId }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` `ttl` is not a positive whole number of seconds."
+}

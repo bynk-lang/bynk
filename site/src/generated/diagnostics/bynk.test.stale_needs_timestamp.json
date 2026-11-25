@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Signature` actor refuses a stale request by reading a timestamp header and comparing it with a `tolerance`. `by Stale` signs a request in the past, so it means something only when the actor declares both; without them the seam has no window to refuse it by, and the case would test nothing. Add `timestamp = \"<Header>\"` and `tolerance = <seconds>` to the actor, or test the signature itself with `by Forged`. On a route with no `Signature` actor, see `bynk.test.forged_needs_signature_route`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.stale_needs_timestamp",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nactor Legacy { auth = Signature(secret = \"LEGACY_SECRET\", header = \"X-Legacy-Sig\") }\nactor Hook { auth = Signature(secret = \"HOOK_SECRET\", header = \"X-Sig\", timestamp = \"X-Ts\", tolerance = 300) }\n\n// tests/api.test.bynk\nlet r <- api.POST(\"/legacy\", \"x\") by Stale    // ✗ `Legacy` declares no `timestamp`\nlet r <- api.POST(\"/hook\", \"x\") by Stale      // ✓",
+  "severity": "error",
+  "summary": "A case drives `by Stale` at a `Signature` route whose actor declares no `timestamp` header and `tolerance`, so there is no replay window for the seam to refuse a stale signature by."
+}

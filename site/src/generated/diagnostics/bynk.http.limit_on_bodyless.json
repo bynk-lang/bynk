@@ -1,0 +1,10 @@
+{
+  "blurb": "`@limit` caps the size of a request body, so it means something only on a route that reads one: `POST`, `PUT` or `PATCH`. A `GET` or `DELETE` takes no body in Bynk, so there is nothing to cap. Move the annotation to the body-taking route, or remove it. A default for every body-taking route in a service goes in `limits { maxBody: … }`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.limit_on_bodyless",
+  "constructs": [],
+  "example": "@limit(maxBody: 1_000_000)   // ✗ a `GET` has no body\non GET(\"/notes\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\ntype Note = { text: String }\n\n@limit(maxBody: 1_000_000)   // ✓ a route that reads a body\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@limit` annotation is placed on a handler that takes no body (a GET or DELETE)."
+}

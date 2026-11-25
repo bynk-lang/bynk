@@ -1,17 +1,21 @@
 ---
 // One page per diagnostic code (web presence track, slice 4, #3876). Every
 // tool links a code as `https://bynk-lang.org/d/<code>`, which `_redirects`
-// sends here. The page is built from `src/generated/diagnostics.json` (the
-// compiler's registry, rendered by `bynk_syntax::diagnostics::render_json` and
-// kept current by the `diagnostics_registry` docs-consistency test) and lists
+// sends here. The page is built from `src/generated/diagnostics/<code>.json` (the
+// compiler's registry, rendered per code by `bynk_syntax::diagnostics::render_json_per_code`
+// and kept current by the `diagnostics_registry` docs-consistency test) and lists
 // the Book pages that explain the code from `src/data/diagnostic-links.json`.
 import { getCollection, render } from "astro:content";
 import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
 import { Badge, Code } from "@astrojs/starlight/components";
-import diagnostics from "../../../generated/diagnostics.json";
 import diagnosticLinks from "../../../data/diagnostic-links.json";
 
 export async function getStaticPaths() {
+  // One file per code (#4286), so two changes that add different codes never touch the same
+  // file. Inside the function: Astro hoists `getStaticPaths`, so only imports are in scope.
+  const diagnostics = Object.values(
+    import.meta.glob("../../../generated/diagnostics/*.json", { eager: true, import: "default" }),
+  ).sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
   // The title and headings of every Book page a code links to, read once.
   const wanted = new Set(
     Object.values(diagnosticLinks)

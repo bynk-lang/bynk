@@ -1,0 +1,10 @@
+{
+  "blurb": "A purge reaches the edge cache only from the Worker's own `fetch`. Cloudflare accepts a purge from a cron run, but it clears nothing from the cache that `fetch` serves, so the stale responses would stay. An `on schedule` handler that reaches `EdgeCache`, with `given Edge` or through a provider that does, is refused. Purge from a service handler instead. An agent and a queue consumer have the same rule: `bynk.cloudflare.edge_cache_in_agent`, `bynk.cloudflare.edge_cache_in_queue`.",
+  "category": "Cloudflare",
+  "categoryAnchor": "cloudflare",
+  "code": "bynk.cloudflare.edge_cache_in_schedule",
+  "constructs": [],
+  "example": "capability Edge = EdgeCache\n\nservice sweep from cron {\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] given Edge {   // ✗ a cron purge clears nothing\n        let purged <- Edge.purge([\"/dl/\"])\n        if purged { Ok(()) } else { Err(\"refused\") }\n    }\n}\n\nservice operator from http {\n    on POST(\"/purge/:hex\") (hex: String) -> Effect[HttpResult[Bool]] by v: Visitor given Edge {   // ✓ purge from a service handler\n        let purged <- Edge.purge([\"/dl/\\(hex)\"])\n        Ok(purged)\n    }\n}",
+  "severity": "error",
+  "summary": "An `on schedule` handler reaches an `EdgeCache` instance; a cron run's purge is accepted but clears nothing from the fetch cache, so purge from a service handler."
+}

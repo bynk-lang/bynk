@@ -1,0 +1,12 @@
+{
+  "blurb": "A `system` case runs against deployed Workers and addresses services by their context path, which no `unit` or `integration` case can. So a suite holds either `system` cases only or none: a case of another tier in a `system` suite, or a `system` case among others, is refused. Move it into a suite of its own.",
+  "category": "Test tiers",
+  "categoryAnchor": "test-tiers",
+  "code": "bynk.tier.mixed_system_suite",
+  "constructs": [
+    "case"
+  ],
+  "example": "suite demo.desk as system {\n    case \"a local one\" as unit {   // ✗ not `system`, in a `system` suite\n        let n <- local.call(1)\n    }\n}\n\nsuite demo.desk {\n    case \"a local one\" {   // ✓ in a suite of its own\n        let n <- local.call(1)\n    }\n}",
+  "severity": "error",
+  "summary": "A suite mixes `system` cases with `unit` or `integration` ones; a `system` case runs against deployed Workers and addresses services by context path, so it needs a `suite … as system` of its own."
+}

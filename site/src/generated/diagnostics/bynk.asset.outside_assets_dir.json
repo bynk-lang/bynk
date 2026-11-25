@@ -1,0 +1,10 @@
+{
+  "blurb": "An asset is served to anyone who asks, without the Worker running, so it may come only from the project's `assets/` folder. If any path were allowed, a declaration could publish `.env` or a source file just by naming it. Move or copy the file into `assets/` and name it there. A path that is absolute or contains `..` is `bynk.asset.unsafe_path` instead.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.outside_assets_dir",
+  "constructs": [],
+  "example": "asset style = \"styles/board.css\"        // ✗ not in the assets/ folder\nasset style = \"assets/board.css\"        // ✓",
+  "severity": "error",
+  "summary": "An `asset` path does not name a file in the project's `assets/` folder."
+}

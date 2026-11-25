@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler declared `by u: User` runs as a verified actor, and a `case` has no real caller, so it must say who is calling with a call-site `by`. The same applies to a handler guarded by an actor sum: name one of its members. Append `by <Actor>(<identity>)` to the call.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.principal_required",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\nlet r <- api.GET(\"/items\")                  // ✗ who is calling?\nlet r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
+  "severity": "error",
+  "summary": "A test drives an identity-carrying handler, or one guarded by an actor sum, with no call-site `by <Actor>`."
+}

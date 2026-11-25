@@ -1,0 +1,12 @@
+{
+  "blurb": "`@example` gives `Val` the one value to use for a `Matches` or `IsoDate` refinement, which it cannot invent. A second `@example` would leave two candidates and no rule for choosing, so a refinement takes at most one. Keep the one you want. An example that does not satisfy the refinement is `bynk.types.example_violates`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.duplicate_example",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\") @example(\"XYZ\")    // ✗ a second example\n\ntype Code = String where Matches(\"[A-Z]{3}\") @example(\"ABC\")                       // ✓",
+  "severity": "error",
+  "summary": "A refinement carries more than one `@example`."
+}

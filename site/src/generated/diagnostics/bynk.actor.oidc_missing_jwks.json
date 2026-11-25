@@ -1,0 +1,10 @@
+{
+  "blurb": "An `Oidc` actor holds no shared secret. It checks a token's signature against the provider's public keys, a JSON Web Key Set that the verifier fetches from a URL, so the actor must say where it is. Add `jwks = \"…\"`, for example the provider's `/.well-known/jwks.json`. The `issuer` and `audience` are required as well, under `bynk.actor.oidc_missing_issuer` and `bynk.actor.oidc_missing_audience`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.oidc_missing_jwks",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\"), identity = UserId }   // ✗ nowhere to fetch the public keys\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the provider's key set",
+  "severity": "error",
+  "summary": "An `Oidc` actor does not name its `jwks` endpoint."
+}

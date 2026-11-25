@@ -5,18 +5,18 @@
 //!    appear in `bynk_syntax::diagnostics::REGISTRY`, and vice versa. "Compiler
 //!    source" is the `src/` of every workspace member (#1662), since emit sites
 //!    are spread across crates.
-//! 2. `site/src/content/docs/reference/diagnostics.md` and
-//!    `site/src/generated/diagnostics.json` must match what the registry
-//!    renders.
+//! 2. `site/src/generated/diagnostics/<code>.json`, one file per code, must match what
+//!    the registry renders, with no file for a code the registry lacks. The index page is
+//!    assembled from them at site build time (#4286), so it is not committed.
 //!
-//! Regenerate the docs page after changing the registry with:
+//! Regenerate the per-code files after changing the registry with:
 //!     BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bynk_syntax::diagnostics::{EXPLANATIONS, REGISTRY, render_markdown};
+use bynk_syntax::diagnostics::{EXPLANATIONS, REGISTRY};
 
 fn grammar_json() -> String {
     let path =
@@ -177,25 +177,6 @@ fn grammar_symbols_are_embeddable_rules() {
     }
 }
 
-#[test]
-fn generated_diagnostics_page_is_up_to_date() {
-    let page = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../site/src/content/docs/reference/diagnostics.md");
-    let rendered = xtask::site_page::to_site_page(&render_markdown(), "reference");
-
-    if std::env::var_os("BYNK_BLESS").is_some() {
-        fs::write(&page, &rendered).unwrap();
-        return;
-    }
-
-    let current = fs::read_to_string(&page).unwrap_or_default();
-    assert_eq!(
-        current, rendered,
-        "site/src/content/docs/reference/diagnostics.md is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
-    );
-}
-
 // --- #853: `bynk explain` / `codeDescription` explanations ------------------
 
 /// A GitHub-style heading slug: lowercase, non-alphanumerics (bar spaces and
@@ -336,6 +317,20 @@ fn blurb_codes_are_read_from_backtick_spans_only() {
     );
 }
 
+/// The heading slugs of the diagnostic index: one per category, as the per-code files record.
+fn index_anchors() -> BTreeSet<String> {
+    bynk_syntax::diagnostics::render_json_per_code()
+        .iter()
+        .map(|(_, json)| {
+            let doc: serde_json::Value = serde_json::from_str(json).expect("per-code json");
+            doc["categoryAnchor"]
+                .as_str()
+                .expect("categoryAnchor")
+                .to_string()
+        })
+        .collect()
+}
+
 /// A code's links (#3876): `site/src/data/diagnostic-links.json` maps codes to
 /// the Book pages that explain them, which the code's page lists. Every key
 /// must be a registry code, and every link a page on disk with, where it names
@@ -366,6 +361,17 @@ fn diagnostic_links_name_registry_codes_and_real_pages() {
                 "diagnostic-links.json `{code}`: `{target}` must be a root-relative `/…/` path"
             );
             let stem = path.trim_start_matches('/').trim_end_matches('/');
+            // The index is assembled at build time (#4286), so there is no file to read: its
+            // headings are the categories the registry's codes fall into.
+            if stem == "reference/diagnostics" {
+                assert!(
+                    anchor.is_empty() || index_anchors().contains(anchor),
+                    "diagnostic-links.json `{code}` links `{target}`, but the diagnostic index \
+                     has no category with that slug. Present slugs: {:?}",
+                    index_anchors()
+                );
+                continue;
+            }
             let file = ["md", "mdx"]
                 .iter()
                 .map(|x| docs_root.join(format!("{stem}.{x}")))
@@ -433,22 +439,39 @@ fn links_to_code_pages_name_registry_codes() {
     );
 }
 
-/// `site/src/generated/diagnostics.json`, the data behind each code's page
-/// (#3876), must match what the registry renders.
+/// `site/src/generated/diagnostics/<code>.json`, the data behind each code's page (#3876) and the
+/// index (#4286), must match what the registry renders, one file per code. A file for a code the
+/// registry no longer has fails too, so a removed code takes its file with it.
 #[test]
 fn generated_diagnostics_json_is_up_to_date() {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics.json");
-    let rendered = bynk_syntax::diagnostics::render_json();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/generated/diagnostics");
+    let rendered = bynk_syntax::diagnostics::render_json_per_code();
     if std::env::var_os("BYNK_BLESS").is_some() {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, &rendered).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        for (code, json) in &rendered {
+            fs::write(dir.join(format!("{code}.json")), json).unwrap();
+        }
         return;
     }
-    let current = fs::read_to_string(&path).unwrap_or_default();
+    let mut problems = Vec::new();
+    for (code, json) in &rendered {
+        let current = fs::read_to_string(dir.join(format!("{code}.json"))).unwrap_or_default();
+        if current != *json {
+            problems.push(format!("{code}.json is missing or out of date"));
+        }
+    }
+    let known: BTreeSet<String> = rendered.iter().map(|(c, _)| format!("{c}.json")).collect();
+    for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !known.contains(&name) {
+            problems.push(format!("{name} is not a registry code"));
+        }
+    }
     assert!(
-        current == rendered,
-        "site/src/generated/diagnostics.json is out of date with the registry.\n\
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::"
+        problems.is_empty(),
+        "site/src/generated/diagnostics/ is out of date with the registry:\n  {}\n\
+         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry::",
+        problems.join("\n  ")
     );
 }

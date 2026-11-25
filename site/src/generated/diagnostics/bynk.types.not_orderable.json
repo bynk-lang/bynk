@@ -1,0 +1,10 @@
+{
+  "blurb": "`<`, `<=`, `>` and `>=`, and a parameter declared `T: Ord`, need a type with a total order. `Int`, `Float`, `Decimal`, `String`, `Duration`, `Instant` and `Bytes` have one, as do refined types over them, `Option` and `List` of an orderable type, and any type of your own that declares `derives Ord`. `Bool`, `Result`, `Map`, `Set` and functions do not. Your own types are not ordered by accident, because opting in makes declaration order significant: reordering the fields or variants changes how values sort. Add `derives Ord`, or compare a field that is already orderable. A `sortBy`, `min` or `max` key that cannot be ordered is `bynk.types.key_not_orderable`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.not_orderable",
+  "constructs": [],
+  "example": "type Point = { x: Int, y: Int }\n\nfn before(a: Point, b: Point) -> Bool {\n    a < b    // ✗ `Point` does not derive `Ord`\n}\n\ntype Point = { x: Int, y: Int } derives Ord    // ✓ ordered by `x`, then `y`",
+  "severity": "error",
+  "summary": "A value is ordered (`<`, `<=`, `>`, `>=`), or passed to an `Ord`-bounded parameter, but its type is not `Ord`. `Int`, `Float`, `String`, `Duration`, `Instant`, `Bytes`, `Option`/`List` of an orderable type, refined types over those, and types that declare `derives Ord` are; adding `derives Ord` is offered as a fix that is never applied automatically, because it makes declaration order significant (constrained-generics slice 1)."
+}

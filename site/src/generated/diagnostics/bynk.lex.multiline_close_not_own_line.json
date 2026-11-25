@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.multiline_close_not_own_line",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A `\"\"\"` inside a multi-line string literal is not on a line of its own."
+}

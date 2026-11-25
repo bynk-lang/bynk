@@ -1,0 +1,10 @@
+{
+  "blurb": "A held `Connection` is a live resource with an identity: two values are the same connection or they are not, so there is no value to compare. So `==` on one, or on a type that holds one, is refused. Compare an id that you keep next to the connection. A `Stream` has `bynk.types.stream_not_comparable`, and functions and effects have `bynk.types.not_comparable`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.held_not_comparable",
+  "constructs": [],
+  "example": "type Frame = { text: String }\n\nfn same(a: Connection[Frame], b: Connection[Frame]) -> Bool {\n    a == b                            // ✗ a connection has identity, not value\n}\n\nfn same(a: String, b: String) -> Bool {    // ✓ compare ids kept beside them\n    a == b\n}",
+  "severity": "error",
+  "summary": "A held value (`Connection[F]`) is compared with `==`/`!=` — held values have identity, not value-equality (§2.9.3, real-time track slice 2)."
+}

@@ -1,0 +1,5 @@
+context registry.admission
+
+exports transparent { Refusal }
+
+type Refusal = { code: String, message: String }

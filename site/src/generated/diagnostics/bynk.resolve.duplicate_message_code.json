@@ -1,0 +1,10 @@
+{
+  "blurb": "A message code is the key `render` looks a template up by, so one block can give it only one text. A second entry under the same code leaves two templates for one key, and the second is refused. Delete the repeat, or give it a code of its own. The same code in different locale blocks is how a translation is written, and is not an error. A locale declared twice is `bynk.resolve.duplicate_message_locale`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_message_code",
+  "constructs": [],
+  "example": "messages \"en\" @reference {\n    \"cart.empty\" => \"Your basket is empty.\"\n    \"cart.empty\" => \"Your cart is empty.\"       // ✗ already declared in this block\n}\n\nmessages \"en\" @reference {\n    \"cart.empty\" => \"Your basket is empty.\"\n    \"cart.total\" => \"Your total is {total}.\"    // ✓ a code of its own\n}",
+  "severity": "error",
+  "summary": "A message bundle declares the same code twice in one block."
+}

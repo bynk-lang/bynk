@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.multiline_indent",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "A line of a multi-line string literal is indented less than its closing `\"\"\"`."
+}

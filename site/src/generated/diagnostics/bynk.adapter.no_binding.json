@@ -1,0 +1,12 @@
+{
+  "blurb": "An external provider, `provides Jwt = JoseJwt` with no body, is written in TypeScript, not Bynk. The adapter's `binding` clause names that TypeScript module, resolved relative to the adapter's source file, and the compiler reads it to wire the provider in. The code fires when the clause is missing, and when the named file cannot be read. Add `binding \"./tokens.binding.ts\"` and create the file, exporting a class named for the provider.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.no_binding",
+  "constructs": [
+    "adapter_decl"
+  ],
+  "example": "adapter tokens {                        // ✗ an external provider, but no binding clause\n  provides Jwt = JoseJwt\n}\n\nadapter tokens {\n  binding \"./tokens.binding.ts\"         // ✓ names the module that supplies JoseJwt\n  provides Jwt = JoseJwt\n}",
+  "severity": "error",
+  "summary": "An `adapter` declares an external provider but no `binding` module to supply it."
+}

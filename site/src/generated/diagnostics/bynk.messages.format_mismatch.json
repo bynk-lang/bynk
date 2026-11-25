@@ -1,0 +1,10 @@
+{
+  "blurb": "A placeholder that appears in the reference locale's template and in another locale's must be formatted the same way in both: plain `{n}`, `plural`, `select`, `number` or `date`. The caller supplies one kind of value for it, and an interface cannot sensibly be plural-aware in one language and plain in another. Use the same kind in every locale. The arms inside a `plural` or `select` may differ. A different placeholder name is `bynk.messages.placeholder_mismatch`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.format_mismatch",
+  "constructs": [],
+  "example": "messages \"en\" @reference {\n  \"cart.count\" => \"{n, plural, one {# item} other {# items}}\"\n}\n\nmessages \"fr\" {\n  \"cart.count\" => \"{n} articles\"        // ✗ plain here, plural in the reference\n  \"cart.count\" => \"{n, plural, one {# article} other {# articles}}\"  // ✓\n}",
+  "severity": "error",
+  "summary": "A code's placeholder is formatted as a different ICU kind (plain/plural/select/number/date) across declared locales."
+}
