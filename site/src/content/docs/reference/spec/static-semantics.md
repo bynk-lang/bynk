@@ -2760,6 +2760,8 @@ name already in scope there (`bynk.fixture.duplicate`, `bynk.resolve.name_confli
 The text follows an `embed`'s (§5.12a): a leading byte-order mark dropped, line
 endings normalised to `\n`. A fixture is emitted into test output only.
 
+A commons declared `commons x.y for tests` (#3984) is a test-only commons: only a suite or another test-only commons MAY `uses` it (`bynk.uses.test_only_commons`), and a deployable build omits it.
+
 A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
 that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
 MUST NOT repeat the name of another helper of its suite or of any value in scope in

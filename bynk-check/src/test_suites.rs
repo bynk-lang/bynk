@@ -1454,6 +1454,7 @@ pub fn integration_resolved(
     } = view.clone();
 
     let synthetic_commons = Commons {
+        test_only: false,
         name: QualifiedName {
             parts: vec![Ident {
                 name: "integration".to_string(),
@@ -6074,6 +6075,7 @@ pub fn build_privileged_resolved(
         unit_tables,
     );
     let synthetic_commons = Commons {
+        test_only: false,
         name: QualifiedName {
             parts: owning_unit
                 .split('.')

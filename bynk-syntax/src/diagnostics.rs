@@ -6644,6 +6644,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nuses pay                         // ✗ `pay` is a context\nconsumes pay                     // ✓ depend on a context with `consumes`",
     },
     Explain {
+        code: "bynk.uses.test_only_commons",
+        blurb: "A commons declared `for tests` holds what suites share (helpers, types, constants and test-only values) and is left out of every deployable. Only a suite or another test-only commons may `uses` it, so production code cannot depend on code that is not there. Move what the unit needs into a commons that is not marked `for tests`.",
+        example: "// kit.bynk\ncommons kit for tests\n\nconst Start: Int = 1\n\n// shop.bynk\ncontext shop\n\nuses kit                         // ✗ `kit` is test-only\n\n// tests/shop.test.bynk\nsuite shop\n\nuses kit                         // ✓ a suite may use it",
+    },
+    Explain {
         code: "bynk.uses.unknown_commons",
         blurb: "`uses` brings a commons' types, functions and constants into scope, so it must name a commons in the project, and no unit of that name exists. Check the spelling against the `commons` line of the unit you mean. If the unit is a context, `uses` is the wrong clause: that is `bynk.uses.target_is_context`.",
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nuses mony                        // ✗ no commons `mony`\nuses money                       // ✓ the commons' declared name",
@@ -11120,6 +11125,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.target_is_context",
         "`uses` targets a context instead of a commons.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.test_only_commons",
+        "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`.",
         &["uses_decl"],
     ),
     dg(

@@ -312,7 +312,7 @@ Reserved only in their own position (ordinary names elsewhere): `asset` `case`
 `const` `embed` `event` `messages` `on` `suite`.
 
 Contextual words (keywords in one place only): `advance` `by` `derives` `drop` `fixture` `key`
-`migrate` `par` `private` `removed` `replaces` `store`.
+`migrate` `par` `private` `removed` `replaces` `store` `tests`.
 
 Built-in type names, reserved in type position: `Asset` `BoundaryRejection`
 `Connection` `History` `HttpResult` `List` `Map` `Query` `QueueResult`

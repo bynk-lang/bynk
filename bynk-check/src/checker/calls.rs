@@ -37,7 +37,8 @@ pub(crate) fn check_fn(
 ) {
     check_fn_in(
         f,
-        false,
+        // #3984: a test-only commons may use what a suite helper may.
+        input.commons.test_only,
         None,
         input,
         expr_types,
