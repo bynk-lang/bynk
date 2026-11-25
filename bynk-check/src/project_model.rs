@@ -1345,6 +1345,34 @@ fn vectorize_metric_error(
     })
 }
 
+/// #3942 B: the bare name an option was given, when it was one that did not
+/// resolve to a literal (see `annotation_consts::rewrite_instance_options`).
+fn bare_name_arg(ann: &bynk_syntax::ast::Annotation) -> Option<String> {
+    ann.args.first().and_then(|a| match &a.value.kind {
+        ExprKind::Ident(id) => Some(id.name.clone()),
+        _ => None,
+    })
+}
+
+/// An instance option's own error, with a note on what a constant must be to
+/// stand there when the option was given a name (#3942 B).
+fn invalid_option_error(
+    option: &str,
+    named: Option<&str>,
+    span: bynk_syntax::span::Span,
+    message: String,
+) -> CompileError {
+    let error = CompileError::new("bynk.capability.invalid_option", span, message).with_note(
+        format!("write `@{option}({})`, for example", option_sample(option)),
+    );
+    match named {
+        Some(name) => error.with_note(format!(
+            "`{name}` is not a constant declared exactly the option's type and bound to a literal, or to another such constant"
+        )),
+        None => error,
+    }
+}
+
 /// Interop I5 (#1972): the value of one instance option: one positional
 /// literal of the option's kind (P3, #2342). `@worker("name")` names a Worker,
 /// so it must be a Worker name as Cloudflare takes one: lowercase letters,
@@ -1362,24 +1390,9 @@ fn instance_option_value(
 ) -> Option<crate::symbols::OptionValue> {
     use crate::symbols::OptionValue;
     let option = ann.name.name.as_str();
-    // #3942 B: a bare name that did not resolve (see
-    // `annotation_consts::rewrite_instance_options`) keeps the option's own
-    // error, with a note on what a constant must be to stand here.
-    let named = ann.args.first().and_then(|a| match &a.value.kind {
-        ExprKind::Ident(id) => Some(id.name.clone()),
-        _ => None,
-    });
-    let invalid = |span, message: String| {
-        let error = CompileError::new("bynk.capability.invalid_option", span, message).with_note(
-            format!("write `@{option}({})`, for example", option_sample(option)),
-        );
-        match &named {
-            Some(name) => error.with_note(format!(
-                "`{name}` is not a constant declared exactly the option's type and bound to a literal, or to another such constant"
-            )),
-            None => error,
-        }
-    };
+    let named = bare_name_arg(ann);
+    let invalid =
+        |span, message: String| invalid_option_error(option, named.as_deref(), span, message);
     let [arg] = ann.args.as_slice() else {
         errors.push_for(
             Some(path),
