@@ -50,7 +50,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_bearer_Param_delete(__id_delete, { ...deps, identity: __id.value });
+      return handlers.api.http_GET_bearer_Param_delete(__id_delete, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_oidc_Param_function(request: globalThis.Request, __id_function: string) {
       const __authz = request.headers.get("Authorization");

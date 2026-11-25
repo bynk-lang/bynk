@@ -2,7 +2,7 @@ context demo.api
 
 type UserId = String where NonEmpty
 
-actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+actor User { auth = SignedCookie(secret = "SESSION_KEY", ttl = 12.hours), identity = UserId }
 
 service api from http {
   on GET("/me") () -> Effect[HttpResult[String]] by u: User {

@@ -135,7 +135,7 @@ case "principals" {
     );
     for line in [
         r#"const a = await api.http_GET({ ...deps, who: { tag: "User", identity: id } });"#,
-        "const b = await api.http_GET_plain({ ...deps, identity: (id as any) });",
+        "const b = await api.http_GET_plain({ ...deps, identity: (id as any), claims: __tokenClaims([]) });",
         r#"const c = await api.http_GET({ ...deps, who: { tag: "Visitor" } });"#,
         "const d = await api.http_GET_open(deps);",
         r#"const e = await api.http_GET_item_Param_id("7", deps);"#,
@@ -195,7 +195,7 @@ fn a_branded_principal_is_a_node_and_prints_byte_for_byte() {
     let text = emit("2020_test_actor_sum_principal", &[]);
     for line in [
         r#"const r = await api.http_GET({ ...deps, who: { tag: "User", identity: ("ada" as any) } });"#,
-        r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any) });"#,
+        r#"const r = await api.http_GET_plain({ ...deps, identity: (("bo" as any) as any), claims: __tokenClaims([]) });"#,
         r#"const v = await api.http_GET_greet({ ...deps, who: { tag: "Visitor" } });"#,
     ] {
         assert_line(&text, line);
@@ -437,11 +437,11 @@ fn a_system_call_passes_its_claims_and_its_acting_actor() {
     let oidc = emit("3052_system_oidc_refusals", &[]);
     assert_line(
         &oidc,
-        r#"const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkOidcClaims(["repository: acme/money"]));"#,
+        r#"const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkClaimLines(["repository: acme/money"]));"#,
     );
     assert_line(
         &oidc,
-        r#"const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkOidcClaims([]));"#,
+        r#"const r = await __sysdrive_raw_api_http_POST_release("\"v1\"", undefined, ("wid" as any), __bynkClaimLines([]));"#,
     );
     let sum = emit("2155_system_sum_route_credential", &[]);
     assert_line(
