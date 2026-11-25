@@ -1,0 +1,9 @@
+context shop
+
+actor Authenticated = Sender where Dmarc(DmarcPass)
+
+service ping {
+  on call(n: Int) -> Effect[Int] by Authenticated {
+    n
+  }
+}

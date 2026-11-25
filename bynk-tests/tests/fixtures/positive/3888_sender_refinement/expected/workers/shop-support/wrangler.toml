@@ -5,3 +5,7 @@ compatibility_date = "2026-08-11"
 compatibility_flags = ["global_fetch_strictly_public"]
 addresses = ["orders@shop.example", "support@shop.example"]
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
