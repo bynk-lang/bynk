@@ -27,7 +27,7 @@ To deploy from GitHub Actions, see [Deploy from CI](/book/guides/projects-build-
 A constant can take its value from `bynk.toml` at build time, so the same
 source builds with different settings per environment:
 
-```bynk
+```bynk,fragment
 const Origin: String = env(APP_ORIGIN)
 const MaxLines: Int = env(MAX_LINES, 100)
 ```
