@@ -904,9 +904,8 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
                 .join(", ")
         ),
     )
-    .with_note(if ctx.test_values {
-        // A suite helper is not a context function, so it cannot declare
-        // `given` to pass the capabilities on.
+    .with_note(if ctx.test_values && ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
+        // A suite helper with no `given` of its own has no capabilities to pass on.
         "a suite helper has no capabilities of its own to pass on: call it from a `case`, which gets the target's capabilities as its handlers do, or take the operation as a function parameter".to_string()
     } else if ctx.caps.given_anchor.is_none() && ctx.caps.given_entries.is_empty() {
         // A method, a pure function or a lambda in one cannot declare `given`.
@@ -916,9 +915,8 @@ pub(crate) fn require_callee_given(name: &Ident, callee: &FnDecl, ctx: &mut Ctx)
             "a capability never appears in a body without appearing in the signature of every handler and function on the path to it: add `{list}` to the caller's `given` clause"
         )
     });
-    if !ctx.test_values
-        && let Some((span, insert)) =
-            given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
+    if let Some((span, insert)) =
+        given_insertion_edit(&ctx.caps.given_entries, ctx.caps.given_anchor, &list)
     {
         err = err.with_suggestion(
             format!("add `{list}` to the `given` clause"),

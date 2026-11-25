@@ -4246,9 +4246,9 @@ pub fn typecheck_case_body(
     )
 }
 
-/// The capabilities a case of `target_name` reaches: the target's own, its consumed adapters'
-/// and its consumed services' seams. A case, and (#3983) a suite helper that declares `given`,
-/// has them all in scope.
+/// The capabilities of `target_name`: its own, and its consumed adapters'. A case has them in
+/// scope, and (#3983) a suite helper's `given` names them; a consumed service's seam, which a case
+/// stubs and observes but never calls as a capability, is not one.
 pub fn target_capability_map(
     target_name: &str,
     unit_tables: &HashMap<String, UnitTable>,
@@ -4277,7 +4277,6 @@ pub fn target_capability_map(
         }
     }
     add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, resolved, tys);
-    add_consumed_service_seams(&mut capability_info_map, resolved, unit_tables, tys);
     capability_info_map
 }
 
@@ -4315,7 +4314,8 @@ fn typecheck_case_body_recording(
 
     // Capabilities of the target context, if any (so the test body can
     // call capabilities directly when targeting a context).
-    let capability_info_map = target_capability_map(target_name, unit_tables, resolved, tys);
+    let mut capability_info_map = target_capability_map(target_name, unit_tables, resolved, tys);
+    add_consumed_service_seams(&mut capability_info_map, resolved, unit_tables, tys);
 
     // All declared capabilities are implicitly "given" inside a test body;
     // the test runner wires them via the mocked deps. We feed the same map

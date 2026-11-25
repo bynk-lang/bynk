@@ -1401,7 +1401,7 @@ case "an empty table counts zero" {
   one: a stub supplies a value and never runs logic
   (`bynk.given.missing_for_call`).
 - **Capabilities.** `given` names the target's capabilities (its own, and those
-  of the adapters and services it consumes). A case already has them, so it does
+  of the adapters it consumes; a consumed service is not a capability). A case already has them, so it does
   not declare them to call the helper. The case's `stub`s and call recording
   apply inside the helper, so `expect Stock.run called` sees the helper's calls.
 - **Tiers.** At `unit` and `integration` a helper may declare `given`. A `system`
