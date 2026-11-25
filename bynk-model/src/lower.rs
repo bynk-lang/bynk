@@ -2151,7 +2151,7 @@ context demo
 type EmailJob = { to: String }
 
 service Outbox from queue("orders") {
-  on message(m: EmailJob) -> Effect[QueueResult] {
+  on message(m: EmailJob) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

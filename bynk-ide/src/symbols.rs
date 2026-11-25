@@ -4025,7 +4025,7 @@ mod tests {
     /// named `message`, and not at a lower tier.
     #[test]
     fn system_job_hover_needs_a_job_service_receiver() {
-        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
+        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] by Producer {\n    Ack\n  }\n}\n";
         let suite = |tier: &str| {
             format!(
                 "suite cr.jobs{tier} {{\n  case \"c\" {{\n    let e = Envelope {{ message: \"hi\" }}\n    let m = e.message\n    let r <- deliveries.message(e)\n    let s <- sweeper.schedule(\"*/5 * * * *\")\n    expect m == \"hi\"\n  }}\n}}\n"

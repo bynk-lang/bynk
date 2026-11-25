@@ -1,0 +1,9 @@
+context shop
+
+type Order = { id: String }
+
+service fulfil from queue("orders") {
+  on message(order: Order) -> Effect[QueueResult] by Producer {
+    Ack
+  }
+}

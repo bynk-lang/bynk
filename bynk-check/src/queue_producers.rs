@@ -355,7 +355,7 @@ mod tests {
 
     const TYPES: &str = "type Order = { id: String, qty: Int }\ntype Refund = { id: String }\ntype Qty = Int where InRange(1, 100)\ntype Line = { qty: Qty }\ntype Loose = { qty: Int }\n";
 
-    const CONSUMER: &str = "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] { Ack }\n}\n";
+    const CONSUMER: &str = "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer { Ack }\n}\n";
 
     fn producer(call: &str) -> String {
         format!(
@@ -409,7 +409,7 @@ mod tests {
 
     fn consumer_of(ty: &str) -> String {
         format!(
-            "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+            "context shop.fulfil\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {ty}) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
         )
     }
 
@@ -430,7 +430,7 @@ mod tests {
     fn a_producer_and_consumer_in_one_context_are_compared() {
         let source = |call: &str| {
             format!(
-                "context shop.orders\n\nconsumes bynk.cloudflare {{ Queue }}\n\ncapability OrderEvents = Queue @name(\"order-events\")\n\n{TYPES}\nservice go {{\n  on call(o: Order) -> Effect[()] by Caller given OrderEvents {{\n    {call}\n  }}\n}}\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(order: Order) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+                "context shop.orders\n\nconsumes bynk.cloudflare {{ Queue }}\n\ncapability OrderEvents = Queue @name(\"order-events\")\n\n{TYPES}\nservice go {{\n  on call(o: Order) -> Effect[()] by Caller given OrderEvents {{\n    {call}\n  }}\n}}\n\nservice fulfil from queue(\"order-events\") {{\n  delivery {{ deadLetter: None }}\n  on message(order: Order) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
             )
         };
         assert!(
