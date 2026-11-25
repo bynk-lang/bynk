@@ -7,6 +7,9 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.700.1** | Signature help shows one signature per arity for `min`, `max`, `count` and `List.join`, and highlights the form that fits the arguments typed |
+| **v0.700.0** | An HttpResult takes withHeader, retryAfter, at and download for response headers, a router-owned name or a malformed literal is refused, and headers() reads them in a test |
+| **v0.699.1** | The stamp numbers several pending files in the order they merged rather than by filename, and records each increment's own PR; a dry-run `stamp-batch` workflow shows what a batched stamp would do |
 | **v0.699.0** | A test stubs an agent operation at `unit`: `stub Basket.add(_) faulted` or `unreachable` makes the calls it matches, whatever the key, end as `Faulted` or `Unreachable(None)` in `Basket(k).add.outcome(x)`, and fault a plain call; only an agent of the context under test, only at `unit`, and only those two words (`bynk.stub.agent_stub`) |
 | **v0.698.0** | A pattern of `Undecodable` over a `QueueResult` warns (`bynk.queue.undecodable_unreachable`) outside a `system` case, where the verdict can never be it |
 | **v0.697.0** | A `ValidationError` names the failed predicate as `e.rule`, a closed `ValidationRule` sum with typed arguments, and the `400 RefinementViolation` body carries it beside `field` and `message` |

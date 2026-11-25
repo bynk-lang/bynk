@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0964](0964-response-headers-on-http-result.md) | **An HttpResult carries response headers through withHeader and typed helpers for Retry-After, Location and Content-Disposition** (v0.700) — How a handler sets a header of its own without touching the ones the router owns | Accepted (v0.700) |
 | [0963](0963-agent-operation-stubs.md) | **An agent operation is stubbed at `unit`, by intercepting the agent's own calls** (v0.699) — The address, scope, words and interception point of `stub <Agent>.<op>(…) faulted | unreachable` | Accepted (v0.699) |
 | [0962](0962-queue-undecodable-unreachable.md) | **An `Undecodable` pattern warns where the verdict cannot be it** (v0.698) — A checker warning on `Undecodable` patterns of a `QueueResult` outside a `system` case, so a dead arm does not look meaningful | Accepted (v0.698) |
 | [0961](0961-validation-rule.md) | **A ValidationError names the failed predicate as a closed ValidationRule sum** (v0.697) — `e.rule` is a prelude `ValidationRule` with a `Bound` sum for numeric arguments; the 400 body carries it and never the value | Accepted (v0.697) |

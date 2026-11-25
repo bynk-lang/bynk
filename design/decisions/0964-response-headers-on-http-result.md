@@ -1,13 +1,6 @@
----
-level: minor
-probes: diagnostic_coverage, emit_diagnostics, explained_codes, ts_writes
-raises: ts_writes — an HttpResult can carry response headers, which the router appends when it builds the response (#3915)
-changelog: An HttpResult takes withHeader, retryAfter, at and download for response headers, a router-owned name or a malformed literal is refused, and headers() reads them in a test
----
+# 0964 — An HttpResult carries response headers through withHeader and typed helpers for Retry-After, Location and Content-Disposition
 
-## ADR: response-headers-on-http-result
-title: An HttpResult carries response headers through withHeader and typed helpers for Retry-After, Location and Content-Disposition
-summary: How a handler sets a header of its own without touching the ones the router owns
+- **Status:** Accepted (v0.700)
 
 **Context.** A handler could set a cookie and nothing else: there was no way to add `Retry-After` to a `429`, `Location` to a `201`, `Content-Disposition` to a download, or a custom header such as a request id. The router also writes headers of its own (caching, framing, CORS, authentication challenges), and a handler that could overwrite those could defeat them.
 
