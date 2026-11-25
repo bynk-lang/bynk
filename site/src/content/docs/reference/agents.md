@@ -301,7 +301,10 @@ route through it, and declaring both is the warning `bynk.store.unique_implies_i
 ```bynk
 context shop
 
-type Customer = { id: String, email: String }
+type Customer = {
+	id: String,
+	email: String,
+}
 
 agent Directory {
 	key id: String
@@ -311,11 +314,11 @@ agent Directory {
 	on call add(c: Customer) -> Effect[Result[(), String]] {
 		let taken <- customers.filter((x) => x.email == c.email).first()
 		match taken {
-			Some(_) => Err("taken")
+			Some(_) => Err("taken"),
 			None => {
 				let _ <- customers.put(c.id, c)
 				Ok(())
-			}
+			},
 		}
 	}
 }
