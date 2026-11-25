@@ -1,0 +1,12 @@
+---
+#3941: constants whose values come from `bynk.toml` at build time: a required
+one, one with a default, and one a variable sets only in the `staging`
+environment, so the default environment keeps its default.
+---
+commons shop.config
+
+const AppOrigin: String = env(APP_ORIGIN)
+const BillingWorker: String = env(BILLING_WORKER, "legacy-billing")
+const MaxLines: Int = env(MAX_LINES, 100)
+const Verbose: Bool = env(VERBOSE, false)
+const Flags: List[String] = env(FLAGS)
