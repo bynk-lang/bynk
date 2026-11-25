@@ -973,7 +973,11 @@ references the agent's `store` fields by bare name and is a *pure, agent-local
 - it MUST NOT reference another agent (`bynk.invariant.cross_agent_reference`) —
   invariants constrain a single agent's reachable states; a property that spans
   agents belongs in a saga or scenario;
-- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`).
+- invariant names MUST be distinct within an agent (`bynk.invariant.duplicate_name`);
+- it MAY read a `store` `Map` or `Set` field only through `size()`, written on the bare
+  field name, which denotes the staged entry count; any other read of a collection field
+  is refused (`bynk.invariant.collection_scan`), and a `Log` or `Cache` field may not be
+  read at all (a `Cache` counts only its live entries, which a commit has no clock to judge);
 
 The predicate language is ordinary expressions plus `implies` (logical
 implication, `P implies Q` ≡ `!P || Q`) and `is` (pattern-matching as a `Bool`
@@ -999,6 +1003,11 @@ agent-local `Bool` expression* in the same predicate language:
 - it MUST NOT reference another agent (`bynk.transition.cross_agent_reference`);
 - transition names MUST be distinct within an agent
   (`bynk.transition.duplicate_name`);
+- it MAY read a `store` `Map` or `Set` field only through `size()` on `old` or `new`:
+  `new.<field>.size()` is the staged entry count and `old.<field>.size()` the last
+  committed one; any other read of a collection field, a bare field name included, is
+  refused (`bynk.transition.collection_scan`), and a `Log` or `Cache` field may not be
+  read at all;
 - it MUST reference `old` or `new` (`bynk.transition.no_step_reference`) — a
   predicate over neither is a snapshot claim, which is an `invariant`.
 

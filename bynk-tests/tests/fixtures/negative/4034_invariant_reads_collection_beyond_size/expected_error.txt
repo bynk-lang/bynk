@@ -1,0 +1,2 @@
+bynk.invariant.collection_scan
+beyond its `size()`

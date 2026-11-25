@@ -1,0 +1,13 @@
+context shop
+
+agent Basket {
+  key id: String
+  store lines: Map[String, Int]
+
+  invariant no_negative_lines:
+    lines.values().all((n) => n >= 0)
+
+  on call add(k: String, n: Int) -> Effect[()] {
+    lines.put(k, n)
+  }
+}

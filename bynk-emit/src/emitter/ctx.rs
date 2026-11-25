@@ -330,13 +330,22 @@ pub(crate) enum BodyMode {
     Invariant {
         name: String,
         fields: HashSet<String>,
+        /// #4034: the `Map`, `Set` and `Cache` fields, whose `size()` reads the
+        /// count `commitState` binds beforehand (`__size_new_<field>`).
+        collections: HashSet<String>,
     },
     /// v0.116 (testing track slice 4): a `transition` predicate. Carries the JS
     /// names bound to the contextual `old` and `new` state records. The Bynk
     /// identifiers `old`/`new` lower to these (`new` is a JS reserved word, so
     /// both are renamed), and field access `old.<field>` reads off the `old`
     /// record.
-    Transition { old: String, new: String },
+    Transition {
+        old: String,
+        new: String,
+        /// #4034: the `Map`, `Set` and `Cache` fields: `old.<field>.size()` reads
+        /// `__size_old_<field>`, `new.<field>.size()` reads `__size_new_<field>`.
+        collections: HashSet<String>,
+    },
     /// A service handler body (`emit_service`).
     ServiceHandler {
         handler: HandlerShared,

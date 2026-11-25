@@ -49,7 +49,7 @@ export const __QueuedTrailProvider = { token: __TrailToken, factory: (deps: { Au
 export const api = {
   async http_POST_orders_Param_id(id: string, deps: { OrderEvents: OrderEvents }): globalThis.Promise<HttpResult<string>> {
     const __r0 = await deps.OrderEvents.send(globalThis.JSON.stringify(__serialise_Placed({ id: id, total: 3 })));
-    const __r1 = await deps.OrderEvents.sendWith(globalThis.JSON.stringify(id as __JsonValue), { delay: Some(30000) });
+    const __r1 = await deps.OrderEvents.sendWith(globalThis.JSON.stringify(id as __JsonValue), { delay: Some((30000 as bynk_cloudflare.QueueDelay)) });
     return HttpResult.Created("queued");
   },
 };
