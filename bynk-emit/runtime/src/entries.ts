@@ -798,6 +798,36 @@ export async function commitStored(
 // A handler that never touched a `Cache` notes nothing, and its commit reaps nothing.
 const clocks = new WeakMap<object, number>();
 
+/**
+ * #3931: `self.erase()`. A handler that calls it carries an `Erasure`, marked by the call, and its commit
+ * deletes the instance's storage instead of writing the handler's state.
+ */
+export interface Erasure {
+  erased: boolean;
+}
+
+export function newErasure(): Erasure {
+  return { erased: false };
+}
+
+/** The erasure `self.erase()` marks: an effect, so `do self.erase()` and a tail `self.erase()` read as any other. */
+export function markErased(erasure: Erasure): Promise<void> {
+  erasure.erased = true;
+  return Promise.resolve();
+}
+
+/**
+ * The commit of a handler that erased: delete every key of the instance's storage (the `"state"` record, the
+ * layout and schema markers, each per-entry key and index posting), and forget what was read of it, so the next
+ * call finds a key it has never seen. Nothing of the handler's own writes is kept, and no invariant is checked
+ * against the initial state the instance returns to.
+ */
+export async function eraseStored(self: object, storage: DurableObjectStorage): Promise<void> {
+  await storage.deleteAll();
+  bases.delete(self);
+  lazyReads.delete(self);
+}
+
 /** The most expired entries one commit deletes, across all of an agent's `Cache` fields. */
 export const CACHE_REAP_LIMIT = 64;
 

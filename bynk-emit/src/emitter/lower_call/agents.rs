@@ -161,6 +161,16 @@ pub(in crate::emitter) fn lower_agent_init(
     cx.agent_construct_node(&name.name, key)
 }
 
+/// #3931: `self.erase()`: mark the handler's erasure, which its commit then carries out. The mark is
+/// an effect (a resolved promise), so `do self.erase()` and a tail `self.erase()` read as any other.
+pub(in crate::emitter) fn lower_agent_erase_call(
+    e: &Expr,
+    cx: &LowerCtx,
+) -> Option<bynk_ts::TsExpr> {
+    matches!(cx.commons().callees.get(&e.id), Some(Callee::AgentErase))
+        .then(|| call(ident("__markErased"), vec![ident("__erasure")]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -15,7 +15,7 @@ use crate::emitter::lower_ctx::LowerCtx;
 use crate::emitter::lower_stmt::{Body, Item, block_body_with_return, claim_scoped};
 use crate::emitter::ts_types::ts_type_ref_to_ts_type;
 use crate::emitter::{BuildTarget, Ty, UnitFacts, agent_factory_name, ts_ident};
-use crate::ts_build::{call, ident};
+use crate::ts_build::{call, ident, member};
 use bynk_check::checker::TypedCommons;
 use bynk_check::firstparty::FirstPartyCap;
 use bynk_model::{
@@ -244,6 +244,7 @@ pub(super) fn emit_agent_handlers(
             is_store_agent,
             writes_state,
             body_emits_directly,
+            bynk_model::block_uses_erase(&h.body, &commons.callees),
             history_handler(ctx, &scope_method),
         );
         // #3465: an agent handler that claimed settles its claims after the state
@@ -289,6 +290,7 @@ fn assemble_agent_body(
     is_store_agent: bool,
     writes_state: bool,
     body_emits_directly: bool,
+    erases: bool,
     history_handler: Option<&str>,
 ) -> Body {
     let mut body = Body::new();
@@ -318,6 +320,15 @@ fn assemble_agent_body(
         )
     };
     body.push(Item::Node(Box::new(state_decl)));
+    // #3931: `self.erase()` marks this, and the commit below deletes the instance if it did.
+    if erases {
+        body.push(Item::Node(Box::new(bynk_ts::TsStmt::const_stmt(
+            bynk_ts::TsBindingName::Ident("__erasure".to_string()),
+            None,
+            call(crate::ts_build::ident("__newErasure"), Vec::new()),
+            None,
+        ))));
+    }
     // Only a handler that wraps its body (a commit, or direct events) needs the closure.
     if !writes_state && !body_emits_directly {
         body.append(lowered);
@@ -333,10 +344,25 @@ fn assemble_agent_body(
         if let Some(h) = history_handler {
             args.push(bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(h.to_string())));
         }
-        body.push(Item::Node(Box::new(bynk_ts::TsStmt::expr_stmt(
-            this_await("commitState", args),
-            None,
-        ))));
+        let commit = bynk_ts::TsStmt::expr_stmt(this_await("commitState", args), None);
+        body.push(Item::Node(Box::new(if erases {
+            // #3931: an erased instance is deleted, not written (no invariant is checked against
+            // the initial state it returns to).
+            bynk_ts::TsStmt::if_else_stmt(
+                member(crate::ts_build::ident("__erasure"), "erased"),
+                bynk_ts::TsStmt::block(
+                    vec![bynk_ts::TsStmt::expr_stmt(
+                        this_await("eraseState", Vec::new()),
+                        None,
+                    )],
+                    None,
+                ),
+                bynk_ts::TsStmt::block(vec![commit], None),
+                None,
+            )
+        } else {
+            commit
+        })));
     }
     if body_emits_directly {
         body.push(events_flush_item(true));

@@ -238,6 +238,10 @@ pub fn complete_in(
     if let Some(items) = crate::call_outcome::outcome_member_candidates(line_prefix, doc_text) {
         return items;
     }
+    // 3b''. #3931: `self.<cursor>` in a document with an agent — `erase`.
+    if let Some(items) = crate::agent_erase::erase_member_candidates(line_prefix, doc_text) {
+        return items;
+    }
     // 3c. #3446: `Record.field.<cursor>` on a cookie record — the typed cookie write and deletion.
     if let Some((record, field)) = cookie_field_receiver(line_prefix) {
         return cookie_field_members(&record, &field, doc_text, files);

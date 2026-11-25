@@ -46,6 +46,7 @@
 /book/guides/actors/public-and-authenticated/
 /book/guides/actors/verify-webhooks/
 /book/guides/agents-and-state/
+/book/guides/agents-and-state/delete-a-users-data/
 /book/guides/agents-and-state/state-machine/
 /book/guides/agents-and-state/stateful-agent/
 /book/guides/agents-and-state/the-agent-model/
@@ -257,6 +258,7 @@
 /book/reference/diagnostics/bynk.agent.return_not_effect/
 /book/reference/diagnostics/bynk.agent.state_name_conflict/
 /book/reference/diagnostics/bynk.agent.version_without_path/
+/book/reference/diagnostics/bynk.agent.write_after_erase/
 /book/reference/diagnostics/bynk.agents.bad_state_initialiser/
 /book/reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /book/reference/diagnostics/bynk.agents.self_operation/
@@ -1384,6 +1386,7 @@
 /reference/diagnostics/bynk.agent.return_not_effect/
 /reference/diagnostics/bynk.agent.state_name_conflict/
 /reference/diagnostics/bynk.agent.version_without_path/
+/reference/diagnostics/bynk.agent.write_after_erase/
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /reference/diagnostics/bynk.agents.self_operation/

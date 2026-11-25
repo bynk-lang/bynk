@@ -417,6 +417,14 @@ if (__prior !== undefined) {
 }
 ```
 
+**Erasure (#3931).** A handler that calls `self.erase()` declares `const __erasure = __newErasure()`
+after its state is loaded, and the call lowers to `__markErased(__erasure)`, an effect that sets the mark.
+Where the handler would call `commitState(__state)` it calls `this.eraseState()` instead when the mark is
+set. `eraseState` is a private method, written only for a class with such a handler, and it calls
+`__eraseStored(this, this.state.storage)`: `storage.deleteAll()` on a Worker and in the bundle's in-memory
+double alike, then the instance's remembered reads are dropped. The events flush that follows is
+unchanged.
+
 ### §7.3.4 HTTP services
 
 On the `workers` target, each context with HTTP handlers emits

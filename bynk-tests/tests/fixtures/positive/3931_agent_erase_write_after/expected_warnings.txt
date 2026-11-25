@@ -1,0 +1,3 @@
+# #3931: a `:=` after `self.erase()` in the same block, at the top level and in a branch; a write before it, and one in the other branch, are not warned.
+write_after_erase `closed := …` has no effect
+write_after_erase `note := …` has no effect

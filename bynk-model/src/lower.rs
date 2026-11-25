@@ -483,6 +483,8 @@ pub fn body_writes_state(body: &Block, program: &TypedCommons) -> bool {
             // `mutates` flag. A `Callee::Store` already carries the op
             // resolved against its field's kind, so the op name alone decides.
             Some(Callee::Store { op, .. }) => op.mutates(),
+            // #3931: `self.erase()` is the strongest write: the commit deletes the instance.
+            Some(Callee::AgentErase) => true,
             _ => false,
         }
     }
