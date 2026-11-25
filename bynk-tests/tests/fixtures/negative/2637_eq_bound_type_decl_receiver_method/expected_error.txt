@@ -1,2 +1,2 @@
 bynk.types.not_comparable
-`Box2.size` requires `T: Eq`
+`Box2` requires `T: Eq`

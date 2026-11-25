@@ -1768,6 +1768,9 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
         };
         check_key_bounds(field_refs.into_iter(), &t.type_params, errors);
     }
+    // #3958: the bounds this type's own parameters carry, for the bounded types
+    // its fields apply to them.
+    let type_scope = crate::checker::equality::EqScope::for_type(t);
     match &t.body {
         TypeBody::Refined { .. } => {
             // Refined-type bodies only reference base types directly.
@@ -1833,6 +1836,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     }
                 }
                 check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
+                check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
             }
         }
         TypeBody::Sum(s) => {
@@ -1889,6 +1893,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     // in its variant payloads, resolving as rigid vars (empty set
                     // for a non-generic sum — the same reference walk as before).
                     check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
+                    check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
                 }
             }
             // v0.154 (ADR 0178): the `embeds E as V` clauses' source types must
@@ -2037,9 +2042,12 @@ fn check_fn_refs_with(
             errors.push(w);
         }
     }
+    // #3958: the bounds this signature's own parameters carry.
+    let fn_scope = crate::checker::equality::EqScope::for_fn_in(f, types);
     let mut seen_params: HashMap<&str, &Ident> = HashMap::new();
     for p in &f.params {
         check_type_ref_resolves_in(&p.type_ref, types, &type_params, errors);
+        check_applied_bounds_at(&p.type_ref, &type_params, &fn_scope, types, errors);
         if let Some(prev) = seen_params.get(p.name.name.as_str()) {
             errors.push(
                 CompileError::new(
@@ -2054,6 +2062,7 @@ fn check_fn_refs_with(
         }
     }
     check_type_ref_resolves_in(&f.return_type, types, &type_params, errors);
+    check_applied_bounds_at(&f.return_type, &type_params, &fn_scope, types, errors);
 
     // Build the initial scope: parameters plus `self` (for instance methods).
     let mut params: HashMap<String, ()> =
@@ -2078,6 +2087,7 @@ fn check_fn_refs_with(
         given: &f.given,
         cap_advice: &cap_advice,
         declared_caps,
+        eq_scope: Some(&fn_scope),
         scopes: Vec::new(),
         errors,
     };
@@ -2150,6 +2160,7 @@ fn check_const_refs_with(
         given: &[],
         cap_advice: "",
         declared_caps: &HashSet::new(),
+        eq_scope: None,
         scopes: Vec::new(),
         errors,
     };
@@ -3235,6 +3246,20 @@ fn bare_generic_type_error(id: &Ident, arity: usize) -> CompileError {
     .with_note("a generic type is used only through a concrete instantiation")
 }
 
+/// #3958: report a bounded type applied to one of `type_params` that lacks a
+/// bound the type declares.
+fn check_applied_bounds_at(
+    r: &TypeRef,
+    type_params: &HashSet<String>,
+    scope: &crate::checker::equality::EqScope,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Sinks,
+) {
+    for e in crate::checker::applied_bounds::applied_bound_errors(r, type_params, scope, types) {
+        errors.push(e);
+    }
+}
+
 /// Recursively check that every type reference resolves.
 fn check_type_ref_resolves(
     r: &TypeRef,
@@ -3337,9 +3362,9 @@ fn check_type_ref_resolves_in(
                         );
                     } else {
                         // A bound the type declares (`type Set2[T: Eq]`) is checked
-                        // against each argument written here. A bare type
-                        // parameter argument is not checked (slice 0: no body
-                        // requires a type's bound).
+                        // against each concrete argument written here; a type
+                        // parameter standing for (or inside) the argument is checked
+                        // by `check_applied_bounds_at` (#3958).
                         let scope: Vec<&str> = type_params.iter().map(String::as_str).collect();
                         for (tp, arg) in decl.type_params.iter().zip(args) {
                             // Slice 1: an `Ord` bound requires an orderable argument.
@@ -3855,8 +3880,22 @@ struct RefCheckCtx<'a, 'b> {
     /// #2868: every capability the context declares or consumes, for the note
     /// on a use the function's `given` does not cover.
     declared_caps: &'a HashSet<String>,
+    /// #3958: the bounds the enclosing function's parameters carry, for the
+    /// bounded types an annotation applies to them; none for a constant.
+    eq_scope: Option<&'a crate::checker::equality::EqScope>,
     scopes: Vec<HashMap<String, ()>>,
     errors: &'a mut Sinks<'b>,
+}
+
+impl RefCheckCtx<'_, '_> {
+    /// A type reference written in the body resolves, and (#3958) a bounded type
+    /// it applies to one of the function's type parameters finds the bound there.
+    fn check_type_ref(&mut self, r: &TypeRef) {
+        check_type_ref_resolves_in(r, self.types, self.type_params, self.errors);
+        if let Some(scope) = self.eq_scope {
+            check_applied_bounds_at(r, self.type_params, scope, self.types, self.errors);
+        }
+    }
 }
 
 fn check_block_references(block: &Block, cx: &mut RefCheckCtx) {
@@ -3873,7 +3912,7 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
         Statement::Let(l) | Statement::EffectLet(l) => {
             check_expr_references(&l.value, cx);
             if let Some(annot) = &l.type_annot {
-                check_type_ref_resolves_in(annot, cx.types, cx.type_params, cx.errors);
+                cx.check_type_ref(annot);
             }
             if let Some(prev) = cx.types.get(&l.name.name) {
                 cx.errors.push(
@@ -4033,7 +4072,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
         ExprKind::Lambda(lambda) => {
             for p in &lambda.params {
                 if let Some(tr) = &p.type_ref {
-                    check_type_ref_resolves_in(tr, cx.types, cx.type_params, cx.errors);
+                    cx.check_type_ref(tr);
                 }
             }
             let mut frame: HashMap<String, ()> = HashMap::new();
@@ -4230,7 +4269,7 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             // `fn`/method bodies are covered; the checker backstops handler
             // bodies (which never reach this walk).
             for ta in type_args {
-                check_type_ref_resolves_in(ta, cx.types, cx.type_params, cx.errors);
+                cx.check_type_ref(ta);
             }
             match cx.fns.get(&name.name) {
                 Some(decl) => {

@@ -84,3 +84,24 @@ fn a_maybe_incorrect_fix_does_not_ride_along_with_machine_applicable_ones() {
     assert!(!file.fixed.contains("derives"), "{}", file.fixed);
     assert_eq!(categories(&file.fixed), ["bynk.types.not_orderable"]);
 }
+
+/// #3958: the bounds a bounded type's application requires of a type parameter
+/// are migrated by `bynk check --fix` in one pass, down a chain of generic
+/// types and functions: a field's type parameter, a signature's, and the
+/// function that reaches a bounded type through them.
+#[test]
+fn applied_bound_fixes_repair_a_chain_in_one_pass() {
+    let src = "commons m\n\ntype Sorted[T: Ord] = { items: List[T] }\n\ntype Index[K: Key, V] = { m: Map[K, V] }\n\ntype Wrap[U] = { i: Index[U, Int] }\n\nfn mk[A](xs: List[A]) -> Sorted[A] {\n  Sorted { items: xs }\n}\n\nfn rewrap[B](w: Wrap[B]) -> Int { 0 }\n";
+    assert!(categories(src).contains(&"bynk.generics.missing_key_bound"));
+    assert!(categories(src).contains(&"bynk.generics.missing_ord_bound"));
+    let path = scratch("applied_bounds", src);
+    let plan = plan_file(&path).unwrap().expect("fixes settle");
+    let [file] = plan.files.as_slice() else {
+        panic!("one file changed: {plan:?}");
+    };
+    let fixed = &file.fixed;
+    assert!(fixed.contains("type Wrap[U: Key]"), "{fixed}");
+    assert!(fixed.contains("fn mk[A: Ord]"), "{fixed}");
+    assert!(fixed.contains("fn rewrap[B: Key]"), "{fixed}");
+    assert!(categories(fixed).is_empty(), "{:?}", categories(fixed));
+}
