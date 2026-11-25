@@ -7189,6 +7189,9 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     ("MalformedForm", true),
     // #3908: the router's `400` to a path whose percent-encoding does not decode.
     ("MalformedPath", true),
+    // #3926: the router's `429` to a client over a `@rateLimit` route's limit. A
+    // breaking addition to a closed sum, as ADR 0586's was.
+    ("RateLimited", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────

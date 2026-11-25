@@ -1,0 +1,10 @@
+{
+  "blurb": "`@rateLimit` names the limiter that counts the route's requests, and the limiter is a `RateLimit` capability the route's own context declares: `capability SignupLimit = RateLimit @limit(10) @period(60.seconds)`. A name that is not declared there, or that names something that is not a `RateLimit` (a constant, another capability), leaves the router with nothing to ask. Declare the limiter in the context, or fix the name. The annotation needs no `given` on the handler.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rate_limit_unknown_limiter",
+  "constructs": [],
+  "example": "@rateLimit(NoSuchLimit, key: clientIp)   // ✗ not declared in this context\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ declared above",
+  "severity": "error",
+  "summary": "A `@rateLimit` names something that is not a `RateLimit` the context declares."
+}

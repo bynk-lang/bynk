@@ -83,7 +83,9 @@ fn f(s: Status, t: Y.Status, m: Money) -> String {
 ```
 
 Two used commons that declare one name are fine until the file writes it bare; then
-`bynk.uses.ambiguous_name` names the spellings that would resolve it. A declaration is read by
+`bynk.uses.ambiguous_name` names the spellings that would resolve it. Selecting the name
+(`uses lib.y { Status }`) settles it too: a selected name outranks the same name from a whole
+`uses`, though only the names you list stay in scope from that commons. A declaration is read by
 one spelling in a unit (`bynk.uses.second_spelling`), and a name the commons does not export
 publicly cannot be listed (`bynk.uses.unknown_name`).
 

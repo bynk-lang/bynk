@@ -57,6 +57,9 @@ import {
   type CookieValue,
   queryObject,
   queryString,
+  problemRejection,
+  rateLimitAllows,
+  rateLimitedResponse,
   renderRejection,
   responseToHttpResult,
   type CorsPolicy,
@@ -135,6 +138,48 @@ test("httpResultToResponse: 412 and 428 render as problem details with their rea
     assert.equal(body.title, title);
     assert.equal(body.status, status);
     assert.ok(body.detail.length > 0);
+  }
+});
+
+// #3918: a structured event is framed per the HTML event-stream format, and a value the wire
+// cannot carry faults the body at that element instead of going out as a different event.
+const noOpt = { tag: "None" } as const;
+const someOpt = <T>(value: T) => ({ tag: "Some", value }) as const;
+const sse = (e: { data: string; event?: ReturnType<typeof someOpt<string>>; id?: ReturnType<typeof someOpt<string>>; retry?: ReturnType<typeof someOpt<number>> }) =>
+  ({ data: e.data, event: e.event ?? noOpt, id: e.id ?? noOpt, retry: e.retry ?? noOpt });
+async function* events(...items: ReturnType<typeof sse>[]): AsyncGenerator<ReturnType<typeof sse>> {
+  yield* items;
+}
+const framed = (...items: ReturnType<typeof sse>[]) => httpResultToResponse(HttpResult.Streaming(events(...items)), id).text();
+
+test("SseEvent framing: event, id and retry precede data; a bare string is unchanged", async () => {
+  assert.equal(
+    await framed(sse({ data: "hi", event: someOpt("greeting"), id: someOpt("7"), retry: someOpt(1500) })),
+    "event: greeting\nid: 7\nretry: 1500\ndata: hi\n\n",
+  );
+  assert.equal(await framed(sse({ data: "hi", retry: someOpt(0) })), "retry: 0\ndata: hi\n\n");
+  assert.equal(await framed(sse({ data: "" })), "data: \n\n");
+});
+
+test("SseEvent framing: data splits on CRLF, LF and a lone CR", async () => {
+  assert.equal(await framed(sse({ data: "a\r\nb\nc\rd" })), "data: a\ndata: b\ndata: c\ndata: d\n\n");
+});
+
+test("SseEvent framing: a value the wire cannot carry errors the body at that event", async () => {
+  const bad: [string, ReturnType<typeof sse>][] = [
+    ["event with LF", sse({ data: "x", event: someOpt("a\nb") })],
+    ["event with CR", sse({ data: "x", event: someOpt("a\rb") })],
+    ["id with LF", sse({ data: "x", id: someOpt("a\nb") })],
+    ["id with CR", sse({ data: "x", id: someOpt("a\rb") })],
+    ["id with NUL", sse({ data: "x", id: someOpt("a\0b") })],
+    ["fractional retry", sse({ data: "x", retry: someOpt(1.5) })],
+    ["negative retry", sse({ data: "x", retry: someOpt(-1) })],
+    ["retry beyond a safe integer", sse({ data: "x", retry: someOpt(1e21) })],
+  ];
+  for (const [what, event] of bad) {
+    // An earlier good event is delivered; the bad one errors the body rather than being rewritten.
+    const response = httpResultToResponse(HttpResult.Streaming(events(sse({ data: "ok" }), event)), id);
+    await assert.rejects(response.text(), /bynk: an SSE/, what);
   }
 });
 
@@ -1901,4 +1946,75 @@ test("headerPairs: repeated Wire lines combine; a list item with a comma or quot
   assert.throws(() => headerPairs({ tags: ['say "x"'] }), /does not survive/);
   // A non-list value may hold a comma (a `Date`).
   assert.deepEqual(headerPairs({ date: "Tue, 15 Nov 1994" }), { date: "Tue, 15 Nov 1994" });
+});
+
+test("rateLimitAllows: counts by CF-Connecting-IP, and shares `unknown` without one (#3926)", async () => {
+  const seen: string[] = [];
+  const limiter = {
+    async limit({ key }: { key: string }) {
+      seen.push(key);
+      return { success: key !== "9.9.9.9" };
+    },
+  };
+  const from = (ip?: string) => new Request("https://x.test/", ip ? { headers: { "cf-connecting-ip": ip } } : {});
+  assert.equal(await rateLimitAllows(limiter, from("1.2.3.4")), true);
+  assert.equal(await rateLimitAllows(limiter, from("9.9.9.9")), false);
+  assert.equal(await rateLimitAllows(limiter, from()), true);
+  assert.deepEqual(seen, ["1.2.3.4", "9.9.9.9", "unknown"]);
+});
+
+test("rateLimitedResponse: a 429 with Retry-After and the RateLimited rejection (#3926)", async () => {
+  const res = rateLimitedResponse(60);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  const body = (await res.json()) as { kind: string; details: string };
+  assert.equal(body.kind, "RateLimited");
+  assert.match(body.details, /60 seconds/);
+});
+
+test("responseToHttpOutcome: the router's 429 is Rejected(RateLimited); a handler's TooManyRequests stays Handled (#3926)", async () => {
+  const deser = (v: JsonValue) => ({ tag: "Ok", value: v }) as never;
+  const routed = await responseToHttpOutcome(rateLimitedResponse(10), deser);
+  assert.equal(routed.tag, "Rejected");
+  assert.equal((routed as { value: { tag: string } }).value.tag, "RateLimited");
+  const handled = await responseToHttpOutcome(
+    new Response(JSON.stringify({ error: "slow down" }), { status: 429, headers: { "content-type": "application/json" } }),
+    deser,
+  );
+  assert.equal(handled.tag, "Handled");
+});
+
+test("problemRejection: the 429 keeps Retry-After and becomes problem details of type rate-limited (#3926)", async () => {
+  const res = await problemRejection(rateLimitedResponse(60));
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "application/problem+json");
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.equal(body.type, "https://bynk-lang.org/problems/rate-limited");
+  assert.equal(body.title, "Too Many Requests");
+  assert.equal(body.kind, "RateLimited");
+  assert.match(String(body.detail), /60 seconds/);
+});
+
+test("renderRejection: `on rejected` receives RateLimited(detail) and its RawError keeps Retry-After (#3926)", async () => {
+  const seen: { tag: string; detail: string }[] = [];
+  const hook = async (why: { tag: string; detail: string }) => {
+    seen.push(why);
+    return HttpResult.RawError(429, new TextEncoder().encode("slow down"), "text/plain");
+  };
+  const res = await renderRejection(rateLimitedResponse(60), hook as never);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].tag, "RateLimited");
+  assert.match(seen[0].detail, /60 seconds/);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "60");
+  assert.equal(res.headers.get("content-type"), "text/plain");
+  assert.equal(await res.text(), "slow down");
+});
+
+test("a rate-limited 429 stamped with the CORS policy carries the grant and Retry-After (#3926)", async () => {
+  const res = applyCors(rateLimitedResponse(10), listPolicy, "https://app.example.com");
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("access-control-allow-origin"), "https://app.example.com");
+  assert.equal(res.headers.get("retry-after"), "10");
 });

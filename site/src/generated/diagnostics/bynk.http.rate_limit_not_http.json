@@ -1,0 +1,10 @@
+{
+  "blurb": "`@rateLimit` makes the router ask a rate limiter before it reads a request body, and only an `on http` route has a router and a request body. On a `call`, an event or a schedule handler it has nothing to act on, so it is refused rather than ignored. Remove it, or call the limiter yourself with `allow(key)` in a handler that is given it.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rate_limit_not_http",
+  "constructs": [],
+  "example": "service jobs {\n    @rateLimit(SignupLimit, key: clientIp)   // ✗ a `call` has no router step\n    on call(n: Int) -> Effect[Int] by Caller { … }\n}\n\nservice jobs {\n    on call(n: Int) -> Effect[Int] by Caller given SignupLimit {   // ✓ ask the limiter\n        let ok <- SignupLimit.allow(\"jobs\")\n        Effect.pure(if ok { 1 } else { 0 })\n    }\n}",
+  "severity": "error",
+  "summary": "A `@rateLimit` annotates a handler that is not `on http`."
+}

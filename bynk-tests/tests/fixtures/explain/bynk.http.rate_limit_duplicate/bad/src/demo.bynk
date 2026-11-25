@@ -1,0 +1,13 @@
+context demo
+
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  @rateLimit(SignupLimit, key: clientIp)
+  on POST("/signup") (body: String) -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("ok")
+  }
+}

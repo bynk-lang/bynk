@@ -271,6 +271,8 @@ actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
 
 **On a keyword:** nothing (hovers only fire on identifiers).
 
+**`?` on an `Option`, and an interpolation hole (#4363).** Hovering the `?` of an `Option` names only the propagation the enclosing function's or handler's declared return type gives: `None` returned as it is in a body returning `Option` (or `Effect[Option]`), `404 NotFound` in an `HttpResult` handler. Inside a lambda the declaration around it does not decide the answer, so the hover describes both. Hovering the `\(` or `)` of an interpolation hole says how its value is rendered, from the hole's type (`String` as it is, `Int` and `Float` by `toString()`, `Bool` as `true`/`false`, `Decimal` as its canonical text, `Instant` as RFC 3339 UTC, `Duration` as units, and a refinement of one as its base); an identifier inside the hole keeps its own hover.
+
 **References, not just declarations (v0.165, ADR 0190).** Hover resolves a name's *use*, not only the line that declares it — the three gaps #611 found were all inside an `agent` handler body:
 
 - **An agent-state reference** — a `store`/`key` field used in a handler body or an invariant/transition predicate (a bare read `lastSeq + 1`, a `:=` write target, a store op's receiver) — renders exactly what its declaration renders (ADR 0161's field signature plus the contextual-keyword doc). State fields are not index symbols and not `let`/param locals, so this resolves **by name**, scoped to the positions where a bare name actually binds to state: the declaration region is excluded, so `@indexed(by: id)` — a field of the *stored value* — never masquerades as a same-named `key id`. A local of the field's name shadows it, matching the checker's by-provenance dispatch.

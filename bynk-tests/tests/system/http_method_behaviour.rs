@@ -116,6 +116,18 @@ async function main(): Promise<void> {
   r = await worker.fetch(req("GET", "/ticks"), env);
   assert((await r.text()) === "data: tick-1\n\ndata: tick-2\n\n", "GET /ticks streams both events");
 
+  // --- #3918: a structured event is framed per the HTML event-stream format. ---
+  r = await worker.fetch(req("GET", "/events"), env);
+  assert(r.headers.get("content-type") === "text/event-stream", "GET /events is an event stream");
+  assert(
+    (await r.text()) === "event: greeting\nid: 7\nretry: 1500\ndata: hello\n\ndata: a\ndata: b\ndata: c\n\n",
+    "GET /events frames event/id/retry and splits data on any line break",
+  );
+  r = await worker.fetch(req("GET", "/bad-event"), env);
+  let badBody = "";
+  try { badBody = await r.text(); } catch { badBody = "<errored>"; }
+  assert(badBody === "<errored>", "an event name with a line break errors the body in-band");
+
   // --- HEAD from a Raw GET: the author content-type, empty body. ---
   r = await worker.fetch(req("HEAD", "/logo"), env);
   assert(r.status === 200, "HEAD /logo is 200");

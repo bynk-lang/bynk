@@ -1,0 +1,10 @@
+{
+  "blurb": "`@rateLimit` takes a limiter and a key, and the key is a word the router knows: `@rateLimit(SignupLimit, key: clientIp)`. A missing key, a key that is not `clientIp` or `identity`, extra arguments or a literal where the limiter's name goes leaves the router nothing to count by, so the annotation is refused. A limit keyed on something only the handler knows stays a call to the limiter's `allow(key)` in the handler. `identity` is `bynk.http.rate_limit_key_unavailable`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.rate_limit_bad_args",
+  "constructs": [],
+  "example": "@rateLimit(SignupLimit, key: region)       // ✗ not a key\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓",
+  "severity": "error",
+  "summary": "A `@rateLimit` is malformed: not a limiter and a `key:` the router knows."
+}

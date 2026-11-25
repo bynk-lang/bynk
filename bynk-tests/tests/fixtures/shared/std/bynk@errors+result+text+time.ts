@@ -369,6 +369,26 @@ export const Cookie = {
 };
 
 /**
+ * One server-sent event, for a `Streaming(...)` response that needs more than a
+ * `data:` line. `data` is the payload (a line break in it becomes several `data:`
+ * lines); `event` names the event type a browser's `EventSource` listens for;
+ * `id` sets its last event ID, which a reconnecting browser sends back as
+ * `Last-Event-ID`; `retry` is the reconnection delay the browser should wait, sent
+ * in whole milliseconds. `event` and `id` cannot hold a line break and `id`
+ * cannot hold NUL: an element that does faults the stream, in-band. A
+ * `Stream[String]` is still framed as plain `data:` events, unchanged.
+ */
+export interface SseEvent {
+  readonly data: string;
+  readonly event: Option<string>;
+  readonly id: Option<string>;
+  readonly retry: Option<number>;
+}
+
+export const SseEvent = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the

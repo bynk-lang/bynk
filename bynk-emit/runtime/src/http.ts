@@ -1,7 +1,7 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
 import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
-import type { HttpResult } from "./httpresult.ts";
+import type { HttpResult, SseEvent } from "./httpresult.ts";
 
 // #3908: the path's segments, percent-decoded once (empty segments dropped, so
 // `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
@@ -119,16 +119,45 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
 // Each stream element is one SSE event; a multi-line element becomes multiple
 // `data:` lines, terminated by a blank line. The body is a ReadableStream, so
 // this is a Web standard that runs unchanged on Workers and Node.
-function sseResponse(stream: AsyncIterable<string>): Response {
+function sseResponse(stream: AsyncIterable<string | SseEvent>): Response {
   const encoder = new TextEncoder();
-  const body = pullBody(stream, (value) => [
-    ...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)),
-    encoder.encode("\n"),
-  ]);
+  const body = pullBody(stream, (value) => {
+    if (typeof value === "string") {
+      return [...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)), encoder.encode("\n")];
+    }
+    return sseEventChunks(value).map((line) => encoder.encode(line));
+  });
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
   });
+}
+
+// #3918: one structured event as the lines of the HTML event-stream format, `event:`, `id:` and
+// `retry:` before the `data:` lines, and a blank line to end it. `data` splits on any line break
+// (CRLF, LF or CR) into one `data:` line each, so an embedded break can never end the event early.
+// An `event` or `id` with a line break, an `id` with NUL, or a `retry` that is not a whole
+// number of milliseconds throws, which errors the body at this element, in-band, as a throw from
+// the source does: a value the wire cannot carry is never written as a different one.
+function sseEventChunks(e: SseEvent): string[] {
+  const out: string[] = [];
+  if (e.event.tag === "Some") {
+    if (/[\r\n]/.test(e.event.value)) throw new Error("bynk: an SSE `event` name cannot contain a line break");
+    out.push(`event: ${e.event.value}\n`);
+  }
+  if (e.id.tag === "Some") {
+    if (/[\r\n]/.test(e.id.value)) throw new Error("bynk: an SSE `id` cannot contain a line break");
+    if (e.id.value.includes("\0")) throw new Error("bynk: an SSE `id` cannot contain NUL");
+    out.push(`id: ${e.id.value}\n`);
+  }
+  if (e.retry.tag === "Some") {
+    const ms = e.retry.value;
+    if (!Number.isSafeInteger(ms) || ms < 0) throw new Error("bynk: an SSE `retry` must be a whole number of milliseconds");
+    out.push(`retry: ${ms}\n`);
+  }
+  for (const line of e.data.split(/\r\n|\r|\n/)) out.push(`data: ${line}\n`);
+  out.push("\n");
+  return out;
 }
 
 // K-streams (#2623): mark `stream` as read, or throw if it already was. A
@@ -917,6 +946,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
     case "MalformedPath":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
+    case "RateLimited":
       return str(body.details);
     case "StructuralMismatch":
       return `${str(body.path)}: expected ${str(body.expected)}, got ${str(body.actual)}`;
@@ -939,7 +969,14 @@ async function rejectionOf(
 ): Promise<{ readonly tag: string; readonly detail: string } | null> {
   if (response.status === 401) return { tag: "Unauthorized", detail: "" };
   if (response.status === 405) return { tag: "MethodNotAllowed", detail: "" };
-  if (response.status !== 400 && response.status !== 413 && response.status !== 415) return null;
+  if (
+    response.status !== 400 &&
+    response.status !== 413 &&
+    response.status !== 415 &&
+    response.status !== 429
+  ) {
+    return null;
+  }
   let body: Record<string, unknown> | null = null;
   try {
     body = (await response.clone().json()) as Record<string, unknown>;
@@ -1930,14 +1967,21 @@ export async function responseToHttpOutcome<T>(
   // A capped route's `413` and a raw route's `415` are the router's own
   // synthesised refusals, told from a handler's `PayloadTooLarge`/
   // `UnsupportedMediaType` (whose body is `{ error }`) by the `kind` they carry.
-  if (response.status === 413 || response.status === 415) {
+  // #3926: and a `@rateLimit` route's `429`, told from a handler's `TooManyRequests`
+  // (whose body is `{ error }`) the same way.
+  if (response.status === 413 || response.status === 415 || response.status === 429) {
     let body: { kind?: unknown } | null = null;
     try {
       body = (await response.clone().json()) as { kind?: unknown };
     } catch {
       body = null;
     }
-    if (body && (body.kind === "PayloadTooLarge" || body.kind === "UnsupportedMediaType")) {
+    if (
+      body &&
+      (body.kind === "PayloadTooLarge" ||
+        body.kind === "UnsupportedMediaType" ||
+        body.kind === "RateLimited")
+    ) {
       const fields = body as Record<string, unknown>;
       return {
         tag: "Rejected",
@@ -2005,6 +2049,35 @@ function corsResolveOrigin(policy: CorsPolicy, requestOrigin: string | null): st
   if (policy.origins.length === 1 && policy.origins[0] === "*") return "*";
   if (requestOrigin !== null && policy.origins.includes(requestOrigin)) return requestOrigin;
   return null;
+}
+
+// #3926: `@rateLimit(Limiter, key: clientIp)`. The router asks the limiter, before it reads
+// the request body, whether this client may have another request in the window.
+// Cloudflare's `CF-Connecting-IP` is the client's address and is reliable only behind
+// Cloudflare's edge; a request without it (`bynk dev`, a test that sets none) shares the
+// one `unknown` key rather than going uncounted.
+export async function rateLimitAllows(
+  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
+  request: Request,
+): Promise<boolean> {
+  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  return (await limiter.limit({ key })).success;
+}
+
+// #3926: the router's `429` to a client over its limit: `Retry-After` is the limiter's window
+// in seconds, and the body is the `RateLimited` rejection, so `on rejected` can render it and
+// a system test can assert `Rejected(RateLimited)`.
+export function rateLimitedResponse(periodSecs: number): Response {
+  return new Response(
+    JSON.stringify({
+      kind: "RateLimited",
+      details: `too many requests: try again in ${periodSecs} seconds`,
+    }),
+    {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": String(periodSecs) },
+    },
+  );
 }
 
 // Stamp the CORS response headers onto an already-built `Response`, in place.
