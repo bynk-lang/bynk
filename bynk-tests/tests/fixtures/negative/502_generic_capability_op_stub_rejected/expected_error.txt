@@ -1,1 +1,1 @@
-bynk.stub.generic_op `Idempotency.dedup` declares its own type parameter — a generic capability operation cannot be stubbed at v1
+bynk.stub.generic_op `Idempotency.dedup` declares its own type parameter, so a `stub` of it names the type argument

@@ -468,21 +468,15 @@ impl<'a> Parser<'a> {
             self.exit_item_loop();
             start.merge(last_span)
         };
-        Ok(Commons {
+        Ok(Commons::parsed(
             name,
-            test_only: false,
             items,
             uses,
             documentation,
-            form: if brace {
-                CommonsForm::Brace
-            } else {
-                CommonsForm::Fragment
-            },
+            brace,
             span,
-            trivia: Trivia::default(),
             trailing_comments,
-        })
+        ))
     }
 
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {
@@ -994,6 +988,8 @@ impl<'a> Parser<'a> {
             };
             method = next;
         }
+        // #3945: explicit type arguments of a generic operation.
+        let type_args = self.parse_stub_type_args()?;
         self.expect(
             TokenKind::LParen,
             "after the method name in a `stub` clause",
@@ -1030,6 +1026,7 @@ impl<'a> Parser<'a> {
         Ok(StubClause {
             capability,
             method,
+            type_args,
             args,
             rhs,
             after,
@@ -1037,6 +1034,23 @@ impl<'a> Parser<'a> {
             span,
             trivia: Trivia::default(),
         })
+    }
+
+    /// #3945: `[T, U]` after a stub target's operation name, or none. The list is a
+    /// type-argument list, as on a call (`Json.decode[T](…)`).
+    pub(super) fn parse_stub_type_args(&mut self) -> Result<Vec<TypeRef>, CompileError> {
+        let mut type_args = Vec::new();
+        if self.eat(TokenKind::LBracket).is_none() {
+            return Ok(type_args);
+        }
+        loop {
+            type_args.push(self.parse_type_ref("as a type argument")?);
+            if self.eat(TokenKind::Comma).is_none() {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBracket, "to close the type-argument list")?;
+        Ok(type_args)
     }
 
     /// #2134: whether the cursor is at an `env {` clause head. `env` is a

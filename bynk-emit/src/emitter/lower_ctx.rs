@@ -381,6 +381,12 @@ impl<'a> LowerCtx<'a> {
             .map(String::as_str)
     }
 
+    /// #3945: whether a call to a generic capability operation also passes its type arguments'
+    /// identity (a test build; see `CompileOptions::typed_capability_calls`).
+    pub(crate) fn typed_capability_calls(&self) -> bool {
+        self.module.typed_capability_calls
+    }
+
     /// #2045: whether `name` is a consumed context's type on `workers`.
     pub(crate) fn is_consumed_context_type(&self, name: &str) -> bool {
         self.module.consumed_context_types.contains(name)
@@ -1016,12 +1022,12 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #2380 (L5): whether the addressed http handler binds an `Oidc` actor,
+    /// #2380 (L5), #3937: whether the addressed http handler binds an `Oidc` or `Bearer` actor,
     /// so an in-process call passes it `deps.claims`.
-    pub(crate) fn is_oidc_handler(&self, service: &str, key: &str) -> bool {
+    pub(crate) fn is_claims_handler(&self, service: &str, key: &str) -> bool {
         match &self.mode {
             BodyMode::TestCase { sum_handlers, .. } => {
-                sum_handlers.contains(&(service.to_string(), format!("oidc:{key}")))
+                sum_handlers.contains(&(service.to_string(), format!("claims:{key}")))
             }
             BodyMode::Method
             | BodyMode::FreeFn
@@ -1256,8 +1262,23 @@ impl<'a> LowerCtx<'a> {
                     .unwrap_or_else(|| bynk_ts::TsExpr::array(vec![]));
                 Some({
                     let c = vec![lines];
-                    call(ident("__bynkOidcClaims"), c)
+                    call(ident("__bynkClaimLines"), c)
                 })
+            }
+            // #3937: a `Bearer` route whose binder reads `.claims` signs the principal's own lines
+            // beside a refinement's witness claims (which the lines override), or just the witness
+            // claims, or none, when it gives no lines.
+            BodyMode::IntegrationCase {
+                system_http_claims, ..
+            } if system_http_claims.bearer_claim_routes.contains(route) => {
+                let witness = system_http_claims.witness_on(route, self.call_site_actor.as_ref());
+                let presented = self.call_site_claim_lines.clone().map(|lines| {
+                    let c = vec![lines];
+                    call(ident("__bynkClaimLines"), c)
+                });
+                Some(super::claim_predicate::bearer_claims_node(
+                    witness, presented,
+                ))
             }
             BodyMode::IntegrationCase {
                 system_http_claims, ..
@@ -1268,7 +1289,7 @@ impl<'a> LowerCtx<'a> {
                     .and_then(|a| system_http_claims.actors.get(a))
                 {
                     // The actor's witness claims, as `{ "name": value, … }`.
-                    Some(witness) => witness_claims_node(witness),
+                    Some(witness) => super::claim_predicate::witness_claims_node(witness),
                     None => bynk_ts::TsExpr::object(vec![]),
                 },
             ),
@@ -1288,13 +1309,14 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    /// #3052: whether this body is a `system` case on a target with an
-    /// `Oidc` route, whose calls mint their claims from `TokenClaims.of` lines.
-    pub(crate) fn is_system_oidc_body(&self) -> bool {
+    /// #3052, #3937: whether this body is a `system` case on a target with a route that mints
+    /// its token's claims from `TokenClaims.of` lines (`Oidc`, or a `Bearer` whose binder reads them).
+    pub(crate) fn is_system_claims_body(&self) -> bool {
         matches!(
             &self.mode,
             BodyMode::IntegrationCase { system_http_claims, .. }
                 if !system_http_claims.oidc_routes.is_empty()
+                    || !system_http_claims.bearer_claim_routes.is_empty()
         )
     }
 
@@ -1847,27 +1869,6 @@ impl<'a> LowerCtx<'a> {
             _ => None,
         }
     }
-}
-
-/// An actor's witness claims as an object literal: each claim a quoted key, so a name that is not
-/// an identifier reads the same, and `true` or its string value.
-fn witness_claims_node(witness: &[(String, bynk_check::actors::WitnessValue)]) -> bynk_ts::TsExpr {
-    use bynk_check::actors::WitnessValue;
-    bynk_ts::TsExpr::object_entries(
-        witness
-            .iter()
-            .map(|(name, value)| {
-                let value = match value {
-                    WitnessValue::True => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true)),
-                    WitnessValue::Str(v) => bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Str(v.clone())),
-                };
-                bynk_ts::TsObjectEntry::prop(
-                    format!("\"{}\"", bynk_ts::escape_ts_literal(name)),
-                    value,
-                )
-            })
-            .collect(),
-    )
 }
 
 // ---- #4034: `size()` of a `store` collection inside a predicate ---------------

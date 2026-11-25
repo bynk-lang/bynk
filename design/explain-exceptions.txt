@@ -71,3 +71,5 @@ bynk.wasm.strip_failed: a tool failure or compiler bug, not a program error
 bynk.fmt.comment_loss: a tool failure or compiler bug, not a program error
 bynk.fmt.mixed_comment_syntax: a tool failure or compiler bug, not a program error
 bynk.fmt.roundtrip: a tool failure or compiler bug, not a program error
+bynk.env.unknown_variable: reported on `bynk.toml` with no source position (a variable has no line the check can point at), so the example gate cannot tell which line it is on
+bynk.env.in_dependency: needs a second package (a path dependency) beside the project, and the example gate compiles one project tree, so no compiled pair can show it; pinned by a bynk-driver test

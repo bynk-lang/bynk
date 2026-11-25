@@ -1,0 +1,9 @@
+suite demo.orders {
+  consumes idempotency { Idempotency }
+  stub Idempotency.ping[Int](_) returns None
+
+  case "reserve returns the cached value" {
+    let result <- reserve.call()
+    expect result is None
+  }
+}

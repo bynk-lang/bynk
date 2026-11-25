@@ -782,8 +782,15 @@ type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codabl
 are accepted there), and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
-where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
-`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+where the type is applied, at **every** application: a written type argument
+(`type Set2[T: Eq]` rejects `Set2[(Int) -> Int]` with the equality diagnostics
+below), a type parameter standing for the argument (`Set2[U]` MUST be in the scope
+of a `U` that carries the bound, else `bynk.generics.missing_{eq,ord,key,codable}_bound`
+with the same machine-applicable fix as a function's), and an instantiation the
+checker infers from a record or variant literal (`Set2 { items: [f] }` is checked
+as a written argument would be). The bounds a type needs are declared on it, never
+inferred from its fields, and a method of a bounded type holds its receiver type's
+bounds without repeating them. An `Eq` bound adds nothing to emission. An
 `Ord` bound adds one hidden trailing comparator parameter to the emitted
 function (the receiver type's parameters first, then the method's own, in
 declaration order), which the caller builds from the concrete type; it is
@@ -2517,6 +2524,16 @@ fail-closed, but no identity is captured (anonymous / verify-and-discard). `_`
 MUST NOT be used as the binder (omit it instead). A named binder MUST NOT collide
 with a handler parameter (`bynk.actor.binder_shadows_param`).
 
+The binder of an `http` handler whose `by` clause names one `Oidc` or `Bearer` actor, or a
+refinement of a `Bearer` one (#2380, #3937), also exposes the verified token's claims as
+`<binder>.claims`, of type `TokenClaims` (`get(name)`, `has(name)`). The seam reads them from the
+token it already verified, so a refinement's binder reads its base's. The binder of any other scheme,
+a binder-less `by`, and a sum's binder (which is the resolved arm) have no `.claims`
+(`bynk.types.unknown_field`). A `TokenClaims` MUST NOT be a field, nor cross a call, a message or an
+agent (`bynk.types.claims_at_boundary`). A test supplies them as the principal's second argument,
+`by User("ada", TokenClaims.of([…]))`, for an `Oidc` or `Bearer` actor and no other
+(`bynk.test.principal_claims_not_oidc`).
+
 ### §5.7a.1 Multi-actor sum dispatch (v0.52)
 
 A `by` clause MAY name an **ordered sum of peer actors**
@@ -2852,7 +2869,8 @@ as the consumer acknowledged or retried it. The scheduled time, an `Instant`, is
 required when the handler declares it, as at the other tiers.
 
 An http address in a `system`-tier `case` presents the acting actor's
-credential: a signed token for a Bearer actor, a signature for a `Signature`
+credential: a signed token for a Bearer actor (#3937: carrying the principal's literal
+`TokenClaims.of(…)` lines when the handler's binder reads them, beside a refinement's witness claims), a signature for a `Signature`
 actor (#2135), and on an actor sum the credential of the member the principal
 names (#2155). For an `Oidc` actor (#3052) the driver is the issuer: it signs the
 token with a key pair generated for the test process, serves the matching JWKS in

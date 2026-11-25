@@ -455,6 +455,7 @@ pub(super) fn integration_typed_commons(
             },
             items: Vec::new(),
             uses: Vec::new(),
+            consumes: Vec::new(),
             documentation: None,
             form: CommonsForm::Brace,
             span: Span::default(),
@@ -676,18 +677,17 @@ pub(super) fn target_sum_handlers(table: Option<&UnitTable>) -> HashSet<(String,
                 ));
             }
         }
-        // #2380 (L5): an `Oidc` route that binds its actor, recorded under an
-        // `oidc:` key, so an in-process call gives it `deps.claims`.
+        // #2380 (L5), #3937: an `Oidc` or `Bearer` route that binds its actor, recorded under a
+        // `claims:` key, so an in-process call gives it `deps.claims`.
         for h in &decl.handlers {
             if let bynk_model::IrHandlerKind::Http { method, path } =
                 bynk_model::lower_handler_kind_ir(&h.kind)
-                && bynk_check::actors::oidc_seam_for(h, &t.actors)
-                    .is_some_and(|s| s.binder.is_some())
+                && bynk_check::actors::claims_binder_for(h, &t.actors).is_some()
             {
                 out.insert((
                     name.clone(),
                     format!(
-                        "oidc:{}",
+                        "claims:{}",
                         crate::emitter::http_handler_method_name_ir(method, &path)
                     ),
                 ));

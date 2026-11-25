@@ -41,9 +41,9 @@ async function __sysdrive_api_http_GET_processor(__extraHeaders: { get(name: str
   const __res = await __h.env.SHOP_PAY.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_GET_me(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}` } });
+  const __req = new globalThis.Request(`https://test/me`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["AUTH_JWT_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["AUTH_JWT_SECRET"] ?? ""))}` } });
   const __res = await __h.env.SHOP_PAY.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -103,7 +103,7 @@ async function test_system__a_token_signed_with_the_fixture_secret_is_admitted()
     const secret: string = __fixture_fixtures_2fjwt_2dsecret_2etxt;
     const processor: string = __fixture_fixtures_2fprocessor_2etxt;
     const override: string = __fixture_fixtures_2foverride_2etxt;
-    const r = await __sysdrive_api_http_GET_me(undefined, ("ada" as any));
+    const r = await __sysdrive_api_http_GET_me(undefined, ("ada" as any), {});
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "ada"))) { throw __bynkExpectFailure("tests/pay_system.bynk:20:10", 642, 656, "expect r is Ok(\"ada\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

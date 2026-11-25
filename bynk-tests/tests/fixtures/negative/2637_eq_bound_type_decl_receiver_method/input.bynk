@@ -1,5 +1,6 @@
-// A bound the receiver type declares applies to its methods' callers, with no
-// `where` clause, even when the instantiation is inferred from a construction.
+// A bound the type declares holds for every value of it, with no `where`
+// clause, even when the instantiation is inferred from a construction (#3958):
+// the construction is where the bad type is made, so it is reported there.
 commons c
 
 type Box2[T: Eq] = { value: T }

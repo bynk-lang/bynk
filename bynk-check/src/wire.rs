@@ -531,7 +531,7 @@ fn collect_type_names(
 /// each type-parameter name with the concrete argument type-ref — so a
 /// per-instantiation codec sees fully concrete field types.
 /// `Paginated[User]`'s `items: List[T]` becomes `items: List[User]`.
-fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
+pub fn subst_type_ref(t: &TypeRef, subst: &HashMap<String, TypeRef>) -> TypeRef {
     match t {
         TypeRef::Named(id) => match subst.get(&id.name) {
             Some(replacement) => replacement.clone(),

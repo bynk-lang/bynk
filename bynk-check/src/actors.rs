@@ -444,6 +444,20 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
     })
 }
 
+/// #3937: the binder of an HTTP handler whose `by` clause names one actor that reads a verified
+/// JWT, so the binder's `.claims` is the token's claims: an `Oidc` actor, or a `Bearer` actor or a
+/// refinement of one. `None` for a sum (the binder there is the resolved arm), a handler of any
+/// other protocol, and a `by` with no binder.
+pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Option<String> {
+    if let Some(seam) = oidc_seam_for(handler, actors) {
+        return seam.binder;
+    }
+    if !matches!(handler.kind, HandlerKind::Http { .. }) || handler.by_clause.as_ref()?.is_sum() {
+        return None;
+    }
+    bearer_seam_for(handler, actors)?.binder
+}
+
 /// v0.54: the binder of a cross-context `on call … by c: Caller` handler that
 /// captures a live `CallerId` (the calling context's name, Q7). `None` unless
 /// the handler binds an identity whose contract is `CallerId` — i.e. the
@@ -964,7 +978,10 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // external network request, so no external auth scheme applies.
         // I3 (#1971): a `call` also admits a declared foreign caller.
         ServiceProtocol::Call => matches!(scheme, Scheme::Internal | Scheme::Foreign),
-        ServiceProtocol::Cron | ServiceProtocol::Queue { .. } | ServiceProtocol::Events { .. } => {
+        // #3899: a queue consumer may name a `Foreign` producer; the checker
+        // refuses it as not yet enforced (`queue_actor_not_enforced`).
+        ServiceProtocol::Queue { .. } => matches!(scheme, Scheme::Internal | Scheme::Foreign),
+        ServiceProtocol::Cron | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)
         }
         // #3328: the platform delivers inbound mail, so the only admitted

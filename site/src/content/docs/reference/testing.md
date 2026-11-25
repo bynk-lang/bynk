@@ -202,7 +202,7 @@ handler route would receive for an asset's path still goes to the Worker; only
 
 ### Passing token claims — `by Workload("id", TokenClaims.of([…]))` {#token-claims}
 
-A handler guarded by an [`Oidc` actor](/reference/actors/#reading-claims)
+A handler guarded by an [`Oidc` or `Bearer` actor](/reference/actors/#reading-claims)
 reads its token's claims through its binder. At `unit` and `integration` a case
 supplies them as the principal's second argument, from `"name: value"` lines;
 with none, the handler sees no claims:
@@ -216,10 +216,11 @@ suite ci.release {
 }
 ```
 
-Each line is a string claim. Only an `Oidc` actor's principal takes claims
+Each line is a string claim. Only an `Oidc` or `Bearer` actor's principal takes claims
 (`bynk.test.principal_claims_not_oidc`). A `system` case mints the token itself:
 the [driver is the issuer](#failure-principals), signing a token whose `sub` is
-the identity and whose claims are those lines, and the Worker's real seam
+the identity and whose claims are those lines (for a refinement of a `Bearer` actor, beside the
+claims its predicate needs, which the principal's own override), and the Worker's real seam
 verifies it. There the claims must be written as a literal `TokenClaims.of([…])`
 in the principal (`bynk.test.system_claims_need_literal`), because the driver
 writes the lines into the token.
@@ -1163,6 +1164,14 @@ This substitutes a consumed seam of the unit under test — the third of the sea
 triad: `consumes` *declares* a seam, `given` *requires* it, and `stub`
 *substitutes* it under test (its own keyword since #548; formerly a pun on the
 production `provides`).
+
+A [generic operation](/reference/capabilities/#generic-operations) is stubbed at a
+type argument, written as at a call site: `stub Idempotency.dedup[Int](_) returns
+Some(7)`. The clause is typed against the operation with the type argument
+substituted, and it answers only calls made at that type argument, so
+`dedup[Int]` and `dedup[String]` carry separate stubs. The test build passes the
+call's type arguments as a trailing marker argument that the real binding
+ignores; the code the compiler emits for a production build is unchanged.
 
 - **The left is `Cap.method(<pattern>, …)`** — the capability, the method, and an
   **argument pattern** per parameter. A pattern is the [one predicate
@@ -2201,6 +2210,10 @@ The subject is a **`Cap.op` reference** — the capability and one of its operat
 | `expect Cap.op called with <pred>` | at least one call whose arguments satisfy `<pred>` |
 | `expect Cap.op called <n> times with <pred>` | exactly `<n>` calls, and they match |
 | `expect A.op before B.op` | both occurred, and the first `A.op` precedes the first `B.op` |
+
+A generic operation is observed per type argument: `expect Idempotency.dedup[Int]
+called once` counts only the calls made at `Int`. Without the type argument an
+observation counts the calls at every type argument.
 
 `before` compares the order calls were **issued** in, not the order they finished.
 Inside a [`par` block](/reference/capabilities/#par) the first call of each

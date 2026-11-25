@@ -372,7 +372,7 @@ pub(crate) fn check_fn_in(
             },
         },
         in_test_body: false,
-        oidc_binder: None,
+        claims_binder: None,
         test_services: HashMap::new(),
         test_actors: HashMap::new(),
         type_vars: vars.clone(),
@@ -554,7 +554,7 @@ fn type_static_initialiser(
             fold_init_expected: None,
             caps: CapabilityCtx::default(),
             in_test_body: false,
-            oidc_binder: None,
+            claims_binder: None,
             test_services: HashMap::new(),
             test_actors: HashMap::new(),
             type_vars: HashSet::new(),
@@ -2746,8 +2746,15 @@ pub(crate) fn check_store_log_op(
         }
         // The general query vocabulary over the entry values.
         name if is_query_op(name) => {
-            let r =
-                check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx);
+            let r = check_query_kernel_method(
+                method,
+                QueryOp::from_name(name),
+                args,
+                elem,
+                None,
+                span,
+                ctx,
+            );
             par::reject_store_write_in_closure(method, args, ctx);
             r
         }
@@ -3464,7 +3471,7 @@ fn check_method_call_inner(
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
             let kop = QueryOp::from_name(&method.name);
-            let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            let r = check_query_kernel_method(method, kop, args, *elem, Some(receiver), span, ctx);
             par::reject_store_write_in_closure(method, args, ctx);
             return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }
@@ -4961,29 +4968,36 @@ fn oidc_only_principal(bad: BadCredential) -> Option<OidcOnlyPrincipal> {
     })
 }
 
-/// #2380 (L5): a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
-/// only an `Oidc` actor's handler reads them.
+/// #2380 (L5), #3937: a call-site principal's claims (`by W("id", claims)`) are a `TokenClaims`, and
+/// only an `Oidc` or `Bearer` actor's handler reads them (a refinement reads its base's).
 fn check_principal_claims(p: &bynk_syntax::ast::CallSiteActor, ctx: &mut Ctx) {
     let tys = ctx.tys;
     if let Some(claims) = &p.claims {
         let want = tys.intern(Ty::TokenClaims);
         check_arg(claims, want, "the principal's claims", ctx);
-        let oidc = ctx.test_actors.get(&p.actor.name).is_some_and(|decl| {
-            decl.auth
-                .as_ref()
-                .is_some_and(|a| a.name.as_str() == "Oidc")
-        });
-        if !oidc {
+        let reads_claims = |name: &str| {
+            ctx.test_actors.get(name).is_some_and(|decl| {
+                decl.auth
+                    .as_ref()
+                    .is_some_and(|a| matches!(a.name.as_str(), "Oidc" | "Bearer"))
+            })
+        };
+        let base = ctx
+            .test_actors
+            .get(&p.actor.name)
+            .and_then(|d| d.refinement.as_ref())
+            .map(|r| r.base.name.clone());
+        if !reads_claims(&p.actor.name) && !base.as_deref().is_some_and(reads_claims) {
             ctx.errors.push(
                 CompileError::new(
                     "bynk.test.principal_claims_not_oidc",
                     claims.span,
                     format!(
-                        "`{}` isn't an `Oidc` actor, so its handlers read no token claims",
+                        "`{}` isn't an `Oidc` or `Bearer` actor, so its handlers read no token claims",
                         p.actor.name
                     ),
                 )
-                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` actor"),
+                .with_note("claims are passed as `by Workload(\"id\", TokenClaims.of([\"name: value\"]))` for an `Oidc` or `Bearer` actor"),
             );
         }
     }

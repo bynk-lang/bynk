@@ -21,7 +21,7 @@ A closed, compiler-known set. `auth = <Scheme>` with keyed config where noted.
 | Scheme | Config | Identity | Protocols | Verification |
 |---|---|---|---|---|
 | `None` | — | `()` | any | none (anonymous; the prelude `Visitor`) |
-| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity; `401` |
+| `Bearer` | `secret = "<ENV>"` | a string-constructible type | `http` | JWT HS256 over `Authorization: Bearer …`; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
 | `Signature` | `secret`, `header`, optional `timestamp` + `tolerance` | none | `http` | HMAC-SHA256 over the raw body; `401` |
 | `SignedCookie` | `secret = "<ENV>"`, `ttl`, optional `cookie`, `previous`, `sameSite` | a string-constructible type | `http` | a signed, expiring session cookie that Bynk issues and verifies; `sub` → identity; `401`. see [Signed cookies](#signed-cookies) |
 | `Oidc` | `issuer`, `audience`, `jwks` (all URLs/ids; **no secret**); optional `trustFrom` | a string-constructible type | `http` | RS256/ES256 JWT verified against the provider's JWKS over `Authorization: Bearer …`; `iss`/`aud`/`exp` checked; `sub` → identity, and the verified claims → [`claims`](#reading-claims); `401` |
@@ -164,8 +164,9 @@ a `@cache(scope: public)` route (`bynk.actor.signed_cookie_public_cache`).
 
 ## Reading claims
 
-An `Oidc` actor's binder carries the verified token's claims beside its
-identity, as a `TokenClaims`:
+The binder of an `Oidc` actor, of a `Bearer` actor, and of a refinement of a
+`Bearer` actor carries the verified token's claims beside its identity, as a
+`TokenClaims`:
 
 ```bynk,fragment
 on POST("/release") () -> Effect[HttpResult[String]] by w: Workload {
@@ -174,6 +175,20 @@ on POST("/release") () -> Effect[HttpResult[String]] by w: Workload {
   Ok(repository.getOrElse("-"))
 }
 ```
+
+A `Bearer` binder reads them the same way, so a handler behind an ordinary HS256 JWT can read a
+tenant, a scope or a plan:
+
+```bynk,fragment
+on GET("/reports") () -> Effect[HttpResult[String]] by u: User {
+  let tenant = u.claims.get("tenant").getOrElse("default")
+  Ok(tenant)
+}
+```
+
+A refinement's binder (`by a: Admin`, where `actor Admin = User where hasClaim("admin")`) carries its
+base's claims, the same token's. The claims are the token's whether or not a refinement's predicate
+reads them. A route with no binder (`by User`) verifies the token and reads nothing.
 
 | Method | Returns | Reads |
 |---|---|---|
@@ -184,8 +199,12 @@ Every claim comes from a token whose signature, `iss`, `aud` and `exp` the seam
 verified; a token that fails is `401` before the handler runs. The claims are
 read where the token arrives and never kept: a `TokenClaims` can't be a field, or
 cross a call, a message or an agent (`bynk.types.claims_at_boundary`). Read the
-claim you need and keep that `String`. Only an `Oidc` binder has `.claims`;
-`Bearer` claims are a later addition.
+claim you need and keep that `String`. Only the binder of an `Oidc` or a `Bearer`
+actor has `.claims` (not another scheme's, and not a sum's: the binder of `by who: A | B` is the
+resolved arm).
+
+A claim says what the token asserts, not whose data the handler may touch: an object-level check
+(*is this report this tenant's?*) stays in the handler. See [Who, not whose](#who-not-whose).
 
 ## Trust roots from the environment
 
@@ -254,7 +273,10 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   inserts it, and a service-header `by` covers every handler without its own.
   An `on message` handler writes at least `by Producer`, the explicit "anyone on the
   account" (`bynk.actor.missing_by_on_queue`); `bynk check --fix=bynk.actor.missing_by_on_queue`
-  inserts it. The platform-only protocols default: cron → `Scheduler`,
+  inserts it. A refinement of `Producer` (`actor Shop = Producer where IsContext(shop)`)
+  and a `Foreign` actor are valid declarations, but naming one on an `on message`
+  handler is `bynk.actor.queue_actor_not_enforced` until queue delivery verifies the
+  sender. The platform-only protocols default: cron → `Scheduler`,
   email → `Sender`. An agent's `on call` operations are reached only from inside
   their own context, so they name no caller.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.

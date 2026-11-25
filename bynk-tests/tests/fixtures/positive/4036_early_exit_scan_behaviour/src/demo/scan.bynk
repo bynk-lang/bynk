@@ -144,4 +144,21 @@ agent Tally {
 	on call anyBig(n: Int) -> Effect[Bool] {
 		orders.filter((o) => o.total > n).any((o) => o.status == "open")
 	}
+
+	on call allWithStatus(status: String, n: Int) -> Effect[Bool] {
+		orders.filter((o) => o.status == status).all((o) => o.total > n)
+	}
+
+	// A stage after the routed filter keeps its place: the posting list feeds it, not the whole Map.
+	on call anyDoubledWithStatus(status: String, n: Int) -> Effect[Bool] {
+		orders.filter((o) => o.status == status).map((o) => o.total * 2).any((t) => t > n)
+	}
+
+	on call anyBigWithStatus(status: String, n: Int) -> Effect[Bool] {
+		orders.filter((o) => o.status == status).filter((o) => o.total > n).any((o) => o.total > 0)
+	}
+
+	on call firstWithStatus(status: String) -> Effect[Option[Order]] {
+		orders.filter((o) => o.status == status).first()
+	}
 }

@@ -145,6 +145,10 @@ pub struct Commons {
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,
+    /// `consumes` clauses of this file. Source cannot write one in a commons
+    /// yet; the toolchain adds the type-only clause that reaches the `bynk`
+    /// adapter's transparent types (#4181, `ParsedFile::add_implicit_consumes` in `bynk-project`).
+    pub consumes: Vec<ConsumesDecl>,
     /// Optional documentation block attached to the commons declaration.
     pub documentation: Option<Doc>,
     /// Surface form of the file: brace-delimited body or headerless fragment.
@@ -157,6 +161,38 @@ pub struct Commons {
     /// Comments appearing after the last item but before the file ends
     /// (or the closing brace, for brace form). One entry per `--` line.
     pub trailing_comments: Vec<Comment>,
+}
+
+impl Commons {
+    /// A commons as the parser reads it: no `consumes` (source cannot write one;
+    /// the toolchain adds the implicit type-only clause, #4181), the brace or
+    /// fragment form, and no trivia of its own.
+    pub fn parsed(
+        name: QualifiedName,
+        items: Vec<CommonsItem>,
+        uses: Vec<UsesDecl>,
+        documentation: Option<Doc>,
+        brace: bool,
+        span: Span,
+        trailing_comments: Vec<Comment>,
+    ) -> Commons {
+        Commons {
+            name,
+            test_only: false,
+            items,
+            uses,
+            consumes: Vec::new(),
+            documentation,
+            form: if brace {
+                CommonsForm::Brace
+            } else {
+                CommonsForm::Fragment
+            },
+            span,
+            trivia: Trivia::default(),
+            trailing_comments,
+        }
+    }
 }
 
 /// The two surface forms in which a commons body may be parsed (v0.3 §3.1).
@@ -511,6 +547,10 @@ pub struct StubClause {
     pub capability: Ident,
     /// The overridden method.
     pub method: Ident,
+    /// #3945: the explicit type arguments of a generic operation
+    /// (`stub Idempotency.dedup[Outcome](_) …`): the stub answers a call whose
+    /// own type arguments these are. Empty for an operation without any.
+    pub type_args: Vec<TypeRef>,
     /// One argument pattern per parameter (`_` or a value the arg must equal).
     pub args: Vec<ArgPattern>,
     /// The provision: a value, a fault, a per-call sequence, or none at all.
@@ -5289,6 +5329,9 @@ pub struct FaultsExpr {
 pub struct ObservationExpr {
     pub cap: Ident,
     pub op: Ident,
+    /// #3945: the explicit type arguments (`Idempotency.dedup[Outcome]`): the
+    /// claim is about the calls made with these. Empty counts every call.
+    pub type_args: Vec<TypeRef>,
     pub matcher: ObservationMatcher,
 }
 
@@ -6094,6 +6137,7 @@ fn f(x: Int) -> Int {
                 let ObservationExpr {
                     cap: _,
                     op: _,
+                    type_args: _,
                     matcher,
                 } = obs.as_ref();
                 match matcher {

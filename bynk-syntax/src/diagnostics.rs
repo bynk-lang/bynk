@@ -276,6 +276,11 @@ pub const EXPLANATIONS: &[Explain] = &[
         example: "commons shop\n\nactor User { auth = None }   // ✗ a commons has no handlers\n\ncontext shop\n\nactor User { auth = None }   // ✓ declared where it is used",
     },
     Explain {
+        code: "bynk.actor.queue_actor_not_enforced",
+        blurb: "A queue consumer may one day narrow who can send to it, with a refinement of `Producer` that admits only named contexts or with a `Foreign` producer, but nothing yet verifies the sender of a queue message. Accepting such a `by` today would read as a restriction while admitting every producer on the account, so the compiler refuses it instead. Write `by Producer`, which says what is true: any producer on the account may send.",
+        example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
+    },
+    Explain {
         code: "bynk.actor.refinement_base_unsupported",
         blurb: "`actor Admin = User where …` adds an authorisation check on a token's claims, and only a `Bearer` actor carries claims. So the base must be a declared `Bearer` actor: not `Visitor`, `Internal` or `Signature`, and not another refinement. Name a `Bearer` actor as the base, declaring it if need be.",
         example: "type UserId = String where NonEmpty\nactor User { auth = Bearer(secret = \"JWT_KEY\"), identity = UserId }\n\nactor Admin = Visitor where hasClaim(\"admin\")   // ✗ `Visitor` carries no claims\n\nactor Admin = User where hasClaim(\"admin\")   // ✓ a `Bearer` actor",
@@ -1829,6 +1834,36 @@ fn wait() -> Duration { 5.hours }     // ✓",
                 inside `embeds/`. A relative path that is only outside `embeds/` is \
                 `bynk.embed.outside_embeds_dir`.",
         example: "embed shell = \"embeds/../page.html\"    // ✗ a `..` segment\n\nembed shell = \"embeds/page.html\"       // ✓",
+    },
+    Explain {
+        code: "bynk.env.bad_value",
+        blurb: "Each `env(NAME)` constant is read from `bynk.toml` as the type it is declared with: a `String` takes a string, an `Int` a whole number, a `Bool` `true` or `false`, a `List[String]` an array of strings. A value of another kind is refused rather than converted, so a quoted `\"3\"` cannot stand in for the `Int` 3. The message names the variable, the table it was read from, and the type the constant needs. Fix the value in `bynk.toml`, or change the constant's type. A value of the right kind that breaks the constant's refinement is reported on the `env(…)` initialiser, as any literal that breaks its type would be.",
+        example: "// bynk.toml\n[vars]\nMAX_LINES = \"100\"\n\n// config.bynk\nconst MaxLines: Int = env(MAX_LINES)   // ✗ the value is a string\n\n// bynk.toml\n[vars]\nMAX_LINES = 100   // ✓ a whole number",
+    },
+    Explain {
+        code: "bynk.env.conflicting_default",
+        blurb: "A `bynk.toml` variable has one value per environment, so two constants that read it must agree on what it is when no environment sets it. Two different defaults leave the variable meaning two things at once. Give both the same default, or give neither a default and set the variable in `bynk.toml`, or read two different variables.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://a.example\")\nconst Callback: String = env(APP_ORIGIN, \"https://b.example\")   // ✗ a different default for `APP_ORIGIN`\n\nconst Callback: String = env(APP_ORIGIN, \"https://a.example\")   // ✓ the same default",
+    },
+    Explain {
+        code: "bynk.env.malformed_call",
+        blurb: "A constant's `env` initialiser names the `bynk.toml` variable it reads, bare and not as a string, and may give a default: `env(NAME)` or `env(NAME, default)`. The name is capital letters, digits and `_`, starting with a capital letter, so a variable cannot be mistaken for a constant (which is written in upper-camel case). Write the call in that form.",
+        example: "const Origin: String = env(\"APP_ORIGIN\")   // ✗ the name is written as a string\n\nconst Origin: String = env(APP_ORIGIN, \"https://app.example\")   // ✓ a bare name",
+    },
+    Explain {
+        code: "bynk.env.missing",
+        blurb: "`env(NAME)` with no default is a required value: every environment must supply one. The build for this environment found none in its `[env.<name>.vars]` or in `[vars]`. Set the variable in `bynk.toml`, under `[vars]` for every environment or under `[env.<name>.vars]` for one, or give `env` a default: `env(NAME, \"fallback\")`. The value is read from `bynk.toml` only, never from the Worker's run-time environment or the build machine's, so a deploy depends only on committed configuration.",
+        example: "const Origin: String = env(APP_ORIGIN)   // ✗ no default, and `bynk.toml` sets no `APP_ORIGIN`\n\nconst Origin: String = env(APP_ORIGIN, \"https://app.example\")   // ✓ a default",
+    },
+    Explain {
+        code: "bynk.env.not_initialiser",
+        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value",
+    },
+    Explain {
+        code: "bynk.env.unsupported_type",
+        blurb: "A `bynk.toml` value is text, a whole number, `true` or `false`, or an array of strings, so an `env(NAME)` constant can be a `String`, an `Int`, a `Bool` or a `List[String]`, or a refinement over a `String` or an `Int` declared in the same unit. A record, a sum, a `Duration` or any other type has no spelling there yet. Read the pieces as separate constants and build the value from them, or declare the constant with a supported type.",
+        example: "const Window: Duration = env(WINDOW)   // ✗ a `Duration` cannot be written in `bynk.toml`\n\nconst WindowMillis: Int = env(WINDOW_MS, 1000)   // ✓ an `Int`",
     },
     Explain {
         code: "bynk.event.bad_params",
@@ -4176,6 +4211,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
     },
     Explain {
+        code: "bynk.query.while_needs_order",
+        blurb: "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first, or a window of one (`since`, `before`, `between`, `recent`, `reversed`). A `flatMap` loses the order, because each inner query is joined in its own. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+        example: "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+    },
+    Explain {
         code: "bynk.queue.bad_params",
         blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
@@ -4851,8 +4891,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.stub.generic_op",
-        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names, and a fixed value cannot be that. Such an operation cannot be stubbed. Test through the capability's real provider, and stub the other, non-generic operations of the capability if you need to.",
-        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None   // ✗ `dedup` has its own type parameter\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()   // ✓ the real provider answers\n    expect result is None\n}",
+        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names. A `stub` of it names the type argument, as the call site does, so its answer has a concrete type, and it answers only the calls made at that type: `stub Idempotency.dedup[Int](_) returns None`. Without the type argument the clause could not be typed, and is refused.",
+        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None        // ✗ `dedup` has its own type parameter\nstub Idempotency.dedup[Int](_) returns None   // ✓ the type argument, as the call writes it\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()\n    expect result is None\n}",
     },
     Explain {
         code: "bynk.stub.not_a_seam",
@@ -5351,14 +5391,15 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.test.principal_claims_not_oidc",
-        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` actor's token \
-                carries, which the handler reads and the actor's rules check. A \
-                `Bearer` actor's token holds an identity and nothing else, so \
-                there is no claim set to fill, and the argument is refused. Drop \
-                the claims, or test a route guarded by an `Oidc` actor. See \
-                `bynk.test.actor_no_identity` for the other extra argument.",
+        blurb: "`TokenClaims.of([…])` supplies the claims an `Oidc` or `Bearer` \
+                actor's token carries, which the handler reads and the actor's rules \
+                check. A `SignedCookie` actor's credential holds an identity and \
+                nothing else, so there is no claim set to fill, and the argument is \
+                refused. Drop the claims, or test a route guarded by an `Oidc` or \
+                `Bearer` actor. See `bynk.test.actor_no_identity` for the other extra \
+                argument.",
         example: "// tests/api.test.bynk\n\
-                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a Bearer actor\n\
+                  let r <- api.GET(\"/me\") by User(\"bob\", TokenClaims.of([\"repository: acme/money\"]))   // ✗ a SignedCookie actor\n\
                   let r <- api.GET(\"/me\") by User(\"bob\")                                               // ✓",
     },
     Explain {
@@ -7109,6 +7150,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `actor` was declared outside a context (e.g. in a commons).",
     ),
     d(
+        "bynk.actor.queue_actor_not_enforced",
+        "A queue consumer names a `Producer` refinement or a `Foreign` actor, which nothing enforces yet.",
+    ),
+    d(
         "bynk.actor.refinement_base_unsupported",
         "A refinement actor's base is not a `Bearer` actor (no claims to authorise against).",
     ),
@@ -7976,6 +8021,42 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.embed.unsafe_path",
         "An `embed` path is empty, absolute, or contains a `..` segment.",
+    ),
+    d(
+        "bynk.env.bad_value",
+        "A `bynk.toml` variable holds a value of the wrong kind for the `env(…)` constant that reads it: a string where the constant is an `Int`, say.",
+    ),
+    d(
+        "bynk.env.conflicting_default",
+        "Two `env(…)` constants name one variable but give it different defaults.",
+    ),
+    d(
+        "bynk.env.in_dependency",
+        "A constant of a package consumed as a dependency reads a `bynk.toml` variable with `env(…)`: deployment configuration is the application's to read.",
+    ),
+    d(
+        "bynk.env.malformed_call",
+        "`env(…)` is not `env(NAME)` or `env(NAME, default)`.",
+    ),
+    d(
+        "bynk.env.missing",
+        "An `env(NAME)` constant has no default, and `bynk.toml` gives its variable no value in the environment being built.",
+    ),
+    d(
+        "bynk.env.not_initialiser",
+        "`env(…)` appears inside another expression: it is only ever a constant's whole initialiser.",
+    ),
+    warn(d(
+        "bynk.env.secret_like_name",
+        "An `env(…)` variable is named like a secret (`*_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD`), but `bynk.toml` is committed (warning).",
+    )),
+    d(
+        "bynk.env.unknown_variable",
+        "`bynk.toml` sets a build-time variable that no `env(…)` constant reads.",
+    ),
+    d(
+        "bynk.env.unsupported_type",
+        "An `env(…)` constant has a type `bynk.toml` cannot spell.",
     ),
     d(
         "bynk.event.bad_params",
@@ -9570,6 +9651,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &[],
     ),
     dg(
+        "bynk.query.while_needs_order",
+        "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.queue.bad_params",
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
@@ -10105,7 +10191,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.stub.generic_op",
-        "A test `stub` targets a capability operation that declares its own type parameter — not supported at v1.",
+        "A test `stub` targets a capability operation that declares its own type parameter without naming its type argument (`stub Cap.op[T](…)`).",
     ),
     d(
         "bynk.stub.not_a_seam",
