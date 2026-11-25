@@ -49,7 +49,7 @@ export const place = {
   async call(o: Order, deps: { OrderEvents: OrderEvents; Audit: Audit }): globalThis.Promise<void> {
     const __r0 = await deps.OrderEvents.sendValue(__serialise_Order(o));
     const __r1 = await deps.OrderEvents.sendValueBatch(__serialise_List_Order([o, o]));
-    const __r2 = await deps.OrderEvents.sendValueWith(__serialise_Order(o), { delay: Some(5000) });
+    const __r2 = await deps.OrderEvents.sendValueWith(__serialise_Order(o), { delay: Some((5000 as bynk_cloudflare.QueueDelay)) });
     const __r3 = await deps.Audit.send("{}");
     return undefined;
   },
