@@ -10,7 +10,7 @@ use super::*;
 use crate::emitter::internal_fault::FaultSite;
 use bynk_check::checker::Types;
 use bynk_syntax::ast::{BaseType, TypeBody, TypeDecl};
-use bynk_ts::{TsArrowBody, TsExpr, TsParam, TsType};
+use bynk_ts::{TsArrowBody, TsExpr, TsParam};
 use std::sync::Arc;
 
 /// `(<params>) => <body>`.
@@ -18,7 +18,7 @@ fn arrow(params: &[&str], body: TsExpr) -> TsExpr {
     TsExpr::Arrow {
         params: params
             .iter()
-            .map(|p| TsParam::new((*p).to_string(), Some(TsType::named("any"))))
+            .map(|p| TsParam::new((*p).to_string(), None))
             .collect(),
         is_async: false,
         generics: Vec::new(),
