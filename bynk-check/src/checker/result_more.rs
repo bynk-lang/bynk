@@ -46,7 +46,10 @@ pub(super) fn check_result_more(
     match &*tys.get(ret) {
         Ty::Result(t2, f) => {
             let (t2, f) = (*t2, *f);
-            if !compatible(t2, ok, tys) && !compatible(ok, t2, tys) {
+            // One way only, as `Option.orElse`: the fallback's success value must be usable
+            // where the receiver's is expected. The call is typed `Result[ok, F]`, so a
+            // wider success type (an `Int` for a refined `Int`) would skip the refinement.
+            if !compatible(t2, ok, tys) {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.combinator_return_mismatch",
                     args[0].span,
