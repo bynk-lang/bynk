@@ -366,7 +366,7 @@ mod tests {
 
     /// Units that list nothing: types only, no functions or capabilities (and
     /// `bynk.ordering`, whose `then`/`reverse` are methods on its `Ordering`).
-    const NOTHING_TO_LIST: &[&str] = &["bynk.locale.types", "bynk.ordering"];
+    const NOTHING_TO_LIST: &[&str] = &["bynk.locale.types", "bynk.ordering", "bynk.validation"];
 
     #[test]
     fn every_first_party_unit_is_listed_or_allowlisted() {

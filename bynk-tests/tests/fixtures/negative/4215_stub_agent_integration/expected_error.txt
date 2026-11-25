@@ -1,0 +1,3 @@
+bynk.stub.agent_stub `stub Basket.add` is in an `integration`-tier case, where an agent runs for real
+bynk.stub.agent_stub `stub Basket.add` is in an `integration`-tier suite, where an agent runs for real
+# exact

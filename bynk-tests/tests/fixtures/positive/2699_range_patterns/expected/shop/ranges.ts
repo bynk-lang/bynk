@@ -17,10 +17,10 @@ export type Score = number & { readonly __brand: "Score" };
 export const Score = {
   of(value: number): Result<Score, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Score", message: "must be a safe integer", value });
+      return Err({ field: "Score", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0 && value <= 100)) {
-      return Err({ field: "Score", message: "must be in range [0, 100]", value });
+      return Err({ field: "Score", message: "must be in range [0, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 0 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Score);
   },

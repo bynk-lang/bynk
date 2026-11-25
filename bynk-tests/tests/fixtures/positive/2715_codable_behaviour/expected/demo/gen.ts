@@ -35,7 +35,7 @@ export type Email = string & { readonly __brand: "Email" };
 export const Email = {
   of(value: string): Result<Email, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 3)) {
-      return Err({ field: "Email", message: "length must be at least 3", value });
+      return Err({ field: "Email", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value });
     }
     return Ok(value as Email);
   },

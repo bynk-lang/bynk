@@ -1,7 +1,11 @@
 ---
 title: Type system
 ---
+<!-- sorted: headings -->
+
 ## Built-in base types
+
+<!-- sorted: table -->
 
 | Type | Values | Emits |
 |---|---|---|
@@ -14,6 +18,8 @@ title: Type system
 | `Int` | integer literals (`0`, `-42`); a JS safe integer, ±(2^53 − 1) | `number` |
 | `String` | string literals (`"…"`) | `string` |
 
+<!-- /sorted -->
+
 The unit type is written `()`. `Int` and `Float` are **distinct and
 incompatible** — there is no implicit coercion (`bynk.types.no_numeric_coercion`).
 Convert explicitly: `i.toFloat()` (Int → Float, total) or `f.round()` /
@@ -23,6 +29,8 @@ result is not a safe integer); parse a string with `Int.parse(s)` /
 decimal only (`" 7 "`, `"0x10"` and, for `Int`, `"1e3"` are `None`). An `Int`
 is a JS safe integer at every entry point: a larger literal, a wire value, a
 parse result or a conversion is rejected, and `Int` division by zero faults.
+
+<!-- sorted: headings -->
 
 ### Bytes
 
@@ -302,7 +310,11 @@ is deprecated for it. URLs and query strings are in `bynk.url`, written over `pe
 [Related first-party modules](/reference/bynk-capabilities/#related-first-party-modules)).
 A method not in this table is `bynk.types.method_not_found`.
 
+<!-- /sorted -->
+
 ## Built-in generic types
+
+<!-- sorted: table -->
 
 | Type | Variants | Purpose |
 |---|---|---|
@@ -313,6 +325,8 @@ A method not in this table is `bynk.types.method_not_found`.
 | `Result[T, E]` | `Ok(T)`, `Err(E)` | success or error |
 | `Set[T]` | — | an immutable set of [`Key`](#keys) elements (see [Set](#set)) |
 | `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
+
+<!-- /sorted -->
 
 ### `Option` and `Result` methods {#option-and-result-methods}
 
@@ -357,20 +371,70 @@ On an `Effect[Result[T, E]]`, `map` and `andThen` act on the whole `Result`; `ma
 `Effect` is an error, since it would nest one effect in another: use `andThen`. A method
 an `Effect` does not have is `bynk.types.method_not_found`.
 
+### `ValidationError` {#validationerror}
+
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
-A `ValidationError` has two `String` fields:
+A `ValidationError` has two `String` fields and the rule that failed:
 
 | Field | Meaning |
 |---|---|
 | `field` | the name of the refined type or field that failed validation |
-| `message` | a human-readable description of the failure |
+| `message` | a human-readable description of the failure, generated from the rule |
+| `rule` | the predicate that failed, with its argument, as a `ValidationRule` |
+
+`ValidationRule` is a closed sum with a variant per predicate, and `Bound` carries a
+numeric argument of whichever base the refined type has. Both are in scope with no
+`uses`, as `ValidationError` is:
+
+```bynk,fragment
+type ValidationRule =
+  | NonNegative
+  | Positive
+  | InRange(lo: Bound, hi: Bound)
+  | AtLeast(bound: Bound)
+  | AtMost(bound: Bound)
+  | NonEmpty
+  | MinLength(limit: Int)
+  | MaxLength(limit: Int)
+  | Length(limit: Int)
+  | Matches(pattern: String)
+  | IsoDate
+  | Cron
+  | WellFormed
+
+type Bound =
+  | IntBound(value: Int)
+  | FloatBound(value: Float)
+  | DecimalBound(value: Decimal)
+  | DurationBound(value: Duration)
+```
+
+`WellFormed` is a value that is not a valid member of its base type at all (a number that is
+not finite, an `Int` outside the safe range), before any predicate was tried. A `match` on
+`e.rule` is checked for exhaustiveness, so a new predicate is a visible change; the `_` arm
+opts out:
+
+```bynk,fragment
+fn noteProblem(e: ValidationError) -> String {
+  match e.rule {
+    MaxLength(limit) => "Keep it to \(limit) characters",
+    MinLength(limit) => "At least \(limit) characters",
+    NonEmpty => "Required",
+    _ => e.message,
+  }
+}
+```
+
+The variants name a `ValidationRule` only where the context says so (a `match` or `is` on
+one, an expected type, the other side of `==` or `!=`), so a type of your own with a
+`Positive` or `MaxLength` variant is untouched. `ValidationRule.MaxLength(…)` always works.
 
 It has no string form, so `"\(e)"` is refused
 (`bynk.types.interpolation_non_scalar`); interpolate its fields instead:
 `"\(e.field): \(e.message)"`. The offending value is also carried at runtime
-but is not reachable from Bynk yet, so `e.value` is refused
-(`bynk.types.unknown_field`).
+but is not reachable from Bynk, so `e.value` is refused
+(`bynk.types.unknown_field`), and it is never written to an HTTP response.
 
 ## Connection
 
@@ -590,6 +654,8 @@ be generic (its base is a fixed primitive); only a record or **sum** body may be
 The types an `on http` handler uses for cookies and uploaded files. See
 [HTTP](/reference/http/) for how a handler uses them.
 
+<!-- sorted: headings -->
+
 ### Cookie and SameSite {#cookie}
 
 `Cookie` is the record a handler attaches to a result with
@@ -630,6 +696,8 @@ handler's `cookies` parameter when it needs a name a record field cannot spell. 
 and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty()`. It is not
 a boundary type: it cannot be stored, sent or returned. See
 [Reading a prefixed cookie](/reference/http/#request-cookies).
+
+<!-- /sorted -->
 
 ## The JSON codec
 
@@ -1086,6 +1154,8 @@ A narrower arm may precede a wider one (`Some(Red)` then `Some(_)`), and a
 guarded arm never counts as covering, because its guard may fail. So an
 unguarded arm with the same pattern can always follow it.
 
+<!-- sorted: headings -->
+
 ### Exhaustiveness and reachability
 
 Both checks are one rule (patterns track, slice 3, #2665): an arm is reachable
@@ -1312,6 +1382,8 @@ record pattern (`bynk.parse.lambda_pattern_not_record`) and takes no annotation
 generic record takes its type arguments from the expected function type. Function,
 method and handler parameters stay plain names.
 
+<!-- /sorted -->
+
 ## Named types
 
 ```bynk
@@ -1530,23 +1602,7 @@ into the storage capability the `store` fields already carry (no new `given`):
 
 On a `Query`, and so on a store or held `Map`, the concurrent step that returns `()` is `parForEach`, the name it has on a `List`. Before #4177 it was `parTraverse`; that spelling is now the error `bynk.query.par_traverse_renamed`, whose fix (`bynk check --fix`) renames the call. A `Query` has no value-returning `parTraverse`: `collect()` it, then `parTraverse` the list.
 
-### Which terminals stop reading early
-
-A terminal over a `store` collection reads its pages from storage. Where the answer is known
-before the last page, the read stops there, and the pages after it are never fetched:
-
-| Collection | Stops early | Reads every entry |
-|---|---|---|
-| `Log` | `.any(p)`, `.all(p)`, `.first()`, `.firstOrElse(d)`, `.take(n).collect()` | the other terminals |
-| `Map` | `.any(p)`, `.all(p)` | `.first()`, `.firstOrElse(d)`, `.take(n)`, and the other terminals |
-
-Only `filter`, `map` and `flatMap` (and `skip`, on a `Log`) may come before such a terminal. A
-`sortBy`, `sortByDescending`, `distinct`, `distinctBy`, `groupBy`, join or aggregate needs the whole
-input, so `sortBy(…).first()` reads everything while `first()` does not. A `Log` is read oldest first,
-so `first()` is its oldest match. A `Map` is scanned in insertion order, which only reading every
-entry recovers, so its order-dependent terminals read everything. An equality `filter` on an
-[`@indexed`](/reference/agents/#indexed-routing) field reads its posting list as before. A query
-held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
+<!-- sorted: headings -->
 
 ### Joins and grouping
 
@@ -1591,6 +1647,26 @@ items.entries.map((e) => TodoItem { id: e.key, seq: e.value.seq, title: e.value.
 This is what lets a stored value drop the denormalised copy of its own key. The
 accessors are paren-less builders on the *storage* map, distinct from the eager
 in-memory `Map` value methods `.keys()`/`.values()` that return `List`s.
+
+### Which terminals stop reading early
+
+A terminal over a `store` collection reads its pages from storage. Where the answer is known
+before the last page, the read stops there, and the pages after it are never fetched:
+
+| Collection | Stops early | Reads every entry |
+|---|---|---|
+| `Log` | `.any(p)`, `.all(p)`, `.first()`, `.firstOrElse(d)`, `.take(n).collect()` | the other terminals |
+| `Map` | `.any(p)`, `.all(p)` | `.first()`, `.firstOrElse(d)`, `.take(n)`, and the other terminals |
+
+Only `filter`, `map` and `flatMap` (and `skip`, on a `Log`) may come before such a terminal. A
+`sortBy`, `sortByDescending`, `distinct`, `distinctBy`, `groupBy`, join or aggregate needs the whole
+input, so `sortBy(…).first()` reads everything while `first()` does not. A `Log` is read oldest first,
+so `first()` is its oldest match. A `Map` is scanned in insertion order, which only reading every
+entry recovers, so its order-dependent terminals read everything. An equality `filter` on an
+[`@indexed`](/reference/agents/#indexed-routing) field reads its posting list as before. A query
+held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
+
+<!-- /sorted -->
 
 ## Record types
 
@@ -2048,3 +2124,5 @@ sum declares and works inside a context but has no codec yet, so it is refused
 where a codec is required, with `bynk.generics.recursive_generic_at_boundary`
 (see [Generic record types](#generic-record-types)). A generic sum may not carry an
 `embeds` clause (`bynk.generics.generic_sum_embeds`).
+
+<!-- /sorted -->

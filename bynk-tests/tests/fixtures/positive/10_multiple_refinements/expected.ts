@@ -10,13 +10,13 @@ export type Username = string & { readonly __brand: "Username" };
 export const Username = {
   of(value: string): Result<Username, ValidationError> {
     if (!(__bynkCodePointLength(value) >= 3)) {
-      return Err({ field: "Username", message: "length must be at least 3", value });
+      return Err({ field: "Username", message: "length must be at least 3", rule: { tag: "MinLength", limit: 3 }, value });
     }
     if (!(__bynkCodePointLength(value) <= 20)) {
-      return Err({ field: "Username", message: "length must be at most 20", value });
+      return Err({ field: "Username", message: "length must be at most 20", rule: { tag: "MaxLength", limit: 20 }, value });
     }
     if (!(__bynkRegExp("^(?:" + "[a-z0-9_]+" + ")$", "u").test(value))) {
-      return Err({ field: "Username", message: "must match /[a-z0-9_]+/", value });
+      return Err({ field: "Username", message: "must match /[a-z0-9_]+/", rule: { tag: "Matches", pattern: "[a-z0-9_]+" }, value });
     }
     return Ok(value as Username);
   },

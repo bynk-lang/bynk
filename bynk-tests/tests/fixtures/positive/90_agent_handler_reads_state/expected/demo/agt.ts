@@ -13,10 +13,10 @@ export type Id = number & { readonly __brand: "demo.agt.Id" };
 export const Id = {
   of(value: number): Result<Id, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Id", message: "must be a safe integer", value });
+      return Err({ field: "Id", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0)) {
-      return Err({ field: "Id", message: "must be non-negative", value });
+      return Err({ field: "Id", message: "must be non-negative", rule: { tag: "NonNegative" }, value });
     }
     return Ok(value as Id);
   },

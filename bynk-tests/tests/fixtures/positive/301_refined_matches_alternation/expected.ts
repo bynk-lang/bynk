@@ -10,7 +10,7 @@ export type Code = string & { readonly __brand: "Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "ab|cd" + ")$", "u").test(value))) {
-      return Err({ field: "Code", message: "must match /ab|cd/", value });
+      return Err({ field: "Code", message: "must match /ab|cd/", rule: { tag: "Matches", pattern: "ab|cd" }, value });
     }
     return Ok(value as Code);
   },

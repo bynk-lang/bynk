@@ -1,0 +1,34 @@
+context shop.gate
+
+consumes bynk { CallOutcome }
+
+agent Audit {
+	key id: String
+
+	store seen: Cell[Int]
+
+	on call note(n: Int) -> Effect[Int] {
+		let _ <- seen.update((t) => t + n)
+		seen
+	}
+}
+
+agent Door {
+	key id: String
+
+	store audited: Cell[Bool]
+
+	// The door is audited by another agent. Whether the audit was reached is the door's state.
+	on call enter() -> Effect[Int] {
+		let o <- Audit("log").note.outcome(1)
+		match o {
+			Handled(_) => {
+				let _ <- audited.update((_) => true)
+				Effect.pure(1)
+			}
+			Rejected(_) => Effect.pure(0)
+			Faulted => Effect.pure(0)
+			Unreachable(_) => Effect.pure(0)
+		}
+	}
+}
