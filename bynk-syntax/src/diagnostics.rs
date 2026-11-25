@@ -6661,8 +6661,9 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         blurb: "In a test, a bare `Val[T]` fabricates a valid value of `T`. It can do that for \
                 most refinements (`Positive` gives `1`, `MinLength(3)` a string of length three) \
                 but not for a `Matches` pattern or `IsoDate`, so it refuses rather than guess; \
-                the same goes for a record or sum that reaches one. A `for all` over such a type \
-                is refused too. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
+                the same goes for a record or sum that reaches one, and the message names the \
+                field that does. A `for all` is different: it draws a `Matches` or `IsoDate` \
+                string, and pins only a `Cron` or a pattern it cannot walk. Pin a value, `Val[Code](\"abc\")`, which is checked against the \
                 refinement, or give the type an `@example` and use bare `Val`. See the \
                 `bynk.val.*` codes for pins that are not literals or do not satisfy the type.",
         example: "// demo/codes.bynk\n\
