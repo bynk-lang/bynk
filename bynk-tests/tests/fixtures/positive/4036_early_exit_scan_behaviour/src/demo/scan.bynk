@@ -144,4 +144,12 @@ agent Tally {
 	on call anyBig(n: Int) -> Effect[Bool] {
 		orders.filter((o) => o.total > n).any((o) => o.status == "open")
 	}
+
+	on call allWithStatus(status: String, n: Int) -> Effect[Bool] {
+		orders.filter((o) => o.status == status).all((o) => o.total > n)
+	}
+
+	on call firstWithStatus(status: String) -> Effect[Option[Order]] {
+		orders.filter((o) => o.status == status).first()
+	}
 }

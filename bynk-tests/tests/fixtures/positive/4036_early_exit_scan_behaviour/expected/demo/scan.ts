@@ -309,12 +309,25 @@ export class Tally {
 
   async anyWithStatus(status: string, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
-    return __bynkThen(((() => __state.orders.byIndex("status", String(status))))(), (__q) => __q.some((__x) => ((o: Order) => o.total > 0)(__x)));
+    return __scanAny(__state.orders.lazyByIndex("status", String(status)), (__x) => ((o: Order) => o.total > 0)(__x));
   }
 
   async anyBig(n: number, deps: {}): globalThis.Promise<boolean> {
     const __state = await this.loadState();
     return __scanAny(__scanFilter(__state.orders.lazyValues(), (__x) => ((o: Order) => o.total > n)(__x)), (__x) => ((o: Order) => o.status === "open")(__x));
+  }
+
+  async allWithStatus(status: string, n: number, deps: {}): globalThis.Promise<boolean> {
+    const __state = await this.loadState();
+    return __scanAll(__state.orders.lazyByIndex("status", String(status)), (__x) => ((o: Order) => o.total > n)(__x));
+  }
+
+  async firstWithStatus(status: string, deps: {}): globalThis.Promise<Option<Order>> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __state.orders.byIndex("status", String(status))))(), (__q) => (() => {
+      const __a = __q;
+      return __a.length > 0 ? Some(__a[0]) : None;
+    })());
   }
 }
 

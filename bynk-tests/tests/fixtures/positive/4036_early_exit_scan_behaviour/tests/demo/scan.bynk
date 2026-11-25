@@ -142,3 +142,21 @@ case "an indexed equality filter and an unindexed one agree with the data" {
 	expect !scanned
 	expect !scannedNone
 }
+
+case "any and all over an indexed equality filter agree with the data, and first keeps insertion order" {
+	do Tally("p").order("a", "open", 5)
+	do Tally("p").order("b", "open", 50)
+	do Tally("p").order("c", "closed", 500)
+	let anyBig <- Tally("p").anyWithStatus("open")
+	let none <- Tally("p").anyWithStatus("void")
+	let allOver <- Tally("p").allWithStatus("open", 4)
+	let allOverFifty <- Tally("p").allWithStatus("open", 10)
+	let allNone <- Tally("p").allWithStatus("void", 10)
+	expect anyBig
+	expect !none
+	expect allOver
+	expect !allOverFifty
+	expect allNone
+	let first <- Tally("p").firstWithStatus("open")
+	expect first == Some(Order { status: "open", total: 5 })
+}

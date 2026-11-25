@@ -612,8 +612,9 @@ pub fn describe_scan_reads_at(
         )
     } else if indexed && !is_log && stages.last() == Some(&"filter") {
         format!(
-            "Stops reading `{field}` a page at a time as soon as the answer is known, unless the \
-             leading `filter` is an equality on an `@indexed` field, which reads that posting list instead."
+            "Stops reading `{field}` a page at a time as soon as the answer is known. A leading \
+             `filter` that is an equality on an `@indexed` field reads that value's posting list \
+             instead, a page at a time."
         )
     } else {
         format!("Stops reading `{field}` a page at a time as soon as the answer is known.")
