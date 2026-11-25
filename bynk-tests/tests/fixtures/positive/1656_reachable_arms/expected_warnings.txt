@@ -1,0 +1,3 @@
+# #3972: the refined `_ where Positive` arms on an `Int` are range patterns.
+refined_pattern_is_range this refined pattern is the range pattern `1..`
+refined_pattern_is_range this refined pattern is the range pattern `1..`

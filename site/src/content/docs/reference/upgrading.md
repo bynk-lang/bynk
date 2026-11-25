@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.694.0
+
+A project that sends a type its own consumer cannot accept now fails to compile (`bynk.queue.message_type_mismatch`); it already failed at run time as a message the consumer could not decode
+
 ## v0.693.0
 
 a unit that declares its own two-parameter `type MapEntry[A, B]` now gets `bynk.resolve.duplicate_type`, because `MapEntry[K, V]` is the prelude record; rename the type.

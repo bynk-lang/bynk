@@ -5687,6 +5687,14 @@ pub fn phase_unprovided_capabilities(
 /// whether a bundle has a composition root from the same facts.
 pub type UnitCallees = HashMap<String, HashMap<ExprId, checker::Callee>>;
 
+/// What the whole-program call checks read besides the tables: every unit's
+/// kept callees, the units each `uses`, and the project's type interner.
+pub type CallFacts<'a> = (
+    &'a UnitCallees,
+    &'a HashMap<String, Vec<String>>,
+    &'a Arc<checker::Types>,
+);
+
 /// Whether a resolved call is `Events.emit`, the one callee
 /// [`unit_table_uses_emit`] looks for. `Events.emit[...]` dispatches through
 /// the ordinary capability-call path (`checker/calls.rs`).
@@ -5854,10 +5862,22 @@ pub fn phase_bundle_composition_unprovided(
     unit_consumes: &HashMap<String, Vec<String>>,
     unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
     unit_tables: &HashMap<String, UnitTable>,
-    unit_callees: &UnitCallees,
+    (unit_callees, unit_uses, tys): CallFacts<'_>,
     unit_flattened: &HashMap<String, HashMap<String, String>>,
     errors: &mut ErrorSink,
 ) {
+    // #3879: a producer's message type against the queue's consumer.
+    crate::queue_producers::phase_queue_producers(
+        parsed,
+        groups,
+        kinds,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_callees,
+        tys,
+        errors,
+    );
     // #3890: the whole-program call checks share this entry point, which both
     // pipelines call once the per-unit checks are done: a call the callee's
     // `Caller` refinement does not admit, and an `IsContext(…)` name that is no

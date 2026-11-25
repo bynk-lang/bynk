@@ -337,6 +337,26 @@ A method not in this table is `bynk.types.method_not_found`.
 The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
 shows them in use.
 
+### `Effect` methods {#effect-methods}
+
+Every `Effect[T]` has these methods. `map` and `andThen` build an effect rather than
+run one, so they are legal in a pure helper; an effect is already started, so neither
+changes when `e` starts.
+
+| Method | Returns | |
+|---|---|---|
+| `e.andThen(f: T -> Effect[U])` | `Effect[U]` | a further effect, run after `e` |
+| `e.detach()` | `Effect[()]` | stops waiting for `e`; see [`within`, `race` and `detach`](/reference/capabilities/#within) |
+| `e.map(f: T -> U)` | `Effect[U]` | `f` applied to the effect's value |
+| `e.race(other: Effect[T])` | `Effect[T]` | the first side to succeed wins |
+| `e.within(d: Duration)` | `Effect[Result[T, TimedOut]]` | races `e` against a deadline |
+
+On an `Effect[Result[T, E]]`, `map` and `andThen` act on the whole `Result`; `mapOk`,
+`mapErr`, `flatMapOk` and `flatMapErr` act on its two sides (see the
+[specification](/reference/spec/static-semantics/)). A `map` function that returns an
+`Effect` is an error, since it would nest one effect in another: use `andThen`. A method
+an `Effect` does not have is `bynk.types.method_not_found`.
+
 ### `ValidationError` {#validationerror}
 
 `ValidationError` is the error type returned by refined-type `.of` constructors.
@@ -1251,6 +1271,11 @@ match age {
   `String` ranges are deliberate non-goals. A refined `Int` is matched as an
   `Int`: `Age = Int where InRange(0, 150)` still needs the whole of `Int` covered.
 - `lo > hi` is `bynk.types.empty_range_pattern`, whose fix swaps the bounds.
+- **Prefer a range to `_ where InRange(a, b)` on an `Int`.** A refined pattern is a guard and never counts towards exhaustiveness, so `_ where InRange(200, 299)` is
+  `bynk.match.refined_pattern_is_range`, a warning whose quick fix writes `200..299` (offered, never applied by `--fix`, since the range can make a later arm unreachable); `Positive`
+  and `NonNegative` become `1..` and `0..`, and a combined predicate that is one
+  interval becomes that interval. A refined pattern stays where a range cannot go: a
+  `String` predicate (`Matches`, a length predicate, `IsoDate`).
 - **Exhaustiveness is by interval.** The integers are the safe integers, and a
   column is split at every endpoint its patterns use, so `..-1` and `0..` cover
   every `Int` with no `_` arm. A match of literals alone is not split, and stays
