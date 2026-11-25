@@ -2078,6 +2078,7 @@
 /reference/diagnostics/bynk.test.advance_not_clock/
 /reference/diagnostics/bynk.test.advance_not_duration/
 /reference/diagnostics/bynk.test.advance_outside_case/
+/reference/diagnostics/bynk.test.bad_principal_needs_arm/
 /reference/diagnostics/bynk.test.asset_address_method/
 /reference/diagnostics/bynk.test.call_needs_in_process/
 /reference/diagnostics/bynk.test.credential_needs_system/
