@@ -1,0 +1,1 @@
+bynk.types.map_entry_at_boundary a `MapEntry` type cannot appear in a record field
