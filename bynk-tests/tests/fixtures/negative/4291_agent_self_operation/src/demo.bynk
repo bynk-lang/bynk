@@ -1,0 +1,21 @@
+context demo
+
+// #4291: `self.op(…)` inside the agent is refused in the user's terms.
+agent Counter {
+  key id: String
+  store n: Cell[Int]
+
+  on call add(by: Int) -> Effect[Int] {
+    n
+  }
+  on call twice() -> Effect[Int] {
+    let a <- self.add(1)
+    n
+  }
+}
+
+service probe {
+  on call() -> Effect[Int] by Caller {
+    Counter("a").add(1)
+  }
+}

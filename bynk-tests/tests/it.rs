@@ -437,12 +437,16 @@ mod system {
     mod http_option_body_behaviour;
     #[path = "http_plain_json_behaviour.rs"]
     mod http_plain_json_behaviour;
+    #[path = "http_problem_details.rs"]
+    mod http_problem_details;
     #[path = "http_raw_body_behaviour.rs"]
     mod http_raw_body_behaviour;
     #[path = "http_raw_caching_behaviour.rs"]
     mod http_raw_caching_behaviour;
     #[path = "http_recursive_body_behaviour.rs"]
     mod http_recursive_body_behaviour;
+    #[path = "http_response_headers.rs"]
+    mod http_response_headers;
     #[path = "http_security_behaviour.rs"]
     mod http_security_behaviour;
     #[path = "idempotency_workerd.rs"]

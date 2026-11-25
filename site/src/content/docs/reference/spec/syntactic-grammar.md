@@ -645,6 +645,18 @@ The queue consumer's delivery policy (#3877).
 
 One `name: value` field of a `delivery` policy.
 
+#### errors_policy {#441b1-errors_policy}
+
+{{#grammar errors_policy}}
+
+The error-body policy (#3916).
+
+#### errors_field {#441b2-errors_field}
+
+{{#grammar errors_field}}
+
+One `name: value` field of an `errors` policy.
+
 ### §4.4.2 service_protocol
 
 {{#grammar service_protocol}}

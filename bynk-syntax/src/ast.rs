@@ -1204,6 +1204,11 @@ pub struct ServiceDecl {
     /// response bodies, byte-for-byte unchanged; a route's `@json(options:)`
     /// overrides it.
     pub json: Option<JsonPolicy>,
+    /// The optional error-body policy (#3916) — an `errors { format: problem }`
+    /// section in the service body, only meaningful on a `from http` service.
+    /// `None` (or `format: bynk`) keeps Bynk's own error bodies, byte-for-byte
+    /// unchanged; a route's `@errors(format:)` overrides it.
+    pub errors: Option<ErrorsPolicy>,
     /// The optional consumer delivery policy (#3877) — a `delivery { }` section
     /// in the service body, only meaningful on a `from queue` service. `None`
     /// keeps Cloudflare's defaults, except that a missing dead-letter queue is
@@ -1583,6 +1588,76 @@ impl JsonPolicy {
             .and_then(JsonOptions::from_expr)
             .unwrap_or_default()
     }
+}
+
+/// The shape of an error response body (#3916).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ErrorFormat {
+    /// Bynk's own bodies: `{ "error": message }` from a variant and
+    /// `{ "kind": …, "details": … }` from a router rejection.
+    #[default]
+    Bynk,
+    /// RFC 9457 `application/problem+json`.
+    Problem,
+}
+
+impl ErrorFormat {
+    /// Read a bare `bynk` / `problem` identifier, the value of `format:`.
+    pub fn from_expr(e: &Expr) -> Option<ErrorFormat> {
+        match &e.kind {
+            ExprKind::Ident(n) if n.name == "bynk" => Some(ErrorFormat::Bynk),
+            ExprKind::Ident(n) if n.name == "problem" => Some(ErrorFormat::Problem),
+            _ => None,
+        }
+    }
+}
+
+/// An error-body policy on a `from http` service (#3916): the `errors { }`
+/// section in the service body. Parsed leniently as a list of `name: value`
+/// fields (as `json { }`); the closed set is `format`, whose value is the bare
+/// identifier `bynk` or `problem`.
+#[derive(Debug, Clone)]
+pub struct ErrorsPolicy {
+    pub fields: Vec<ErrorsField>,
+    pub span: Span,
+    pub trailing_comments: Vec<Comment>,
+    pub trivia: Trivia,
+}
+
+/// One `name: value` field inside an `errors { }` policy.
+#[derive(Debug, Clone)]
+pub struct ErrorsField {
+    pub name: Ident,
+    pub value: Expr,
+    pub span: Span,
+    pub trivia: Trivia,
+}
+
+impl ErrorsPolicy {
+    pub fn field(&self, name: &str) -> Option<&Expr> {
+        self.fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == name)
+            .map(|f| &f.value)
+    }
+
+    /// The service-wide `format:`; a malformed value (already reported by the
+    /// checker) reads as the default, `bynk`.
+    pub fn format(&self) -> ErrorFormat {
+        self.field("format")
+            .and_then(ErrorFormat::from_expr)
+            .unwrap_or_default()
+    }
+}
+
+/// The shape a route's error bodies are written in: its own
+/// `@errors(format:)` wins over the service's `errors { format: }`, which wins
+/// over Bynk's own bodies.
+pub fn effective_error_format(service: Option<&ErrorsPolicy>, h: &Handler) -> ErrorFormat {
+    h.error_format()
+        .or_else(|| service.map(ErrorsPolicy::format))
+        .unwrap_or_default()
 }
 
 /// A queue consumer's delivery policy (#3877): the `delivery { }` section in a
@@ -2266,6 +2341,17 @@ impl Handler {
         let ann = self.annotations.iter().find(|a| a.name.name == "json")?;
         ann.args.iter().find_map(|arg| match &arg.label {
             Some(l) if l.name == "options" => JsonOptions::from_expr(&arg.value),
+            _ => None,
+        })
+    }
+
+    /// The handler's own `@errors(format:)`, if it carries a well-formed one
+    /// (#3916). The checker rejects a malformed `@errors`, so a bad value reads
+    /// as no override here.
+    pub fn error_format(&self) -> Option<ErrorFormat> {
+        let ann = self.annotations.iter().find(|a| a.name.name == "errors")?;
+        ann.args.iter().find_map(|arg| match &arg.label {
+            Some(l) if l.name == "format" => ErrorFormat::from_expr(&arg.value),
             _ => None,
         })
     }
