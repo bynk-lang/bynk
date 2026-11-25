@@ -21,7 +21,7 @@ service sweeper from cron {
 
 // The `system` tier needs a serialisation edge to cross.
 service deliveries from queue("deliveries") {
-	on message(d: Delivery) -> Effect[QueueResult] {
+	on message(d: Delivery) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

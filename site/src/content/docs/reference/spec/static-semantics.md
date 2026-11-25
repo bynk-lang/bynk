@@ -2484,11 +2484,12 @@ apart by name. A `Signature` handler MUST take a `body`
 parameter — the signature is computed over the request body, so a bodyless signed
 request is meaningless (`bynk.actor.signature_requires_body`). A handler that
 omits `by` inherits its service header's default, else its protocol's default
-actor (cron `Scheduler`, queue `Producer`, email `Sender`); an **HTTP handler has
+actor (cron `Scheduler`, email `Sender`); an **HTTP handler has
 no safe default and MUST declare `by`** (`bynk.actor.missing_by_on_http`), as MUST
-a WebSocket `on open` and a service's **`on call`** handler
+a WebSocket `on open`, a service's **`on call`** handler
 (`bynk.actor.missing_by_on_call`, which supersedes the earlier silent `Caller`
-default). An agent's `on call` operations are unaffected.
+default) and a queue consumer's **`on message`** handler
+(`bynk.actor.missing_by_on_queue`, likewise superseding a silent `Producer` default). An agent's `on call` operations are unaffected.
 
 The `Caller` prelude actor (the explicit "any consuming context" for `on call`) yields a **live `CallerId`**
 (v0.54): a cross-context `on call … by c: Caller (…)` handler binds `c.identity`

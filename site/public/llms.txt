@@ -231,7 +231,7 @@ service checks from cron {
 }
 
 service worker from queue("orders") {
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

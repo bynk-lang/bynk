@@ -27,7 +27,7 @@ service sweeper from cron {
 }
 
 service deliveries from queue("deliveries") {
-	on message(d: Delivery) -> Effect[QueueResult] {
+	on message(d: Delivery) -> Effect[QueueResult] by Producer {
 		do refuse().detach()
 		do refuse().detach()
 		Ack

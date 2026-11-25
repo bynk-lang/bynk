@@ -15,7 +15,7 @@ provides Sender = StubSender {
 }
 
 service notify from queue("notifications") {
-  on message(message: Notification) -> Effect[QueueResult] given Sender {
+  on message(message: Notification) -> Effect[QueueResult] by Producer given Sender {
     let _ <- Sender.send(message.body)
     Ack
   }
