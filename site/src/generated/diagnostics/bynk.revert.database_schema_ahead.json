@@ -1,0 +1,10 @@
+{
+  "blurb": "D1 migrations only move forward. If the live version applied a migration the target was not built against, the older code would meet a schema it was never written for. Bynk cannot judge a migration's SQL, so it refuses. If every such migration is additive, assert it per database with `--accept-schema-ahead <binding>`; otherwise deploy a fix forward. The same refusal is given when the applied migrations could not be read, because an unread list is never taken to be empty.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.database_schema_ahead",
+  "constructs": [],
+  "example": "bynk revert --dry-run\n  d1        DB           refused: the live version applied 0003_add_index.sql after the target was built\n\nbynk revert --accept-schema-ahead DB   # only if each such migration is additive",
+  "severity": "error",
+  "summary": "`bynk revert` refused because the live version applied D1 migrations the target was not built against, or the applied migrations could not be read; migrations only move forward, so the older code may not run on the newer schema."
+}

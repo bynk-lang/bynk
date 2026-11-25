@@ -1,0 +1,10 @@
+{
+  "blurb": "A layout is how an agent's state is placed in storage, and each version's deploy facts record which one it writes. Code that writes an older layout than the live version cannot read records in the newer one: a build with the layout check faults them as `NewerLayout`, and one without it would orphan their entries. `bynk revert` refuses while stored instances exist or are not known to be absent. Deploy a fix forward.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.revert.layout_older",
+  "constructs": [],
+  "example": "bynk revert --dry-run\n  layout    Cart         refused: the target writes layout 1, the live version writes layout 2, and stored instances exist\n\nbynk deploy   # fix forward",
+  "severity": "error",
+  "summary": "`bynk revert` refused because the target writes an older agent storage layout than the live one while stored instances exist or are not known to be absent, so the older code could not read the newer records."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`update` and `upsert` rebuild a map entry from its old value with a function. A held connection cannot be rebuilt from another: it is a live handle, stored and found by identity. So a held `Map[K, Connection]` takes `put`, `get`, `remove`, `contains` and `size`, and not these two. To replace an entry, `put` the new connection under the key, and to drop one, `remove` it.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.held.unsupported_map_op",
+  "constructs": [],
+  "example": "let _ <- conns.update(u, (c: Connection[ServerFrame]) => c)   // ✗ a connection cannot be derived from another\n\nlet _ <- conns.put(u, c)   // ✓ store the connection itself",
+  "severity": "error",
+  "summary": "A held `Map[K, Connection]` is given an `update`/`upsert` — a held resource cannot be transformed by a `(Connection) -> Connection` function; use `put`/`get`/`remove` (real-time track slice 3b-ii)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A constant is named in upper-camel case, a capital letter and then letters, digits or `_`, like a variant, so that a constant reads differently from a binding wherever it is used. The grammar accepts any identifier here and leaves the case to the checker, so a lower-case name is reported with a suggested spelling instead of failing to parse. Rename it, and every use of it: `MaxRetries`, not `maxRetries`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.const_name_case",
+  "constructs": [
+    "const_decl"
+  ],
+  "example": "const maxRetries: Int = 3   // ✗ a constant's name starts with a capital\n\nconst MaxRetries: Int = 3   // ✓",
+  "severity": "error",
+  "summary": "A constant's name is not upper-camel case (`MaxRetries`, not `maxRetries`)."
+}

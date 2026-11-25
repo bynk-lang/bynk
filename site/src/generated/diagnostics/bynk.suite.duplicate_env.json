@@ -1,0 +1,12 @@
+{
+  "blurb": "An `env` clause gives a variable one value in its scope, so naming it twice in the same suite or the same case leaves two values and no way to choose. Keep one. A case's own `env` may still override a name its suite gives; only a repeat within one scope is refused.",
+  "category": "Suites and cases",
+  "categoryAnchor": "suites-and-cases",
+  "code": "bynk.suite.duplicate_env",
+  "constructs": [
+    "env_clause"
+  ],
+  "example": "env {\n    MODE = \"fake\"\n    MODE = \"live\"     // ✗ `MODE` is already given in this suite\n}\n\nenv {\n    MODE = \"fake\"\n    REGION = \"eu\"     // ✓ one value per name\n}",
+  "severity": "error",
+  "summary": "An `env { … }` clause gives the same name twice at one scope (a suite's `env` clauses, or one case's); a case's `env` may override a suite's name, but not repeat its own."
+}

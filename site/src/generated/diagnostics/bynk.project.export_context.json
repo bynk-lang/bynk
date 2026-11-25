@@ -1,0 +1,10 @@
+{
+  "blurb": "A package's `exports` list names the commons and adapters it shares. A context is a deployment unit, owned by the project that deploys it, so a package never shares one, and listing one is refused. Remove it, or move what other projects need into a commons and list that. A name that is no unit of the package at all is `bynk.project.export_unknown`.",
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.export_context",
+  "constructs": [],
+  "example": "[package]\nname = \"acme/shop\"\nexports = [\"shop.checkout\"]     // ✗ a context\n\nexports = [\"money\"]             // ✓ a commons",
+  "severity": "error",
+  "summary": "`bynk.toml`'s `[package] exports` lists a context: a package shares commons and adapters, never a context, which belongs to the project that deploys it."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A valid signature shows that some key signed a token, not that your provider issued it. An `Oidc` actor therefore names its `issuer`, the `iss` claim a token must carry, and refuses any other. Add `issuer = \"…\"` with the provider's issuer URL. The other required settings have their own codes, `bynk.actor.oidc_missing_audience` and `bynk.actor.oidc_missing_jwks`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.oidc_missing_issuer",
+  "constructs": [],
+  "example": "type UserId = String where NonEmpty\nactor User { auth = Oidc(audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✗ no issuer\n\nactor User { auth = Oidc(issuer = \"https://issuer.example\", audience = \"my-api\", jwks = \"https://issuer.example/jwks\"), identity = UserId }   // ✓ the `iss` a token must carry",
+  "severity": "error",
+  "summary": "An `Oidc` actor does not name its `issuer`."
+}

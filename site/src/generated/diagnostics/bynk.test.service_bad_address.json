@@ -1,0 +1,12 @@
+{
+  "blurb": "A test addresses an http route by method and route pattern, as in `api.POST(\"/items\", body)`. The first argument must be that pattern as a string literal, so a number or a variable is refused. The same code covers other addresses used the wrong way, such as fetching an asset through a service that is not `from http`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.service_bad_address",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nservice api from http { … }\n\n// tests/api.test.bynk\nlet r <- api.POST(1, \"x\") by Visitor          // ✗ not a pattern\nlet r <- api.POST(\"/items\", \"x\") by Visitor   // ✓",
+  "severity": "error",
+  "summary": "A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string)."
+}

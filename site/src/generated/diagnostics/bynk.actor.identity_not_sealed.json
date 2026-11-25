@@ -1,0 +1,10 @@
+{
+  "blurb": "An actor's identity is a value only its context can mint, from a verified token or caller, so its type has to be one that context owns. A built-in such as `Int`, or a type from another context, could be built by anyone, so the identity would prove nothing. Declare the identity as a type in this context, such as `type PrincipalId = Int where NonNegative`, and name that.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.identity_not_sealed",
+  "constructs": [],
+  "example": "actor Principal { auth = Internal, identity = Int }   // ✗ `Int` is not owned by this context\n\ntype PrincipalId = Int where NonNegative\nactor Principal { auth = Internal, identity = PrincipalId }   // ✓ minted only here",
+  "severity": "error",
+  "summary": "An actor identity type is not a context-ownable (sealed) value type."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`Form.decode[T]` and `Form.encode` read and write the flat `key=value` text a `@form` route handles, so `T` must be a record of fields a form can carry: a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`. Form keys have no nesting, so a nested record, or a type that is not a record, is refused. Put the nested record's fields in `T` itself. A `@form` route's own body has the same rule: `bynk.http.form_field_not_stringy`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.form_uncodable",
+  "constructs": [],
+  "example": "type Address = { city: String }\ntype Signup = { email: String, address: Address }\n\nForm.decode[Signup](text)    // ✗ `address` is a nested record\n\ntype Signup = { email: String, city: String }\n\nForm.decode[Signup](text)    // ✓",
+  "severity": "error",
+  "summary": "`Form.decode` or `Form.encode` names a type that is not a record of form fields (a `String`, `Int`, `Bool`, `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List`)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "`expect Cap.op called` checks the calls the unit under test made through a capability it consumes, whether declared in its context, brought in with `consumes`, or listed in `given`. A name that is not one of those, such as a type or a function, has no recorded calls. Name a consumed capability. An operation it does not declare is `bynk.observe.unknown_op`.",
+  "category": "Observation",
+  "categoryAnchor": "observation",
+  "code": "bynk.observe.not_a_seam",
+  "constructs": [],
+  "example": "// tests/t.test.bynk\nexpect AuthId.unsafe called   // ✗ `AuthId` is a type, not a capability\nexpect Logger.log called      // ✓",
+  "severity": "error",
+  "summary": "An observation targets a capability the unit under test does not consume."
+}

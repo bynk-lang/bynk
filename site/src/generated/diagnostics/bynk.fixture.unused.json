@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.unused",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A suite declares a `fixture` that none of its cases, properties or helpers uses (warning)."
+}

@@ -17,6 +17,14 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.678.0
+
+a project whose `derives Ord` type is reordered, past what was recorded, fails the build with `bynk.types.ord_order_changed` until `bynk lock accept-order` accepts it; a project that does not reorder is unaffected
+
+## v0.677.2
+
+A `400 RefinementViolation` body no longer carries `violation.value`; a client that read it must stop
+
 ## v0.675.0
 
 A queue message that does not decode is no longer retried (and eventually deleted); it is dead-lettered or dropped visibly, a `system` case that expected `Retry` for one now sees `Undecodable`, and a `match` of a queue verdict in a case must now name `Undecodable` or have a wildcard

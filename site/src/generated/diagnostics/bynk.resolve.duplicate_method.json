@@ -1,0 +1,12 @@
+{
+  "blurb": "A method is looked up by its type and name, so `p.norm()` has to mean one body. A second `fn Point.norm` would leave the call with nothing to choose between. Delete the repeat, or give it a different name if it does something else.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_method",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "type Point = { x: Int }\n\nfn Point.norm(self) -> Int { self.x }\n\nfn Point.norm(self) -> Int { 0 }                  // ✗ `Point.norm` is already declared\n\nfn Point.isOrigin(self) -> Bool { self.x == 0 }   // ✓ a different name",
+  "severity": "error",
+  "summary": "Two methods share a name."
+}

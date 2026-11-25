@@ -1,0 +1,12 @@
+{
+  "blurb": "A key that has never been used is initialised automatically the first time it is touched, so every `store Cell[T]` field needs a starting value. With no initialiser, the compiler supplies a zero (`0`, `false`, `\"\"`, `None`, or a record of zeroed fields), but only where that zero is a valid value of the type. An opaque type, a sum other than `Option`, and a refined type that rules its zero out have none, and the compiler will not invent a value that the type's own constructors might refuse. Say what \"not set yet\" means: wrap the type in `Option`, where `None` is the zero, give the field an initialiser, `store name: Cell[T] = value`, or relax a refinement so that its zero is allowed (`NonNegative` admits `0`; `Positive` does not).",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agents.non_zeroable_state_field",
+  "constructs": [
+    "store_field"
+  ],
+  "example": "type Secret = opaque String\n\nstore secret: Cell[Secret]                // ✗ no zero value for an opaque type\n\nstore secret: Cell[Option[Secret]]        // ✓ `None` until it is set",
+  "severity": "error",
+  "summary": "An agent `store` field has no initialiser and no implicit zero value."
+}

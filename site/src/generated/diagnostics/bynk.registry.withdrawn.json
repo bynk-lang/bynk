@@ -1,0 +1,10 @@
+{
+  "blurb": "Your `bynk.lock` locks a version that its registry has withdrawn. A withdrawal is a takedown — for a legal request or confirmed malware — so unlike a yank, which keeps a version for locked builds, the registry has deleted its archive and there is nothing to fetch. The message quotes the registry's reason. A machine that already has the tree in its store keeps building; elsewhere, move off the version with `bynk update` and the dependency's alias. The reason is unsigned, so when it was read through a mirror the message says the origin wasn't consulted.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.registry.withdrawn",
+  "constructs": [],
+  "example": "error[bynk.registry.withdrawn]: `acme/money` 1.4.2 was withdrawn by registry `acme-internal`: \"removed at the copyright holder's request\"\n  = note: `bynk.lock` locks this version; choose another with `bynk update money`\n\n$ bynk update money     # resolves to the newest version not withdrawn",
+  "severity": "error",
+  "summary": "`bynk.lock` locks a registry version that its registry withdrew (a takedown: yanked, and its archive deleted), and its tree isn't in the store."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A held value, such as a `Connection[F]`, must be disposed of exactly once. If one branch of an `if` or `match` closes, stores or passes it on while another leaves it, the compiler cannot say afterwards whether the value is still open to close, or already gone. Make every branch dispose of it, or none, and dispose of it once after the conditional. A connection that is never disposed of is `bynk.held.leak`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.held.branch_divergence",
+  "constructs": [],
+  "example": "let _ <- if m == \"a\" { conn.close() } else { conn.send(ServerFrame { text: \"keep\" }) }   // ✗ one branch closes it\n\nlet _ <- if m == \"a\" { conn.send(ServerFrame { text: \"bye\" }) } else { conn.send(ServerFrame { text: \"keep\" }) }   // ✓ neither does\nlet _ <- conn.close()                                                                                          // ✓ closed once, after",
+  "severity": "error",
+  "summary": "Branches of a conditional leave a held value (e.g. `Connection[F]`) in inconsistent ownership states — one consumes or stores it, another leaves it owned (§2.9.5, real-time track slice 2)."
+}

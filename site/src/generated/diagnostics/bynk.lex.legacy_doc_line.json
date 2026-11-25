@@ -1,0 +1,10 @@
+{
+  "blurb": "A one-line doc is `--- text`. The older `--|` spelling is refused rather than reread, so no file written for it changes meaning unnoticed. The fix is machine-applicable: `bynk check --fix` applies it and `bynk fmt` rewrites a whole project. A `--|` with no text has no one-line form; write a doc block between two `---` lines.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.legacy_doc_line",
+  "constructs": [],
+  "example": "--| Doubles a number.                  // ✗ the old spelling\nfn double(n: Int) -> Int { n * 2 }\n\n--- Doubles a number.                  // ✓\nfn double(n: Int) -> Int { n * 2 }",
+  "severity": "error",
+  "summary": "A `--|` one-line doc, the spelling before #2203; a one-line doc is `--- text` (auto-fixable; `bynk fmt` rewrites it)."
+}

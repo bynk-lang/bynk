@@ -1,0 +1,12 @@
+{
+  "blurb": "A method call needs a type that has methods. A user-declared type does, and so do the built-ins that document them, such as `String` and `List`, but a function value, a `Bool` or `()` has none, so `f.apply(n)` has nothing to look up. A function is called directly, as `f(n)`. For a type that does have methods, a name it lacks is `bynk.types.method_not_found`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.method_on_non_named_type",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn twice(f: (Int) -> Int, n: Int) -> Int {\n    f.apply(f.apply(n))    // ✗ a function value has no methods\n}\n\nfn twice(f: (Int) -> Int, n: Int) -> Int {\n    f(f(n))    // ✓ call it directly\n}",
+  "severity": "error",
+  "summary": "A method was called on a built-in type that has no methods."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A `where` clause on `for all` discards each generated input that fails it, so it must be a `Bool`. A filter of another type, such as an `Int`, cannot say whether to keep an input. Write a comparison over the bound variables.",
+  "category": "Properties (generative tests)",
+  "categoryAnchor": "properties-generative-tests",
+  "code": "bynk.property.where_not_bool",
+  "constructs": [
+    "for_all"
+  ],
+  "example": "for all n: Int where n + 1 {   // ✗ an `Int`, not a `Bool`\n\nfor all n: Int where n > 0 {   // ✓",
+  "severity": "error",
+  "summary": "A `for all ... where` filter does not type to `Bool`."
+}

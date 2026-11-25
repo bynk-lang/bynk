@@ -1,0 +1,12 @@
+{
+  "blurb": "An alias is a name in this context, so it cannot be one that is already taken: by another alias, by a type or function the context declares or brings in with `uses`, or by a capability. Give each aliased type a name of its own. A consumed type that is not aliased, and clashes with one of these, is `bynk.consumes.name_conflict`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.type_alias_conflict",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop.bynk\ncontext shop\n\nconsumes payment { AuthId as Id, Receipt as Id }            // ✗ `Id` already names `AuthId`\n\nconsumes payment { AuthId as Id, Receipt as ReceiptId }     // ✓ distinct aliases",
+  "severity": "error",
+  "summary": "A `consumes U { T as Alias }` alias collides with a type or value in scope, or with another alias."
+}

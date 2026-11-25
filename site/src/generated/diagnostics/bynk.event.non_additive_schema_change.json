@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.non_additive_schema_change",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "An event's field shape changed in a way the schema registry cannot evolve additively — a field was removed, retyped, added without a default, or lost a default it previously had. Give the new shape a new event type name, or make the change additive."
+}

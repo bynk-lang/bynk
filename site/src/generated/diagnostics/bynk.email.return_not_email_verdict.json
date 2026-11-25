@@ -1,0 +1,10 @@
+{
+  "blurb": "An email handler decides what happens to the message, and the decision is named: `Accept`, `Reject(reason)`, `Forward(to)` or `Reply(message)`, the `EmailVerdict` sum from `bynk.cloudflare`. It is not a `Result` or a `String`, because the decision is independent of success or failure. It is the agency rule that gives a queue handler `QueueResult`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.email.return_not_email_verdict",
+  "constructs": [],
+  "example": "on message(mail: InboundEmail) -> Effect[String] {         // ✗ not a verdict\n    \"done\"\n}\n\non message(mail: InboundEmail) -> Effect[EmailVerdict] {   // ✓\n    Accept\n}",
+  "severity": "error",
+  "summary": "An email `on message` handler does not return `Effect[EmailVerdict]`."
+}

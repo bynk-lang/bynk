@@ -1,0 +1,12 @@
+{
+  "blurb": "A spread, `T { ...base, x: 1 }`, copies the fields of `base` that you do not name, so the result has the base's own type. It cannot convert one record type to another, even one with the same fields, and a `T` that names a different type from the base's is refused. Write the base's type, or, to build a different record, give every field: `Point { x: s.x, y: s.y }`. A base that is not a record is `bynk.record_spread.non_record_base`.",
+  "category": "Record spread",
+  "categoryAnchor": "record-spread",
+  "code": "bynk.record_spread.type_mismatch",
+  "constructs": [
+    "record_spread"
+  ],
+  "example": "type Point = { x: Int, y: Int }\ntype Size = { x: Int, y: Int }\n\nfn widen(s: Size) -> Size { Point { ...s, x: 1 } }   // ✗ `s` is a `Size`, not a `Point`\n\nfn widen(s: Size) -> Size { Size { ...s, x: 1 } }    // ✓ the base's own type",
+  "severity": "error",
+  "summary": "A record spread's base is a different record type."
+}

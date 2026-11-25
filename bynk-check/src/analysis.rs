@@ -937,6 +937,15 @@ fn analyse_project_inner(
                     &mut agent_errors,
                 );
                 errors.extend_attributed_by_span(&parsed, agent_errors);
+                // #3956: the order of each `derives Ord` type.
+                let mut order_errors: Vec<bynk_syntax::error::CompileError> = Vec::new();
+                crate::ord_order::reconcile_orders(
+                    &existing_reg,
+                    &mut updated,
+                    &parsed,
+                    &mut order_errors,
+                );
+                errors.extend_attributed_by_span(&parsed, order_errors);
             }
             Err(err) => {
                 contract_diff.lock = LockState::Unreadable;

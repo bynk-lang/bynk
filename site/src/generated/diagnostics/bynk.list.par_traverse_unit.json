@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.list.par_traverse_unit",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`List.parTraverse` now returns the steps' values, and its step returns `()`: that is `parForEach` (warning; auto-fixable)."
+}

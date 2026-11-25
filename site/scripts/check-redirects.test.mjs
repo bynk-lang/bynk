@@ -245,9 +245,8 @@ test("distRoutes maps index.html to the folder, x.html to /x and assets to thems
 test("sampleCodes takes the first, middle and last registry codes", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "redirects-"));
   try {
-    const file = path.join(dir, "diagnostics.json");
-    fs.writeFileSync(file, JSON.stringify(["a", "b", "c", "d", "e"].map((code) => ({ code }))));
-    assert.deepEqual(sampleCodes(file), ["a", "c", "e"]);
+    for (const code of ["e", "a", "d", "b", "c"]) fs.writeFileSync(path.join(dir, `${code}.json`), "{}");
+    assert.deepEqual(sampleCodes(dir), ["a", "c", "e"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

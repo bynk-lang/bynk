@@ -1,0 +1,12 @@
+{
+  "blurb": "A guard, as in `pattern if condition => …`, decides whether an arm applies, so it must be a `Bool`: a number or an `Option` is not read as true or false. Say what you mean with a comparison, such as `r > 10`. A guarded arm covers nothing for exhaustiveness, because its guard may fail. The condition of an `if` expression is `bynk.types.if_non_bool_cond`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.guard_not_bool",
+  "constructs": [
+    "match_arm"
+  ],
+  "example": "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r => \"round\"    // ✗ `r` is an `Int`\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}\n\nfn label(s: Shape) -> String {\n    match s {\n        Circle(r) if r > 10 => \"round\"    // ✓\n        Circle(_) => \"small\"\n        Dot => \"dot\"\n    }\n}",
+  "severity": "error",
+  "summary": "A match-arm `if` guard is not a `Bool` expression."
+}

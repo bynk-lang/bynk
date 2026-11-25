@@ -1,0 +1,12 @@
+{
+  "blurb": "A pinned `Val[T](lit)` is accepted only for a refined type, where the literal is checked against the refinement. A sum, record or opaque type takes no pin, so one is refused. Use bare `Val[T]`, which builds the first variant, or every field, itself, or construct the value directly with a variant or a record literal. A pin that is not a literal at all is `bynk.val.pin_not_literal`.",
+  "category": "Value fabrication",
+  "categoryAnchor": "value-fabrication",
+  "code": "bynk.val.pin_unsupported",
+  "constructs": [
+    "val_expr"
+  ],
+  "example": "// tests/demo.test.bynk\nlet s = Val[Status](1)   // ✗ `Status` is a sum\nlet s = Val[Status]      // ✓ bare `Val` picks the first variant",
+  "severity": "error",
+  "summary": "A pin was given for a type kind that does not support pinning."
+}

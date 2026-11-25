@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent is addressed by its key, so the key is the first thing in its body: `key id: Type`. Anything else there, usually a `store` field written first, is refused, so that how an agent is found is the first thing a reader sees. Move the `key` line to the top.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_agent_key",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Counter {\n    store n: Cell[Int]                   // ✗ the key comes first\n    key id: String\n\n    on call get() -> Effect[Int] { … }\n}\n\nagent Counter {\n    key id: String                       // ✓\n    store n: Cell[Int]\n\n    on call get() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "Expected a `key` declaration in an agent."
+}

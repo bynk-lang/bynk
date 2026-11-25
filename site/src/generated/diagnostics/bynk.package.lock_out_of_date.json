@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.lock_out_of_date",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`--locked` was given, and resolving the manifests would change `bynk.lock`."
+}

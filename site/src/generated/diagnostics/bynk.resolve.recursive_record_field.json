@@ -1,0 +1,12 @@
+{
+  "blurb": "A record cannot contain itself through record fields alone, whether directly (`next: Node` in `Node`) or round a cycle (`A` has a `B`, which has an `A`). A value of such a type could never be built, since making one needs one already, and the compiler could not synthesise the default value it needs for one. A cycle through an `Option`, `List`, `Map` or a sum type is fine, because that position can hold a value that ends the chain. Wrap one field in the cycle in `Option[…]`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.recursive_record_field",
+  "constructs": [
+    "record_type"
+  ],
+  "example": "type Node = { value: Int, next: Node }   // ✗ a `Node` would need a `Node`\n\ntype Node = { value: Int, next: Option[Node] }   // ✓ `None` ends the chain",
+  "severity": "error",
+  "summary": "A record directly contains a field of its own type."
+}

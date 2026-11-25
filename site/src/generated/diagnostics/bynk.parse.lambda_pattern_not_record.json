@@ -1,0 +1,12 @@
+{
+  "blurb": "A lambda parameter may be a pattern only when it is a record pattern that cannot fail, as in `(Item { qty, .. }) => qty`. A lambda is given a value and has no `else`, so a pattern that can miss, such as `Some(n)`, a list, a literal or a range, has no way to say what happens then. Take a name and `match` on it in the body.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.lambda_pattern_not_record",
+  "constructs": [
+    "lambda_param"
+  ],
+  "example": "xs.map((Some(n)) => n)               // ✗ a lambda has no `else` for `None`\n\nxs.map((o) => match o {              // ✓ the `match` covers both\n    Some(n) => n\n    None => 0\n})",
+  "severity": "error",
+  "summary": "A lambda parameter is a pattern other than a record pattern; only an irrefutable record pattern may stand in for a name."
+}

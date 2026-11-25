@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.unused_capability",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `given` capability is never used (warning)."
+}

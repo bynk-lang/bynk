@@ -1,0 +1,12 @@
+{
+  "blurb": "A call such as `platform.pay.charge(1)` reaches into another context, and a context may only do that to one it has declared with `consumes`. The declaration is what makes a dependency between contexts visible and checked, instead of a name that happens to resolve. The same code is reported for a `given platform.pay.Cap` whose context is not consumed. Add `consumes platform.pay` (with an alias, if you want to call it by another name) at the top of the calling context. A consumed context that does not export a capability is `bynk.given.cross_context_unknown_capability`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.unconsumed_context",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// app/shop.bynk\ncontext app.shop\n\nservice checkout {\n    on call() -> Effect[Int] by Caller {\n        platform.pay.charge(1)   // ✗ `platform.pay` is not in this context's `consumes`\n    }\n}\n\ncontext app.shop\n\nconsumes platform.pay          // ✓ declared at the top",
+  "severity": "error",
+  "summary": "A context's service was called, or its capability named in `given`, without a `consumes` declaration."
+}

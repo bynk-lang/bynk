@@ -1,0 +1,10 @@
+{
+  "blurb": "A subscription pattern narrows delivery by field: `from Events(Paid { region: Domestic, .. })` runs the handler only when `region` is `Domestic`. The listed fields combine with AND, so naming one twice would ask for two values at once, or say the same thing twice, and is refused rather than guessed at. List each field once. To accept several values, leave the field out of the pattern and `match` on it in the handler.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.pattern_duplicate_field",
+  "constructs": [],
+  "example": "service OnPaid from Events(Paid { region: Domestic, region: International, .. }) {    // ✗ `region` twice\nservice OnPaid from Events(Paid { region: Domestic, .. }) {                            // ✓\n    on event(e: Paid) -> Effect[()] { … }\n}",
+  "severity": "error",
+  "summary": "A `from Events(E { ... })` subscription pattern listed the same field more than once."
+}

@@ -560,6 +560,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("__wireLog", "store"),
     ("__wireMap", "store"),
     ("__wirePostings", "store"),
+    ("__wireRefusal", "boundary"),
     ("__wireSet", "store"),
     ("__withPlainJson", "http"),
     ("acceptHibernatableConnection", "connection"),
@@ -786,6 +787,7 @@ pub(crate) const RUNTIME_EXPORTS: &[(&str, &str)] = &[
     ("wireLog", "store"),
     ("wireMap", "store"),
     ("wirePostings", "store"),
+    ("wireRefusal", "boundary"),
     ("wireSet", "store"),
     ("withPlainJson", "http"),
 ];

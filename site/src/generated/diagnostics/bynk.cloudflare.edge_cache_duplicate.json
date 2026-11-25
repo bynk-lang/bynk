@@ -1,0 +1,10 @@
+{
+  "blurb": "Workers Cache is one setting for the whole Worker, and a context has one Worker, so a context declares at most one `EdgeCache` instance, which both turns the cache on and purges it. A second would be another handle on the same cache, so it is refused. Delete it and use the first instance wherever you need it, with `given`.",
+  "category": "Cloudflare",
+  "categoryAnchor": "cloudflare",
+  "code": "bynk.cloudflare.edge_cache_duplicate",
+  "constructs": [],
+  "example": "capability Edge = EdgeCache\ncapability Cdn = EdgeCache    // ✗ one `EdgeCache` per context\n\ncapability Edge = EdgeCache   // ✓ use `Edge` everywhere",
+  "severity": "error",
+  "summary": "A context declares a second `EdgeCache` instance; the edge cache is one setting for the whole Worker."
+}

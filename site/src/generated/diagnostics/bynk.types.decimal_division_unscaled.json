@@ -1,0 +1,10 @@
+{
+  "blurb": "`Decimal` is exact, and a quotient often has no exact decimal answer (one third), so `/` is not defined on it. `div` says what `/` leaves out: how many decimal places to keep and how to round. `+`, `-` and `*` stay exact. Write `a.div(b, 2, RoundingMode.HalfEven)`, with the scale and mode you need.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.decimal_division_unscaled",
+  "constructs": [],
+  "example": "fn share(total: Decimal, ways: Decimal) -> Decimal {\n    total / ways    // ✗ no exact quotient\n}\n\nfn share(total: Decimal, ways: Decimal) -> Decimal {\n    total.div(ways, 2, RoundingMode.HalfEven)    // ✓ two places, rounded\n}",
+  "severity": "error",
+  "summary": "`/` was used on `Decimal` operands. A quotient has no exact decimal answer, so division states its scale and rounding mode: `a.div(b, 2, RoundingMode.HalfEven)` (#2622)."
+}

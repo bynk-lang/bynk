@@ -1,0 +1,10 @@
+{
+  "blurb": "The identity is minted from the cookie's `sub` claim, which is a string, so it must be a refined or opaque `String` type that this context owns. Declare `identity = T`.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_identity_not_string_constructible",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours) }   // ✗\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "error",
+  "summary": "A `SignedCookie` actor's identity is missing or not a string-constructible type."
+}

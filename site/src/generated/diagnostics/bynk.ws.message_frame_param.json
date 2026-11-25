@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket `on message` handler is called with a decoded inbound frame, so it needs exactly one parameter of the service's `in:` type. Any other parameters are route values recovered from the connection. Add the frame parameter. A route value whose type differs from `on open`'s is `bynk.ws.route_param_mismatch`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.ws.message_frame_param",
+  "constructs": [],
+  "example": "service gateway from websocket(in: Frame, out: Frame) {\n    on message (room: RoomId) -> Effect[()] by user: Member { … }                  // ✗ no `Frame` parameter\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }   // ✓\n}",
+  "severity": "error",
+  "summary": "A WebSocket `on message` handler does not have exactly one parameter of the service's inbound (`in:`) frame type — the decoded frame (real-time track slice 3b-iii)."
+}

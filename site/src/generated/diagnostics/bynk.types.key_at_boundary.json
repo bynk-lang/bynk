@@ -1,0 +1,10 @@
+{
+  "blurb": "A `bynk.crypto` `SigningKey` or `VerifyKey` is a handle to a key the platform holds non-extractable, and it lives only for the call that imported it. Storing, serialising, logging or sending it would either leak the secret or mean nothing on the other side, so one cannot be a `store` field, a record or event field, or a handler parameter or result. Keep the key's bytes, such as the PKCS#8 `Bytes`, in `Secrets` or a field, and import the key again with `Crypto.importSigningKey` where you sign. A capability operation may take one.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.key_at_boundary",
+  "constructs": [],
+  "example": "type Credentials = {\n    owner: String,\n    key: SigningKey,    // ✗ a key cannot be held in a type\n}\n\ntype Credentials = {\n    owner: String,\n    pkcs8: Bytes,       // ✓ keep the bytes, import the key where it signs\n}",
+  "severity": "error",
+  "summary": "A `bynk.crypto` `SigningKey` or `VerifyKey` appears in a storable or boundary-crossing position — a key is held non-extractable and lives for the call that imported it, never persisted, logged or sent (standard-library K4)."
+}

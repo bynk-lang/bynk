@@ -1,0 +1,12 @@
+{
+  "blurb": "A snapshot is stored under its name, so the name must be a string literal: the compiler then knows every snapshot a suite takes. A variable or other expression is refused. Write the name as a literal.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.snapshot_name_not_literal",
+  "constructs": [
+    "snapshot_expr"
+  ],
+  "example": "expect read(\"a\") matches snapshot name        // ✗ not a string literal\nexpect read(\"a\") matches snapshot \"first\"     // ✓",
+  "severity": "error",
+  "summary": "`matches snapshot` is not followed by a string literal; a snapshot is named by a literal so the compiler knows every snapshot a suite takes."
+}

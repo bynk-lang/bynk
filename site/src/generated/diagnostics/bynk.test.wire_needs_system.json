@@ -1,0 +1,12 @@
+{
+  "blurb": "`Wire(…)` hands raw text to the real boundary, before any decoding, so that a case can check what the boundary refuses. Only a `system` case has a real boundary: below it the handler is called directly, and the text would go in unchecked. Promote the case with `as system`, or pass a typed value instead. For other addresses, see `bynk.test.wire_http_only`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.wire_needs_system",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\ncase \"raw text is refused\" {            // ✗ not a system case\ncase \"raw text is refused\" as system {  // ✓\n    let r <- api.POST(\"/n\", Wire(\"0\")) by Visitor\n    expect r is Rejected(RefinementViolation(_))\n}",
+  "severity": "error",
+  "summary": "A `Wire(...)` raw argument is used outside a `system`-tier service address; `Wire` hands pre-validation input to the boundary and is meaningless at `unit` or in any other position."
+}

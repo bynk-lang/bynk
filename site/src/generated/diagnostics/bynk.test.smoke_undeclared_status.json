@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.smoke_undeclared_status",
+  "constructs": [
+    "case"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A smoke case (`bynk test --smoke`) gets a non-5xx answer whose status is not among those its route's handler declares; the case still passes (warning)."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A case sends a credential only through its `by` clause: the driver builds the `Authorization` header (or the signature headers) from the actor it acts as. Sending an `Authorization` header as an extra request header, in `RequestHeaders.of`, would give the request two competing credentials, so it is refused. Choose the actor with `by`, and keep `RequestHeaders` for other headers.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.extra_headers_authorization",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/api.test.bynk\nlet r <- api.GET(\"/health\", RequestHeaders.of([\"Authorization: Bearer x\"])) by Visitor   // ✗\nlet r <- api.GET(\"/health\", RequestHeaders.of([\"X-Trace: 1\"])) by Visitor                // ✓",
+  "severity": "error",
+  "summary": "A `system` case sends `Authorization` as an extra request header to a route that declares no `headers:` parameter; the case's `by <Actor>` owns the credential the driver sends."
+}

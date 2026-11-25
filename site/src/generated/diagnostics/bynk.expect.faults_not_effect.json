@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect <call> faults` claims that an effectful call throws, for instance because a `stub … fails`. Only a call can fault, so the subject must be the call itself, with type `Effect[_]`. A value already bound, or a pure method on one, has nothing left to throw. Write the call inside the claim, not a name bound from it. A fault that is not claimed fails the case.",
+  "category": "Expectations",
+  "categoryAnchor": "expectations",
+  "code": "bynk.expect.faults_not_effect",
+  "constructs": [
+    "faults_expr"
+  ],
+  "example": "// tests/vault.test.bynk\nlet label = \"sealed\"\nexpect label.length() faults   // ✗ a pure method, not an effectful call\nexpect box.call() faults       // ✓ the call that faults",
+  "severity": "error",
+  "summary": "A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`."
+}
