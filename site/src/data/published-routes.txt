@@ -1339,6 +1339,7 @@
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
 /reference/diagnostics/bynk.actor.scheme_arg_kind/
 /reference/diagnostics/bynk.actor.scheme_not_admissible/
+/reference/diagnostics/bynk.actor.sender_admits_nothing/
 /reference/diagnostics/bynk.actor.signature_identity_unsupported/
 /reference/diagnostics/bynk.actor.signature_missing_header/
 /reference/diagnostics/bynk.actor.signature_missing_secret/

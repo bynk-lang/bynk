@@ -3046,8 +3046,23 @@ fn check_refinement_actor(
     {
         // #3888: a refinement over `Sender` narrows which mail is admitted, by
         // the closed `Dmarc(…)` vocabulary.
-        if let Err(span) = actors::parse_sender_predicate(&r.predicate) {
-            errors.push(
+        match actors::parse_sender_predicate(&r.predicate) {
+            Ok(pred) if pred.admitted().is_empty() => errors.push(
+                CompileError::new(
+                    "bynk.actor.sender_admits_nothing",
+                    r.predicate.span,
+                    format!(
+                        "the refinement `{}` admits no DMARC verdict, so every message would be refused",
+                        actor.name.name
+                    ),
+                )
+                .with_note(
+                    "the predicate is false for `DmarcPass`, `DmarcFail` and `DmarcNone` alike — \
+                     check the `&&` and `!` it combines",
+                ),
+            ),
+            Ok(_) => {}
+            Err(span) => errors.push(
                 CompileError::new(
                     "bynk.actor.refinement_predicate_unsupported",
                     span,
@@ -3057,7 +3072,7 @@ fn check_refinement_actor(
                     "the DMARC verdict is the only thing a `Sender` refinement tests: name \
                      `DmarcPass`, `DmarcFail` or `DmarcNone`",
                 ),
-            );
+            ),
         }
         return;
     }
