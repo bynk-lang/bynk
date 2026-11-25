@@ -931,6 +931,7 @@ pub(super) fn synthetic_typed_commons_for_target(
             },
             items: capability_items,
             uses: Vec::new(),
+            consumes: Vec::new(),
             documentation: None,
             form: CommonsForm::Brace,
             span: Span::default(),

@@ -8276,6 +8276,7 @@ mod actor_binding_persistence_tests {
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
+            consumes: Vec::new(),
             documentation: ctx.documentation,
             form: ctx.form,
             span: ctx.span,

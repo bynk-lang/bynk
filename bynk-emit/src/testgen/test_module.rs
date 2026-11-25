@@ -1497,6 +1497,7 @@ mod tests {
                 },
                 items: vec![],
                 uses: vec![],
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Fragment,
                 span: Span::new(0, 0),
