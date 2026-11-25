@@ -8,4 +8,20 @@ suite ops.inbox {
       Undecodable => expect false
     }
   }
+
+  case "an is test of Undecodable is a dead test" {
+    let r <- inbox.message(Job { id: "u2" })
+    expect r is Ack
+    expect !(r is Undecodable)
+  }
+
+  case "an integration case stays in the context" as integration {
+    let r <- inbox.message(Job { id: "i1" })
+    match r {
+      Ack => expect true
+      Retry(_) => expect false
+      RetryAfter(_, _) => expect false
+      Undecodable => expect false
+    }
+  }
 }

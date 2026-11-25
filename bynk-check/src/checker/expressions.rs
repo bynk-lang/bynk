@@ -4712,7 +4712,7 @@ fn warn_unreachable_undecodable(variant: &Ident, ty: TyId, ctx: &mut Ctx) {
         .with_note(
             "a message fails to decode only when a real queue delivers it, so `unit` and `integration` cases and handlers never see this verdict",
         )
-        .with_note("remove the arm, or move the case to `as system` and address the queue by context path"),
+        .with_note("replace the arm with `_` (a `match` must still be exhaustive), or move the case to `as system` and address the queue by context path"),
     );
 }
 

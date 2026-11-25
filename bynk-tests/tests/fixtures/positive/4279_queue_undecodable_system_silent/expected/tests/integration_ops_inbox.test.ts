@@ -2,6 +2,7 @@
 // system test: ops.inbox
 
 import type { __ServiceBinding } from "../__bynk_runtime/boundary.js";
+import { QueueResult } from "../__bynk_runtime/queue.js";
 import * as __ns_ops_inbox from "../workers/ops-inbox/handlers.js";
 import worker___ns_ops_inbox from "../workers/ops-inbox/index.js";
 
@@ -33,6 +34,9 @@ async function test_a_system_case_reads_the_verdict_a_real_queue_gives() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
+    function undecodable(r: QueueResult): boolean {
+      return ((__c: boolean) => __c)(r.tag === "Undecodable");
+    }
     const r = await __sysdrive_message_inbox({ id: "s1" });
     void (((__d) => {
       switch (__d.tag) {
@@ -60,9 +64,47 @@ async function test_a_system_case_reads_the_verdict_a_real_queue_gives() {
   }
 }
 
+async function test_an_is_test_of_Undecodable_can_match_at_system() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    function undecodable(r: QueueResult): boolean {
+      return ((__c: boolean) => __c)(r.tag === "Undecodable");
+    }
+    const r = await __sysdrive_message_inbox({ id: "s2" });
+    if (!(!(((__c: boolean) => __c)(r.tag === "Undecodable")))) { throw __bynkExpectFailure("tests/inbox_system.bynk:14:12", 402, 421, "expect !(r is Undecodable)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_helper_of_a_system_suite_may_name_Undecodable() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    function undecodable(r: QueueResult): boolean {
+      return ((__c: boolean) => __c)(r.tag === "Undecodable");
+    }
+    const r = await __sysdrive_message_inbox({ id: "s3" });
+    if (!(!undecodable(r))) { throw __bynkExpectFailure("tests/inbox_system.bynk:24:12", 685, 700, "expect !undecodable(r)"); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a system case reads the verdict a real queue gives"];
+export const __bynkCases: readonly string[] = ["a system case reads the verdict a real queue gives", "an is test of Undecodable can match at system", "a helper of a system suite may name Undecodable"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -70,6 +112,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a system case reads the verdict a real queue gives")) {
     const started = __bynkCaseNow();
     const r = { name: "a system case reads the verdict a real queue gives", ...(await test_a_system_case_reads_the_verdict_a_real_queue_gives()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("an is test of Undecodable can match at system")) {
+    const started = __bynkCaseNow();
+    const r = { name: "an is test of Undecodable can match at system", ...(await test_an_is_test_of_Undecodable_can_match_at_system()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a helper of a system suite may name Undecodable")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a helper of a system suite may name Undecodable", ...(await test_a_helper_of_a_system_suite_may_name_Undecodable()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

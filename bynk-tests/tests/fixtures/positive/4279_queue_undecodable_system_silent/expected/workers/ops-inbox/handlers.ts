@@ -12,26 +12,6 @@ export interface Job {
 export const Job = {
 };
 
-export function describe(r: QueueResult): string {
-  switch (r.tag) {
-    case "Ack": {
-      return "done";
-    }
-    case "Retry": {
-      const why = r.reason;
-      return why;
-    }
-    case "RetryAfter": {
-      const why = r.reason;
-      return why;
-    }
-    case "Undecodable": {
-      return "undecodable";
-    }
-  }
-  throw new globalThis.Error("non-exhaustive match");
-}
-
 export const inbox = {
   async queue_inbox_0(job: Job, deps: {}): globalThis.Promise<QueueResult> {
     return QueueResult.Ack;

@@ -71,7 +71,7 @@ use bynk_project::ParsedFile;
 use bynk_project::UnitKind;
 use bynk_project::discovery::{case_effective_tier, suite_effective_tier_is_system};
 use bynk_syntax::ast::*;
-use bynk_syntax::error::CompileError;
+use bynk_syntax::error::{CompileError, Severity};
 use bynk_syntax::span::Span;
 
 /// Which runs of a target's test module a `stub` clause applies to (#291).
@@ -320,7 +320,9 @@ pub fn phase_test_bodies(
             unit_consumes,
             broken,
         );
-        let bodies_failed = !bodies_errs.is_empty();
+        let bodies_failed = bodies_errs
+            .iter()
+            .any(|e| Severity::for_error(e) == Severity::Error);
         errors.extend(resolver::split_broken_decl_echoes(bodies_errs, &visible_broken).0);
 
         if bodies_failed {
@@ -962,6 +964,7 @@ pub fn phase_integration_bodies(
             let Some(d) = parsed[i].integration() else {
                 continue;
             };
+            let suite_from = body_errs.len();
             // #2834: as for a unit suite, a system suite's helpers are
             // definitions of their own file's namespace.
             let namespace = if SuiteItems::of(d).is_empty() {
@@ -1111,6 +1114,9 @@ pub fn phase_integration_bodies(
                 }
                 check_bad_signature_tier(case, case_effective_tier(case, d), &mut body_errs);
             }
+            if suite_has_system {
+                drop_undecodable_warning(&mut body_errs, suite_from);
+            }
         }
         // #3162: a skipped declaration of any participant (or of what the
         // participants and the suite use) is a known name, not an unknown one.
@@ -1122,7 +1128,9 @@ pub fn phase_integration_bodies(
             unit_consumes,
             broken,
         );
-        let bodies_failed = !body_errs.is_empty();
+        let bodies_failed = body_errs
+            .iter()
+            .any(|e| Severity::for_error(e) == Severity::Error);
         errors.extend(resolver::split_broken_decl_echoes(body_errs, &visible_broken).0);
         if bodies_failed {
             continue;
@@ -1203,7 +1211,6 @@ fn check_integration_body(
     refs: &mut RefSink,
     tys: &Arc<Types>,
 ) -> HashMap<ExprId, checker::Callee> {
-    let from = errors.len();
     let callees = typecheck_integration_case_body(
         body.participants,
         body.view,
@@ -1216,7 +1223,6 @@ fn check_integration_body(
         tys,
     )
     .1;
-    keep_undecodable_at_system(errors, from, case_effective_tier(body.case, body.suite));
     if let Some(d1_sql) = d1_sql {
         errors.extend(d1_sql.check_peek_sites(body.unit_tables, &callees, Some(source)));
     }
@@ -3707,27 +3713,20 @@ fn check_faults_tier(
     }
 }
 
-/// Slice C, #2905: `bynk.test.wire_needs_system` — a case below `system` that
-/// uses `Wire(…)`. Shared by the unit and integration paths: the unit path
-/// once skipped it, so an http `Wire` in a unit suite reached `tsc`.
 /// #4279: the checker reports an `Undecodable` pattern of a `QueueResult` in every test body, since
-/// it does not know the case's tier. At `system` the verdict can be it, so the report is dropped
-/// for the errors a case body added from `from`.
-fn keep_undecodable_at_system(
-    errors: &mut Vec<CompileError>,
-    from: usize,
-    tier: bynk_syntax::ast::TestTier,
-) {
-    if tier != bynk_syntax::ast::TestTier::System {
-        return;
-    }
-    let mut i = from;
+/// it does not know the tier. In a suite that has a `system` case the verdict can be it, so the
+/// report is dropped for the suite's cases and helpers alike.
+fn drop_undecodable_warning(errors: &mut Vec<CompileError>, from: usize) {
+    let mut i = 0;
     errors.retain(|e| {
         i += 1;
         i <= from || e.category != crate::checker::UNDECODABLE_UNREACHABLE
     });
 }
 
+/// Slice C, #2905: `bynk.test.wire_needs_system` — a case below `system` that
+/// uses `Wire(…)`. Shared by the unit and integration paths: the unit path
+/// once skipped it, so an http `Wire` in a unit suite reached `tsc`.
 fn check_wire_tier(case: &Case, tier: bynk_syntax::ast::TestTier, errors: &mut Vec<CompileError>) {
     if tier == bynk_syntax::ast::TestTier::System || !block_uses_wire(&case.body) {
         return;
@@ -6622,6 +6621,18 @@ service intake from queue(\"orders\") {
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ok(_)")
             .assert_reports("bynk.types.is_unknown_variant");
+    }
+
+    /// #4279: only a `system` case's verdict can be `Undecodable`, so a lower tier's arm or `is`
+    /// test of it warns.
+    #[test]
+    fn an_undecodable_pattern_warns_below_system() {
+        for body in [
+            "    let r <- intake.message(Item { sku: \"x\" })\n    expect !(r is Undecodable)",
+            "    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false\n      _ => expect false\n    }",
+        ] {
+            case(body).assert_reports("bynk.queue.undecodable_unreachable");
+        }
     }
 
     /// The context of `385_system_wire_rejection`, cut down.

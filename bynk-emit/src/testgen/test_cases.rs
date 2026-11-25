@@ -9,6 +9,7 @@ use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::test_suites::{self, ResolvedStub, StubScope};
 use bynk_syntax::ast::{Case, FnName};
+use bynk_syntax::error::Severity;
 use bynk_ts::{TsBinaryOp, TsBindingName, TsDecl, TsExpr, TsLit, TsStmt, TsType, TsTypeMember};
 use std::sync::Arc;
 
@@ -459,6 +460,8 @@ pub(super) fn suite_fn_decls(
         &mut LocalsSink::new(),
         tys,
     );
+    // #4279: a warning is not drift.
+    errs.retain(|e| Severity::for_error(e) == Severity::Error);
     debug_assert!(
         errs.is_empty(),
         "suite helpers re-typed for emission reported errors the check pass did not: {:?}",
@@ -627,8 +630,8 @@ pub(super) fn emit_test_case_function(
             tys,
         );
         // #1875 review: as at the system tier, an error here is drift.
-        // #4279: a warning is not one, and a unit case's `Undecodable` arm is flagged.
-        throwaway_errors.retain(|e| e.category != bynk_check::checker::UNDECODABLE_UNREACHABLE);
+        // #4279: a warning is not drift.
+        throwaway_errors.retain(|e| Severity::for_error(e) == Severity::Error);
         debug_assert!(
             throwaway_errors.is_empty(),
             "a unit case re-typed for emission reported errors the check pass did not: {:?}",

@@ -119,7 +119,7 @@ const WARNING_ONLY: &[(&str, &str)] = &[
     ),
     (
         "bynk.queue.undecodable_unreachable",
-        "a warning; `positive/4279_queue_undecodable_unreachable` holds it with `expected_warnings.txt`",
+        "a warning; `positive/4279_queue_undecodable_unreachable` holds it with `expected_warnings.txt`, and `positive/4279_queue_undecodable_system_silent` shows a `system` case without it",
     ),
     (
         "bynk.http.cookie_domain_widens",
