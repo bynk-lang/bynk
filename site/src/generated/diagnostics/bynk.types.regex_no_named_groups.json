@@ -1,0 +1,12 @@
+{
+  "blurb": "`findRegexNamed` returns the first match's capture groups keyed by their names, and the names come from the pattern, which is a literal checked when the program compiles. A pattern with no named group, `(?<name>…)`, has nothing to key the result by, so it is refused. Name the groups you want, or use `findRegex`, which returns the groups by position (the whole match first).",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.regex_no_named_groups",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(\\\\d{4})-(\\\\d{2})\")                 // ✗ no group is named\n}\n\nfn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<year>\\\\d{4})-(?<month>\\\\d{2})\")  // ✓\n}",
+  "severity": "error",
+  "summary": "`findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by."
+}

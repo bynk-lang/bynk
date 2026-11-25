@@ -1,0 +1,9 @@
+---
+#3979: `findRegexNamed` reads its group names from the pattern at compile time,
+so the pattern must be a literal, as every regex method's is.
+---
+commons demo
+
+fn pick(s: String, pattern: String) -> Option[Map[String, Option[String]]] {
+    s.findRegexNamed(pattern)
+}

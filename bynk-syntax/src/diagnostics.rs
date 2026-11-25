@@ -2738,7 +2738,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.security_invalid_field",
-        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. Write the value out. A field other than these two is `bynk.http.security_unknown_field`.",
+        blurb: "The fields of a `security { }` section are fixed at compile time and become response headers. `hsts` must be a positive `Duration` literal such as `180.days`, because it is written as a `max-age` and a zero would clear the browser's HTTPS pin; a bare number has no unit. `nosniff` must be `true` or `false`. `frameAncestors` must be a list of exact origins (`\"https://partner.example\"`) or `\"self\"`, with no wildcard, except `[\"*\"]`, which stands alone and needs an explicit `csp` beside it so that opening framing to every site is never an accident. `referrerPolicy` must be one of the standard values written in camel case (`noReferrer`, `sameOrigin`, `strictOriginWhenCrossOrigin`, and so on). `csp` must be a non-empty string literal with no line break. Write the value out. A field other than these is `bynk.http.security_unknown_field`.",
         example: "service api from http {\n    security { hsts: 180 }         // ✗ a `Duration`, not a number\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }    // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
@@ -2748,8 +2748,8 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.security_unknown_field",
-        blurb: "A `security { }` section has two fields, `hsts` and `nosniff`, and each becomes a response header. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
-        example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ `hsts` and `nosniff` only\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+        blurb: "A `security { }` section has five fields: `hsts`, `nosniff`, `frameAncestors`, `referrerPolicy` and `csp`, and each becomes a response header (the last three on an HTML response). The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the service sending headers you did not intend; no other header is set from this section. Rename the field or remove it. A field with a bad value is `bynk.http.security_invalid_field`.",
+        example: "service api from http {\n    security { hsts: 180.days, frameOptions: \"DENY\" }    // ✗ not a field of `security`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days }                          // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.stream_body_not_raw",
@@ -3341,7 +3341,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.parse.duplicate_security",
-        blurb: "A service has one `security` policy, and it sets the security headers (`hsts`, `nosniff`) stamped on every response. Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
+        blurb: "A service has one `security` policy, and it sets the security headers stamped on responses (`hsts` and `nosniff` on every response, and `frameAncestors`, `referrerPolicy` and `csp` on an HTML page). Two blocks could set them differently, and the reader would not know which holds, so the second is refused. Merge them into one. `cors`, `limits` and `json` follow the same rule (`bynk.parse.duplicate_cors`, `bynk.parse.duplicate_limits`, `bynk.parse.duplicate_json`).",
         example: "service api from http {\n    security { hsts: 180.days }\n    security { nosniff: true }                       // ✗ a second `security`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    security { hsts: 180.days, nosniff: true }       // ✓ one policy\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
     },
     Explain {
@@ -6332,6 +6332,16 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Status = enum { Open, Paid }\n\nfn code(s: Status) -> Int {\n    match s {\n        Status { .. } => 1    // ✗ `Status` is an enum, not a record\n        _ => 2\n    }\n}\n\nfn code(s: Status) -> Int {\n    match s {\n        Open => 1             // ✓ name the variants\n        Paid => 2\n    }\n}",
     },
     Explain {
+        code: "bynk.types.regex_duplicate_group_name",
+        blurb: "`findRegexNamed` keys its result by the pattern's group names, and a name may belong to one group only: the runtimes refuse a repeated name, even across alternatives, when the pattern is built, so the program would fail at run time. Give each group its own name.",
+        example: "fn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<side>a)|(?<side>b)\")          // ✗ `side` names two groups\n}\n\nfn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<left>a)|(?<right>b)\")         // ✓\n}",
+    },
+    Explain {
+        code: "bynk.types.regex_no_named_groups",
+        blurb: "`findRegexNamed` returns the first match's capture groups keyed by their names, and the names come from the pattern, which is a literal checked when the program compiles. A pattern with no named group, `(?<name>…)`, has nothing to key the result by, so it is refused. Name the groups you want, or use `findRegex`, which returns the groups by position (the whole match first).",
+        example: "fn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(\\\\d{4})-(\\\\d{2})\")                 // ✗ no group is named\n}\n\nfn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<year>\\\\d{4})-(?<month>\\\\d{2})\")  // ✓\n}",
+    },
+    Explain {
         code: "bynk.types.regex_not_literal",
         blurb: "A regex method checks its pattern when the program compiles, to reject one that can take catastrophic time on crafted input (ReDoS). A pattern built at run time would escape that check, so it must be a string literal. Write the pattern in place, as an ordinary or a raw string, `r\"\\d+\"`. To look for text that varies, use `contains`, which takes plain text.",
         example: "fn has(s: String, pattern: String) -> Bool {\n    s.containsRegex(pattern)              // ✗ the pattern is not a literal\n}\n\nfn has(s: String) -> Bool {\n    s.containsRegex(\"(?i)error\")          // ✓\n}",
@@ -8589,7 +8599,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.http.security_invalid_field",
-        "A `security` policy field (`hsts`/`nosniff`) has the wrong value shape.",
+        "A `security` policy field (`hsts`, `nosniff`, `frameAncestors`, `referrerPolicy`, `csp`) has the wrong value shape.",
     ),
     d(
         "bynk.http.security_not_http",
@@ -10813,8 +10823,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["record_pattern"],
     ),
     dg(
+        "bynk.types.regex_duplicate_group_name",
+        "`findRegexNamed`'s pattern names a capture group more than once, which the runtimes refuse when the pattern is built.",
+        &["method_call"],
+    ),
+    dg(
+        "bynk.types.regex_no_named_groups",
+        "`findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.types.regex_not_literal",
-        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
+        "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time.",
         &["method_call"],
     ),
     d(

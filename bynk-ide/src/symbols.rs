@@ -645,7 +645,60 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
         }
     }
     // #3909: otherwise a route string that overlaps another route of its method.
-    describe_route_at(source, offset).or_else(|| describe_path_param_at(source, offset))
+    describe_route_at(source, offset)
+        .or_else(|| describe_path_param_at(source, offset))
+        .or_else(|| describe_security_field_at(source, offset))
+}
+
+/// #3923: hover for a field name inside a service's `security { }`: the header it sets and its
+/// default. `None` when the cursor is elsewhere, or on a name outside the closed set.
+pub fn describe_security_field_at(source: &str, offset: usize) -> Option<String> {
+    let tokens = tokenize(source).ok()?;
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &[],
+    };
+    for item in items {
+        let CommonsItem::Service(service) = item else {
+            continue;
+        };
+        let Some(security) = &service.security else {
+            continue;
+        };
+        for field in &security.fields {
+            if !span_covers(field.name.span, offset) {
+                continue;
+            }
+            let (header, default) = match field.name.name.as_str() {
+                "nosniff" => ("`X-Content-Type-Options: nosniff`, on every response", "on"),
+                "hsts" => (
+                    "`Strict-Transport-Security: max-age=…`, on every response",
+                    "off (opt in with a `Duration`)",
+                ),
+                "frameAncestors" => (
+                    "`Content-Security-Policy: frame-ancestors …`, on an HTML (`text/html`) response",
+                    "`'none'`: no site may frame the page",
+                ),
+                "referrerPolicy" => (
+                    "`Referrer-Policy`, on an HTML (`text/html`) response",
+                    "`strictOriginWhenCrossOrigin`",
+                ),
+                "csp" => (
+                    "`Content-Security-Policy`, sent verbatim on an HTML (`text/html`) response; `frame-ancestors` is appended when it names none",
+                    "none: only `frame-ancestors 'none'` is sent",
+                ),
+                _ => return None,
+            };
+            return Some(format!(
+                "```bynk\nsecurity {{ {}: … }}\n```\n\n**`{}`** — sets {header}.\n\n- **Default** — {default}.",
+                field.name.name, field.name.name
+            ));
+        }
+    }
+    None
 }
 
 /// #3910: hover for a path parameter's name in an HTTP handler's parameter list: how the router
@@ -3416,6 +3469,16 @@ fn security_summary(security: &SecurityPolicy) -> String {
     if let Some(secs) = security.hsts_max_age_secs() {
         parts.push(format!("hsts: {secs}s"));
     }
+    // #3923: what an HTML page gets: the framing sources, the referrer policy, a `csp`.
+    if let Some(sources) = security.frame_ancestors() {
+        parts.push(format!("frameAncestors: [{}]", sources.join(", ")));
+    }
+    if let Some(policy) = security.referrer_policy() {
+        parts.push(format!("referrerPolicy: {policy}"));
+    }
+    if security.csp().is_some() {
+        parts.push("csp".to_string());
+    }
     if parts.is_empty() {
         // The default posture (nosniff on, no HSTS) with an empty block.
         "nosniff".to_string()
@@ -5214,6 +5277,30 @@ mod tests {
         // Off the annotation (on the `Ok` body) — no annotation hover.
         let ok_offset = CACHE_SVC.find("Ok(").unwrap() + 1;
         assert!(describe_handler_annotation_at(CACHE_SVC, ok_offset).is_none());
+    }
+
+    #[test]
+    fn hover_on_a_security_field_names_its_header_and_default() {
+        let svc = "context api\nservice api from http {\n  security {\n    frameAncestors: [\"self\"],\n    referrerPolicy: noReferrer,\n  }\n  on GET(\"/x\") () -> Effect[HttpResult[()]] by v: Visitor {\n    Ok(())\n  }\n}\n";
+        let at = |needle: &str| describe_security_field_at(svc, svc.find(needle).unwrap() + 1);
+        let frame = at("frameAncestors").expect("hovers");
+        assert!(
+            frame.contains("frame-ancestors") && frame.contains("text/html"),
+            "{frame}"
+        );
+        assert!(frame.contains("'none'"), "names the default: {frame}");
+        let referrer = at("referrerPolicy").expect("hovers");
+        assert!(
+            referrer.contains("Referrer-Policy")
+                && referrer.contains("strictOriginWhenCrossOrigin"),
+            "{referrer}"
+        );
+        // The path of a route is not a security field.
+        assert!(at("/x").is_none());
+        // And a fully-wired hover reaches it from the annotation fallback.
+        assert!(
+            describe_handler_annotation_at(svc, svc.find("frameAncestors").unwrap() + 1).is_some()
+        );
     }
 
     #[test]

@@ -1,0 +1,9 @@
+commons demo.orelsesuccessmismatch
+
+fn text() -> Result[String, String] {
+	Ok("zero")
+}
+
+fn recover(r: Result[Int, String]) -> Result[Int, String] {
+	r.orElse((e) => text())
+}

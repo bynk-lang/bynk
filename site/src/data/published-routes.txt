@@ -2169,6 +2169,8 @@
 /reference/diagnostics/bynk.types.question_outside_result/
 /reference/diagnostics/bynk.types.range_pattern_on_non_int/
 /reference/diagnostics/bynk.types.record_pattern_on_non_record/
+/reference/diagnostics/bynk.types.regex_duplicate_group_name/
+/reference/diagnostics/bynk.types.regex_no_named_groups/
 /reference/diagnostics/bynk.types.regex_not_literal/
 /reference/diagnostics/bynk.types.rejection_at_boundary/
 /reference/diagnostics/bynk.types.request_cookies_at_boundary/

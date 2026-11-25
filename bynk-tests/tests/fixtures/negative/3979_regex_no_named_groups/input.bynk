@@ -1,0 +1,9 @@
+---
+#3979: `findRegexNamed` keys its result by the pattern's group names, so a pattern
+with none is refused at compile time and points at `findRegex`.
+---
+commons demo
+
+fn digits(s: String) -> Option[Map[String, Option[String]]] {
+    s.findRegexNamed("(\\d+)")
+}
