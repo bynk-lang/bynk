@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provides": {
+    "listing": "abdead4292b3d7bb",
+    "save": "773d2ea3edbf2955",
+    "taxes": "55d023879dd10ac8"
+  },
+  "expects": {},
+  "provides_shapes": {
+    "listing": "Svc(\"listing\",Ret(R(L(Rec(\"Price\",F(\"amount\",B(\"Decimal\")),F(\"id\",B(\"String\")))),B(\"String\"))))",
+    "save": "Svc(\"save\",P(\"id\",B(\"String\")),P(\"amount\",B(\"String\")),Ret(R(N(\"SqlRun\"),N(\"SqlError\"))))",
+    "taxes": "Svc(\"taxes\",Ret(R(L(Rec(\"Taxed\",F(\"id\",B(\"String\")),F(\"tax\",B(\"Decimal\")))),B(\"String\"))))"
+  }
+}

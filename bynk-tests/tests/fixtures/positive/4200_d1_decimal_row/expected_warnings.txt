@@ -1,0 +1,1 @@
+bynk.d1.decimal_numeric_affinity

@@ -420,6 +420,13 @@ mod native {
                 }
                 if let Some(err) = check_site(&conn, site, &database, source) {
                     out.push(err);
+                } else if site.row.is_some() {
+                    out.extend(check_decimal_affinity(
+                        &conn,
+                        site,
+                        &site.decimals,
+                        site.span,
+                    ));
                 }
             }
             // #3139: each linked decode's required fields against the columns
@@ -436,6 +443,7 @@ mod native {
                 };
                 let conn = conn.lock().unwrap_or_else(|e| e.into_inner());
                 out.extend(check_decode(&conn, d));
+                out.extend(check_decimal_affinity(&conn, &d.site, &d.decimals, d.span));
             }
             out
         }
@@ -540,6 +548,54 @@ mod native {
         {
             let _ = stmt.execute([]);
         }
+    }
+
+    /// #4200: a `Decimal` row field read from a SQLite column whose declared type has
+    /// numeric affinity (`DECIMAL`, `NUMERIC`, `REAL`, `INT`…): the value then comes back
+    /// as a JSON number, which does not decode as a `Decimal`. A `TEXT` column keeps it
+    /// exact. Only a column read straight from a table has a declared type.
+    pub(super) fn check_decimal_affinity(
+        conn: &Connection,
+        site: &D1SqlSite,
+        decimals: &[String],
+        span: Span,
+    ) -> Vec<CompileError> {
+        if decimals.is_empty() {
+            return Vec::new();
+        }
+        let Ok(stmt) = conn.prepare(&site.text) else {
+            return Vec::new();
+        };
+        let what = site_name(site);
+        stmt.columns()
+            .filter(|c| decimals.iter().any(|d| d == c.name()))
+            .filter_map(|c| {
+                let declared = c.decl_type()?;
+                (!is_text_affinity(declared)).then(|| {
+                    CompileError::new(
+                        "bynk.d1.decimal_numeric_affinity",
+                        span,
+                        format!(
+                            "`{}` of {what} is declared `{declared}`, which SQLite stores as a number, so a `Decimal` read from it fails to decode",
+                            c.name()
+                        ),
+                    )
+                    .with_note("declare the column `TEXT` (a `Decimal` is stored as its canonical text), or read it into a `Float`")
+                })
+            })
+            .collect()
+    }
+
+    /// Whether a declared column type has `TEXT` affinity, by SQLite's rules: it
+    /// contains `CHAR`, `CLOB` or `TEXT`. (No declared type and `BLOB` keep a value as
+    /// given, so a text value stays text; the numeric affinities do not.)
+    pub(super) fn is_text_affinity(declared: &str) -> bool {
+        let d = declared.to_ascii_uppercase();
+        d.is_empty()
+            || d.contains("BLOB")
+            || d.contains("CHAR")
+            || d.contains("CLOB")
+            || d.contains("TEXT")
     }
 
     fn check_site(
@@ -843,6 +899,67 @@ mod tests {
     use crate::project_model::ErrorSink;
     use rusqlite::Connection;
 
+    /// #4200: SQLite's affinity rules, as far as a `Decimal` read cares: only a type
+    /// naming `CHAR`, `CLOB` or `TEXT` keeps the text; `NUMERIC`, `DECIMAL(10,2)`,
+    /// `REAL` and `INTEGER` hand it back as a number.
+    #[test]
+    fn only_text_affinity_keeps_a_decimal_exact() {
+        for text in [
+            "TEXT",
+            "text",
+            "VARCHAR(20)",
+            "NCHAR(4)",
+            "CLOB",
+            "BLOB",
+            "",
+        ] {
+            assert!(native::is_text_affinity(text), "{text}");
+        }
+        for numeric in [
+            "NUMERIC",
+            "DECIMAL(10,2)",
+            "REAL",
+            "FLOAT",
+            "DOUBLE",
+            "INTEGER",
+        ] {
+            assert!(!native::is_text_affinity(numeric), "{numeric}");
+        }
+    }
+
+    #[test]
+    fn a_decimal_read_from_a_numeric_column_warns_and_from_text_does_not() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE p (id TEXT, amount TEXT, tax NUMERIC)")
+            .unwrap();
+        let site = |text: &str| crate::checker::D1SqlSite {
+            cap: "Prices".to_string(),
+            op: "all".to_string(),
+            text: text.to_string(),
+            span: bynk_syntax::span::Span::default(),
+            row: None,
+            decimals: Vec::new(),
+            passed: None,
+            literal: None,
+            batch: None,
+            peek: None,
+        };
+        let warn = |text: &str, field: &str| {
+            native::check_decimal_affinity(
+                &conn,
+                &site(text),
+                &[field.to_string()],
+                bynk_syntax::span::Span::default(),
+            )
+        };
+        assert!(warn("SELECT id, amount FROM p", "amount").is_empty());
+        let numeric = warn("SELECT id, tax FROM p", "tax");
+        assert_eq!(numeric.len(), 1);
+        assert_eq!(numeric[0].category, "bynk.d1.decimal_numeric_affinity");
+        // A computed column has no declared type, so nothing is claimed of it.
+        assert!(warn("SELECT tax + 1 AS tax FROM p", "tax").is_empty());
+    }
+
     fn migrations(files: &[(&str, &str)]) -> D1Migrations {
         let mut m = D1Migrations::new();
         m.insert(
@@ -1101,6 +1218,7 @@ mod tests {
         span: (usize, usize),
     ) -> crate::checker::D1SqlSite {
         crate::checker::D1SqlSite {
+            decimals: Vec::new(),
             cap: "Orders".into(),
             op: "select".into(),
             text: text.into(),
