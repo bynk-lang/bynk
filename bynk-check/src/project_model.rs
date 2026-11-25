@@ -5606,7 +5606,6 @@ pub fn phase_topology(
     phase_workers_unprovided_capabilities(target, parsed, groups, kinds, unit_tables, errors);
     crate::email::phase_duplicate_addresses(parsed, groups, kinds, errors);
     crate::queue_consumers::phase_duplicate_queue_consumers(parsed, groups, kinds, errors);
-    crate::queue_delivery::phase_dead_letter_consumers(parsed, groups, kinds, errors);
     phase_workers_ws_open_split(target, parsed, groups, kinds, unit_tables, errors);
 }
 
@@ -5945,6 +5944,19 @@ pub fn phase_bundle_composition_unprovided(
     unit_flattened: &HashMap<String, HashMap<String, String>>,
     errors: &mut ErrorSink,
 ) {
+    // #3877, #4305: a dead-letter queue's consumer against the source consumer, by the same
+    // comparison as a producer's send.
+    crate::queue_delivery::phase_dead_letter_consumers(
+        parsed,
+        groups,
+        kinds,
+        &crate::queue_producers::Project {
+            tables: unit_tables,
+            uses: unit_uses,
+            consumes: unit_consumes,
+        },
+        errors,
+    );
     // #3879: a producer's message type against the queue's consumer.
     crate::queue_producers::phase_queue_producers(
         parsed,

@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.706.0
+
+`Instant.toString()` and `Duration.toString()` no longer give the bare millisecond count. They give RFC 3339 UTC text (`2026-11-22T10:00:00.000Z`) and unit text (`1h30m`). Code that read the old text back as a number should call `toEpochMillis()` or `toMillis()`. No diagnostic marks it, because the new text names its units and cannot be mistaken for the old number.
+
 ## v0.701.0
 
 a program that writes `Effect[Effect[T]]`, or that instantiates a generic function so it wraps one effect in another (`wrap(e)` with `e: Effect[_]`, or `Effect.pure(e)`), now gets `bynk.types.nested_effect`; such a program type-checked before but failed at run time when a method was called on the flattened value. Sequence the effects with `andThen` or `<-` instead.

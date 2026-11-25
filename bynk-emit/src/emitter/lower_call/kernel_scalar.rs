@@ -293,7 +293,10 @@ pub(in crate::emitter) fn lower_duration_kernel(
                 DurationOp::ToSeconds => "1000",
                 DurationOp::ToMinutes => "60000",
                 DurationOp::ToHours => "3600000",
-                DurationOp::ToDays | DurationOp::ToMillis | DurationOp::ToString => "86400000",
+                DurationOp::ToDays
+                | DurationOp::ToMillis
+                | DurationOp::ToString
+                | DurationOp::ToIso => "86400000",
             };
             let kids = operands(&mut pre, cx, &[receiver]);
             let [recv] = take::<1, _>(kids);
@@ -308,9 +311,15 @@ pub(in crate::emitter) fn lower_duration_kernel(
                 right: Box::new(TsExpr::Lit(bynk_ts::TsLit::Num("0".to_string()))),
             })
         }
-        (DurationOp::ToString, []) => {
+        // #3977: the text of a `Duration`, in units (`1h30m`) or ISO 8601 (`PT1H30M`).
+        (DurationOp::ToString | DurationOp::ToIso, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
-            Some(plain_call("String", kids))
+            let helper = if matches!(op, DurationOp::ToIso) {
+                "__bynkDurationToIso"
+            } else {
+                "__bynkDurationToString"
+            };
+            Some(plain_call(helper, kids))
         }
         _ => None,
     };
@@ -330,12 +339,8 @@ pub(in crate::emitter) fn lower_instant_kernel(
     let built: Option<bynk_ts::TsExpr> = match (op, args) {
         // The identity returns its operand unchanged, so a parent node's printer brackets it.
         (InstantOp::ToEpochMillis, []) => Some(identity(&mut pre, receiver, cx)),
-        (InstantOp::ToString, []) => {
-            let kids = operands(&mut pre, cx, &[receiver]);
-            Some(plain_call("String", kids))
-        }
-        // K3 (#2592): RFC 3339 in UTC.
-        (InstantOp::ToIso, []) => {
+        // K3 (#2592): RFC 3339 in UTC. #3977: `toString` is the same text.
+        (InstantOp::ToString | InstantOp::ToIso, []) => {
             let kids = operands(&mut pre, cx, &[receiver]);
             Some(plain_call("__bynkInstantToIso", kids))
         }
@@ -1168,8 +1173,24 @@ mod tests {
                 "globalThis.Math.atan2(x, y)",
                 "",
             ),
-            ("d: Duration", "String { d.toString() }", "String(d)", ""),
-            ("i: Instant", "String { i.toString() }", "String(i)", ""),
+            (
+                "d: Duration",
+                "String { d.toString() }",
+                "__bynkDurationToString(d)",
+                "__bynkDurationToString",
+            ),
+            (
+                "d: Duration",
+                "String { d.toIso() }",
+                "__bynkDurationToIso(d)",
+                "__bynkDurationToIso",
+            ),
+            (
+                "i: Instant",
+                "String { i.toString() }",
+                "__bynkInstantToIso(i)",
+                "__bynkInstantToIso",
+            ),
             (
                 "i: Instant",
                 "String { i.toIso() }",
