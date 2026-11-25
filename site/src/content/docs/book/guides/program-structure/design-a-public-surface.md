@@ -89,6 +89,10 @@ Two used commons that declare one name are fine until the file writes it bare; t
 one spelling in a unit (`bynk.uses.second_spelling`), and a name the commons does not export
 publicly cannot be listed (`bynk.uses.unknown_name`).
 
+A qualified name reads the same wherever it is written: in a record's field types, in a
+generic's arguments, in `Val[lib.y.Status]` in a test, and across a Workers boundary, where the
+record's wire codec uses the type's own. A `suite` writes the qualifier through its own `uses`.
+
 ## Name an adapter's types in a commons
 
 A commons can `consumes` the types an adapter exports, in braces, and nothing

@@ -1,0 +1,21 @@
+// #4403: a wire codec for a record whose fields name two used commons' types by
+// full name binds each helper it calls: `lib.x.Status` and `lib.y.Status` are two
+// types of one bare name, so each codec is imported under its own spelling.
+context app.api
+
+uses lib.x
+uses lib.y
+
+type Holder = {
+  s: lib.x.Status,
+  t: lib.y.Status,
+  p: lib.x.Point,
+  all: List[lib.y.Status],
+  maybe: Option[lib.x.Level],
+}
+
+service echo {
+  on call(h: Holder) -> Effect[Holder] by Caller {
+    Effect.pure(h)
+  }
+}

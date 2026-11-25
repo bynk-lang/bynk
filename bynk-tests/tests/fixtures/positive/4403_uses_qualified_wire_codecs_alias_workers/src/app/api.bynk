@@ -1,0 +1,20 @@
+// #4403: the alias form of the same record: each wire codec helper is bound under
+// the name the type is written with (`X.Status`, `Y.Status`: one bare name, two types).
+context app.api
+
+uses lib.x as X
+uses lib.y as Y
+
+type Holder = {
+  s: X.Status,
+  t: Y.Status,
+  p: X.Point,
+  all: List[Y.Status],
+  maybe: Option[X.Level],
+}
+
+service echo {
+  on call(h: Holder) -> Effect[Holder] by Caller {
+    Effect.pure(h)
+  }
+}
