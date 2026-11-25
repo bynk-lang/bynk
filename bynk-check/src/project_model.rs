@@ -3092,54 +3092,32 @@ pub fn phase_resolve_consumes(
                     continue;
                 }
                 // #4044: a commons consumes types only: braced, from an adapter.
-                if kind == UnitKind::Commons {
-                    let capabilities = unit_tables
-                        .get(&target)
-                        .map(|t| &t.exported_capabilities)
-                        .cloned()
-                        .unwrap_or_default();
-                    if let Some(err) = commons_consumes_refusal(
+                if kind == UnitKind::Commons
+                    && let Some(err) = commons_consumes_refusal(
                         c,
                         &target,
                         target_kind,
-                        &capabilities,
+                        unit_tables,
                         &exports_type,
-                    ) {
-                        errors.push_for(Some(&parsed[i].identity_path()), err);
-                        continue;
-                    }
+                    )
+                {
+                    errors.push_for(Some(&parsed[i].identity_path()), err);
+                    continue;
                 }
                 // v0.18: adapter dependencies are adapter-to-adapter (spec §4.5) —
                 // an adapter consuming a *context* would pull service logic into
                 // the host boundary.
                 if kind == UnitKind::Adapter && target_kind == UnitKind::Context {
-                    errors.push_for(Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.adapter.consumes_context",
-                            c.span,
-                            format!(
-                                "adapter `{name}` cannot `consumes` the context `{target}` — adapter dependencies are adapter-to-adapter"
-                            ),
-                        )
-                        .with_note(
-                            "an adapter may only depend on capabilities exported by other adapters (e.g. the `bynk` surface)",
-                        ),
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        adapter_consumes_context(name, &target, c.span),
                     );
                     continue;
                 }
                 if target == *name {
-                    let kind_word = if kind == UnitKind::Adapter {
-                        "adapter"
-                    } else {
-                        "context"
-                    };
                     errors.push_for(
                         Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.consumes.self_reference",
-                            c.span,
-                            format!("{kind_word} `{name}` cannot `consumes` itself"),
-                        ),
+                        consumes_self_reference(kind, name, c.span),
                     );
                     continue;
                 }
@@ -6476,6 +6454,36 @@ fn suggest_alias(target: &str, type_name: &str) -> String {
     format!("{head}{}{type_name}", chars.as_str())
 }
 
+/// `bynk.consumes.self_reference`: a unit that `consumes` itself.
+fn consumes_self_reference(kind: UnitKind, name: &str, span: Span) -> CompileError {
+    let kind_word = if kind == UnitKind::Adapter {
+        "adapter"
+    } else {
+        "context"
+    };
+    CompileError::new(
+        "bynk.consumes.self_reference",
+        span,
+        format!("{kind_word} `{name}` cannot `consumes` itself"),
+    )
+}
+
+/// `bynk.adapter.consumes_context`: adapter dependencies are adapter-to-adapter
+/// (spec §4.5), so an adapter consuming a context would pull service logic into
+/// the host boundary.
+fn adapter_consumes_context(name: &str, target: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.adapter.consumes_context",
+        span,
+        format!(
+            "adapter `{name}` cannot `consumes` the context `{target}` — adapter dependencies are adapter-to-adapter"
+        ),
+    )
+    .with_note(
+        "an adapter may only depend on capabilities exported by other adapters (e.g. the `bynk` surface)",
+    )
+}
+
 /// #4044: why a commons may not write this `consumes`, or `None` when it names
 /// only types an adapter exports, in braces. A commons is shared, pure code, so
 /// it takes types from another unit and nothing else: no whole-unit or aliased
@@ -6486,10 +6494,11 @@ fn commons_consumes_refusal(
     c: &bynk_syntax::ast::ConsumesDecl,
     target: &str,
     target_kind: UnitKind,
-    capabilities: &HashSet<String>,
+    unit_tables: &HashMap<String, UnitTable>,
     exports_type: &dyn Fn(&str, &str) -> bool,
 ) -> Option<CompileError> {
     const CODE: &str = "bynk.commons.consumes_not_types";
+    let capabilities = unit_tables.get(target).map(|t| &t.exported_capabilities);
     let refuse = |span: Span, msg: String, note: &str| {
         Some(CompileError::new(CODE, span, msg).with_note(note.to_string()))
     };
@@ -6514,7 +6523,7 @@ fn commons_consumes_refusal(
     }
     for item in names {
         let n = &item.name;
-        if capabilities.contains(&n.name) {
+        if capabilities.is_some_and(|caps| caps.contains(&n.name)) {
             return refuse(
                 n.span,
                 format!("`{}` is a capability of `{target}`, not a type", n.name),
@@ -7618,14 +7627,18 @@ pub fn phase_detect_consumes_cycles(
     groups: &BTreeMap<String, Vec<usize>>,
     parsed: &[ParsedFile],
     unit_consumes: &HashMap<String, Vec<String>>,
-    // #4044: a commons may `consumes` an adapter that `uses` it, so the cycle
-    // check walks the `uses` edges too.
-    unit_uses: &HashMap<String, Vec<String>>,
     errors: &mut ErrorSink,
 ) {
     let mut consumes_sites: HashMap<(String, String), (PathBuf, Span)> = HashMap::new();
+    // #4044: a commons may `consumes` an adapter that `uses` it, so the cycle
+    // check walks each unit's `uses` edges too.
+    let mut unit_uses: HashMap<String, Vec<String>> = HashMap::new();
     for (name, indices) in groups {
         for &i in indices {
+            unit_uses
+                .entry(name.clone())
+                .or_default()
+                .extend(parsed[i].uses().iter().map(|u| u.target.joined()));
             if parsed[i].is_synthetic() {
                 continue;
             }
@@ -7637,7 +7650,12 @@ pub fn phase_detect_consumes_cycles(
         }
     }
     let mut cycle_errors: Vec<(Option<PathBuf>, CompileError)> = Vec::new();
-    detect_dependency_cycles(unit_consumes, unit_uses, &consumes_sites, &mut cycle_errors);
+    detect_dependency_cycles(
+        unit_consumes,
+        &unit_uses,
+        &consumes_sites,
+        &mut cycle_errors,
+    );
     for (path, err) in cycle_errors {
         errors.push_for(path.as_deref(), err);
     }

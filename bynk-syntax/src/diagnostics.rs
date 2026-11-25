@@ -1196,7 +1196,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     Explain {
         code: "bynk.commons.consumes_not_types",
         blurb: "A commons is shared, pure code, so it may `consumes` types of an adapter and nothing else: write the braced list, `consumes bynk { TimedOut }` or `consumes bynk.cloudflare { SqlError }`. A whole-unit or aliased `consumes` brings services and capabilities, a name that is a capability is not a type, a name the unit does not export has nothing to import, and a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable. A context uses a capability with `consumes` and `given`. Renaming a listed type with `as` is allowed.",
-        example: "commons app.errors\n\nconsumes bynk                // ✗ a whole-unit `consumes` brings services and capabilities\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\nfn code(t: TimedOut) -> Int { 1 }\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+        example: "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
     },
     Explain {
         code: "bynk.consumes.alias_conflict",

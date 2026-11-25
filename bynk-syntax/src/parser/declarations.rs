@@ -134,6 +134,24 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// A documentation block with no declaration to attach to: warn, and keep
+    /// its text as an ordinary comment so nothing is lost.
+    fn warn_orphan_doc(
+        &mut self,
+        item_doc: Option<DocLead>,
+        leading: &mut Vec<Comment>,
+        why: &str,
+    ) {
+        if let Some(doc) = item_doc {
+            self.warnings.push(CompileError::new(
+                "bynk.parse.orphan_doc_block",
+                doc.span,
+                why,
+            ));
+            keep_orphan(leading, doc);
+        }
+    }
+
     /// Parse a commons body, brace or fragment form (`brace` selects which).
     /// Unified from two near-duplicate functions (review Part 3, "the
     /// six-fold item loop") behind the same `brace: bool` parameter
@@ -175,28 +193,20 @@ impl<'a> Parser<'a> {
                     // Doc not attachable; treat as orphan if present. Any
                     // leading comments at this position end up as the
                     // body's trailing comments.
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block has no following declaration to attach to",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(
+                        item_doc,
+                        &mut leading,
+                        "documentation block has no following declaration to attach to",
+                    );
                     trailing_comments = std::mem::take(&mut leading);
                     break;
                 }
                 None if !brace => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block has no following declaration to attach to",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(
+                        item_doc,
+                        &mut leading,
+                        "documentation block has no following declaration to attach to",
+                    );
                     // Comments we held as leading for the next item, plus
                     // any held in the trivia table's epilogue, become the
                     // commons body's trailing comments.
@@ -205,17 +215,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Some(TokenKind::Uses) => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(
-                            CompileError::new(
-                                "bynk.parse.orphan_doc_block",
-                                doc_span,
-                                "documentation block before `uses` is not allowed; only `type` and `fn` declarations carry docs",
-                            ),
-                        );
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(item_doc, &mut leading, "documentation block before `uses` is not allowed; only `type` and `fn` declarations carry docs");
                     if !brace && seen_item {
                         let t = self.peek().unwrap();
                         return Err(CompileError::new(
@@ -241,15 +241,7 @@ impl<'a> Parser<'a> {
                 // unit. Every form parses; the checker accepts only the braced,
                 // type-only one (`bynk.commons.consumes_not_types`).
                 Some(TokenKind::Consumes) => {
-                    if let Some(doc) = item_doc {
-                        let doc_span = doc.span;
-                        self.warnings.push(CompileError::new(
-                            "bynk.parse.orphan_doc_block",
-                            doc_span,
-                            "documentation block before `consumes` is not allowed; only `type` and `fn` declarations carry docs",
-                        ));
-                        keep_orphan(&mut leading, doc);
-                    }
+                    self.warn_orphan_doc(item_doc, &mut leading, "documentation block before `consumes` is not allowed; only `type` and `fn` declarations carry docs");
                     match self.parse_consumes_decl() {
                         Ok(mut c) => {
                             c.trivia.leading = leading;

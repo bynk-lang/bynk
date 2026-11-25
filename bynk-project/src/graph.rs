@@ -51,7 +51,10 @@ fn detect_cycles(
     // cycles and yields the cycle path for the diagnostic.
     let mut visited: HashSet<String> = HashSet::new();
     let mut reported: HashSet<Vec<String>> = HashSet::new();
-    for start in consumes.keys() {
+    // Sorted, so the cycle each run reports does not depend on hash order.
+    let mut starts: Vec<&String> = consumes.keys().collect();
+    starts.sort();
+    for start in starts {
         if visited.contains(start) {
             continue;
         }
@@ -91,19 +94,26 @@ fn dfs_consumes(
         // Canonicalise the cycle for de-dup.
         let canon = canonicalise_cycle(&cycle);
         // With a `consumes`-only filter, a cycle none of whose edges is a `consumes`
-        // edge is somebody else's to report.
-        let has_consumes_edge = must_include.is_none_or(|c| {
-            cycle
-                .windows(2)
-                .any(|w| c.get(&w[0]).is_some_and(|ts| ts.contains(&w[1])))
-        });
-        if has_consumes_edge && reported.insert(canon.clone()) {
+        // edge is somebody else's to report. It is reported from the first unit
+        // (in canonical order) whose edge on the cycle is a `consumes` one, so the
+        // diagnostic anchors on a real `consumes` clause.
+        if let Some(c) = must_include {
+            let n = canon.len();
+            let Some(k) = (0..n).find(|&k| {
+                c.get(&canon[k])
+                    .is_some_and(|ts| ts.contains(&canon[(k + 1) % n]))
+            }) else {
+                return;
+            };
+            cycle = (0..=n).map(|d| canon[(k + d) % n].clone()).collect();
+        }
+        if reported.insert(canon.clone()) {
             // Anchor the diagnostic on the clause forming the cycle's closing
-            // edge — `node` consuming the next unit on the path (#696) — when its
-            // site is known; fall back to the spanless, unattributed form
-            // otherwise. `cycle` is `[node, …, node]`, so `cycle[1]` is the unit
-            // `node` consumes on the cycle (itself, for a self-loop).
-            let edge = (node.to_string(), cycle[1].clone());
+            // edge — `cycle[0]` consuming the next unit on the path (#696) — when
+            // its site is known; fall back to the spanless, unattributed form
+            // otherwise. `cycle` is `[start, …, start]`, so `cycle[1]` is the unit
+            // `cycle[0]` consumes on the cycle (itself, for a self-loop).
+            let edge = (cycle[0].clone(), cycle[1].clone());
             let (file, span) = match sites.get(&edge) {
                 Some((path, span)) => (Some(path.clone()), *span),
                 None => (None, Span::default()),

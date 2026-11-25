@@ -785,13 +785,7 @@ fn analyse_project_inner(
 
     crate::phase_timing::mark(crate::phase_timing::Level::Project);
     // -- 5c. `consumes` cycles. --
-    project_model::phase_detect_consumes_cycles(
-        &groups,
-        &parsed,
-        &unit_consumes,
-        &unit_uses,
-        &mut errors,
-    );
+    project_model::phase_detect_consumes_cycles(&groups, &parsed, &unit_consumes, &mut errors);
 
     // -- 6. `uses` name-conflict detection. --
     project_model::phase_uses_name_conflicts(

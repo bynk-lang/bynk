@@ -2,6 +2,4 @@ commons app.errors
 
 consumes bynk { TimedOut }
 
-fn code(t: TimedOut) -> Int {
-	1
-}
+fn code(t: TimedOut) -> Int { 1 }

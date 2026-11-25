@@ -1,7 +1,0 @@
-commons app.errors
-
-consumes bynk
-
-fn code(t: Int) -> Int {
-	t
-}

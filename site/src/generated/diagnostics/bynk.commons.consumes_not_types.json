@@ -6,7 +6,7 @@
   "constructs": [
     "consumes_decl"
   ],
-  "example": "commons app.errors\n\nconsumes bynk                // ✗ a whole-unit `consumes` brings services and capabilities\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\nfn code(t: TimedOut) -> Int { 1 }\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
+  "example": "commons app.errors\n\nconsumes bynk { Clock }      // ✗ `Clock` is a capability, not a type\n\ncommons app.errors\n\nconsumes bynk { TimedOut }   // ✓ the types it names, in braces\n\nfn code(t: TimedOut) -> Int { 1 }",
   "severity": "error",
   "summary": "A commons `consumes` something other than a braced list of types an adapter exports: a whole-unit or aliased form, a capability, an unknown name, or a context."
 }
