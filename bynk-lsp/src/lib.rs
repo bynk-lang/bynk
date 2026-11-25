@@ -509,16 +509,6 @@ impl Backend {
     /// applies if no clear happened while the walk was in flight; otherwise
     /// the fresh answer is simply not cached (correct either way — just an
     /// uncached hit for that one request).
-    /// #3941: the project's `bynk.toml` variables, read from disk; `None` when the
-    /// file is in no project or the tables do not parse (the build says why).
-    async fn project_vars(&self, uri: &Url) -> Option<crate::env_const::ProjectVars> {
-        let root = self.root_for_uri(uri).await?;
-        tokio::task::spawn_blocking(move || crate::env_const::read_vars(&root))
-            .await
-            .ok()
-            .flatten()
-    }
-
     async fn root_for_uri(&self, uri: &Url) -> Option<PathBuf> {
         let generation = {
             let state = self.state.read().await;
@@ -533,6 +523,16 @@ impl Backend {
             state.root_cache.insert(uri.clone(), root.clone());
         }
         root
+    }
+
+    /// #3941: the project's `bynk.toml` variables, read from disk; `None` when the
+    /// file is in no project or the tables do not parse (the build says why).
+    async fn project_vars(&self, uri: &Url) -> Option<crate::env_const::ProjectVars> {
+        let root = self.root_for_uri(uri).await?;
+        tokio::task::spawn_blocking(move || crate::env_const::read_vars(&root))
+            .await
+            .ok()
+            .flatten()
     }
 
     /// #682: whether a `root_for_uri` write-back computed while the cache was

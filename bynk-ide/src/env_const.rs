@@ -28,7 +28,7 @@ pub const SIGNATURE: &str = "env(NAME, default)";
 pub struct EnvCall {
     /// The constant's name.
     pub constant: String,
-    /// The constant's written type (`String`), when there is one.
+    /// The constant's written type (`String`).
     pub ty: String,
     /// The variable name, and where it starts in the buffer.
     pub variable: String,
@@ -63,10 +63,7 @@ pub fn call_on_line(text: &str, offset: usize) -> Option<EnvCall> {
         .collect();
     let name_end = variable_start + variable.len();
     let tail = after_ws[variable.len()..].trim_start();
-    let default = tail.strip_prefix(',').map(|d| {
-        let d = d.trim();
-        d.strip_suffix(')').unwrap_or(d).trim().to_string()
-    });
+    let default = tail.strip_prefix(',').map(|d| default_text(d).to_string());
     Some(EnvCall {
         constant: constant.trim().to_string(),
         ty: ty.trim().to_string(),
@@ -76,6 +73,32 @@ pub fn call_on_line(text: &str, offset: usize) -> Option<EnvCall> {
         call_start,
         name_end,
     })
+}
+
+/// The default argument in `rest`, the text after the call's comma: up to the
+/// call's closing `)`, skipping string literals so a `)` or `,` inside the
+/// default does not end it, and not taking in what follows the call (a comment).
+fn default_text(rest: &str) -> &str {
+    let (mut depth, mut in_str, mut escaped) = (0usize, false, false);
+    for (i, c) in rest.char_indices() {
+        if in_str {
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_str = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => in_str = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' if depth == 0 => return rest[..i].trim(),
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    rest.trim()
 }
 
 /// Whether `offset` is where the call's variable name is being written: inside
@@ -200,6 +223,14 @@ mod tests {
         assert_eq!(&SRC[c.variable_start..c.name_end], "APP_ORIGIN");
         let p = call_on_line(SRC, at(SRC, "PORT)")).unwrap();
         assert_eq!(p.default, None);
+        // What follows the call's closing paren is not the default, and a `)`
+        // or `,` inside a string is part of it.
+        let src = "commons c\n\nconst A: String = env(X, \"a), b\") // fallback (x)\n";
+        let c = call_on_line(src, at(src, "X,")).unwrap();
+        assert_eq!(c.default.as_deref(), Some("\"a), b\""));
+        let src = "commons c\n\nconst L: List[String] = env(Y, [\"a\", \"b\"]) // list\n";
+        let c = call_on_line(src, at(src, "Y,")).unwrap();
+        assert_eq!(c.default.as_deref(), Some("[\"a\", \"b\"]"));
     }
 
     #[test]
