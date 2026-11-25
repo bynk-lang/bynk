@@ -11,6 +11,12 @@ suite shop.support {
     let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example", headers: headers })
     expect r is Accept
   }
+  case "a capitalised header name reads as the Worker reads it" {
+    let headers: Map[String, String] = Map.empty().insert("Authentication-Results", "mx.cloudflare.net; dmarc=pass")
+    let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example", headers: headers })
+    expect r is Accept
+  }
+
   case "mail that failed DMARC is refused" {
     let headers: Map[String, String] = Map.empty().insert("authentication-results", "mx.cloudflare.net; dmarc=fail")
     let r <- orders.message(InboundEmail { from: "a@b.example", to: "orders@shop.example", headers: headers })

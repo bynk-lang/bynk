@@ -285,7 +285,9 @@ export function dmarcVerdict(headers: readonly { readonly key: string; readonly 
  * mx.cloudflare.net; dmarc=pass` reads `DmarcPass` at every tier.
  */
 export function dmarcVerdictOf(headers: ReadonlyMap<string, string>): DmarcVerdict {
-  return dmarcVerdict([...headers].map(([key, value]) => ({ key, value })));
+  // Header names are case-insensitive (RFC 5322), and the Worker's parser lower-cases them, so a case's
+  // `Authentication-Results` must read as the Worker reads it. The first spelling of a header wins.
+  return dmarcVerdict([...headers].map(([key, value]) => ({ key: key.toLowerCase(), value })));
 }
 
 // ------------------------------------------------------------------- parsing

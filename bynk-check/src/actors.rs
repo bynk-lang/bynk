@@ -535,10 +535,9 @@ pub fn sender_admits_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
 ) -> Option<Vec<&'static str>> {
+    // The check reads the identity, so it exists only where the identity is passed.
+    sender_binder_for(handler, actors)?;
     let by = handler.by_clause.as_ref()?;
-    if by.is_sum() {
-        return None;
-    }
     let decl = actors.get(&by.primary().name)?;
     sender_refinement(decl, actors).map(|p| p.admitted())
 }
