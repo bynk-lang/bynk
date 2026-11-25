@@ -71,10 +71,12 @@ suite shop.api as system {
 		expect other is Handled(NoContent)
 	}
 
+	// `by Revoked` signs in as the harness's fixed subject, `bynk-test`, so the two cases below count that
+	// same identity live and revoked: the revoked session is compared against its own identity's allowance.
 	case "a revoked session is refused with 401 even when the limit is exhausted" {
-		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
-		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
-		let over <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		let over <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
 		expect over is Rejected(RateLimited(_))
 		let revoked <- api.POST("/rename", Wire("\"x\"")) by Revoked
 		expect revoked is Rejected(Unauthorized)
@@ -86,11 +88,11 @@ suite shop.api as system {
 		let r3 <- api.POST("/rename", Wire("\"x\"")) by Revoked
 		expect r1 is Rejected(Unauthorized)
 		expect r3 is Rejected(Unauthorized)
-		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
-		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
 		expect a is Handled(NoContent)
 		expect b is Handled(NoContent)
-		let c <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let c <- api.POST("/rename", Wire("\"x\"")) by Member("bynk-test")
 		expect c is Rejected(RateLimited(_))
 	}
 }
