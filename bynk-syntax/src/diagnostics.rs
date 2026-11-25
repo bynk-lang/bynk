@@ -277,7 +277,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.queue_actor_not_enforced",
-        blurb: "A queue consumer may one day narrow who can send to it, with a refinement of `Producer` that admits only named contexts or with a `Foreign` producer, but nothing yet verifies the sender of a queue message. Accepting such a `by` today would read as a restriction while admitting every producer on the account, so the compiler refuses it instead. Write `by Producer`, which says what is true: any producer on the account may send.",
+        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor in a sum or with a binder, because nothing binds the resolved actor in a queue handler yet. Write `by Producer`, which says what is true (any producer on the account may send), or name one `Foreign` actor alone, with no binder.",
         example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
     },
     Explain {
@@ -4269,6 +4269,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
     },
     Explain {
+        code: "bynk.queue.dead_letter_signing_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, so a signed queue's dead letters are still the signed envelope and an unsigned queue's are the bare body. The dead-letter queue's consumer must therefore be signed exactly when the source consumer is, in the same context, and a signed one must admit every sender the source does; otherwise it could not verify or decode a single dead letter, and each would be dropped. Make the dead-letter consumer admit the same `Foreign` actors, or point `deadLetter` at a queue whose consumer does.",
+        example: "actor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer admits unsigned messages\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }   // ✓ the same sender\n}",
+    },
+    Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
         blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }   // ✓ the same type\n}",
@@ -7325,7 +7330,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.queue_actor_not_enforced",
-        "A queue consumer names a `Producer` refinement or a `Foreign` actor, which nothing enforces yet.",
+        "A queue consumer names a `Producer` refinement, or a `Foreign` actor in a sum or with a binder, which nothing enforces yet.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",
@@ -9872,6 +9877,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.queue.bad_params",
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
+    ),
+    d(
+        "bynk.queue.dead_letter_signing_mismatch",
+        "A signed queue's dead-letter consumer is not signed, is in another context, or does not admit the same senders (or the reverse).",
     ),
     dg(
         "bynk.queue.dead_letter_type_mismatch",

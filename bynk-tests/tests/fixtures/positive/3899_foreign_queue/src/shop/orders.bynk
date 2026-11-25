@@ -1,0 +1,34 @@
+context shop.orders
+
+type Order = { id: String }
+
+agent Tally {
+  key id: String
+  store n: Cell[Int]
+
+  on call bump() -> Effect[Int] {
+    let _ <- n.update((x) => x + 1)
+    n
+  }
+}
+
+// #3899: a producer that is not Bynk, declared under its own secret. The consumer admits only
+// messages signed under it. The handler counts the times a message reaches it (`Tally`), so a case
+// sees whether a refused message was handled: it was not if the next delivery of that order is the first.
+// An order named "flaky" asks for a retry the first time, to show that a message whose handler
+// failed is admitted again when the platform redelivers it.
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+service fulfil from queue("orders") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Legacy {
+    let n <- Tally(order.id).bump()
+    if order.id == "flaky" {
+      if n == 1 { Retry("try again") } else { Ack }
+    } else if n > 1 {
+      Retry("handled twice")
+    } else {
+      Ack
+    }
+  }
+}

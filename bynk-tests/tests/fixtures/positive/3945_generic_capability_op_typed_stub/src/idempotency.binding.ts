@@ -7,4 +7,8 @@ export class MemoIdempotency implements Idempotency {
   async dedup<T>(key: string): Promise<Option<T>> {
     return this.store.has(key) ? Some(this.store.get(key) as T) : None;
   }
+
+  async stamp<T>(_value: T): Promise<number> {
+    return 1;
+  }
 }

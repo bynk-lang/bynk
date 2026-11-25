@@ -574,6 +574,9 @@ pub struct ForeignCaller {
     /// The foreign Worker's name, when the declaration gives one
     /// (`worker = "ledger-svc"`), so `bynk deploy`'s hand-off can name it.
     pub worker: Option<String>,
+    /// #3899: whether this sender signs queue messages to a `from queue` consumer, not calls
+    /// (an actor admitted on both is listed as a caller).
+    pub queue: bool,
 }
 
 /// I3 (#1971): the foreign caller an actor declaration describes, if it is a
@@ -587,6 +590,7 @@ pub fn foreign_caller_of(decl: &ActorDecl) -> Option<ForeignCaller> {
             .scheme_arg("worker")
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
+        queue: false,
     })
 }
 
@@ -709,6 +713,51 @@ pub fn call_admission_for(
         admission.sum = Some(members);
     }
     Some(admission)
+}
+
+/// #3899: the foreign senders a `from queue` consumer admits. Such a consumer admits signed
+/// messages only: each must come from one of these actors, signed under that actor's secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueAdmission {
+    /// The foreign senders admitted, in `by` order.
+    pub foreign: Vec<ForeignCaller>,
+}
+
+/// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
+/// messages (`by Producer`, today's behaviour). A consumer whose `by` names only `Foreign` actors
+/// admits only messages signed under one of their secrets; the checker refuses a `by` that mixes
+/// them with an unsigned actor, so a signed consumer's every member is a foreign sender here.
+pub fn queue_admission_for(
+    handler: &Handler,
+    protocol: &ServiceProtocol,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(protocol, ServiceProtocol::Queue { .. })
+        || !matches!(handler.kind, HandlerKind::Message)
+    {
+        return None;
+    }
+    let mut foreign = Vec::new();
+    for actor in &handler.by_clause.as_ref()?.actors {
+        // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
+        let decl = actors.get(&actor.name)?;
+        if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
+            return None;
+        }
+        // Classified by scheme, not by whether the declaration is whole, as `call_admission_for`
+        // does: a malformed `Foreign` actor (the checker reports it) is still a signed sender, with
+        // an empty secret that no environment supplies, so the consumer refuses every message.
+        foreign.push(ForeignCaller {
+            queue: true,
+            ..foreign_caller_of(decl).unwrap_or_else(|| ForeignCaller {
+                actor: decl.name.name.clone(),
+                secret: String::new(),
+                worker: None,
+                queue: true,
+            })
+        });
+    }
+    (!foreign.is_empty()).then_some(QueueAdmission { foreign })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —
@@ -1040,8 +1089,9 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // external network request, so no external auth scheme applies.
         // I3 (#1971): a `call` also admits a declared foreign caller.
         ServiceProtocol::Call => matches!(scheme, Scheme::Internal | Scheme::Foreign),
-        // #3899: a queue consumer may name a `Foreign` producer; the checker
-        // refuses it as not yet enforced (`queue_actor_not_enforced`).
+        // #3899: a queue consumer may name a `Foreign` producer, whose messages it admits only when
+        // signed under its secret; the checker refuses the forms not yet enforced
+        // (`queue_actor_not_enforced`).
         ServiceProtocol::Queue { .. } => matches!(scheme, Scheme::Internal | Scheme::Foreign),
         ServiceProtocol::Cron | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)

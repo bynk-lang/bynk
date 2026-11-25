@@ -257,27 +257,26 @@ fn keyed_calls(
     type_args: &[bynk_syntax::ast::TypeRef],
     cx: &LowerCtx,
 ) -> bynk_ts::TsExpr {
-    use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsParam};
+    use bynk_ts::{TsArrowBody, TsExpr, TsParam};
     if type_args.is_empty() {
         return calls;
     }
-    let test = binary(
-        TsBinaryOp::StrictEq,
-        TsExpr::Member {
-            object: Box::new(TsExpr::Paren(Box::new(TsExpr::As {
-                expr: Box::new(bynk_ts::TsExpr::Ident("__c".to_string())),
-                ty: bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
-                    name: "typeKey".to_string(),
-                    ty: bynk_ts::TsType::named("string"),
-                    optional: true,
-                    readonly: false,
-                }]),
-            }))),
-            property: "typeKey".to_string(),
-        },
-        str_lit(crate::emitter::lower_call::platform::type_key_of(
-            type_args, cx,
-        )),
+    let recorded = TsExpr::Member {
+        object: Box::new(TsExpr::Paren(Box::new(TsExpr::As {
+            expr: Box::new(bynk_ts::TsExpr::Ident("__c".to_string())),
+            ty: bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
+                name: "typeKey".to_string(),
+                ty: bynk_ts::TsType::named("string"),
+                optional: true,
+                readonly: false,
+            }]),
+        }))),
+        property: "typeKey".to_string(),
+    };
+    // #4382: a call keyed by a longer resolved list that starts with the named arguments counts.
+    let test = crate::ts_build::type_key_matches(
+        recorded,
+        &crate::emitter::lower_call::platform::type_key_of(type_args, cx),
     );
     TsExpr::Paren(Box::new(TsExpr::Call {
         callee: Box::new(TsExpr::Member {

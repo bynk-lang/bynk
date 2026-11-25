@@ -1,15 +1,40 @@
 suite shop {
   consumes bynk { Idempotency, Claim }
 
-  stub Idempotency.dedup[Quote](_) returns None
-
   case "a stub names the type no argument determines and leaves the key open" {
+    stub Idempotency.dedup[Quote](_) returns None
     let n <- sums.call(true, 1)
     expect n == 0
     expect Idempotency.dedup[Quote] called once
   }
 
+  // #4382: the stubbed `Some(...)` reaches the handler as written, not as a miss.
+  case "a stubbed typed read returns the value it was given" {
+    stub Idempotency.dedup[Quote](_) returns Some(Quote { total: 42 })
+    let n <- sums.call(true, 1)
+    expect n == 42
+  }
+
+  // #4382: `remember` infers its type arguments, and a clause naming the leading one matches.
+  case "a stub and an observation naming the type match a call that inferred it" {
+    stub Idempotency.remember[Quote](_, _, _) returns ()
+    stub Idempotency.dedup[Quote](_) returns Some(Quote { total: 7 })
+    let n <- sums.call(false, 3)
+    expect n == 7
+    expect Idempotency.remember[Quote] called once
+  }
+
+  // #4382: the clause for another type does not answer a call made at `Quote`; `Receipt` has the
+  // same shape, so a wrong match would decode as a `Quote` and read 9.
+  case "a clause naming another type does not match" {
+    stub Idempotency.dedup[Receipt](_) returns Some(Receipt { total: 9 })
+    stub Idempotency.dedup[Quote](_) returns None
+    let n <- sums.call(true, 1)
+    expect n == 0
+  }
+
   case "an observation reads the stored key as a String" {
+    stub Idempotency.dedup[Quote](_) returns None
     let n <- sums.call(false, 4)
     expect n == 0
     expect Idempotency.remember called once with key == "shop.sums.call::k:{\"tag\":\"Email\"}"

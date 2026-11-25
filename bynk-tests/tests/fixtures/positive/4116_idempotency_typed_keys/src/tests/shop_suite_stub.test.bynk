@@ -1,0 +1,11 @@
+suite shop {
+  consumes bynk { Idempotency, Claim }
+
+  // #4382: a suite-level typed-read stub reaches the handler as written.
+  stub Idempotency.dedup[Quote](_) returns Some(Quote { total: 5 })
+
+  case "a suite-level stub of a typed read returns its value" {
+    let n <- sums.call(true, 1)
+    expect n == 5
+  }
+}
