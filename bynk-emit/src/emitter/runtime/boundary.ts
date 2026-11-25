@@ -3,6 +3,7 @@ import type { Option } from "./result.ts";
 import { Ok, Err, Some, None } from "./result.ts";
 import type { ValidationBound, ValidationError, ValidationRule, WireViolation } from "./errors.ts";
 import { __bynkDecimalToString } from "./decimal.ts";
+import { W3C_TRACEPARENT_HEADER, admitTrace, formatTraceparent, isTraceId, outgoingTraceparent } from "./traceparent.ts";
 
 // v0.8: cross-Worker boundary protocol — JSON wire format and error types.
 
@@ -390,6 +391,24 @@ export async function signature(key: string, fields: SignedFields): Promise<stri
   return hex(await crypto.subtle.sign("HMAC", await hmacKey(key, "sign"), new TextEncoder().encode(signingInput(fields))));
 }
 
+// #3895: the `traceparent` header a call sends from inside a trace, and none
+// outside one. It is not part of the signing input: it is observability
+// metadata, and a callee reads it only from a request that has already proved
+// its caller.
+function traceHeaders(): Record<string, string> {
+  const traceparent = outgoingTraceparent();
+  return traceparent === undefined ? {} : { [W3C_TRACEPARENT_HEADER]: traceparent };
+}
+
+// #3895: the header an event delivery sends, from the envelope's `trace` alone
+// and never from the request scope. The fan-out Durable Object delivers outside
+// the emitting request, and the handler reads the same trace as `env.trace`, so
+// the header and the envelope cannot disagree.
+function eventTraceHeaders(envelope: unknown): Record<string, string> {
+  const trace = (envelope as { trace?: unknown } | null)?.trace;
+  return isTraceId(trace) ? { [W3C_TRACEPARENT_HEADER]: formatTraceparent(trace) } : {};
+}
+
 // The sending side: the headers that prove `caller` sent `body` to `callee`.
 // Throws, naming the unset key, when the Worker holds none for the edge:
 // sending without it would only come back as an opaque 401.
@@ -504,7 +523,10 @@ export async function verifyCall(
     sig,
     new TextEncoder().encode(signingInput(fields)),
   );
-  return ok ? new TextDecoder().decode(bytes) : refused;
+  if (!ok) return refused;
+  // #3895: only a request that proved its caller is read for a trace.
+  admitTrace(request);
+  return new TextDecoder().decode(bytes);
 }
 
 // #1969: the published cross-context wire format's version
@@ -562,6 +584,7 @@ async function callServiceCore<R>(
       "X-Bynk-Caller": callerContext,
       "X-Bynk-Contract": contractHash,
       [WIRE_VERSION_HEADER]: WIRE_VERSION,
+      ...traceHeaders(),
       ...signed,
     },
     body,
@@ -760,7 +783,7 @@ export async function deliverEvent(
   const signed = await signedHeaders(env, publisher, subscriber, path, "", "1", body, `the event delivery to ${servicePath}`);
   const request = new Request(`http://internal/_bynk/event/${servicePath}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...signed },
+    headers: { "content-type": "application/json", ...eventTraceHeaders(envelope), ...signed },
     body,
   });
   const response = await binding.fetch(request);
@@ -769,7 +792,18 @@ export async function deliverEvent(
   }
 }
 
-// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion }`)
+// #3895: the envelope a subscriber's handler is handed, from one that was
+// minted in this process. The minting site writes `trace` as a bare id (so it
+// serialises as the wire's optional string, and is absent outside a trace); a
+// handler reads it as an `Option[String]`. An envelope that already carries an
+// `Option` is returned as it is.
+export function eventEnvelopeOf<E extends object>(envelope: E): Omit<E, "trace"> & { trace: Option<string> } {
+  const trace = (envelope as { trace?: unknown }).trace;
+  if (typeof trace === "object" && trace !== null) return envelope as Omit<E, "trace"> & { trace: Option<string> };
+  return { ...envelope, trace: isTraceId(trace) ? Some(trace) : None };
+}
+
+// #973: `EventEnvelope` (`{ eventId, publisherId, emittedAt, schemaVersion, trace }`)
 // is declared in `adapter bynk`, not by a consumed context, so it never goes
 // through the ordinary `emit_record_codec` machinery a context's own boundary
 // types get (that machinery is rooted at a *consumed context's* exports;
@@ -785,7 +819,7 @@ export function deserialiseEventEnvelope(
   json: JsonValue,
   path: string = "$",
 ): Result<
-  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number },
+  { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace: Option<string> },
   BoundaryError
 > {
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
@@ -828,9 +862,17 @@ export function deserialiseEventEnvelope(
       actual: typeof schemaVersion,
     });
   }
-  return Ok({ eventId, publisherId, emittedAt, schemaVersion });
+  // #3895: optional and additive. Absent, `null` and a malformed id are all
+  // `None`: a trace must never make an event undeliverable. On the wire the
+  // trace is a bare id string, as the fan-out carries it. That is not the
+  // tagged `{ kind: "Some", value }` form the std codec writes for an
+  // `Option` field, which this route reads as `None`: the two shapes do not
+  // round-trip, and nothing sends the std form here.
+  const wireTrace = obj["trace"];
+  const trace = isTraceId(wireTrace) ? Some(wireTrace) : None;
+  return Ok({ eventId, publisherId, emittedAt, schemaVersion, trace });
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { boundaryError as __boundaryError, callOutcome as __callOutcome, callService as __callService, callServiceOutcome as __callServiceOutcome, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall, wireRefusal as __wireRefusal };
+export { boundaryError as __boundaryError, callOutcome as __callOutcome, callService as __callService, callServiceOutcome as __callServiceOutcome, checkStoredLayout as __checkStoredLayout, checkStoredSchemaVersion as __checkStoredSchemaVersion, deliverEvent as __deliverEvent, deserialiseEventEnvelope as __deserialiseEventEnvelope, eventEnvelopeOf as __eventEnvelopeOf, faultResponse as __faultResponse, migrationFailed as __migrationFailed, rehydrationViolation as __rehydrationViolation, readCapped as __readBodyCapped, reportUnknownStoredKeys as __reportUnknownStoredKeys, verifyCall as __verifyCall, wireRefusal as __wireRefusal };
 export type { BoundaryError as __BoundaryError, JsonValue as __JsonValue, ServiceBinding as __ServiceBinding };
