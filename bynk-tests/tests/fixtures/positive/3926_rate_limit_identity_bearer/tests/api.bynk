@@ -79,4 +79,30 @@ suite pay.api as system {
 		let c <- api.GET("/activity") by Reader("ada")
 		expect c is Ok("activity for ada")
 	}
+
+	case "a GET with a path parameter is counted by caller" {
+		let a <- api.GET("/notes/:id", Wire("\"n1\"")) by Reader("cy")
+		let b <- api.GET("/notes/:id", Wire("\"n2\"")) by Reader("cy")
+		let c <- api.GET("/notes/:id", Wire("\"n3\"")) by Reader("cy")
+		expect a is Handled(Ok(_))
+		expect c is Rejected(RateLimited(_))
+	}
+
+	case "a GET with a forged credential never consumes the limiter" {
+		let f1 <- api.GET("/notes/:id", Wire("\"n1\"")) by Forged
+		let f2 <- api.GET("/notes/:id", Wire("\"n1\"")) by Forged
+		let f3 <- api.GET("/notes/:id", Wire("\"n1\"")) by Forged
+		expect f3 is Rejected(Unauthorized)
+		let a <- api.GET("/notes/:id", Wire("\"n1\"")) by Reader("dee")
+		let b <- api.GET("/notes/:id", Wire("\"n2\"")) by Reader("dee")
+		expect b is Handled(Ok(_))
+	}
+
+	case "a bad path segment is refused after the caller was counted" {
+		let bad <- api.GET("/notes/:id", Wire("\"far-too-long-an-id\"")) by Reader("eve")
+		expect bad is Rejected(RefinementViolation(_))
+		let a <- api.GET("/notes/:id", Wire("\"n1\"")) by Reader("eve")
+		let b <- api.GET("/notes/:id", Wire("\"n2\"")) by Reader("eve")
+		expect b is Rejected(RateLimited(_))
+	}
 }

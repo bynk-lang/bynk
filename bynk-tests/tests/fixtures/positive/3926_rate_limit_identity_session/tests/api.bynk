@@ -60,4 +60,13 @@ suite shop.api as system {
 		let again <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
 		expect again is Handled(NoContent)
 	}
+
+	case "two routes naming one limiter count together per caller" {
+		let a <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let b <- api.POST("/rename", Wire("\"x\"")) by Member("ada")
+		let c <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: same-origin"]), Wire("\"x\"")) by Member("ada")
+		expect c is Rejected(RateLimited(_))
+		let other <- api.POST("/rename-from", RequestHeaders.of(["Sec-Fetch-Site: same-origin"]), Wire("\"x\"")) by Member("bob")
+		expect other is Handled(NoContent)
+	}
 }

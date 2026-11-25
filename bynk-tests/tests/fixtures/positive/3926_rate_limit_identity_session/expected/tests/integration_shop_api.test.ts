@@ -372,9 +372,29 @@ async function test_the_window_recovers() {
   }
 }
 
+async function test_two_routes_naming_one_limiter_count_together_per_caller() {
+  try {
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const a = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    const b = await __sysdrive_raw_api_http_POST_rename("\"x\"", undefined, ("ada" as any));
+    const c = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: same-origin"]), "\"x\"", ("ada" as any));
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:68:10", 3342, 3371, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
+    const other = await __sysdrive_raw_api_http_POST_rename_from(__requestHeaders(["Sec-Fetch-Site: same-origin"]), "\"x\"", ("bob" as any));
+    if (!(((__c: boolean) => __c)(other.tag === "Handled" && other.value.tag === "NoContent"))) { throw __bynkExpectFailure("tests/api.bynk:70:10", 3505, 3532, "expect other is Handled(NoContent)", "other", () => __bynkShow(other)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a signed-in user over the limit is refused with 429", "two users count separately", "a cross-site request is refused and never consumes the limiter", "a forged cookie is refused and never consumes the limiter", "an expired cookie is refused and never consumes the limiter", "the window recovers"];
+export const __bynkCases: readonly string[] = ["a signed-in user over the limit is refused with 429", "two users count separately", "a cross-site request is refused and never consumes the limiter", "a forged cookie is refused and never consumes the limiter", "an expired cookie is refused and never consumes the limiter", "the window recovers", "two routes naming one limiter count together per caller"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -412,6 +432,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("the window recovers")) {
     const started = __bynkCaseNow();
     const r = { name: "the window recovers", ...(await test_the_window_recovers()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("two routes naming one limiter count together per caller")) {
+    const started = __bynkCaseNow();
+    const r = { name: "two routes naming one limiter count together per caller", ...(await test_two_routes_naming_one_limiter_count_together_per_caller()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

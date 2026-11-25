@@ -89,6 +89,58 @@ async function __sysdrive_rawforged_api_http_POST_notes(body: string, __extraHea
   const __res = await __h.env.PAY_API.fetch(__req);
   return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
+async function __sysdrive_api_http_GET_notes_Param_id(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? ""))}` } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_raw_api_http_GET_notes_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? ""))}` } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_noauth_api_http_GET_notes_Param_id(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawnoauth_api_http_GET_notes_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}) } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_expired_api_http_GET_notes_Param_id(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawexpired_api_http_GET_notes_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() - 3600 }, ((__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? "")))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_forged_api_http_GET_notes_Param_id(id: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? "") + "!"))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
+async function __sysdrive_rawforged_api_http_GET_notes_Param_id(id: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+  const __token = `Bearer ${await __bynkSignHs256({ sub: "bynk-test", exp: __bynkNow() + 3600 }, ((__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? "") + "!"))}`;
+  const __h = __makeHarness();
+  const __req = new globalThis.Request(`https://test/notes/${id}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": __token } });
+  const __res = await __h.env.PAY_API.fetch(__req);
+  return __responseToUnauthOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
+}
 async function __sysdrive_api_http_GET_activity(__extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
   const __req = new globalThis.Request(`https://test/activity`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["API_TOKEN_SECRET"] ?? ""))}` } });
@@ -307,9 +359,71 @@ async function test_a_route_without_the_annotation_is_not_counted() {
   }
 }
 
+async function test_a_GET_with_a_path_parameter_is_counted_by_caller() {
+  try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const a = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n1\"", undefined, ("cy" as any), {});
+    const b = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n2\"", undefined, ("cy" as any), {});
+    const c = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n3\"", undefined, ("cy" as any), {});
+    if (!(((__c: boolean) => __c)(a.tag === "Handled" && a.value.tag === "Ok"))) { throw __bynkExpectFailure("tests/api.bynk:87:10", 3812, 3831, "expect a is Handled(Ok(_))", "a", () => __bynkShow(a)); }
+    if (!(((__c: boolean) => __c)(c.tag === "Rejected" && c.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:88:10", 3841, 3870, "expect c is Rejected(RateLimited(_))", "c", () => __bynkShow(c)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_GET_with_a_forged_credential_never_consumes_the_limiter() {
+  try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const f1 = await __sysdrive_rawforged_api_http_GET_notes_Param_id("\"n1\"", undefined, "");
+    const f2 = await __sysdrive_rawforged_api_http_GET_notes_Param_id("\"n1\"", undefined, "");
+    const f3 = await __sysdrive_rawforged_api_http_GET_notes_Param_id("\"n1\"", undefined, "");
+    if (!(((__c: boolean) => __c)(f3.tag === "Rejected" && f3.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:95:10", 4132, 4160, "expect f3 is Rejected(Unauthorized)", "f3", () => __bynkShow(f3)); }
+    const a = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n1\"", undefined, ("dee" as any), {});
+    const b = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n2\"", undefined, ("dee" as any), {});
+    if (!(((__c: boolean) => __c)(b.tag === "Handled" && b.value.tag === "Ok"))) { throw __bynkExpectFailure("tests/api.bynk:98:10", 4302, 4321, "expect b is Handled(Ok(_))", "b", () => __bynkShow(b)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+async function test_a_bad_path_segment_is_refused_after_the_caller_was_counted() {
+  try {
+    __bynkEnv = { API_TOKEN_SECRET: "test-api-secret" };
+    __bynkHarness = undefined;
+    __bynkClockNow = 0;
+    const deps = __makeHarness();
+    const bad = await __sysdrive_raw_api_http_GET_notes_Param_id("\"far-too-long-an-id\"", undefined, ("eve" as any), {});
+    if (!(((__c: boolean) => __c)(bad.tag === "Rejected" && bad.value.tag === "RefinementViolation"))) { throw __bynkExpectFailure("tests/api.bynk:103:10", 4488, 4527, "expect bad is Rejected(RefinementViolation(_))", "bad", () => __bynkShow(bad)); }
+    const a = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n1\"", undefined, ("eve" as any), {});
+    const b = await __sysdrive_raw_api_http_GET_notes_Param_id("\"n2\"", undefined, ("eve" as any), {});
+    if (!(((__c: boolean) => __c)(b.tag === "Rejected" && b.value.tag === "RateLimited"))) { throw __bynkExpectFailure("tests/api.bynk:106:10", 4669, 4698, "expect b is Rejected(RateLimited(_))", "b", () => __bynkShow(b)); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["a verified caller over the limit is refused with 429", "two callers count separately", "a forged credential is refused and never consumes the limiter", "an expired credential is refused and never consumes the limiter", "a missing credential is refused and never consumes the limiter", "a verified caller over the limit gets 429, not 413, for a body over the cap", "a body over the cap is a 413 while the caller's limit holds", "the window recovers", "a route without the annotation is not counted"];
+export const __bynkCases: readonly string[] = ["a verified caller over the limit is refused with 429", "two callers count separately", "a forged credential is refused and never consumes the limiter", "an expired credential is refused and never consumes the limiter", "a missing credential is refused and never consumes the limiter", "a verified caller over the limit gets 429, not 413, for a body over the cap", "a body over the cap is a 413 while the caller's limit holds", "the window recovers", "a route without the annotation is not counted", "a GET with a path parameter is counted by caller", "a GET with a forged credential never consumes the limiter", "a bad path segment is refused after the caller was counted"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -365,6 +479,24 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a route without the annotation is not counted")) {
     const started = __bynkCaseNow();
     const r = { name: "a route without the annotation is not counted", ...(await test_a_route_without_the_annotation_is_not_counted()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a GET with a path parameter is counted by caller")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a GET with a path parameter is counted by caller", ...(await test_a_GET_with_a_path_parameter_is_counted_by_caller()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a GET with a forged credential never consumes the limiter")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a GET with a forged credential never consumes the limiter", ...(await test_a_GET_with_a_forged_credential_never_consumes_the_limiter()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bad path segment is refused after the caller was counted")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bad path segment is refused after the caller was counted", ...(await test_a_bad_path_segment_is_refused_after_the_caller_was_counted()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

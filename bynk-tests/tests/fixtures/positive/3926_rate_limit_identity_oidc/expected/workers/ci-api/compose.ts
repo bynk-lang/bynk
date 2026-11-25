@@ -22,7 +22,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
       const __id = handlers.WorkloadId.of(__claims.value.sub);
       if (__id.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
-      return { tag: "Ok", value: { key: globalThis.String(__claims.value.sub), principal: { identity: __id.value, claims: __tokenClaims(__claims.value.claims) } } };
+      return { tag: "Ok", value: { key: "identity:Workload:".concat(globalThis.String(__claims.value.sub)), principal: { identity: __id.value, claims: __tokenClaims(__claims.value.claims) } } };
     },
     async http_POST_release(body: string, principal: any) {
       return handlers.api.http_POST_release(body, { ...deps, ...principal });

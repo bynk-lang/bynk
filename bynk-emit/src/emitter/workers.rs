@@ -1207,6 +1207,19 @@ pub(super) fn emit_http_wrapper(
     }
 }
 
+/// The scope of a verified identity's limiter key (#3926): `identity:<Actor>:` ahead of the
+/// `sub`. A limiter is shared by every route that names it, so the bare `sub` of one actor
+/// (or an issuer's) would otherwise spend another's budget, and an address a `clientIp`
+/// route counts could collide with a `sub`. `identity:` cannot begin an IP address.
+fn limiter_key_prefix(h: &Handler) -> String {
+    let actor = h
+        .by_clause
+        .as_ref()
+        .map(|b| b.primary().name.clone())
+        .unwrap_or_default();
+    format!("identity:{actor}:")
+}
+
 /// #3926: a route with `@rateLimit(Limiter, key: identity)` is served by two compose
 /// methods in place of the one wrapper, so the entry can verify the caller, ask the
 /// limiter about them, and only then read the body. `<route>__verify(request)` runs the
@@ -1233,7 +1246,11 @@ fn identity_split_wrapper(
             TsExpr::object(vec![
                 (
                     "key".to_string(),
-                    call(ident("globalThis.String"), vec![principal.key]),
+                    method_call(
+                        str_lit(limiter_key_prefix(h)),
+                        "concat",
+                        vec![call(ident("globalThis.String"), vec![principal.key])],
+                    ),
                 ),
                 (
                     "principal".to_string(),

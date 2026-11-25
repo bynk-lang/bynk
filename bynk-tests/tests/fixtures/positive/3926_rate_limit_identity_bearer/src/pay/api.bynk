@@ -7,6 +7,7 @@ context pay.api
 consumes bynk.cloudflare { RateLimit }
 
 type UserId = String where NonEmpty
+type NoteId = String where NonEmpty && MaxLength(8)
 
 actor Reader { auth = Bearer(secret = "API_TOKEN_SECRET"), identity = UserId }
 
@@ -17,6 +18,14 @@ service api from http {
   @limit(maxBody: 16)
   on POST("/notes") (body: String) -> Effect[HttpResult[String]] by r: Reader {
     Ok("noted \(r.identity)")
+  }
+
+  // A `GET` with a typed path parameter, counted by caller: the refusal is rendered by the `GET`
+  // form of the route's response, and a bad segment is refused after the caller was verified and
+  // counted, not before.
+  @rateLimit(NoteLimit, key: identity)
+  on GET("/notes/:id") (id: NoteId) -> Effect[HttpResult[String]] by r: Reader {
+    Ok("note \(id) for \(r.identity)")
   }
 
   on GET("/activity") () -> Effect[HttpResult[String]] by r: Reader {

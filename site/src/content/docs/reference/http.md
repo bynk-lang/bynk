@@ -2071,7 +2071,7 @@ test can assert `Rejected(RateLimited(_))`.
   Cloudflare's edge. Users behind one address (an office or carrier NAT) share a count. Without
   the header (under `bynk dev`, or a test that sets none) every request counts as one client,
   `unknown`.
-- `key: identity` counts by the verified caller (`sub`). The router verifies the route's actor
+- `key: identity` counts by the verified caller (`sub`), scoped to the route's actor, so two actors' users never share a count even on one limiter. The router verifies the route's actor
   first, then asks the limiter about the caller, then reads the body, so an unverified caller never
   touches the limiter: a missing, forged or expired credential, a cross-site request to a
   `SignedCookie` route and a revoked session each get the `401` or `403` they always got, and a

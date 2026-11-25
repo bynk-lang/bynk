@@ -24,10 +24,24 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
-      return { tag: "Ok", value: { key: globalThis.String(__claims.value.sub), principal: { identity: __id.value, claims: __tokenClaims(__claims.value.claims) } } };
+      return { tag: "Ok", value: { key: "identity:Reader:".concat(globalThis.String(__claims.value.sub)), principal: { identity: __id.value, claims: __tokenClaims(__claims.value.claims) } } };
     },
     async http_POST_notes(body: string, principal: any) {
       return handlers.api.http_POST_notes(body, { ...deps, ...principal });
+    },
+    async http_GET_notes_Param_id__verify(request: globalThis.Request): globalThis.Promise<{ tag: "Err"; error: any } | { tag: "Ok"; value: { key: string; principal: any } }> {
+      const __authz = request.headers.get("Authorization");
+      if (__authz === null || !__authz.startsWith("Bearer ")) return { tag: "Err", error: HttpResult.Unauthorized };
+      const __secret = (env as unknown as globalThis.Record<string, unknown>)["API_TOKEN_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["API_TOKEN_SECRET"];
+      if (typeof __secret !== "string") return { tag: "Err", error: HttpResult.Unauthorized };
+      const __claims = await __verifyBearerJwtHs256(__authz.slice(7), __secret);
+      if (__claims.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
+      const __id = handlers.UserId.of(__claims.value.sub);
+      if (__id.tag === "Err") return { tag: "Err", error: HttpResult.Unauthorized };
+      return { tag: "Ok", value: { key: "identity:Reader:".concat(globalThis.String(__claims.value.sub)), principal: { identity: __id.value, claims: __tokenClaims(__claims.value.claims) } } };
+    },
+    async http_GET_notes_Param_id(id: handlers.NoteId, principal: any) {
+      return handlers.api.http_GET_notes_Param_id(id, { ...deps, ...principal });
     },
     async http_GET_activity(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");

@@ -30,7 +30,7 @@ export function compose(env: Env) {
       if (__session.value.sid === undefined) return { tag: "Err", error: HttpResult.Unauthorized };
       const __live = await handlers.__makeMemberSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return { tag: "Err", error: HttpResult.Unauthorized };
-      return { tag: "Ok", value: { key: globalThis.String(__session.value.sub), principal: { ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value } } };
+      return { tag: "Ok", value: { key: "identity:Member:".concat(globalThis.String(__session.value.sub)), principal: { ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value } } };
     },
     async http_POST_rename(body: string, principal: any) {
       return handlers.api.http_POST_rename(body, { ...deps, ...principal });
@@ -46,7 +46,7 @@ export function compose(env: Env) {
       if (__session.value.sid === undefined) return { tag: "Err", error: HttpResult.Unauthorized };
       const __live = await handlers.__makeMemberSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
       if (!__live) return { tag: "Err", error: HttpResult.Unauthorized };
-      return { tag: "Ok", value: { key: globalThis.String(__session.value.sub), principal: { ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value } } };
+      return { tag: "Ok", value: { key: "identity:Member:".concat(globalThis.String(__session.value.sub)), principal: { ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value } } };
     },
     async http_POST_rename_from(headers: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } }, body: string, principal: any) {
       return handlers.api.http_POST_rename_from(headers, body, { ...deps, ...principal });

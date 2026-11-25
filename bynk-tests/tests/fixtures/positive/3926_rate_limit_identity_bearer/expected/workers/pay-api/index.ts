@@ -6,6 +6,7 @@ import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, 
 import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, __rateLimitAllowsKey, __rateLimitedResponse, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
+import * as handlers from "./handlers.js";
 
 function __bynkReportFault(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, e: unknown): void {
   if (ctx === undefined) return;
@@ -84,6 +85,31 @@ export default {
           return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"pay.api\""])), __security_api);
         }
       }
+      {
+        const __m = __matchPath("/notes/:id", path);
+        if ((method === "GET" || method === "HEAD") && __m) {
+          __route = "GET /notes/:id";
+          if (__m.malformed) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedPath", details: __m.malformed })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __v = await surface.http_GET_notes_Param_id__verify(request);
+          if (__v.tag === "Err") {
+            const result = __v.error;
+            const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"pay.api\""])), __security_api);
+            return method === "HEAD" ? __headResponse(__response) : __response;
+          }
+          if (!await __rateLimitAllowsKey(env.RATELIMIT_NOTE_LIMIT, __v.value.key)) {
+            return __applySecurityHeaders(__rateLimitedResponse(60), __security_api);
+          }
+          const __raw_id = __m.params["id"];
+          const __r_id = handlers.NoteId.of(__raw_id);
+          if (__r_id.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "RefinementViolation", path: "path.id", violation: __r_id.error })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          const id = __r_id.value;
+          const result = await surface.http_GET_notes_Param_id(id, __v.value.principal);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"pay.api\""])), __security_api);
+          return method === "HEAD" ? __headResponse(__response) : __response;
+        }
+      }
       if (__matchPath("/activity", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
@@ -92,6 +118,11 @@ export default {
       if (__matchPath("/notes", path) !== null) {
         const __status = method === "OPTIONS" ? 204 : 405;
         const __res = new globalThis.Response(null, { status: __status, headers: { allow: "OPTIONS, POST" } });
+        return __applySecurityHeaders(__res, __security_api);
+      }
+      if (__matchPath("/notes/:id", path) !== null) {
+        const __status = method === "OPTIONS" ? 204 : 405;
+        const __res = new globalThis.Response(null, { status: __status, headers: { allow: "GET, HEAD, OPTIONS" } });
         return __applySecurityHeaders(__res, __security_api);
       }
       return new globalThis.Response("Not Found", { status: 404 });
