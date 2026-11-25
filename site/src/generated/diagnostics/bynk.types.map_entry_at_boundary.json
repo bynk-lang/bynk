@@ -1,0 +1,10 @@
+{
+  "blurb": "`MapEntry[K, V]` is the record a map's `entries()` yields and `Map.of` takes: `{ key: K, value: V }`. It is built and used in place, so it has no codec: it is refused as a record, sum or event field, an agent key or store field, a capability operation, or a handler's parameter or result. A helper may take or return one. Where the pair must cross a boundary, declare a record of your own with the fields you need, and convert with `map`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.map_entry_at_boundary",
+  "constructs": [],
+  "example": "type Index = {\n    entries: List[MapEntry[String, Int]],   // ✗ a map entry is not boundary data\n}\n\ntype Pair = { key: String, value: Int }\n\ntype Index = {\n    entries: List[Pair],                    // ✓ a record of your own\n}",
+  "severity": "error",
+  "summary": "A `MapEntry` type appears in a storable or boundary-crossing position: a map entry is built and consumed in place, never persisted or sent."
+}
