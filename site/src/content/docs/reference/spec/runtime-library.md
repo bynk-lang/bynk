@@ -84,7 +84,7 @@ The runtime maps each variant to an HTTP response:
 | `weakETag(body)` | a weak validator `W/"…"` over a serialised body, from a synchronous non-cryptographic hash (FNV-1a); a `Raw` body is hashed the same way over its octets |
 | `applyCache(response, maxAgeSecs, scope, immutable?)` | stamps `Cache-Control: <scope>, max-age=<n>` onto a response, in place, appending `, immutable` when `immutable` is `true` |
 | `notModifiedIfMatch(response, request)` | when the response carries an `ETag` and the request's `If-None-Match` matches, returns a `304` with an empty body copying the `ETag` + `Cache-Control`; otherwise returns the response unchanged |
-| `applySecurityHeaders(response, policy)` | stamps the service's security headers onto a response, in place — `X-Content-Type-Options: nosniff` when `policy.nosniff`, and `Strict-Transport-Security: max-age=<n>` when `policy.hstsMaxAgeSecs` is set |
+| `applySecurityHeaders(response, policy)` | stamps the service's security headers onto a response, in place — `X-Content-Type-Options: nosniff` when `policy.nosniff`, and `Strict-Transport-Security: max-age=<n>` when `policy.hstsMaxAgeSecs` is set; and, when the response's media type is `text/html`, `Content-Security-Policy: <policy.htmlCsp>` and `Referrer-Policy: <policy.htmlReferrerPolicy>` |
 
 The entry router (§7 emission) answers the RFC 9110 method contract **derived
 from the declared routes**, around the `HttpResult` lowering above: a request to

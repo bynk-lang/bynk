@@ -8,5 +8,5 @@
   ],
   "example": "fn has(s: String, pattern: String) -> Bool {\n    s.containsRegex(pattern)              // ✗ the pattern is not a literal\n}\n\nfn has(s: String) -> Bool {\n    s.containsRegex(\"(?i)error\")          // ✓\n}",
   "severity": "error",
-  "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
+  "summary": "A regex method's pattern (`matchesRegex`, `containsRegex`, `findRegex`, `findAllRegex`, `findRegexNamed`, `replaceRegex`, `splitRegex`) is not a string literal, so its ReDoS check cannot run at compile time."
 }

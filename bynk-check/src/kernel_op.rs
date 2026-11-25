@@ -241,6 +241,8 @@ kernel_ops! {
         IsOk = "isOk", "isOk() -> Bool";
         IsErr = "isErr", "isErr() -> Bool";
         Ok = "ok", "ok() -> Option[T]";
+        OrElse = "orElse", "orElse(f: E -> Result[T, F]) -> Result[T, F]";
+        Err = "err", "err() -> Option[E]";
     }
 /// The `String` kernel (v0.22a; UTF-16 code units, except `chars`).
     StringOp {
@@ -276,6 +278,8 @@ kernel_ops! {
         ContainsRegex = "containsRegex", "containsRegex(pattern: String) -> Bool";
         FindRegex = "findRegex", "findRegex(pattern: String) -> Option[List[Option[String]]]";
         FindAllRegex = "findAllRegex", "findAllRegex(pattern: String) -> List[List[Option[String]]]";
+        // #3979: the named capture groups of the first match, keyed by name.
+        FindRegexNamed = "findRegexNamed", "findRegexNamed(pattern: String) -> Option[Map[String, Option[String]]]";
         ReplaceRegex = "replaceRegex", "replaceRegex(pattern: String, with: String) -> String";
         SplitRegex = "splitRegex", "splitRegex(pattern: String) -> List[String]";
     }

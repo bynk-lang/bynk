@@ -2060,6 +2060,16 @@ checker enforces the closed field set — an unknown field is
 - **`hsts`** — OPTIONAL; a **positive** `Duration` literal
   (`bynk.http.security_invalid_field`). Opts in to `Strict-Transport-Security`,
   lowered to `max-age` in whole seconds. Absent ⇒ no HSTS.
+- **`frameAncestors`** — OPTIONAL; a list of string literals
+  (`bynk.http.security_invalid_field`), each an exact origin (`http://` or `https://`
+  and a host, with no path and no wildcard) or `"self"`. The list `["*"]` MUST stand
+  alone and MUST be accompanied by a `csp`. Absent or empty ⇒ `'none'`.
+- **`referrerPolicy`** — OPTIONAL; one of the identifiers `noReferrer`,
+  `noReferrerWhenDowngrade`, `origin`, `originWhenCrossOrigin`, `sameOrigin`,
+  `strictOrigin`, `strictOriginWhenCrossOrigin`, `unsafeUrl`
+  (`bynk.http.security_invalid_field`). Absent ⇒ `strictOriginWhenCrossOrigin`.
+- **`csp`** — OPTIONAL; a non-empty string literal with no CR or LF
+  (`bynk.http.security_invalid_field`), the whole `Content-Security-Policy`.
 
 Unlike `cors`, the safe header is **on by default**: a `from http` service with no
 `security { }` policy (or one that omits `nosniff`) still stamps
@@ -2068,8 +2078,15 @@ default policy (`nosniff: true`, no HSTS) for **every** `from http` service. Onl
 explicit `nosniff: false` suppresses it. The headers are stamped uniformly across
 every response family and the synthesised preflight, `405`/`OPTIONS`, and `304`,
 composing with the CORS headers (the two sets are disjoint, so the stamping order is
-not observable). `Content-Security-Policy` and `X-Frame-Options` are **not** emitted
-— they constrain markup, which the Bynk HTTP surface does not serve. See
+not observable. A response whose `Content-Type` has the media type `text/html`
+(parameters removed, compared without case) additionally carries a
+`Content-Security-Policy` and a `Referrer-Policy`: the `csp` as written, with
+`frame-ancestors <sources>` appended when it names none (the `frameAncestors` sources,
+or `'none'`), or `frame-ancestors <sources>` alone without a `csp`; and the
+`referrerPolicy` as its header token. These are independent of `nosniff` and of each
+other, apply to every response of the service whatever built it, and overwrite a header
+of the same name set earlier. A response of any other media type carries neither.
+`X-Frame-Options` is **not** emitted, `frame-ancestors` superseding it. See
 [§7.4.3](/reference/spec/runtime-library/#743-httpresult) for the runtime lowering.
 
 ### §5.7.4 Request body-size limits (v0.142) {#body-limits}

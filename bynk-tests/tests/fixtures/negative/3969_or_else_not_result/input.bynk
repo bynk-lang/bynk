@@ -1,0 +1,5 @@
+commons demo.orelsenotresult
+
+fn recover(r: Result[Int, String]) -> Result[Int, String] {
+	r.orElse((e) => 0)
+}

@@ -425,6 +425,8 @@ mod system {
     mod http_client;
     #[path = "http_edge_cache_behaviour.rs"]
     mod http_edge_cache_behaviour;
+    #[path = "http_html_security.rs"]
+    mod http_html_security;
     #[path = "http_limits_behaviour.rs"]
     mod http_limits_behaviour;
     #[path = "http_method_behaviour.rs"]

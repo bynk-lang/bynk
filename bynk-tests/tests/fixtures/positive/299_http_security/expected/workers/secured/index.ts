@@ -20,9 +20,9 @@ export default {
     const path = url.pathname;
     const method = request.method;
     const surface = compose(env);
-    const __security_admin: __SecurityPolicy = { nosniff: false, hstsMaxAgeSecs: null };
-    const __security_health: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
-    const __security_store: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: 15552000 };
+    const __security_admin: __SecurityPolicy = { nosniff: false, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+    const __security_health: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
+    const __security_store: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: 15552000, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
     let __route: string = "request";
     try {
       if (path.startsWith("/_bynk/call/")) {
