@@ -729,11 +729,13 @@ Type-check a `.bynk` file or project without writing compiled output. Runs the
 compiler pipeline **in-process**.
 
 A project with dependencies is resolved first, as for every command that
-compiles one. The first `bynk check` creates `bynk.lock` (and prints
-`bynk: wrote bynk.lock` on stderr); a later one writes it again only when the
-dependency graph changed, and otherwise leaves the project tree as it was. With
-`--locked` it fails instead of writing the lock, as `cargo check --locked` does
-for `Cargo.lock`.
+compiles one. The first `bynk check` creates `bynk.lock` (at the workspace root
+for a workspace member) and prints `bynk: wrote bynk.lock` on stderr; a later
+one writes it again only when the dependency graph changed, and otherwise
+leaves the project tree as it was. A git dependency missing from the store is
+fetched into it. With `--locked` it fails instead of writing the lock, as
+`cargo check --locked` does for `Cargo.lock`, and with `--offline` it fails
+instead of fetching.
 
 ```text
 bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--locked] [--offline]
