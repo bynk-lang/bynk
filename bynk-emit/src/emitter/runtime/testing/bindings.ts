@@ -4,7 +4,7 @@
 // project's emitted `storage` module no longer carries them; a test build imports them from here
 // through the `__` aliases. The platform interfaces they implement stay in `storage.ts`.
 
-import { makeTestState, type AiSearchInstance, type D1Database, type DurableObjectState, type AnalyticsDataset, type AnalyticsSqlBinding, type D1PreparedStatement, type D1Result, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type R2MultipartUpload, type R2ObjectBody, type R2ObjectMeta, type R2PutOptions, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerImagesTransformer, type WorkerVersionMetadata } from "../storage.ts";
+import { makeTestState, type AiSearchInstance, type D1Database, type DurableObjectState, type AnalyticsDataset, type AnalyticsSqlBinding, type D1PreparedStatement, type D1Result, type Hyperdrive, type KVNamespace, type QueueProducer, type R2Bucket, type R2GetOptions, type R2MultipartUpload, type R2ObjectBody, type R2ObjectMeta, type R2PutOptions, type RateLimiter, type SecretsStoreSecret, type SendEmail, type WorkerAiBinding, type WorkerImagesBinding, type WorkerImagesTransformer, type WorkerVersionMetadata } from "../storage.ts";
 import { VECTORIZE_LIMITS, type VectorizeIndex } from "../vectorize.ts";
 import { serialiseAgentClass, type DurableObjectNamespace, type DurableObjectStub } from "../agent.ts";
 
@@ -166,10 +166,34 @@ export function makeIntegrationR2(): R2Bucket {
     };
   };
   return {
-    async get(key: string): Promise<R2ObjectBody | null> {
+    async get(key: string, options?: R2GetOptions): Promise<R2ObjectBody | null> {
       const s = objects.get(key);
       if (!s) return null;
-      const bytes = s.body;
+      // #4049: a condition that does not hold answers the object with no body, as R2 does.
+      const gate = options?.onlyIf;
+      if (gate?.etagMatches !== undefined && s.meta.etag !== gate.etagMatches) return { ...s.meta } as unknown as R2ObjectBody;
+      if (gate?.etagDoesNotMatch !== undefined && s.meta.etag === gate.etagDoesNotMatch) return { ...s.meta } as unknown as R2ObjectBody;
+      // #4049: a range is clamped to the object, but one that starts at or past its end is refused, as R2
+      // refuses it (10039), rather than answered with nothing.
+      let served = { offset: 0, length: s.body.length };
+      let ranged = false;
+      const range = options?.range;
+      if (range !== undefined) {
+        ranged = true;
+        // R2 refuses a negative offset, length or suffix, as the unit-tier double does; a handler usually
+        // takes these from a client's `Range` header.
+        if (("suffix" in range && range.suffix < 0) || ("offset" in range && (range.offset < 0 || (range.length ?? 0) < 0))) {
+          throw new Error("R2: a range offset, length and suffix are not negative");
+        }
+        if ("suffix" in range) {
+          const length = Math.min(range.suffix, s.body.length);
+          served = { offset: s.body.length - length, length };
+        } else {
+          if (range.offset >= s.body.length) throw new Error("R2: the requested range is not satisfiable (10039)");
+          served = { offset: range.offset, length: Math.min(range.length ?? s.body.length - range.offset, s.body.length - range.offset) };
+        }
+      }
+      const bytes = s.body.subarray(served.offset, served.offset + served.length);
       let at = 0;
       const body = new ReadableStream<Uint8Array>({
         pull(controller) {
@@ -184,6 +208,7 @@ export function makeIntegrationR2(): R2Bucket {
       return {
         ...s.meta,
         body,
+        ...(ranged ? { range: served } : {}),
         async arrayBuffer(): Promise<ArrayBuffer> {
           return bytes.slice().buffer as ArrayBuffer;
         },
@@ -210,15 +235,27 @@ export function makeIntegrationR2(): R2Bucket {
       const prefix = options?.prefix ?? "";
       const limit = options?.limit ?? 1000;
       const after = options?.cursor;
-      const keys = [...objects.keys()]
-        .filter((k) => k.startsWith(prefix) && (after === undefined || k > after))
-        .sort();
-      const page = keys.slice(0, limit);
-      const truncated = keys.length > page.length;
+      const delimiter = options?.delimiter;
+      // A cursor that is a folded prefix skips everything under it, so the prefix is not listed twice.
+      const past = (k: string): boolean =>
+        after === undefined || (k > after && !(delimiter !== undefined && delimiter !== "" && after.endsWith(delimiter) && k.startsWith(after)));
+      const keys = [...objects.keys()].filter((k) => k.startsWith(prefix) && past(k)).sort();
+      // #4049: with a delimiter, a key that holds it after the prefix folds into the key up to and including
+      // the delimiter, listed once, as R2 does. A page counts objects and prefixes together, in key order.
+      const entries: Array<{ key: string; folded: boolean }> = [];
+      for (const k of keys) {
+        const at = delimiter === undefined || delimiter === "" ? -1 : k.indexOf(delimiter, prefix.length);
+        const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + delimiter!.length), folded: true };
+        if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+        entries.push(entry);
+      }
+      const page = entries.slice(0, limit);
+      const truncated = entries.length > page.length;
       return {
-        objects: page.map((k) => objects.get(k)!.meta),
+        objects: page.filter((e) => !e.folded).map((e) => objects.get(e.key)!.meta),
+        delimitedPrefixes: page.filter((e) => e.folded).map((e) => e.key),
         truncated,
-        cursor: truncated ? page[page.length - 1] : undefined,
+        cursor: truncated ? page[page.length - 1].key : undefined,
       };
     },
     async createMultipartUpload(key, options) {

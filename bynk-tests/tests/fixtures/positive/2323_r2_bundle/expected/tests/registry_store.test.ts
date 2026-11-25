@@ -16,6 +16,9 @@ type __Archives_putWith_Call = { key: string; body: globalThis.Uint8Array; optio
 type __Archives_delete_Call = { key: string };
 type __Archives_list_Call = { prefix: Option<string>; cursor: Option<string> };
 type __Archives_getStream_Call = { key: string };
+type __Archives_getRange_Call = { key: string; range: __ns_bynk_cloudflare.R2Range };
+type __Archives_getStreamIf_Call = { key: string; onlyIf: __ns_bynk_cloudflare.R2GetIf };
+type __Archives_listWith_Call = { options: __ns_bynk_cloudflare.R2List };
 type __Archives_putStream_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number };
 type __Archives_putStreamWith_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number; options: __ns_bynk_cloudflare.R2Put };
 type __Archives_createUpload_Call = { key: string; options: __ns_bynk_cloudflare.R2UploadOptions };
@@ -29,6 +32,9 @@ type __Indexes_putWith_Call = { key: string; body: globalThis.Uint8Array; option
 type __Indexes_delete_Call = { key: string };
 type __Indexes_list_Call = { prefix: Option<string>; cursor: Option<string> };
 type __Indexes_getStream_Call = { key: string };
+type __Indexes_getRange_Call = { key: string; range: __ns_bynk_cloudflare.R2Range };
+type __Indexes_getStreamIf_Call = { key: string; onlyIf: __ns_bynk_cloudflare.R2GetIf };
+type __Indexes_listWith_Call = { options: __ns_bynk_cloudflare.R2List };
 type __Indexes_putStream_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number };
 type __Indexes_putStreamWith_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number; options: __ns_bynk_cloudflare.R2Put };
 type __Indexes_createUpload_Call = { key: string; options: __ns_bynk_cloudflare.R2UploadOptions };
@@ -42,6 +48,9 @@ type __R2_putWith_Call = { key: string; body: globalThis.Uint8Array; options: __
 type __R2_delete_Call = { key: string };
 type __R2_list_Call = { prefix: Option<string>; cursor: Option<string> };
 type __R2_getStream_Call = { key: string };
+type __R2_getRange_Call = { key: string; range: __ns_bynk_cloudflare.R2Range };
+type __R2_getStreamIf_Call = { key: string; onlyIf: __ns_bynk_cloudflare.R2GetIf };
+type __R2_listWith_Call = { options: __ns_bynk_cloudflare.R2List };
 type __R2_putStream_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number };
 type __R2_putStreamWith_Call = { key: string; body: AsyncIterable<globalThis.Uint8Array>; size: number; options: __ns_bynk_cloudflare.R2Put };
 type __R2_createUpload_Call = { key: string; options: __ns_bynk_cloudflare.R2UploadOptions };
@@ -61,7 +70,7 @@ class __Stub_Archives {
   }
 
   async get(key: string): globalThis.Promise<Option<globalThis.Uint8Array>> {
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -119,10 +128,15 @@ class __Stub_Archives {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -164,6 +178,26 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
     version += 1;
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
+  };
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
+    const p = prefix.tag === "Some" ? prefix.value : "";
+    const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
+    const after = cursor.tag === "Some" ? cursor.value : undefined;
+    // A cursor that is a folded prefix skips everything under it, so the prefix is not listed twice.
+    const past = (k: string) => after === undefined || (k > after && !(d !== undefined && after.endsWith(d) && k.startsWith(after)));
+    const entries: { key: string; folded: boolean }[] = [];
+    for (const k of [...store.keys()].filter((k) => k.startsWith(p) && past(k)).sort()) {
+      const at = d === undefined ? -1 : k.indexOf(d, p.length);
+      const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + d!.length), folded: true };
+      if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+      entries.push(entry);
+    }
+    const page = entries.slice(0, 1000);
+    return {
+      keys: page.filter((e) => !e.folded).map((e) => meta(e.key)),
+      cursor: entries.length > page.length ? Some(page[page.length - 1].key) : None,
+      prefixes: page.filter((e) => e.folded).map((e) => e.key),
+    };
   };
   type Upload = {
     options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
@@ -225,11 +259,49 @@ function __bynkTest_Archives(): __ns_bynk_cloudflare.R2 {
       store.delete(key);
     },
     async list(prefix, cursor) {
-      const keys = [...store.keys()]
-        .filter((k) => (prefix.tag === "None" || k.startsWith(prefix.value)) && (cursor.tag === "None" || k > cursor.value))
-        .sort();
-      const page = keys.slice(0, 1000);
-      return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+      return listPage(prefix, cursor, None);
+    },
+    // #4049: with a delimiter a key that holds it after the prefix folds into the key up to and including the
+    // delimiter, listed once, as R2 does; a page counts objects and prefixes together.
+    async listWith(options) {
+      return listPage(options.prefix, options.cursor, options.delimiter);
+    },
+    // #4049: a byte range as a stream. One that starts at or past the end is refused, as R2 refuses it (10039).
+    async getRange(key, range) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const size = e.body.length;
+      let offset: number;
+      let length: number;
+      if (range.tag === "Suffix") {
+        if (range.length < 0) throw new globalThis.Error(`R2: a suffix range is not negative, not ${range.length}`);
+        length = globalThis.Math.min(range.length, size);
+        offset = size - length;
+      } else {
+        const wanted = range.length.tag === "Some" ? range.length.value : undefined;
+        if (range.offset < 0 || (wanted !== undefined && wanted < 0)) throw new globalThis.Error("R2: a range offset and length are not negative");
+        if (range.offset >= size) throw new globalThis.Error("R2: the requested range is not satisfiable (10039)");
+        offset = range.offset;
+        length = globalThis.Math.min(wanted ?? size - offset, size - offset);
+      }
+      const bytes = e.body.slice(offset, offset + length);
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), offset, length, body: chunks() });
+    },
+    // #4049: a read gated on the etag; a condition that does not hold is `NotModified` with the metadata.
+    async getStreamIf(key, onlyIf) {
+      const e = store.get(key);
+      if (e === undefined) return { tag: "Missing" };
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
+        return { tag: "NotModified", object: meta(key) };
+      }
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return { tag: "Present", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);
@@ -309,6 +381,26 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
+    const p = prefix.tag === "Some" ? prefix.value : "";
+    const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
+    const after = cursor.tag === "Some" ? cursor.value : undefined;
+    // A cursor that is a folded prefix skips everything under it, so the prefix is not listed twice.
+    const past = (k: string) => after === undefined || (k > after && !(d !== undefined && after.endsWith(d) && k.startsWith(after)));
+    const entries: { key: string; folded: boolean }[] = [];
+    for (const k of [...store.keys()].filter((k) => k.startsWith(p) && past(k)).sort()) {
+      const at = d === undefined ? -1 : k.indexOf(d, p.length);
+      const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + d!.length), folded: true };
+      if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+      entries.push(entry);
+    }
+    const page = entries.slice(0, 1000);
+    return {
+      keys: page.filter((e) => !e.folded).map((e) => meta(e.key)),
+      cursor: entries.length > page.length ? Some(page[page.length - 1].key) : None,
+      prefixes: page.filter((e) => e.folded).map((e) => e.key),
+    };
+  };
   type Upload = {
     options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
     parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
@@ -369,11 +461,49 @@ function __bynkTest_Indexes(): __ns_bynk_cloudflare.R2 {
       store.delete(key);
     },
     async list(prefix, cursor) {
-      const keys = [...store.keys()]
-        .filter((k) => (prefix.tag === "None" || k.startsWith(prefix.value)) && (cursor.tag === "None" || k > cursor.value))
-        .sort();
-      const page = keys.slice(0, 1000);
-      return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+      return listPage(prefix, cursor, None);
+    },
+    // #4049: with a delimiter a key that holds it after the prefix folds into the key up to and including the
+    // delimiter, listed once, as R2 does; a page counts objects and prefixes together.
+    async listWith(options) {
+      return listPage(options.prefix, options.cursor, options.delimiter);
+    },
+    // #4049: a byte range as a stream. One that starts at or past the end is refused, as R2 refuses it (10039).
+    async getRange(key, range) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const size = e.body.length;
+      let offset: number;
+      let length: number;
+      if (range.tag === "Suffix") {
+        if (range.length < 0) throw new globalThis.Error(`R2: a suffix range is not negative, not ${range.length}`);
+        length = globalThis.Math.min(range.length, size);
+        offset = size - length;
+      } else {
+        const wanted = range.length.tag === "Some" ? range.length.value : undefined;
+        if (range.offset < 0 || (wanted !== undefined && wanted < 0)) throw new globalThis.Error("R2: a range offset and length are not negative");
+        if (range.offset >= size) throw new globalThis.Error("R2: the requested range is not satisfiable (10039)");
+        offset = range.offset;
+        length = globalThis.Math.min(wanted ?? size - offset, size - offset);
+      }
+      const bytes = e.body.slice(offset, offset + length);
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), offset, length, body: chunks() });
+    },
+    // #4049: a read gated on the etag; a condition that does not hold is `NotModified` with the metadata.
+    async getStreamIf(key, onlyIf) {
+      const e = store.get(key);
+      if (e === undefined) return { tag: "Missing" };
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
+        return { tag: "NotModified", object: meta(key) };
+      }
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return { tag: "Present", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);
@@ -453,6 +583,26 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
+    const p = prefix.tag === "Some" ? prefix.value : "";
+    const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
+    const after = cursor.tag === "Some" ? cursor.value : undefined;
+    // A cursor that is a folded prefix skips everything under it, so the prefix is not listed twice.
+    const past = (k: string) => after === undefined || (k > after && !(d !== undefined && after.endsWith(d) && k.startsWith(after)));
+    const entries: { key: string; folded: boolean }[] = [];
+    for (const k of [...store.keys()].filter((k) => k.startsWith(p) && past(k)).sort()) {
+      const at = d === undefined ? -1 : k.indexOf(d, p.length);
+      const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + d!.length), folded: true };
+      if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+      entries.push(entry);
+    }
+    const page = entries.slice(0, 1000);
+    return {
+      keys: page.filter((e) => !e.folded).map((e) => meta(e.key)),
+      cursor: entries.length > page.length ? Some(page[page.length - 1].key) : None,
+      prefixes: page.filter((e) => e.folded).map((e) => e.key),
+    };
+  };
   type Upload = {
     options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
     parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
@@ -513,11 +663,49 @@ function __bynkTest_R2(): __ns_bynk_cloudflare.R2 {
       store.delete(key);
     },
     async list(prefix, cursor) {
-      const keys = [...store.keys()]
-        .filter((k) => (prefix.tag === "None" || k.startsWith(prefix.value)) && (cursor.tag === "None" || k > cursor.value))
-        .sort();
-      const page = keys.slice(0, 1000);
-      return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+      return listPage(prefix, cursor, None);
+    },
+    // #4049: with a delimiter a key that holds it after the prefix folds into the key up to and including the
+    // delimiter, listed once, as R2 does; a page counts objects and prefixes together.
+    async listWith(options) {
+      return listPage(options.prefix, options.cursor, options.delimiter);
+    },
+    // #4049: a byte range as a stream. One that starts at or past the end is refused, as R2 refuses it (10039).
+    async getRange(key, range) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const size = e.body.length;
+      let offset: number;
+      let length: number;
+      if (range.tag === "Suffix") {
+        if (range.length < 0) throw new globalThis.Error(`R2: a suffix range is not negative, not ${range.length}`);
+        length = globalThis.Math.min(range.length, size);
+        offset = size - length;
+      } else {
+        const wanted = range.length.tag === "Some" ? range.length.value : undefined;
+        if (range.offset < 0 || (wanted !== undefined && wanted < 0)) throw new globalThis.Error("R2: a range offset and length are not negative");
+        if (range.offset >= size) throw new globalThis.Error("R2: the requested range is not satisfiable (10039)");
+        offset = range.offset;
+        length = globalThis.Math.min(wanted ?? size - offset, size - offset);
+      }
+      const bytes = e.body.slice(offset, offset + length);
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), offset, length, body: chunks() });
+    },
+    // #4049: a read gated on the etag; a condition that does not hold is `NotModified` with the metadata.
+    async getStreamIf(key, onlyIf) {
+      const e = store.get(key);
+      if (e === undefined) return { tag: "Missing" };
+      if ((onlyIf.tag === "IfEtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "IfEtagDiffers" && e.etag === onlyIf.etag)) {
+        return { tag: "NotModified", object: meta(key) };
+      }
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return { tag: "Present", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);
@@ -594,7 +782,7 @@ async function test_an_object_round_trips() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -652,10 +840,15 @@ async function test_an_object_round_trips() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -697,7 +890,7 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -755,10 +948,15 @@ async function test_an_absent_only_write_refuses_an_existing_key() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -800,7 +998,7 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -858,10 +1056,15 @@ async function test_an_etag_match_write_swaps_only_the_current_version() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -902,7 +1105,7 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -960,10 +1163,15 @@ async function test_delete_is_idempotent_and_list_pages_by_prefix() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -1006,7 +1214,7 @@ async function test_instances_are_separate() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -1064,10 +1272,15 @@ async function test_instances_are_separate() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -1105,9 +1318,9 @@ async function test_instances_are_separate() {
 async function test_a_stubbed_instance_answers() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Archives: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], Indexes: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], R2: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getStream", "head", "list", "put", "putStream", "putStreamWith", "putWith", "uploadPart"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed instance answers"), { Archives: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getRange", "getStream", "getStreamIf", "head", "list", "listWith", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], Indexes: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getRange", "getStream", "getStreamIf", "head", "list", "listWith", "put", "putStream", "putStreamWith", "putWith", "uploadPart"], R2: ["abortUpload", "completeUpload", "createUpload", "delete", "get", "getRange", "getStream", "getStreamIf", "head", "list", "listWith", "put", "putStream", "putStreamWith", "putWith", "uploadPart"] }, __obs);
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -1165,10 +1378,15 @@ async function test_a_stubbed_instance_answers() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;
@@ -1207,7 +1425,7 @@ async function test_instances_are_separate_at_integration() {
   try {
     const deps = __makeTestDeps();
     const { archive, fetch, names, remove, size, swap, write } = __ns_registry_store;
-    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2Listing, R2Object, R2Part, R2Put, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
+    const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;
     type AnalyticsSqlError = __ns_bynk_cloudflare.AnalyticsSqlError;
     type AnalyticsSqlResult = __ns_bynk_cloudflare.AnalyticsSqlResult;
@@ -1265,10 +1483,15 @@ async function test_instances_are_separate_at_integration() {
     type QueueSend = __ns_bynk_cloudflare.QueueSend;
     type R2Body = __ns_bynk_cloudflare.R2Body;
     type R2Condition = __ns_bynk_cloudflare.R2Condition;
+    type R2GetIf = __ns_bynk_cloudflare.R2GetIf;
+    type R2List = __ns_bynk_cloudflare.R2List;
     type R2Listing = __ns_bynk_cloudflare.R2Listing;
     type R2Object = __ns_bynk_cloudflare.R2Object;
     type R2Part = __ns_bynk_cloudflare.R2Part;
+    type R2Partial = __ns_bynk_cloudflare.R2Partial;
     type R2Put = __ns_bynk_cloudflare.R2Put;
+    type R2Range = __ns_bynk_cloudflare.R2Range;
+    type R2Read = __ns_bynk_cloudflare.R2Read;
     type R2Upload = __ns_bynk_cloudflare.R2Upload;
     type R2UploadOptions = __ns_bynk_cloudflare.R2UploadOptions;
     type RequestCf = __ns_bynk_cloudflare.RequestCf;

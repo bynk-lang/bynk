@@ -221,6 +221,52 @@ fn resolve_element(
     Some(reference)
 }
 
+/// #3925: a `cors { origins: … }` value may name constants: the whole list as
+/// one `List[String]` constant (`origins: AppOrigins`), or any element of a
+/// written list as a `String` constant (`origins: [AppOrigin, "https://b.example"]`).
+/// Each resolves to the literal it is bound to, as an annotation argument does
+/// (ADR 0826), through the same helpers, so the checks for a wildcard and for
+/// credentials, and the emitter, read literal text. A name that does not resolve
+/// is left as written, so `bynk.http.cors_invalid_origins` fires on it.
+fn rewrite_cors(
+    policy: Option<&mut bynk_syntax::ast::CorsPolicy>,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let Some(policy) = policy else {
+        return false;
+    };
+    let mut changed = false;
+    for field in policy
+        .fields
+        .iter_mut()
+        .filter(|f| f.name.name == "origins")
+    {
+        match &mut field.value.kind {
+            ExprKind::Ident(id) => {
+                let Some(found) = crate::consts::resolve_string_list_const(
+                    |u| scope.lookup(u),
+                    scope.unit,
+                    &id.name,
+                ) else {
+                    continue;
+                };
+                refs.record(id.span, SymbolKind::Const, &id.name);
+                field.value.kind = found.literal.kind.clone();
+                changed = true;
+            }
+            ExprKind::ListLit(items, ..) => {
+                for item in items {
+                    changed |= resolve_element(item, BaseType::String, scope, refs).is_some();
+                }
+            }
+            _ => {}
+        }
+    }
+    changed
+}
+
+/// The base type each `delivery { }` key's constant must have (#3877).
 const DELIVERY_KEYS: &[(&str, BaseType)] = &[
     ("retries", BaseType::Int),
     ("retryDelay", BaseType::Duration),
@@ -402,6 +448,7 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
             }
             CommonsItem::Service(svc) => {
                 changed |= rewrite_delivery(svc.delivery.as_mut(), scope, refs);
+                changed |= rewrite_cors(svc.cors.as_mut(), scope, refs);
                 changed |= rewrite_handlers(&mut svc.handlers, scope, refs)
             }
             CommonsItem::Agent(agent) => {

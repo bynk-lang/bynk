@@ -1,5 +1,5 @@
 {
-  "blurb": "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+  "blurb": "Each optional `cors` field takes one kind of value: `headers` and `expose` a list of header names written as string literals (`expose` may instead be `[\"*\"]` alone), `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. A header name is an RFC 9110 token: letters, digits and ``!#$%&'*+-.^_`|~``, with no space, colon or comma. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
   "category": "HTTP",
   "categoryAnchor": "http",
   "code": "bynk.http.cors_invalid_field",
