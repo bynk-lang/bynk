@@ -317,10 +317,7 @@ pub fn complete_in(
     }
     // 4g''. #3888: `actor A = Sender where <cursor>` — the `Sender` predicate.
     if is_sender_refinement_where(line_prefix) {
-        return vec![Completion::snippet(
-            "Dmarc",
-            "Dmarc(${1:DmarcPass})",
-        )];
+        return vec![Completion::snippet("Dmarc", "Dmarc(${1:DmarcPass})")];
     }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
