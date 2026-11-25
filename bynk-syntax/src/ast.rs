@@ -3301,7 +3301,61 @@ pub struct RefinementPred {
     /// (`1_000`), digit separators kept (#2993); `None` for other predicates
     /// and for a predicate built without source. Only the formatter reads it.
     pub arg_text: Option<String>,
+    /// #3951: a predicate written with a constant in an argument
+    /// (`InRange(1, MaxQty)`), before the resolution pass has replaced the
+    /// constant with the literal it is bound to. While this is set `kind` is a
+    /// placeholder that nothing may read: the pass clears it once every
+    /// argument resolves, and the checker reports an argument that did not.
+    pub pending: Option<Box<PendingPred>>,
+    /// #3951: the constants the pass substituted into this predicate, so a
+    /// diagnostic and the IDE can name them. Empty for a literal-only predicate.
+    pub from_const: Vec<ConstRef>,
     pub span: Span,
+}
+
+/// #3951: the arguments of a predicate written with a constant in one of them.
+#[derive(Debug, Clone)]
+pub struct PendingPred {
+    /// The predicate's name as written (`InRange`, `MaxLength`, …).
+    pub name: String,
+    pub args: Vec<PendingArg>,
+    /// The constants the resolution pass could not substitute, and why, for the
+    /// checker to report as `bynk.refine.bound_not_literal` (or
+    /// `bynk.resolve.const_cycle`). Empty until the pass has run.
+    pub unresolved: Vec<UnresolvedBound>,
+}
+
+/// #3951: a constant a predicate argument names that is not usable as the
+/// literal it stands for.
+#[derive(Debug, Clone)]
+pub struct UnresolvedBound {
+    pub name: Ident,
+    pub why: BoundRefusal,
+}
+
+/// Why a constant in a predicate argument was refused (ADR 0826's rule).
+#[derive(Debug, Clone)]
+pub enum BoundRefusal {
+    /// No constant of that name is in scope.
+    Unknown,
+    /// The constant is declared a type other than exactly the argument's.
+    Declared(String),
+    /// The constant is not bound to a literal, or to another constant that is.
+    NotLiteral,
+    /// The constant is declared the refined type whose bound it names; the
+    /// path is `const → type → const`.
+    Cycle(Vec<String>),
+}
+
+/// One argument of a [`PendingPred`].
+#[derive(Debug, Clone)]
+pub enum PendingArg {
+    /// A numeric literal written in place.
+    Num(PredBound),
+    /// A string literal written in place (`Matches`).
+    Str(String),
+    /// A constant to be replaced by the literal it denotes.
+    Const(Ident),
 }
 
 #[derive(Debug, Clone)]
