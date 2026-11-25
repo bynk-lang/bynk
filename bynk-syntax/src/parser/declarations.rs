@@ -460,21 +460,15 @@ impl<'a> Parser<'a> {
             self.exit_item_loop();
             start.merge(last_span)
         };
-        Ok(Commons {
+        Ok(Commons::parsed(
             name,
             items,
             uses,
-            consumes: Vec::new(),
             documentation,
-            form: if brace {
-                CommonsForm::Brace
-            } else {
-                CommonsForm::Fragment
-            },
+            brace,
             span,
-            trivia: Trivia::default(),
             trailing_comments,
-        })
+        ))
     }
 
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {

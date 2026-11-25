@@ -1,0 +1,11 @@
+---
+#4181: a name the commons declares itself is its own. `File` is also a
+transparent type of `bynk`, but this commons declares one, so it reaches none.
+---
+commons ops.local
+
+type File = { name: String }
+
+fn label(f: File) -> String {
+	f.name
+}

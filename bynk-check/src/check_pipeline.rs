@@ -179,11 +179,12 @@ pub fn prepare_unit_check_ctx(
     reached_types: &crate::project_model::ReachedTypes,
     policy: &Arc<crate::stability::StabilityPolicy>,
 ) -> UnitCheckCtx {
-    let cross_context_views = if kind == UnitKind::Context || kind == UnitKind::Adapter || kind == UnitKind::Commons {
-        Some(views.get(unit_info))
-    } else {
-        None
-    };
+    let cross_context_views =
+        if kind == UnitKind::Context || kind == UnitKind::Adapter || kind == UnitKind::Commons {
+            Some(views.get(unit_info))
+        } else {
+            None
+        };
     let uses_commons_type_names: HashSet<String> = imported_from_kind
         .keys()
         .filter(|n| {

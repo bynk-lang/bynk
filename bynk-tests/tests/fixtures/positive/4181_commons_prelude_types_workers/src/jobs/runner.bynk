@@ -1,0 +1,10 @@
+context jobs.runner
+
+uses ops.schedules
+
+// The shared constant names the schedule, and this context does not `consumes bynk`.
+service sweeper from cron {
+	on schedule(Nightly) (at: Instant) -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}

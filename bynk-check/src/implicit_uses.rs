@@ -69,29 +69,48 @@ pub(crate) fn add_implicit_uses(parsed: &mut [ParsedFile]) {
     }
 }
 
-/// The types the `bynk` adapter exports `transparent`, read from its own
-/// source, so a type added there is reached with no second edit. Empty if the
-/// source does not parse (`every_first_party_source_parses` rejects that in CI).
+/// The names the `bynk` adapter exports under `kind`, read from its own source,
+/// so a name added there is reached with no second edit. Empty if the source
+/// does not parse (`every_first_party_source_parses` rejects that in CI).
+fn bynk_exports(kind: bynk_syntax::ast::ExportKind) -> Vec<String> {
+    use bynk_syntax::ast::SourceUnit;
+    let Some(unit) = bynk_std::UNITS
+        .iter()
+        .find(|u| u.name == bynk_std::BYNK_UNIT)
+    else {
+        return Vec::new();
+    };
+    let parsed = bynk_syntax::lexer::tokenize(unit.source)
+        .ok()
+        .and_then(|tokens| bynk_syntax::parser::parse_unit(&tokens, unit.source).ok());
+    let Some(SourceUnit::Adapter(adapter)) = parsed else {
+        return Vec::new();
+    };
+    adapter
+        .exports
+        .iter()
+        .filter(|e| e.kind == kind)
+        .flat_map(|e| e.names.iter().map(|n| n.name.name.clone()))
+        .collect()
+}
+
+/// The types the `bynk` adapter exports `transparent`.
 fn bynk_transparent_types() -> &'static [String] {
-    use bynk_syntax::ast::{ExportKind, SourceUnit, Visibility};
+    use bynk_syntax::ast::{ExportKind, Visibility};
     static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    NAMES.get_or_init(|| {
-        let Some(unit) = bynk_std::UNITS.iter().find(|u| u.name == bynk_std::BYNK_UNIT) else {
-            return Vec::new();
-        };
-        let parsed = bynk_syntax::lexer::tokenize(unit.source)
-            .ok()
-            .and_then(|tokens| bynk_syntax::parser::parse_unit(&tokens, unit.source).ok());
-        let Some(SourceUnit::Adapter(adapter)) = parsed else {
-            return Vec::new();
-        };
-        adapter
-            .exports
-            .iter()
-            .filter(|e| e.kind == ExportKind::Type(Visibility::Transparent))
-            .flat_map(|e| e.names.iter().map(|n| n.name.name.clone()))
-            .collect()
-    })
+    NAMES.get_or_init(|| bynk_exports(ExportKind::Type(Visibility::Transparent)))
+}
+
+/// Whether `name` is a capability the `bynk` adapter exports (`Clock`,
+/// `Logger`, …). A capability is not a type, so naming one as a type is
+/// refused; this lets that error say so (#4181).
+pub(crate) fn is_bynk_capability(name: &str) -> bool {
+    use bynk_syntax::ast::ExportKind;
+    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    NAMES
+        .get_or_init(|| bynk_exports(ExportKind::Capability))
+        .iter()
+        .any(|n| n == name)
 }
 
 /// #4181: give every commons of the project's own that names a transparent type
@@ -125,7 +144,8 @@ pub(crate) fn add_implicit_consumes(parsed: &mut [ParsedFile]) {
         let wanted: Vec<&str> = declaring
             .iter()
             .filter(|(name, units)| {
-                !units.contains(&own) && !used.iter().any(|u| units.contains(u))
+                !units.contains(&own)
+                    && !used.iter().any(|u| units.contains(u))
                     && names_identifier(pf.source(), name)
             })
             .map(|(name, _)| name.as_str())
@@ -164,9 +184,9 @@ fn names_identifier(source: &str, name: &str) -> bool {
         return false;
     }
     tokenize(source).is_ok_and(|tokens| {
-        tokens
-            .iter()
-            .any(|t| t.kind == TokenKind::Ident && source.get(t.span.start..t.span.end) == Some(name))
+        tokens.iter().any(|t| {
+            t.kind == TokenKind::Ident && source.get(t.span.start..t.span.end) == Some(name)
+        })
     })
 }
 

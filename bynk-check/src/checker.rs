@@ -4557,16 +4557,7 @@ fn unresolved_type_ref_error(
     vars: &HashSet<String>,
 ) -> CompileError {
     match first_unresolved_type_name(r, types, vars) {
-        Some(id) => CompileError::new(
-            "bynk.resolve.unknown_type",
-            id.span,
-            format!("unknown type `{}`", id.name),
-        )
-        .with_note(
-            "in scope are the base types (`Int`, `Float`, `String`, `Bool`, `Duration`, \
-             `Instant`, `Bytes`), the built-in generics (`List`, `Map`, `Option`, `Result`, …), \
-             `ValidationError`, and the types this unit declares or imports",
-        ),
+        Some(id) => crate::resolver::unknown_type_error(id),
         None => CompileError::new(
             "bynk.resolve.unknown_type",
             r.span(),

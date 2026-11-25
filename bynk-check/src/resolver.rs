@@ -3206,8 +3206,8 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
     }
 }
 
-fn unknown_type_error(id: &Ident) -> CompileError {
-    CompileError::new(
+pub(crate) fn unknown_type_error(id: &Ident) -> CompileError {
+    let err = CompileError::new(
         "bynk.resolve.unknown_type",
         id.span,
         format!("unknown type `{}`", id.name),
@@ -3216,7 +3216,16 @@ fn unknown_type_error(id: &Ident) -> CompileError {
         "in scope are the base types (`Int`, `Float`, `String`, `Bool`, `Duration`, \
          `Instant`, `Bytes`), the built-in generics (`List`, `Map`, `Option`, `Result`, …), \
          `ValidationError`, and the types this unit declares or imports",
-    )
+    );
+    // #4181: a capability is not a type, and a commons stays pure by naming
+    // none, so say that rather than leave the reader to guess.
+    if crate::implicit_uses::is_bynk_capability(&id.name) {
+        return err.with_note(format!(
+            "`{}` is a capability, not a type: a context uses one with `consumes bynk {{ {} }}` and `given`; a commons declares and names none",
+            id.name, id.name
+        ));
+    }
+    err
 }
 
 /// v0.157 (ADR 0183): a generic type named without its `[…]` arguments.

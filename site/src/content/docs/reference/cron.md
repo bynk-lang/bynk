@@ -80,7 +80,7 @@ a constant.
 ```bynk,ignore
 commons ops.schedules
 
-const Nightly: String = "0 2 * * *"
+const Nightly: CronSchedule = "0 2 * * *"
 ```
 
 ```bynk,ignore
@@ -94,8 +94,9 @@ service sweeper from cron {
 
 The name resolves to its literal at compile time, so the `wrangler.toml` trigger
 table and the dispatch key are still the literal text. A constant is accepted
-when it is declared exactly `String`, or exactly `CronSchedule` (the prelude type,
-nameable in a context that `consumes bynk { CronSchedule }`), and is bound to a
+when it is declared exactly `String`, or exactly `CronSchedule` (the prelude type:
+a context names it with `consumes bynk { CronSchedule }`, and a commons with no
+clause, see [Naming `bynk`'s types in a commons](/reference/bynk-capabilities/#naming-bynks-types-in-a-commons)), and is bound to a
 literal or to another such constant, in the same file, a sibling file or a used
 commons. The resolved literal is then checked against `Cron` as a literal
 schedule is, so `const Bad: String = "61 * * * *"` is
