@@ -4071,6 +4071,22 @@ mod tests {
         assert_eq!(fmt(&out), out);
     }
 
+    /// #4045: the three `uses` forms and a name qualified by one are written as
+    /// they were, and formatting is idempotent.
+    #[test]
+    fn uses_forms_and_qualified_names_round_trip() {
+        let src = "commons app.z\n\nuses lib.x\nuses lib.y as Y\nuses lib.money { Money, format as formatMoney }\n\nfn f(t: Y.Status, m: Money) -> String {\n\tY.describe(t)\n}\n\nfn g(s: lib.x.Status) -> String {\n\tlib.x.describe(s)\n}\n";
+        let out = fmt(src);
+        assert_eq!(out, src);
+        assert_eq!(fmt(&out), out);
+        // A braced list is laid out on one line, with its entries spaced.
+        let squeezed = fmt("commons app.z\n\nuses lib.money {Money,format as formatMoney}\n");
+        assert!(
+            squeezed.contains("uses lib.money { Money, format as formatMoney }"),
+            "{squeezed}"
+        );
+    }
+
     #[test]
     fn formats_minimal_commons() {
         let src = "commons fitness.units {}";
