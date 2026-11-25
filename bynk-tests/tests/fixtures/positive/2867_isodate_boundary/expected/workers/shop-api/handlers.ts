@@ -42,10 +42,10 @@ export const Booking = {
 };
 
 export const api = {
-  async http_GET_x_Param_day(day: Day, deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_x_Param_day(day: Day, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(day);
   },
-  async http_POST_book(body: Booking, deps: { identity: UserId }): globalThis.Promise<HttpResult<Booking>> {
+  async http_POST_book(body: Booking, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Booking>> {
     return HttpResult.Created(body);
   },
 };

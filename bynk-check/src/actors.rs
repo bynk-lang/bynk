@@ -444,6 +444,20 @@ pub fn oidc_seam_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> 
     })
 }
 
+/// #3937: the binder of an HTTP handler whose `by` clause names one actor that reads a verified
+/// JWT, so the binder's `.claims` is the token's claims: an `Oidc` actor, or a `Bearer` actor or a
+/// refinement of one. `None` for a sum (the binder there is the resolved arm), a handler of any
+/// other protocol, and a `by` with no binder.
+pub fn claims_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>) -> Option<String> {
+    if let Some(seam) = oidc_seam_for(handler, actors) {
+        return seam.binder;
+    }
+    if !matches!(handler.kind, HandlerKind::Http { .. }) || handler.by_clause.as_ref()?.is_sum() {
+        return None;
+    }
+    bearer_seam_for(handler, actors)?.binder
+}
+
 /// v0.54: the binder of a cross-context `on call … by c: Caller` handler that
 /// captures a live `CallerId` (the calling context's name, Q7). `None` unless
 /// the handler binds an identity whose contract is `CallerId` — i.e. the

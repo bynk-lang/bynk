@@ -216,6 +216,14 @@ pub fn process_tests(
     let mut outputs: Vec<StagedFile> = Vec::new();
     let mut runnable_tests: Vec<RunnableTest> = Vec::new();
 
+    // #4348: the checks scope a test-only commons to the suites that `uses` it; the module
+    // below is emitted over the union, which only has to reach every name a suite may spell.
+    let emit_uses_map = bynk_check::project_model::unit_uses_with_suite_uses(
+        unit_uses,
+        parsed,
+        &(0..parsed.len()).collect::<Vec<_>>(),
+    );
+    let emit_uses = &emit_uses_map;
     let ready = test_suites::phase_test_bodies(
         test_groups,
         parsed,
@@ -247,7 +255,7 @@ pub fn process_tests(
         // #1814: the types the target's privileged view reaches but does not
         // import, computed once per target for every runner below.
         let hidden =
-            test_suites::privileged_view(target_name, unit_tables, unit_uses, unit_consumes)
+            test_suites::privileged_view(target_name, unit_tables, emit_uses, unit_consumes)
                 .map(|v| v.hidden)
                 .unwrap_or_default();
 
@@ -262,7 +270,7 @@ pub fn process_tests(
             unit_tables,
             unit_consumes,
             unit_consumes_aliases,
-            unit_uses,
+            emit_uses,
             unit_flattened,
             exports_visibility,
             import_ext,
@@ -270,7 +278,7 @@ pub fn process_tests(
             &hidden,
             asset_harness(
                 target_name,
-                unit_uses,
+                emit_uses,
                 unit_consumes,
                 unit_tables,
                 asset_files,
@@ -314,7 +322,7 @@ pub fn process_tests(
             if let Some(consumed) = unit_consumes.get(target_name) {
                 imported.extend(consumed.iter().map(String::as_str));
             }
-            if let Some(used) = unit_uses.get(target_name) {
+            if let Some(used) = emit_uses.get(target_name) {
                 imported.extend(used.iter().map(String::as_str));
             }
             // #1814: and the owner of each reached type it imports.

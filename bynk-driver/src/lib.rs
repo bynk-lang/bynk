@@ -77,6 +77,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
             .compatibility_flags(workers.compatibility_flags)
             .workers_dev(workers.workers_dev)
             .observability(workers.observability)
+            .tuning(workers.tuning)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?)
             .fixture_files(discovery::list_fixture_folder(input)?)
@@ -130,6 +131,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .compatibility_flags(workers.compatibility_flags)
                 .workers_dev(workers.workers_dev)
                 .observability(workers.observability)
+                .tuning(workers.tuning)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
                 .fixture_files(fixture_files)
@@ -2120,6 +2122,78 @@ mod tests {
             text.contains("[observability]\nenabled = false\nhead_sampling_rate = 0.5\n"),
             "the group sets `enabled`, the project the rate: {text}"
         );
+    }
+
+    /// #4128: `cpu_ms` and `placement` reach `[limits]` and `[placement]`, are
+    /// left out when unset, and a group's keys override the project's.
+    #[test]
+    fn manifest_cpu_limit_and_placement_reach_wrangler_toml() {
+        let dir = workers_project("tuning_default", "[project]\nname = \"p\"\n");
+        let (text, _) = greet_wrangler(try_project_options(&dir.0).expect("reads"));
+        assert!(
+            !text.contains("[limits]") && !text.contains("[placement]"),
+            "{text}"
+        );
+        let dir = workers_project(
+            "tuning_set",
+            "[workers]\ncpu_ms = 50\nplacement = \"smart\"\n",
+        );
+        for options in [
+            try_project_options(&dir.0).expect("reads"),
+            project_options(&dir.0).expect("reads"),
+        ] {
+            let (text, _) = greet_wrangler(options);
+            assert!(text.contains("[limits]\ncpu_ms = 50\n"), "{text}");
+            assert!(text.contains("[placement]\nmode = \"smart\"\n"), "{text}");
+        }
+        let dir = workers_project(
+            "tuning_group",
+            "[workers]\ncpu_ms = 50\nplacement = \"smart\"\n\n[deploy.workers.core]\ncontexts = [\"greet\"]\ncpu_ms = 2000\nplacement = \"off\"\n",
+        );
+        let options = try_project_options(&dir.0).expect("reads");
+        let out = project::compile_project(&options.target(project::BuildTarget::Workers))
+            .unwrap_or_else(|f| {
+                let msgs: Vec<&str> = f.errors.iter().map(|e| e.error.message.as_str()).collect();
+                panic!("builds: {msgs:?}")
+            });
+        let text = out.artefacts.docs[Path::new("workers/core/wrangler.toml")].text();
+        assert!(text.contains("[limits]\ncpu_ms = 2000\n"), "{text}");
+        assert!(
+            !text.contains("[placement]"),
+            "the group turns placement off: {text}"
+        );
+        for bad in [
+            "[workers]\ncpu_ms = 0\n",
+            "[workers]\ncpu_ms = 300001\n",
+            "[workers]\nplacement = \"nearby\"\n",
+        ] {
+            let dir = workers_project("tuning_bad", bad);
+            assert!(
+                matches!(
+                    try_project_options(&dir.0),
+                    Err(ProjectOptionsError::Paths(
+                        ProjectPathsError::BadWorkers { .. }
+                    ))
+                ),
+                "{bad}"
+            );
+        }
+        // A bad group value takes the worker-group error path instead.
+        for bad in [
+            "[deploy.workers.core]\ncpu_ms = 0\n",
+            "[deploy.workers.core]\nplacement = \"nearby\"\n",
+        ] {
+            let dir = workers_project("tuning_bad_group", bad);
+            assert!(
+                matches!(
+                    try_project_options(&dir.0),
+                    Err(ProjectOptionsError::Paths(
+                        ProjectPathsError::BadWorkerGroup { .. }
+                    ))
+                ),
+                "{bad}"
+            );
+        }
     }
 
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.

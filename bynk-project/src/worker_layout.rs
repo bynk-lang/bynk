@@ -38,6 +38,8 @@ pub struct WorkerLayout {
     order: BTreeMap<String, Vec<String>>,
     /// #4127: each group's own Workers Logs settings, by the group's directory.
     observability: BTreeMap<String, crate::observability::ObservabilityOverride>,
+    /// #4128: each group's own CPU limit and placement, by the group's directory.
+    tuning: BTreeMap<String, crate::worker_tuning::WorkerTuningOverride>,
 }
 
 impl WorkerLayout {
@@ -87,11 +89,28 @@ impl WorkerLayout {
             .iter()
             .filter_map(|(key, group)| group.observability.map(|o| (key.clone(), o)))
             .collect();
+        let tuning = groups
+            .iter()
+            .filter_map(|(key, group)| group.tuning.map(|t| (key.clone(), t)))
+            .collect();
         Self {
             members,
             order,
             observability,
+            tuning,
         }
+    }
+
+    /// #4128: the CPU limit and placement of the Worker `context` belongs to:
+    /// `base` (the project's), with its group's keys laid over it.
+    pub fn tuning(
+        &self,
+        context: &str,
+        base: crate::worker_tuning::WorkerTuning,
+    ) -> crate::worker_tuning::WorkerTuning {
+        self.tuning
+            .get(&self.dir(context))
+            .map_or(base, |t| t.over(base))
     }
 
     /// #4127: the Workers Logs settings of the Worker `context` belongs to:

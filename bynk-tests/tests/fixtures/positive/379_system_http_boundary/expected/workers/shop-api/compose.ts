@@ -2,7 +2,7 @@
 // composition root for `shop.api` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -23,7 +23,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_POST_cart(body, { ...deps, identity: __id.value });
+      return handlers.api.http_POST_cart(body, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_cart_size(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -34,7 +34,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_cart_size({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_cart_size({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
   };
 }

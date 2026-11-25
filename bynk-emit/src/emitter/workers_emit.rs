@@ -75,6 +75,8 @@ pub struct WorkersSettings {
     pub workers_dev: Option<bool>,
     /// #4127: `[workers.observability]`, before a group's override.
     pub observability: bynk_project::observability::Observability,
+    /// #4128: `[workers]`'s `cpu_ms` and `placement`, before a group's override.
+    pub tuning: bynk_project::worker_tuning::WorkerTuning,
 }
 
 impl WorkersEmit<'_> {
@@ -473,6 +475,10 @@ impl WorkersEmit<'_> {
         wrangler_doc.push_block(emitter::observability_block(
             layout.observability(first, workers.observability),
         ));
+        // #4128: the CPU limit and placement, the same way.
+        for block in emitter::tuning_blocks(layout.tuning(first, workers.tuning)) {
+            wrangler_doc.push_block(block);
+        }
         self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
         // #3477: the Durable Object classes of this Worker's containers.
         if let Some(program) = emitter::emit_containers_ts(bindings) {

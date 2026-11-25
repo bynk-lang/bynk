@@ -1149,8 +1149,6 @@ pub(super) fn run_checks(
     // (K4): its binding is Web Crypto over the test's own bytes, deterministic and
     // I/O-free, so a test runs it for real and a fake would check nothing.
     let test_binding_modules = test_binding_modules(&adapter_bindings);
-    // #3984: a suite's test-only commons are reached through its target's view.
-    let test_uses = project_model::unit_uses_with_suite_uses(&unit_uses, &parsed);
     let (test_outputs, runnable_tests) = process_tests(
         &test_groups,
         &parsed,
@@ -1159,7 +1157,7 @@ pub(super) fn run_checks(
         &exports_visibility,
         &unit_consumes,
         &unit_consumes_aliases,
-        &test_uses,
+        &unit_uses,
         &broken,
         &unit_flattened,
         &groups,

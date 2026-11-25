@@ -1,0 +1,19 @@
+context greet
+
+capability Clock {
+  fn now() -> Effect[Int]
+}
+
+provides Clock = FixedClock {
+  fn now() -> Effect[Int] {
+    42
+  }
+}
+
+service hello {
+  on call(name: String) -> Effect[Result[String, ()]] by Caller
+      given Clock {
+    let n <- Clock.now()
+    Ok("hello")
+  }
+}
