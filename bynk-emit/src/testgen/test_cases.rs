@@ -627,6 +627,8 @@ pub(super) fn emit_test_case_function(
             tys,
         );
         // #1875 review: as at the system tier, an error here is drift.
+        // #4279: a warning is not one, and a unit case's `Undecodable` arm is flagged.
+        throwaway_errors.retain(|e| e.category != bynk_check::checker::UNDECODABLE_UNREACHABLE);
         debug_assert!(
             throwaway_errors.is_empty(),
             "a unit case re-typed for emission reported errors the check pass did not: {:?}",

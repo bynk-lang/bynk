@@ -1203,6 +1203,7 @@ fn check_integration_body(
     refs: &mut RefSink,
     tys: &Arc<Types>,
 ) -> HashMap<ExprId, checker::Callee> {
+    let from = errors.len();
     let callees = typecheck_integration_case_body(
         body.participants,
         body.view,
@@ -1215,6 +1216,7 @@ fn check_integration_body(
         tys,
     )
     .1;
+    keep_undecodable_at_system(errors, from, case_effective_tier(body.case, body.suite));
     if let Some(d1_sql) = d1_sql {
         errors.extend(d1_sql.check_peek_sites(body.unit_tables, &callees, Some(source)));
     }
@@ -2163,6 +2165,7 @@ fn check_test_bodies(
             );
         }
         for case in &test_decl.cases {
+            let from = errors.len();
             let case_callees = check_test_case_body(
                 target_name,
                 target_kind,
@@ -2186,6 +2189,7 @@ fn check_test_bodies(
                 &mut errors,
             );
             let tier = case_effective_tier(case, test_decl);
+            keep_undecodable_at_system(&mut errors, from, tier);
             check_extra_headers_tier(case, tier, &case_callees, &mut errors);
             check_extra_headers_let(case, &case_callees, &mut errors);
             check_faults_tier(case, tier, &mut errors);
@@ -3708,6 +3712,24 @@ fn check_faults_tier(
 /// Slice C, #2905: `bynk.test.wire_needs_system` — a case below `system` that
 /// uses `Wire(…)`. Shared by the unit and integration paths: the unit path
 /// once skipped it, so an http `Wire` in a unit suite reached `tsc`.
+/// #4279: the checker reports an `Undecodable` pattern of a `QueueResult` in every test body, since
+/// it does not know the case's tier. At `system` the verdict can be it, so the report is dropped
+/// for the errors a case body added from `from`.
+fn keep_undecodable_at_system(
+    errors: &mut Vec<CompileError>,
+    from: usize,
+    tier: bynk_syntax::ast::TestTier,
+) {
+    if tier != bynk_syntax::ast::TestTier::System {
+        return;
+    }
+    let mut i = from;
+    errors.retain(|e| {
+        i += 1;
+        i <= from || e.category != crate::checker::UNDECODABLE_UNREACHABLE
+    });
+}
+
 fn check_wire_tier(case: &Case, tier: bynk_syntax::ast::TestTier, errors: &mut Vec<CompileError>) {
     if tier == bynk_syntax::ast::TestTier::System || !block_uses_wire(&case.body) {
         return;

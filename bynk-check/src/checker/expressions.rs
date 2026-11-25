@@ -4696,6 +4696,26 @@ fn bind_as_error(pat: &Pattern, ctx: &mut Ctx) {
     }
 }
 
+/// #4279: `Undecodable` reads a body that did not decode, which only a `system` case's queue
+/// address can produce. Everywhere else a `QueueResult` pattern of it is a dead arm. A test body
+/// reports it unconditionally; the suite drops it for a `system` case, where it can match.
+fn warn_unreachable_undecodable(variant: &Ident, ty: TyId, ctx: &mut Ctx) {
+    if variant.name != QUEUE_UNDECODABLE || !matches!(&*ctx.tys.get(ty), Ty::QueueResult) {
+        return;
+    }
+    ctx.errors.push(
+        CompileError::new(
+            UNDECODABLE_UNREACHABLE,
+            variant.span,
+            "`Undecodable` can never match here: only a `system` case's queue address returns it",
+        )
+        .with_note(
+            "a message fails to decode only when a real queue delivers it, so `unit` and `integration` cases and handlers never see this verdict",
+        )
+        .with_note("remove the arm, or move the case to `as system` and address the queue by context path"),
+    );
+}
+
 fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
     let tys = ctx.tys;
     match pat {
@@ -4805,6 +4825,7 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
                 bind_as_error(pat, ctx);
                 return;
             };
+            warn_unreachable_undecodable(variant, ty, ctx);
             // v0.25: a qualified `T.Variant` references `T`, and its qualifier
             // must match the scrutinee type's name.
             if let Some(tn) = type_name {
@@ -5517,6 +5538,7 @@ fn check_is_pattern(
             {
                 ctx.refs.record(tn.span, SymbolKind::Type, &tn.name);
             }
+            warn_unreachable_undecodable(variant, value_ty, ctx);
             // 1. Sum-variant interpretation: the name is a variant of `value`'s
             //    sum type. (Takes priority when `value` is that sum.)
             let info = variants

@@ -695,6 +695,11 @@ pub(super) fn emit_integration_module(
         // lowering would silently fall back to untyped output.
         // #2906: except a lower-tier case in a suite that also has `system`
         // ones, which the check pass leaves unchecked (`mixed_system_suite`).
+        // #4279: a warning the check pass drops for a `system` case (`Undecodable` can match there).
+        let throwaway_errors: Vec<_> = throwaway_errors
+            .iter()
+            .filter(|e| e.category != bynk_check::checker::UNDECODABLE_UNREACHABLE)
+            .collect();
         debug_assert!(
             throwaway_errors.is_empty() || input.tier != bynk_syntax::ast::TestTier::System,
             "a system case re-typed for emission reported errors the check pass did not: {:?}",

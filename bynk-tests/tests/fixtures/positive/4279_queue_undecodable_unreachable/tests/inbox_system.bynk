@@ -1,0 +1,11 @@
+suite ops.inbox as system {
+  case "a system case reads the verdict a real queue gives" {
+    let r <- inbox.message(Job { id: "s1" })
+    match r {
+      Ack => expect true
+      Retry(_) => expect false
+      RetryAfter(_, _) => expect false
+      Undecodable => expect false
+    }
+  }
+}

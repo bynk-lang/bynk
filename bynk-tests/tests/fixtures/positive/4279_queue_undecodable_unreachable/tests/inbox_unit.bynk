@@ -1,0 +1,11 @@
+suite ops.inbox {
+  case "a unit case calls the handler with a typed value" {
+    let r <- inbox.message(Job { id: "u1" })
+    match r {
+      Ack => expect true
+      Retry(_) => expect false
+      RetryAfter(_, _) => expect false
+      Undecodable => expect false
+    }
+  }
+}

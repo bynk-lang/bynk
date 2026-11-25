@@ -118,6 +118,10 @@ const WARNING_ONLY: &[(&str, &str)] = &[
         "a warning; `positive/3877_queue_no_dead_letter` holds it with `expected_warnings.txt`",
     ),
     (
+        "bynk.queue.undecodable_unreachable",
+        "a warning; `positive/4279_queue_undecodable_unreachable` holds it with `expected_warnings.txt`",
+    ),
+    (
         "bynk.http.cookie_domain_widens",
         "a warning; `positive/3329_cookie_domain_widens` holds it with `expected_warnings.txt`",
     ),
