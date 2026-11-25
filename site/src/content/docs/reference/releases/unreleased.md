@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.679.0** | A queue consumer can return `RetryAfter(reason, delay)` to redeliver a message after a delay (whole seconds, 1 second to 24 hours: a literal outside that range is `bynk.queue.retry_delay_out_of_range`, a computed delay is rounded up and clamped with the clamp logged); `Retry` keeps retrying after the consumer's `retryDelay` |
 | **v0.678.2** | The diagnostic reference is generated one file per code, and its index is assembled at site build time, so two changes that add different diagnostics no longer conflict |
 | **v0.678.1** | The generated `tests/main.ts` marks the fixed part of its `main()` with comments, so the snapshot harness can share it between fixtures |
 | **v0.678.0** | `bynk.schema.lock` records each `derives Ord` type's field and variant order, and a reorder is an error until `bynk lock accept-order` accepts it |
