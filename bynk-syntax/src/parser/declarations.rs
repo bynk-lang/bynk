@@ -2748,6 +2748,15 @@ impl<'a> Parser<'a> {
                             t.span,
                         )
                     }
+                    // #3938: a boolean flag (`sessions = true`) is carried as the identifier
+                    // `true`/`false`; the checker admits it only where a key wants a flag.
+                    Some(TokenKind::True | TokenKind::False) => {
+                        let t = self.bump().expect("peeked a boolean literal");
+                        (
+                            SchemeArgValue::Ident(self.slice(t.span).to_string()),
+                            t.span,
+                        )
+                    }
                     // #3386: a bare identifier names a variant (`sameSite = Lax`).
                     Some(TokenKind::Ident) => {
                         let id = self.expect_ident("as a scheme config value")?;

@@ -2,7 +2,7 @@
 //! `fetch` dispatch (`emit_agent_dispatch`) and the agent factory (`emit_agent_factory`).
 
 use super::{
-    AgentStoreLayout, GivenDeps, WsOpenHost, agent_env_const_stmt, agent_key_assign,
+    AgentStoreLayout, GivenDeps, UniqueIndex, WsOpenHost, agent_env_const_stmt, agent_key_assign,
     agent_key_codec, agent_key_codec_name, agent_wire_name, agent_wire_table, append_deps_field,
     build_deps_object_ty_with_surface, consumed_type_ns, effective_given,
     emit_ws_dispatch_handlers, events_decl_item, events_deps_const_stmt, events_flush_item,
@@ -22,7 +22,7 @@ use bynk_model::{
     IrHandlerKind, StoreKindIr, body_writes_state, is_effectful_return, lower_handler_kind_ir,
 };
 use bynk_syntax::ast::AgentDecl;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// An agent class's handler methods (#3167): one per `on` handler, each lowered
 /// to a class method and written onto `out`, in declaration order.
@@ -100,7 +100,7 @@ pub(super) fn emit_agent_handlers(
                 sets: set_names.clone(),
                 caches: cache_ttls.clone(),
                 logs: log_retains.clone(),
-                indexes: store_map_indexes.clone(),
+                indexes: routable_indexes(store_map_indexes, &layout.unique_indexes),
                 held_maps: held_maps_ts.clone(),
                 map_values: map_value_ts.clone(),
                 connection_maps: layout
@@ -847,4 +847,28 @@ pub(super) fn emit_agent_factory(
     stmts.push(factory_decl);
     // #1486: no explicit blank stmt here — the printer's automatic top-level
     // spacing policy supplies the single blank before whatever follows.
+}
+
+/// The `@indexed` fields an equality `filter` may route through (#4038): every indexed field but a
+/// `@unique` `Option`, whose posting is keyed by the `Some` payload, so a lookup by the whole
+/// `Option` would not find it.
+fn routable_indexes(
+    indexes: &HashMap<String, Vec<String>>,
+    unique: &[UniqueIndex],
+) -> HashMap<String, Vec<String>> {
+    indexes
+        .iter()
+        .map(|(map, fields)| {
+            let kept = fields
+                .iter()
+                .filter(|f| {
+                    !unique
+                        .iter()
+                        .any(|u| u.optional.is_some() && u.map == *map && u.field == **f)
+                })
+                .cloned()
+                .collect();
+            (map.clone(), kept)
+        })
+        .collect()
 }

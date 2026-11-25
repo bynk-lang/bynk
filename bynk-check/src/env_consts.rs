@@ -25,7 +25,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use bynk_project::ParsedFile;
-use bynk_project::vars::{ProjectVars, VarValue, is_var_name};
+use bynk_project::vars::{ProjectVars, ResolvedConst, ValueSource, VarValue, is_var_name};
 use bynk_syntax::ast::{
     BaseType, CommonsItem, ConstDecl, Expr, ExprKind, SourceUnit, TypeBody, TypeRef, UnaryOp,
     expr_children,
@@ -39,6 +39,8 @@ use bynk_syntax::lexer::MAX_SAFE_INT;
 pub struct Outcome {
     pub source: Vec<CompileError>,
     pub manifest: Vec<CompileError>,
+    /// Each constant that resolved, with its value and where it came from.
+    pub resolved: Vec<ResolvedConst>,
 }
 
 /// The variable names that look like secrets: `bynk.toml` is committed.
@@ -372,7 +374,15 @@ fn resolve_const(
     }
     match vars.resolve(environment, &var) {
         Some((value, origin)) => match literal(value, kind, &c.init) {
-            Some(lit) => c.init = lit,
+            Some(lit) => {
+                out.resolved.push(ResolvedConst {
+                    constant: c.name.name.clone(),
+                    variable: var.clone(),
+                    value: value.shown(),
+                    source: origin.into(),
+                });
+                c.init = lit;
+            }
             None => out.source.push(
                 CompileError::new(
                     "bynk.env.bad_value",
@@ -397,7 +407,15 @@ fn resolve_const(
         None => match default {
             // The default stands in as the initialiser, with its own ids, and is
             // checked as a literal of the declared type like any other.
-            Some(d) => c.init = d,
+            Some(d) => {
+                out.resolved.push(ResolvedConst {
+                    constant: c.name.name.clone(),
+                    variable: var.clone(),
+                    value: default_shown(&d),
+                    source: ValueSource::Default,
+                });
+                c.init = d;
+            }
             None => out.source.push(
                 CompileError::new(
                     "bynk.env.missing",
@@ -485,4 +503,20 @@ fn default_mismatch(d: &Expr, kind: Kind) -> Option<&'static str> {
         _ => return None,
     };
     (found != expected(kind)).then_some(found)
+}
+
+/// A default as it is written, for the plan: a literal's own text, else `…`.
+fn default_shown(e: &Expr) -> String {
+    match &e.kind {
+        ExprKind::StrLit(s) => format!("{s:?}"),
+        ExprKind::IntLit { lexeme, .. } => lexeme.clone(),
+        ExprKind::BoolLit(b) => b.to_string(),
+        ExprKind::UnaryOp(UnaryOp::Neg, inner) => format!("-{}", default_shown(inner)),
+        ExprKind::ListLit(items, ..) => {
+            let parts: Vec<String> = items.iter().map(default_shown).collect();
+            format!("[{}]", parts.join(", "))
+        }
+        ExprKind::Paren(inner) => default_shown(inner),
+        _ => "…".to_string(),
+    }
 }

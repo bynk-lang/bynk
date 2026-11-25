@@ -388,9 +388,20 @@ pub fn resolve_env_consts(
     overlay: &std::collections::HashMap<std::path::PathBuf, String>,
     errors: &mut ErrorSink,
 ) {
+    let default = bynk_project::vars::DEFAULT_ENVIRONMENT;
+    resolve_env_consts_for(parsed, project_root, overlay, default, errors);
+}
+
+/// [`resolve_env_consts`] for the named environment (`bynk deploy --env`).
+pub fn resolve_env_consts_for(
+    parsed: &mut [ParsedFile],
+    project_root: &std::path::Path,
+    overlay: &std::collections::HashMap<std::path::PathBuf, String>,
+    environment: &str,
+    errors: &mut ErrorSink,
+) {
     let vars = bynk_project::vars::try_read_vars_with(project_root, overlay).unwrap_or_default();
-    let outcome =
-        crate::env_consts::resolve(parsed, &vars, bynk_project::vars::DEFAULT_ENVIRONMENT);
+    let outcome = crate::env_consts::resolve(parsed, &vars, environment);
     errors.extend_attributed_by_span(parsed, outcome.source);
     for e in outcome.manifest {
         errors.push_for(Some(std::path::Path::new("bynk.toml")), e);

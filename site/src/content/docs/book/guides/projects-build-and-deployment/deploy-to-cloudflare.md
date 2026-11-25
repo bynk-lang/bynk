@@ -36,8 +36,13 @@ Set the values under `[vars]` in `bynk.toml` (and `[env.<name>.vars]` for one
 environment); the build resolves each constant to a literal, falling back to the
 default given to `env`. A required variable with no value, a value of the wrong
 kind, and a `bynk.toml` variable no constant reads are all build errors. Keep
-secrets out of `[vars]`: `bynk.toml` is committed, so use `Secrets` instead. See
-[Constants](/reference/constants/) for the full rules.
+secrets out of `[vars]`: `bynk.toml` is committed, so use `Secrets` instead.
+
+`bynk deploy --env staging` builds with `[env.staging.vars]`, and the plan lists
+each constant with its value and where it came from, so you see a staging Worker
+about to use production's value before anything is pushed. Add
+`--strict-environments` to refuse that. See [Constants](/reference/constants/)
+for the full rules.
 
 ## Review a plan
 

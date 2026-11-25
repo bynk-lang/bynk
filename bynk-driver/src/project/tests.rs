@@ -612,7 +612,10 @@ fn split_roots_give_each_file_a_distinct_identity() {
         true,
         &SchemaLock::Off,
         None,
-        roots.project_root(),
+        (
+            roots.project_root(),
+            bynk_project::vars::DEFAULT_ENVIRONMENT,
+        ),
         None,
         None,
         None,
@@ -897,7 +900,10 @@ fn analyse_split(root: &Path) -> Vec<AttributedError> {
         true,
         &SchemaLock::Off,
         None,
-        roots.project_root(),
+        (
+            roots.project_root(),
+            bynk_project::vars::DEFAULT_ENVIRONMENT,
+        ),
         None,
         None,
         None,
