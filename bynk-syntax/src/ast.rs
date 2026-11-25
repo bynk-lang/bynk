@@ -2023,6 +2023,10 @@ pub struct AnnotationArg {
     /// keeps the reference's span, so a diagnostic points where the author can
     /// act; this names the constant and where it is declared.
     pub from_const: Option<ConstRef>,
+    /// #3942: the constants a list argument's elements named
+    /// (`@allowedRecipients([OpsAddr])`), each with the reference's span, which
+    /// the resolved element keeps. Empty for every other argument.
+    pub element_consts: Vec<ConstRef>,
 }
 
 /// #3445: the constant an annotation argument named before the resolution pass
