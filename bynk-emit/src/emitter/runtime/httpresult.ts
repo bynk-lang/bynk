@@ -53,9 +53,11 @@ export type HttpResult<T> =
   | { readonly tag: "Conflict"; readonly message: string }
   | { readonly tag: "Gone" }
   | { readonly tag: "LengthRequired" }
+  | { readonly tag: "PreconditionFailed"; readonly message: string }
   | { readonly tag: "PayloadTooLarge"; readonly message: string }
   | { readonly tag: "UnsupportedMediaType"; readonly message: string }
   | { readonly tag: "UnprocessableEntity"; readonly message: string }
+  | { readonly tag: "PreconditionRequired"; readonly message: string }
   | { readonly tag: "TooManyRequests"; readonly message: string }
   | { readonly tag: "UnavailableForLegalReasons"; readonly message: string }
   // 5xx server error.
@@ -120,6 +122,7 @@ export const HttpResult = {
   Conflict: (message: string): HttpResult<never> => ({ tag: "Conflict", message }),
   Gone: { tag: "Gone" } as HttpResult<never>,
   LengthRequired: { tag: "LengthRequired" } as HttpResult<never>,
+  PreconditionFailed: (message: string): HttpResult<never> => ({ tag: "PreconditionFailed", message }),
   PayloadTooLarge: (message: string): HttpResult<never> => ({ tag: "PayloadTooLarge", message }),
   UnsupportedMediaType: (message: string): HttpResult<never> => ({
     tag: "UnsupportedMediaType",
@@ -127,6 +130,10 @@ export const HttpResult = {
   }),
   UnprocessableEntity: (message: string): HttpResult<never> => ({
     tag: "UnprocessableEntity",
+    message,
+  }),
+  PreconditionRequired: (message: string): HttpResult<never> => ({
+    tag: "PreconditionRequired",
     message,
   }),
   TooManyRequests: (message: string): HttpResult<never> => ({ tag: "TooManyRequests", message }),

@@ -430,9 +430,11 @@ body.
 | `Conflict(message)` | 409 | message |
 | `Gone` | 410 | none |
 | `LengthRequired` | 411 | none |
+| `PreconditionFailed(message)` | 412 | message |
 | `PayloadTooLarge(message)` | 413 | message |
 | `UnsupportedMediaType(message)` | 415 | message |
 | `UnprocessableEntity(message)` | 422 | message |
+| `PreconditionRequired(message)` | 428 | message |
 | `TooManyRequests(message)` | 429 | message |
 | `UnavailableForLegalReasons(message)` | 451 | message |
 
@@ -1033,6 +1035,52 @@ The `304` is a **router** response synthesised from the request, not an
 `HttpResult` variant — there is no `NotModified` to return. Like the CORS
 preflight, it is stamped with `Access-Control-Allow-Origin` for a CORS service, so
 a cross-origin revalidation stays readable by the browser.
+
+### Conditional writes (`If-Match`, `412`, `428`) {#conditional-writes}
+
+Optimistic concurrency, "update this only if it has not changed since I read it", is a standard
+HTTP pattern: the client sends `If-Match: <etag>` with the validator it read, and the server
+answers `412 Precondition Failed` when the resource has moved on, or `428 Precondition Required`
+when the client must send a condition at all ([RFC 9110 §13.1.1](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1),
+[RFC 6585 §3](https://www.rfc-editor.org/rfc/rfc6585#section-3)). `PreconditionFailed(message)` and
+`PreconditionRequired(message)` are the two `HttpResult` variants for it, message-carrying like
+`Conflict(message)`, so they render under the service's error format, [problem details](#problem-details)
+included. They are `ErrorStatus` names too, so `RawError(PreconditionFailed, …)` works.
+
+```bynk,ignore
+type DocHeaders = { @name("if-match") ifMatch: Option[String] }
+
+on PUT("/docs/:id") (id: DocId, headers: DocHeaders, body: DocUpdate) -> Effect[HttpResult[()]] by u: User given Docs {
+  match headers.ifMatch {
+    None => PreconditionRequired("send If-Match with the document's ETag")
+    Some(expected) => {
+      let current <- Docs.version(id)
+      if "\"\(current)\"" != expected {
+        PreconditionFailed("the document changed since you read it")
+      } else {
+        let _ <- Docs.save(id, body)
+        NoContent
+      }
+    }
+  }
+}
+```
+
+The handler does the comparison: it reads `If-Match` through a typed [`headers`](#typed-headers)
+record, looks up the resource's current validator and answers. The router does not evaluate
+`If-Match` for you, because it would have to know the resource's current validator before the handler
+has looked it up; naming a validator source for the router to check is a later design.
+
+The comparison above handles one strong entity tag. `If-Match` may also be `*` (any current
+representation) or a comma-separated list such as `"v1", "v2"`, and a client that echoes a weak tag
+(`W/"v1"`) is rightly refused under strong comparison. A handler that accepts those splits the header
+on commas, trims each part and accepts `*` or any part equal to the current validator.
+
+The automatic `ETag` on a `GET` is **weak** (`W/"…"`), and `If-Match` uses **strong** comparison
+(RFC 9110 §13.1.1), so a validator the router derived cannot guard a write. It exists to revalidate
+`GET`s only. For writes, serve a strong validator from the `GET`, with
+[`RawTagged`](#supplying-the-validator-rawtagged) or an explicit version field, and compare against
+that.
 
 ### Declared freshness (`@cache`)
 

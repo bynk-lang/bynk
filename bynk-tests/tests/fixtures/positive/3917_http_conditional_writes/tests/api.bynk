@@ -1,0 +1,32 @@
+suite docs.api {
+	case "a write with no If-Match is answered 428" {
+		let r <- api.PUT("/docs/:id", "d1", DocHeaders { ifMatch: None }, "text") by Visitor
+		expect r is PreconditionRequired(_)
+	}
+
+	case "a stale If-Match is answered 412" {
+		let r <- api.PUT("/docs/:id", "d1", DocHeaders { ifMatch: Some("\"v1\"") }, "text") by Visitor
+		expect r is PreconditionFailed(_)
+	}
+
+	case "a matching If-Match is answered 204" {
+		let r <- api.PUT("/docs/:id", "d1", DocHeaders { ifMatch: Some("\"v2\"") }, "text") by Visitor
+		expect r is NoContent
+	}
+
+	case "RawError accepts PreconditionFailed" {
+		let r <- api.DELETE("/docs/:id", "d1") by Visitor
+		expect r is RawError(412, _, _)
+	}
+}
+
+suite docs.api as system {
+	case "the router answers 428, 412 and 204" {
+		let none <- api.PUT("/docs/:id", "d1", DocHeaders { ifMatch: None }, "text") by Visitor
+		expect none is PreconditionRequired(_)
+		let stale <- api.PUT("/docs/:id", "d1", DocHeaders { ifMatch: Some("\"v1\"") }, "text") by Visitor
+		expect stale is PreconditionFailed(_)
+		let ok <- api.PUT("/docs/:id", "d1", DocHeaders { ifMatch: Some("\"v2\"") }, "text") by Visitor
+		expect ok is NoContent
+	}
+}
