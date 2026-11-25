@@ -1983,11 +1983,14 @@ export async function responseToUnauthOutcome<T>(
 // derived from the service's routes at emit time (never restated by the author);
 // `allowHeaders` carries the resolved list (the `content-type`/`Authorization`
 // default, or the author's override). `maxAgeSecs` is the `Access-Control-Max-Age`
-// in whole seconds, absent when the author gave no `maxAge`.
+// in whole seconds, absent when the author gave no `maxAge`. #3925: `exposeHeaders`
+// is the `Access-Control-Expose-Headers` list: the headers Bynk writes for a client to
+// read plus the author's `expose` names (or `["*"]`).
 export interface CorsPolicy {
   readonly origins: readonly string[];
   readonly allowMethods: readonly string[];
   readonly allowHeaders: readonly string[];
+  readonly exposeHeaders: readonly string[];
   readonly credentials: boolean;
   readonly maxAgeSecs: number | null;
 }
@@ -2021,9 +2024,11 @@ export function applyCors<R extends Response>(
   response.headers.set("access-control-allow-origin", allowOrigin);
   if (allowOrigin !== "*") response.headers.append("vary", "Origin");
   if (policy.credentials) response.headers.set("access-control-allow-credentials", "true");
-  // #3914 (E): a `401`'s challenge is readable by a browser client.
-  if (response.headers.has("www-authenticate")) {
-    response.headers.append("access-control-expose-headers", "WWW-Authenticate");
+  // #3925: the headers a browser script may read from a cross-origin response: the ones Bynk
+  // writes for a client (a `401`'s challenge, #3914; `Retry-After`; `Location`; `ETag`) and the
+  // author's `expose` names. Naming a header the response does not carry is harmless.
+  if (policy.exposeHeaders.length > 0) {
+    response.headers.set("access-control-expose-headers", policy.exposeHeaders.join(", "));
   }
   return response;
 }

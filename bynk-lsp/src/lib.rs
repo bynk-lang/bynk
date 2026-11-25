@@ -11329,6 +11329,36 @@ mod tests {
         );
     }
 
+    /// #3925: inside a service's `cors { }`, `expose` is a field name and a
+    /// `String` constant is offered in `origins: [`, through the real
+    /// `Backend::completion`.
+    #[tokio::test]
+    async fn cors_offers_expose_and_origin_constants() {
+        let src = "context shop\n\nconst AppOrigin: String = \"https://app.example.com\"\n\nservice api from http {\n  cors {\n    origins: [AppOrigin],\n    \n  }\n\n  on GET(\"/ping\") () -> Effect[HttpResult[String]] by v: Visitor { Ok(\"pong\") }\n}\n";
+        let s = scratch_project(
+            "cors_expose_consts",
+            &[
+                ("bynk.toml", "[project]\nname=\"shop\"\n"),
+                ("src/a.bynk", src),
+            ],
+        );
+        let backend = backend_at(&s.0).await;
+        let uri = file_uri(&s.0, "src/a.bynk");
+        open(&backend, &uri, src).await;
+        backend.run_round().await;
+
+        let fields = complete_at(&backend, &uri, src, "    origins: [AppOrigin],\n    ").await;
+        assert!(
+            fields.contains(&"expose".to_string()),
+            "the cors field names: {fields:?}"
+        );
+        let values = complete_at(&backend, &uri, src, "origins: [").await;
+        assert!(
+            values.contains(&"AppOrigin".to_string()),
+            "an in-scope String constant: {values:?}"
+        );
+    }
+
     /// #4312: a store collection read in an agent predicate through `old.`,
     /// `new.` or a bare name offers `size` and nothing else, through the real
     /// `Backend::completion`.

@@ -153,6 +153,29 @@ pub(super) fn build_path_method_table(
         .collect()
 }
 
+/// #3925: the headers Bynk itself writes for a client to read, which every CORS
+/// response exposes whether or not the author lists them: the `401` challenge
+/// (#3914), `Retry-After` and `Location` (#3915) and `ETag` (`@cache`). Naming a
+/// header the service never sends is harmless.
+const AUTO_EXPOSED_HEADERS: [&str; 4] = ["WWW-Authenticate", "Retry-After", "Location", "ETag"];
+
+/// #3925: the `Access-Control-Expose-Headers` list of a service: the wildcard
+/// `["*"]` when the author wrote it (the checker refused it with credentials),
+/// otherwise the automatic set followed by the author's names, a name already
+/// present (compared without case) left out.
+fn expose_headers(policy: &bynk_syntax::ast::CorsPolicy) -> Vec<String> {
+    if policy.is_wildcard_expose() {
+        return vec!["*".to_string()];
+    }
+    let mut out: Vec<String> = AUTO_EXPOSED_HEADERS.iter().map(|h| h.to_string()).collect();
+    for name in policy.expose_headers() {
+        if !out.iter().any(|h| h.eq_ignore_ascii_case(&name)) {
+            out.push(name);
+        }
+    }
+    out
+}
+
 /// Build the per-service CORS policies. A service with a `cors { }` section on a
 /// `from http` protocol gets one `CorsService`; allow-methods is derived from its
 /// routes (union + `OPTIONS`), and allow-headers defaults to `content-type` (plus
@@ -207,6 +230,10 @@ pub(super) fn build_cors_services(
             ("origins".to_string(), str_array(&policy.origins())),
             ("allowMethods".to_string(), str_array(&methods)),
             ("allowHeaders".to_string(), str_array(&allow_headers)),
+            (
+                "exposeHeaders".to_string(),
+                str_array(&expose_headers(policy)),
+            ),
             ("credentials".to_string(), bool_lit(policy.credentials())),
             ("maxAgeSecs".to_string(), max_age_expr),
         ]);
