@@ -1,0 +1,35 @@
+commons demo.rec
+
+type RowError = { row: Int, reason: String }
+
+fn parseDecimal(s: String) -> Result[Int, String] {
+	Int.parse(s).okOr("not a decimal")
+}
+
+fn parseHex(s: String) -> Result[Int, String] {
+	if s == "ff" { Ok(255) } else { Err("not hex") }
+}
+
+fn parseAny(s: String) -> Result[Int, String] {
+	parseDecimal(s).orElse((_) => parseHex(s))
+}
+
+fn failAt(row: Int, reason: String) -> Result[Int, RowError] {
+	Err(RowError { row: row, reason: reason })
+}
+
+fn withRow(row: Int, s: String) -> Result[Int, RowError] {
+	parseDecimal(s).orElse((e) => failAt(row, e))
+}
+
+fn zero() -> Result[Int, String] {
+	Ok(0)
+}
+
+fn recover(r: Result[Int, String]) -> Result[Int, String] {
+	r.orElse((e) => zero())
+}
+
+fn problems(rs: List[Result[Int, String]]) -> List[String] {
+	rs.filterMap((r) => r.err())
+}

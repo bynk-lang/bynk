@@ -1,0 +1,5 @@
+commons demo
+
+fn side(s: String) -> Option[Map[String, Option[String]]] {
+    s.findRegexNamed("(?<left>a)|(?<right>b)")
+}

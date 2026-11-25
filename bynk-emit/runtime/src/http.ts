@@ -1849,6 +1849,10 @@ export function corsPreflightResponse(policy: CorsPolicy, requestOrigin: string 
 export interface SecurityPolicy {
   readonly nosniff: boolean;
   readonly hstsMaxAgeSecs: number | null;
+  // #3923: the `Content-Security-Policy` and `Referrer-Policy` an HTML response gets,
+  // both resolved at compile time (the `security { }` fields or their defaults).
+  readonly htmlCsp: string;
+  readonly htmlReferrerPolicy: string;
 }
 
 // Stamp the security response headers onto an already-built `Response`, in place
@@ -1866,6 +1870,13 @@ export function applySecurityHeaders<R extends Response>(
   if (policy.nosniff) response.headers.set("x-content-type-options", "nosniff");
   if (policy.hstsMaxAgeSecs !== null) {
     response.headers.set("strict-transport-security", `max-age=${policy.hstsMaxAgeSecs}`);
+  }
+  // #3923: framing and referrer protection for a page. It is decided by the response's
+  // own media type (parameters stripped), so a JSON API is unchanged.
+  const mediaType = (response.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+  if (mediaType === "text/html") {
+    response.headers.set("content-security-policy", policy.htmlCsp);
+    response.headers.set("referrer-policy", policy.htmlReferrerPolicy);
   }
   return response;
 }

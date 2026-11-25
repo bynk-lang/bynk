@@ -5199,14 +5199,19 @@ fn validate_security_policy(
     // Field names are a closed set; flag anything else (the parser accepts any
     // name, per the CORS / annotation precedent).
     for field in &policy.fields {
-        if !matches!(field.name.name.as_str(), "hsts" | "nosniff") {
+        if !matches!(
+            field.name.name.as_str(),
+            "hsts" | "nosniff" | "frameAncestors" | "referrerPolicy" | "csp"
+        ) {
             errors.push(
                 CompileError::new(
                     "bynk.http.security_unknown_field",
                     field.name.span,
                     format!("unknown `security` field `{}`", field.name.name),
                 )
-                .with_note("known fields are `hsts` and `nosniff`"),
+                .with_note(
+                    "known fields are `hsts`, `nosniff`, `frameAncestors`, `referrerPolicy` and `csp`",
+                ),
             );
         }
     }
@@ -5232,6 +5237,109 @@ fn validate_security_policy(
             expr.span,
             "`security` `nosniff` must be `true` or `false`",
         ));
+    }
+    validate_html_security_fields(policy, errors);
+}
+
+/// #3923: whether `s` is an exact origin a `frame-ancestors` source list may carry:
+/// `http://` or `https://`, then a host (and optional port), with no path, no
+/// wildcard and nothing that could end the directive or the header.
+fn is_exact_origin(s: &str) -> bool {
+    let Some(rest) = s
+        .strip_prefix("https://")
+        .or_else(|| s.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+}
+
+/// #3923: the three HTML-response fields of a `security { }` policy:
+/// `frameAncestors` (a list of exact origins, `"self"`, or `["*"]` beside a `csp`),
+/// `referrerPolicy` (one of the standard tokens, in camel case) and `csp` (a string
+/// literal with no line break). A bad value is `bynk.http.security_invalid_field`.
+fn validate_html_security_fields(policy: &SecurityPolicy, errors: &mut Vec<CompileError>) {
+    if let Some(expr) = policy.field("frameAncestors") {
+        validate_frame_ancestors(expr, policy, errors);
+    }
+    validate_scalar_html_fields(policy, errors);
+}
+
+/// #3923: `frameAncestors` is a list of exact origins or `"self"`; `["*"]` stands alone
+/// and needs an explicit `csp`.
+fn validate_frame_ancestors(expr: &Expr, policy: &SecurityPolicy, errors: &mut Vec<CompileError>) {
+    let invalid = |span, message: String| {
+        CompileError::new("bynk.http.security_invalid_field", span, message)
+    };
+    let ExprKind::ListLit(items, ..) = &expr.kind else {
+        errors.push(invalid(
+            expr.span,
+            "`security` `frameAncestors` must be a list of string literals".to_string(),
+        ));
+        return;
+    };
+    let wildcard = items
+        .iter()
+        .any(|i| matches!(&i.kind, ExprKind::StrLit(s) if s == "*"));
+    if wildcard && (items.len() != 1 || policy.csp().is_none()) {
+        errors.push(
+            invalid(
+                expr.span,
+                "`frameAncestors: [\"*\"]` must stand alone and needs an explicit `csp`".to_string(),
+            )
+            .with_note("allowing every site to frame a page is never the result of an accident: say so beside the policy you mean it for"),
+        );
+    }
+    for item in items {
+        match &item.kind {
+            ExprKind::StrLit(s) if s == "*" || s == "self" || is_exact_origin(s) => {}
+            ExprKind::StrLit(s) => errors.push(
+                invalid(
+                    item.span,
+                    format!("`frameAncestors` entry `{s}` is not an exact origin"),
+                )
+                .with_note("write an origin such as \"https://partner.example\", or \"self\"; wildcards are refused, as in `cors`"),
+            ),
+            _ => errors.push(invalid(
+                item.span,
+                "each `frameAncestors` entry must be a string literal".to_string(),
+            )),
+        }
+    }
+}
+
+/// #3923: `referrerPolicy` and `csp`, the two scalar HTML-response fields.
+fn validate_scalar_html_fields(policy: &SecurityPolicy, errors: &mut Vec<CompileError>) {
+    if let Some(expr) = policy.field("referrerPolicy") {
+        let ok = matches!(&expr.kind, ExprKind::Ident(id)
+            if REFERRER_POLICIES.iter().any(|(camel, _)| *camel == id.name));
+        if !ok {
+            let names: Vec<&str> = REFERRER_POLICIES.iter().map(|(c, _)| *c).collect();
+            errors.push(
+                CompileError::new(
+                    "bynk.http.security_invalid_field",
+                    expr.span,
+                    "`security` `referrerPolicy` must be one of the standard values, in camel case",
+                )
+                .with_note(format!("the values are {}", names.join(", "))),
+            );
+        }
+    }
+    if let Some(expr) = policy.field("csp") {
+        match &expr.kind {
+            ExprKind::StrLit(s) if !s.contains(['\r', '\n']) && !s.trim().is_empty() => {}
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.security_invalid_field",
+                    expr.span,
+                    "`security` `csp` must be a non-empty string literal with no line break",
+                )
+                .with_note("the policy is sent verbatim as one header value"),
+            ),
+        }
     }
 }
 

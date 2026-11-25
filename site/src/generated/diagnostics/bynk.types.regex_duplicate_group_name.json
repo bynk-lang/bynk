@@ -1,0 +1,12 @@
+{
+  "blurb": "`findRegexNamed` keys its result by the pattern's group names, and a name may belong to one group only: the runtimes refuse a repeated name, even across alternatives, when the pattern is built, so the program would fail at run time. Give each group its own name.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.regex_duplicate_group_name",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "fn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<side>a)|(?<side>b)\")          // ✗ `side` names two groups\n}\n\nfn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<left>a)|(?<right>b)\")         // ✓\n}",
+  "severity": "error",
+  "summary": "`findRegexNamed`'s pattern names a capture group more than once, which the runtimes refuse when the pattern is built."
+}
