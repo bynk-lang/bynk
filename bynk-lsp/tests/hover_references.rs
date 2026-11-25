@@ -1189,6 +1189,7 @@ fn a_renamed_or_qualified_used_name_hovers_as_the_declaration_it_names() {
         !h.contains(" is `describe` of "),
         "a bare name needs no note: {h}"
     );
+}
 
 /// #4181 — a commons names the `bynk` adapter's transparent types with no
 /// `consumes`, and hovers them like any type: the reference resolves to the
