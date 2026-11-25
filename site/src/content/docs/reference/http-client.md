@@ -345,11 +345,13 @@ its `etag` is the header, as sent. A raw answer that should carry an `ETag` and 
 
 ### Server-sent events
 
-`Streaming(s)` takes a `Stream[String]`, so an event is a `string` and nothing is decoded.
-The server writes each element as one event: a `data:` line for each line of the element,
-then a blank line, under `content-type: text/event-stream`, and nothing else (no `event:`,
-`id:` or `retry:`, no comments). The client reads the body with `fetch`, not `EventSource`
-(which cannot send headers or a body), and yields each event's `data`:
+`Streaming(s)` takes a `Stream[String]` or a `Stream[SseEvent]`, so an event is a `string` and
+nothing is decoded. The server writes each element as one event: a `data:` line for each line
+of the element, then a blank line, under `content-type: text/event-stream`. A `SseEvent` adds
+`event:`, `id:` and `retry:` lines, and a route that uses `.heartbeat(every)` adds comment lines
+while it is idle. The client reads the body with `fetch` and yields each event's `data`; the
+`event`, `id` and `retry` of an `SseEvent` are not surfaced (read the route through
+[`EventSource`](#eventsource) for those):
 
 ```ts
 const res = await api.orders.getTicks();
@@ -368,6 +370,34 @@ cannot become a `CallFailure`: the iteration throws a `StreamFailure` (exported,
 holding what the body rejected with), the one place the client throws. Two edges are the server's framing: an
 element containing a bare `\r` is split by a reader (the server splits on `\n` only), so it
 does not round-trip, and an empty element is an event with empty data.
+
+### EventSource
+
+A `GET` route that answers `Streaming` also has a second function, named for the route with
+`EventSource` after it, that returns the browser's own `EventSource` for the URL a call would
+fetch:
+
+```ts
+const source = api.feed.getFeedEventSource();
+if (!("kind" in source)) {
+  source.addEventListener("tick", (e) => console.log(e.data, e.lastEventId));
+}
+```
+
+An `EventSource` reconnects by itself, waiting the `retry` the server last sent, and sends the
+last event's `id` back as `Last-Event-ID`, which a handler reads through a typed `headers`
+record; that is what it is for. Its events are the browser's, so a handler's `event` name is the
+type to listen for (a `String` element is an unnamed `message`). The function takes the same
+arguments as the call and returns the `EventSource`, or the `CallFailure` that stopped one being
+made (an argument that cannot be encoded, a path segment `.` or `..`, or no `EventSource` in
+this environment, which is `Transport`).
+
+An `EventSource` cannot send a header, so it cannot send `Authorization` or any typed `headers`
+value (a non-empty one is refused as `Invalid` rather than dropped). It suits a route that is
+public or guarded by a cookie: pass `credentials: "include"` to `createClient` to send cookies to
+another origin. A route guarded by a `Bearer` or `Oidc` actor is read through the call's `events`
+instead, which uses `fetch` and so can send the header. The generated function carries that
+warning in its doc comment on every route, since the client does not know a route's actor.
 
 ## Calling through a Service Binding
 

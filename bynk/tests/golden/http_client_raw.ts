@@ -591,6 +591,59 @@ export function __streamed(route: __Route, response: globalThis.Response): unkno
   return reply;
 }
 
+/**
+ * #3918: a `Streaming` route read through the browser's own `EventSource`, which reconnects by
+ * itself and sends the last event's `id` back as `Last-Event-ID`. The arguments are encoded as for a
+ * call, and the URL is the one a call would fetch. An `EventSource` can send no header of its
+ * own, so no `Authorization`, no `x-bynk-contract` and no typed `headers`: a route that needs
+ * one is read through the call's `events` instead. `credentials: "include"` makes it send cookies
+ * to another origin. Returns the `EventSource`, or the `CallFailure` that stopped it being made.
+ */
+export function __eventSource(
+  options: ClientOptions,
+  route: __Route,
+  build: () => Result<__Request, BoundaryError>,
+): unknown {
+  let request: __Request;
+  try {
+    const built = build();
+    if (built.tag === "Err") return { kind: "Invalid", error: built.error } satisfies CallFailure;
+    request = built.value;
+  } catch (e) {
+    return __invalid(e);
+  }
+  for (const [name, value] of globalThis.Object.entries(request.params ?? {})) {
+    if (value === "." || value === "..") {
+      return {
+        kind: "Invalid",
+        error: { kind: "StructuralMismatch", path: `path.${name}`, expected: "a path segment", actual: value },
+      } satisfies CallFailure;
+    }
+  }
+  // A header the caller set cannot reach the wire through an `EventSource`; refuse it rather than drop it.
+  const headerNames = globalThis.Object.keys(request.headers ?? {});
+  if (headerNames.length > 0) {
+    return {
+      kind: "Invalid",
+      error: {
+        kind: "StructuralMismatch",
+        path: `headers.${headerNames[0]}`,
+        expected: "no typed headers: an EventSource sends none (read the route through `events` instead)",
+        actual: (request.headers ?? {})[headerNames[0]!] ?? "",
+      },
+    } satisfies CallFailure;
+  }
+  const make = (globalThis as { readonly EventSource?: typeof globalThis.EventSource }).EventSource;
+  if (make === undefined) {
+    return { kind: "Transport", cause: new globalThis.Error("this environment has no EventSource") } satisfies CallFailure;
+  }
+  try {
+    return new make(__url(options, route, request), { withCredentials: options.credentials === "include" });
+  } catch (cause) {
+    return { kind: "Transport", cause } satisfies CallFailure;
+  }
+}
+
 /** Make one call: encode, send, classify. Returns the route's reply, or the `CallFailure`. */
 export async function __call(
   options: ClientOptions,
@@ -998,12 +1051,30 @@ export function createClient(options: ClientOptions = {}) {
       getTicks: (init?: globalThis.RequestInit): globalThis.Promise<GetTicksResponse | CallFailure> => __call(options, init, __route_api_getTicks, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetTicksResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getTicksEventSource: (): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getTicks, () => {
+        return Ok({ params: {} });
+      }) as globalThis.EventSource | CallFailure,
       getCr: (init?: globalThis.RequestInit): globalThis.Promise<GetCrResponse | CallFailure> => __call(options, init, __route_api_getCr, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetCrResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getCrEventSource: (): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getCr, () => {
+        return Ok({ params: {} });
+      }) as globalThis.EventSource | CallFailure,
       getFeedByMode: (mode: string, init?: globalThis.RequestInit): globalThis.Promise<GetFeedByModeResponse | CallFailure> => __call(options, init, __route_api_getFeedByMode, () => {
         return Ok({ params: { "mode": globalThis.String(mode) } });
       }) as globalThis.Promise<GetFeedByModeResponse | CallFailure>,
+      /**
+       * The same route read through the browser's own `EventSource`, which reconnects by itself and sends the last event's `id` back as `Last-Event-ID`. It can send no `Authorization` or other header, so a route that needs one is read through the call's `events` instead; `credentials: "include"` sends cookies to another origin.
+       */
+      getFeedByModeEventSource: (mode: string): globalThis.EventSource | CallFailure => __eventSource(options, __route_api_getFeedByMode, () => {
+        return Ok({ params: { "mode": globalThis.String(mode) } });
+      }) as globalThis.EventSource | CallFailure,
       getOrigin: (init?: globalThis.RequestInit): globalThis.Promise<GetOriginResponse | CallFailure> => __call(options, init, __route_api_getOrigin, () => {
         return Ok({ params: {} });
       }) as globalThis.Promise<GetOriginResponse | CallFailure>,

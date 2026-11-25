@@ -1,0 +1,16 @@
+---
+level: minor
+probes: ts_writes
+raises: ts_writes — the generated client gains an EventSource function per streaming GET route (#3918)
+changelog: bynk client emits, for each Streaming GET route, a function returning the browser's own EventSource, and a Chromium test proves named events, Last-Event-ID resumption, multi-line data, an in-band fault and an unchanged Stream[String]
+---
+
+## ADR: sse-client-event-source
+title: The generated client gives a streaming GET route an EventSource form
+summary: A thin function over the browser's EventSource, since event names are runtime values and the browser already reconnects with Last-Event-ID
+
+**Context.** A client that reads a `Streaming` route with `fetch` can send headers but must reconnect by hand, and it yields only each event's `data`. A browser's `EventSource` reconnects by itself and replays `Last-Event-ID`, which is what the structured `SseEvent` is for, but it cannot send a header.
+
+**Decision.** (E) For each `GET` route that answers `Streaming`, the generated client adds a function named for the route with `EventSource` after it, taking the same arguments and returning the native `EventSource` for the URL a call would fetch (or the `CallFailure` that stopped one being made). It is thin, not a typed wrapper: an event's name is a runtime value (`SseEvent.event` is an `Option[String]`), so there is nothing static to type but the `data` string. `credentials: "include"` becomes `withCredentials`. A non-empty typed `headers` value is refused as `Invalid`, not dropped, because an `EventSource` sends none. The route's actor is not known to the client, so rather than omit the function on a `Bearer` or `Oidc` route, every one carries a doc comment that it cannot authenticate with a header, and the reference says to read such a route through the call's `events`. The existing `events` iterable is unchanged.
+
+**Consequences.** A cookie-authenticated or public stream can be consumed with the platform's own reconnecting client. A browser test (`system/sse_browser.rs`) drives Playwright's Chromium at a compiled handler over HTTP, with Playwright installed from its own pinned lockfile in the existing System tests job: it adds about one to two minutes of runner time on a cold apt cache (the Chromium install; the test runs in about a second), and `BYNK_REQUIRE_BROWSER` makes a missing browser a failure in CI while other legs skip loudly. A heartbeat's comment line is invisible to the `EventSource` API, so it is proved at the wire by the runtime's own tests.

@@ -1119,6 +1119,18 @@ for await (const e of live.events) { seen.push(e); break; }
 show("feed-break", seen);
 show("feed-404", await c.api.getFeedByMode("off"));
 
+// #3918: the same routes through the browser's own `EventSource`.
+const opened = [];
+globalThis.EventSource = class { constructor(url, init) { opened.push([url, init.withCredentials]); } };
+const viaEs = createClient({ baseUrl: "http://x", credentials: "include" }).api;
+viaEs.getTicksEventSource();
+viaEs.getFeedByModeEventSource("a b");
+c.api.getTicksEventSource();
+show("es-opened", opened);
+show("es-dot", viaEs.getFeedByModeEventSource(".."));
+delete globalThis.EventSource;
+show("es-none", Object.keys(viaEs.getTicksEventSource()));
+
 // The parser, over frames cut at awkward places and written by other servers.
 const framed = (parts, type = "text/event-stream") => async () =>
   new Response(new ReadableStream({ start(k) { for (const p of parts) k.enqueue(typeof p === "string" ? new TextEncoder().encode(p) : p); k.close(); } }), { status: 200, headers: { "content-type": type } });
@@ -1221,6 +1233,20 @@ fn check_raw(out: &str) {
     );
     assert_eq!(v("feed-break"), r#"["a"]"#);
     assert_eq!(v("feed-404"), r#"{"status":404,"kind":"NotFound"}"#);
+    // An `EventSource` opens the URL a call would fetch, with credentials only when asked.
+    let opened = v("es-opened");
+    assert!(
+        opened.contains(r#"["http://x/ticks",true]"#)
+            && opened.contains(r#"["http://x/feed/a%20b",true]"#),
+        "{opened}"
+    );
+    assert!(opened.ends_with(r#",false]]"#), "{opened}");
+    assert!(
+        v("es-dot").contains(r#""kind":"Invalid""#),
+        "{}",
+        v("es-dot")
+    );
+    assert_eq!(v("es-none"), r#"["kind","cause"]"#);
     // The server splits an element on `\n` only, so a `\r` in one ends a line for a reader.
     assert_eq!(v("cr"), r#"["a"]"#);
     // The parser follows the specification.

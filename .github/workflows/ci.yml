@@ -1134,12 +1134,29 @@ jobs:
       # before the suite. Mandatory on Linux (BYNK_REQUIRE_WORKERD).
       - name: Pre-warm the npx cache for wrangler
         run: npx -y wrangler@4 --version
+      # #3918: the browser test (system/sse_browser.rs) drives a real Chromium's
+      # `EventSource` at a compiled handler. Playwright is installed from its own
+      # pinned lockfile, and the action serves Chromium's apt packages from the
+      # Actions cache (see it for why). Cost: about 1 to 2 minutes of this job's
+      # runner time on a cold cache, well under one when the apt cache hits (the
+      # test itself runs in about a second).
+      - name: Install Playwright
+        working-directory: bynk-tests/tests/system/browser
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Chromium (SSE browser test)
+        uses: ./.github/actions/playwright-chromium
+        with:
+          lockfile: bynk-tests/tests/system/browser/package-lock.json
+          working-directory: bynk-tests/tests/system/browser
+          save: ${{ github.event_name != 'merge_group' }}
       - name: Run tests (system tier)
         run: >-
           scripts/ci/run-unless-sibling-fails.sh "Test suite (ubuntu-latest)"
           cargo nextest run --workspace --locked --profile ci-system
         env:
           BYNK_REQUIRE_TSC: "1"
+          BYNK_REQUIRE_BROWSER: "1"
+          NODE_PATH: ${{ github.workspace }}/bynk-tests/tests/system/browser/node_modules
           BYNK_REQUIRE_WORKERD: "1"
           BYNK_REQUIRE_MYSQL: "1"
           BYNK_MYSQL_SMOKE_PORT: ${{ job.services.mariadb.ports['3306'] }}

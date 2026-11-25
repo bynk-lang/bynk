@@ -998,6 +998,7 @@ impl Gen {
                 unions.extend(route.response_type.into_iter().flatten());
                 unions.extend(route.arg_types);
                 methods.push(route.method);
+                methods.extend(route.event_source);
             }
             services.push(TsObjectEntry::prop(
                 property(&sp.key),
