@@ -17,6 +17,8 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0951](0951-predicates-read-collection-size.md) | **An invariant or transition reads a store collection's size, and nothing else of it** (v0.689) — What a predicate may read of a Map, Set, Cache or Log store field, and which count it sees | Accepted (v0.689) |
+| [0950](0950-queue-delay-refined.md) | **A Queue send delay is a refined QueueDelay, a part second still rounds up, and the maximum is 24 hours** (v0.688) — QueueSend.delay takes `QueueDelay = Duration where InRange(0.seconds, 24.hours)`, checked at compile time for a literal, and a part second rounds up so a message is never early | Accepted (v0.688) |
 | [0949](0949-authenticated-cache-private.md) | **Authenticated responses are Cache-Control private by default, with noStore opt-in** (v0.687) — A route whose actor carries a credential sends private on every response, refuses public, and @cache(noStore: true) sends no-store | Accepted (v0.687) |
 | [0948](0948-retired-diagnostic-tombstones.md) | **Retired diagnostic codes are tombstoned, not forgotten** (v0.686) — A RETIRED table answers `bynk explain`, a shipped-codes list makes removal without a tombstone fail CI | Accepted (v0.686) |
 | [0947](0947-generate-matches-and-isodate.md) | **A for all draws members of a Matches pattern and real IsoDate dates** (v0.685) — How the pattern is walked, what filters the draws, and what stays pinned | Accepted (v0.685) |
