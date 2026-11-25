@@ -1750,13 +1750,9 @@ struct SessionDriver {
     cookie: String,
     /// How long an issued cookie is valid, in seconds.
     ttl_secs: i64,
-    /// #3938: for a `sessions = true` actor, where its session agent is built from: the
-    /// participant's handlers namespace, its `env` binding and the agent's factory name. The
-    /// acting principal's session is recorded there, as `issue` records one, so the seam
-    /// finds it live.
+    /// #3938: for a `sessions = true` actor, how the acting principal's session is recorded in
+    /// its session agent, as `issue` records one, so the seam finds it live.
     sessions: Option<super::session_driver::SessionAgentRef>,
-    /// The cookie's `SameSite`, which `issue` takes.
-    same_site: String,
 }
 
 impl SessionDriver {
@@ -1803,32 +1799,12 @@ fn session_route(
     let session = SessionDriver {
         keys: TsExpr::object(vec![("secret".to_string(), secret_read_of(&seam.secret))]),
         actor: seam.actor.clone(),
-        cookie: seam.cookie,
+        cookie: seam.cookie.clone(),
         ttl_secs: seam.ttl_secs,
-        sessions: seam
-            .sessions
-            .then(|| super::session_driver::SessionAgentRef {
-                handlers_ns: ns.to_string(),
-                env: env_binding(ns),
-                factory: crate::emitter::agent_factory_name(
-                    &bynk_check::actors::sessions_agent_name(&seam.actor),
-                ),
-            }),
-        same_site: seam.same_site,
+        sessions: super::session_driver::SessionAgentRef::of(&seam, ns),
     };
     let pair = match &session.sessions {
-        Some(agent) => super::session_driver::registered_pair(
-            &session.keys,
-            (
-                &session.actor,
-                &session.cookie,
-                &session.same_site,
-                session.ttl_secs,
-            ),
-            agent,
-            ident("__sub"),
-            now_secs(),
-        ),
+        Some(agent) => agent.pair(&session.keys, ident("__sub"), now_secs()),
         None => session.pair(&session.keys, ident("__sub"), now_secs()),
     };
     (
@@ -2030,7 +2006,6 @@ mod tests {
             cookie: "__Host-session".to_string(),
             ttl_secs: 43200,
             sessions: None,
-            same_site: "Lax".to_string(),
         }
     }
 

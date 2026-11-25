@@ -10,62 +10,78 @@ use crate::ts_build::{
 };
 
 /// How a driver reaches a `sessions = true` actor's session agent: the participant's handlers
-/// namespace, its `env` binding (a field of the harness `__h`) and the agent's factory name.
+/// namespace, its `env` binding (a field of the harness `__h`), the agent's factory name and the
+/// actor's own seam settings `issue` takes.
 pub(super) struct SessionAgentRef {
-    pub(super) handlers_ns: String,
-    pub(super) env: String,
-    pub(super) factory: String,
+    handlers_ns: String,
+    env: String,
+    factory: String,
+    actor: String,
+    cookie: String,
+    same_site: String,
+    ttl_secs: i64,
 }
 
-/// The `name=value` template literal of `sub`'s session cookie, issued `issued_secs` after the
-/// epoch with `keys`, and recorded in the agent first. `(actor, cookie, same_site, ttl_secs)` are
-/// the actor's own seam settings.
-pub(super) fn registered_pair(
-    keys: &TsExpr,
-    (actor, cookie, same_site, ttl_secs): (&str, &str, &str, i64),
-    agent: &SessionAgentRef,
-    sub: TsExpr,
-    issued_secs: TsExpr,
-) -> TsExpr {
-    let register = arrow_with(
-        vec![
-            TsParam::new("__sid".to_string(), Some(TsType::named("string"))),
-            TsParam::new("__exp".to_string(), Some(TsType::named("number"))),
-            TsParam::new("__now".to_string(), Some(TsType::named("number"))),
-        ],
-        true,
-        method_call(
-            call(
-                member(ident(agent.handlers_ns.clone()), agent.factory.clone()),
+impl SessionAgentRef {
+    /// The reference for `seam`'s actor in participant `ns`, or `None` without `sessions`.
+    pub(super) fn of(seam: &bynk_check::actors::SignedCookieSeam, ns: &str) -> Option<Self> {
+        seam.sessions.then(|| Self {
+            handlers_ns: ns.to_string(),
+            env: crate::testgen::names::env_binding(ns),
+            factory: crate::emitter::agent_factory_name(&bynk_check::actors::sessions_agent_name(
+                &seam.actor,
+            )),
+            actor: seam.actor.clone(),
+            cookie: seam.cookie.clone(),
+            same_site: seam.same_site.clone(),
+            ttl_secs: seam.ttl_secs,
+        })
+    }
+
+    /// The `name=value` template literal of `sub`'s session cookie, issued `issued_secs` after the
+    /// epoch with `keys`, and recorded in the agent first.
+    pub(super) fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        let agent = self;
+        let register = arrow_with(
+            vec![
+                TsParam::new("__sid".to_string(), Some(TsType::named("string"))),
+                TsParam::new("__exp".to_string(), Some(TsType::named("number"))),
+                TsParam::new("__now".to_string(), Some(TsType::named("number"))),
+            ],
+            true,
+            method_call(
+                call(
+                    member(ident(agent.handlers_ns.clone()), agent.factory.clone()),
+                    vec![
+                        as_expr(sub.clone(), TsType::named("never")),
+                        member(ident("__h"), agent.env.clone()),
+                    ],
+                ),
+                "add",
                 vec![
-                    as_expr(sub.clone(), TsType::named("never")),
-                    member(ident("__h"), agent.env.clone()),
+                    ident("__sid"),
+                    ident("__exp"),
+                    ident("__now"),
+                    TsExpr::object(Vec::new()),
                 ],
             ),
-            "add",
+        );
+        let issued = await_expr(call(
+            ident("__issueSessionCookie"),
             vec![
-                ident("__sid"),
-                ident("__exp"),
-                ident("__now"),
-                TsExpr::object(Vec::new()),
+                keys.clone(),
+                str_lit(self.actor.clone()),
+                str_lit(self.cookie.clone()),
+                str_lit(self.same_site.clone()),
+                sub,
+                num_lit(self.ttl_secs),
+                binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
+                register,
             ],
-        ),
-    );
-    let issued = await_expr(call(
-        ident("__issueSessionCookie"),
-        vec![
-            keys.clone(),
-            str_lit(actor.to_string()),
-            str_lit(cookie.to_string()),
-            str_lit(same_site.to_string()),
-            sub,
-            num_lit(ttl_secs),
-            binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
-            register,
-        ],
-    ));
-    TsExpr::template_lit(
-        vec![cookie.to_string() + "=", String::new()],
-        vec![member(paren(issued), "value")],
-    )
+        ));
+        TsExpr::template_lit(
+            vec![self.cookie.clone() + "=", String::new()],
+            vec![member(paren(issued), "value")],
+        )
+    }
 }
