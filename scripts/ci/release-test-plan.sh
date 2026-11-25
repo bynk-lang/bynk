@@ -34,7 +34,11 @@
 #
 # Which run answers, per job (for the commit's own legs): the commit's `push` run on main, then its
 # `merge_group` run (the queue passes the Linux legs and the push run then
-# skips them). The first run that has the job decides: a leg that ran and did
+# skips them), then a `schedule` run on it. ci.yml has had no `push` trigger
+# since November 2026: `main` is tested by a backstop every three hours, so a
+# tagged commit that was `main`'s head at a backstop has a `schedule` run
+# with every leg (the full `ci` profile), and the queue run alone never has
+# the ready set. Older commits keep their push runs. The first run that has the job decides: a leg that ran and did
 # not succeed on the push run is never overridden by the queue's earlier pass.
 # A `chore(stamp):` commit by the stamp bot changes no code and its run
 # deliberately skips legs its parent passed (see ci.yml's `test-os` step), so
@@ -93,7 +97,7 @@ fi
 green() {
   local name=$1 sha event state
   for sha in "${candidates[@]}"; do
-    for event in push merge_group; do
+    for event in push merge_group schedule; do
       state="$(job_state "$sha" "$event" "$name")"
       case "$state" in
         ok) return 0 ;;

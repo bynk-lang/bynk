@@ -2,7 +2,8 @@ name: CI
 
 # Stages. Each event runs what is worth its cost at that point, and no more
 # (ADR "ci-staged-gates"). Path filters (`changes`) apply on top, in every
-# stage but the nightly. `changes` names the stage (`stage` output).
+# stage but the backstop and the nightly. `changes` names the stage (`stage`
+# output).
 #
 #   draft          A draft PR's pushes: fast feedback, Linux only. lint,
 #                  clippy, API docs, the Linux unit + integration tiers and
@@ -23,11 +24,17 @@ name: CI
 #                  gates pass (`ci-fast`), so a PR that fails fmt or clippy
 #                  spends no Windows or macOS minutes.
 #   merge_group    Integration only: the draft set, on top of the entries
-#                  ahead, minus the jobs a combination of PRs cannot break in
-#                  practice (API docs, the wasm builds, the browser artefacts,
-#                  the docs site, the Dev Container feature): each entry
-#                  passed those at its own head, and the backstop and nightly
-#                  run them on `main`. Each entry already passed the ready set
+#                  ahead, minus API docs, the wasm builds, the browser
+#                  artefacts, the docs site and the Dev Container feature.
+#                  Each entry passed those at its own head. Combining entries
+#                  can still break two of them: rustdoc's `-D warnings` and
+#                  the site's link checker fail when one entry renames what
+#                  another newly links to. Such a break lands on `main`,
+#                  turns later Rust or site PRs red (their runs test the merge
+#                  ref), and is named by the next backstop's failure issue,
+#                  up to 3 h later. That is the accepted cost of the runners
+#                  saved; the backstop runs the first four on `main`, the
+#                  nightly the fifth. Each entry already passed the ready set
 #                  at its own head; the queue checks what combining them can
 #                  break, on Linux, where that is cheapest. An ejection costs
 #                  minutes.
@@ -214,7 +221,8 @@ jobs:
       installer_scripts: ${{ steps.filter.outputs.installer_scripts }}
       release_workflow: ${{ steps.filter.outputs.release_workflow }}
       all: ${{ steps.all.outputs.value }}
-      # The CI stage of this run: draft | ready | queue | main | nightly (see
+      # The CI stage of this run: draft | ready | queue | backstop | nightly
+      # (`main` only for a push run, which is no longer triggered; see
       # the stage table at the top). A draft that `promote` marks ready keeps
       # `draft` here; `ready-gate` reads the promotion.
       stage: ${{ steps.stage.outputs.value }}
