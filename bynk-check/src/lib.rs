@@ -59,6 +59,7 @@ pub mod email;
 pub mod embeds;
 pub mod emitted_names;
 pub mod entailment;
+pub mod env_consts;
 pub mod exec_plan;
 pub mod exports;
 pub mod expr_types;

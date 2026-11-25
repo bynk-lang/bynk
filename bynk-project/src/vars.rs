@@ -185,8 +185,15 @@ pub fn try_read_vars_with(
     project_root: &Path,
     overlay: &HashMap<PathBuf, String>,
 ) -> Result<ProjectVars, ProjectPathsError> {
-    let Ok(content) = read_source(&project_root.join("bynk.toml"), overlay) else {
-        return Ok(ProjectVars::default());
+    // Like the worker groups, an overlay without the manifest falls back to the
+    // disk: the CLI's source map holds `.bynk` files only.
+    let manifest = project_root.join("bynk.toml");
+    let content = match read_source(&manifest, overlay) {
+        Ok(text) => text,
+        Err(_) => match std::fs::read_to_string(&manifest) {
+            Ok(text) => text,
+            Err(_) => return Ok(ProjectVars::default()),
+        },
     };
     let doc = content
         .parse::<toml::Table>()

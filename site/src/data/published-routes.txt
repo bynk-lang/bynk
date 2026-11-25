@@ -1518,6 +1518,14 @@
 /reference/diagnostics/bynk.embed.too_large/
 /reference/diagnostics/bynk.embed.unreadable_file/
 /reference/diagnostics/bynk.embed.unsafe_path/
+/reference/diagnostics/bynk.env.bad_value/
+/reference/diagnostics/bynk.env.conflicting_default/
+/reference/diagnostics/bynk.env.malformed_call/
+/reference/diagnostics/bynk.env.missing/
+/reference/diagnostics/bynk.env.not_initialiser/
+/reference/diagnostics/bynk.env.secret_like_name/
+/reference/diagnostics/bynk.env.unknown_variable/
+/reference/diagnostics/bynk.env.unsupported_type/
 /reference/diagnostics/bynk.event.bad_params/
 /reference/diagnostics/bynk.event.bad_schema_dispatch/
 /reference/diagnostics/bynk.event.bad_schema_version/

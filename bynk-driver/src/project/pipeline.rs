@@ -535,6 +535,8 @@ pub(super) fn run_checks(
     //        them all. The parsed AST that `bynk fmt` produces is untouched (it
     //        parses independently), so the terse inheriting source round-trips.
     project_model::normalize_service_defaults(&mut parsed);
+    // #3941: `env(NAME)` constants take the default environment's values.
+    project_model::resolve_env_consts(&mut parsed, project_root, overlay, &mut errors);
     // #1821 (ADR 0147 D3): a deployable build strips every suite, here, right
     // after parsing, so no later pass (the reserved-namespace and
     // function-type checks walk every parsed unit) sees one: never

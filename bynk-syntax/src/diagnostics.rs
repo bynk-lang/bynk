@@ -1816,6 +1816,36 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "embed shell = \"embeds/../page.html\"    // ✗ a `..` segment\n\nembed shell = \"embeds/page.html\"       // ✓",
     },
     Explain {
+        code: "bynk.env.bad_value",
+        blurb: "Each `env(NAME)` constant is read from `bynk.toml` as the type it is declared with: a `String` takes a string, an `Int` a whole number, a `Bool` `true` or `false`, a `List[String]` an array of strings. A value of another kind is refused rather than converted, so a quoted `\"3\"` cannot stand in for the `Int` 3. The message names the variable, the table it was read from, and the type the constant needs. Fix the value in `bynk.toml`, or change the constant's type. A value of the right kind that breaks the constant's refinement is reported on the `env(…)` initialiser, as any literal that breaks its type would be.",
+        example: "// bynk.toml\n[vars]\nMAX_LINES = \"100\"\n\n// config.bynk\nconst MaxLines: Int = env(MAX_LINES)   // ✗ the value is a string\n\n// bynk.toml\n[vars]\nMAX_LINES = 100   // ✓ a whole number",
+    },
+    Explain {
+        code: "bynk.env.conflicting_default",
+        blurb: "A `bynk.toml` variable has one value per environment, so two constants that read it must agree on what it is when no environment sets it. Two different defaults leave the variable meaning two things at once. Give both the same default, or give neither a default and set the variable in `bynk.toml`, or read two different variables.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://a.example\")\nconst Callback: String = env(APP_ORIGIN, \"https://b.example\")   // ✗ a different default for `APP_ORIGIN`\n\nconst Callback: String = env(APP_ORIGIN, \"https://a.example\")   // ✓ the same default",
+    },
+    Explain {
+        code: "bynk.env.malformed_call",
+        blurb: "A constant's `env` initialiser names the `bynk.toml` variable it reads, bare and not as a string, and may give a default: `env(NAME)` or `env(NAME, default)`. The name is capital letters, digits and `_`, starting with a capital letter, so a variable cannot be mistaken for a constant (which is written in upper-camel case). Write the call in that form.",
+        example: "const Origin: String = env(\"APP_ORIGIN\")   // ✗ the name is written as a string\n\nconst Origin: String = env(APP_ORIGIN, \"https://app.example\")   // ✓ a bare name",
+    },
+    Explain {
+        code: "bynk.env.missing",
+        blurb: "`env(NAME)` with no default is a required value: every environment must supply one. The build for this environment found none in its `[env.<name>.vars]` or in `[vars]`. Set the variable in `bynk.toml`, under `[vars]` for every environment or under `[env.<name>.vars]` for one, or give `env` a default: `env(NAME, \"fallback\")`. The value is read from `bynk.toml` only, never from the Worker's run-time environment or the build machine's, so a deploy depends only on committed configuration.",
+        example: "const Origin: String = env(APP_ORIGIN)   // ✗ no default, and `bynk.toml` sets no `APP_ORIGIN`\n\nconst Origin: String = env(APP_ORIGIN, \"https://app.example\")   // ✓ a default",
+    },
+    Explain {
+        code: "bynk.env.not_initialiser",
+        blurb: "`env(NAME)` is a constant's whole initialiser and nothing else. It cannot sit inside a record or a list. Every per-environment value is therefore a named constant, and code that needs the value names the constant: a constant is either fixed or bound to exactly one variable. Give the value its own constant.",
+        example: "const Origin: String = env(APP_ORIGIN, \"https://app.example\")\nconst Origins: List[String] = [env(APP_ORIGIN, \"https://app.example\")]   // ✗ `env` nested in a list\n\nconst Origins: List[String] = [Origin]   // ✓ a constant for the value",
+    },
+    Explain {
+        code: "bynk.env.unsupported_type",
+        blurb: "A `bynk.toml` value is text, a whole number, `true` or `false`, or an array of strings, so an `env(NAME)` constant can be a `String`, an `Int`, a `Bool` or a `List[String]`, or a refinement over a `String` or an `Int` declared in the same unit. A record, a sum, a `Duration` or any other type has no spelling there yet. Read the pieces as separate constants and build the value from them, or declare the constant with a supported type.",
+        example: "const Window: Duration = env(WINDOW)   // ✗ a `Duration` cannot be written in `bynk.toml`\n\nconst WindowMillis: Int = env(WINDOW_MS, 1000)   // ✓ an `Int`",
+    },
+    Explain {
         code: "bynk.event.bad_params",
         blurb: "An `on event` handler takes the event payload and, optionally, a second parameter of type `EventEnvelope`, which carries the emission's metadata: its event id, publisher, time and schema version. Any other count, or any other type in second place, has nothing to receive it. Remove the extra parameter or type it `EventEnvelope`. A wrong first parameter is `bynk.event.handler_param_type_mismatch`.",
         example: "consumes bynk\n\nevent Paid = { id: String }\n\nservice onPaid from Events(Paid) {\n  on event(e: Paid, env: String) -> Effect[()] {   // ✗ the second parameter must be `EventEnvelope`\n  on event(e: Paid, env: EventEnvelope) -> Effect[()] {   // ✓",
@@ -7896,6 +7926,38 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.embed.unsafe_path",
         "An `embed` path is empty, absolute, or contains a `..` segment.",
+    ),
+    d(
+        "bynk.env.bad_value",
+        "A `bynk.toml` variable holds a value of the wrong kind for the `env(…)` constant that reads it: a string where the constant is an `Int`, say.",
+    ),
+    d(
+        "bynk.env.conflicting_default",
+        "Two `env(…)` constants name one variable but give it different defaults.",
+    ),
+    d(
+        "bynk.env.malformed_call",
+        "`env(…)` is not `env(NAME)` or `env(NAME, default)`.",
+    ),
+    d(
+        "bynk.env.missing",
+        "An `env(NAME)` constant has no default, and `bynk.toml` gives its variable no value in the environment being built.",
+    ),
+    d(
+        "bynk.env.not_initialiser",
+        "`env(…)` appears inside another expression: it is only ever a constant's whole initialiser.",
+    ),
+    warn(d(
+        "bynk.env.secret_like_name",
+        "An `env(…)` variable is named like a secret (`*_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD`), but `bynk.toml` is committed (warning).",
+    )),
+    d(
+        "bynk.env.unknown_variable",
+        "`bynk.toml` sets a build-time variable that no `env(…)` constant reads.",
+    ),
+    d(
+        "bynk.env.unsupported_type",
+        "An `env(…)` constant has a type `bynk.toml` cannot spell.",
     ),
     d(
         "bynk.event.bad_params",

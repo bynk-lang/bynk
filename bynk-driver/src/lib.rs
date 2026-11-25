@@ -1894,6 +1894,69 @@ mod tests {
         ));
     }
 
+    /// #3941: `env(NAME[, default])` constants take the default environment's
+    /// values from `bynk.toml`, then their own default; the rest is refused.
+    #[test]
+    fn env_constants_resolve_from_bynk_toml_then_their_default() {
+        let build = |name: &str, manifest: &str, source: &str| {
+            let dir = scratch_dir(name);
+            fs::write(dir.0.join("bynk.toml"), manifest).unwrap();
+            fs::create_dir_all(dir.0.join("src")).unwrap();
+            fs::write(dir.0.join("src/config.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0).expect("reads");
+            project::compile_project(&options).map(|_| ()).map_err(|f| {
+                f.errors
+                    .iter()
+                    .map(|e| e.error.category)
+                    .collect::<Vec<_>>()
+            })
+        };
+        let project = "[project]\nname = \"p\"\n\n";
+        let consts = "commons config\n\nconst Origin: String = env(APP_ORIGIN)\nconst Lines: Int = env(MAX_LINES, 100)\n";
+        // A `[vars]` value, and a default for the unset one.
+        assert_eq!(
+            build(
+                "env_ok",
+                &format!("{project}[vars]\nAPP_ORIGIN = \"https://app\"\n"),
+                consts
+            ),
+            Ok(())
+        );
+        // A required variable with no value, in the default environment.
+        assert_eq!(
+            build("env_missing", project, consts),
+            Err(vec!["bynk.env.missing"])
+        );
+        // A value of the wrong kind, a variable nothing reads, and an
+        // environment's own variable that is read.
+        assert_eq!(
+            build(
+                "env_bad",
+                &format!("{project}[vars]\nAPP_ORIGIN = 3\n"),
+                consts
+            ),
+            Err(vec!["bynk.env.bad_value"])
+        );
+        assert_eq!(
+            build(
+                "env_unknown",
+                &format!("{project}[vars]\nAPP_ORIGIN = \"x\"\nAPP_ORIGN = \"y\"\n"),
+                consts
+            ),
+            Err(vec!["bynk.env.unknown_variable"])
+        );
+        assert_eq!(
+            build(
+                "env_staging_var_read",
+                &format!(
+                    "{project}[vars]\nAPP_ORIGIN = \"x\"\n\n[env.staging.vars]\nMAX_LINES = 5\n"
+                ),
+                consts
+            ),
+            Ok(())
+        );
+    }
+
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.
     #[test]
     fn a_worker_gets_the_default_compatibility_flag_without_a_workers_table() {
