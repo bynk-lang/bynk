@@ -42,6 +42,7 @@ pub mod documentation_request;
 pub mod explain_request;
 pub mod extract;
 pub mod fill_arms;
+pub mod match_to_expect;
 pub use bynk_ide::first_party_docs;
 pub mod fix_all;
 pub use bynk_ide::hover;
@@ -4327,6 +4328,8 @@ impl LanguageServer for Backend {
             version,
         ));
         actions.extend(crate::extract::extract_variable(text, span, &uri, version));
+        // #4252: `match` with an `expect false` arm -> `expect … is`.
+        actions.extend(crate::match_to_expect::quick_fix(text, span, &uri, version));
         let empty_reqs = Vec::new();
         let empty_locals = Vec::new();
         let empty_types = Vec::new();
