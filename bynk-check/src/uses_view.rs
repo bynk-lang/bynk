@@ -552,3 +552,102 @@ pub fn add_ambiguous_imports(
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::testkit::analyse;
+
+    const X: (&str, &str) = (
+        "lib/x.bynk",
+        "commons lib.x\n\ntype Status = | Open | Shut\n\nfn describe(s: Status) -> String {\n  \"x\"\n}\n\nconst Limit: Int = 1\n",
+    );
+    const Y: (&str, &str) = (
+        "lib/y.bynk",
+        "commons lib.y\n\ntype Status = | On | Off\n\nfn describe(s: Status) -> String {\n  \"y\"\n}\n\nconst Limit: Int = 2\n",
+    );
+
+    fn app(body: &str) -> crate::testkit::Analysed {
+        analyse(&[X, Y, ("app/z.bynk", &format!("commons app.z\n\n{body}"))])
+    }
+
+    /// #4045: two used commons that declare one name are legal until it is written.
+    #[test]
+    fn two_whole_uses_sharing_a_name_pass_until_it_is_written() {
+        app("uses lib.x\nuses lib.y\n\nfn f() -> Int {\n  1\n}\n").assert_clean();
+    }
+
+    #[test]
+    fn writing_a_shared_name_bare_is_ambiguous_for_types_values_and_constants() {
+        for body in [
+            "uses lib.x\nuses lib.y\n\nfn f(s: Status) -> Int {\n  1\n}\n",
+            "uses lib.x\nuses lib.y\n\nfn f() -> Int {\n  Limit\n}\n",
+        ] {
+            app(body).assert_reports("bynk.uses.ambiguous_name");
+        }
+        let a = app("uses lib.x\nuses lib.y\n\nfn f(s: Status) -> Int {\n  1\n}\n");
+        let msg = a.render();
+        assert!(msg.contains("lib.x.Status") && msg.contains("lib.y.Status"), "{msg}");
+    }
+
+    /// An alias qualifies, and bare names of the other commons still resolve.
+    #[test]
+    fn an_alias_reaches_the_commons_names_qualified() {
+        app("uses lib.x\nuses lib.y as Y\n\nfn f(s: Status, t: Y.Status) -> String {\n  Y.describe(t)\n}\n\nfn g() -> Int {\n  Y.Limit\n}\n")
+            .assert_clean();
+    }
+
+    /// A braced list selects and renames.
+    #[test]
+    fn a_braced_list_selects_and_renames() {
+        app("uses lib.x\nuses lib.y { Status as YStatus, describe as describeY }\n\nfn f(s: Status, t: YStatus) -> String {\n  describeY(t)\n}\n")
+            .assert_clean();
+        // Unlisted names are not in scope.
+        app("uses lib.y { Status }\n\nfn f() -> Int {\n  Limit\n}\n")
+            .assert_reports("bynk.resolve.unknown_name");
+    }
+
+    /// A commons' full name qualifies a name the clauses leave ambiguous bare.
+    #[test]
+    fn the_full_commons_name_qualifies() {
+        app("uses lib.x\nuses lib.y\n\nfn f(s: lib.x.Status, t: lib.y.Status) -> String {\n  lib.y.describe(t)\n}\n")
+            .assert_clean();
+    }
+
+    #[test]
+    fn a_selected_name_that_does_not_exist_is_unknown() {
+        app("uses lib.y { Nope }\n\nfn f() -> Int {\n  1\n}\n")
+            .assert_reports("bynk.uses.unknown_name");
+        app("uses lib.y as Y\n\nfn f() -> Int {\n  Y.Nope\n}\n")
+            .assert_reports("bynk.uses.unknown_name");
+    }
+
+    /// A second spelling of one declaration is refused, never a second type.
+    #[test]
+    fn a_second_spelling_of_one_declaration_is_refused() {
+        app("uses lib.y { Status }\n\nfn f(a: Status, b: lib.y.Status) -> Int {\n  1\n}\n")
+            .assert_reports("bynk.uses.second_spelling");
+        app("uses lib.y as Y\n\nfn f(a: Y.Status, b: lib.y.Status) -> Int {\n  1\n}\n")
+            .assert_reports("bynk.uses.second_spelling");
+    }
+
+    /// A one-segment commons name is no qualifier: `keys.map(…)` is a method call.
+    #[test]
+    fn a_one_segment_commons_name_is_not_a_qualifier() {
+        let a = analyse(&[
+            ("keys.bynk", "commons keys\n\nfn one() -> Int {\n  1\n}\n"),
+            (
+                "app.bynk",
+                "commons app\n\nuses keys\n\nfn f(keys: List[Int]) -> List[Int] {\n  keys.map((k: Int) => k)\n}\n",
+            ),
+        ]);
+        a.assert_clean();
+    }
+
+    /// The types a selected declaration mentions come along under their own
+    /// names, so it still checks, and a local declaration wins over an import.
+    #[test]
+    fn a_selected_declaration_keeps_the_types_it_mentions() {
+        app("uses lib.x\nuses lib.y { describe as describeY }\n\nfn f(t: lib.y.Status) -> String {\n  describeY(t)\n}\n")
+            .assert_clean();
+    }
+}
