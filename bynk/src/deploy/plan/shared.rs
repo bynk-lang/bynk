@@ -65,15 +65,58 @@ pub(crate) fn shared_constants(
         .collect()
 }
 
+/// Whether `bindings` hold anything [`shared_bindings`] compares: a Service to a
+/// Worker outside the build, or an `Email`. When they do not, `default` need not
+/// be built at all.
+pub(crate) fn has_comparable_bindings(
+    bindings: &BTreeMap<String, Vec<WorkerBinding>>,
+    own_scripts: &BTreeSet<String>,
+) -> bool {
+    bindings.values().flatten().any(|b| match &b.source {
+        BindingSource::ForeignService { worker, .. } => !own_scripts.contains(worker),
+        // Only an `Email` with a value that could match: an open one is never shared.
+        BindingSource::Email {
+            to,
+            allowed_recipients,
+            ..
+        } => to.is_some() || !allowed_recipients.is_empty(),
+        _ => false,
+    })
+}
+
+/// What to say, and whether to refuse, when `default` could not be built so its
+/// `Service` and `Email` values were not compared: a literal worker name is the
+/// same in every build, so `--strict-environments` cannot vouch for isolation.
+/// `cause` is why it failed to build (its first error); both messages carry it and
+/// what to do about it.
+pub(crate) fn comparison_skipped(environment: &str, strict: bool, cause: &str) -> (String, bool) {
+    const REMEDY: &str = "fix `default` (often a required variable only an environment sets: give it a value under `[vars]` or `[env.default.vars]`) to see what is shared";
+    if strict {
+        (
+            format!(
+                "bynk: error: `default` could not be built ({cause}), so whether `{environment}` shares a `Service` worker or an `Email` address with it was not checked (`--strict-environments`); {REMEDY}"
+            ),
+            true,
+        )
+    } else {
+        (
+            format!(
+                "bynk: note: `default` could not be built ({cause}), so `{environment}`'s `Service` workers and `Email` addresses were not compared with it; {REMEDY}"
+            ),
+            false,
+        )
+    }
+}
+
 /// The `Service @worker` and `Email @to` / `@allowedRecipients` bindings whose
 /// value in `environment`'s build equals `default`'s build, matched by context
-/// and binding name. `foreign` is the names of the Service bindings that reach a
-/// Worker outside the build: one that reaches the build's own Worker is a project
-/// edge, which an environment names apart from `default`'s, so it is not shared.
+/// and binding name. `own_scripts` is the build's own Workers' script names: a
+/// Service that reaches one is a project edge, which an environment names apart
+/// from `default`'s, so only a Service to a Worker outside the build is shared.
 pub(crate) fn shared_bindings(
     environment: &BTreeMap<String, Vec<WorkerBinding>>,
     default: &BTreeMap<String, Vec<WorkerBinding>>,
-    foreign: &BTreeSet<String>,
+    own_scripts: &BTreeSet<String>,
 ) -> Vec<SharedWithDefault> {
     let mut out = Vec::new();
     for (context, bindings) in environment {
@@ -88,7 +131,7 @@ pub(crate) fn shared_bindings(
                 (
                     BindingSource::ForeignService { worker, .. },
                     BindingSource::ForeignService { worker: same, .. },
-                ) if worker == same && foreign.contains(&binding.name) => {
+                ) if worker == same && !own_scripts.contains(worker) => {
                     out.push(shared("service", &binding.name, format!("{worker:?}")));
                 }
                 (
@@ -159,7 +202,14 @@ pub(crate) fn strict_refusal(shared: &[SharedWithDefault], environment: &str) ->
     if shared.is_empty() {
         return None;
     }
-    let names: Vec<&str> = shared.iter().map(|s| s.name.as_str()).collect();
+    // Each name once, in order: an `Email` sharing both `@to` and
+    // `@allowedRecipients` is two entries of one binding.
+    let mut names: Vec<&str> = Vec::new();
+    for s in shared {
+        if !names.contains(&s.name.as_str()) {
+            names.push(s.name.as_str());
+        }
+    }
     Some(format!(
         "bynk: error: `{environment}` shares {} with `default`; give each its own value under `[env.{environment}.vars]` (`--strict-environments`)",
         names.join(", ")
