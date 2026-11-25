@@ -121,10 +121,27 @@ pub(crate) fn emit_capability(
             // mentions a `Codable` type parameter is encoded whole at the call
             // site, so the provider receives a JSON value, never a witness.
             let codable = bynk_check::checker::codable::codable_op_params(op);
+            // #4116: a first-party operation's `Key`-bound parameter (`Idempotency`'s key) is
+            // encoded at the call site too: the provider receives its canonical string.
+            let first_party_keys: Vec<String> = if commons.commons.name.joined() == "bynk" {
+                op.type_params
+                    .iter()
+                    .filter(|tp| tp.bounds.iter().any(|b| b.name == "Key"))
+                    .map(|tp| tp.name.name.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            };
             let encoded: Vec<bool> = op
                 .params
                 .iter()
-                .map(|p| bynk_check::checker::codable::mentions_any(&p.type_ref, &codable))
+                .map(|p| {
+                    bynk_check::checker::codable::mentions_any(&p.type_ref, &codable)
+                        || bynk_check::checker::codable::mentions_any(
+                            &p.type_ref,
+                            &first_party_keys,
+                        )
+                })
                 .collect();
             let params: Vec<bynk_ts::TsParam> = sig
                 .params
@@ -156,7 +173,7 @@ pub(crate) fn emit_capability(
                 .iter()
                 .map(|tp| tp.name.name.clone())
                 .filter(|tp| {
-                    codable.is_empty()
+                    (codable.is_empty() && first_party_keys.is_empty())
                         || op
                             .params
                             .iter()

@@ -620,6 +620,15 @@ export function __bynkKeyEncode(v: unknown): string {
   return JSON.stringify(canonical(v));
 }
 
+/**
+ * The string a first-party `Idempotency` operation stores a non-text key under (#4116): `k:` and
+ * its canonical encoding, so two keys share an entry exactly when they are `==`. A text key is
+ * stored as it is, by the call site, which does not call this.
+ */
+export function __bynkIdempotencyKey(k: unknown): string {
+  return "k:" + __bynkKeyEncode(k);
+}
+
 /** Whether `k` can key a plain `Map`/`Set` (SameValueZero is value equality). */
 function plainKey(k: unknown): boolean {
   return typeof k !== "object" || k === null;

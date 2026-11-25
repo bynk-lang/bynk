@@ -197,6 +197,25 @@ pub(in crate::emitter) fn decode_capability_reply(
     )
 }
 
+/// #4116: whether an `Idempotency` key argument is text at run time: a `String`, or a refined or
+/// opaque `String`.
+fn key_is_text(key: &Expr, cx: &LowerCtx) -> bool {
+    use bynk_check::checker::{NamedKind, Ty};
+    use bynk_syntax::ast::BaseType;
+    let Some(te) = cx.commons().expr_types.get(&key.id) else {
+        return true;
+    };
+    let ty = te.ty.get(cx.ty_render().types());
+    matches!(
+        &*ty,
+        Ty::Base(BaseType::String)
+            | Ty::Named {
+                kind: NamedKind::Refined(BaseType::String) | NamedKind::Opaque(BaseType::String),
+                ..
+            }
+    )
+}
+
 /// #934 (call-site key scoping): `Idempotency.dedup[T](key)` and
 /// `Idempotency.remember[T](key, value, expiresAfter)` and
 /// `Idempotency.claim(key, expiresAfter)` all take the
@@ -222,6 +241,7 @@ pub(in crate::emitter) fn scope_idempotency_key(
     is_first_party: bool,
     method: &str,
     args_lowered: &mut Vec<bynk_ts::TsExpr>,
+    key_arg: Option<&Expr>,
     cx: &LowerCtx,
 ) {
     if !is_first_party || !matches!(method, "dedup" | "remember" | "claim") {
@@ -230,7 +250,13 @@ pub(in crate::emitter) fn scope_idempotency_key(
     let scope = cx
         .handler_scope()
         .unwrap_or_else(|| panic!("Idempotency.{method} lowered with no handler_scope set"));
-    let key = args_lowered.remove(0);
+    let mut key = args_lowered.remove(0);
+    // #4116: a key that is not text is stored under its canonical encoding. A `String`, a
+    // refined `String` and an opaque `String` are stored as they were, so existing entries match.
+    if key_arg.is_some_and(|k| !key_is_text(k, cx)) {
+        cx.runtime_use().note_cmp("__bynkIdempotencyKey");
+        key = call(ident("__bynkIdempotencyKey"), vec![key]);
+    }
     // `TemplateLit` parts print verbatim, so the scope prints as it is spelled.
     let scoped = TsExpr::template_lit(vec![format!("{scope}::"), String::new()], vec![key]);
     args_lowered.insert(0, scoped);
@@ -740,7 +766,13 @@ pub(in crate::emitter) fn lower_capability_call(
                 ..
             })
         );
-        scope_idempotency_key(is_first_party, &method.name, &mut args_lowered, cx);
+        scope_idempotency_key(
+            is_first_party,
+            &method.name,
+            &mut args_lowered,
+            args.first(),
+            cx,
+        );
         if is_first_party && method.name == "claim" && cx.tracks_claims() {
             let cap_node = member(cx.cap_deps_node(), &recv.name);
             return Some(tracked_claim_call(cap_node, args_lowered, cx));
@@ -786,7 +818,13 @@ pub(in crate::emitter) fn lower_cross_capability_call(
             ..
         })
     );
-    scope_idempotency_key(first_party, &method.name, &mut args_lowered, cx);
+    scope_idempotency_key(
+        first_party,
+        &method.name,
+        &mut args_lowered,
+        args.first(),
+        cx,
+    );
     if first_party && method.name == "claim" && cx.tracks_claims() {
         let cap_node = member(cx.cap_deps_node(), &cap);
         return Some(tracked_claim_call(cap_node, args_lowered, cx));

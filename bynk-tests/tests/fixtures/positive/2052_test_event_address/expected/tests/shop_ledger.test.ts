@@ -8,9 +8,9 @@ import * as __ns_shop_order from "./../shop/order.js";
 <<bynk-shared: testing/expectation>>
 <<bynk-shared: testing/observation>>
 
-type __Idempotency_dedup_Call = { key: string };
-type __Idempotency_remember_Call = { key: string; value: unknown; expiresAfter: number };
-type __Idempotency_claim_Call = { key: string; expiresAfter: number };
+type __Idempotency_dedup_Call = { key: unknown };
+type __Idempotency_remember_Call = { key: unknown; value: unknown; expiresAfter: number };
+type __Idempotency_claim_Call = { key: unknown; expiresAfter: number };
 
 function __bynkTest_Idempotency(): __ns_bynk.Idempotency {
   const store = new globalThis.Map<string, { value: unknown; until: number }>();
