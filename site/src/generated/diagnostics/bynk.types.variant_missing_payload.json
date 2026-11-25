@@ -1,0 +1,10 @@
+{
+  "blurb": "A variant with a payload is built by calling it, with its payload as arguments. Written bare, `Circle` is not a value, since nothing fills `radius`; only a variant with no payload can stand alone. Call it with one argument per field, as `Circle(10)`. The qualified form `Shape.Circle` is refused in the same way. A call with the wrong number of arguments is `bynk.types.variant_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.variant_missing_payload",
+  "constructs": [],
+  "example": "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle    // ✗ `Circle` carries a payload\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
+  "severity": "error",
+  "summary": "A variant requiring a payload was used without one."
+}

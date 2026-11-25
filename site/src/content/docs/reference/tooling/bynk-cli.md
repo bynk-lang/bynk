@@ -1761,6 +1761,32 @@ tag. A refusal exits non-zero and changes nothing.
 
 ---
 
+## `bynk lock`
+
+Changes to `bynk.schema.lock` that are a person's decision.
+
+### `bynk lock accept-order`
+
+```text
+bynk lock accept-order <TYPE> [--path PATH]
+bynk lock accept-order --all [--path PATH]
+```
+
+Accepts the new order of a `derives Ord` type: rewrites its entry under
+`[orders]` to the field or variant order now declared. A reorder changes how
+every value of the type sorts, so a build refuses it
+([`bynk.types.ord_order_changed`](/reference/diagnostics/bynk.types.ord_order_changed/))
+until it is accepted. Commit the rewritten lock with the reorder.
+
+`TYPE` is the type's name, or `<unit>.<Type>` when two types share a name. `--all`
+accepts every type whose order differs from the lock and prints each one.
+`--path` is the project directory (default `.`). It reads the source without
+checking it, and refuses a project that does not parse. **Exit code:** `0`, or
+non-zero when the type is not found or the lock cannot be written. Accepting an
+order that is already recorded says so and writes nothing.
+
+---
+
 ## `bynk migrate`
 
 An agent's stored record migrates lazily, when it is next loaded. `bynk migrate`

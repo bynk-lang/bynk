@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.registry.source_mismatch",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk.lock` locks a package to one registry, but its organisation now routes to another; a misrouted organisation fails rather than resolving a same-named package elsewhere."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`select[T]` and `firstAs[T]` write the `SELECT` and the column list themselves, from the fields of the row record `T`, so the SQL you give is only the rest, starting at `FROM`. That way the columns are spelt once and cannot drift from the type. Start at `FROM`. A query that cannot (a `WITH` or a parenthesised one) is read with `all` and `Json.decodeSql`, which take the whole statement.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.select_tail_has_select",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "let _ <- Orders.select[Order](\"SELECT id, total FROM orders\", [])    // ✗ the compiler writes `SELECT`\n\nlet _ <- Orders.select[Order](\"FROM orders\", [])                      // ✓",
+  "severity": "error",
+  "summary": "A `D1`, `Postgres` or `MySql` `select[T]` or `firstAs[T]` statement does not start at `FROM` (for example it begins with `SELECT`, `WITH` or a parenthesis); the compiler writes the `SELECT` and column list from `T`."
+}

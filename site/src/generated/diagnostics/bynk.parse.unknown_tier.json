@@ -1,0 +1,10 @@
+{
+  "blurb": "A test case's tier says how much of the program it runs against, and there are three: `unit`, `integration` and `system`. Any other name after `as` is refused, usually a misspelling. Leave the clause out for `unit`, the default.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unknown_tier",
+  "constructs": [],
+  "example": "case \"doubles\" as weird {               // ✗ not a tier\n    expect double(2) == 4\n}\n\ncase \"doubles\" as unit {                // ✓\n    expect double(2) == 4\n}",
+  "severity": "error",
+  "summary": "A `case`/`suite` `as <tier>` clause names something other than `unit`, `integration`, or `system`."
+}

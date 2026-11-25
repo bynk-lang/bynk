@@ -1,0 +1,12 @@
+{
+  "blurb": "A constant's value is fixed when its module loads, so its initialiser must be static: a literal, a `Duration` literal, a record, list or variant built from static values, `Some`/`None`/`Ok`/`Err`, `T.unsafe(lit)`, an empty `List`/`Map`/`Set`, or another constant. A function call (even a pure one), an operator, an interpolated string, a field access, a lambda, `if` and `match` are not. The code is also reported when a static value is not of the declared type. Write the value out, or make it a `fn` and call it where it is used.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.bad_const_initialiser",
+  "constructs": [
+    "const_decl"
+  ],
+  "example": "fn base() -> Int {\n  10\n}\n\nconst Limit: Int = base()   // ✗ a call is not a static value\n\nconst Limit: Int = 10   // ✓",
+  "severity": "error",
+  "summary": "A `const` initialiser is not a static value of the declared type: only literals, constructors over static values, `T.unsafe(lit)`, `List.empty()`/`Map.empty()`/`Set.empty()`, `Duration` literals and references to other constants are allowed."
+}

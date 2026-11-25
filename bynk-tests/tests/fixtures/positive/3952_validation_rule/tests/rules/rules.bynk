@@ -49,6 +49,21 @@ case "a string predicate names itself" {
   expect failed(Nightly.of("nope")) == "cron"
 }
 
+fn bounded[T](r: Result[T, ValidationError]) -> String {
+  match r {
+    Ok(_) => "ok",
+    Err(e) => bound(e),
+  }
+}
+
+case "a bound written as a constant is the rule's argument" {
+  expect failed(Capped.of(0)) == "range"
+  expect bounded(Capped.of(0)) == "1 to 100"
+  expect bounded(Atmost.of(11)) == "at most 10"
+  expect bounded(Tag.of("ABC")) == "matches ^[a-z]+$"
+  expect bounded(Capped.of(50)) == "ok"
+}
+
 case "a failure keeps its human message beside the rule" {
   expect said(Note.of("too long")) == "Keep it to 5 characters"
   expect said(Short.of("ab")) == "At least 3 characters"

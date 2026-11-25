@@ -1,0 +1,10 @@
+{
+  "blurb": "The type parameters of one declaration are told apart by name, and a repeat would collapse into a single parameter, so `Pair[T, T]` would force both fields to the same type with no sign of it. Give each parameter its own name. A method's own type parameter may not reuse a name from its receiver type either, as that would make the two ambiguous.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.duplicate_type_param",
+  "constructs": [],
+  "example": "type Pair[T, T] = { a: T, b: T }    // ✗ `T` declared twice\n\ntype Pair[A, B] = { a: A, b: B }    // ✓ one name for each",
+  "severity": "error",
+  "summary": "A `type` or `fn` declares the same type-parameter name more than once (v0.157, ADR 0183)."
+}

@@ -1,9 +1,9 @@
 //! Central registry of diagnostic codes.
 //!
 //! This is the single source of truth for the `bynk.*` codes the compiler can
-//! emit. The reference page `site/src/content/docs/reference/diagnostics.md` is generated
-//! from [`render_markdown`], and the test `tests/diagnostics_registry.rs`
-//! asserts that this table matches exactly the set of codes used across the
+//! emit. The reference index `site/src/content/docs/reference/diagnostics.md` is assembled at site
+//! build time from the per-code files [`render_json_per_code`] writes (#4286), and the test
+//! `tests/diagnostics_registry.rs` asserts that this table matches exactly the set of codes used across the
 //! compiler source — so a new code cannot be introduced without documenting it
 //! here, and a removed code cannot linger in the docs.
 //!
@@ -55,7 +55,7 @@ pub const D_PATH: &str = "/d/";
 /// A curated, offline-complete explanation of a diagnostic code (#853).
 ///
 /// The `blurb`/`example` are the offline answer `bynk explain` prints, and the
-/// text of the code's page on the site ([`render_json`]). Where that page
+/// text of the code's page on the site ([`render_json_per_code`]). Where that page
 /// lives, and which reference sections it links to, belong to the docs
 /// (`site/src/data/diagnostic-links.json`), not to this table (#3876): the
 /// toolchain links every code as [`href`], so a docs reorganisation never
@@ -2285,7 +2285,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.held.query_accessor_on_held_map",
         blurb: "A held `Map[K, Connection]` is iterated with the broadcast operations, `forEach` (one at a time) or `parTraverse` (in parallel), not with a key query. `.entries`, `.keys` and `.values` would lift the connections out into a query, which the single-owner rules for held values do not allow. To send to every connection, broadcast over the map; to learn who is connected, keep a separate `Set` of their keys.",
-        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+        example: "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
     },
     Explain {
         code: "bynk.held.unsupported_map_op",
@@ -2321,6 +2321,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.history.restates_invariant",
         blurb: "Every state a driven run reaches has already passed the agent's `invariant` and `transition` checks, so a history property that only asserts the same thing over `run` cannot fail. The compiler flags it, and the check is deliberately narrow, so a near-copy may pass. Assert something the per-state rules do not say, such as a protocol across steps: a spend is accepted only after a top-up.",
         example: "// demo/wallet.bynk\ninvariant nonneg: balance >= 0\n\n// tests/t.test.bynk\nfor all run: History[Wallet] { expect run.all((s) => s.new.balance >= 0) }   // ✗ the invariant says this\nfor all run: History[Wallet] { expect run.all((s) => (s.call is Spend && s.accepted) implies run.upTo(s).any((p) => p.call is TopUp && p.accepted)) }   // ✓ a protocol across steps",
+    },
+    Explain {
+        code: "bynk.http.body_cap_defaulted",
+        blurb: "Every body-taking HTTP route has a request-body cap, 1 MiB (1,048,576 bytes) unless the route's `@limit(maxBody: …)` or the service's `limits { maxBody: … }` says otherwise. This hint lists, once per service, the routes that take the default, so a service that used to accept larger bodies finds out at build and not in production: a larger body is answered `413`, and its `details` say that `@limit(maxBody: …)` raises the cap. It is a hint, not an error: if 1 MiB is what you want, leave it, or state it with `limits { maxBody: 1_048_576 }` to silence the hint. A `@raw` route has no default and must declare its cap (`bynk.http.raw_body_unbounded`).",
+        example: "type Import = { rows: List[String] }\n\nservice api from http {\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }   // hint: takes the default 1 MiB cap\n}\n\nservice api from http {\n    @limit(maxBody: 26_214_400)   // ✓ the cap is stated\n    on POST(\"/imports\") (body: Import) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
     },
     Explain {
         code: "bynk.http.body_kind_conflict",
@@ -2627,11 +2632,6 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.limits_unknown_field",
         blurb: "A `limits { }` section sets the request-body ceilings of a service. Its fields are `maxBody` and, for `@multipart` routes, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the routes with a ceiling you did not set. Rename it or remove it. A field with a bad value is `bynk.http.limits_invalid_field`; the per-route form is `bynk.http.limit_unknown_arg`.",
         example: "type Note = { text: String }\n\nservice api from http {\n    limits { maxBody: 1_000_000, maxSize: 10 }    // ✗ not a field of `limits`\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    limits { maxBody: 1_000_000 }                 // ✓\n    on POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
-    },
-    Explain {
-        code: "bynk.http.multipart_body_unbounded",
-        blurb: "A `@multipart` body is buffered whole, with its parsed parts held beside it, so an upload with no ceiling lets one client use up the Worker's memory. A `@multipart` route therefore needs a cap, as a `@raw` one does (`bynk.http.raw_body_unbounded`): `@limit(maxBody: …)` on the handler, or `limits { maxBody: … }` on the service. Choose the largest upload you mean to accept.",
-        example: "type Upload = { title: String }\n\n@multipart   // ✗ no cap on the handler or the service\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 1_000_000)   // ✓ capped\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
         code: "bynk.http.path_param_not_stringy",
@@ -4076,6 +4076,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Order = { customerId: String, region: Int }\ntype Customer = { code: String, region: Int }\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.region, (o, c) => c.region).count()   // ✗ `String` against `Int`\n\norders.joinOn(customers, (o) => o.customerId, (c) => c.code, (o, c) => c.region).count()     // ✓ both `String`",
     },
     Explain {
+        code: "bynk.query.par_traverse_renamed",
+        blurb: "`parTraverse` on a store or held `Map` is now `parForEach`. On a `List`, `parTraverse` runs the steps concurrently and returns their values; the query form returns `()`, so it takes the `parForEach` name, which means the same on both receivers. Rename the call: the fix is machine-applicable. A step whose results you want back is a `List`: `collect()` the query, then `parTraverse` the list.",
+        example: "agent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parTraverse((c) => c.send(Frame { text: text }))   // ✗ renamed\n    }\n}\n\nagent Room {\n    key id: String\n    store conns: Map[String, Connection[Frame]]\n\n    on call fan(text: String) -> Effect[()] {\n        conns.parForEach((c) => c.send(Frame { text: text }))    // ✓ runs for effect\n    }\n}",
+    },
+    Explain {
         code: "bynk.query.sum_needs_numeric",
         blurb: "`sum` and `average` add the values the key function returns, so the key must be numeric: `Int`, `Float` or `Duration`, or a refined type over one of them. A `String` or a record cannot be added. Return a numeric field. `sum` also adds a `Decimal` key, exactly, on a `List` and on a `Query`. `average` does not take one: a mean is a division, and a `Decimal` division needs a scale and a rounding mode, so sum the key, then `div(Decimal.fromInt(n), scale, mode)` by the count. To pick by an ordering rather than add, `min`, `max` and `sortBy` accept any orderable key.",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
@@ -4116,8 +4121,13 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
+        code: "bynk.queue.retry_delay_out_of_range",
+        blurb: "`RetryAfter(reason, delay)` retries a message after `delay`, and Cloudflare retries after a whole number of seconds, from 1 second to 24 hours. A delay written as a literal outside that range is refused here: under a second it would round to no delay at all, and over 24 hours the platform would not honour it. Write a delay between 1 second and 24 hours. A delay computed at run time, such as `30.seconds * delivery.attempts`, cannot be checked, so it is rounded up to whole seconds and clamped to the range, with the clamp logged. A fault would retry with no delay, the opposite of what the handler asked for.",
+        example: "on message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 25.hours)   // ✗ at most 24 hours\n}\n\non message(job: Job) -> Effect[QueueResult] {\n    RetryAfter(\"smtp unavailable\", 30.seconds)   // ✓\n}",
+    },
+    Explain {
         code: "bynk.queue.return_not_queue_result",
-        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled) and `Retry(reason)` (deliver it again). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
+        blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled), `Retry(reason)` (deliver it again) and `RetryAfter(reason, delay)` (deliver it again after a delay). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
         example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
     },
     Explain {
@@ -4154,6 +4164,24 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.record_spread.unknown_field",
         blurb: "A record spread, `T { ...base, field: value }`, copies every field of `base` and replaces the ones you list. Each listed field has to be one the record declares: a misspelt or invented name would otherwise be dropped silently, or build a value that is not a `T`. Check the field name against the type's declaration. To add a field, declare it on the type first.",
         example: "type Counter = { n: Int }\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, missing: 0 }   // ✗ `Counter` has no field `missing`\n}\n\nfn bump(c: Counter) -> Counter {\n    Counter { ...c, n: 0 }   // ✓ an existing field\n}",
+    },
+    Explain {
+        code: "bynk.refine.bound_not_literal",
+        blurb: "An argument of a refinement predicate (`InRange`, `AtLeast`, `AtMost`, \
+                `MinLength`, `MaxLength`, `Length`, `Matches`) can be a constant, and \
+                the compiler replaces it with the literal it is bound to before the \
+                refinement is read, so `InRange(1, MaxQty)` means what `InRange(1, 100)` \
+                means. This one cannot be replaced: the constant is declared a type \
+                other than exactly the argument's (a refined constant is not a plain \
+                `Int`), is not bound to a literal or to another such constant, or is not \
+                a constant in scope. Declare it with the argument's own type and bind it \
+                to a literal, or write the literal in the predicate. A constant declared \
+                the refined type whose bound it is reports `bynk.resolve.const_cycle`.",
+        example: "type Count = Int where Positive\n\
+                  const MaxQty: Count = 100\n\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✗ `MaxQty` is a `Count`, not an `Int`\n\n\
+                  const MaxQty: Int = 100\n\
+                  type Qty = Int where InRange(1, MaxQty)   // ✓ declared exactly `Int`",
     },
     Explain {
         code: "bynk.refine.literal_violates",
@@ -6180,6 +6208,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Key = | Id(n: Int) | Name(n: String)\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) | Name(n) => \"key\"    // ✗ `n` is an `Int` and a `String`\n    }\n}\n\nfn show(k: Key) -> String {\n    match k {\n        Id(n) => \"id\"               // ✓ one arm each\n        Name(n) => n\n    }\n}",
     },
     Explain {
+        code: "bynk.types.ord_order_changed",
+        blurb: "A `derives Ord` type orders by declaration order: a record by its fields in turn, a sum \
+                or enum by its variants and then their payloads. Moving a field or variant changes \
+                how every value of the type sorts, and nothing else would notice, so bynk.schema.lock \
+                records the order of each of the project's `derives Ord` types under `[orders]` and a \
+                build that finds a different one fails until the change is accepted. Swapping two \
+                existing fields or variants, or inserting one anywhere but the end, is a change; \
+                adding at the end, removing, and renaming in place are not, and the lock follows \
+                them. If the new order is intended, run `bynk lock accept-order <Type>` (or \
+                `--all`) and commit the lock with the change; otherwise put the declaration back.",
+        example: "// tasks.bynk, with `Priority` recorded as Low < Medium < High\n\
+                  type Priority = enum { High, Low, Medium } derives Ord    // ✗ the order changed\n\
+                  \n\
+                  type Priority = enum { Low, Medium, High } derives Ord    // ✓ the recorded order",
+    },
+    Explain {
         code: "bynk.types.pattern_arity",
         blurb: "A variant pattern takes one binding for each payload field the variant \
                 declares, in order, or none to ignore the payload. A different count, or any \
@@ -8078,7 +8122,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.held.query_accessor_on_held_map",
-        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query.",
+        "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`), not a key query.",
     ),
     d(
         "bynk.held.unsupported_map_op",
@@ -8108,6 +8152,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.history.restates_invariant",
         "A history property merely re-checks a guarantee a declared `invariant`/`transition` already enforces on every reached state (testing track slice 7, ADR 0155).",
     ),
+    hint(d(
+        "bynk.http.body_cap_defaulted",
+        "A service's body-taking routes rely on the default 1 MiB request-body cap (hint).",
+    )),
     d(
         "bynk.http.body_kind_conflict",
         "A handler carries both `@raw` and `@form`, which each fix the wire format of its one `body`.",
@@ -8386,10 +8434,6 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.http.limits_unknown_field",
         "A `limits { }` policy declares a field outside the closed set.",
-    ),
-    d(
-        "bynk.http.multipart_body_unbounded",
-        "A `@multipart` route has no request-body cap (`@limit` or `limits { maxBody }`).",
     ),
     warn(d(
         "bynk.http.multipart_large_cap",
@@ -9258,6 +9302,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.query.join_key_mismatch",
         "A `joinOn`/`leftJoin` left and right key function return different types.",
     ),
+    d(
+        "bynk.query.par_traverse_renamed",
+        "`Query.parTraverse` (a store or held `Map`'s concurrent step) is now `parForEach` (auto-fixable).",
+    ),
     dg(
         "bynk.query.sum_needs_numeric",
         "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).",
@@ -9298,6 +9346,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning).",
         &["delivery_policy"],
     )),
+    d(
+        "bynk.queue.retry_delay_out_of_range",
+        "A `RetryAfter` delay written as a literal is under 1 second or over 24 hours.",
+    ),
     dg(
         "bynk.queue.return_not_queue_result",
         "An `on message` handler does not return `Effect[QueueResult]`.",
@@ -9337,6 +9389,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.record_spread.unknown_field",
         "A record spread overrides a field the record does not have.",
         &["record_spread"],
+    ),
+    dg(
+        "bynk.refine.bound_not_literal",
+        "A constant in a refinement predicate's argument is not a literal of the argument's type.",
+        &["refined_type"],
     ),
     dg(
         "bynk.refine.literal_violates",
@@ -10604,6 +10661,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An or-pattern's alternatives give a shared binding different types (or refinements).",
         &["match_arm", "is_expr"],
     ),
+    d(
+        "bynk.types.ord_order_changed",
+        "A `derives Ord` type's field or variant order differs from the one `bynk.schema.lock` records under `[orders]`, so every sort, comparison, `min` and `max` on it would change; accept it with `bynk lock accept-order`.",
+    ),
     dg(
         "bynk.types.pattern_arity",
         "A pattern binds the wrong number of payload fields.",
@@ -11028,86 +11089,24 @@ fn category_title(cat: &str) -> &'static str {
     }
 }
 
-/// Render the diagnostic index as a Markdown reference page, grouped by
-/// category. This is the generator behind
-/// `site/src/content/docs/reference/diagnostics.md`.
-pub fn render_markdown() -> String {
-    use std::collections::BTreeMap;
-
-    // Group codes by their category title, preserving sorted code order.
-    let mut by_category: BTreeMap<&str, Vec<&DiagnosticInfo>> = BTreeMap::new();
-    for info in REGISTRY {
-        by_category
-            .entry(category_title(category(info.code)))
-            .or_default()
-            .push(info);
-    }
-
-    let mut out = String::new();
-    out.push_str("# Diagnostic index\n\n");
-    out.push_str(
-        "<!-- GENERATED FILE — do not edit by hand.\n     \
-         Source: bynk-syntax/src/diagnostics.rs (`render_markdown`).\n     \
-         Regenerate with: BYNK_BLESS=1 cargo test -p xtask --test docs_consistency diagnostics_registry:: -->\n\n",
-    );
-    out.push_str(
-        "Every diagnostic code the compiler can emit, with a one-line summary of \
-         the cause, grouped by category. Each code links to its own page: what the \
-         code means, how to fix it and an example where an explanation is written, \
-         the grammar rules it governs, and the Book pages that explain it. \
-         `bynk explain <code>` prints a code's explanation in a terminal, and in VS Code the diagnostic's **Explain** quick fix (or \
-         **Bynk: Explain Diagnostic Code…**) shows the same text in a panel, offline.\n\n",
-    );
-    out.push_str(&format!(
-        "There are **{}** codes in total. Every code is an error unless it is marked \
-         **Warning** or **Hint**.\n",
-        REGISTRY.len()
-    ));
-    // The site's filter box (`site/public/diagnostic-filter.js`) adds itself
-    // here, above the first category, and narrows the lists as you type.
-    out.push_str("\n<script type=\"module\" src=\"/diagnostic-filter.js\"></script>\n");
-
-    for (title, infos) in &by_category {
-        out.push_str(&format!("\n## {title}\n\n"));
-        // One list item per code, not a table row: nearly 900 codes in a
-        // table overflowed the content column (#3876 review), and the
-        // category heading already groups them. A code's grammar constructs
-        // are on its own page.
-        for info in infos {
-            // Every code links to its own page (#3876), which the site
-            // generates from `render_json` for every registry code.
-            let code = format!("[`{0}`]({INDEX_PATH}{0}/)", info.code);
-            // ADR 0117/finding #50: every code's severity, straight from the
-            // registry. Errors are the overwhelming majority and go unmarked;
-            // a `warn`-built entry carries a "Warning" badge, a hint "Hint".
-            let severity = match info.severity {
-                Severity::Error => "",
-                Severity::Warning => "<span class=\"diagnostic-severity\">Warning</span> ",
-                Severity::Hint => "<span class=\"diagnostic-severity\">Hint</span> ",
-            };
-            out.push_str(&format!("- {code} — {severity}{}\n", info.summary));
-        }
-    }
-
-    out
-}
-
-/// Every registry code as JSON, for the site's page per code (#3876): its
-/// summary, severity, category (title and the index anchor of its heading),
-/// grammar constructs, and the curated `blurb` and `example` where the code
-/// has one (else `null`). Sorted by code. This is the generator behind
-/// `site/src/generated/diagnostics.json`, which the route
-/// `site/src/pages/reference/diagnostics/[code].astro` renders; the
-/// docs-consistency test keeps the committed file current.
-pub fn render_json() -> String {
+/// Every registry code as JSON, one document per code, for the site's page per code (#3876): its
+/// summary, severity, category (title and the index anchor of its heading), grammar constructs,
+/// and the curated `blurb` and `example` where the code has one (else `null`). Returned as
+/// `(code, json)`, sorted by code. This is the generator behind
+/// `site/src/generated/diagnostics/<code>.json`, one committed file per code so two changes that
+/// add different codes never touch the same file (#4286). The route
+/// `site/src/pages/reference/diagnostics/[code].astro` renders them, and
+/// `site/scripts/build-diagnostics-index.mjs` assembles the index page from them at build time;
+/// the docs-consistency test keeps the committed files current.
+pub fn render_json_per_code() -> Vec<(String, String)> {
     let mut infos: Vec<&DiagnosticInfo> = REGISTRY.iter().collect();
     infos.sort_by_key(|i| i.code);
-    let codes: Vec<serde_json::Value> = infos
+    infos
         .iter()
         .map(|info| {
             let cat = category(info.code);
             let explained = explain(info.code);
-            serde_json::json!({
+            let doc = serde_json::json!({
                 "code": info.code,
                 "summary": info.summary,
                 "severity": match info.severity {
@@ -11120,12 +11119,12 @@ pub fn render_json() -> String {
                 "constructs": info.grammar_symbol,
                 "blurb": explained.map(|e| e.blurb),
                 "example": explained.map(|e| e.example),
-            })
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("diagnostic serialises");
+            out.push('\n');
+            (info.code.to_string(), out)
         })
-        .collect();
-    let mut out = serde_json::to_string_pretty(&codes).expect("diagnostics serialise");
-    out.push('\n');
-    out
+        .collect()
 }
 
 /// Invert the registry into a `{ "<rule>": [ { code, summary }, … ], … }` map,

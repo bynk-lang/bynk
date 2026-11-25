@@ -1,0 +1,10 @@
+{
+  "blurb": "`at` serves an asset at a fixed URL, for clients that ask for a file by name, such as `/favicon.ico`, so the path must be the URL of one file: it starts with `/`, does not end in `/`, and uses only letters, digits and `._~-` between its slashes. It may not be under `/_assets/` or `/_bynk/`, which Bynk uses itself, nor be `/_headers`, `/_redirects` or `/.assetsignore`, which the platform reads as configuration. Write the path of a single file.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.invalid_at_path",
+  "constructs": [],
+  "example": "asset favicon = \"assets/favicon.ico\" at \"/icons/\"          // ✗ a folder, not a file\n\nasset favicon = \"assets/favicon.ico\" at \"/favicon.ico\"    // ✓",
+  "severity": "error",
+  "summary": "An `asset`'s `at` path is not a URL path naming one file, or lies under `/_assets/` or `/_bynk/`, or is a file the platform reads as configuration."
+}

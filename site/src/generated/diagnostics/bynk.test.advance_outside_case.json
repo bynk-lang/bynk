@@ -1,0 +1,12 @@
+{
+  "blurb": "`advance Clock by …` moves the harness clock, which only a `case` owns. A `property` runs its body once per generated input and has no clock of its own, and non-test code reads real time. Put the time-dependent step in a `case`. `bynk.test.advance_not_clock` and `bynk.test.advance_not_duration` cover the other ways to get `advance` wrong.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.advance_outside_case",
+  "constructs": [
+    "advance_stmt"
+  ],
+  "example": "property \"time moves on\" {\n  for all n: Int {\n    advance Clock by 5.minutes    // ✗ a property has no clock\n  }\n}\n\ncase \"time moves on\" {\n  advance Clock by 5.minutes      // ✓\n}",
+  "severity": "error",
+  "summary": "An `advance Clock by` statement appears outside a test `case` body; only the test harness has a clock to move."
+}

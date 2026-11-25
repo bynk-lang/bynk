@@ -1,0 +1,10 @@
+{
+  "blurb": "A `transition` checks each committed step of an agent against the one before it, so it belongs with the agent's invariants, above the handlers whose steps it constrains. One written after a handler is refused. Move it above the first handler. `bynk.parse.invariant_after_handler` and `bynk.parse.migrate_after_handler` are the same rule for invariants and migrations.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.transition_after_handler",
+  "constructs": [],
+  "example": "agent Counter {\n    key id: String\n    store n: Cell[Int]\n\n    on call get() -> Effect[Int] { … }\n\n    transition up:                        // ✗ after a handler\n        new.n >= old.n\n}\n\nagent Counter {\n    key id: String\n    store n: Cell[Int]\n\n    transition up:                        // ✓ before the handlers\n        new.n >= old.n\n\n    on call get() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "A `transition` is declared after an agent handler; step invariants precede the handlers."
+}

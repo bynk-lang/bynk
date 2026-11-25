@@ -1,0 +1,13 @@
+{
+  "blurb": "`Int`, `Float` and `Decimal` are never mixed implicitly, in an operator, a comparison or an `InRange`, `AtLeast` or `AtMost` bound, which takes literals of the base's own type (`1.second` for a `Duration`). Each conversion can lose or invent precision, so Bynk makes you write it: `.toFloat()` on an `Int`, `.round()`, `.floor()`, `.ceil()` or `.truncate()` on a `Float`, `Decimal.fromInt(n)` or a decimal literal for a `Decimal`. The same code covers a `Duration` or `Instant` used with an operand it does not support.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.no_numeric_coercion",
+  "constructs": [
+    "binary_expr",
+    "refinement"
+  ],
+  "example": "fn total(count: Int, price: Float) -> Float {\n    count * price                    // ✗ `Int` and `Float` in one operator\n}\n\nfn total(count: Int, price: Float) -> Float {\n    count.toFloat() * price          // ✓ explicit conversion\n}",
+  "severity": "error",
+  "summary": "`Int`, `Float` and `Decimal` were mixed without an explicit conversion — in an operation, a comparison or refinement bounds."
+}

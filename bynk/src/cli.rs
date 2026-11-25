@@ -73,7 +73,7 @@ pub const COMMAND_GROUPS: &[(&str, &[&str])] = &[
     ),
     (
         "Run and deploy",
-        &["dev", "deploy", "revert", "tail", "migrate"],
+        &["dev", "deploy", "revert", "tail", "migrate", "lock"],
     ),
     (
         "Dependencies",
@@ -772,6 +772,14 @@ pub enum Command {
         #[command(subcommand)]
         command: MigrateCommand,
     },
+    /// Maintain `bynk.schema.lock` by hand.
+    ///
+    /// `accept-order` records a `derives Ord` type's new field or variant order
+    /// after a reorder that `bynk.types.ord_order_changed` refused.
+    Lock {
+        #[command(subcommand)]
+        command: LockCommand,
+    },
     /// Add a registry dependency to `bynk.toml`.
     ///
     /// Adds (#2274) the highest version its registry offers (or one matching
@@ -963,6 +971,35 @@ pub enum Command {
             requires = "search"
         )]
         format: BookFormat,
+    },
+}
+
+/// `bynk lock`'s subcommands (#3956).
+#[derive(Subcommand, Debug)]
+pub enum LockCommand {
+    /// Accept the new order of a `derives Ord` type: rewrite its entry under
+    /// `[orders]` in `bynk.schema.lock` to the order now declared.
+    ///
+    /// A reorder changes how every value of the type sorts, so a build refuses
+    /// it (`bynk.types.ord_order_changed`) until it is accepted. This is the
+    /// deliberate step, and the rewritten lock belongs in the same commit as the
+    /// reorder. Name the type, qualified (`shop.tasks.Priority`) or not when it
+    /// is the only one so called, or pass `--all` to accept every changed type
+    /// (it lists what it accepts).
+    AcceptOrder {
+        /// The type to accept. Omit with `--all`.
+        #[arg(
+            value_name = "TYPE",
+            required_unless_present = "all",
+            conflicts_with = "all"
+        )]
+        type_name: Option<String>,
+        /// Accept every `derives Ord` type whose order differs from the lock.
+        #[arg(long)]
+        all: bool,
+        /// Project directory. Defaults to the current directory.
+        #[arg(long, value_name = "PATH", default_value = ".")]
+        path: PathBuf,
     },
 }
 

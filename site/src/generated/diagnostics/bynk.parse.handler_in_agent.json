@@ -1,0 +1,12 @@
+{
+  "blurb": "An `agent` has only `on call` handlers. HTTP routes (`on GET`, `on POST`, …), schedules and queue messages belong on a `service`, which receives the request or event and calls the agent. Move the protocol handler to a service and give the agent an `on call` operation for it to call.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.handler_in_agent",
+  "constructs": [
+    "handler"
+  ],
+  "example": "agent Tally {\n    key id: String\n    store count: Cell[Int]\n\n    on GET(\"/count\") () -> Effect[Result[Int, String]] {   // ✗ a route is a service's\n        Ok(count)\n    }\n}\n\nagent Tally {\n    key id: String\n    store count: Cell[Int]\n\n    on call get() -> Effect[Result[Int, String]] {         // ✓ the agent's own operation\n        Ok(count)\n    }\n}",
+  "severity": "error",
+  "summary": "A protocol handler (`on GET`/`schedule`/`message`) was declared in an agent."
+}

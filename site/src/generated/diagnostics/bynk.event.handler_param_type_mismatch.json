@@ -1,0 +1,10 @@
+{
+  "blurb": "An `on event` handler's first parameter is the event itself, so its type must be the one the `from Events(E)` header names. A subscription pattern is checked against that event, and the body reads `e` at that type. Make the parameter `E`, or change the header to the event you mean to handle. The optional second parameter is `EventEnvelope`; other mistakes there are `bynk.event.bad_params`.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.handler_param_type_mismatch",
+  "constructs": [],
+  "example": "event Paid = { id: String }\nevent Refunded = { id: String }\n\nservice onPaid from Events(Paid) {\n    on event(e: Refunded) -> Effect[()] { … }   // ✗ the header says `Paid`\n    on event(e: Paid) -> Effect[()] { … }       // ✓\n}",
+  "severity": "error",
+  "summary": "An `on event(e: T)` handler's declared parameter type does not match its `from Events(E)` header's event type."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`do e` runs an effect as a statement, so like `<-` it belongs in a body that is itself effectful, one whose return type is `Effect[T]`. A function that returns a plain `Int` promises to wait for nothing and reach nothing outside, and a `do` inside it would break that promise for every caller. Change the return type to `Effect[T]` and end with `Effect.pure(…)`, or drop the `do`. The same mistake with `<-` is `bynk.effect.bind_in_pure_context`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.do_in_pure_context",
+  "constructs": [
+    "do_stmt"
+  ],
+  "example": "fn ping() -> Effect[()] {\n    Effect.pure(())\n}\n\nfn run() -> Int {\n    do ping()                    // ✗ `do` in a function that returns a plain `Int`\n    5\n}\n\nfn run() -> Effect[Int] {        // ✓ effectful, so `do` is allowed\n    do ping()\n    Effect.pure(5)\n}",
+  "severity": "error",
+  "summary": "A `do` statement was used in a pure (non-effectful) context."
+}

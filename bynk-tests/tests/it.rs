@@ -327,6 +327,8 @@ mod system {
     mod binding_scaffold;
     #[path = "binding_workerd.rs"]
     mod binding_workerd;
+    #[path = "body_cap_hint.rs"]
+    mod body_cap_hint;
     #[path = "callee_faulted_workerd.rs"]
     mod callee_faulted_workerd;
     #[path = "case_filter.rs"]
@@ -465,6 +467,8 @@ mod system {
     mod observation_behaviour;
     #[path = "oidc_auth.rs"]
     mod oidc_auth;
+    #[path = "ord_order_lock.rs"]
+    mod ord_order_lock;
     #[path = "package_dependencies.rs"]
     mod package_dependencies;
     #[path = "package_exports.rs"]

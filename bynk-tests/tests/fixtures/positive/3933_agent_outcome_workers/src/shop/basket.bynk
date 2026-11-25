@@ -1,0 +1,50 @@
+context shop.basket
+
+consumes bynk { CallOutcome }
+
+agent Basket {
+	key id: String
+
+	store total: Cell[Int]
+
+	invariant non_negative: total >= 0
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+
+	on call boom() -> Effect[Int] {
+		let _ <- unreachable("boom")
+		total
+	}
+}
+
+// A service undoes a step on every way the agent call can fail (#3933): `Handled` answers,
+// `Faulted` is a fault in the handler (an invariant violation included), `Unreachable` is a
+// call that never started (a busy instance), and `Rejected` does not occur for an agent.
+service place {
+	on call(id: String, n: Int) -> Effect[Result[Int, String]] by Caller {
+		let o <- Basket(id).add.outcome(n)
+		match o {
+			Handled(t) => Effect.pure(Ok(t))
+			Rejected(_) => Effect.pure(Err("rejected"))
+			Faulted => Effect.pure(Err("faulted"))
+			Unreachable(_) => Effect.pure(Err("busy"))
+		}
+	}
+}
+
+// The same call through a let-bound instance.
+service placeBound {
+	on call(id: String) -> Effect[Result[Int, String]] by Caller {
+		let b = Basket(id)
+		let o <- b.boom.outcome()
+		match o {
+			Handled(t) => Effect.pure(Ok(t))
+			Rejected(_) => Effect.pure(Err("rejected"))
+			Faulted => Effect.pure(Err("faulted"))
+			Unreachable(_) => Effect.pure(Err("busy"))
+		}
+	}
+}

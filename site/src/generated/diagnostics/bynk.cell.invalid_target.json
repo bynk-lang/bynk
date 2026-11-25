@@ -1,0 +1,10 @@
+{
+  "blurb": "A `:=` replaces the value of a `Cell`, the one store kind that holds a single value. A `Set`, `Map`, `Log` or `Cache` has no one value to replace; each changes through its own operations (`add`, `put`, `append`), and a name that is not a `store` field of the agent has nothing to write. Use the operation the field's kind offers, or declare the field `Cell[T]` if a single replaceable value is what you want. The same check covers a `migrate from` step that assigns a field.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.cell.invalid_target",
+  "constructs": [],
+  "example": "store ids: Set[Int]\n\nids := n               // ✗ a `Set` has no single value to replace\n\nlet _ <- ids.add(n)    // ✓ the operation the kind offers",
+  "severity": "error",
+  "summary": "A `:=` write targets something that is not a `store Cell` field."
+}

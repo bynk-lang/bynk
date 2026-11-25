@@ -159,6 +159,7 @@ pub(super) fn emit_test_module(
         (target_kind == UnitKind::Adapter).then_some(binding_modules),
         "__makeTestDeps",
         uses_emit,
+        None,
     );
     let has_integration_case = indices.iter().any(|&i| {
         parsed[i].test().is_some_and(|t| {
@@ -179,6 +180,7 @@ pub(super) fn emit_test_module(
             Some(binding_modules),
             name,
             uses_emit,
+            Some(runtime_use),
         )
     };
     let integration_deps = (target_kind == UnitKind::Context
@@ -215,6 +217,16 @@ pub(super) fn emit_test_module(
             },
             None,
         ));
+    }
+    // #4190: the codecs a stubbed consumed service's calls cross at `integration`.
+    if integration_deps.is_some() {
+        let stubbed: BTreeSet<&String> = stubs
+            .values()
+            .filter_map(|rp| rp.service_context.as_ref())
+            .collect();
+        for ctx in stubbed {
+            stmts.push(super::stub_wire::wire_import(ctx, ext));
+        }
     }
     // #1975: the binding module of each adapter a factory builds for real,
     // under the alias the composition root gives it. K4: and `bynk.crypto`'s,
@@ -514,6 +526,10 @@ pub(super) fn emit_test_module(
     // consumes.
     if !stubs.is_empty() {
         stmts.push(TestRuntimeModule::StubOverlay.splice());
+    }
+    // #4190: and the round trip a stubbed consumed service makes at `integration`.
+    if integration_deps.is_some() && stubs.values().any(|rp| rp.service_context.is_some()) {
+        stmts.push(TestRuntimeModule::StubWire.splice());
     }
     // Both factories may name the same double; define each once. Keyed on the
     // whole `(owner, capability, name)`, so two owners' same-named doubles

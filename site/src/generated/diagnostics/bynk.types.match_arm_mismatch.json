@@ -1,0 +1,12 @@
+{
+  "blurb": "A `match` is an expression, so its arms must produce one type: the least upper bound of their types, where a refined type and its base agree at the base. If one arm gives a `String` and another an `Int`, there is no single type for the caller to rely on. Make the arms agree, converting where needed. The rule also holds for `let … else`, whose `else` must produce the type of the rest of its block.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.match_arm_mismatch",
+  "constructs": [
+    "match_arm"
+  ],
+  "example": "type Status = enum { Pending, Active, Done }\n\nfn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => 1           // ✗ an `Int`, where the others are `String`\n        Done => \"finished\"\n    }\n}\n\nfn label(s: Status) -> String {\n    match s {\n        Pending => \"waiting\"\n        Active => \"running\"   // ✓\n        Done => \"finished\"\n    }\n}",
+  "severity": "error",
+  "summary": "A `match` arm has a different type from the others."
+}

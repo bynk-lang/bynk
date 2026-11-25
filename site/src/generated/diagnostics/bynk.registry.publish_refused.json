@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.registry.publish_refused",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "`bynk publish` or `bynk yank` didn't go through: the project isn't a versioned package, it has a path or git dependency, its registry has no publish API (or is read through a mirror), or the registry refused the request (no or wrong token, an existing version, an invalid upload)."
+}

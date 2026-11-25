@@ -17,6 +17,22 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.684.0
+
+A body-taking HTTP route with no `@limit` or `limits { maxBody }` now answers `413` for a body over 1 MiB; the build hints `bynk.http.body_cap_defaulted` name those routes, and `@limit(maxBody: …)` on a route or `limits { maxBody: … }` on the service raises the cap.
+
+## v0.680.0
+
+`parTraverse` on a `store Map` or a held `Map[K, Connection]` (the query form that runs a step per element concurrently and returns `()`) is now `parForEach`; the old spelling is the error `bynk.query.par_traverse_renamed`, and `bynk check --fix` renames the call.
+
+## v0.679.0
+
+`QueueResult` has a third variant, `RetryAfter`, so a `match` over a `QueueResult` (in a test case or elsewhere) must now name it or have a wildcard
+
+## v0.678.0
+
+a project whose `derives Ord` type is reordered, past what was recorded, fails the build with `bynk.types.ord_order_changed` until `bynk lock accept-order` accepts it; a project that does not reorder is unaffected
+
 ## v0.677.2
 
 A `400 RefinementViolation` body no longer carries `violation.value`; a client that read it must stop

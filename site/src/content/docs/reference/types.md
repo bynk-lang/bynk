@@ -1474,11 +1474,25 @@ The `Float` total order applies to the ordering kernels and `Ord` witnesses. The
 operators keep IEEE behaviour on a `Float`: `NaN < x` is `false`, and `==` is
 unchanged.
 
-**Reordering changes the order.** A `derives Ord` type sorts by declaration
-order, so moving a field, or a variant, changes how its values sort. The wire
-contract hash ignores field and variant order, so the change does not appear as
-a contract change and `bynk` raises no diagnostic for it. Treat the declaration
-order of such a type as meaningful.
+**Reordering changes the order, and the build says so.** A `derives Ord` type
+sorts by declaration order, so moving a field, or a variant, changes how its
+values sort. The wire contract hash ignores that order, so `bynk.schema.lock`
+records it instead: each of the project's own `derives Ord` types has an entry
+under `[orders]` (the field names of a record, the variant names of a sum with
+each variant's payload field names). A build that finds a different order fails
+with `bynk.types.ord_order_changed`, naming the type and showing the recorded
+and the new order, until the change is accepted.
+
+- **A change:** two fields or variants that were both there swap relative order,
+  or a field or variant is inserted anywhere but at the end.
+- **Not a change, and the lock follows:** a field or variant added at the end, a
+  field, variant or the whole type removed, and a rename in place.
+- **Accepting it:** `bynk lock accept-order <Type>` (or `--all`, which lists what
+  it accepts) rewrites the entry. Commit the lock with the reorder. The editor
+  also offers "Restore the recorded order", which moves the declaration back.
+  A project's first build records every type, silently, and dropping `derives
+  Ord` removes the entry. Only the project's own types are recorded: a
+  dependency's reorder is for its changelog.
 
 **Not ordered by accident.** A type without `derives Ord` is never ordered
 implicitly. Using `<` or a sort key on one is `bynk.types.not_orderable`, whose
@@ -1524,6 +1538,9 @@ into the storage capability the `store` fields already carry (no new `given`):
 | `.any(p)` / `.all(p)` | `Effect[Bool]` |
 | `.fold(init, f)` | `Effect[acc]` |
 | `.forEach(f)` | `Effect[()]` |
+| `.parForEach(f)` | `Effect[()]`, running the steps concurrently |
+
+On a `Query`, and so on a store or held `Map`, the concurrent step that returns `()` is `parForEach`, the name it has on a `List`. Before #4177 it was `parTraverse`; that spelling is now the error `bynk.query.par_traverse_renamed`, whose fix (`bynk check --fix`) renames the call. A `Query` has no value-returning `parTraverse`: `collect()` it, then `parTraverse` the list.
 
 ### Joins and grouping
 

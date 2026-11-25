@@ -1,0 +1,10 @@
+{
+  "blurb": "A pattern can test only which variant a field holds, not what it carries. For a variant with a payload that would admit emissions the pattern looks as if it excludes, so only payload-free variants are allowed. Subscribe to a payload-free variant, or drop the pattern and read the field in the handler's body.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.pattern_variant_payload",
+  "constructs": [],
+  "example": "type Region =\n    | Domestic\n    | International\n    | Refunded(reason: String)\nevent Paid = { id: String, region: Region }\n\nservice onPaid from Events(Paid { region: Region.Refunded, .. }) {   // ✗ `Refunded` carries a `reason`\n\nservice onPaid from Events(Paid { region: Region.Domestic, .. }) {   // ✓ no payload",
+  "severity": "error",
+  "summary": "A `from Events(E { ... })` subscription pattern's variant value names a variant that carries a payload — only nullary variants are admitted, since testing the tag alone would silently ignore the payload."
+}

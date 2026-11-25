@@ -1,0 +1,10 @@
+{
+  "blurb": "`trustFrom` names an environment variable whose JSON, when set, replaces the actor's declared trust roots at run time, as in a test or staging deployment. A variable is named by a string, so a number or other expression names nothing. Write the variable's name in quotes.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.oidc_trust_from_not_string",
+  "constructs": [],
+  "example": "type WorkloadId = String where NonEmpty\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = 5), identity = WorkloadId }   // ✗ not a name\n\nactor Workload { auth = Oidc(issuer = \"https://i.test\", audience = \"a\", jwks = \"https://i.test/jwks\", trustFrom = \"OIDC_TRUST\"), identity = WorkloadId }   // ✓",
+  "severity": "error",
+  "summary": "An `Oidc` actor's `trustFrom` isn't a string naming an environment variable."
+}

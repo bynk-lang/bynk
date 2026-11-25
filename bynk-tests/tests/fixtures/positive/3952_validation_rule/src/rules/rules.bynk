@@ -5,6 +5,10 @@ One refined type per predicate.
 ---
 commons rules.rules
 
+const MaxQty: Int = 100
+const SlugPattern: String = "^[a-z]+$"
+const Limit: Int = 10
+
 type Count = Int where NonNegative
 type Price = Int where Positive
 type Qty = Int where InRange(1, 100)
@@ -21,6 +25,9 @@ type Code = String where Length(4)
 type Slug = String where Matches("^[a-z]+$")
 type Day = String where IsoDate
 type Nightly = String where Cron
+type Capped = Int where InRange(1, MaxQty)
+type Tag = String where Matches(SlugPattern)
+type Atmost = Int where AtMost(Limit)
 
 fn describe(e: ValidationError) -> String {
   match e.rule {
@@ -37,6 +44,24 @@ fn describe(e: ValidationError) -> String {
     IsoDate => "iso date",
     Cron => "cron",
     WellFormed => "well formed",
+  }
+}
+
+// A bound written as a constant (#3951) is substituted before the rule is
+// built, so the rule carries the constant's value.
+fn int(b: Bound) -> Int {
+  match b {
+    IntBound(value) => value,
+    _ => -1,
+  }
+}
+
+fn bound(e: ValidationError) -> String {
+  match e.rule {
+    InRange(lo, hi) => "\(int(lo)) to \(int(hi))",
+    AtMost(limit) => "at most \(int(limit))",
+    Matches(pattern) => "matches \(pattern)",
+    _ => "other",
   }
 }
 

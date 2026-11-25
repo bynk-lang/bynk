@@ -1,0 +1,12 @@
+{
+  "blurb": "The context's `queue` entry point picks the handler by the queue's name. Two `on message` handlers for the same name would leave it with two to run. Merge them into one handler, or move one to a `from queue` service for another queue. The rule holds across the project too: Cloudflare accepts one consumer Worker per queue, so two contexts consuming one queue, in a `[deploy.workers]` group or not, could never both deploy. Move the queue to one context; any number of contexts may still send to it.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.duplicate_consumer",
+  "constructs": [
+    "queue_handler"
+  ],
+  "example": "service worker from queue(\"jobs\") {\n    on message(message: String) -> Effect[QueueResult] { … }\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ `jobs` already has a consumer\n}\n\nservice audit from queue(\"audit\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓ a queue of its own\n}",
+  "severity": "error",
+  "summary": "Two `on message` handlers, in one context or in two, consume the same queue."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "A literal written where a refined type is expected is checked at compile time, and this one does not satisfy the type's predicate. A refined type is a base type plus a rule (`InRange`, `NonEmpty`, …), and a literal that breaks the rule can never be a valid value, so the compiler rejects it instead of admitting it. Use a value that satisfies the predicate, or loosen the type. A value known only at run time goes through `.of`, which returns a `Result`.",
+  "category": "Refinement",
+  "categoryAnchor": "refinement",
+  "code": "bynk.refine.literal_violates",
+  "constructs": [
+    "refined_type"
+  ],
+  "example": "type Age = Int where InRange(0, 150)\n\nfn limit() -> Age { 200 }   // ✗ 200 is outside InRange(0, 150)\nfn limit() -> Age { 150 }   // ✓ admitted at compile time",
+  "severity": "error",
+  "summary": "A literal does not satisfy the refined type's predicate."
+}

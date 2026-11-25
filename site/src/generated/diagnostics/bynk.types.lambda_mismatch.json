@@ -1,0 +1,12 @@
+{
+  "blurb": "A lambda is checked against the function type expected where it is written, such as the parameter it is passed for. It must take the same number of parameters, any annotation on a parameter must match that parameter's type, and its body must produce the result type, because the function it is passed to calls it with that shape and uses what comes back. Change the lambda to fit, or change the function type if that is what is wrong.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.lambda_mismatch",
+  "constructs": [
+    "lambda_expr"
+  ],
+  "example": "fn apply(f: Int -> Int, x: Int) -> Int {\n    f(x)\n}\n\nfn total() -> Int {\n    apply((a, b) => a + b, 5)    // ✗ `f` takes one argument\n}\n\nfn total() -> Int {\n    apply((a) => a + 1, 5)       // ✓\n}",
+  "severity": "error",
+  "summary": "A lambda's parameter count, parameter annotations, or body type do not match the expected function type."
+}

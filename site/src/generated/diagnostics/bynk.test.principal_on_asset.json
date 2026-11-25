@@ -1,0 +1,12 @@
+{
+  "blurb": "An asset is public: the platform serves it before the Worker runs, so no actor's seam ever sees the request. A `by` clause on an asset fetch would name a principal that nothing checks, so it is refused. Drop the `by`. To test who may reach something, drive a route, not an asset. A method other than `GET` is `bynk.test.asset_address_method`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.principal_on_asset",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/web.bynk\nasset style = \"assets/board.css\"\n\n// tests/web.test.bynk\nlet r <- api.GET(style) by Visitor    // ✗ an asset has no principal\nlet r <- api.GET(style)               // ✓",
+  "severity": "error",
+  "summary": "A suite's asset fetch carries a `by` clause; an asset is public and served before the Worker runs."
+}

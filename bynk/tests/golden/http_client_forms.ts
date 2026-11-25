@@ -898,6 +898,7 @@ export interface __Wire_Upload {
 export type PostNotesResponse =
     { readonly status: 200; readonly kind: "Ok"; readonly body: string }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly error: { readonly kind: "PayloadTooLarge"; readonly details: string } }
   | { readonly status: 415; readonly kind: "UnsupportedMediaType"; readonly error: { readonly kind: "UnsupportedMediaType"; readonly details: string } };
 
 /**
@@ -1240,10 +1241,11 @@ export function __deserialise_List_File(json: __JsonValue, path: string = "$"): 
 const __route_api_postNotes: __Route = {
   method: "POST",
   path: "/notes",
-  contract: "02ffc49f0f50fa3d",
+  contract: "4b821cfe592cf4a2",
   replies: {
     200: [{ kind: "Ok", body: "value", decode: (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j) }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
+    413: [{ kind: "PayloadTooLarge", body: "boundary" }],
     415: [{ kind: "UnsupportedMediaType", body: "boundary" }],
   },
 };
@@ -1288,9 +1290,9 @@ const __route_api_getOrigin: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "d386d4b18c423bb5",
+    service: "6a3327eeb1bf5aa5",
     routes: {
-      postNotes: "02ffc49f0f50fa3d",
+      postNotes: "4b821cfe592cf4a2",
       postUpload: "f97755165e28a732",
       getPrefs: "0ddac1a6cd1ffcba",
       getOrigin: "9b5bc1bd95601bb9",

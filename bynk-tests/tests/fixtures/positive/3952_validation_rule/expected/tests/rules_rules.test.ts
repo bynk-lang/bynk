@@ -15,8 +15,10 @@ function __makeTestDeps() {
 async function test_an_integer_predicate_names_itself() {
   try {
     const deps = {};
-    const { Cap, Code, Count, Day, Floor, Grade, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, Wait, describe, explain, gradeName } = __ns_rules_rules;
+    const { Atmost, Cap, Capped, Code, Count, Day, Floor, Grade, Limit, MaxQty, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, SlugPattern, Tag, Wait, bound, describe, explain, gradeName, int } = __ns_rules_rules;
+    type Atmost = __ns_rules_rules.Atmost;
     type Cap = __ns_rules_rules.Cap;
+    type Capped = __ns_rules_rules.Capped;
     type Code = __ns_rules_rules.Code;
     type Count = __ns_rules_rules.Count;
     type Day = __ns_rules_rules.Day;
@@ -32,6 +34,7 @@ async function test_an_integer_predicate_names_itself() {
     type Short = __ns_rules_rules.Short;
     type Slow = __ns_rules_rules.Slow;
     type Slug = __ns_rules_rules.Slug;
+    type Tag = __ns_rules_rules.Tag;
     type Wait = __ns_rules_rules.Wait;
     const { Bound, ValidationRule } = __ns_bynk_validation;
     type Bound = __ns_bynk_validation.Bound;
@@ -68,6 +71,18 @@ async function test_an_integer_predicate_names_itself() {
         case "Err": {
           const e = r.error;
           return e.message;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    function bounded<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return bound(e);
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -90,8 +105,10 @@ async function test_an_integer_predicate_names_itself() {
 async function test_a_float__a_decimal_and_a_duration_range_name_the_same_rule() {
   try {
     const deps = {};
-    const { Cap, Code, Count, Day, Floor, Grade, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, Wait, describe, explain, gradeName } = __ns_rules_rules;
+    const { Atmost, Cap, Capped, Code, Count, Day, Floor, Grade, Limit, MaxQty, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, SlugPattern, Tag, Wait, bound, describe, explain, gradeName, int } = __ns_rules_rules;
+    type Atmost = __ns_rules_rules.Atmost;
     type Cap = __ns_rules_rules.Cap;
+    type Capped = __ns_rules_rules.Capped;
     type Code = __ns_rules_rules.Code;
     type Count = __ns_rules_rules.Count;
     type Day = __ns_rules_rules.Day;
@@ -107,6 +124,7 @@ async function test_a_float__a_decimal_and_a_duration_range_name_the_same_rule()
     type Short = __ns_rules_rules.Short;
     type Slow = __ns_rules_rules.Slow;
     type Slug = __ns_rules_rules.Slug;
+    type Tag = __ns_rules_rules.Tag;
     type Wait = __ns_rules_rules.Wait;
     const { Bound, ValidationRule } = __ns_bynk_validation;
     type Bound = __ns_bynk_validation.Bound;
@@ -143,6 +161,18 @@ async function test_a_float__a_decimal_and_a_duration_range_name_the_same_rule()
         case "Err": {
           const e = r.error;
           return e.message;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    function bounded<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return bound(e);
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -164,8 +194,10 @@ async function test_a_float__a_decimal_and_a_duration_range_name_the_same_rule()
 async function test_a_string_predicate_names_itself() {
   try {
     const deps = {};
-    const { Cap, Code, Count, Day, Floor, Grade, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, Wait, describe, explain, gradeName } = __ns_rules_rules;
+    const { Atmost, Cap, Capped, Code, Count, Day, Floor, Grade, Limit, MaxQty, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, SlugPattern, Tag, Wait, bound, describe, explain, gradeName, int } = __ns_rules_rules;
+    type Atmost = __ns_rules_rules.Atmost;
     type Cap = __ns_rules_rules.Cap;
+    type Capped = __ns_rules_rules.Capped;
     type Code = __ns_rules_rules.Code;
     type Count = __ns_rules_rules.Count;
     type Day = __ns_rules_rules.Day;
@@ -181,6 +213,7 @@ async function test_a_string_predicate_names_itself() {
     type Short = __ns_rules_rules.Short;
     type Slow = __ns_rules_rules.Slow;
     type Slug = __ns_rules_rules.Slug;
+    type Tag = __ns_rules_rules.Tag;
     type Wait = __ns_rules_rules.Wait;
     const { Bound, ValidationRule } = __ns_bynk_validation;
     type Bound = __ns_bynk_validation.Bound;
@@ -217,6 +250,18 @@ async function test_a_string_predicate_names_itself() {
         case "Err": {
           const e = r.error;
           return e.message;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    function bounded<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return bound(e);
         }
       }
       throw new globalThis.Error("non-exhaustive match");
@@ -238,11 +283,13 @@ async function test_a_string_predicate_names_itself() {
 }
 
 // case tier: unit
-async function test_a_failure_keeps_its_human_message_beside_the_rule() {
+async function test_a_bound_written_as_a_constant_is_the_rule_s_argument() {
   try {
     const deps = {};
-    const { Cap, Code, Count, Day, Floor, Grade, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, Wait, describe, explain, gradeName } = __ns_rules_rules;
+    const { Atmost, Cap, Capped, Code, Count, Day, Floor, Grade, Limit, MaxQty, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, SlugPattern, Tag, Wait, bound, describe, explain, gradeName, int } = __ns_rules_rules;
+    type Atmost = __ns_rules_rules.Atmost;
     type Cap = __ns_rules_rules.Cap;
+    type Capped = __ns_rules_rules.Capped;
     type Code = __ns_rules_rules.Code;
     type Count = __ns_rules_rules.Count;
     type Day = __ns_rules_rules.Day;
@@ -258,6 +305,7 @@ async function test_a_failure_keeps_its_human_message_beside_the_rule() {
     type Short = __ns_rules_rules.Short;
     type Slow = __ns_rules_rules.Slow;
     type Slug = __ns_rules_rules.Slug;
+    type Tag = __ns_rules_rules.Tag;
     type Wait = __ns_rules_rules.Wait;
     const { Bound, ValidationRule } = __ns_bynk_validation;
     type Bound = __ns_bynk_validation.Bound;
@@ -298,11 +346,113 @@ async function test_a_failure_keeps_its_human_message_beside_the_rule() {
       }
       throw new globalThis.Error("non-exhaustive match");
     }
-    if (!(said(Note.of("too long")) === "Keep it to 5 characters")) { throw __bynkExpectFailure("tests/rules/rules.bynk:53:10", 1417, 1471, "expect said(Note.of(\"too long\")) == \"Keep it to 5 characters\"\n  expected: said(Note.of(\"too long\")) == \"Keep it to 5 characters\"\n  actual:   " + __bynkShow((said(Note.of("too long")))) + " == " + __bynkShow(("Keep it to 5 characters"))); }
-    if (!(said(Short.of("ab")) === "At least 3 characters")) { throw __bynkExpectFailure("tests/rules/rules.bynk:54:10", 1481, 1528, "expect said(Short.of(\"ab\")) == \"At least 3 characters\"\n  expected: said(Short.of(\"ab\")) == \"At least 3 characters\"\n  actual:   " + __bynkShow((said(Short.of("ab")))) + " == " + __bynkShow(("At least 3 characters"))); }
-    if (!(said(Name.of("")) === "Required")) { throw __bynkExpectFailure("tests/rules/rules.bynk:55:10", 1538, 1569, "expect said(Name.of(\"\")) == \"Required\"\n  expected: said(Name.of(\"\")) == \"Required\"\n  actual:   " + __bynkShow((said(Name.of("")))) + " == " + __bynkShow(("Required"))); }
-    if (!(said(Qty.of(0)) === plain(Qty.of(0)))) { throw __bynkExpectFailure("tests/rules/rules.bynk:56:10", 1579, 1614, "expect said(Qty.of(0)) == plain(Qty.of(0))\n  expected: said(Qty.of(0)) == plain(Qty.of(0))\n  actual:   " + __bynkShow((said(Qty.of(0)))) + " == " + __bynkShow((plain(Qty.of(0))))); }
-    if (!(plain(Qty.of(0)) === "must be in range [1, 100]")) { throw __bynkExpectFailure("tests/rules/rules.bynk:57:10", 1624, 1671, "expect plain(Qty.of(0)) == \"must be in range [1, 100]\"\n  expected: plain(Qty.of(0)) == \"must be in range [1, 100]\"\n  actual:   " + __bynkShow((plain(Qty.of(0)))) + " == " + __bynkShow(("must be in range [1, 100]"))); }
+    function bounded<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return bound(e);
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    if (!(failed(Capped.of(0)) === "range")) { throw __bynkExpectFailure("tests/rules/rules.bynk:60:10", 1539, 1570, "expect failed(Capped.of(0)) == \"range\"\n  expected: failed(Capped.of(0)) == \"range\"\n  actual:   " + __bynkShow((failed(Capped.of(0)))) + " == " + __bynkShow(("range"))); }
+    if (!(bounded(Capped.of(0)) === "1 to 100")) { throw __bynkExpectFailure("tests/rules/rules.bynk:61:10", 1580, 1615, "expect bounded(Capped.of(0)) == \"1 to 100\"\n  expected: bounded(Capped.of(0)) == \"1 to 100\"\n  actual:   " + __bynkShow((bounded(Capped.of(0)))) + " == " + __bynkShow(("1 to 100"))); }
+    if (!(bounded(Atmost.of(11)) === "at most 10")) { throw __bynkExpectFailure("tests/rules/rules.bynk:62:10", 1625, 1663, "expect bounded(Atmost.of(11)) == \"at most 10\"\n  expected: bounded(Atmost.of(11)) == \"at most 10\"\n  actual:   " + __bynkShow((bounded(Atmost.of(11)))) + " == " + __bynkShow(("at most 10"))); }
+    if (!(bounded(Tag.of("ABC")) === "matches ^[a-z]+$")) { throw __bynkExpectFailure("tests/rules/rules.bynk:63:10", 1673, 1717, "expect bounded(Tag.of(\"ABC\")) == \"matches ^[a-z]+$\"\n  expected: bounded(Tag.of(\"ABC\")) == \"matches ^[a-z]+$\"\n  actual:   " + __bynkShow((bounded(Tag.of("ABC")))) + " == " + __bynkShow(("matches ^[a-z]+$"))); }
+    if (!(bounded(Capped.of(50)) === "ok")) { throw __bynkExpectFailure("tests/rules/rules.bynk:64:10", 1727, 1757, "expect bounded(Capped.of(50)) == \"ok\"\n  expected: bounded(Capped.of(50)) == \"ok\"\n  actual:   " + __bynkShow((bounded(Capped.of(50)))) + " == " + __bynkShow(("ok"))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_failure_keeps_its_human_message_beside_the_rule() {
+  try {
+    const deps = {};
+    const { Atmost, Cap, Capped, Code, Count, Day, Floor, Grade, Limit, MaxQty, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, SlugPattern, Tag, Wait, bound, describe, explain, gradeName, int } = __ns_rules_rules;
+    type Atmost = __ns_rules_rules.Atmost;
+    type Cap = __ns_rules_rules.Cap;
+    type Capped = __ns_rules_rules.Capped;
+    type Code = __ns_rules_rules.Code;
+    type Count = __ns_rules_rules.Count;
+    type Day = __ns_rules_rules.Day;
+    type Floor = __ns_rules_rules.Floor;
+    type Grade = __ns_rules_rules.Grade;
+    type Money = __ns_rules_rules.Money;
+    type Name = __ns_rules_rules.Name;
+    type Nightly = __ns_rules_rules.Nightly;
+    type Note = __ns_rules_rules.Note;
+    type Price = __ns_rules_rules.Price;
+    type Qty = __ns_rules_rules.Qty;
+    type Ratio = __ns_rules_rules.Ratio;
+    type Short = __ns_rules_rules.Short;
+    type Slow = __ns_rules_rules.Slow;
+    type Slug = __ns_rules_rules.Slug;
+    type Tag = __ns_rules_rules.Tag;
+    type Wait = __ns_rules_rules.Wait;
+    const { Bound, ValidationRule } = __ns_bynk_validation;
+    type Bound = __ns_bynk_validation.Bound;
+    type ValidationRule = __ns_bynk_validation.ValidationRule;
+    function failed<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return describe(e);
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    function said<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return explain(e);
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    function plain<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return e.message;
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    function bounded<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return bound(e);
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    if (!(said(Note.of("too long")) === "Keep it to 5 characters")) { throw __bynkExpectFailure("tests/rules/rules.bynk:68:10", 1829, 1883, "expect said(Note.of(\"too long\")) == \"Keep it to 5 characters\"\n  expected: said(Note.of(\"too long\")) == \"Keep it to 5 characters\"\n  actual:   " + __bynkShow((said(Note.of("too long")))) + " == " + __bynkShow(("Keep it to 5 characters"))); }
+    if (!(said(Short.of("ab")) === "At least 3 characters")) { throw __bynkExpectFailure("tests/rules/rules.bynk:69:10", 1893, 1940, "expect said(Short.of(\"ab\")) == \"At least 3 characters\"\n  expected: said(Short.of(\"ab\")) == \"At least 3 characters\"\n  actual:   " + __bynkShow((said(Short.of("ab")))) + " == " + __bynkShow(("At least 3 characters"))); }
+    if (!(said(Name.of("")) === "Required")) { throw __bynkExpectFailure("tests/rules/rules.bynk:70:10", 1950, 1981, "expect said(Name.of(\"\")) == \"Required\"\n  expected: said(Name.of(\"\")) == \"Required\"\n  actual:   " + __bynkShow((said(Name.of("")))) + " == " + __bynkShow(("Required"))); }
+    if (!(said(Qty.of(0)) === plain(Qty.of(0)))) { throw __bynkExpectFailure("tests/rules/rules.bynk:71:10", 1991, 2026, "expect said(Qty.of(0)) == plain(Qty.of(0))\n  expected: said(Qty.of(0)) == plain(Qty.of(0))\n  actual:   " + __bynkShow((said(Qty.of(0)))) + " == " + __bynkShow((plain(Qty.of(0))))); }
+    if (!(plain(Qty.of(0)) === "must be in range [1, 100]")) { throw __bynkExpectFailure("tests/rules/rules.bynk:72:10", 2036, 2083, "expect plain(Qty.of(0)) == \"must be in range [1, 100]\"\n  expected: plain(Qty.of(0)) == \"must be in range [1, 100]\"\n  actual:   " + __bynkShow((plain(Qty.of(0)))) + " == " + __bynkShow(("must be in range [1, 100]"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -316,8 +466,10 @@ async function test_a_failure_keeps_its_human_message_beside_the_rule() {
 async function test_a_type_of_your_own_keeps_its_Positive_and_MaxLength_variants() {
   try {
     const deps = {};
-    const { Cap, Code, Count, Day, Floor, Grade, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, Wait, describe, explain, gradeName } = __ns_rules_rules;
+    const { Atmost, Cap, Capped, Code, Count, Day, Floor, Grade, Limit, MaxQty, Money, Name, Nightly, Note, Price, Qty, Ratio, Short, Slow, Slug, SlugPattern, Tag, Wait, bound, describe, explain, gradeName, int } = __ns_rules_rules;
+    type Atmost = __ns_rules_rules.Atmost;
     type Cap = __ns_rules_rules.Cap;
+    type Capped = __ns_rules_rules.Capped;
     type Code = __ns_rules_rules.Code;
     type Count = __ns_rules_rules.Count;
     type Day = __ns_rules_rules.Day;
@@ -333,6 +485,7 @@ async function test_a_type_of_your_own_keeps_its_Positive_and_MaxLength_variants
     type Short = __ns_rules_rules.Short;
     type Slow = __ns_rules_rules.Slow;
     type Slug = __ns_rules_rules.Slug;
+    type Tag = __ns_rules_rules.Tag;
     type Wait = __ns_rules_rules.Wait;
     const { Bound, ValidationRule } = __ns_bynk_validation;
     type Bound = __ns_bynk_validation.Bound;
@@ -373,8 +526,20 @@ async function test_a_type_of_your_own_keeps_its_Positive_and_MaxLength_variants
       }
       throw new globalThis.Error("non-exhaustive match");
     }
-    if (!(gradeName(Grade.Positive) === "up")) { throw __bynkExpectFailure("tests/rules/rules.bynk:61:10", 1754, 1781, "expect gradeName(Positive) == \"up\"\n  expected: gradeName(Positive) == \"up\"\n  actual:   " + __bynkShow((gradeName(Grade.Positive))) + " == " + __bynkShow(("up"))); }
-    if (!(gradeName(Grade.MaxLength(3)) === "max")) { throw __bynkExpectFailure("tests/rules/rules.bynk:62:10", 1791, 1823, "expect gradeName(MaxLength(3)) == \"max\"\n  expected: gradeName(MaxLength(3)) == \"max\"\n  actual:   " + __bynkShow((gradeName(Grade.MaxLength(3)))) + " == " + __bynkShow(("max"))); }
+    function bounded<T>(r: Result<T, ValidationError>): string {
+      switch (r.tag) {
+        case "Ok": {
+          return "ok";
+        }
+        case "Err": {
+          const e = r.error;
+          return bound(e);
+        }
+      }
+      throw new globalThis.Error("non-exhaustive match");
+    }
+    if (!(gradeName(Grade.Positive) === "up")) { throw __bynkExpectFailure("tests/rules/rules.bynk:76:10", 2166, 2193, "expect gradeName(Positive) == \"up\"\n  expected: gradeName(Positive) == \"up\"\n  actual:   " + __bynkShow((gradeName(Grade.Positive))) + " == " + __bynkShow(("up"))); }
+    if (!(gradeName(Grade.MaxLength(3)) === "max")) { throw __bynkExpectFailure("tests/rules/rules.bynk:77:10", 2203, 2235, "expect gradeName(MaxLength(3)) == \"max\"\n  expected: gradeName(MaxLength(3)) == \"max\"\n  actual:   " + __bynkShow((gradeName(Grade.MaxLength(3)))) + " == " + __bynkShow(("max"))); }
     return { pass: true };
   } catch (e) {
     if (e instanceof ExpectationError) {
@@ -386,7 +551,7 @@ async function test_a_type_of_your_own_keeps_its_Positive_and_MaxLength_variants
 
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["an integer predicate names itself", "a float, a decimal and a duration range name the same rule", "a string predicate names itself", "a failure keeps its human message beside the rule", "a type of your own keeps its Positive and MaxLength variants"];
+export const __bynkCases: readonly string[] = ["an integer predicate names itself", "a float, a decimal and a duration range name the same rule", "a string predicate names itself", "a bound written as a constant is the rule's argument", "a failure keeps its human message beside the rule", "a type of your own keeps its Positive and MaxLength variants"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -406,6 +571,12 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a string predicate names itself")) {
     const started = __bynkCaseNow();
     const r = { name: "a string predicate names itself", ...(await test_a_string_predicate_names_itself()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a bound written as a constant is the rule's argument")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a bound written as a constant is the rule's argument", ...(await test_a_bound_written_as_a_constant_is_the_rule_s_argument()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

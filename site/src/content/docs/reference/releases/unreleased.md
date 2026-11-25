@@ -7,6 +7,17 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.684.0** | Every body-taking HTTP route has a 1 MiB request-body cap by default (JSON, `@form` and `@multipart`; `@raw` still declares its own); `@limit` and `limits { maxBody }` raise it up to 524,288,000 bytes, there is no unlimited setting, the `413` says how to raise the cap, and a build hint lists the routes that rely on the default |
+| **v0.683.1** | `bynk test --smoke` no longer stops on a hint, so a project with a hint-level diagnostic synthesises its smoke suite as before |
+| **v0.683.0** | A constant can stand as a refinement predicate's argument (`InRange(1, MaxQty)`, `MaxLength(MaxNote)`, `Matches(SlugPattern)`), substituted as the literal it is bound to |
+| **v0.682.0** | `Agent(key).op.outcome(args)` returns a `CallOutcome`, as a cross-context call's `.outcome(…)` does: `AgentBusy` is `Unreachable(None)`, and a fault in the handler, an invariant violation or a rehydration violation is `Faulted` |
+| **v0.681.0** | At the `integration` tier a stubbed consumed service's arguments and result cross that context's wire codecs, so a value the wire cannot carry fails the call |
+| **v0.680.0** | `parTraverse` on a store or held `Map` is renamed `parForEach`, matching `List`, and the old spelling is an error with a machine-applicable fix |
+| **v0.679.0** | A queue consumer can return `RetryAfter(reason, delay)` to redeliver a message after a delay (whole seconds, 1 second to 24 hours: a literal outside that range is `bynk.queue.retry_delay_out_of_range`, a computed delay is rounded up and clamped with the clamp logged); `Retry` keeps retrying after the consumer's `retryDelay` |
+| **v0.678.2** | The diagnostic reference is generated one file per code, and its index is assembled at site build time, so two changes that add different diagnostics no longer conflict |
+| **v0.678.1** | The generated `tests/main.ts` marks the fixed part of its `main()` with comments, so the snapshot harness can share it between fixtures |
+| **v0.678.0** | `bynk.schema.lock` records each `derives Ord` type's field and variant order, and a reorder is an error until `bynk lock accept-order` accepts it |
+| **v0.677.3** | `bynk test` no longer panics when a suite checks a function that returns a consumed type renamed with `as` |
 | **v0.677.2** | A `400 RefinementViolation` body no longer echoes the rejected value; `violation` carries `field` and `message` only |
 | **v0.677.1** | A type selected from a consumed context now wins over an unselected `bynk` export of the same name (`Refusal`, `CallOutcome`, `CallFailure`) |
 | **v0.677.0** | `List` gains `filterMap`, `zipWith`, `takeWhile`, `skipWhile` and `count(p)` |

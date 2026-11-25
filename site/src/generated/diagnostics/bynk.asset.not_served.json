@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.not_served",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "A deployable Bundle build met an `asset`; a Bundle ships no files, so its `.url` would not be served (a warning)."
+}

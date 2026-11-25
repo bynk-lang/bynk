@@ -1,0 +1,12 @@
+{
+  "blurb": "`let x <- e` waits for `e` and binds its result, so `e` must be an `Effect[T]`. A plain value has nothing to wait for, and `<-` on one usually means the right-hand side is not the call you meant. Write `let x = …` for a pure binding. Where an effect is required and you hold a plain value, wrap it with `Effect.pure(…)`. A `<-` in a body that is not itself effectful is `bynk.effect.bind_in_pure_context`.",
+  "category": "Effects",
+  "categoryAnchor": "effects",
+  "code": "bynk.effect.bind_on_non_effect",
+  "constructs": [
+    "effect_let_stmt"
+  ],
+  "example": "fn run() -> Effect[Int] {\n    let x <- 42                  // ✗ `42` is an `Int`, not an `Effect[Int]`\n    Effect.pure(x)\n}\n\nfn run() -> Effect[Int] {\n    let x = 42                   // ✓ a pure binding\n    Effect.pure(x)\n}",
+  "severity": "error",
+  "summary": "An `<-` bind was applied to a non-`Effect` value."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.no_root",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "No project root could be determined."
+}

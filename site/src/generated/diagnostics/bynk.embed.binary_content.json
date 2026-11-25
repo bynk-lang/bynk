@@ -1,0 +1,10 @@
+{
+  "blurb": "An embed becomes a `String` in the compiled code, so its file must be text. A file holding a NUL byte is binary, and a `String` made from it would be meaningless. Binary data belongs in `assets/`, where the platform serves it as a file. Text that is not valid UTF-8 is `bynk.embed.invalid_encoding`.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.binary_content",
+  "constructs": [],
+  "example": "embed logo = \"embeds/logo.png\"    // ✗ the file has a NUL byte\n\nasset logo = \"assets/logo.png\"    // ✓ a binary file is served, not read",
+  "severity": "error",
+  "summary": "An `embed` names a file with a NUL byte, so it is binary, not text."
+}

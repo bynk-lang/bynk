@@ -675,7 +675,8 @@ export type GetChunksResponse =
 export type PostMadeByNameResponse =
     { readonly status: 201; readonly kind: "RawCreated"; readonly contentType: string; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> }
   | { readonly status: 400; readonly kind: "StructuralMismatch"; readonly error: BoundaryError }
-  | { readonly status: 409; readonly kind: "RawError"; readonly contentType: string; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> };
+  | { readonly status: 409; readonly kind: "RawError"; readonly contentType: string; readonly body: globalThis.ReadableStream<globalThis.Uint8Array> | null; readonly bytes: () => globalThis.Promise<globalThis.Uint8Array>; readonly text: () => globalThis.Promise<string> }
+  | { readonly status: 413; readonly kind: "PayloadTooLarge"; readonly error: { readonly kind: "PayloadTooLarge"; readonly details: string } };
 
 /**
  * What `GET /ticks` answers, by `status`.
@@ -801,11 +802,12 @@ const __route_api_getChunks: __Route = {
 const __route_api_postMadeByName: __Route = {
   method: "POST",
   path: "/made/:name",
-  contract: "dba9c76a62b6fa39",
+  contract: "8a1328cba5042d24",
   replies: {
     201: [{ kind: "RawCreated", body: "raw" }],
     400: [{ kind: "StructuralMismatch", body: "boundary" }],
     409: [{ kind: "RawError", body: "raw" }],
+    413: [{ kind: "PayloadTooLarge", body: "boundary" }],
   },
   streamed: __streamed,
 };
@@ -913,14 +915,14 @@ const __route_api_getContract: __Route = {
  */
 export const API_CONTRACTS = {
   api: {
-    service: "54dcdb645d40ee11",
+    service: "73ecc554947a7b23",
     routes: {
       putBlobByName: "2e5adccd6e203411",
       postAny: "b3916c13802b3413",
       getLogo: "36f73b79c07168da",
       getDocByName: "e1a3e7420b9489df",
       getChunks: "d892f3cb141268b3",
-      postMadeByName: "dba9c76a62b6fa39",
+      postMadeByName: "8a1328cba5042d24",
       getTicks: "51500504e77fb16f",
       getCr: "a0d7949e54f72c42",
       getFeedByMode: "80ff3ff70fff834c",

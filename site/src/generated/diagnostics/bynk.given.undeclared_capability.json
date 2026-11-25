@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler may only use a capability it has itself declared with `given`. Effects in Bynk are explicit: the `given` clause is the handler's honest, checkable statement of every capability it reaches for, so a reader (and the compiler) can see a handler's full reach from its signature alone. Using a capability that is not in `given` is the missing half of that contract.",
+  "category": "Given capabilities",
+  "categoryAnchor": "given-capabilities",
+  "code": "bynk.given.undeclared_capability",
+  "constructs": [
+    "given_clause"
+  ],
+  "example": "on call() -> Effect[()] by Caller {\n    Logger.log(\"hi\")                     // ✗ uses Logger without declaring it\n}\n\non call() -> Effect[()] by Caller given Logger {   // ✓ declared, then used\n    Logger.log(\"hi\")\n}",
+  "severity": "error",
+  "summary": "A handler uses a capability it did not declare with `given`."
+}

@@ -1056,7 +1056,7 @@ enforces (ADR 0130):
 - **Consistent disposal across branches.** Every branch of an `if`/`match` MUST
   leave a held binding in the same ownership state (`bynk.held.branch_divergence`).
 - **Borrows are non-consuming.** A borrowed held binding — e.g. the closure
-  parameter of a `forEach`/`parTraverse` over a `Map[K, Connection]` — admits only
+  parameter of a `forEach`/`parForEach` over a `Map[K, Connection]` — admits only
   non-consuming operations; a consuming op on a borrow is
   `bynk.held.consume_on_borrow`.
 - **Guards borrow.** A `match` arm's `if` guard runs before its arm is chosen, so
@@ -1100,6 +1100,20 @@ A stored key the current definition does not declare (a renamed
 or removed field) is carried through unchanged and written back, never silently
 dropped. A value that has no wire form, such as a non-finite `Float`, cannot be
 stored: the commit faults and nothing persists.
+
+**Recorded orders.** A build also reconciles the order of each `derives Ord` type
+the project itself declares (not a dependency's, and not the standard library's)
+against the lock's `[orders]` section, keyed `<unit>.<Type>`: the field names of
+a record in declaration order, or the variant names of a sum in declaration
+order with each variant's payload field names in order. A new type is recorded;
+an unchanged order keeps its entry. A field or variant added at the end, a type
+or member removed, and a member renamed in place update the entry. Any other
+change to the names both orders share (two swap relative order, or one is
+inserted anywhere but the end) is `bynk.types.ord_order_changed`, and the entry
+is left as it was until `bynk lock accept-order` rewrites it. Dropping
+`derives Ord` removes the entry. A lock with no entry is at the version it always
+had; one with entries is at version 3, which an older toolchain refuses rather
+than drops.
 
 **Recorded state shapes.** A build also reconciles each agent class's stored shape
 against the project's `bynk.schema.lock`, keyed `<context>.<Agent>`. A field's
@@ -1364,6 +1378,14 @@ refusals (`TooLarge`, `NotAuthenticated`, `UnsupportedWire`, `NoSuchService`, `N
 `StaleContract`, `Undecodable`). `o.handled()` has type `Result[R, CallFailure]`, so `?` and
 `embeds` propagate a failed call. A value of `CallOutcome` or `CallFailure` MUST NOT be
 constructed in a context (`bynk.call.outcome_construction`); matching one is unaffected.
+
+The same form calls an agent operation (`Agent(key).op.outcome(args)`, or `b.op.outcome(args)` for
+a `b` bound to an instance; #3933): the arguments are checked as for `Agent(key).op(args)`, the call has
+type `Effect[CallOutcome[R]]` for the handler's `R`, and it is legal wherever the plain call is. A
+call to the handler's own instance (`self`) stays a plain call. At run time `AgentBusy` is
+`Unreachable(None)`, a fault in the handler (an invariant or rehydration violation included) is
+`Faulted`, and `Rejected` never occurs; `ReentrantAgentCall` and a failure to encode the call or decode its answer
+remain faults.
 
 A **timeout** (`e.within(d)`; #2683) bounds how long an effect may take. It is a
 method of every `Effect[T]`: `d` MUST be a `Duration`, and the call has type
@@ -1905,6 +1927,12 @@ of its type (`bynk.queue.delivery_bad_option`); on any other service it is
 the consumer's own, and a Bynk consumer of it MUST take the same message type as the consumer it
 receives from (`bynk.queue.dead_letter_type_mismatch`).
 
+`RetryAfter(reason, delay)` (#3881) is a `QueueResult` variant taking a `String` reason and a
+`Duration` delay. A `delay` written as a `Duration` literal MUST be from 1 second to 24 hours
+(`bynk.queue.retry_delay_out_of_range`); a computed delay is rounded up to whole seconds and
+clamped to that range when the verdict is settled. A `match` over a `QueueResult` names
+`RetryAfter` or has a wildcard.
+
 A **`from email("address")`** service (#3328) claims one recipient address, written
 `local@domain` or, for a domain's catch-all, `*@domain`; any other form is
 `bynk.email.invalid_address`. Two services of a context MUST NOT claim the same
@@ -2031,8 +2059,8 @@ The **`limits { }`** section is legal only on a `from http` service
 (`bynk.parse.duplicate_limits`). The grammar accepts any `name: value` field; the
 checker enforces the closed field set:
 
-- **`maxBody`** — the only field; a positive `Int` byte count
-  (`bynk.http.limits_invalid_field`). Any other field is
+- **`maxBody`** — the only field; a positive `Int` byte count of at most
+  524 288 000 (`bynk.http.limits_invalid_field`). Any other field is
   `bynk.http.limits_unknown_field`.
 
 The **`@limit`** annotation is a handler-position annotation (the `@cache`
@@ -2041,16 +2069,16 @@ handler** — a body-taking method — and on a `GET`/`DELETE` (or any bodyless
 method) it is `bynk.http.limit_on_bodyless`; at most once per handler
 (`bynk.http.limit_duplicate`). Its arguments:
 
-- **`maxBody`** — the only argument; a positive `Int` byte count
-  (`bynk.http.limit_bad_max_body`). Any other argument is
+- **`maxBody`** — the only argument; a positive `Int` byte count of at most
+  524 288 000 (`bynk.http.limit_bad_max_body`). Any other argument is
   `bynk.http.limit_unknown_arg`.
 
 **Effective cap and precedence.** For a body-taking route the effective cap is the
 route `@limit` `maxBody` if present, otherwise the service `limits { maxBody }` if
-present, otherwise **none**. A route with no effective cap reads the body
-unchanged, so this surface is **opt-in** (the CORS posture, not the security
-default-on posture): a service declaring neither `limits { }` nor any `@limit` is
-byte-for-byte unchanged.
+present, otherwise **1 048 576 bytes**. Every body-taking HTTP route therefore has an
+effective cap; there is no unlimited setting. A `@raw` route MUST still declare a cap
+explicitly (`bynk.http.raw_body_unbounded`). A service whose body-taking routes rely
+on the default gets one hint listing them (`bynk.http.body_cap_defaulted`).
 
 **Enforcement.** A capped route rejects a request whose `Content-Length` exceeds
 the effective cap with a synthesised **`413 PayloadTooLarge`** (`{ kind:
@@ -2094,8 +2122,7 @@ applies refinements and defaults and a failure is a `400` whose `path` is rooted
 `multipart/form-data` upload. Its placement rules are `@form`'s, and it likewise excludes
 `@raw` and `@form` (`bynk.http.body_kind_conflict`). The `body` MUST be a record whose
 fields are form leaves, or `File` (the record `bynk` exports), or an `Option` or `List` of
-one. The route MUST have an effective `maxBody` (`bynk.http.multipart_body_unbounded`),
-and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
+one. Its effective `maxBody` is the route's, the service's or the default, and a cap over 32 MiB is a warning (`bynk.http.multipart_large_cap`). `maxFile` and
 `maxParts` are positive `Int` fields of `limits { }` and arguments of `@limit`
 (`bynk.http.limits_invalid_field`, `bynk.http.limit_bad_max_file`); in `@limit` they are legal
 only on a `@multipart` handler (`bynk.http.limit_on_non_multipart`). The router answers a
@@ -3141,7 +3168,7 @@ effectful function value, so calling one in a pure context is
 is the `Query.forEach` terminal over an eager list — the effect-per-element loop,
 **sequential** (each element awaited in order). `parForEach(f: T -> Effect[()])`
 (v0.147, named `parTraverse` until #3967; [ADR 0171](https://github.com/bynk-lang/bynk/blob/main/design/decisions/0171-list-partraverse.md))
-is its **concurrent** sibling — the `Query.parTraverse` fan-out over an eager
+is its **concurrent** sibling — the `Query.parForEach` fan-out (named `parTraverse` on a query until #4177) over an eager
 list, issuing every element's effect at once and awaiting them together, so a
 slow element does not head-of-line-block the rest; the order in which side
 effects interleave is unspecified. Unlike the sequential `forEach` (which

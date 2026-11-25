@@ -7,6 +7,8 @@ import { __bynkIsIsoDate, __bynkIsCron } from "../__bynk_runtime/time.js";
 import { __bynkCodePointLength, __bynkRegExp } from "../__bynk_runtime/text.js";
 import type { ValidationError } from "../__bynk_runtime/errors.js";
 
+import { Bound } from "../bynk/validation.js";
+
 /**
  * #3952: a refinement failure names the predicate that failed, and its argument,
  * as `e.rule`: a `ValidationRule` that a `match` is checked for exhaustiveness over.
@@ -207,6 +209,45 @@ export const Nightly = {
   },
 };
 
+export type Capped = number & { readonly __brand: "Capped" };
+
+export const Capped = {
+  of(value: number): Result<Capped, ValidationError> {
+    if (!globalThis.Number.isSafeInteger(value)) {
+      return Err({ field: "Capped", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
+    }
+    if (!(value >= 1 && value <= 100)) {
+      return Err({ field: "Capped", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
+    }
+    return Ok(value as Capped);
+  },
+};
+
+export type Tag = string & { readonly __brand: "Tag" };
+
+export const Tag = {
+  of(value: string): Result<Tag, ValidationError> {
+    if (!(__bynkRegExp("^(?:" + "^[a-z]+$" + ")$", "u").test(value))) {
+      return Err({ field: "Tag", message: "must match /^[a-z]+$/", rule: { tag: "Matches", pattern: "^[a-z]+$" }, value });
+    }
+    return Ok(value as Tag);
+  },
+};
+
+export type Atmost = number & { readonly __brand: "Atmost" };
+
+export const Atmost = {
+  of(value: number): Result<Atmost, ValidationError> {
+    if (!globalThis.Number.isSafeInteger(value)) {
+      return Err({ field: "Atmost", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
+    }
+    if (!(value <= 10)) {
+      return Err({ field: "Atmost", message: "must be at most 10", rule: { tag: "AtMost", bound: { tag: "IntBound", value: 10 } }, value });
+    }
+    return Ok(value as Atmost);
+  },
+};
+
 export type Grade =
     { readonly tag: "Positive" }
   | { readonly tag: "MaxLength"; readonly n: number };
@@ -215,6 +256,15 @@ export const Grade = {
   Positive: { tag: "Positive" } as Grade,
   MaxLength: (n: number): Grade => ({ tag: "MaxLength", n }),
 };
+
+var __const_MaxQty: { v: number } | undefined;
+export function MaxQty(): number { return (__const_MaxQty ??= { v: 100 }).v; }
+
+var __const_SlugPattern: { v: string } | undefined;
+export function SlugPattern(): string { return (__const_SlugPattern ??= { v: "^[a-z]+$" }).v; }
+
+var __const_Limit: { v: number } | undefined;
+export function Limit(): number { return (__const_Limit ??= { v: 10 }).v; }
 
 export function describe(e: ValidationError): string {
   switch (e.rule.tag) {
@@ -264,6 +314,41 @@ export function describe(e: ValidationError): string {
     }
     case "WellFormed": {
       return "well formed";
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+export function int(b: Bound): number {
+  switch (b.tag) {
+    case "IntBound": {
+      const value = b.value;
+      return value;
+    }
+    default: {
+      return -1;
+    }
+  }
+  throw new globalThis.Error("non-exhaustive match");
+}
+
+export function bound(e: ValidationError): string {
+  switch (e.rule.tag) {
+    case "InRange": {
+      const lo = e.rule.lo;
+      const hi = e.rule.hi;
+      return `${String(int(lo))} to ${String(int(hi))}`;
+    }
+    case "AtMost": {
+      const limit = e.rule.bound;
+      return `at most ${String(int(limit))}`;
+    }
+    case "Matches": {
+      const pattern = e.rule.pattern;
+      return `matches ${String(pattern)}`;
+    }
+    default: {
+      return "other";
     }
   }
   throw new globalThis.Error("non-exhaustive match");

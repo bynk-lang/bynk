@@ -1,0 +1,12 @@
+{
+  "blurb": "A `:name` segment in a route promises a value the handler can use, and the value reaches it only through a parameter of the same name. A segment with no such parameter would be matched and then thrown away, which is nearly always a slip, so the route is refused. Add the parameter, typed `String` or a refined `String`, or drop the segment from the path. The reverse, a parameter with no segment, is `bynk.http.extra_param`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.unbound_path_param",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/items/:id\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `:id` has no parameter\n\non GET(\"/items/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+  "severity": "error",
+  "summary": "A `:name` route segment has no matching handler parameter."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.workers_ignored_on_bundle",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`bynk.toml` declares `[deploy.workers]` groups, which only a `workers` build uses; this build is a `bundle`, which has every context in one program and ignores them (warning)."
+}

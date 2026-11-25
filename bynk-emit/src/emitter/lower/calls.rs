@@ -149,6 +149,10 @@ pub(super) fn lower_method_call(e: &Expr, cx: &mut LowerCtx) -> Lowered {
     if let Some(built) = lower_test_service_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(built);
     }
+    // #3933: `Agent(key).op.outcome(args)`.
+    if let Some(built) = lower_agent_outcome_call(e, receiver, method, args, cx, &mut pre) {
+        return pre.finish(built);
+    }
     if let Some(built) = lower_inline_agent_call(e, receiver, method, args, cx, &mut pre) {
         return pre.finish(built);
     }
@@ -193,6 +197,39 @@ fn lower_cross_context_call(
         return lower_cross_context_service_call(receiver, method, args, false, cx, pre);
     }
     None
+}
+
+/// #3933: `Agent(key).op.outcome(args)`, or `None` when the call is not one. The agent call is
+/// lowered as `Agent(key).op(args)` is, and `__callAgentOutcome` reads what it came to as a
+/// `CallOutcome`. The checker recorded the call as the agent's (`Callee::Agent`).
+fn lower_agent_outcome_call(
+    e: &Expr,
+    receiver: &Expr,
+    method: &Ident,
+    args: &[Expr],
+    cx: &mut LowerCtx,
+    pre: &mut Pre,
+) -> Option<bynk_ts::TsExpr> {
+    let ExprKind::FieldAccess {
+        receiver: inner,
+        field: op,
+    } = &receiver.kind
+    else {
+        return None;
+    };
+    let Some(Callee::Agent { agent, handler }) = cx.commons().callee(e.id) else {
+        return None;
+    };
+    if method.name != "outcome" || *handler != op.name {
+        return None;
+    }
+    let target = [agent.as_str(), ".", op.name.as_str()].concat();
+    let plain = lower_inline_agent_call(e, inner, op, args, cx, pre)
+        .or_else(|| lower_let_bound_agent_call(e, inner, op, args, cx, pre))?;
+    Some(crate::ts_build::call(
+        crate::ts_build::ident("__callAgentOutcome"),
+        vec![plain, crate::ts_build::str_lit(target)],
+    ))
 }
 
 /// #3894: the context prefix and service of `<context>.<service>.outcome(…)`, when the checker

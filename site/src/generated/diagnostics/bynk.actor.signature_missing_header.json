@@ -1,0 +1,10 @@
+{
+  "blurb": "A `Signature` actor reads the sender's signature from a request header, and the header's name is the sender's choice, so the actor must say which one. Add `header = \"…\"` with the name of the header that carries the HMAC. Without it the compiler has no way to find the signature to check the body against.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signature_missing_header",
+  "constructs": [],
+  "example": "actor Hook { auth = Signature(secret = \"WEBHOOK_KEY\") }   // ✗ which header holds the signature?\n\nactor Hook { auth = Signature(secret = \"WEBHOOK_KEY\", header = \"X-Sig\") }   // ✓",
+  "severity": "error",
+  "summary": "A `Signature` actor does not name its signature header."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Project",
+  "categoryAnchor": "project",
+  "code": "bynk.project.contracts_lock_stale",
+  "constructs": [],
+  "example": null,
+  "severity": "warning",
+  "summary": "`bynk.contracts.lock` lists an older contract the service no longer accepts, because it is unreadable or no longer compatible with the contract the service has now; the entry is ignored (warning)."
+}

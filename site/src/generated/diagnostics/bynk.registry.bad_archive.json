@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.registry.bad_archive",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A registry archive is malformed or hostile: not a `bynk-tree-v1` stream, a path that is absolute or climbs out of the package, an out-of-order or repeated file, or past the size limits."
+}

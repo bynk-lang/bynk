@@ -1,0 +1,10 @@
+{
+  "blurb": "On a `@multipart` route, `@limit`'s `maxFile` caps the bytes of one file part and `maxParts` the number of parts. Each must be a positive `Int` literal: zero or a negative number would refuse every upload, and there is no size literal, so `\"5MB\"` is refused too. Write the count, as `5_000_000`. `limits { }` has the same rule (`bynk.http.limits_invalid_field`), and so does `maxBody` (`bynk.http.limit_bad_max_body`).",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.limit_bad_max_file",
+  "constructs": [],
+  "example": "consumes bynk { File }\n\ntype Upload = { photo: File }\n\n@multipart\n@limit(maxBody: 5_000_000, maxFile: 0)           // ✗ a positive byte count\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@multipart\n@limit(maxBody: 5_000_000, maxFile: 1_000_000)   // ✓\non POST(\"/upload\") (body: Upload) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@limit` `maxFile` or `maxParts` is not a positive `Int` literal."
+}

@@ -535,6 +535,28 @@
             },
             "description": "StructuralMismatch — every param is structurally re-validated on the way in; a malformed or refinement-violating value fails closed with a 400 the handler body never names"
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "details": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "PayloadTooLarge"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "details"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "PayloadTooLarge — the body is counted as it is read and cut off at the route's cap (1 MiB unless `@limit` or `limits` says otherwise)"
+          },
           "422": {
             "content": {
               "application/json": {

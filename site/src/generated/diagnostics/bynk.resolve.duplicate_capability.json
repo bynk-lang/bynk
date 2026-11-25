@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability is named by the `given` clauses that ask for it and by the calls made through it, and its name is one of the unit's top-level names, so two capabilities of one name leave those with nothing to choose between. Rename one, or delete the repeat. The same holds for the other named declarations: `bynk.resolve.duplicate_service`, `bynk.resolve.duplicate_agent` and `bynk.resolve.duplicate_actor`. A capability provided twice is `bynk.resolve.duplicate_provider`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_capability",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "capability Clock { … }\ncapability Clock { … }       // ✗ `Clock` is already declared\n\ncapability Clock { … }\ncapability Calendar { … }    // ✓ a name of its own",
+  "severity": "error",
+  "summary": "Two capabilities share a name."
+}

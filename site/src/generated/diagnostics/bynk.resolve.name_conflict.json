@@ -1,0 +1,10 @@
+{
+  "blurb": "Two declarations of different kinds share a name. A unit's functions, assets, embeds, constants, types and events, services, agents and providers with a body (by their implementation name) all live in one namespace, across all of the unit's files, because they are one scope in the emitted module. Capabilities and actors each keep their own. Two types, or a type and an event, are `bynk.resolve.duplicate_type`, and two constants `bynk.resolve.duplicate_const`. Rename one of the two.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.name_conflict",
+  "constructs": [],
+  "example": "fn Limit() -> Int {\n    3\n}\n\nconst Limit: Int = 3         // ✗ a function already has this name\n\nconst Limit: Int = 3         // ✓ once the function is renamed `limit`",
+  "severity": "error",
+  "summary": "Two declarations share a name."
+}

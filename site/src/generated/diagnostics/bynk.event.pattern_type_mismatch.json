@@ -1,0 +1,10 @@
+{
+  "blurb": "A subscription pattern compares a field with a literal or a variant, so the value must be of the field's type: an `Int` literal for an `Int` field, a `String` for a `String`, a variant of the field's own sum type. A value of any other type could never match an emission. Write one of the field's type.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.pattern_type_mismatch",
+  "constructs": [],
+  "example": "event Paid = { id: String, amount: Int }\n\nservice onPaid from Events(Paid { amount: \"10\", .. }) {   // ✗ `amount` is an `Int`\n\nservice onPaid from Events(Paid { amount: 10, .. }) {   // ✓",
+  "severity": "error",
+  "summary": "A `from Events(E { ... })` subscription pattern field's matched value is not compatible with that field's declared type."
+}

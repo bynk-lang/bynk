@@ -1,0 +1,12 @@
+{
+  "blurb": "`self` is the value a method was called on, so it exists only in the body of a method, declared as `fn Type.name(self, …)`. A plain function has no receiver. Make the function a method of the type, or take the value as an ordinary parameter.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.self_outside_method",
+  "constructs": [
+    "self_expr"
+  ],
+  "example": "type Counter = { n: Int }\n\nfn read(c: Counter) -> Int {\n    self.n                         // ✗ a plain function has no `self`\n}\n\nfn Counter.read(self) -> Int {     // ✓ a method declares `self`\n    self.n\n}",
+  "severity": "error",
+  "summary": "`self` referenced outside a method or handler."
+}

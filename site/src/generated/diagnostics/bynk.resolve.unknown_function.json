@@ -1,0 +1,12 @@
+{
+  "blurb": "A call names a function that is not in scope. Only functions declared in the same unit, or brought in through `uses`, can be called; a capitalised name, which would construct an agent, needs an agent of that name in scope. This is most often a typo or a missing `uses`. A lambda cannot call itself through its own `let` name either, because the name is not bound until the lambda is built. A type used as a function, as in `Money(5)`, is the separate `bynk.resolve.type_as_function`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.unknown_function",
+  "constructs": [
+    "call"
+  ],
+  "example": "fn double(x: Int) -> Int {\n    x * 2\n}\n\ndubble(4)          // ✗ no function `dubble`\n\ndouble(4)          // ✓ the declared name",
+  "severity": "error",
+  "summary": "Called a function that does not exist."
+}

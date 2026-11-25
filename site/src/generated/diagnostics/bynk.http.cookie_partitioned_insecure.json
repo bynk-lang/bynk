@@ -1,0 +1,12 @@
+{
+  "blurb": "A `partitioned` cookie is stored separately for each top-level site that embeds your service, and browsers accept the `Partitioned` attribute only with `Secure`. A literal that sets `partitioned: true` with `secure: false` would be dropped, so it is refused. Remove `secure: false` (the default is `secure: true`), or drop `partitioned`. See also `bynk.http.cookie_samesite_none_insecure`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_partitioned_insecure",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", partitioned: true, secure: false })   // ✗\n\nCreated(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", partitioned: true })                  // ✓",
+  "severity": "error",
+  "summary": "A `partitioned` cookie literal is not `secure`."
+}

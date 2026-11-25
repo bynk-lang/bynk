@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fmt.roundtrip",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "The formatter's output does not re-parse to the same program, so it leaves the file unchanged."
+}

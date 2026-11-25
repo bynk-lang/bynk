@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.multiline_open",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": null,
+  "severity": "error",
+  "summary": "The opening `\"\"\"` of a multi-line string literal is not followed by a newline, or by a language tag (`\"\"\"sql`) and a newline."
+}

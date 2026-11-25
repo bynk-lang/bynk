@@ -1,0 +1,10 @@
+{
+  "blurb": "A `migrate from N (old: T)` step reads a stored record through `T`, so `T` must describe the shape version `N` recorded in bynk.schema.lock, which is not necessarily the shape the code has now. The compiler checks each field of `T` against that record: its storage kind and its type must match what was stored, and a field the class never had is refused too. A `drop` of a field that exists neither then nor now is refused as well. Declare the old type exactly as version `N` stored it, and give a nested type that has changed since its own copy. Keep such types for the step alone.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.migrate_shape_mismatch",
+  "constructs": [],
+  "example": "type CartV1 = { owner: Int }      // ✗ version 1 recorded `owner` as a `String`\n\ntype CartV1 = { owner: String }   // ✓ as version 1 stored it",
+  "severity": "error",
+  "summary": "A `migrate` step's declared old shape (or a `drop`) names a field the lock does not record at that version, or records with a different structure."
+}
