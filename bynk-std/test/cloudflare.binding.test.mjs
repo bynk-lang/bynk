@@ -1319,18 +1319,24 @@ t("WorkersKv.putBytes: writes the bytes with the options, readable as text when 
   assert.deepEqual(await store.get("t"), Some("hi"));
 });
 
-t("WorkersKv.putValue and getValue: the JSON text round-trips, a missing key is None, and a non-JSON text faults without naming it", async () => {
+t("WorkersKv.putValue: writes the JSON text with the options, and refuses a key over 512 bytes", async () => {
   const kv = fakeKv();
   const store = new WorkersKv({ KV: kv });
-  assert.deepEqual(await store.getValue("absent"), { kind: "None" });
   await store.putValue("k", { user: "ada", roles: ["Admin"] }, putOpts({ metadata: new Map([["kind", "session"]]) }));
   // The stored text is `Json.encode`'s, so a plain `get` reads it back.
   assert.deepEqual(await store.get("k"), Some('{"user":"ada","roles":["Admin"]}'));
   assert.deepEqual(kv.puts[0].options, { metadata: { kind: "session" } });
-  assert.deepEqual(await store.getValue("k"), { kind: "Some", value: { user: "ada", roles: ["Admin"] } });
+  await assert.rejects(store.putValue("k".repeat(513), 1, putOpts()), /a key is at most 512 bytes/);
+});
+
+t("WorkersKv.getValue: the parsed JSON as an Option, None for a missing key, and a fault for text that is not JSON that does not name it", async () => {
+  const kv = fakeKv();
+  const store = new WorkersKv({ KV: kv });
+  assert.deepEqual(await store.getValue("absent"), { kind: "None" });
+  await store.put("k", '{"user":"ada"}');
+  assert.deepEqual(await store.getValue("k"), { kind: "Some", value: { user: "ada" } });
   await store.put("bad", "secret, not json");
   await assert.rejects(store.getValue("bad"), (e) => /getValue returned a value that is not JSON/.test(e.message) && !/secret/.test(e.message));
-  await assert.rejects(store.putValue("k".repeat(513), 1, putOpts()), /a key is at most 512 bytes/);
 });
 
 t("WorkersKv.listPage: one page at a time, with each key's expiry and metadata, to a None cursor", async () => {

@@ -588,11 +588,11 @@ error. In tests the namespace is in memory: it keeps metadata and expiry
 `[unstable] allow`.
 
 ```bynk,fragment
-type Session = { user: UserId, created: Instant, roles: List[Role] }
-
 let _ <- Sessions.putValue(id, session, KvPut { expiration: After(30.minutes), metadata: Map.empty() })
 let s <- Sessions.getValue[Session](id)          // Option[Session]
 ```
+
+Here `Session` is any `Codable` type, such as `{ user: UserId, created: Instant, roles: List[Role] }`.
 
 - `putValue(key, value, options)` stores `Json.encode(value)`, so `Json.decode` of a
   `get` result reads it, and `getValue[T]` reads what `putValue` wrote exactly. `options`
