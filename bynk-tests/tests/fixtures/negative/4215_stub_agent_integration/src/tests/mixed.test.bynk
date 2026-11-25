@@ -1,0 +1,15 @@
+// #4215: an agent stub runs at `unit` only. A suite-scoped stub is refused when any
+// case of the suite is `integration`, even beside a `unit` case.
+suite shop.basket {
+	stub Basket.add(_) faulted
+
+	case "a unit case" {
+		let r <- place.call("a", 1)
+		expect r is Err("faulted")
+	}
+
+	case "an integration case" as integration {
+		let r <- place.call("b", 1)
+		expect r is Ok(1)
+	}
+}

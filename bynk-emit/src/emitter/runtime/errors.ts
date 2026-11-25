@@ -1,7 +1,51 @@
+// #3952: the numeric argument of a rule, of whichever base the refined type has
+// (`bynk.validation`'s `Bound`). A `Decimal` is the runtime's `{ coefficient, scale }`
+// and a `Duration` its milliseconds, as those types erase everywhere else.
+export type ValidationBound =
+  | { readonly tag: "IntBound"; readonly value: number }
+  | { readonly tag: "FloatBound"; readonly value: number }
+  | { readonly tag: "DecimalBound"; readonly value: { readonly coefficient: bigint; readonly scale: number } }
+  | { readonly tag: "DurationBound"; readonly value: number };
+
+// #3952: the predicate a refinement check enforces, with its argument
+// (`bynk.validation`'s `ValidationRule`); `WellFormed` is a value that is not a
+// valid member of its base type at all. A plain tagged object, as the compiler
+// shapes every sum, so a `match` on `e.rule` reads it with no conversion.
+export type ValidationRule =
+  | { readonly tag: "NonNegative" }
+  | { readonly tag: "Positive" }
+  | { readonly tag: "InRange"; readonly lo: ValidationBound; readonly hi: ValidationBound }
+  | { readonly tag: "AtLeast"; readonly bound: ValidationBound }
+  | { readonly tag: "AtMost"; readonly bound: ValidationBound }
+  | { readonly tag: "NonEmpty" }
+  | { readonly tag: "MinLength"; readonly limit: number }
+  | { readonly tag: "MaxLength"; readonly limit: number }
+  | { readonly tag: "Length"; readonly limit: number }
+  | { readonly tag: "Matches"; readonly pattern: string }
+  | { readonly tag: "IsoDate" }
+  | { readonly tag: "Cron" }
+  | { readonly tag: "WellFormed" };
+
 export interface ValidationError {
   readonly field: string;
   readonly message: string;
+  readonly rule: ValidationRule;
   readonly value: unknown;
+}
+
+// #3952: a rule as a `400` body writes it: `kind` where the in-memory form has `tag`
+// (every sum is `{"kind": …}` on the wire), a `Decimal` bound as its text.
+export interface WireValidationRule {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+// #3952: a violation as the `400` body carries it: the field, the message and the rule,
+// never the value (#4278). What a client reads back from a server's refusal.
+export interface WireViolation {
+  readonly field: string;
+  readonly message: string;
+  readonly rule: WireValidationRule;
 }
 
 // v0.22b: the JSON-decode error (ADR 0047) — BoundaryError's information

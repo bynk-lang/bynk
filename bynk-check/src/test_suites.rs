@@ -71,7 +71,7 @@ use bynk_project::ParsedFile;
 use bynk_project::UnitKind;
 use bynk_project::discovery::{case_effective_tier, suite_effective_tier_is_system};
 use bynk_syntax::ast::*;
-use bynk_syntax::error::CompileError;
+use bynk_syntax::error::{CompileError, Severity};
 use bynk_syntax::span::Span;
 
 /// Which runs of a target's test module a `stub` clause applies to (#291).
@@ -119,6 +119,12 @@ pub struct ResolvedStub {
     /// return type those of the service's `on call` handler), so the stub
     /// machinery treats a service as an operation.
     pub service_context: Option<String>,
+    /// #4215: when the seam is an agent the target context declares rather than a capability,
+    /// `cap_decl` is a synthetic capability with one operation per stubbed agent handler (its
+    /// parameters and return type those of the handler), and the clauses end `faulted` or
+    /// `unreachable` alone. An agent stub is not a `deps` entry: the test runtime intercepts
+    /// the agent's own calls (`stubAgents`).
+    pub agent: bool,
     /// The `stub` clauses for this capability, in match order (case-scoped
     /// first so they take precedence over suite-scoped in the emitted if-chain).
     pub clauses: Vec<StubClause>,
@@ -260,6 +266,13 @@ pub fn phase_test_bodies(
             errors,
         );
 
+        crate::stub_agent::refuse_agent_stubs_above_unit(
+            unit_tables.get(target_name),
+            indices,
+            parsed,
+            errors,
+        );
+
         if had_dup {
             // Skip body/type-checking for this target; we have name conflicts.
             continue;
@@ -320,7 +333,7 @@ pub fn phase_test_bodies(
             unit_consumes,
             broken,
         );
-        let bodies_failed = !bodies_errs.is_empty();
+        let bodies_failed = any_error(&bodies_errs);
         errors.extend(resolver::split_broken_decl_echoes(bodies_errs, &visible_broken).0);
 
         if bodies_failed {
@@ -451,6 +464,30 @@ fn resolve_stubs(
             );
             continue;
         }
+        // #4215: an agent the target declares is a seam too, stubbed at the agent's own calls.
+        if resolve_cap(&cap_name).is_none() {
+            if let Some(agent) = crate::stub_agent::target_agent(target_table, &cap_name) {
+                crate::stub_agent::resolve_agent_stub(
+                    agent,
+                    pc,
+                    scope,
+                    identity_path,
+                    fixtures,
+                    fns,
+                    types,
+                    consts,
+                    &mut out,
+                    errors,
+                );
+                continue;
+            }
+            if let Some(e) =
+                crate::stub_agent::other_context_agent_error(&pc, target_name, unit_tables)
+            {
+                errors.push(e);
+                continue;
+            }
+        }
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
             // non-existent capability. Either way it is not a seam.
@@ -520,6 +557,7 @@ fn resolve_stubs(
             cap: cap_name.clone(),
             cap_decl: cap_decl.clone(),
             service_context: None,
+            agent: false,
             clauses: Vec::new(),
             clause_scopes: Vec::new(),
             clause_fixtures: Vec::new(),
@@ -607,6 +645,7 @@ fn resolve_service_stub(
             trivia: Default::default(),
         },
         service_context: Some(ctx.to_string()),
+        agent: false,
         clauses: Vec::new(),
         clause_scopes: Vec::new(),
         clause_fixtures: Vec::new(),
@@ -962,6 +1001,7 @@ pub fn phase_integration_bodies(
             let Some(d) = parsed[i].integration() else {
                 continue;
             };
+            let suite_from = body_errs.len();
             // #2834: as for a unit suite, a system suite's helpers are
             // definitions of their own file's namespace.
             let namespace = if SuiteItems::of(d).is_empty() {
@@ -1026,10 +1066,7 @@ pub fn phase_integration_bodies(
             // harness to run in, so checking them against the harness view
             // would only add false errors (a consumed capability read as
             // "not a seam"); the tier error stands for them.
-            let suite_has_system = d.tier == Some(bynk_syntax::ast::TestTier::System)
-                || d.cases
-                    .iter()
-                    .any(|c| case_effective_tier(c, d) == bynk_syntax::ast::TestTier::System);
+            let suite_has_system = has_system_case(d);
             for case in &d.cases {
                 let unchecked = suite_has_system
                     && case_effective_tier(case, d) != bynk_syntax::ast::TestTier::System;
@@ -1111,6 +1148,7 @@ pub fn phase_integration_bodies(
                 }
                 check_bad_signature_tier(case, case_effective_tier(case, d), &mut body_errs);
             }
+            drop_undecodable_warning(&mut body_errs, suite_from, suite_has_system);
         }
         // #3162: a skipped declaration of any participant (or of what the
         // participants and the suite use) is a known name, not an unknown one.
@@ -1122,7 +1160,7 @@ pub fn phase_integration_bodies(
             unit_consumes,
             broken,
         );
-        let bodies_failed = !body_errs.is_empty();
+        let bodies_failed = any_error(&body_errs);
         errors.extend(resolver::split_broken_decl_echoes(body_errs, &visible_broken).0);
         if bodies_failed {
             continue;
@@ -3703,6 +3741,34 @@ fn check_faults_tier(
             ),
         );
     }
+}
+
+/// Whether a suite is `system` or holds a `system` case.
+fn has_system_case(d: &SuiteDecl) -> bool {
+    d.tier == Some(TestTier::System)
+        || d.cases
+            .iter()
+            .any(|c| case_effective_tier(c, d) == TestTier::System)
+}
+
+/// Whether any of a suite's diagnostics is an error; a warning does not fail its bodies (#4279).
+fn any_error(errs: &[CompileError]) -> bool {
+    errs.iter()
+        .any(|e| Severity::for_error(e) == Severity::Error)
+}
+
+/// #4279: the checker reports an `Undecodable` pattern of a `QueueResult` in every test body, since
+/// it does not know the tier. In a suite that has a `system` case the verdict can be it, so the
+/// report is dropped for the suite's cases and helpers alike.
+fn drop_undecodable_warning(errors: &mut Vec<CompileError>, from: usize, system: bool) {
+    if !system {
+        return;
+    }
+    let mut i = 0;
+    errors.retain(|e| {
+        i += 1;
+        i <= from || e.category != crate::checker::UNDECODABLE_UNREACHABLE
+    });
 }
 
 /// Slice C, #2905: `bynk.test.wire_needs_system` — a case below `system` that
@@ -6618,10 +6684,22 @@ service intake from queue(\"orders\") {
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ack")
             .assert_clean();
-        case("    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Retry(why) => expect why.length() > 0\n      RetryAfter(_, _) => expect false\n      Ack => expect true\n      Undecodable => expect false\n    }")
+        case("    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Retry(why) => expect why.length() > 0\n      RetryAfter(_, _) => expect false\n      Ack => expect true\n      _ => expect false\n    }")
             .assert_clean();
         case("    let r <- intake.message(Item { sku: \"x\" })\n    expect r is Ok(_)")
             .assert_reports("bynk.types.is_unknown_variant");
+    }
+
+    /// #4279: only a `system` case's verdict can be `Undecodable`, so a lower tier's arm or `is`
+    /// test of it warns.
+    #[test]
+    fn an_undecodable_pattern_warns_below_system() {
+        for body in [
+            "    let r <- intake.message(Item { sku: \"x\" })\n    expect !(r is Undecodable)",
+            "    let r <- intake.message(Item { sku: \"x\" })\n    match r {\n      Ack => expect true\n      Undecodable => expect false\n      _ => expect false\n    }",
+        ] {
+            case(body).assert_reports("bynk.queue.undecodable_unreachable");
+        }
     }
 
     /// The context of `385_system_wire_rejection`, cut down.

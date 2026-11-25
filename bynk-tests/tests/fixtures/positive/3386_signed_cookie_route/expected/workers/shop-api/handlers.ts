@@ -12,10 +12,10 @@ export type UserId = string & { readonly __brand: "shop.api.UserId" };
 export const UserId = {
   of(value: string): Result<UserId, ValidationError> {
     if (!(__bynkCodePointLength(value) > 0)) {
-      return Err({ field: "UserId", message: "must be non-empty", value });
+      return Err({ field: "UserId", message: "must be non-empty", rule: { tag: "NonEmpty" }, value });
     }
     if (!(__bynkCodePointLength(value) <= 64)) {
-      return Err({ field: "UserId", message: "length must be at most 64", value });
+      return Err({ field: "UserId", message: "length must be at most 64", rule: { tag: "MaxLength", limit: 64 }, value });
     }
     return Ok(value as UserId);
   },

@@ -19,7 +19,7 @@ export type Code = string & { readonly __brand: "r.api.Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 3)) {
-      return Err({ field: "Code", message: "length must be at most 3", value });
+      return Err({ field: "Code", message: "length must be at most 3", rule: { tag: "MaxLength", limit: 3 }, value });
     }
     return Ok(value as Code);
   },
@@ -100,7 +100,7 @@ export function __deserialise_Item(json: __JsonValue, path: string = "$"): Resul
   }
   const __name = obj["name"];
   if (!(__bynkCodePointLength(__name) > 0)) {
-    return Err({ kind: "RefinementViolation", path: `${path}.name`, violation: { field: "name", message: "must be non-empty", value: __name } });
+    return Err({ kind: "RefinementViolation", path: `${path}.name`, violation: { field: "name", message: "must be non-empty", rule: { tag: "NonEmpty" }, value: __name } });
   }
   return Ok({ name: __name } as Item);
 }

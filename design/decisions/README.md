@@ -17,6 +17,9 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0963](0963-agent-operation-stubs.md) | **An agent operation is stubbed at `unit`, by intercepting the agent's own calls** (v0.699) — The address, scope, words and interception point of `stub <Agent>.<op>(…) faulted | unreachable` | Accepted (v0.699) |
+| [0962](0962-queue-undecodable-unreachable.md) | **An `Undecodable` pattern warns where the verdict cannot be it** (v0.698) — A checker warning on `Undecodable` patterns of a `QueueResult` outside a `system` case, so a dead arm does not look meaningful | Accepted (v0.698) |
+| [0961](0961-validation-rule.md) | **A ValidationError names the failed predicate as a closed ValidationRule sum** (v0.697) — `e.rule` is a prelude `ValidationRule` with a `Bound` sum for numeric arguments; the 400 body carries it and never the value | Accepted (v0.697) |
 | [0960](0960-store-scans-stop-early.md) | **Which store scans stop reading pages early** (v0.696.2) — any/all over Map and Log, and first/firstOrElse/take(n).collect over Log, read a page at a time and stop at the answer | Accepted (v0.696.2) |
 | [0959](0959-d1-row-admits-decimal-from-text.md) | **A D1 row admits Decimal, read from a TEXT column** (v0.696.1) — Replaces ADR 0698's consequence that a Decimal is not admitted in a Json.decodeSql row | Accepted (v0.696.1) |
 | [0958](0958-effect-map-and-then.md) | **Effect.map and Effect.andThen, as the spec already describes, usable in a pure helper** (v0.696) — Adds map and andThen to every Effect, and replaces the misleading "has no methods" error with method_not_found | Accepted (v0.696) |

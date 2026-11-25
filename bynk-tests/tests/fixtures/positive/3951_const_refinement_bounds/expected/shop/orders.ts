@@ -17,10 +17,10 @@ export type Qty = number & { readonly __brand: "Qty" };
 export const Qty = {
   of(value: number): Result<Qty, ValidationError> {
     if (!globalThis.Number.isSafeInteger(value)) {
-      return Err({ field: "Qty", message: "must be a safe integer", value });
+      return Err({ field: "Qty", message: "must be a safe integer", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 1 && value <= 100)) {
-      return Err({ field: "Qty", message: "must be in range [1, 100]", value });
+      return Err({ field: "Qty", message: "must be in range [1, 100]", rule: { tag: "InRange", lo: { tag: "IntBound", value: 1 }, hi: { tag: "IntBound", value: 100 } }, value });
     }
     return Ok(value as Qty);
   },
@@ -31,7 +31,7 @@ export type Note = string & { readonly __brand: "Note" };
 export const Note = {
   of(value: string): Result<Note, ValidationError> {
     if (!(__bynkCodePointLength(value) <= 280)) {
-      return Err({ field: "Note", message: "length must be at most 280", value });
+      return Err({ field: "Note", message: "length must be at most 280", rule: { tag: "MaxLength", limit: 280 }, value });
     }
     return Ok(value as Note);
   },
@@ -42,7 +42,7 @@ export type Slug = string & { readonly __brand: "Slug" };
 export const Slug = {
   of(value: string): Result<Slug, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "^[a-z]+$" + ")$", "u").test(value))) {
-      return Err({ field: "Slug", message: "must match /^[a-z]+$/", value });
+      return Err({ field: "Slug", message: "must match /^[a-z]+$/", rule: { tag: "Matches", pattern: "^[a-z]+$" }, value });
     }
     return Ok(value as Slug);
   },
@@ -53,10 +53,10 @@ export type Ratio = number & { readonly __brand: "Ratio" };
 export const Ratio = {
   of(value: number): Result<Ratio, ValidationError> {
     if (!globalThis.Number.isFinite(value)) {
-      return Err({ field: "Ratio", message: "must be a finite number", value });
+      return Err({ field: "Ratio", message: "must be a finite number", rule: { tag: "WellFormed" }, value });
     }
     if (!(value >= 0.0 && value <= 2.5)) {
-      return Err({ field: "Ratio", message: "must be in range [0.0, 2.5]", value });
+      return Err({ field: "Ratio", message: "must be in range [0.0, 2.5]", rule: { tag: "InRange", lo: { tag: "FloatBound", value: 0.0 }, hi: { tag: "FloatBound", value: 2.5 } }, value });
     }
     return Ok(value as Ratio);
   },
@@ -67,7 +67,7 @@ export type Wait = number & { readonly __brand: "Wait" };
 export const Wait = {
   of(value: number): Result<Wait, ValidationError> {
     if (!(value <= 300000)) {
-      return Err({ field: "Wait", message: "must be at most 5.minutes", value });
+      return Err({ field: "Wait", message: "must be at most 5.minutes", rule: { tag: "AtMost", bound: { tag: "DurationBound", value: 300000 } }, value });
     }
     return Ok(value as Wait);
   },
@@ -78,7 +78,7 @@ export type Code = string & { readonly __brand: "Code" };
 export const Code = {
   of(value: string): Result<Code, ValidationError> {
     if (!(__bynkCodePointLength(value) === 280)) {
-      return Err({ field: "Code", message: "length must be exactly 280", value });
+      return Err({ field: "Code", message: "length must be exactly 280", rule: { tag: "Length", limit: 280 }, value });
     }
     return Ok(value as Code);
   },

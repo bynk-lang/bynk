@@ -10,6 +10,7 @@ use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
 use bynk_check::d1_migrations::D1Migrations;
 use bynk_check::test_suites::{self};
+use bynk_syntax::error::Severity;
 use bynk_ts::{SourceMapBuilder, TsBinaryOp, TsDecl, TsExpr, TsProgram, TsStmt, TsType};
 use std::sync::Arc;
 
@@ -695,6 +696,8 @@ pub(super) fn emit_integration_module(
         // lowering would silently fall back to untyped output.
         // #2906: except a lower-tier case in a suite that also has `system`
         // ones, which the check pass leaves unchecked (`mixed_system_suite`).
+        // #4279: a warning is not drift.
+        throwaway_errors.retain(|e| Severity::for_error(e) == Severity::Error);
         debug_assert!(
             throwaway_errors.is_empty() || input.tier != bynk_syntax::ast::TestTier::System,
             "a system case re-typed for emission reported errors the check pass did not: {:?}",

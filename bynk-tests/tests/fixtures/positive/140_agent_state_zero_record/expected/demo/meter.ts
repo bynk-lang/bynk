@@ -19,7 +19,7 @@ export type MeterId = string & { readonly __brand: "demo.meter.MeterId" };
 export const MeterId = {
   of(value: string): Result<MeterId, ValidationError> {
     if (!(__bynkRegExp("^(?:" + "[a-z0-9]{1,16}" + ")$", "u").test(value))) {
-      return Err({ field: "MeterId", message: "must match /[a-z0-9]{1,16}/", value });
+      return Err({ field: "MeterId", message: "must match /[a-z0-9]{1,16}/", rule: { tag: "Matches", pattern: "[a-z0-9]{1,16}" }, value });
     }
     return Ok(value as MeterId);
   },

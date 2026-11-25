@@ -24,6 +24,10 @@ pub const REFUSALS: [&str; 7] = [
 /// What is wrong with `clause`'s `rejected`, `faulted` or `unreachable`, if anything: it must
 /// stub a consumed service, and `rejected` must name a `Refusal` case.
 pub fn stub_outcome_word_errors(clause: &StubClause, rp: &ResolvedStub) -> Vec<CompileError> {
+    // #4215: an agent stub's words are checked where it is resolved (`stub_agent`).
+    if rp.agent {
+        return Vec::new();
+    }
     let word = match &clause.rhs {
         StubRhs::Rejected(..) => "rejected",
         StubRhs::Faulted(_) => "faulted",
