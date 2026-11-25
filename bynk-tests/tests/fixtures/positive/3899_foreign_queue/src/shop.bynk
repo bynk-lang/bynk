@@ -1,0 +1,15 @@
+context shop
+
+type Order = { id: String }
+
+// #3899: a producer that is not Bynk, declared under its own secret. The consumer admits only
+// messages signed under it. The handler always asks for a retry, so a case tells a message that
+// reached it (a `Retry`) from one that was refused before it (acknowledged: `Ack`).
+actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }
+
+service fulfil from queue("orders") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Legacy {
+    Retry("reached the handler")
+  }
+}

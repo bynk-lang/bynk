@@ -540,6 +540,9 @@ pub struct ForeignCaller {
     /// The foreign Worker's name, when the declaration gives one
     /// (`worker = "ledger-svc"`), so `bynk deploy`'s hand-off can name it.
     pub worker: Option<String>,
+    /// #3899: whether this sender signs queue messages to a `from queue` consumer, not calls
+    /// (an actor admitted on both is listed as a caller).
+    pub queue: bool,
 }
 
 /// I3 (#1971): the foreign caller an actor declaration describes, if it is a
@@ -553,6 +556,7 @@ pub fn foreign_caller_of(decl: &ActorDecl) -> Option<ForeignCaller> {
             .scheme_arg("worker")
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
+        queue: false,
     })
 }
 
@@ -675,6 +679,39 @@ pub fn call_admission_for(
         admission.sum = Some(members);
     }
     Some(admission)
+}
+
+/// #3899: the foreign senders a `from queue` consumer admits. Such a consumer admits signed
+/// messages only: each must come from one of these actors, signed under that actor's secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueAdmission {
+    /// The foreign senders admitted, in `by` order.
+    pub foreign: Vec<ForeignCaller>,
+}
+
+/// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
+/// messages (`by Producer`, today's behaviour). A consumer whose `by` names only `Foreign` actors
+/// admits only messages signed under one of their secrets; the checker refuses a `by` that mixes
+/// them with an unsigned actor, so a signed consumer's every member is a foreign sender here.
+pub fn queue_admission_for(
+    handler: &Handler,
+    protocol: &ServiceProtocol,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(protocol, ServiceProtocol::Queue { .. })
+        || !matches!(handler.kind, HandlerKind::Message)
+    {
+        return None;
+    }
+    let mut foreign = Vec::new();
+    for actor in &handler.by_clause.as_ref()?.actors {
+        // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
+        foreign.push(ForeignCaller {
+            queue: true,
+            ..foreign_caller_of(actors.get(&actor.name)?)?
+        });
+    }
+    (!foreign.is_empty()).then_some(QueueAdmission { foreign })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —

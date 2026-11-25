@@ -613,9 +613,17 @@ fn foreign_caller_secrets(p: &str, unit_tables: &HashMap<String, UnitTable>) -> 
     let mut secrets: Vec<String> = t
         .services
         .values()
-        .flat_map(|s| s.handlers.iter())
-        .filter_map(|h| bynk_check::actors::call_admission_for(h, &t.actors))
-        .flat_map(|a| a.foreign.into_iter().map(|f| f.secret))
+        .flat_map(|s| s.handlers.iter().map(move |h| (s, h)))
+        .flat_map(|(s, h)| {
+            let call = bynk_check::actors::call_admission_for(h, &t.actors)
+                .map(|a| a.foreign)
+                .unwrap_or_default();
+            // #3899: and the foreign senders a queue consumer admits, signed as by a case.
+            let queue = bynk_check::actors::queue_admission_for(h, &s.protocol, &t.actors)
+                .map(|a| a.foreign)
+                .unwrap_or_default();
+            call.into_iter().chain(queue).map(|f| f.secret)
+        })
         .collect();
     secrets.sort();
     secrets.dedup();

@@ -1,0 +1,6 @@
+suite shop {
+  case "a message reaches the handler as the foreign producer" {
+    let r <- fulfil.message(Order { id: "o1" }) by Legacy
+    expect r is Retry("reached the handler")
+  }
+}

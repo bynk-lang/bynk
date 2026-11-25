@@ -122,6 +122,17 @@ pub(super) const UNDECODABLE_HELPER: &str = "async function __bynkUndecodable(ct
 }
 ";
 
+/// #3899: settles one message a signed consumer refused (unsigned, wrongly signed, from a sender it
+/// does not admit, or replayed). It is acknowledged, so it is never retried or dead-lettered and the
+/// dead-letter consumer never sees an injected message, and reported as a fault. The record names the
+/// queue and the reason, never the body (#3437).
+pub(super) const QUEUE_REFUSED_HELPER: &str = "function __bynkQueueRefused(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, queue: string, reason: string, msg: { ack(): void }): void {
+  globalThis.console.error(`queue ${queue} refused`, reason);
+  __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} refused a message: ${reason}`));
+  msg.ack();
+}
+";
+
 /// #3881: retries one queue message for a `Retry` or a `RetryAfter` verdict. A `Retry` retries with no
 /// options, so the consumer's `retryDelay` (#3877) applies; a `RetryAfter` overrides it for this message
 /// with `delaySeconds`, its `Duration` rounded up to whole seconds and clamped to Cloudflare's range of
@@ -148,6 +159,7 @@ pub(super) fn fault_helpers(has_cron: bool, has_queue: bool) -> String {
     }
     if has_queue {
         all.push(UNDECODABLE_HELPER);
+        all.push(QUEUE_REFUSED_HELPER);
         all.push(RETRY_MESSAGE_HELPER);
     }
     all.join("\n")

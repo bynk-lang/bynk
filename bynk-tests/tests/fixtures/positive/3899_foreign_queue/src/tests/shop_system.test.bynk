@@ -1,0 +1,22 @@
+suite shop as system {
+  case "a message signed by the foreign producer reaches the handler" {
+    let r <- fulfil.message(Order { id: "o1" }) by Legacy
+    expect r is Retry("reached the handler")
+  }
+
+  case "an unsigned message is refused and never handled" {
+    let r <- fulfil.message(Order { id: "o2" })
+    expect r is Ack
+  }
+
+  // The test producer gives a message the id of its content, so sending the same message twice
+  // replays it: the second is refused, while a different message is its own.
+  case "a replayed message is refused the second time" {
+    let first <- fulfil.message(Order { id: "o3" }) by Legacy
+    let again <- fulfil.message(Order { id: "o3" }) by Legacy
+    let other <- fulfil.message(Order { id: "o4" }) by Legacy
+    expect first is Retry("reached the handler")
+    expect again is Ack
+    expect other is Retry("reached the handler")
+  }
+}

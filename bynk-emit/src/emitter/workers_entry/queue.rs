@@ -4,8 +4,8 @@ use super::respond::{case_, default_case, fault_detail, report_fault};
 use super::wire::deserialise_call;
 use crate::emitter::RuntimeUse;
 use crate::ts_build::{
-    as_expr, await_expr, block, call, const_, expr_stmt, ident, if_, member, method_call, return_,
-    str_lit, strict_eq, switch_stmt,
+    as_expr, await_expr, block, call, const_, expr_stmt, ident, if_, member, method_call, not_expr,
+    return_, str_lit, strict_eq, switch_stmt,
 };
 use bynk_check::symbols::UnitTable;
 use bynk_syntax::ast::{ServiceProtocol, TypeRef};
@@ -81,11 +81,16 @@ fn emit_queue_handler(
     let mut cases: Vec<TsSwitchCase> = Vec::new();
     for route in queue_routes {
         let method_key = crate::emitter::queue_handler_method_name(&route.service, route.index);
+        // #3899: a signed consumer decodes the body inside the envelope its admission unwrapped.
+        let body = member(
+            ident(if route.signed.is_some() { "__a" } else { "msg" }),
+            "body",
+        );
         let dser = match &route.msg_type {
             Some(t) => deserialise_call(
                 t,
                 &TsExpr::Paren(Box::new(as_expr(
-                    member(ident("msg"), "body"),
+                    body.clone(),
                     TsType::named("__JsonValue"),
                 ))),
                 "$",
@@ -95,11 +100,12 @@ fn emit_queue_handler(
             // signature above — no cast needed at all when there's no declared type
             // to (dis)trust it against.
             None => as_expr(
-                call(ident("Ok"), vec![member(ident("msg"), "body")]),
+                call(ident("Ok"), vec![body]),
                 TsType::named("Result<unknown, __BoundaryError>"),
             ),
         };
-        let try_stmts = vec![
+        let mut try_stmts = admission_stmts(route);
+        try_stmts.extend([
             const_("__r", dser),
             // #3878: an undecodable body is never retried (no retry changes the
             // bytes): it is dead-lettered or dropped visibly, then skipped.
@@ -154,7 +160,7 @@ fn emit_queue_handler(
                 ),
                 None,
             ),
-        ];
+        ]);
         // The catch clause's own real content packs both statements onto
         // one compact line (`console.error(...); msg.retry();`) inside the
         // usual braces-on-their-own-lines shape — `TsStmt::try_catch`
@@ -254,6 +260,70 @@ pub(super) struct QueueRoute {
     pub(super) delivery_at: Option<usize>,
     /// #3878: the consumer's dead-letter queue, if its `delivery { }` names one.
     pub(super) dead_letter: Option<String>,
+    /// #3899: set when the consumer admits only signed messages.
+    pub(super) signed: Option<SignedRoute>,
+}
+
+/// #3899: a signed consumer's admission: the foreign senders it admits as (actor, secret name), and
+/// the queues that dead-letter into it, whose messages it also verifies (they were signed for their
+/// source queue, not this one).
+#[derive(Debug, Clone)]
+pub(super) struct SignedRoute {
+    pub(super) secrets: Vec<(String, String)>,
+    pub(super) sources: Vec<String>,
+}
+
+/// `const __a = await __bynkQueueAdmit(msg.body, <queue>, [<sources>], env, { <actor>: <secret> });`
+/// then, on a refusal, `__bynkQueueRefused(ctx, <queue>, __a.reason, msg); continue;`: the message
+/// is acknowledged and reported and never reaches the handler. Nothing for an unsigned consumer.
+fn admission_stmts(route: &QueueRoute) -> Vec<TsStmt> {
+    let Some(signed) = &route.signed else {
+        return Vec::new();
+    };
+    let sources = TsExpr::Array {
+        items: signed.sources.iter().map(|q| str_lit(q.clone())).collect(),
+        multiline: false,
+    };
+    let secrets = TsExpr::object(
+        signed
+            .secrets
+            .iter()
+            .map(|(actor, secret)| (actor.clone(), str_lit(secret.clone())))
+            .collect(),
+    );
+    vec![
+        const_(
+            "__a",
+            await_expr(call(
+                ident("__bynkQueueAdmit"),
+                vec![
+                    member(ident("msg"), "body"),
+                    str_lit(route.name.clone()),
+                    sources,
+                    ident("env"),
+                    secrets,
+                ],
+            )),
+        ),
+        if_(
+            not_expr(member(ident("__a"), "ok")),
+            TsStmt::inline_block(
+                vec![
+                    expr_stmt(call(
+                        ident("__bynkQueueRefused"),
+                        vec![
+                            ident("ctx"),
+                            str_lit(route.name.clone()),
+                            member(ident("__a"), "reason"),
+                            ident("msg"),
+                        ],
+                    )),
+                    TsStmt::continue_stmt(None),
+                ],
+                None,
+            ),
+        ),
+    ]
 }
 
 /// The binding a consumer of `queue` reads its dead-letter producer from (#3878). It is keyed
@@ -324,6 +394,16 @@ pub(super) fn collect_queue_routes(
                     .iter()
                     .find(|p| !bynk_syntax::queue::is_queue_delivery(&p.type_ref))
                     .map(|p| p.type_ref.clone());
+                let signed =
+                    bynk_check::actors::queue_admission_for(h, &service.protocol, &table.actors)
+                        .map(|a| SignedRoute {
+                            secrets: a.foreign.into_iter().map(|f| (f.actor, f.secret)).collect(),
+                            sources: deliveries
+                                .iter()
+                                .filter(|d| d.dead_letter.as_deref() == Some(name.as_str()))
+                                .map(|d| d.queue.clone())
+                                .collect(),
+                        });
                 queue_routes.push(QueueRoute {
                     service: (*sname).clone(),
                     index: queue_idx,
@@ -334,6 +414,7 @@ pub(super) fn collect_queue_routes(
                         .iter()
                         .find(|d| &d.queue == name)
                         .and_then(|d| d.dead_letter.clone()),
+                    signed,
                 });
                 queue_idx += 1;
             }

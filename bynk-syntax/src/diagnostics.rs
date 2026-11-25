@@ -277,7 +277,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.queue_actor_not_enforced",
-        blurb: "A queue consumer may one day narrow who can send to it, with a refinement of `Producer` that admits only named contexts or with a `Foreign` producer, but nothing yet verifies the sender of a queue message. Accepting such a `by` today would read as a restriction while admitting every producer on the account, so the compiler refuses it instead. Write `by Producer`, which says what is true: any producer on the account may send.",
+        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor beside an unsigned one in the same `by`. Write `by Producer`, which says what is true (any producer on the account may send), or name only `Foreign` actors.",
         example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
     },
     Explain {
@@ -7259,7 +7259,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.queue_actor_not_enforced",
-        "A queue consumer names a `Producer` refinement or a `Foreign` actor, which nothing enforces yet.",
+        "A queue consumer names a `Producer` refinement, or a `Foreign` actor beside an unsigned one, which nothing enforces yet.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",

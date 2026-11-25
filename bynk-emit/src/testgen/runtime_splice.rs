@@ -46,6 +46,8 @@ pub(super) enum TestRuntimeModule {
     JobsEmail,
     /// The `Authorization: Bearer …` signer (`__bynkSignHs256`).
     JwtSigner,
+    /// #3899: the test-only producer of a signed queue message (`__bynkSysQueueBody`).
+    QueueSigner,
     /// v0.117: the observation runtime (`Cap.op called …`, `trace(Cap.op)`).
     Observation,
     /// #3052: the test OIDC issuer an `Oidc` route's drivers mint tokens with.
@@ -74,7 +76,7 @@ pub(super) enum TestRuntimeModule {
 
 impl TestRuntimeModule {
     /// Every module, in the table's order.
-    pub(super) const ALL: [TestRuntimeModule; 21] = [
+    pub(super) const ALL: [TestRuntimeModule; 22] = [
         TestRuntimeModule::AssetGet,
         TestRuntimeModule::CaseTiming,
         TestRuntimeModule::Clock,
@@ -84,6 +86,7 @@ impl TestRuntimeModule {
         TestRuntimeModule::Jobs,
         TestRuntimeModule::JobsEmail,
         TestRuntimeModule::JwtSigner,
+        TestRuntimeModule::QueueSigner,
         TestRuntimeModule::Observation,
         TestRuntimeModule::OidcIssuer,
         TestRuntimeModule::Property,
@@ -110,6 +113,7 @@ impl TestRuntimeModule {
             TestRuntimeModule::Jobs => "jobs",
             TestRuntimeModule::JobsEmail => "jobs_email",
             TestRuntimeModule::JwtSigner => "jwt_signer",
+            TestRuntimeModule::QueueSigner => "queue_signer",
             TestRuntimeModule::Observation => "observation",
             TestRuntimeModule::OidcIssuer => "oidc_issuer",
             TestRuntimeModule::Property => "property",

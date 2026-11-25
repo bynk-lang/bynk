@@ -56,6 +56,8 @@ const MODULES = [
   "httpresult",
   "http",
   "queue",
+  "queue_signing",
+  "queue_admit",
   "email",
   "postgres",
   "mysql",
@@ -133,6 +135,7 @@ const TEST_MODULES = [
   "hmac_signer",
   "jobs",
   "jobs_email",
+  "queue_signer",
   "jwt_signer",
   "observation",
   "oidc_issuer",
@@ -276,7 +279,7 @@ const MODULE_TABLE = join(pkgRoot, "..", "src", "emitter", "runtime_modules.rs")
 function parseAliases(source) {
   const byModule = new Map();
   const origin = new Map(); // imported name -> module
-  for (const m of source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([a-z/]+)\.ts";$/gm)) {
+  for (const m of source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*"\.\/([a-z_/]+)\.ts";$/gm)) {
     for (const raw of m[1].split(",")) {
       const item = raw.trim();
       if (item) origin.set(item.replace(/^type\s+/, ""), { module: m[2], type: item.startsWith("type ") });

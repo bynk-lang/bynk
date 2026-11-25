@@ -2198,7 +2198,8 @@ fn check_by_clause_contracts(
                     is_sender_refinement(a, table),
                 )
             }),
-            contract.scheme,
+            // Said once, on the `Foreign` member, not again on each unsigned one beside it.
+            contract.scheme == actors::Scheme::Foreign && by_mixes_foreign(by, table),
         ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
             errors.push(
@@ -2775,9 +2776,8 @@ fn actor_narrowing_refusal(
     protocol: &ServiceProtocol,
     by: &bynk_syntax::ast::ByClause,
     refinement: Option<(bool, bool)>,
-    scheme: crate::actors::Scheme,
+    mixes_foreign: bool,
 ) -> Option<CompileError> {
-    use crate::actors::Scheme;
     let (producer_refinement, sender_refinement) = refinement.unwrap_or_default();
     // #3888: likewise a refinement over `Sender` narrows inbound mail, and only an email
     // handler can name one: elsewhere its `Dmarc(…)` is never checked.
@@ -2817,20 +2817,43 @@ fn actor_narrowing_refusal(
             ),
         );
     }
-    if !on_queue || !(producer_refinement || scheme == Scheme::Foreign) {
+    // #3899: a `Foreign` actor on its own is enforced: the consumer admits only messages signed
+    // under its secret. A `Producer` refinement, or a `Foreign` actor beside an unsigned one
+    // (whose messages carry no signature to tell apart), is not yet.
+    if !on_queue || !(producer_refinement || mixes_foreign) {
         return None;
     }
     Some(
         CompileError::new(
             "bynk.actor.queue_actor_not_enforced",
             by.span,
-            "a queue consumer cannot narrow its actor yet: a `Producer` refinement or a `Foreign` actor is not enforced on `on message`",
+            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement, or a `Foreign` actor beside an unsigned one, is not enforced on `on message`",
         )
         .with_note(
-            "nothing verifies who sent a queue message yet, so accepting this `by` would admit \
-             every producer while reading as if it did not — write `by Producer` for now",
+            "nothing verifies who sent such a message yet, so accepting this `by` would admit \
+             unsigned messages while reading as if it did not — write `by Producer`, or \
+             name only `Foreign` actors",
         ),
     )
+}
+
+/// #3899: whether a `by` clause names a `Foreign` actor beside one that is not (a `Producer`,
+/// a refinement or another scheme): a signed consumer admits only signed messages.
+fn by_mixes_foreign(by: &bynk_syntax::ast::ByClause, table: &UnitTable) -> bool {
+    use crate::actors::Scheme;
+    let foreign = |name: &str| {
+        by_actor_contract(name, table.actors.get(name), table)
+            .is_some_and(|c| c.scheme == Scheme::Foreign)
+    };
+    let (mut some, mut other) = (false, false);
+    for actor in &by.actors {
+        if foreign(&actor.name) {
+            some = true;
+        } else {
+            other = true;
+        }
+    }
+    some && other
 }
 
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe

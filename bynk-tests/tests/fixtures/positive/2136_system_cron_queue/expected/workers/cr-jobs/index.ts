@@ -63,6 +63,12 @@ async function __bynkUndecodable(ctx: { waitUntil(promise: globalThis.Promise<un
   msg.ack();
 }
 
+function __bynkQueueRefused(ctx: { waitUntil(promise: globalThis.Promise<unknown>): void } | undefined, queue: string, reason: string, msg: { ack(): void }): void {
+  globalThis.console.error(`queue ${queue} refused`, reason);
+  __bynkReportFault(ctx, new globalThis.Error(`queue ${queue} refused a message: ${reason}`));
+  msg.ack();
+}
+
 function __bynkRetryMessage(queue: string, msg: { retry(options?: { delaySeconds: number }): void }, result: { readonly tag: string; readonly delay?: number }): void {
   if (result.tag !== "RetryAfter" || typeof result.delay !== "number") {
     msg.retry();

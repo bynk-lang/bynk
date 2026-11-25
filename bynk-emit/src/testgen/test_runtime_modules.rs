@@ -12,6 +12,7 @@ pub(crate) const TEST_RUNTIME_MODULES: &[(&str, &[&str], &[&str], &str)] = &[
     ("hmac_signer", &[], &[], include_str!("test_runtime/hmac_signer.ts")),
     ("jobs", &["expectation"], &[], include_str!("test_runtime/jobs.ts")),
     ("jobs_email", &["jobs"], &[], include_str!("test_runtime/jobs_email.ts")),
+    ("queue_signer", &[], &["canonicalJson", "signQueueMessage"], include_str!("test_runtime/queue_signer.ts")),
     ("jwt_signer", &[], &[], include_str!("test_runtime/jwt_signer.ts")),
     ("observation", &[], &[], include_str!("test_runtime/observation.ts")),
     ("oidc_issuer", &["jwt_signer"], &[], include_str!("test_runtime/oidc_issuer.ts")),
