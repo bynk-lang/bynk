@@ -95,7 +95,11 @@ fn events_dispatch(plan: &ComposePlan, publisher: &str) -> TsExpr {
                     // stays `any`.
                     let mut args = vec![as_any(member(ident("ev"), "payload"))];
                     if sub.wants_envelope {
-                        args.push(member(ident("ev"), "envelope"));
+                        // #3895: minted with a bare trace id; the handler reads an `Option`.
+                        args.push(call(
+                            ident("__eventEnvelopeOf"),
+                            vec![member(ident("ev"), "envelope")],
+                        ));
                     }
                     args.push(ident(format!("{sub_ns}Deps")));
                     let delivery = call(
