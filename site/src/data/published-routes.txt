@@ -1874,6 +1874,7 @@
 /reference/diagnostics/bynk.queue.no_dead_letter/
 /reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
+/reference/diagnostics/bynk.queue.undecodable_unreachable/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/
 /reference/diagnostics/bynk.race.outside_handler/
