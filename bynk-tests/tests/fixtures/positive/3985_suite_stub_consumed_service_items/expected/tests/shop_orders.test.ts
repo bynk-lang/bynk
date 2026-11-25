@@ -14,6 +14,7 @@ class __Stub_Pay {
     const { PaymentError, Receipt } = __ns_shop_pay;
     type PaymentError = __ns_shop_pay.PaymentError;
     type Receipt = __ns_shop_pay.Receipt;
+    const __arg_0 = total;
     const __pv_0_0 = await (async () => {
       interface Tagged {
         readonly text: string;
@@ -97,7 +98,7 @@ class __Stub_Pay {
       function Prefix(): string { return (__const_Prefix ??= { v: "r-" }).v; }
       return Limit();
     })();
-    if (__bynkEq(total, __pv_0_0)) {
+    if (__bynkEq(__arg_0, __pv_0_0)) {
       interface Tagged {
         readonly text: string;
       }
