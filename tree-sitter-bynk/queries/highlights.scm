@@ -49,6 +49,7 @@
   "limits"
   "json"
   "delivery"
+  "errors"
   "exports"
   "key"
   "suite"

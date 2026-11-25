@@ -3494,6 +3494,8 @@ fn check_service_decls(
         crate::queue_delivery::validate_delivery(service, errors);
     }
 
+    validate_error_policies(table, errors);
+
     // #2858: validate each service's `json { }` policy, then refuse the one
     // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
     for service in table.services.values() {
@@ -5454,6 +5456,128 @@ fn validate_json_policy(
     }
 }
 
+/// #3916: validate each service's `errors { }` policy.
+fn validate_error_policies(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    for service in table.services.values() {
+        if let Some(policy) = &service.errors {
+            validate_errors_policy(service, policy, errors);
+        }
+    }
+}
+
+/// #3916: validate a service's `errors { }` policy. The error-body shape is a
+/// property of the HTTP surface, so the section is only legal on a `from http`
+/// service; the closed field set is `format`, whose value is the bare
+/// identifier `bynk` or `problem`.
+fn validate_errors_policy(
+    service: &ServiceDecl,
+    policy: &ErrorsPolicy,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.errors_not_http",
+                policy.span,
+                "an `errors { }` policy is only valid on a `from http` service",
+            )
+            .with_note("the error-body shape governs the HTTP surface, which only a `from http` service has"),
+        );
+        return;
+    }
+    for field in &policy.fields {
+        if field.name.name != "format" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.errors_unknown_field",
+                    field.name.span,
+                    format!("unknown `errors` field `{}`", field.name.name),
+                )
+                .with_note("the only field is `format`"),
+            );
+        }
+    }
+    match policy.field("format") {
+        Some(expr) if ErrorFormat::from_expr(expr).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.errors_invalid_field",
+                expr.span,
+                "`errors` `format` must be `bynk` or `problem`",
+            ));
+        }
+        _ => {}
+    }
+}
+
+/// #3916: the placement rules of `@errors`: at most one, and only on an `on http`
+/// handler. `false` when the annotation is misplaced (already reported), so its
+/// arguments are not checked.
+fn check_errors_annotation(
+    ann: &Annotation,
+    handler: &Handler,
+    seen: &mut bool,
+    errors: &mut Vec<CompileError>,
+) -> bool {
+    if *seen {
+        errors.push(CompileError::new(
+            "bynk.http.errors_duplicate",
+            ann.span,
+            "a handler carries at most one `@errors` annotation",
+        ));
+        return false;
+    }
+    *seen = true;
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.errors_not_http",
+                ann.span,
+                "`@errors` is only valid on an `on http` handler",
+            )
+            .with_note("it chooses the shape of an HTTP error body"),
+        );
+        return false;
+    }
+    validate_errors_args(ann, errors);
+    true
+}
+
+/// #3916: validate `@errors(format: bynk | problem)` on an HTTP handler.
+fn validate_errors_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+    let mut format: Option<&AnnotationArg> = None;
+    for arg in &ann.args {
+        match arg.label.as_ref().map(|l| l.name.as_str()) {
+            Some("format") => format = Some(arg),
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.errors_unknown_field",
+                    arg.span,
+                    "`@errors` accepts only the `format:` argument",
+                )
+                .with_note("write `@errors(format: problem)`"),
+            ),
+        }
+    }
+    match format {
+        None => errors.push(
+            CompileError::new(
+                "bynk.http.errors_invalid_field",
+                ann.span,
+                "`@errors` needs a `format:` argument",
+            )
+            .with_note("write `@errors(format: problem)`"),
+        ),
+        Some(arg) if ErrorFormat::from_expr(&arg.value).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.errors_invalid_field",
+                arg.span,
+                "`@errors` `format` must be `bynk` or `problem`",
+            ));
+        }
+        Some(_) => {}
+    }
+}
+
 /// #2858: validate `@json(options: tagged | plain)` on an HTTP handler.
 fn validate_json_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     let mut options: Option<&AnnotationArg> = None;
@@ -6391,6 +6515,7 @@ fn validate_handler_annotations(
     let mut seen_raw = false;
     let mut seen_form = false;
     let mut seen_json = false;
+    let mut seen_errors = false;
     // #3276: `@raw` and `@form` each fix the body's one wire format, so a handler
     // carries at most one of them.
     let mut body_kind: Option<&str> = None;
@@ -6631,13 +6756,18 @@ fn validate_handler_annotations(
                 }
                 validate_json_args(ann, errors);
             }
+            "errors" => {
+                if !check_errors_annotation(ann, handler, &mut seen_errors, errors) {
+                    continue;
+                }
+            }
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json` and `@errors`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),

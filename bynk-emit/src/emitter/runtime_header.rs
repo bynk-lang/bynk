@@ -252,6 +252,7 @@ const WORKER_ORDER: &[&str] = &[
     "__deserialiseEventEnvelope",
     "__noStore",
     "__privateByDefault",
+    "__problemRejection",
     "__edgeCacheGuard",
     "__varyAcceptLanguage",
     "__SecurityPolicy",

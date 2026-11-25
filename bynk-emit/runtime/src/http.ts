@@ -295,10 +295,83 @@ export function withPlainJson<T>(serialise: (v: T) => JsonValue): (v: T) => Json
   };
 }
 
+// #3916: `errors { format: problem }`. An error response as RFC 9457 problem details: `type`,
+// `title`, `status` and `detail` (when there is one), and a router rejection's `kind` and
+// `path` as extension members. A problem with no more to say than its status has `type`
+// `about:blank` (RFC 9457 §4.2.1); a router rejection has a stable
+// `https://bynk-lang.org/problems/<kind>` URI.
+const REASON_PHRASES: Readonly<Record<number, string>> = {
+  400: "Bad Request",
+  401: "Unauthorized",
+  403: "Forbidden",
+  404: "Not Found",
+  405: "Method Not Allowed",
+  406: "Not Acceptable",
+  408: "Request Timeout",
+  409: "Conflict",
+  413: "Payload Too Large",
+  415: "Unsupported Media Type",
+  422: "Unprocessable Entity",
+  429: "Too Many Requests",
+  451: "Unavailable For Legal Reasons",
+  500: "Internal Server Error",
+  501: "Not Implemented",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+};
+
+function problemResponse(
+  status: number,
+  fields: { readonly detail?: string; readonly kind?: string; readonly path?: string },
+  headers?: Headers,
+): Response {
+  const body: Record<string, unknown> = {
+    type:
+      fields.kind === undefined
+        ? "about:blank"
+        : `https://bynk-lang.org/problems/${fields.kind.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`,
+    title: REASON_PHRASES[status] ?? "Error",
+    status,
+  };
+  if (fields.detail !== undefined && fields.detail !== "") body.detail = fields.detail;
+  if (fields.kind !== undefined) body.kind = fields.kind;
+  if (fields.path !== undefined) body.path = fields.path;
+  const out = new Headers(headers);
+  out.delete("content-length");
+  out.set("content-type", "application/problem+json");
+  return new Response(JSON.stringify(body), { status, headers: out });
+}
+
+/**
+ * A router rejection as problem details. Only a JSON rejection (`400`, `413`, `415`, with the
+ * `kind` the router writes) is rewritten; a body-less `401` or `405`, and anything else, passes
+ * through, since RFC 9457 does not require a body. Applied before `on rejected`, which still
+ * sees the `kind` and `detail` and may replace the whole response with a `RawError`.
+ */
+export async function problemRejection(response: Response): Promise<Response> {
+  if (response.status < 400 || !(response.headers.get("content-type") ?? "").startsWith("application/json")) {
+    return response;
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = (await response.clone().json()) as Record<string, unknown>;
+  } catch {
+    return response;
+  }
+  if (typeof body.kind !== "string") return response;
+  const path = typeof body.path === "string" ? body.path : undefined;
+  return problemResponse(
+    response.status,
+    { detail: rejectionDetail(body), kind: body.kind, ...(path === undefined ? {} : { path }) },
+    response.headers,
+  );
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   const response = baseHttpResultToResponse(result, serialiseValue, opts);
   // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
@@ -318,7 +391,7 @@ export function httpResultToResponse<T>(
 function baseHttpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
@@ -416,6 +489,7 @@ function baseHttpResultToResponse<T>(
     case "BadGateway":
     case "ServiceUnavailable":
     case "GatewayTimeout":
+      if (opts?.problem === true) return problemResponse(status, { detail: result.message });
       return new Response(JSON.stringify({ error: result.message }), {
         status,
         headers: { "content-type": "application/json" },

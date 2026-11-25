@@ -473,6 +473,71 @@ A test matches a `RawError` by its number: `expect r is RawError(409, _, _)`. A
 system-tier test decodes the response by its status, as it does for every
 variant, so there the same response reads as `Conflict(_)`.
 
+To answer every error in the standard RFC 9457 shape instead, without writing the body
+yourself, see [Problem details](#problem-details).
+
+## Problem details {#problem-details}
+
+A service whose clients are not Bynk's can answer every error in one standard shape. With
+`errors { format: problem }`, an error variant and a router rejection each answer an
+[RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) `application/problem+json` body:
+
+```bynk,fragment
+service api from http {
+  errors { format: problem }
+
+  on POST("/widgets/:id/reserve") (id: String) -> Effect[HttpResult[()]] by v: Visitor {
+    Conflict("widget is out of stock")
+  }
+}
+```
+
+```json
+{ "type": "about:blank", "title": "Conflict", "status": 409, "detail": "widget is out of stock" }
+```
+
+A request the router refuses before the handler runs answers the same way, with a stable `type`
+and the rejection's `kind` and `path` as extension members:
+
+```json
+{ "type": "https://bynk-lang.org/problems/refinement-violation", "title": "Bad Request", "status": 400,
+  "detail": "body.qty: must be positive", "kind": "RefinementViolation", "path": "body.qty" }
+```
+
+| Field | Holds |
+|---|---|
+| `status` | the response's status |
+| `title` | the status's reason phrase |
+| `detail` | the variant's message, or the rejection's detail; absent when there is none |
+| `type` | `about:blank` for an error variant (RFC 9457 §4.2.1); `https://bynk-lang.org/problems/<kind>` for a router rejection |
+| `kind`, `path` | a router rejection's kind, and the field it names, when it names one |
+
+The rejection types are stable, and new kinds are additive. The URI is an identifier, listed
+here once:
+
+| Rejection | `type` | Status |
+|---|---|---|
+| `MalformedJson` {#problem-malformed-json} | `https://bynk-lang.org/problems/malformed-json` | `400` |
+| `MalformedForm` {#problem-malformed-form} | `https://bynk-lang.org/problems/malformed-form` | `400` |
+| `MalformedPath` {#problem-malformed-path} | `https://bynk-lang.org/problems/malformed-path` | `400` |
+| `StructuralMismatch` {#problem-structural-mismatch} | `https://bynk-lang.org/problems/structural-mismatch` | `400` |
+| `RefinementViolation` {#problem-refinement-violation} | `https://bynk-lang.org/problems/refinement-violation` | `400` |
+| `PayloadTooLarge` {#problem-payload-too-large} | `https://bynk-lang.org/problems/payload-too-large` | `413` |
+| `UnsupportedMediaType` {#problem-unsupported-media-type} | `https://bynk-lang.org/problems/unsupported-media-type` | `415` |
+
+The default is `format: bynk`, and with it every error body is what it always was, byte for byte.
+A handler overrides the service with `@errors(format: bynk)` or `@errors(format: problem)`; the route
+wins, then the service. What the format does not touch: a `RawError` body, which you chose; an
+[`on rejected`](#rendering-rejections) handler, which still replaces the router's body; a status
+that has no body (`401`, `403`, `404`, `405`), because RFC 9457 does not require one; the `500` a
+fault answers; and every success body. A shared mapping function that returns `HttpResult[T]`
+needs no change: its variants render as problems in this mode.
+
+The section is legal only on a `from http` service (`bynk.http.errors_not_http`), at most once
+(`bynk.parse.duplicate_errors`), and its one field is `format` (`bynk.http.errors_unknown_field`),
+whose value is `bynk` or `problem` (`bynk.http.errors_invalid_field`). `@errors` follows the same
+rules, and at most one per handler (`bynk.http.errors_duplicate`).
+
 ## Rendering rejections
 
 The router refuses some requests before any handler runs: a `400` for a body or

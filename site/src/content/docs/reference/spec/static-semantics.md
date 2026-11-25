@@ -2282,6 +2282,32 @@ response type of a `plain` route (through record and sum fields, `List`, `Set`,
 `bynk.json.nested_option_plain`. A service or route with neither declaration is
 unchanged.
 
+### §5.7.6 Error body shape (#3916) {#error-format}
+
+A `from http` service MAY declare a single **`errors { }`** section in header
+position, after `json { }`, and a handler MAY carry one **`@errors`** annotation that
+overrides it. Both choose the shape of the error bodies the service answers.
+
+The **`errors { }`** section is legal only on a `from http` service
+(`bynk.http.errors_not_http`) and at most once per service
+(`bynk.parse.duplicate_errors`). Its only field is **`format`**, whose value is the bare
+identifier `bynk` or `problem` (`bynk.http.errors_invalid_field`); any other field is
+`bynk.http.errors_unknown_field`. **`@errors(format: bynk | problem)`** is legal only on
+an `on http` handler (`bynk.http.errors_not_http`), at most once
+(`bynk.http.errors_duplicate`), takes only `format` (`bynk.http.errors_unknown_field`) and
+requires it (`bynk.http.errors_invalid_field`).
+
+The **effective format** of a route is its `@errors`, else its service's `errors { }`,
+else `bynk`. In `bynk` format an error variant with a message answers
+`{ "error": message }` and a router rejection answers `{ "kind": …, "details": … }`,
+exactly as before. In `problem` format each of them answers an RFC 9457
+`application/problem+json` body with `type`, `title`, `status` and, where there is one,
+`detail`. A variant's `type` is `about:blank`; a router rejection's `type` is
+`https://bynk-lang.org/problems/<kind>` (the kind in kebab case), and its `kind` and `path` ride as
+extension members. A `RawError` body, an `on rejected` handler's body and a status that has
+no body (`401`, `403`, `404`, `405`) are unchanged, as are success bodies and the `500`
+a fault answers.
+
 A **`from websocket(in: I, out: O)`** service (v0.103) binds the inbound frame
 type `I` and the server-sent frame type `O` on its header, and declares the
 connection-lifecycle handlers:
