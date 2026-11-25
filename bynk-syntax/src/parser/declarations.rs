@@ -36,6 +36,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Commons(c))
             }
             Some(TokenKind::Context) => {
@@ -52,6 +53,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut c.uses);
                 Ok(SourceUnit::Context(c))
             }
             Some(TokenKind::Adapter) => {
@@ -68,6 +70,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut a.uses);
                 Ok(SourceUnit::Adapter(a))
             }
             Some(TokenKind::Suite) => {
@@ -94,6 +97,7 @@ impl<'a> Parser<'a> {
                     leading: header_leading,
                     trailing: None,
                 };
+                self.distribute_qualified_refs(&mut t.uses);
                 Ok(SourceUnit::Suite(t))
             }
             Some(_) => {
@@ -495,13 +499,80 @@ impl<'a> Parser<'a> {
         ))
     }
 
+    /// #4045: hand each qualified name the unit read to the `uses` clause that
+    /// introduced its qualifier, then clear the parser's record for the next unit.
+    fn distribute_qualified_refs(&mut self, uses: &mut [UsesDecl]) {
+        for (full, span) in std::mem::take(&mut self.qualified_refs) {
+            let Some((prefix, name)) = full.rsplit_once('.') else {
+                continue;
+            };
+            for u in uses.iter_mut() {
+                let by_alias = u.alias.as_ref().is_some_and(|a| a.name == prefix);
+                if (by_alias || u.target.joined() == prefix)
+                    && !u.qualified_refs.iter().any(|r| r.text == full)
+                {
+                    u.qualified_refs.push(QualifiedRef {
+                        text: full.clone(),
+                        name: name.to_string(),
+                        span,
+                    });
+                }
+            }
+        }
+        self.use_prefixes.clear();
+    }
+
     fn parse_uses_decl(&mut self) -> Result<UsesDecl, CompileError> {
         let blank_before = self.trivia.blank_before(self.pos);
         let kw = self.expect(TokenKind::Uses, "to start a `uses` declaration")?;
         let target = self.parse_qualified_name()?;
-        let span = kw.span.merge(target.span);
+        let mut span = kw.span.merge(target.span);
+        let mut alias = None;
+        let mut selected = None;
+        match self.peek_kind() {
+            // #4045: `uses lib.y as Y`.
+            Some(TokenKind::As) => {
+                self.bump();
+                let id = self.expect_ident("as an alias for the used commons")?;
+                span = span.merge(id.span);
+                alias = Some(id);
+            }
+            // #4045: `uses lib.y { Status as YStatus, describe }`.
+            Some(TokenKind::LBrace) => {
+                self.bump();
+                let mut names = Vec::new();
+                while self.peek_kind() != Some(TokenKind::RBrace) {
+                    let id = self.expect_ident("a name in `uses U { … }`")?;
+                    let alias = if self.eat(TokenKind::As).is_some() {
+                        Some(self.expect_ident("a name after `as` in `uses U { … }`")?)
+                    } else {
+                        None
+                    };
+                    names.push(ConsumesItem { name: id, alias });
+                    if self.eat(TokenKind::Comma).is_none() {
+                        break;
+                    }
+                }
+                let close = self.expect(TokenKind::RBrace, "to close the `uses` list")?;
+                span = span.merge(close.span);
+                selected = Some(names);
+            }
+            _ => {}
+        }
+        // #4045: the names a qualified reference may start with from here on.
+        if let Some(a) = &alias {
+            self.use_prefixes.push(a.name.clone());
+        }
+        // A one-segment commons name (`uses keys`) is no qualifier: it is as likely a
+        // local of that name (`keys.map(…)`), which only an alias is explicit about.
+        if target.parts.len() > 1 {
+            self.use_prefixes.push(target.joined());
+        }
         Ok(UsesDecl {
             target,
+            alias,
+            selected,
+            qualified_refs: Vec::new(),
             span,
             trivia: Trivia::default(),
             blank_before,

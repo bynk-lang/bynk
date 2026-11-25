@@ -1,0 +1,9 @@
+context app
+
+uses lib.util
+
+type total = { n: Int }
+
+fn sum() -> Int {
+  total()
+}

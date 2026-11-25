@@ -1161,6 +1161,36 @@ fn question_on_an_option_hovers_as_not_found() {
     );
 }
 
+/// #4045: a name a `uses` clause renames or qualifies hovers as the declaration it
+/// is, and says which one: `YStatus` and `Y.describe` are `lib.y`'s, and a bare
+/// name hovers as before.
+#[test]
+fn a_renamed_or_qualified_used_name_hovers_as_the_declaration_it_names() {
+    let (r, rel, text, root) = analysed(
+        "../bynk-tests/tests/fixtures/positive/4045_uses_forms/src",
+        "app/z.bynk",
+    );
+    let offset = at(&text, "fn f(", "formatMoney(m)");
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("`formatMoney` hovers");
+    assert!(
+        h.contains("fn format"),
+        "the declaration, not the alias: {h}"
+    );
+    assert!(
+        h.contains("`formatMoney` is `format` of `lib.money`"),
+        "{h}"
+    );
+    let offset = at(&text, "fn f(", "Y.describe") + 2;
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("`describe` of `Y.describe` hovers");
+    assert!(h.contains("`Y.describe` is `describe` of `lib.y`"), "{h}");
+    let offset = at(&text, "fn f(", "describe(s)");
+    let h = hover_at(&r, &rel, &text, &root, offset).expect("a bare name hovers");
+    assert!(
+        !h.contains(" is `describe` of "),
+        "a bare name needs no note: {h}"
+    );
+}
+
 /// #4181 — a commons names the `bynk` adapter's transparent types with no
 /// `consumes`, and hovers them like any type: the reference resolves to the
 /// adapter's declaration.

@@ -1,0 +1,14 @@
+---
+level: minor
+changelog: A first-party `bynk.html` commons has `escapeText` and `escapeAttr`, the two HTML escapes by context, and the serve-a-page guide uses them
+---
+
+## ADR: html-escape-commons
+title: A first-party bynk.html commons escapes HTML text and quoted attributes
+summary: Two pure functions, one per context, so every project stops hand-writing an escape that misses the single quote
+
+**Context.** Escaping a value substituted into markup was left to each author (`reference/embeds.md`: nothing is escaped for you), and the serve-a-page guide hand-wrote `escape(s)` covering `&`, `<`, `>` and `"` only. That misses `'`, so it is unsafe in a single-quoted attribute, and every project copies or reinvents it. A missing or incomplete escape around request data is a cross-site scripting hole, and an escape has exactly one right answer, which is the standard library's job.
+
+**Decision.** A first-party `bynk.html` commons, brought in with `uses bynk.html` like `bynk.url`, with two functions. `escapeText(s)` escapes `&`, `<` and `>` (the `&` first, so it never escapes its own output). `escapeAttr(s)` escapes those plus `"`, `'` and a backtick, so it is safe in either quote style and against old browsers that took a backtick as a quote. Both are pure, with no capability, and available on every target, `bundle`, Node and the browser included, because they are written in Bynk over `String.replace`. The doc comments, the capabilities reference and the guide say what neither covers: an unquoted attribute, a URL attribute (where `javascript:` passes), and `<script>` or `<style>`. The guide's hand-written `escape` is replaced, with a note on why `escapeAttr` covers `'`. The commons takes id block 13. The issue spelled the call `consumes bynk.html { Html }` and `Html.escapeText(..)`; every first-party commons is reached with `uses` and its functions are bare names, and an `Html.` prefix would need a placeholder `Html` type before the typed-HTML track defines the real one, so the functions are bare, as `bynk.url`'s are.
+
+**Consequences.** No grammar, checker or emitter change beyond a new first-party unit. A project that already declares a function named `escapeText` or `escapeAttr` is unaffected unless it also writes `uses bynk.html`. A hand-written escape that covers only `"` stays unsafe in a single-quoted attribute; the guide now says so. Hover and completion show each function's doc comment, because the unit is read from the same source list as the other first-party commons.
