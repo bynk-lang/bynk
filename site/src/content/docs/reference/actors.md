@@ -359,8 +359,8 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   secret, in [the signed-message format](/reference/wire-format/#signed-queue-messages):
   an unsigned or wrongly signed message is acknowledged, reported and never handled, and a
   replayed one likewise. A refinement of `Producer` (`actor Shop = Producer where
-  IsContext(shop)`) is a valid declaration, but naming one, or a `Foreign` actor beside an
-  unsigned one, is `bynk.actor.queue_actor_not_enforced` until Bynk producers sign. An email `on message` handler writes at least `by Sender`, the explicit
+  IsContext(shop)`) is a valid declaration, but naming one, or a `Foreign` actor in a sum or with a
+  binder, is `bynk.actor.queue_actor_not_enforced` until Bynk producers sign. An email `on message` handler writes at least `by Sender`, the explicit
   "any mail" (`bynk.actor.missing_by_on_email`); `bynk check --fix=bynk.actor.missing_by_on_email`
   inserts it. The platform-only protocol defaults: cron → `Scheduler`. An agent's
   `on call` operations are reached only from inside

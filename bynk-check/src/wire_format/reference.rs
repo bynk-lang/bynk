@@ -498,7 +498,7 @@ marked `500` `CalleeFaulted` by name, and every other non-`2xx` as
 const SIGNED_QUEUE_SECTION: &str = r#"
 ## Signed queue messages
 
-> **In effect for `Foreign` senders.** A queue consumer whose `by` names only `Foreign` actors (#3899) admits only messages in this format, signed under the actor's secret. A refinement of `Producer` is not yet enforced, and Bynk producers do not sign yet, so a Bynk producer cannot send to such a consumer; the compiler refuses a `Producer` refinement on a queue consumer until it can.
+> **In effect for `Foreign` senders.** A queue consumer whose `by` names one `Foreign` actor (#3899) admits only messages in this format, signed under the actor's secret. A refinement of `Producer` is not yet enforced, and Bynk producers do not sign yet, so a Bynk producer cannot send to such a consumer; the compiler refuses a `Producer` refinement on a queue consumer until it can.
 
 A Cloudflare queue message carries only a body, with no headers, so a signature that proves who sent it travels inside the body. A consumer that admits only named senders (a `Foreign` actor, see [Queue](/reference/queue/)) receives bodies in this form, and a producer that is not Bynk follows it to be admitted. The producer's secret is the one the actor declares (`actor Legacy { auth = Foreign(secret = "LEGACY_QUEUE_KEY") }`): `bynk deploy` mints it, sets it on the consumer's Worker and prints it once for the producer's operator.
 
