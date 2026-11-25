@@ -2574,6 +2574,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"items\") () -> Effect[HttpResult[String]] by v: Visitor { … }    // ✗ no leading `/`\n\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.invalid_response_header",
+        blurb: "A header name is an RFC 9110 token, so it cannot hold a space, a colon or other separator; a header value, a `Location` URL and a download filename cannot carry a line break or another control character, which would let a value forge a second header. `retryAfter` is whole seconds, so a delay under a second cannot be written. These checks run on a literal at compile time; a computed value is checked when the response is built, and a bad one answers `500` rather than sending a malformed header. See also `bynk.http.reserved_response_header`.",
+        example: "Ok(\"x\").withHeader(\"X Request Id\", \"1\")   // ✗ a name has no spaces\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
+    },
+    Explain {
         code: "bynk.http.json_duplicate",
         blurb: "`@json(options: …)` chooses how one route's response bodies write an `Option`. A handler has one, because two would give the same body two encodings with nothing to say which wins, so the second is refused. Keep the one you mean. To set the encoding for every route of a service, use a `json { }` section instead. A handler may likewise carry only one `@cache` (`bynk.http.cache_duplicate`), `@limit` or `@raw`.",
         example: "@json(options: plain)\n@json(options: tagged)    // ✗ a second `@json`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)     // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -2725,6 +2730,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.http.reserved_prefix",
         blurb: "Two path prefixes belong to the platform. `/_bynk/` is reserved for Bynk's own dispatch, and `/_assets/` is where content-hashed static assets are served before the Worker runs, so a handler there could be shadowed by any asset. A route at either, or at the bare `/_bynk` or `/_assets`, is refused. Choose another path.",
         example: "on GET(\"/_bynk/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ reserved for the runtime\n\non GET(\"/health\") () -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.reserved_response_header",
+        blurb: "`withHeader` adds a header of the handler's own, so it cannot set one the router writes itself: the caching headers (`Cache-Control`, `ETag`, `Vary`, `Expires` and the CDN directives), `Content-Type` and `Content-Length`, `Location`, `Retry-After`, `Content-Disposition`, `Set-Cookie`, the `security { }` headers, the `Access-Control-*` CORS headers, `WWW-Authenticate` and `Allow`, and the hop-by-hop headers. Each has its own way in: `@cache`, a body, `.at(url)`, `withCookie`, `security { }`, `cors { }`. A name computed at run time is checked when the response is built, and a reserved one answers `500`. See also `bynk.http.invalid_response_header`.",
+        example: "Ok(\"x\").withHeader(\"Set-Cookie\", \"a=1\")   // ✗ use `withCookie`\n\nOk(\"x\").withHeader(\"X-Request-Id\", \"1\")   // ✓",
     },
     Explain {
         code: "bynk.http.reserved_route_syntax",
@@ -8492,6 +8502,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["http_handler"],
     ),
     d(
+        "bynk.http.invalid_response_header",
+        "A response header method is given a malformed name, value, URL, filename or delay.",
+    ),
+    d(
         "bynk.http.json_duplicate",
         "A handler carries more than one `@json` annotation.",
     ),
@@ -8616,6 +8630,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.reserved_prefix",
         "A route uses a reserved prefix: `/_bynk/` (internal dispatch) or `/_assets/` (static assets).",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.reserved_response_header",
+        "`withHeader` names a header the router owns, such as `Set-Cookie`, `Cache-Control` or `Location`.",
     ),
     dg(
         "bynk.http.reserved_route_syntax",
