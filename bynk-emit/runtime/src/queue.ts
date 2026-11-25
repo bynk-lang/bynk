@@ -3,10 +3,14 @@
 export type QueueResult =
   | { readonly tag: "Ack" }
   | { readonly tag: "Retry"; readonly reason: string }
+  // #3881: redelivered after `delay` (a `Duration`, in milliseconds), rounded up to whole seconds and clamped
+  // to Cloudflare's 1 second to 24 hours by the entry.
+  | { readonly tag: "RetryAfter"; readonly reason: string; readonly delay: number }
   // #3878: only a `system` case's address yields it (a body that did not decode); a handler cannot return it.
   | { readonly tag: "Undecodable" };
 
 export const QueueResult = {
   Ack: { tag: "Ack" } as QueueResult,
   Retry: (reason: string): QueueResult => ({ tag: "Retry", reason }),
+  RetryAfter: (reason: string, delay: number): QueueResult => ({ tag: "RetryAfter", reason, delay }),
 };

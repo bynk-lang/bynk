@@ -1,0 +1,43 @@
+---
+#3951: the substituted bounds admit and reject exactly as literals would.
+---
+suite shop.orders
+
+const Few: Int = 3
+
+type Batch = Int where InRange(1, MaxQty)
+type Handful = Int where AtMost(Few)
+
+case "a quantity is bounded by the constants" {
+  expect qty(1).isOk()
+  expect qty(100).isOk()
+  expect qty(0).isErr()
+  expect qty(101).isErr()
+}
+
+case "a note is bounded by a length constant" {
+  expect note("hi").isOk()
+  expect note("").isOk()
+}
+
+case "a pattern constant is the pattern" {
+  expect slug("abc").isOk()
+  expect slug("ABC").isErr()
+}
+
+case "a float bound constant" {
+  expect ratio(2.5).isOk()
+  expect ratio(2.6).isErr()
+}
+
+case "a literal at the constant's value is admitted at compile time" {
+  let top: Qty = 100
+  expect top == 100
+}
+
+case "a suite's own types take constant bounds too" {
+  let big: Batch = 100
+  let small: Handful = 3
+  expect big == 100
+  expect small == 3
+}

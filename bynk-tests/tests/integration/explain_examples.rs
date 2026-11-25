@@ -74,6 +74,10 @@ use bynk_syntax::diagnostics::EXPLANATIONS;
 /// with an `expected_warnings.txt` instead (`fixtures/positive/`), named here.
 const WARNING_ONLY: &[(&str, &str)] = &[
     (
+        "bynk.http.body_cap_defaulted",
+        "a hint, which the positive-fixture gate leaves out; `tests/system/body_cap_hint.rs` holds it",
+    ),
+    (
         "bynk.actor.signed_cookie_ttl_long",
         "a warning; `positive/3386_signed_cookie_ttl_long` holds it with `expected_warnings.txt`",
     ),
@@ -296,6 +300,7 @@ fn errors_of(source: &str, tag: &str) -> Vec<Reported> {
     let located = |errors: &[bynk_syntax::error::CompileError]| {
         errors
             .iter()
+            .filter(|e| bynk_syntax::Severity::for_error(e) != bynk_syntax::Severity::Hint)
             .map(|e| Reported {
                 code: e.category.to_string(),
                 line: bynk_syntax::span::line_col(source, e.span.start).0,
@@ -360,6 +365,7 @@ fn project_errors(root: &Path) -> Vec<Reported> {
     failure
         .errors
         .iter()
+        .filter(|a| bynk_syntax::Severity::for_error(&a.error) != bynk_syntax::Severity::Hint)
         .map(|attributed| {
             let text = attributed
                 .source_path

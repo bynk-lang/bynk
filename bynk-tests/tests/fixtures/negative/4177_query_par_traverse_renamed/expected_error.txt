@@ -1,0 +1,1 @@
+bynk.query.par_traverse_renamed `Query.parTraverse` is now `parForEach`

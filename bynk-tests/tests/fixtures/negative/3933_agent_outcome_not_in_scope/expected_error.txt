@@ -1,0 +1,1 @@
+bynk.call.outcome_not_in_scope

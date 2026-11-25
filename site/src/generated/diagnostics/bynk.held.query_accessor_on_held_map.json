@@ -4,7 +4,7 @@
   "categoryAnchor": "other",
   "code": "bynk.held.query_accessor_on_held_map",
   "constructs": [],
-  "example": "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
+  "example": "conns.keys.collect()   // ✗ a held map has no key queries\n\nlet _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))   // ✓ broadcast",
   "severity": "error",
-  "summary": "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parTraverse`), not a key query."
+  "summary": "A key-aware query accessor (`.entries`/`.keys`/`.values`) is used on a held `Map[K, Connection]` — a held resource is iterated with the broadcast ops (`forEach`/`parForEach`), not a key query."
 }

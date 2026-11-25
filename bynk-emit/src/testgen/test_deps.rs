@@ -60,6 +60,8 @@ fn events_emit_loop() -> TsStmt {
 /// deps' own entries is that entry, held in a local, not a second copy: in a
 /// test a `stub` overlays the entry, and a copy would escape it (#1864
 /// review).
+///
+/// #4190: `wire` is `Some` at `integration`, where a stubbed service crosses its wire codecs.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_test_deps(
     target_name: &str,
@@ -78,6 +80,7 @@ pub(super) fn emit_test_deps(
     // #2050: whether the target's handlers emit, so their `deps` require
     // `__eventsDispatch` ([`target_emits_events`]).
     uses_emit: bool,
+    wire: Option<&crate::emitter::RuntimeUse>,
 ) -> TestDeps {
     let mut units: BTreeSet<String> = BTreeSet::new();
     let mut doubles: Vec<(String, String, String)> = Vec::new();
@@ -193,7 +196,7 @@ pub(super) fn emit_test_deps(
             // the recording wrapper sees its calls. The services it does not
             // stub throw a named error when called.
             if let Some(local) =
-                stub_service_double(stubs, q, &key, &surface_ty, &mut service_doubles)
+                stub_service_double(stubs, q, &key, &surface_ty, wire, &mut service_doubles)
             {
                 surface_entries.push((key, ident(local)));
                 continue;
@@ -417,13 +420,17 @@ fn stub_service_double(
     ctx: &str,
     key: &str,
     surface_ty: &str,
+    wire: Option<&crate::emitter::RuntimeUse>,
     doubles: &mut Vec<(String, String, TsExpr)>,
 ) -> Option<String> {
     let rp = stubs
         .values()
         .find(|rp| rp.service_context.as_deref() == Some(ctx))?;
     let local = format!("__svc_{key}");
-    let value = stub_overlay(rp, surface_ty, Some(undefined_as_unknown_as(surface_ty)));
+    let mut value = stub_overlay(rp, surface_ty, Some(undefined_as_unknown_as(surface_ty)));
+    if let Some(ru) = wire {
+        value = super::stub_wire::wire_wrap(rp, ctx, value, ru);
+    }
     doubles.push((key.to_string(), local.clone(), value));
     Some(local)
 }
