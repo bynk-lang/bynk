@@ -2529,6 +2529,26 @@ fn wait() -> Duration { 5.hours }     // ✓",
                   RawError(Forbidden, problem(\"no access\"), \"text/plain\")     // ✓",
     },
     Explain {
+        code: "bynk.http.errors_duplicate",
+        blurb: "A handler has one `@errors`, which says which shape its error bodies take. Two would name two shapes for the same response, and neither could be said to win, so the second is refused. Keep one. See also `bynk.http.json_duplicate`.",
+        example: "@errors(format: problem)\n@errors(format: bynk)       // ✗ already set above\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@errors(format: problem)     // ✓ one shape\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.errors_invalid_field",
+        blurb: "`format` chooses the shape of an HTTP service's error bodies, and has two values, written bare: `bynk` (Bynk's own bodies, the default) or `problem` (RFC 9457 `application/problem+json`). Anything else, a string included, is refused, and `@errors` also needs its `format:` argument. See also `bynk.http.json_invalid_field`.",
+        example: "@errors(format: \"problem\")   // ✗ bare, not a string\n\n@errors(format: problem)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.errors_not_http",
+        blurb: "An `errors { }` section, or an `@errors` annotation, chooses the shape of a service's HTTP error bodies. Only a `from http` service has them, so on a `cron` or other service it is refused. Move it to the HTTP service it was meant for, or delete it. The `json` section has the same rule: `bynk.http.json_not_http`.",
+        example: "service jobs from cron {\n    errors { format: problem }   // ✗ a schedule has no error body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    errors { format: problem }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
+        code: "bynk.http.errors_unknown_field",
+        blurb: "`errors { }` has one field, `format`, and `@errors` has one argument, also `format:`. Any other name is refused rather than ignored, so a misspelling does not silently leave the default in place. See also `bynk.http.json_unknown_field`.",
+        example: "errors { format: problem, title: short }   // ✗ only `format`\n\nerrors { format: problem }                  // ✓",
+    },
+    Explain {
         code: "bynk.http.extra_param",
         blurb: "A handler's parameters are not free-form. Each is a path parameter, matching a `:name` in the route, or one of the three the router fills itself: `body`, `headers` and `query`. Any other name has nowhere to come from. Read a value from the query string with `query: RequestQuery` or a record, move it into the path, or drop it. A `:name` with no parameter is `bynk.http.unbound_path_param`.",
         example: "on GET(\"/items\") (page: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ not in the path, and not `body`, `headers` or `query`\n\non GET(\"/items\") (query: RequestQuery) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
@@ -3350,6 +3370,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { retries: 5 }\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ a second `delivery`\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓ one policy\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
     },
     Explain {
+        code: "bynk.parse.duplicate_errors",
+        blurb: "A service's `errors` policy sets the shape of its error bodies, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@errors` on its handler. The same rule holds for `cors`, `security`, `limits` and `json`, as `bynk.parse.duplicate_cors` shows.",
+        example: "service api from http {\n    errors { format: problem }\n    errors { format: bynk }                        // ✗ a second `errors`\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}\n\nservice api from http {\n    errors { format: problem }                     // ✓ one setting\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+    },
+    Explain {
         code: "bynk.parse.duplicate_json",
         blurb: "A service's `json` policy sets whether its response bodies use plain or tagged JSON, so there is one setting for the whole service. A second block would contradict the first, and is refused. Keep one. A single route can still differ with `@json` on its handler. The same rule holds for `cors`, `security` and `limits`, as `bynk.parse.duplicate_cors` shows.",
         example: "service api from http {\n    json { options: plain }\n    json { options: tagged }                         // ✗ a second `json`\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}\n\nservice api from http {\n    json { options: plain }                          // ✓ one setting\n    on GET(\"/a\") () -> Effect[HttpResult[Int]] by Visitor { … }\n}",
@@ -4137,7 +4162,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
-        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
     },
     Explain {
@@ -5975,13 +6000,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     Explain {
         code: "bynk.types.interpolation_non_scalar",
         blurb: "A `\\(…)` hole in a string takes a `String`, `Int`, `Float`, `Bool`, \
-                `Decimal`, or a refined type over one of them, and nothing else. A record or \
+                `Decimal`, `Instant`, `Duration`, or a refined type over one of them, and \
+                nothing else. An `Instant` prints as RFC 3339 UTC and a `Duration` as units, \
+                largest first (`1h30m`), the text their `toString()` gives. A record or \
                 sum has no canonical text, and Bynk will not print an unreadable stand-in \
                 such as `[object Object]`. An opaque type hides its base, so use `.raw` \
                 first. Turn other values into a `String` yourself: `toHex()` or `toBase64()` \
-                on `Bytes`, `toString()` on a `Duration`, `toIso()` or `toString()` on an \
-                `Instant`, or interpolate the fields of a record, a `ValidationError` or a \
-                `DecodeError`.",
+                on `Bytes` (hex or base64 is a real choice), or interpolate the fields of a \
+                record, a `ValidationError` or a `DecodeError`.",
         example: "type User = { name: String }\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u)\"         // ✗ a record has no string form\n}\n\n\
                   fn label(u: User) -> String {\n    \"user: \\(u.name)\"    // ✓ interpolate the field\n}",
@@ -8467,6 +8493,22 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.error_status_position",
         "An `ErrorStatus` name is used anywhere but as `RawError`'s first argument.",
     ),
+    d(
+        "bynk.http.errors_duplicate",
+        "A handler carries more than one `@errors` annotation.",
+    ),
+    d(
+        "bynk.http.errors_invalid_field",
+        "An `errors` `format`, or an `@errors` `format:`, is missing or is not `bynk` or `problem`.",
+    ),
+    d(
+        "bynk.http.errors_not_http",
+        "An `errors { }` section or an `@errors` annotation is not on a `from http` service.",
+    ),
+    d(
+        "bynk.http.errors_unknown_field",
+        "An `errors { }` section or an `@errors` annotation names something other than `format`.",
+    ),
     dg(
         "bynk.http.extra_param",
         "A handler parameter is not a path parameter, `body`, `headers` or `query`.",
@@ -9060,6 +9102,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.parse.duplicate_delivery",
         "A service declares more than one `delivery { }` policy.",
+        &["service_decl"],
+    ),
+    dg(
+        "bynk.parse.duplicate_errors",
+        "A service declares more than one `errors { }` policy.",
         &["service_decl"],
     ),
     dg(

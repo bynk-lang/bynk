@@ -1,0 +1,10 @@
+{
+  "blurb": "`format` chooses the shape of an HTTP service's error bodies, and has two values, written bare: `bynk` (Bynk's own bodies, the default) or `problem` (RFC 9457 `application/problem+json`). Anything else, a string included, is refused, and `@errors` also needs its `format:` argument. See also `bynk.http.json_invalid_field`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.errors_invalid_field",
+  "constructs": [],
+  "example": "@errors(format: \"problem\")   // ✗ bare, not a string\n\n@errors(format: problem)     // ✓",
+  "severity": "error",
+  "summary": "An `errors` `format`, or an `@errors` `format:`, is missing or is not `bynk` or `problem`."
+}

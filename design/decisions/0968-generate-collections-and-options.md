@@ -1,11 +1,6 @@
----
-level: minor
-changelog: A `for all` and a bare `Val` work over `List`, `Set`, `Map` and `Option` and the records and sums that hold them, and `bynk.val.needs_pin` names the path to the part that cannot be generated
----
+# 0968 — Collections and options are generable, and the pin diagnostic names the culprit
 
-## ADR: generate-collections-and-options
-title: Collections and options are generable, and the pin diagnostic names the culprit
-summary: What a for all draws and shrinks for the four types, what Val yields, and how the diagnostic finds the part
+- **Status:** Accepted (v0.704)
 
 **Context.** `for all` and `Val` refused `List`, `Set`, `Map` and `Option`, and any record or sum holding one, with a message that blamed a `Matches` refinement that was not there (#4120).
 

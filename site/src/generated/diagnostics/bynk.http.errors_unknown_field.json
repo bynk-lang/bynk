@@ -1,0 +1,10 @@
+{
+  "blurb": "`errors { }` has one field, `format`, and `@errors` has one argument, also `format:`. Any other name is refused rather than ignored, so a misspelling does not silently leave the default in place. See also `bynk.http.json_unknown_field`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.errors_unknown_field",
+  "constructs": [],
+  "example": "errors { format: problem, title: short }   // ✗ only `format`\n\nerrors { format: problem }                  // ✓",
+  "severity": "error",
+  "summary": "An `errors { }` section or an `@errors` annotation names something other than `format`."
+}
