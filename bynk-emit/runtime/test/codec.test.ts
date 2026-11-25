@@ -189,6 +189,13 @@ test("a reply that does not decode faults, naming the capability, operation, typ
   );
 });
 
+test("a fault over an Option payload names the value read, not the Option wrapper", async () => {
+  await assert.rejects(
+    __bynkCapabilityReply(Promise.resolve({ kind: "Some", value: "secret" }), __bynkCodecOption(intCodec), { ...site, type: "Option[Int]" }, "fault"),
+    { message: "bynk: Store.load returned a value that does not decode as Int: at $: expected number, got string" },
+  );
+});
+
 test("a reply that does not decode is a miss when the operation declares one, with a warning that omits the value", async () => {
   const warned: string[] = [];
   const warn = globalThis.console.warn;
