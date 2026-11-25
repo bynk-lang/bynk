@@ -295,10 +295,87 @@ export function withPlainJson<T>(serialise: (v: T) => JsonValue): (v: T) => Json
   };
 }
 
+// #3916: `errors { format: problem }`. An error response as RFC 9457 problem details: `type`,
+// `title`, `status` and `detail` (when there is one), and a router rejection's `kind` and
+// `path` as extension members. A problem with no more to say than its status has `type`
+// `about:blank` (RFC 9457 §4.2.1); a router rejection has a stable
+// `https://bynk-lang.org/problems/<kind>` URI.
+const REASON_PHRASES: Readonly<Record<number, string>> = {
+  400: "Bad Request",
+  401: "Unauthorized",
+  403: "Forbidden",
+  404: "Not Found",
+  405: "Method Not Allowed",
+  406: "Not Acceptable",
+  408: "Request Timeout",
+  409: "Conflict",
+  413: "Payload Too Large",
+  415: "Unsupported Media Type",
+  422: "Unprocessable Entity",
+  429: "Too Many Requests",
+  451: "Unavailable For Legal Reasons",
+  500: "Internal Server Error",
+  501: "Not Implemented",
+  502: "Bad Gateway",
+  503: "Service Unavailable",
+  504: "Gateway Timeout",
+};
+
+function problemResponse(
+  status: number,
+  fields: { readonly detail?: string; readonly kind?: string; readonly extra?: Record<string, unknown> },
+  headers?: Headers,
+): Response {
+  // A rejection's own structured members (`path`, `expected`, `actual`, a refinement's `violation`)
+  // ride as extension members; the members RFC 9457 defines are written after, so they always win.
+  const body: Record<string, unknown> = {
+    ...fields.extra,
+    type:
+      fields.kind === undefined
+        ? "about:blank"
+        : `https://bynk-lang.org/problems/${fields.kind.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`,
+    title: REASON_PHRASES[status] ?? "Error",
+    status,
+  };
+  if (fields.detail !== undefined && fields.detail !== "") body.detail = fields.detail;
+  if (fields.kind !== undefined) body.kind = fields.kind;
+  const out = new Headers(headers);
+  out.delete("content-length");
+  out.set("content-type", "application/problem+json");
+  return new Response(JSON.stringify(body), { status, headers: out });
+}
+
+/**
+ * A router rejection as problem details. Only a JSON rejection (`400`, `413`, `415`, with the
+ * `kind` the router writes) is rewritten; a body-less `401` or `405`, and anything else, passes
+ * through, since RFC 9457 does not require a body. Applied before `on rejected`, which still
+ * sees the `kind` and `detail` and may replace the whole response with a `RawError`.
+ */
+export async function problemRejection(response: Response): Promise<Response> {
+  if (response.status < 400 || !(response.headers.get("content-type") ?? "").startsWith("application/json")) {
+    return response;
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = (await response.clone().json()) as Record<string, unknown>;
+  } catch {
+    return response;
+  }
+  if (typeof body.kind !== "string") return response;
+  // `details` becomes `detail`, and `kind` is written by the writer; everything else the router put in
+  // the body (`path`, `expected`, `actual`, a refinement's `violation`) is carried as it was written.
+  const { kind: _kind, details: _details, error: _error, type: _type, title: _title, status: _status, detail: _detail, ...extra } = body;
+  return problemResponse(
+    response.status,
+    { detail: rejectionDetail(body), kind: body.kind, extra },
+    response.headers,
+  );
+}
+
 export function httpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   const response = baseHttpResultToResponse(result, serialiseValue, opts);
   // #3277: one `Set-Cookie` per cookie the handler attached. A cookie that is
@@ -460,7 +537,7 @@ function appendResultHeaders(response: Response, result: object): void {
 function baseHttpResultToResponse<T>(
   result: HttpResult<T>,
   serialiseValue: (v: T) => JsonValue,
-  opts?: { readonly weakEtag?: boolean },
+  opts?: { readonly weakEtag?: boolean; readonly problem?: boolean },
 ): Response {
   // #2341 (L4): an author-chosen error status with an author-owned body.
   if (result.tag === "RawError") {
@@ -558,6 +635,7 @@ function baseHttpResultToResponse<T>(
     case "BadGateway":
     case "ServiceUnavailable":
     case "GatewayTimeout":
+      if (opts?.problem === true) return problemResponse(status, { detail: result.message });
       return new Response(JSON.stringify({ error: result.message }), {
         status,
         headers: { "content-type": "application/json" },
@@ -2206,5 +2284,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

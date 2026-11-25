@@ -3897,6 +3897,7 @@ impl LanguageServer for Backend {
         // service-body item start, the `delivery` section keyword.
         items.extend(delivery_completions(&text, offset, &line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
+        items.extend(errors_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
         // names; at a service-body item start, offer the `@limit` snippet.
         items.extend(limit_completions(&text, offset, &line_prefix));
@@ -5610,6 +5611,61 @@ fn json_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
                     "write this route's response `Option`s as `tagged` or `plain` JSON".to_string(),
                 ),
                 insert_text: Some("@json(options: ${1:plain})".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+        ];
+    }
+    Vec::new()
+}
+
+/// #3916: the error-body completion cells, as [`json_completions`]: inside
+/// `errors { }` or `@errors( )` at a name position, `format`; at the value of
+/// `format:`, `bynk` / `problem`; at a service-body item start, the `errors`
+/// section keyword and the `@errors` annotation snippet.
+fn errors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_errors_format_value_position(text, offset) {
+        return completion::ERRORS_FORMAT_VALUES
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some((*doc).to_string()),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_errors_field_position(text, offset)
+        || completion::in_errors_arg_position(text, offset)
+    {
+        return completion::ERRORS_FIELDS
+            .iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::FIELD),
+                detail: Some((*doc).to_string()),
+                insert_text: Some(format!("{name}: ")),
+                ..Default::default()
+            })
+            .collect();
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![
+            CompletionItem {
+                label: "errors".to_string(),
+                kind: Some(CompletionItemKind::KEYWORD),
+                detail: Some("error body shape for this HTTP service".to_string()),
+                insert_text: Some("errors {\n\tformat: ${1:problem},\n}".to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                ..Default::default()
+            },
+            CompletionItem {
+                label: "@errors".to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                detail: Some(
+                    "write this route's error bodies as `bynk` or `problem` (RFC 9457)".to_string(),
+                ),
+                insert_text: Some("@errors(format: ${1:problem})".to_string()),
                 insert_text_format: Some(InsertTextFormat::SNIPPET),
                 ..Default::default()
             },
