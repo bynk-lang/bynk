@@ -639,7 +639,9 @@ repeat it.
 fields, so `fields.orderId` is queryable (see [Log levels and structured
 fields](/reference/bynk-capabilities/#log-levels-and-structured-fields)). Cloudflare collects a Worker's logs
 only while its configuration enables observability, so Bynk writes the setting
-itself. A project that says nothing gets it on:
+itself. A project that says nothing gets it on. (Cloudflare turns Workers Logs on
+for a new Worker by default, so writing it explicitly pins the behaviour the
+`Logger.log` promise rests on rather than changing it.)
 
 ```toml
 # workers/<context>/wrangler.toml (generated)
