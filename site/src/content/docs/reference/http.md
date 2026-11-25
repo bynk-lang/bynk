@@ -515,7 +515,7 @@ and the rejection's own members (`kind`, `path`, and a refinement's `violation`)
 ```json
 { "type": "https://bynk-lang.org/problems/refinement-violation", "title": "Bad Request", "status": 400,
   "detail": "body.qty: must be positive", "kind": "RefinementViolation", "path": "body.qty",
-  "violation": { "field": "qty", "message": "must be positive" } }
+  "violation": { "field": "qty", "message": "must be positive", "rule": { … } } }
 ```
 
 | Field | Holds |
@@ -524,7 +524,7 @@ and the rejection's own members (`kind`, `path`, and a refinement's `violation`)
 | `title` | the status's reason phrase |
 | `detail` | the variant's message, or the rejection's detail; absent when there is none |
 | `type` | `about:blank` for an error variant (RFC 9457 §4.2.1); `https://bynk-lang.org/problems/<kind>` for a router rejection |
-| `kind` and the rejection's other members | a router rejection's kind, and what it carries: `path`; `expected` and `actual` of a structural mismatch; `violation` (the `field` and `message`, never the rejected value) of a refinement |
+| `kind` and the rejection's other members | a router rejection's kind, and what it carries: `path`; `expected` and `actual` of a structural mismatch; `violation` (the `field`, `message` and `rule`, never the rejected value) of a refinement |
 
 The rejection types are stable, and new kinds are additive. The URI is an identifier, listed
 here once:

@@ -107,6 +107,7 @@ async function main(): Promise<void> {
   assert(typeof b.detail === "string" && b.detail.length > 0, "detail is the violation message");
   const violation = b.violation as { field?: unknown; message?: unknown } | undefined;
   assert(violation !== undefined && typeof violation.field === "string" && typeof violation.message === "string", `the violation (field and message) is carried (got ${JSON.stringify(b.violation)})`);
+  assert("rule" in (b.violation as object), `the violated rule is carried (got ${JSON.stringify(b.violation)})`);
   assert(!("value" in (b.violation as object)), "the rejected value is never echoed");
 
   // A structural mismatch carries what it expected and what it got.
