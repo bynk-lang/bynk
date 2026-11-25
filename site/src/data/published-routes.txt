@@ -529,7 +529,6 @@
 /book/reference/diagnostics/bynk.http.limits_invalid_field/
 /book/reference/diagnostics/bynk.http.limits_not_http/
 /book/reference/diagnostics/bynk.http.limits_unknown_field/
-/book/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /book/reference/diagnostics/bynk.http.multipart_large_cap/
 /book/reference/diagnostics/bynk.http.path_param_not_stringy/
 /book/reference/diagnostics/bynk.http.query_field_not_stringy/
@@ -724,6 +723,7 @@
 /book/reference/diagnostics/bynk.provider.signature_mismatch/
 /book/reference/diagnostics/bynk.provider.unknown_capability/
 /book/reference/diagnostics/bynk.query.join_key_mismatch/
+/book/reference/diagnostics/bynk.query.par_traverse_renamed/
 /book/reference/diagnostics/bynk.query.sum_needs_numeric/
 /book/reference/diagnostics/bynk.queue.bad_params/
 /book/reference/diagnostics/bynk.queue.duplicate_consumer/
@@ -1594,6 +1594,7 @@
 /reference/diagnostics/bynk.history.not_generable/
 /reference/diagnostics/bynk.history.outside_property/
 /reference/diagnostics/bynk.history.restates_invariant/
+/reference/diagnostics/bynk.http.body_cap_defaulted/
 /reference/diagnostics/bynk.http.body_kind_conflict/
 /reference/diagnostics/bynk.http.body_on_get_or_delete/
 /reference/diagnostics/bynk.http.cache_bad_immutable/
@@ -1660,7 +1661,6 @@
 /reference/diagnostics/bynk.http.limits_invalid_field/
 /reference/diagnostics/bynk.http.limits_not_http/
 /reference/diagnostics/bynk.http.limits_unknown_field/
-/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /reference/diagnostics/bynk.http.multipart_large_cap/
 /reference/diagnostics/bynk.http.path_param_not_stringy/
 /reference/diagnostics/bynk.http.query_field_not_stringy/
@@ -1861,6 +1861,7 @@
 /reference/diagnostics/bynk.provider.signature_mismatch/
 /reference/diagnostics/bynk.provider.unknown_capability/
 /reference/diagnostics/bynk.query.join_key_mismatch/
+/reference/diagnostics/bynk.query.par_traverse_renamed/
 /reference/diagnostics/bynk.query.sum_needs_numeric/
 /reference/diagnostics/bynk.queue.bad_params/
 /reference/diagnostics/bynk.queue.dead_letter_type_mismatch/
@@ -1869,6 +1870,7 @@
 /reference/diagnostics/bynk.queue.duplicate_consumer/
 /reference/diagnostics/bynk.queue.invalid_name/
 /reference/diagnostics/bynk.queue.no_dead_letter/
+/reference/diagnostics/bynk.queue.retry_delay_out_of_range/
 /reference/diagnostics/bynk.queue.return_not_queue_result/
 /reference/diagnostics/bynk.race.in_agent_handler/
 /reference/diagnostics/bynk.race.in_pure_context/
@@ -1877,6 +1879,7 @@
 /reference/diagnostics/bynk.record_spread.non_record_base/
 /reference/diagnostics/bynk.record_spread.type_mismatch/
 /reference/diagnostics/bynk.record_spread.unknown_field/
+/reference/diagnostics/bynk.refine.bound_not_literal/
 /reference/diagnostics/bynk.refine.literal_violates/
 /reference/diagnostics/bynk.registry.account_refused/
 /reference/diagnostics/bynk.registry.bad_archive/

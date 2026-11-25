@@ -43,12 +43,20 @@ export default {
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
-          let __raw: string;
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
           try {
-            __raw = await request.text();
+            __bytes = await __readBodyCapped(request, 1048576);
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __secret = (env as unknown as globalThis.Record<string, unknown>)["HOOK_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["HOOK_SECRET"];
           if (typeof __secret !== "string") return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"signup.api\", header=\"X-Hook-Sig\""]), __security_api);
           const __ok = await __verifySignatureHmacSha256(__raw, __secret, request.headers.get("X-Hook-Sig"), null, null);
@@ -68,9 +76,22 @@ export default {
           if (!__jsonMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/json" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
+          try {
+            __bytes = await __readBodyCapped(request, 1048576);
+          } catch {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
           let __body_json: __JsonValue;
           try {
-            __body_json = (await request.json()) as __JsonValue;
+            __body_json = globalThis.JSON.parse(new globalThis.TextDecoder().decode(__bytes)) as __JsonValue;
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
@@ -87,12 +108,20 @@ export default {
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
-          let __raw: string;
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
           try {
-            __raw = await request.text();
+            __bytes = await __readBodyCapped(request, 1048576);
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __f = __formObject(__raw, [{ name: "price", kind: "decimal", list: false, option: false }, { name: "subscribed", kind: "bool", list: false, option: false }]);
           if (!__f.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__f.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_body = handlers.__deserialise_Priced(__f.value, "body");
@@ -110,7 +139,7 @@ export default {
           }
           const __contentLength = request.headers.get("content-length");
           if (__contentLength !== null && globalThis.Number(__contentLength) > 64) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           let __bytes: globalThis.Uint8Array | undefined;
           try {
@@ -119,7 +148,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
           if (__bytes === undefined) {
-            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __f = __formObject(__raw, [{ name: "q", kind: "string", list: false, option: false }]);
@@ -137,12 +166,20 @@ export default {
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
-          let __raw: string;
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          let __bytes: globalThis.Uint8Array | undefined;
           try {
-            __raw = await request.text();
+            __bytes = await __readBodyCapped(request, 1048576);
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __f = __formObject(__raw, [{ name: "email", kind: "string", list: false, option: false }, { name: "age", kind: "int", list: false, option: true }, { name: "plan", kind: "enum", list: false, option: false }, { name: "tags", kind: "string", list: true, option: false }, { name: "remember", kind: "bool", list: false, option: false }, { name: "nickname", kind: "string", list: false, option: true }, { name: "title", kind: "string", list: false, option: false }]);
           if (!__f.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__f.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_body = handlers.__deserialise_SignupForm(__f.value, "body");
@@ -162,14 +199,22 @@ export default {
           if (!__formMediaTypeMatches(request)) {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "UnsupportedMediaType", details: "expected Content-Type application/x-www-form-urlencoded (UTF-8)" }), { status: 415, headers: { "content-type": "application/json" } }), __security_api);
           }
+          const __contentLength = request.headers.get("content-length");
+          if (__contentLength !== null && globalThis.Number(__contentLength) > 1048576) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
           const __raw_owner = __m.params["owner"];
           const owner = __raw_owner;
-          let __raw: string;
+          let __bytes: globalThis.Uint8Array | undefined;
           try {
-            __raw = await request.text();
+            __bytes = await __readBodyCapped(request, 1048576);
           } catch {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal({ kind: "MalformedJson", details: "Invalid request body" })), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           }
+          if (__bytes === undefined) {
+            return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
+          }
+          const __raw = new globalThis.TextDecoder().decode(__bytes);
           const __f = __formObject(__raw, [{ name: "q", kind: "string", list: false, option: false }]);
           if (!__f.ok) return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__f.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const __r_body = handlers.__deserialise_Search(__f.value, "body");

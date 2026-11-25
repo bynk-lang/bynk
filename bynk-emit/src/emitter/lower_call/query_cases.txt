@@ -156,7 +156,7 @@ __bynkThen(src, (__q) => (async () => {
     await (f)(__x);
   }
 })())
-=== ParTraverse keyed=false cmp=plain
+=== ParForEach keyed=false cmp=plain
 __bynkThen(src, (__q) => (async () => {
   await __bynkSettleAll(__q.map((__x) => () => (f)(__x)));
 })())

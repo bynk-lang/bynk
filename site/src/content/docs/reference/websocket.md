@@ -65,13 +65,13 @@ agent Room {
   store conns: Map[UserId, Connection[ServerFrame]]
 
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }
 ```
 
-- **`forEach`** broadcasts **sequentially**; **`parTraverse`** broadcasts in
+- **`forEach`** broadcasts **sequentially**; **`parForEach`** broadcasts in
   **parallel**, so one slow or half-dead connection
   does not head-of-line-block the room — the production-correct form (v0.107).
   Every send is issued, then the call waits for all of them to settle; if sends

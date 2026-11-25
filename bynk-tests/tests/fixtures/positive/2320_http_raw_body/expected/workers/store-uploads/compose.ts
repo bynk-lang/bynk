@@ -28,7 +28,7 @@ export function compose(env: Env) {
       } catch {
         return HttpResult.BadRequest("Invalid request body");
       }
-      if (__bytes === undefined) return HttpResult.PayloadTooLarge("request body exceeds 64 bytes");
+      if (__bytes === undefined) return HttpResult.PayloadTooLarge("request body exceeds 64 bytes; `@limit(maxBody: …)` raises it");
       let __who: any = undefined;
       if (__who === undefined) {
         const __secret = (env as unknown as globalThis.Record<string, unknown>)["SENDER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SENDER_SECRET"];

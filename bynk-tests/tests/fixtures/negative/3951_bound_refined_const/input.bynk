@@ -1,0 +1,11 @@
+---
+#3951: a constant declared a refined type is not a literal of its base, so it
+cannot stand as a refinement bound (ADR 0826's rule).
+---
+commons demo.limits
+
+type Count = Int where Positive
+
+const MaxQty: Count = 100
+
+type Qty = Int where InRange(1, MaxQty)

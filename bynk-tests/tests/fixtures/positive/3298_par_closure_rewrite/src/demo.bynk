@@ -36,7 +36,7 @@ agent Tally {
       let r: Result[Int, String] = Ok(o.getOrElse(0))
       Effect.pure(r)
     })
-    let _ <- counts.values.parTraverse((v: Int) => Hits("h").bump(v))
+    let _ <- counts.values.parForEach((v: Int) => Hits("h").bump(v))
     Effect.pure([])
   }
 

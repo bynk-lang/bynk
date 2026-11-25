@@ -1326,8 +1326,8 @@ body a bad JSON `body` gets, its `path` naming the field (`body.email`).
 - **As a codec.** [`Form.decode[T](s)` and `Form.encode(v)`](/reference/types/#form-codec)
   expose this mapping to a `@raw` handler or a test, with `DecodeError`s rooted at `$`.
 - **Caps.** The body is buffered like a JSON one. A `@limit` or `limits { maxBody }`
-  applies, with the same `413`; unlike a [`@raw`](#raw-request-bodies) route, a
-  `@form` route needs no cap, but a public form should have one.
+  applies, with the same `413`; without either, a `@form` route has the 1 MiB
+  [default cap](#request-body-limits), which a public form can lower.
 - **CSRF.** A form post is a *simple request* in CORS terms, so a
   [`cors { }`](#cors) policy does not stop a page on another origin submitting to the
   route. Nothing here authenticates the submitter; use an
@@ -1383,9 +1383,9 @@ for it, so a handler should not branch on that case.
   The `body` is a record whose fields are the form leaves, or a `File`, optionally in an
   `Option` or a `List` (a repeated part); keys are flat
   (`bynk.http.form_field_not_stringy`).
-- **A cap is required.** The body is held in memory with a parsed copy beside it, so a
-  `@multipart` route needs an effective `maxBody`, from `@limit` or the service's
-  `limits { }` (`bynk.http.multipart_body_unbounded`). A cap over 32 MiB is a warning
+- **A cap applies.** The body is held in memory with a parsed copy beside it, so a
+  `@multipart` route is capped like any body-taking route: `@limit`, the service's
+  `limits { }`, or the 1 MiB default. A cap over 32 MiB is a warning
   (`bynk.http.multipart_large_cap`): a Worker has 128 MB for everything it does, and the
   platform's own request-body ceiling depends on the zone's plan.
 - **Caps on the parts.** `maxFile` (bytes in one file part) and `maxParts` (parts in the
@@ -1548,12 +1548,15 @@ A `security { }` block is only valid on a `from http` service
 
 A body-taking route (`POST`/`PUT`/`PATCH`) with an unbounded body is a
 denial-of-service surface: a client can stream an arbitrarily large payload the
-service reads into memory before it can reject it. Declare a **byte ceiling** and
-Bynk rejects an oversized request with a synthesised **`413 PayloadTooLarge`**
-*before the body is read* — the same "reject at the boundary" posture as the
-method-semantics `405`.
+service reads into memory before it can reject it, and a Worker has 128 MB for
+everything. So **every body-taking route has a cap: 1,048,576 bytes (1 MiB) unless
+`limits { maxBody }` or `@limit(maxBody: …)` says otherwise.** There is no
+"unlimited" setting, only explicit larger numbers. Bynk rejects an oversized
+request with a synthesised **`413 PayloadTooLarge`** *before the body is read* —
+the same "reject at the boundary" posture as the method-semantics `405`. The `413`'s
+`details` name the cap and say that `@limit(maxBody: …)` raises it.
 
-Set a service-wide default with a **`limits { }`** section in header position,
+Set a service-wide ceiling with a **`limits { }`** section in header position,
 beside `cors { }` and `security { }`; override it per route with a **`@limit`**
 handler annotation, written immediately before `on` (the `@cache` placement):
 
@@ -1580,13 +1583,12 @@ The wire behaviour, for a body-taking route with an effective cap of `N` bytes:
 | `Content-Length` ≤ `N` | the body is read and validated, then the handler runs |
 | `Content-Length` > `N` | **`413 PayloadTooLarge`** — `{ kind: "PayloadTooLarge", details: "…" }`, the body **never read** |
 | no `Content-Length`, or one that understates the body, and more than `N` bytes arrive | **`413 PayloadTooLarge`** — the read is cut off at `N` bytes |
-| a route with **no** effective cap | the body is read as before — byte-for-byte unchanged output |
 
 ### The `limits { }` section
 
 | Field | Meaning | Default |
 |---|---|---|
-| `maxBody` | The byte ceiling for the service's body-taking routes, as a positive `Int` byte count. | — (no cap) |
+| `maxBody` | The byte ceiling for the service's body-taking routes, as a positive `Int` byte count, at most 524,288,000 (500 MB). | 1,048,576 (1 MiB) |
 | `maxFile` | The byte ceiling for one file part of a [`@multipart`](#multipart-bodies) body. | the body cap |
 | `maxParts` | The most parts one `@multipart` request may carry. | 64 |
 
@@ -1598,23 +1600,33 @@ once per handler:
 
 | Field | Meaning | Default |
 |---|---|---|
-| `maxBody` | The byte ceiling for this route, as a positive `Int` byte count, or an `Int` [constant](/reference/constants/) bound to one. Overrides `limits { maxBody }`. | — |
+| `maxBody` | The byte ceiling for this route, as a positive `Int` byte count (at most 524,288,000), or an `Int` [constant](/reference/constants/) bound to one. Overrides `limits { maxBody }`. | — |
 | `maxFile`, `maxParts` | A `@multipart` route's own file and part-count caps; override `limits { maxFile }` and `limits { maxParts }`. | — |
 
-### Precedence and the opt-in posture
+### Precedence and the default
 
-The effective cap is **route `@limit` first, then service `limits`, then none**:
+The effective cap is **route `@limit` first, then service `limits`, then 1 MiB**:
 
-- a route with a `@limit` uses it (its cap wins over the service default);
+- a route with a `@limit` uses it (its cap wins over the service ceiling);
 - otherwise a body-taking route uses the service `limits { maxBody }`;
-- with **neither**, the route has **no cap** — it reads the body as before and
-  emits byte-for-byte unchanged output.
+- with **neither**, the route uses the **default of 1,048,576 bytes**, the cap the
+  cross-context call wire already applies.
 
-Body limits are therefore **opt-in** (the CORS posture, not the security
-default-on posture): a service that declares no `limits { }` and no `@limit` is
-unaffected. The synthesised `413` is stamped with the CORS and security headers
-(via the same `applyCors`/`applySecurityHeaders` pass as every other response), so
-a cross-origin caller can read it.
+The default covers JSON, `@form` and `@multipart` bodies. A `@raw` route is the one
+exception: its size is a deliberate choice, so it must still declare a cap
+(`bynk.http.raw_body_unbounded`). A route that legitimately takes more declares it,
+and the largest number a literal may state is 524,288,000 bytes, the request-body
+ceiling of the largest platform plan (`bynk.http.limit_bad_max_body`,
+`bynk.http.limits_invalid_field`). The ceiling for your zone depends on its plan (Free
+and Pro accept 100 MB, Business 200 MB), and a request over it is rejected by
+Cloudflare before Bynk sees it.
+
+A service that relies on the default gets one build hint
+(`bynk.http.body_cap_defaulted`) listing those routes, so a service that took
+larger bodies finds out at build, not in production. The synthesised `413` is
+stamped with the CORS and security headers (via the same
+`applyCors`/`applySecurityHeaders` pass as every other response), so a
+cross-origin caller can read it.
 
 ### `maxBody` is a byte count
 

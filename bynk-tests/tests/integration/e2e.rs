@@ -957,9 +957,14 @@ fn negative_fixtures() {
                     ));
                 }
                 Err(failure) => {
+                    // A hint is a suggestion, not a failure of the fixture.
                     let lines: Vec<String> = failure
                         .errors
                         .iter()
+                        .filter(|e| {
+                            bynk_syntax::Severity::for_error(&e.error)
+                                != bynk_syntax::Severity::Hint
+                        })
                         .map(|e| format!("{} {}", e.error.category, e.error.message))
                         .collect();
                     check_expected_errors(&dir, want, &lines, &mut failures);

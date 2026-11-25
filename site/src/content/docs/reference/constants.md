@@ -101,10 +101,15 @@ of a unit may import each other freely: `a.bynk` can declare `const A: Int = 1`
 and `const C: Int = B` while `b.bynk` declares `const B: Int = A`, and either
 file's functions can call the other's.
 
-A constant cannot yet stand in a refinement bound (`InRange(1, MaxQty)`). It
-can stand in an annotation argument that takes a literal of its type, when it is
-declared exactly that type (not a refined one) and bound to a literal or to
-another such constant: `@name(VisitsCookie)`
+A constant can stand in a refinement predicate's argument
+(`type Qty = Int where InRange(1, MaxQty)`), and in an annotation argument that
+takes a literal of its type, when it is declared exactly that type (not a refined
+one) and bound to a literal or to another such constant. In a predicate that
+covers `InRange`, `AtLeast`, `AtMost`, `MinLength`, `MaxLength`, `Length` and
+`Matches`, and the constant may come from a commons the unit `uses`; a constant
+that does not meet the rule is `bynk.refine.bound_not_literal`, and one declared
+the refined type whose bound it is is `bynk.resolve.const_cycle`. In an
+annotation: `@name(VisitsCookie)`
 ([`@name`](/reference/types/#field-name)), `@ttl(SessionTtl)`,
 `@retain`, `@cache(maxAge: Fresh, immutable: Pinned)`,
 `@limit(maxBody: MaxUpload)`, `@schema`, `@raw(contentType: Png)` and
