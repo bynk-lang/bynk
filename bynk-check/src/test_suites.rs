@@ -6802,10 +6802,20 @@ service api from http {
 
     #[test]
     fn forged_stale_and_nobody_are_admitted_on_a_sum_with_a_signature_member() {
+        // #4385: `Forged` could refuse either member, so it names one; `Stale` reaches the one
+        // `Signature` member without a name.
         sums_case(
-            "    let a <- api.POST(\"/mixed\", \"x\") by Forged\n    let b <- api.POST(\"/mixed\", \"x\") by Stale\n    let c <- api.POST(\"/mixed\", \"x\") by Nobody\n    expect a is Rejected(Unauthorized)\n    expect b is Rejected(Unauthorized)\n    expect c is Rejected(Unauthorized)",
+            "    let a <- api.POST(\"/mixed\", \"x\") by Forged(Timed)\n    let b <- api.POST(\"/mixed\", \"x\") by Stale\n    let c <- api.POST(\"/mixed\", \"x\") by Nobody\n    let d <- api.POST(\"/mixed\", \"x\") by Forged(User)\n    expect a is Rejected(Unauthorized)\n    expect b is Rejected(Unauthorized)\n    expect c is Rejected(Unauthorized)\n    expect d is Rejected(Unauthorized)",
         )
         .assert_clean();
+    }
+
+    #[test]
+    fn a_bare_forged_call_must_name_the_member_when_two_could_refuse_it() {
+        sums_case(
+            "    let r <- api.POST(\"/mixed\", \"x\") by Forged\n    expect r is Rejected(Unauthorized)",
+        )
+        .assert_reports("bynk.test.bad_principal_needs_arm");
     }
 
     /// A sum with `Visitor` resolves a bad or missing credential as
