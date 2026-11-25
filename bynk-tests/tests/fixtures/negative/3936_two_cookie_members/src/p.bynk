@@ -1,0 +1,17 @@
+context p
+
+// #3936: peers of a sum differ by scheme, so two cookie actors cannot share a route.
+
+type UserId = String where NonEmpty
+
+actor Web { auth = SignedCookie(secret = "K1", ttl = 2.hours), identity = UserId }
+actor Mobile { auth = SignedCookie(secret = "K2", ttl = 2.hours), identity = UserId }
+
+service api from http {
+  on GET("/me") () -> Effect[HttpResult[String]] by who: Web | Mobile {
+    match who {
+      Web(u) => Ok(u)
+      Mobile(u) => Ok(u)
+    }
+  }
+}

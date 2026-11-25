@@ -1988,8 +1988,16 @@
       "summary": "`uses` appears after other declarations."
     },
     {
+      "code": "bynk.uses.ambiguous_name",
+      "summary": "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one."
+    },
+    {
       "code": "bynk.uses.name_conflict",
-      "summary": "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
+      "summary": "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
+    },
+    {
+      "code": "bynk.uses.second_spelling",
+      "summary": "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type."
     },
     {
       "code": "bynk.uses.self_reference",
@@ -2006,6 +2014,10 @@
     {
       "code": "bynk.uses.unknown_commons",
       "summary": "`uses` names a commons that does not exist."
+    },
+    {
+      "code": "bynk.uses.unknown_name",
+      "summary": "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly."
     }
   ],
   "val_expr": [

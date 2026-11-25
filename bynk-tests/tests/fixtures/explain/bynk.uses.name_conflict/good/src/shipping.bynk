@@ -1,3 +1,0 @@
-commons shipping
-
-type Postage = Int where NonNegative

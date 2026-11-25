@@ -733,7 +733,7 @@ pub fn visible_consts<'a>(
         .map(|(n, decl)| (n.clone(), VisibleConst { decl, owner: None }))
         .collect();
     for used in uses {
-        let Some(used_table) = used_table(used) else {
+        let Some(used_table) = used_table(used).map(|t| table.seen_through(used, t)) else {
             continue;
         };
         // A used commons' `private` constants stay in it.

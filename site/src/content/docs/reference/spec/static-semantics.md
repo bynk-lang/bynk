@@ -59,9 +59,17 @@ scope-first call resolution would change the meaning of existing programs, so
 the pre-existing ident/call precedence asymmetry is preserved deliberately.
 
 A `commons` is imported with `uses`, which MUST name an existing `commons`, not a
-context, and MUST NOT be self-referential or introduce a colliding name
-(`bynk.uses.unknown_commons`, `bynk.uses.target_is_context`,
-`bynk.uses.self_reference`, `bynk.uses.name_conflict`). The visibility of types
+context, and MUST NOT be self-referential (`bynk.uses.unknown_commons`,
+`bynk.uses.target_is_context`, `bynk.uses.self_reference`). Its three forms bring in the
+public names of the commons: all of them (`uses lib.y`), those listed, each optionally
+renamed (`uses lib.y { Status as YStatus, describe }`; a name that is not public is
+`bynk.uses.unknown_name`), or none bare but all qualified by an alias (`uses lib.y as Y`,
+then `Y.Status`). A commons' full name (`lib.y.Status`) qualifies as well, and a one-segment
+commons name is not a qualifier. A declaration MUST be read by one spelling in a unit
+(`bynk.uses.second_spelling`), since a type's identity is its name. Two used commons that
+declare one name do not collide at the `uses`: the name MUST NOT be written bare
+(`bynk.uses.ambiguous_name`, which lists the qualified spellings), and a declaration of the
+unit's own wins over a used name. The visibility of types
 across context boundaries is governed by `exports` and `consumes`
 ([§5.8](#58-boundaries--cross-context)).
 
@@ -2418,8 +2426,7 @@ MUST name its `issuer` (`bynk.actor.oidc_missing_issuer`), its `audience`
 (`bynk.actor.oidc_missing_jwks`) — public trust parameters, **no secret** — and
 MUST declare a string-constructible `identity`, minted from the verified `sub`
 claim (`bynk.actor.oidc_identity_not_string_constructible`); `Oidc` is admissible
-only on `from http` handlers and, this slice, only as a **single** actor — never a
-sum member (`bynk.actor.oidc_not_in_sum`) and not a refinement base. A declared
+only on `from http` handlers and may be a sum member (#3936), but is not a refinement base. A declared
 `identity = T` MUST be a context-ownable
 value type, so the verified identity is sealed — minted only inside the owning
 context (`bynk.actor.identity_not_sealed`). A **`Foreign`** actor (#1971) is a
@@ -2446,7 +2453,7 @@ secret (`bynk.actor.signed_cookie_secret_shared`); and its `identity` MUST be
 string-constructible (`bynk.actor.signed_cookie_identity_not_string_constructible`).
 A `ttl` over 30 days (`bynk.actor.signed_cookie_ttl_long`) and a `cookie` without the
 `__Host-` prefix (`bynk.actor.signed_cookie_unprefixed`) are warnings. It is `http`
-only, MUST NOT be a sum member (`bynk.actor.signed_cookie_not_in_sum`) or a refinement
+only, MAY be a sum member (#3936) but MUST NOT be a refinement
 base, and MUST NOT guard a `@cache(scope: public)` route
 (`bynk.actor.signed_cookie_public_cache`). Inside the declaring context, `Actor.issue(identity)`
 (an `Effect[Cookie]`; `identity` is the actor's identity type) and `Actor.expire()` (a `Cookie`) are the
@@ -2564,10 +2571,19 @@ A sum is well-formed when:
 - the body `match` is **exhaustive** over the members (the ordinary
   sum-exhaustiveness rule, `bynk.types.non_exhaustive_match`).
 
+An `Oidc` or a `SignedCookie` actor MAY be a member (#3936). Each member runs its own scheme's check,
+in declared order, the first verifying member winning. A `SignedCookie` member reads the session cookie
+first: with none (or a repeated one) it does not resolve and refuses nothing. With one, on a
+state-changing method it applies its cross-site check (`Sec-Fetch-Site: same-origin`, or an `Origin` among
+the service's credentialed `cors` origins) before verifying the cookie; a request it refuses that no
+other member resolves is `403`, not `401`. A request carrying a token and a cookie is the first
+listed member's. A sum arm binds its identity only; reading `.claims` of an `Oidc` or `Bearer` arm is
+not part of this rule (#4344).
+
 The reachability checks are **decidable and scheme-level**; the compiler does not
 reason about predicate-level disjointness. Total verification failure (no member
-verifies) is **fail-closed → 401**; a sum's members carry no invariants, so there
-is no 403 path. Verification is side-effect-free and idempotent: first-wins
+verifies) is **fail-closed → 401**; a sum's members carry no invariants, so the
+only 403 is a `SignedCookie` member's cross-site refusal above. Verification is side-effect-free and idempotent: first-wins
 short-circuits, so the set and order of verifications attempted is observable, and
 audit/logging belongs *after* resolution.
 

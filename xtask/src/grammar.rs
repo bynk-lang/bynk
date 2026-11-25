@@ -591,7 +591,8 @@ mod tests {
         // #3877 (queue `delivery { }`) added: delivery_policy, delivery_field.
         // Net +2.
         // #3916 (`errors { }`) added: errors_policy, errors_field. Net +2.
-        assert_eq!(rules.len(), 200);
+        // #4045 (`uses` braced list and alias) added: qualified_type_ref. Net +1.
+        assert_eq!(rules.len(), 201);
         assert!(rules.iter().any(|r| r == "http_handler"));
         assert!(rules.iter().any(|r| r == "_type_ref"));
         // The two trivial wrappers the display layer collapses are excluded.

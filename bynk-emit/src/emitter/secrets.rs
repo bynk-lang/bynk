@@ -97,7 +97,9 @@ pub(crate) fn declared_secrets(table: &UnitTable) -> BTreeSet<String> {
                 SumMemberSeam::Signature(seam) => {
                     names.insert(seam.secret);
                 }
-                SumMemberSeam::None => {}
+                // #3936: an `Oidc` member names no secret, and a `SignedCookie` member's key
+                // is minted by `deploy` (`session_keys`), not declared.
+                SumMemberSeam::None | SumMemberSeam::Oidc(_) | SumMemberSeam::SignedCookie(_) => {}
             }
         }
     }
