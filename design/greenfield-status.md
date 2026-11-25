@@ -38,7 +38,7 @@ Track slice T0.0 (#999); `ts_writes`/`ts_any` added by P7.0 (#1296); `verbatim_o
 | `cloudflare_client_sites` | yes | 0 |
 | `incremental_query_types` | yes | unit_signature present; shared_cache migrated; stability_test present; definition/project levels absent (deleted by #1537) |
 | `unconsumed_ir_items` | yes | 0 |
-| `diagnostic_coverage` | yes | unasserted=33 (asserted 894/927) |
+| `diagnostic_coverage` | yes | unasserted=32 (asserted 895/927) |
 | `model_readers_beyond_emit` | yes | 7 (bynk-model::EntryHandler, bynk-model::EntryParam, bynk-model::EntryShape, bynk-model::IrHandlerKind, bynk-model::IrHttpMethod, bynk-model::entry_handlers, bynk-model::lower_handler_kind_ir) |
 | `unused_deps` | yes | 0 |
 | `explained_codes` | yes | explained=823 (of 927) |

@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.682.0** | `Agent(key).op.outcome(args)` returns a `CallOutcome`, as a cross-context call's `.outcome(…)` does: `AgentBusy` is `Unreachable(None)`, and a fault in the handler, an invariant violation or a rehydration violation is `Faulted` |
 | **v0.681.0** | At the `integration` tier a stubbed consumed service's arguments and result cross that context's wire codecs, so a value the wire cannot carry fails the call |
 | **v0.680.0** | `parTraverse` on a store or held `Map` is renamed `parForEach`, matching `List`, and the old spelling is an error with a machine-applicable fix |
 | **v0.679.0** | A queue consumer can return `RetryAfter(reason, delay)` to redeliver a message after a delay (whole seconds, 1 second to 24 hours: a literal outside that range is `bynk.queue.retry_delay_out_of_range`, a computed delay is rounded up and clamped with the clamp logged); `Retry` keeps retrying after the consumer's `retryDelay` |

@@ -1,12 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `Agent(key).op.outcome(args)` returns a `CallOutcome`, as a cross-context call's `.outcome(…)` does: `AgentBusy` is `Unreachable(None)`, and a fault in the handler, an invariant violation or a rehydration violation is `Faulted`
----
+# 0944 — `Agent(key).op.outcome(…)` returns a `CallOutcome`, as cross-context calls do
 
-## ADR: agent-call-outcome
-title: `Agent(key).op.outcome(…)` returns a `CallOutcome`, as cross-context calls do
-summary: One outcome type for every call that might not reach its handler, with the agent mapping fixed
+- **Status:** Accepted (v0.682)
 
 **Context.** A failed agent call is a fault in the caller: a service that calls
 `Basket(id).add(item)` cannot tell "busy, try again" (`AgentBusy`) from "the
