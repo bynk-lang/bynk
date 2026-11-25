@@ -1893,7 +1893,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     // in its variant payloads, resolving as rigid vars (empty set
                     // for a non-generic sum — the same reference walk as before).
                     check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
-                check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
+                    check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
                 }
             }
             // v0.154 (ADR 0178): the `embeds E as V` clauses' source types must

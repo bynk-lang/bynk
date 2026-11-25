@@ -66,7 +66,9 @@ fn walk(
                         {
                             continue;
                         }
-                        out.push(missing_bound(name, tp, &id.name, id.span, constraint, scope));
+                        out.push(missing_bound(
+                            name, tp, &id.name, id.span, constraint, scope,
+                        ));
                     }
                 }
             }
