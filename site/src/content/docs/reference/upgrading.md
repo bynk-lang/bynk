@@ -17,6 +17,10 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.680.0
+
+`parTraverse` on a `store Map` or a held `Map[K, Connection]` (the query form that runs a step per element concurrently and returns `()`) is now `parForEach`; the old spelling is the error `bynk.query.par_traverse_renamed`, and `bynk check --fix` renames the call.
+
 ## v0.679.0
 
 `QueueResult` has a third variant, `RetryAfter`, so a `match` over a `QueueResult` (in a test case or elsewhere) must now name it or have a wildcard

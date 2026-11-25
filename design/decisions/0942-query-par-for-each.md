@@ -1,13 +1,6 @@
----
-level: minor
-probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: `parTraverse` on a store or held `Map` is renamed `parForEach`, matching `List`, and the old spelling is an error with a machine-applicable fix
-breaking: `parTraverse` on a `store Map` or a held `Map[K, Connection]` (the query form that runs a step per element concurrently and returns `()`) is now `parForEach`; the old spelling is the error `bynk.query.par_traverse_renamed`, and `bynk check --fix` renames the call.
----
+# 0942 — Query.parTraverse becomes parForEach, matching List
 
-## ADR: query-par-for-each
-title: Query.parTraverse becomes parForEach, matching List
-summary: Renames the concurrent unit-returning step on a store or held Map query to parForEach, with an error and a fix for the old name
+- **Status:** Accepted (v0.680)
 
 **Context.** #3967 renamed `List.parTraverse` (which returned `()`) to `parForEach` and gave `parTraverse` the meaning "returns the values". The `Query` vocabulary, used on store `Map`s and held `Map[K, Connection]`s, still spelt its concurrent unit-returning step `parTraverse`, so the same name meant "returns values" on a `List` and "returns `()`" on a query, which broke the grid #3967 set out to make consistent.
 
