@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders } from "../../__bynk_runtime/http.js";
 import { __serialiseAgentClass, __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -157,7 +157,7 @@ export default {
           const __raw_delete = __m.params["delete"];
           const __id_delete = __raw_delete;
           const result = await surface.http_GET_bearer_Param_delete(request, __id_delete);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -185,7 +185,7 @@ export default {
           const __raw_function = __m.params["function"];
           const __id_function = __raw_function;
           const result = await surface.http_GET_oidc_Param_function(request, __id_function);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -199,7 +199,7 @@ export default {
           const __raw_import = __m.params["import"];
           const __id_import = __raw_import;
           const result = await surface.http_GET_sum_Param_import(request, __id_import);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\"", "Bynk realm=\"gateway\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"gateway\"", "Bynk realm=\"gateway\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

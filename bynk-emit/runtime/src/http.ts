@@ -1990,6 +1990,15 @@ export function noStore<R extends Response>(response: R): R {
   return response;
 }
 
+// #3922: a route guarded by an actor that carries a credential answers one caller's data, so
+// every response of it says `private` unless the route already set a `Cache-Control` (an
+// `@cache`, `noStore`, or a response that sets a cookie). `private` still lets the caller's own
+// browser keep and revalidate it; only a shared cache is told not to store it.
+export function privateByDefault<R extends Response>(response: R): R {
+  if (!response.headers.has("cache-control")) response.headers.set("cache-control", "private");
+  return response;
+}
+
 export function edgeCacheGuard(request: Request, response: Response): Response {
   if (request.method !== "GET" && request.method !== "HEAD") return response;
   if (response.status === 101 || response.headers.has("cache-control")) return response;

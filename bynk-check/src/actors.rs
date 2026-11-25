@@ -731,6 +731,32 @@ pub fn route_is_secured(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> b
     })
 }
 
+/// #3922: whether a route's responses carry one caller's data, so a shared cache must not
+/// store them: its `by` clause names a `Bearer`, `Oidc`, `SignedCookie` or `Signature`
+/// actor (a refinement takes its base's scheme), or is a sum with such a member. A
+/// `Visitor` route, and a sum of open actors, are not.
+pub fn route_is_credentialed(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    by.actors.iter().any(|a| {
+        let Some(decl) = actors.get(&a.name) else {
+            return false;
+        };
+        let base = decl
+            .refinement
+            .as_ref()
+            .and_then(|r| actors.get(&r.base.name))
+            .unwrap_or(decl);
+        base.auth
+            .as_ref()
+            .and_then(|auth| Scheme::from_name(auth.name.as_str()))
+            .is_some_and(|s| {
+                matches!(
+                    s,
+                    Scheme::Bearer | Scheme::Oidc | Scheme::SignedCookie | Scheme::Signature
+                )
+            })
+    })
+}
+
 /// #2155: whether an actor sum has an *open* member — `Visitor`, or a
 /// declared actor with no auth scheme. The sum's seam resolves a request with
 /// a missing or bad credential as that member, so it never answers `401`:

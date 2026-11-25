@@ -27,6 +27,7 @@ import {
   applyEdgeCache,
   edgeCacheGuard,
   noStore,
+  privateByDefault,
   notModifiedIfMatch,
   varyAcceptLanguage,
   RAW_WEAK_ETAG_MAX_BYTES,
@@ -1836,6 +1837,13 @@ test("applyCors: exposes WWW-Authenticate when the response carries a challenge"
     "https://app.example.com",
   );
   assert.equal(res.headers.get("access-control-expose-headers"), "WWW-Authenticate");
+});
+
+test("privateByDefault: says private unless a Cache-Control is already set", () => {
+  assert.equal(privateByDefault(httpResultToResponse(HttpResult.Ok(1), id)).headers.get("cache-control"), "private");
+  const cached = applyCache(httpResultToResponse(HttpResult.Ok(1), id), 60, "public");
+  assert.equal(privateByDefault(cached).headers.get("cache-control"), "public, max-age=60");
+  assert.equal(privateByDefault(noStore(httpResultToResponse(HttpResult.Ok(1), id))).headers.get("cache-control"), "no-store");
 });
 
 test("headersObject: a SignedCookie's session cookie is hidden from a cookie field", () => {

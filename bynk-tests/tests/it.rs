@@ -417,6 +417,8 @@ mod system {
     mod header_question_lint;
     #[path = "history_behaviour.rs"]
     mod history_behaviour;
+    #[path = "http_authenticated_cache.rs"]
+    mod http_authenticated_cache;
     #[path = "http_caching_behaviour.rs"]
     mod http_caching_behaviour;
     #[path = "http_client.rs"]

@@ -2,7 +2,7 @@
 // Worker entry point for context `hooks.events`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __requestHeaders } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
@@ -61,7 +61,7 @@ export default {
           if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""]), __security_events);
           const body = __bytes;
           const result = await surface.http_POST_event(__requestHeaders(request, undefined, ["x-hub-signature-256"]), body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""]), __security_events);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"hooks.events\", header=\"X-Hub-Signature-256\""])), __security_events);
         }
       }
       {

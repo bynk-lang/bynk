@@ -1993,8 +1993,9 @@ A `GET` handler MAY carry a single **`@cache`** annotation in handler position
 admits any `@name(args)` before a handler, so a dangling annotation with no
 following `on` is a parse error (`bynk.parse.dangling_handler_annotation`) and any
 name outside the closed set is `bynk.http.unknown_handler_annotation`. `@cache` is
-legal **only on an `on http GET` handler** — on any other method, protocol, or an
-agent handler it is `bynk.http.cache_on_non_get` — and at most once per handler
+legal **only on an `on http GET` handler**, except that `@cache(noStore: true)` is legal on
+any HTTP route — on any other method, protocol, or an agent handler it is
+`bynk.http.cache_on_non_get` — and at most once per handler
 (`bynk.http.cache_duplicate`). Its arguments:
 
 - **`maxAge`** — REQUIRED; a positive `Duration` literal resolving to a whole
@@ -2009,6 +2010,16 @@ agent handler it is `bynk.http.cache_on_non_get` — and at most once per handle
 - **`immutable`** — OPTIONAL; a `Bool` literal (`bynk.http.cache_bad_immutable`),
   defaulting to `false`. `true` appends the RFC 8246 `immutable` directive to the
   `Cache-Control`.
+
+- **`noStore`** — OPTIONAL; a `Bool` literal (`bynk.http.cache_bad_no_store`),
+  defaulting to `false`. `true` sends `Cache-Control: no-store` and no `ETag`, is legal on
+  any route (not only a `GET`), and MUST NOT be combined with `maxAge`, `scope` or
+  `immutable` (`bynk.http.cache_no_store_conflict`); `maxAge` is then not required.
+
+A route guarded by an actor with a `Bearer`, `Oidc`, `SignedCookie` or `Signature` scheme,
+or an actor sum with such a member, sends `Cache-Control: private` on every response that
+carries no `Cache-Control` of its own; `@cache(scope: public)` on such a route is
+`bynk.http.cache_public_authenticated`. A route guarded only by open actors is unchanged.
 
 Any other argument is `bynk.http.cache_unknown_arg`. The annotation governs only
 the opt-in **freshness** half; the conditional **`ETag`/`304`** half is automatic

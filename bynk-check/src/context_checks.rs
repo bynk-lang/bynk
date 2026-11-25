@@ -3454,14 +3454,15 @@ fn check_service_decls(
     for service in table.services.values() {
         let service_cap = service.limits.as_ref().and_then(|p| p.max_body());
         for handler in &service.handlers {
-            validate_handler_annotations(handler, service_cap, errors);
+            let kinds = route_actor_kinds(handler, service, table);
+            validate_handler_annotations(handler, service_cap, kinds, errors);
         }
     }
     note_defaulted_body_caps(table, errors);
     for agent in table.agents.values() {
         crate::agent_busy::validate_agent_annotations(agent, errors);
         let handlers = agent.handlers.iter();
-        handlers.for_each(|h| validate_handler_annotations(h, None, errors));
+        handlers.for_each(|h| validate_handler_annotations(h, None, (false, false), errors));
     }
 
     // v0.131 (ADR 0159): validate each service's `cors { }` policy.
@@ -6322,9 +6323,26 @@ fn validate_query_param(
 /// unknown annotation name is flagged rather than silently ignored. The
 /// automatic conditional `ETag`/`304` half carries no author surface, so `@cache`
 /// is the only annotation validated here.
+/// #3922: whether `scope: public` on this route is a `bynk.http.cache_public_authenticated`,
+/// and whether the route is a `SignedCookie` one. Neither is reported where another rule
+/// already says it: a `SignedCookie` route has `bynk.actor.signed_cookie_public_cache`, and
+/// in a context that declares `EdgeCache` the edge rule
+/// `bynk.cloudflare.edge_cache_public_authenticated` covers every credentialed route.
+fn route_actor_kinds(handler: &Handler, service: &ServiceDecl, table: &UnitTable) -> (bool, bool) {
+    let edge = table.derived.values().any(|d| d.is_edge_cache());
+    let by = handler.by_clause.as_ref().or(service.default_by.as_ref());
+    by.map_or((false, false), |by| {
+        (
+            !edge && crate::actors::route_is_credentialed(by, &table.actors),
+            crate::actors::by_clause_is_signed_cookie(by, &table.actors),
+        )
+    })
+}
+
 fn validate_handler_annotations(
     handler: &Handler,
     service_cap: Option<i64>,
+    (credentialed, signed_cookie_route): (bool, bool),
     errors: &mut Vec<CompileError>,
 ) {
     let is_get = matches!(
@@ -6364,12 +6382,16 @@ fn validate_handler_annotations(
                     continue;
                 }
                 seen_cache = true;
-                if !is_get {
+                // #3922: `noStore` is allowed on any HTTP route, since data that must never
+                // be stored is not only a `GET`'s. Another protocol, or an agent, has no
+                // response to stamp, so it stays `cache_on_non_get`.
+                let is_http = matches!(handler.kind, HandlerKind::Http { .. });
+                if !(is_get || is_http && handler.cache_no_store()) {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_on_non_get",
                             ann.span,
-                            "`@cache` is only valid on an `on http GET` handler",
+                            "`@cache` is only valid on an `on http GET` handler (`@cache(noStore: true)` is also valid on any other HTTP route)",
                         )
                         .with_note(
                             "conditional caching applies to safe, idempotent reads — a `GET` route",
@@ -6384,7 +6406,18 @@ fn validate_handler_annotations(
                     a.label.as_ref().is_some_and(|n| n.name == "scope")
                         && matches!(&a.value.kind, ExprKind::Ident(id) if id.name == "public")
                 });
-                if public && handler.params.iter().any(|p| p.name.name == "cookies") {
+                // #3922: a credentialed route's response is one caller's.
+                // A `SignedCookie` route's own rule is `bynk.actor.signed_cookie_public_cache`.
+                if public && credentialed && !signed_cookie_route {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_public_authenticated",
+                            ann.span,
+                            "a `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another",
+                        )
+                        .with_note("use `scope: private`, or move a response that is the same for everyone to a `Visitor` route"),
+                    );
+                } else if public && handler.params.iter().any(|p| p.name.name == "cookies") {
                     errors.push(
                         CompileError::new(
                             "bynk.http.cache_public_reads_cookies",
@@ -6850,20 +6883,50 @@ fn validate_cache_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     let mut max_age: Option<&AnnotationArg> = None;
     let mut scope: Option<&AnnotationArg> = None;
     let mut immutable: Option<&AnnotationArg> = None;
+    let mut no_store: Option<&AnnotationArg> = None;
     for arg in &ann.args {
         match arg.label.as_ref().map(|l| l.name.as_str()) {
             Some("maxAge") => max_age = Some(arg),
             Some("scope") => scope = Some(arg),
             Some("immutable") => immutable = Some(arg),
+            Some("noStore") => no_store = Some(arg),
             _ => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.cache_unknown_arg",
                         arg.span,
-                        "`@cache` accepts only the `maxAge:`, `scope:` and `immutable:` arguments",
+                        "`@cache` accepts only the `maxAge:`, `scope:`, `immutable:` and `noStore:` arguments",
                     )
                     .with_note("write `@cache(maxAge: 5.minutes, scope: private)`"),
                 );
+            }
+        }
+    }
+    // #3922: `noStore: true` sends `no-store`, so no freshness argument may go with it.
+    if let Some(arg) = no_store {
+        match &arg.value.kind {
+            ExprKind::BoolLit(true) => {
+                for other in [max_age, scope, immutable].into_iter().flatten() {
+                    errors.push(
+                        CompileError::new(
+                            "bynk.http.cache_no_store_conflict",
+                            other.span,
+                            "`@cache(noStore: true)` stores nothing, so it takes no `maxAge`, `scope` or `immutable`",
+                        )
+                        .with_label(arg.span, "`noStore: true` is declared here")
+                        .with_note("drop `noStore: true` to cache, or drop the freshness arguments to forbid storing"),
+                    );
+                }
+                return;
+            }
+            ExprKind::BoolLit(false) => {}
+            _ => {
+                errors.push(CompileError::new(
+                    "bynk.http.cache_bad_no_store",
+                    arg.span,
+                    "`@cache` `noStore` must be `true` or `false`",
+                ));
+                return;
             }
         }
     }

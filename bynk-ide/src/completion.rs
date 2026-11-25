@@ -1250,6 +1250,10 @@ pub const CACHE_ARGS: &[(&str, &str)] = &[
         "immutable",
         "`true` promises the response never changes (a content-addressed path) — appends `immutable` to `Cache-Control`; purge it through `EdgeCache` if it can change; default `false`",
     ),
+    (
+        "noStore",
+        "`true` sends `Cache-Control: no-store` and no `ETag`, for data that must never be stored; allowed on any route, and it excludes `maxAge`, `scope` and `immutable`",
+    ),
 ];
 
 /// v0.142 (ADR 0165): the `@limit` handler-annotation arguments, offered at an
