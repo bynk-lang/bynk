@@ -231,6 +231,10 @@ pub(super) fn emit_test_scope_setup(
         bound.extend(names.iter().cloned());
         out.extend(emit_ns_destructure(&ns, &names, &type_names));
     }
+    // #4403: a name the target's braced `uses` list renames.
+    let (rename_stmts, renamed) = use_rename_destructures(target_name, unit_tables, unit_uses);
+    out.extend(rename_stmts);
+    bound.extend(renamed);
     // #1814: the types the target's view reaches but does not import, from
     // their owning commons (imported by `emit_test_module`).
     out.extend(hidden_destructures(&hidden_by_owner(hidden), unit_tables));

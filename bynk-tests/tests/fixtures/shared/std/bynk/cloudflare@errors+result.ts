@@ -188,15 +188,104 @@ export const R2Put = {
 };
 
 /**
- * One page of an `R2.list`: the objects it holds, and the cursor of the next
- * page, `None` on the last.
+ * One page of an `R2.list` or `R2.listWith`: the objects it holds, and the
+ * cursor of the next page, `None` on the last. `prefixes` are the "folders"
+ * of a delimited listing (see `R2List`): empty unless a delimiter was given.
  */
 export interface R2Listing {
   readonly keys: readonly R2Object[];
   readonly cursor: Option<string>;
+  readonly prefixes: readonly string[];
 }
 
 export const R2Listing = {
+};
+
+/**
+ * The options of an `R2.listWith` page: the `prefix` to list under, the
+ * `cursor` of the previous page, and a `delimiter`. With a delimiter, a key
+ * that holds it after the prefix is not listed: the key up to and including
+ * the delimiter appears once in the listing's `prefixes` instead, so
+ * listing under `photos/` with delimiter `/` gives the immediate children
+ * of that path. `R2.list(prefix, cursor)` is the short form with no
+ * delimiter. Leave a field out for `None`.
+ */
+export interface R2List {
+  readonly prefix: Option<string>;
+  readonly cursor: Option<string>;
+  readonly delimiter: Option<string>;
+}
+
+export const R2List = {
+};
+
+/**
+ * The part of an object an `R2.getRange` reads. `Span(offset, length)` is
+ * `length` bytes from `offset` (to the end of the object when `length` is
+ * `None`); `Suffix(length)` is the last `length` bytes. A range R2 cannot
+ * satisfy (one that starts at or past the end of the object) is not clamped:
+ * R2 refuses it, and the read faults.
+ */
+export type R2Range =
+    { readonly tag: "Span"; readonly offset: number; readonly length: Option<number> }
+  | { readonly tag: "Suffix"; readonly length: number };
+
+export const R2Range = {
+  Span: (offset: number, length: Option<number>): R2Range => ({ tag: "Span", offset, length }),
+  Suffix: (length: number): R2Range => ({ tag: "Suffix", length }),
+};
+
+/**
+ * The condition of an `R2.getStreamIf` read, the read-side counterpart of
+ * `R2Condition`. `Unconditional` always reads; `IfEtagMatches(etag)` reads only
+ * when the object's etag is `etag`; `IfEtagDiffers(etag)` reads only when it
+ * is not (revalidating a cached copy). R2 has further conditions, so a
+ * `match` over this type needs a wildcard.
+ */
+export type R2GetIf =
+    { readonly tag: "Unconditional" }
+  | { readonly tag: "IfEtagMatches"; readonly etag: string }
+  | { readonly tag: "IfEtagDiffers"; readonly etag: string };
+
+export const R2GetIf = {
+  Unconditional: { tag: "Unconditional" } as R2GetIf,
+  IfEtagMatches: (etag: string): R2GetIf => ({ tag: "IfEtagMatches", etag }),
+  IfEtagDiffers: (etag: string): R2GetIf => ({ tag: "IfEtagDiffers", etag }),
+};
+
+/**
+ * A byte range of an object, as `R2.getRange` reads it: the object's
+ * metadata (its whole `size` included), the `offset` and `length` of the bytes
+ * the body holds, and the body as a stream, read once as `R2Body`'s is. An
+ * HTTP `206` response's `Content-Range` is
+ * `bytes <offset>-<offset + length - 1>/<object.size>`.
+ */
+export interface R2Partial {
+  readonly object: R2Object;
+  readonly offset: number;
+  readonly length: number;
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+}
+
+export const R2Partial = {
+};
+
+/**
+ * The answer of an `R2.getStreamIf` read: `Present` with the object, `Missing`
+ * when the key holds none, and `NotModified` with the object's metadata when
+ * the condition did not hold. For `IfEtagDiffers` that is a cache hit
+ * (HTTP `304`); a failed `IfEtagMatches` is HTTP `412 Precondition Failed`,
+ * which the name fits less well.
+ */
+export type R2Read =
+    { readonly tag: "Present"; readonly body: R2Body }
+  | { readonly tag: "Missing" }
+  | { readonly tag: "NotModified"; readonly object: R2Object };
+
+export const R2Read = {
+  Present: (body: R2Body): R2Read => ({ tag: "Present", body }),
+  Missing: { tag: "Missing" } as R2Read,
+  NotModified: (object: R2Object): R2Read => ({ tag: "NotModified", object }),
 };
 
 /**
@@ -1565,7 +1654,11 @@ export const __ServiceToken: symbol = globalThis.Symbol("Service");
  * optionally under a prefix; pass the previous page's `cursor` for the next.
  *
  * Larger objects stream. `getStream` gives the object's metadata and its
- * body as a `Stream[Bytes]` (serve it with `RawStreamed`). `putStream` and
+ * body as a `Stream[Bytes]` (serve it with `RawStreamed`). `getRange` reads
+ * a byte range of an object as a stream (video, audio, resumed downloads and
+ * HTTP `Range` requests), `getStreamIf` reads only when an etag condition
+ * holds and answers `NotModified` otherwise, and `listWith` lists with a
+ * `delimiter`, giving the immediate children of a path as `prefixes`. `putStream` and
  * `putStreamWith` write a stream of exactly `size` bytes, which R2 needs to
  * know up front: a stream that holds more or fewer faults the write, and
  * nothing is stored.
@@ -1587,6 +1680,9 @@ export interface R2 {
   delete(key: string): globalThis.Promise<void>;
   list(prefix: Option<string>, cursor: Option<string>): globalThis.Promise<R2Listing>;
   getStream(key: string): globalThis.Promise<Option<R2Body>>;
+  getRange(key: string, range: R2Range): globalThis.Promise<Option<R2Partial>>;
+  getStreamIf(key: string, onlyIf: R2GetIf): globalThis.Promise<R2Read>;
+  listWith(options: R2List): globalThis.Promise<R2Listing>;
   putStream(key: string, body: AsyncIterable<globalThis.Uint8Array>, size: number): globalThis.Promise<R2Object>;
   putStreamWith(key: string, body: AsyncIterable<globalThis.Uint8Array>, size: number, options: R2Put): globalThis.Promise<Option<R2Object>>;
   createUpload(key: string, options: R2UploadOptions): globalThis.Promise<R2Upload>;

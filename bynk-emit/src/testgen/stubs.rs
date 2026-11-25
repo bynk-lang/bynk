@@ -2,9 +2,13 @@
 //!
 //! Crate-hygiene D1 (#2982, PR 2): split out of `tests_emit.rs`.
 
+use super::stub_clause::{alias_tested_args, arg_alias, clause_reply_payload, type_key_cond};
 use super::*;
+
+mod r2;
 use crate::emitter::RuntimeUse;
 use crate::emitter::ts_types::ts_type_ref_qualified_multi_ts_type;
+use r2::R2_DOUBLE_BODY;
 // #1759: every namespace a test module imports, from one definition.
 use crate::emitter::emit::test_scaffold_ns as test_ns;
 use bynk_check::checker::Types;
@@ -146,24 +150,6 @@ fn clause_key_types(
     )
     .map(|(r, _)| r.types)
     .unwrap_or_default()
-}
-
-/// #3945: `__tk && __tk.__bynkTypeKey === "<key>"`: the clause answers the call made at its type
-/// arguments.
-fn type_key_cond(
-    type_args: &[bynk_syntax::ast::TypeRef],
-    key_types: &HashMap<String, Arc<bynk_syntax::ast::TypeDecl>>,
-    tys: &Arc<Types>,
-) -> TsExpr {
-    and_expr(
-        ident("__tk"),
-        strict_eq(
-            member(ident("__tk"), "__bynkTypeKey"),
-            str_lit(bynk_check::checker::capability_type_key(
-                type_args, key_types, tys,
-            )),
-        ),
-    )
 }
 
 /// v0.118: emit the `__Stub_<Cap>` stub class for a capability seam
@@ -424,10 +410,8 @@ pub(super) fn emit_stub_class(
         alias_tested_args(&mut body, rp, clause_idxs, op);
         for &idx in clause_idxs {
             let clause = &rp.clauses[idx];
-            let (cl_uses, start) = (
-                &clause_imports(rp, idx, &owning_unit, unit_tables, unit_uses),
-                body.len(),
-            );
+            let start = body.len();
+            let cl_uses = &clause_imports(rp, idx, &owning_unit, unit_tables, unit_uses);
             let clause_op = rp.op_for_clause(idx).unwrap_or_else(|| op.clone());
             let op = &clause_op;
             // Argument-pattern consts: a `Value(e)` pattern lowers to a const the
@@ -450,6 +434,7 @@ pub(super) fn emit_stub_class(
                         runtime_use,
                         hidden,
                         tys,
+                        None,
                     );
                     let vname = format!("__pv_{idx}_{i}");
                     body.push(const_(vname.clone(), await_expr(iife(value))));
@@ -463,7 +448,7 @@ pub(super) fn emit_stub_class(
             if *scope != StubScope::Every {
                 cond_parts.insert(0, scopes_test(&[scope]));
             }
-            if generic {
+            if generic && !clause.type_args.is_empty() {
                 cond_parts.push(type_key_cond(&clause.type_args, &key_types, tys));
             }
             let cond = cond_parts
@@ -486,6 +471,7 @@ pub(super) fn emit_stub_class(
                     runtime_use,
                     hidden,
                     tys,
+                    clause_reply_payload(rp, clause, &clause_op).as_ref(),
                 )
             };
             body.push(if_(cond, block(rhs_body)));
@@ -512,30 +498,6 @@ pub(super) fn emit_stub_class(
     );
     class.clear_spans();
     class
-}
-
-/// The call's arguments, aliased ahead of every clause block: a clause binds its suite's
-/// test-only commons, whose names may equal a parameter's, and the match test must compare the
-/// argument, not that name. Only parameters some clause tests by value are aliased.
-fn alias_tested_args(
-    body: &mut Vec<TsStmt>,
-    rp: &ResolvedStub,
-    clause_idxs: &[usize],
-    op: &CapabilityOp,
-) {
-    for (i, param) in op.params.iter().enumerate() {
-        let tested = clause_idxs
-            .iter()
-            .any(|&c| matches!(rp.clauses[c].args.get(i), Some(ArgPattern::Value(_))));
-        if tested {
-            body.push(const_(arg_alias(i), ident(param.name.name.clone())));
-        }
-    }
-}
-
-/// The alias of the call's `i`th argument.
-fn arg_alias(i: usize) -> String {
-    ["__arg_", &i.to_string()].concat()
 }
 
 /// `(async () => { body })()`: a block run in place, for a value that needs its own statements.
@@ -601,9 +563,11 @@ pub(super) fn emit_stub_rhs(
     runtime_use: &RuntimeUse,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
+    // #4382: the payload a typed read's reply is encoded as; see `encoded_reply_payload`.
+    reply_payload: Option<&TypeRef>,
 ) -> Vec<TsStmt> {
     let lower = |e: &Expr| {
-        lower_stub_value_block(
+        let value = lower_stub_value_block(
             e,
             &op.return_type,
             &op.params,
@@ -616,7 +580,18 @@ pub(super) fn emit_stub_rhs(
             runtime_use,
             hidden,
             tys,
-        )
+            reply_payload,
+        );
+        match reply_payload {
+            // The call site decodes the reply with the payload's codec, so the value is
+            // handed back encoded the way that codec reads it.
+            Some(payload) => vec![ret(crate::emitter::serialisation::serialise_expr(
+                payload,
+                &await_expr(iife(value)),
+                runtime_use,
+            ))],
+            None => value,
+        }
     };
     match &clause.rhs {
         StubRhs::Returns(e) => match &clause.after {
@@ -636,6 +611,7 @@ pub(super) fn emit_stub_rhs(
                     runtime_use,
                     hidden,
                     tys,
+                    None,
                 );
                 let after_name = format!("__after_{clause_idx}");
                 let mut out = vec![
@@ -725,6 +701,9 @@ pub(super) fn lower_stub_value_block(
     runtime_use: &RuntimeUse,
     hidden: &BTreeMap<String, String>,
     tys: &Arc<Types>,
+    // #4382: the payload type the value is handed back encoded as; its serialiser is generated
+    // with the value's other codecs.
+    reply_payload: Option<&TypeRef>,
 ) -> Vec<TsStmt> {
     // #2850: the declaring suite's fixtures are names for module-level
     // constants. An operation parameter of the same name shadows one, as in the
@@ -854,6 +833,11 @@ pub(super) fn lower_stub_value_block(
     // map is discarded — it stays unmapped (a deliberate scope cut).
     let body =
         case_body::lower_block_to_async_stmts(&block, ret_type, &mut typed, &cross, runtime_use);
+    if let Some(payload) = reply_payload
+        && let Some(root) = checker::resolve_type_ref(payload, &typed.types, tys)
+    {
+        runtime_use.note_json_codec_root(root);
+    }
     // #3111: the codecs the value reached for beyond the always-present ones.
     let late_codecs = suite_late_codec_stmts(items, &typed, runtime_use, roots_mark);
     let aliases = fixtures.iter().map(|f| {
@@ -958,36 +942,42 @@ pub(super) fn synthetic_typed_commons_for_target(
     // resolves against the same set of names the source can mention.
     if let Some(used) = unit_uses.get(target_name) {
         for u in used {
-            if let Some(t) = unit_tables.get(u) {
-                // #2702: a used commons' `private` declarations are not in the
-                // case's scope, so they must not claim a name (and with it the
-                // codec, the methods or the call a visible one resolves to).
-                for (n, d) in &t.types {
-                    if d.private.is_none() {
-                        types.entry(n.clone()).or_insert_with(|| d.clone());
+            if let Some(plain) = unit_tables.get(u) {
+                // #4403: the target's own view of it first, so a name its `uses` clauses
+                // qualify (`lib.x.Status`) or rename is in scope under that spelling, then
+                // the commons' own names. (`table.use_views` read directly: `table` is
+                // partly moved above.)
+                for t in table.use_views.get(u).into_iter().chain([plain]) {
+                    // #2702: a used commons' `private` declarations are not in the
+                    // case's scope, so they must not claim a name (and with it the
+                    // codec, the methods or the call a visible one resolves to).
+                    for (n, d) in &t.types {
+                        if d.private.is_none() {
+                            types.entry(n.clone()).or_insert_with(|| d.clone());
+                        }
                     }
-                }
-                for (n, f) in &t.fns {
-                    if f.private.is_none() {
-                        fns.entry(n.clone()).or_insert_with(|| f.clone());
+                    for (n, f) in &t.fns {
+                        if f.private.is_none() {
+                            fns.entry(n.clone()).or_insert_with(|| f.clone());
+                        }
                     }
-                }
-                for (n, mt) in &t.methods {
-                    if t.types.get(n).is_some_and(|d| d.private.is_some()) {
-                        continue;
-                    }
-                    let entry = methods.entry(n.clone()).or_default();
-                    for (m, decl) in &mt.instance {
-                        entry
-                            .instance
-                            .entry(m.clone())
-                            .or_insert_with(|| decl.clone());
-                    }
-                    for (m, decl) in &mt.statics {
-                        entry
-                            .statics
-                            .entry(m.clone())
-                            .or_insert_with(|| decl.clone());
+                    for (n, mt) in &t.methods {
+                        if t.types.get(n).is_some_and(|d| d.private.is_some()) {
+                            continue;
+                        }
+                        let entry = methods.entry(n.clone()).or_default();
+                        for (m, decl) in &mt.instance {
+                            entry
+                                .instance
+                                .entry(m.clone())
+                                .or_insert_with(|| decl.clone());
+                        }
+                        for (m, decl) in &mt.statics {
+                            entry
+                                .statics
+                                .entry(m.clone())
+                                .or_insert_with(|| decl.clone());
+                        }
                     }
                 }
             }
@@ -1377,153 +1367,6 @@ pub(super) const KV_DOUBLE_BODY: &str = r#"  type Entry = { bytes: Uint8Array; m
         }),
         cursor: page.length < names.length ? Some(page[page.length - 1]) : None,
       };
-    },
-  };
-"#;
-
-/// P5 (#2323): the body of `bynk.cloudflare`'s `R2` unit-tier double
-/// ([`platform_double`]). P5b (#2626) adds the streamed reads and writes and
-/// multipart uploads, which check sizes and parts as the integration tier's
-/// `makeIntegrationR2` does (the 5 MiB minimum part aside).
-pub(super) const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<string, any>();
-  let version = 0;
-  const meta = (key: string) => {
-    const e = store.get(key);
-    return { key, size: e.body.length, etag: e.etag, uploaded: 0, contentType: e.contentType, metadata: e.metadata };
-  };
-  const write = (key: string, body: Uint8Array, contentType: any, metadata: any) => {
-    version += 1;
-    store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
-    return meta(key);
-  };
-  type Upload = {
-    options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
-    parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
-  };
-  const uploads = new globalThis.Map<string, Upload>();
-  const claim = (stream: object) => {
-    const s = stream as { [k: symbol]: boolean };
-    const k = globalThis.Symbol.for('bynk.stream.read');
-    if (s[k]) throw new globalThis.Error("bynk: a stream can be read only once");
-    s[k] = true;
-  };
-  const collect = async (op: string, body: AsyncIterable<globalThis.Uint8Array>, size: number) => {
-    if (!globalThis.Number.isSafeInteger(size) || size < 0) {
-      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: size must be a whole number of bytes, not ${size}`);
-    }
-    claim(body);
-    const chunks: globalThis.Uint8Array[] = [];
-    let held = 0;
-    for await (const c of body) {
-      held += c.length;
-      if (held > size) break;
-      chunks.push(c);
-    }
-    if (held !== size) {
-      throw new globalThis.Error(`bynk.cloudflare.R2.${op}: the stream held ${held > size ? `at least ${held}` : held} bytes, not the declared size ${size}`);
-    }
-    const out = new globalThis.Uint8Array(size);
-    let at = 0;
-    for (const c of chunks) {
-      out.set(c, at);
-      at += c.length;
-    }
-    return out;
-  };
-  const open = (u: { key: string; uploadId: string }) => {
-    const e = uploads.get(`${u.key}\u0000${u.uploadId}`);
-    if (e === undefined) throw new globalThis.Error(`R2: no multipart upload ${u.uploadId} of ${u.key}`);
-    return e;
-  };
-  return {
-    async get(key) {
-      const e = store.get(key);
-      return e === undefined ? None : Some(e.body.slice());
-    },
-    async head(key) {
-      return store.has(key) ? Some(meta(key)) : None;
-    },
-    async put(key, body) {
-      return write(key, body, None, new globalThis.Map());
-    },
-    async putWith(key, body, options) {
-      const c = options.onlyIf;
-      if (c.tag === "Absent" && store.has(key)) return None;
-      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
-      return Some(write(key, body, options.contentType, options.metadata));
-    },
-    async delete(key) {
-      store.delete(key);
-    },
-    async list(prefix, cursor) {
-      const keys = [...store.keys()]
-        .filter((k) => (prefix.tag === "None" || k.startsWith(prefix.value)) && (cursor.tag === "None" || k > cursor.value))
-        .sort();
-      const page = keys.slice(0, 1000);
-      return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
-    },
-    async getStream(key) {
-      const e = store.get(key);
-      if (e === undefined) return None;
-      const bytes = e.body.slice();
-      const chunks = async function* () {
-        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
-      };
-      return Some({ object: meta(key), body: chunks() });
-    },
-    async putStream(key, body, size) {
-      return write(key, await collect("putStream", body, size), None, new globalThis.Map());
-    },
-    async putStreamWith(key, body, size, options) {
-      const bytes = await collect("putStreamWith", body, size);
-      const c = options.onlyIf;
-      if (c.tag === "Absent" && store.has(key)) return None;
-      if (c.tag === "EtagMatches" && store.get(key)?.etag !== c.etag) return None;
-      return Some(write(key, bytes, options.contentType, options.metadata));
-    },
-    async createUpload(key, options) {
-      version += 1;
-      const uploadId = `upload-${version}`;
-      uploads.set(`${key}\u0000${uploadId}`, { options, parts: new globalThis.Map() });
-      return { key, uploadId };
-    },
-    async uploadPart(upload, partNumber, body) {
-      const e = open(upload);
-      if (!globalThis.Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
-        throw new globalThis.Error(`R2: part number ${partNumber} is not between 1 and 10,000`);
-      }
-      version += 1;
-      const etag = `part-${version}`;
-      e.parts.set(partNumber, { etag, body: body.slice() });
-      return { partNumber, etag };
-    },
-    async completeUpload(upload, parts) {
-      const e = open(upload);
-      const listed = [...parts].sort((a, b) => a.partNumber - b.partNumber);
-      const bodies = listed.map((p, i) => {
-        const part = e.parts.get(p.partNumber);
-        if (part === undefined || part.etag !== p.etag) throw new globalThis.Error(`R2: part ${p.partNumber} was not uploaded with etag ${p.etag}`);
-        if (i > 0 && listed[i - 1].partNumber === p.partNumber) throw new globalThis.Error(`R2: part ${p.partNumber} is listed twice`);
-        return part.body;
-      });
-      if (bodies.length === 0) throw new globalThis.Error("R2: a multipart upload needs at least one part");
-      if (bodies.slice(0, -1).some((b) => b.length !== bodies[0].length)) {
-        throw new globalThis.Error("R2: every part but the last must be the same size");
-      }
-      if (bodies.length > 1 && bodies[bodies.length - 1].length > bodies[0].length) {
-        throw new globalThis.Error("R2: the last part must be no larger than the others");
-      }
-      const out = new globalThis.Uint8Array(bodies.reduce((n, b) => n + b.length, 0));
-      let at = 0;
-      for (const b of bodies) {
-        out.set(b, at);
-        at += b.length;
-      }
-      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
-      return write(upload.key, out, e.options.contentType, e.options.metadata);
-    },
-    async abortUpload(upload) {
-      uploads.delete(`${upload.key}\u0000${upload.uploadId}`);
     },
   };
 "#;

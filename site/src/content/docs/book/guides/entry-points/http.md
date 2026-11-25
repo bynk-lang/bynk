@@ -201,6 +201,45 @@ on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by Visitor {
 See [HTTP → Streamed responses](/reference/http/#streamed-responses) for
 the framing rules and the mid-stream-error pattern.
 
+## Stream events a browser can resume
+
+A browser's `EventSource` reconnects when a stream drops and sends the last `id` it
+saw as `Last-Event-ID`. To give it something to resume from, stream `SseEvent`
+records (from `bynk`) instead of plain strings: `id` names the event, `event` picks
+the name it is dispatched under, and `retry` sets the reconnection delay.
+
+```bynk
+context updates
+
+consumes bynk { SseEvent }
+
+service Updates from http {
+	on GET("/updates") () -> Effect[HttpResult[()]] by Visitor {
+		Streaming(Stream.of([
+			SseEvent {
+				data: "first",
+				id: Some("1"),
+				event: Some("update"),
+			},
+			SseEvent {
+				data: "second",
+				id: Some("2"),
+				event: Some("update"),
+				retry: Some(5.seconds),
+			},
+		]))
+	}
+}
+```
+
+Only `data` is required. To keep an idle stream open through a proxy, add
+`.heartbeat(15.seconds)` after `Streaming(…)`, and to let a reconnecting browser pick up where it
+left off, read `Last-Event-ID` through a typed `headers` record and send what followed it; see
+[HTTP → Resuming after a dropped connection](/reference/http/#resuming-after-a-dropped-connection).
+See
+[HTTP → Structured events](/reference/http/#structured-events) for the framing and the
+values the wire cannot carry.
+
 ## Return a non-JSON body
 
 Handlers return typed values, serialised as JSON. To serve something that is
@@ -279,10 +318,27 @@ allow cookies / `Authorization`, and `maxAge: 1.hour` to let the browser cache
 the preflight. A request from an origin *not* on the list simply gets no grant, so
 the browser blocks it — the same fail-closed posture as authentication.
 
+A script on that page can read only the CORS-safelisted response headers, plus the ones
+Bynk writes for a client: `WWW-Authenticate`, `Retry-After`, `Location` and `ETag`. List
+another header you set yourself in `expose`, and write an origin once as a constant when
+more than one service, or a staging build, needs it:
+
+```bynk,ignore
+const AppOrigins: List[String] = env(APP_ORIGINS, ["https://app.example.com"])
+
+service api from http {
+  cors {
+    origins: AppOrigins,
+    expose:  ["x-request-id"],
+  }
+  …
+}
+```
+
 > **Wildcard + credentials is a compile error.** `origins: ["*"]` opens the service
 > to any origin, but you cannot combine it with `credentials: true` — the browser
 > rejects that pair at runtime, so Bynk rejects it at compile time. With
-> credentials, name the exact origins.
+> credentials, name the exact origins. The same goes for `expose: ["*"]`.
 
 See [HTTP → CORS](/reference/http/#cors) for the full field table and matching
 rules.
@@ -310,6 +366,31 @@ Likewise, a `domain` on a cookie makes every subdomain receive it, so it warns
 (`bynk.http.cookie_domain_widens`) unless the name starts `__Host-`, where a `domain` is an
 error. Drop `domain` to keep a cookie to the host that set it. See
 [HTTP → Setting cookies](/reference/http/#setting-cookies).
+
+## Limit how often a client may call a route
+
+A flood of large requests costs a service the full read and parse of every body before
+anything says no. A route can refuse a client over its limit *before* its body is read.
+Declare a `RateLimit` in the route's context and name it on the route with `@rateLimit`:
+
+```bynk,ignore
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  on POST("/signup") (body: SignupForm) -> Effect[HttpResult[()]] by v: Visitor { … }
+}
+```
+
+The router asks the limiter first of all, before the media-type check, the body-size check
+and authentication. A client over its limit gets `429 Too Many Requests` with a `Retry-After` of
+the limiter's window in seconds, and a service's [`on rejected`](/reference/http/#rendering-rejections)
+can render it: the rejection is `RateLimited(detail)`, and a `system` test asserts
+`Rejected(RateLimited(_))`. `clientIp` counts by the caller's `CF-Connecting-IP`, so users
+behind one address share a count. `RateLimit` is experimental and Cloudflare's; see
+[HTTP → Rate limiting](/reference/http/#rate-limiting) for the rest.
 
 ## Set a cookie from the record that reads it
 

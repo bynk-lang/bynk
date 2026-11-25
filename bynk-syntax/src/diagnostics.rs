@@ -277,7 +277,7 @@ pub const EXPLANATIONS: &[Explain] = &[
     },
     Explain {
         code: "bynk.actor.queue_actor_not_enforced",
-        blurb: "A queue consumer may one day narrow who can send to it, with a refinement of `Producer` that admits only named contexts or with a `Foreign` producer, but nothing yet verifies the sender of a queue message. Accepting such a `by` today would read as a restriction while admitting every producer on the account, so the compiler refuses it instead. Write `by Producer`, which says what is true: any producer on the account may send.",
+        blurb: "A queue consumer can narrow who may send to it with a `Foreign` actor, which admits only messages signed under the actor's secret. Two narrowings are not enforced yet, and the compiler refuses them rather than read as a restriction while admitting unsigned messages: a refinement of `Producer` that admits only named contexts, and a `Foreign` actor in a sum or with a binder, because nothing binds the resolved actor in a queue handler yet. Write `by Producer`, which says what is true (any producer on the account may send), or name one `Foreign` actor alone, with no binder.",
         example: "context shop\n\ntype Order = { id: String }\nactor Shop = Producer where IsContext(shop)\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Shop {   // ✗ nothing verifies the sender yet\n    Ack\n  }\n}\n\nservice fulfil from queue(\"orders\") {\n  delivery { deadLetter: None }\n  on message(order: Order) -> Effect[QueueResult] by Producer {   // ✓ anyone on the account, said outright\n    Ack\n  }\n}",
     },
     Explain {
@@ -1956,6 +1956,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "fn bounded(e: Effect[Int]) -> Effect[Bool] { … }\n\nagent Counter {\n    key id: String\n    store n: Cell[Int] = 0\n\n    on call check() -> Effect[Bool] {\n        bounded(Effect.pure(1))    // ✗ an agent handler has no execution context\n    }\n}\n\nservice api {\n    on call() -> Effect[Bool] by Caller {\n        bounded(Effect.pure(1))    // ✓ a service handler has\n    }\n}",
     },
     Explain {
+        code: "bynk.expect.ambiguous_invariant",
+        blurb: "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. Two agents this suite reaches both declare `<name>`, so the claim does not say which one. Qualify it with the agent: `violates Account.non_negative`.",
+        example: "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negative           // ✗ `Account` and `Wallet` both declare it\nexpect Account(\"a\").withdraw(5) violates Account.non_negative   // ✓",
+    },
+    Explain {
         code: "bynk.expect.faults_not_effect",
         blurb: "`expect <call> faults` claims that an effectful call throws, for \
                 instance because a `stub … fails`. Only a call can fault, so the \
@@ -2012,6 +2017,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
                   \n\
                   // tests/rules.test.bynk\n\
                   expect positive(1)       // ✓ in a case",
+    },
+    Explain {
+        code: "bynk.expect.unknown_invariant",
+        blurb: "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. The name must be one an agent this suite reaches declares: an invariant or transition by its name, or a `@unique` constraint by its field and key (`customers.email`). A name nothing declares could never be raised, so the claim could never hold. The note lists the names that are reachable.",
+        example: "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negatve   // ✗ no such invariant\nexpect Account(\"a\").withdraw(5) violates non_negative  // ✓",
     },
     Explain {
         code: "bynk.exports.capability_not_provided",
@@ -2236,7 +2246,10 @@ fn wait() -> Duration { 5.hours }     // ✓",
                 no expected type, so there is nothing to choose `T` from. The error also fires when a \
                 lambda's parameter types depend on a parameter that the other arguments leave open. Give \
                 the type argument explicitly with `none[Int]()`, or annotate the binding so the expected \
-                type supplies it: `let x: Option[Int] = none()`.",
+                type supplies it: `let x: Option[Int] = none()`. A capability operation also accepts \
+                fewer type arguments than it has parameters: the written ones bind the leading \
+                parameters and the arguments determine the rest, so `Cap.pair[Int](1)` on \
+                `pair[A, B]` leaves `B` open and is refused until you write `Cap.pair[Int, String](1)`.",
         example: "fn none[T]() -> Option[T] {\n    None\n}\n\n\
                   let x = none()                    // ✗ nothing says what `T` is\n\n\
                   let x = none[Int]()               // ✓ given explicitly",
@@ -2534,12 +2547,12 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.cors_invalid_field",
-        blurb: "Each optional `cors` field takes one kind of value: `headers` a list of string literals, `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
+        blurb: "Each optional `cors` field takes one kind of value: `headers` and `expose` a list of header names written as string literals (`expose` may instead be `[\"*\"]` alone), `credentials` the literal `true` or `false`, and `maxAge` a `Duration` literal such as `1.hour`. A header name is an RFC 9110 token: letters, digits and ``!#$%&'*+-.^_`|~``, with no space, colon or comma. They are written straight into the `Access-Control-*` headers the router sends, so they are fixed at compile time: a string, a number or a computed value is refused. `origins`, the required field, is checked by `bynk.http.cors_invalid_origins`.",
         example: "cors { origins: [\"https://app.example.com\"], credentials: \"yes\" }   // ✗ `true` or `false`\n\ncors { origins: [\"https://app.example.com\"], credentials: true }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_invalid_origins",
-        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. A single string, an empty list, a computed entry or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+        blurb: "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
         example: "cors { origins: \"https://app.example.com\" }     // ✗ a list of strings\n\ncors { origins: [\"https://app.example.com\"] }   // ✓",
     },
     Explain {
@@ -2549,13 +2562,18 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.cors_unknown_field",
-        blurb: "A `cors { }` policy has four fields: `origins`, `headers`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
+        blurb: "A `cors { }` policy has five fields: `origins`, `headers`, `expose`, `credentials` and `maxAge`. The set is closed, so a misspelt or invented field is refused rather than ignored, which would leave the policy different from the one you wrote. `Access-Control-Allow-Methods` is not a field: the compiler derives it from the service's routes. Rename the field or delete it. A field with the wrong kind of value is `bynk.http.cors_invalid_field`.",
         example: "cors { origins: [\"https://app.example.com\"], methods: [\"GET\"] }   // ✗ not a field, methods come from the routes\n\ncors { origins: [\"https://app.example.com\"], maxAge: 1.hour }    // ✓",
     },
     Explain {
         code: "bynk.http.cors_wildcard_credentials",
         blurb: "`credentials: true` lets a browser send cookies and `Authorization` to the service, and the Fetch standard forbids answering such a request with the wildcard origin `*`: the browser rejects the response at runtime. Bynk refuses the pair at compile time instead. List the origins that may send credentials, or set `credentials: false` if any site may call the service.",
         example: "cors { origins: [\"*\"], credentials: true }                        // ✗ credentials need named origins\n\ncors { origins: [\"https://app.example.com\"], credentials: true }   // ✓",
+    },
+    Explain {
+        code: "bynk.http.cors_wildcard_expose_credentials",
+        blurb: "`expose` names the response headers a browser script may read from a cross-origin response. The Fetch standard reads `*` there as every header only when the request carries no credentials; on a credentialed response a browser treats it as a header literally named `*`, so a policy that looks like it exposes everything would expose nothing. Bynk refuses the pair at compile time. List the header names the page reads, or set `credentials: false`. The same rule for origins is `bynk.http.cors_wildcard_credentials`.",
+        example: "cors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"*\"] }                 // ✗ credentials need named headers\n\ncors { origins: [\"https://app.example.com\"], credentials: true, expose: [\"x-request-id\"] }   // ✓",
     },
     Explain {
         code: "bynk.http.duplicate_rejected",
@@ -2764,6 +2782,31 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "on GET(\"/items\") (query: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✗ `query` is a record or `RequestQuery`\n\ntype Filter = { tag: Option[String] }\non GET(\"/items\") (query: Filter) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓",
     },
     Explain {
+        code: "bynk.http.rate_limit_bad_args",
+        blurb: "`@rateLimit` takes a limiter and a key, and the key is a word the router knows: `@rateLimit(SignupLimit, key: clientIp)`. A missing key, a key that is not `clientIp` or `identity`, extra arguments or a literal where the limiter's name goes leaves the router nothing to count by, so the annotation is refused. A limit keyed on something only the handler knows stays a call to the limiter's `allow(key)` in the handler. `identity` is `bynk.http.rate_limit_key_unavailable`.",
+        example: "@rateLimit(SignupLimit, key: region)       // ✗ not a key\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_duplicate",
+        blurb: "A route carries at most one `@rateLimit`, because the router asks one limiter, by one key, before it reads the body. Two annotations would leave it two answers, and neither could be said to win. Keep one. A limiter shared by several routes counts across all of them by key, so to limit two routes together, name the same limiter on each.",
+        example: "@rateLimit(SignupLimit, key: clientIp)\n@rateLimit(SignupLimit, key: clientIp)   // ✗ already set above\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)     // ✓ one limiter, one key",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_key_unavailable",
+        blurb: "`key: identity` counts requests by the verified caller, checked after the router has authenticated the request and before it reads the body. The router does not authenticate before it reads the body yet, so `identity` is refused, rather than accepted and counted late. Use `key: clientIp`, which is checked before everything else and so also protects the authentication step, or call the limiter's `allow(key)` in the handler for a limit keyed on the caller. `identity` is planned for routes whose actor has an identity (a `Bearer`, `Oidc` or signed-cookie actor): it will stay refused on a `Visitor` or `Signature` route, which has none.",
+        example: "@rateLimit(SignupLimit, key: identity)   // ✗ not available yet\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_not_http",
+        blurb: "`@rateLimit` makes the router ask a rate limiter before it reads a request body, and only an `on http` route has a router and a request body. On a `call`, an event or a schedule handler it has nothing to act on, so it is refused rather than ignored. Remove it, or call the limiter yourself with `allow(key)` in a handler that is given it.",
+        example: "service jobs {\n    @rateLimit(SignupLimit, key: clientIp)   // ✗ a `call` has no router step\n    on call(n: Int) -> Effect[Int] by Caller { … }\n}\n\nservice jobs {\n    on call(n: Int) -> Effect[Int] by Caller given SignupLimit {   // ✓ ask the limiter\n        let ok <- SignupLimit.allow(\"jobs\")\n        Effect.pure(if ok { 1 } else { 0 })\n    }\n}",
+    },
+    Explain {
+        code: "bynk.http.rate_limit_unknown_limiter",
+        blurb: "`@rateLimit` names the limiter that counts the route's requests, and the limiter is a `RateLimit` capability the route's own context declares: `capability SignupLimit = RateLimit @limit(10) @period(60.seconds)`. A name that is not declared there, or that names something that is not a `RateLimit` (a constant, another capability), leaves the router with nothing to ask. Declare the limiter in the context, or fix the name. The annotation needs no `given` on the handler.",
+        example: "@rateLimit(NoSuchLimit, key: clientIp)   // ✗ not declared in this context\non POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@rateLimit(SignupLimit, key: clientIp)   // ✓ declared above",
+    },
+    Explain {
         code: "bynk.http.raw_bad_content_type",
         blurb: "`@raw(contentType: …)` is the media type the route accepts: the router compares it, ignoring parameters such as `charset`, with each request's `Content-Type` and answers `415` on a mismatch. So it is required, and must be a string literal of the form `type/subtype`, or a non-empty list of them. Write `\"image/png\"`, `[\"image/png\", \"image/jpeg\"]` to accept either, or `\"*/*\"` alone to accept any type; the wildcard cannot be one of several, since it would make the others pointless.",
         example: "@raw(contentType: \"png\")         // ✗ not `type/subtype`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: [\"image/png\", \"*/*\"])   // ✗ `\"*/*\"` is only valid alone\n\n@raw(contentType: \"image/png\")   // ✓\n\n@raw(contentType: [\"image/png\", \"image/jpeg\"])   // ✓ either type\n\nconst Png: String = \"image/png\"\n@raw(contentType: Png)   // ✓ a `String` constant bound to a literal\n@limit(maxBody: 1_000_000)\non POST(\"/icons\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
@@ -2868,7 +2911,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     },
     Explain {
         code: "bynk.http.unknown_handler_annotation",
-        blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
+        blurb: "The handler annotations are a closed set: `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`. Each changes how the router treats the route, so a misspelt one that was ignored would silently lose the behaviour you wanted, such as a freshness window or a body cap. Fix the spelling or remove the annotation. Settings shared by every route belong on the service, in a `cors`, `security`, `limits` or `json` block.",
         example: "@cached(maxAge: 5.minutes)   // ✗ no such annotation\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)    // ✓",
     },
     Explain {
@@ -4226,6 +4269,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
     },
     Explain {
+        code: "bynk.queue.dead_letter_signing_mismatch",
+        blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, so a signed queue's dead letters are still the signed envelope and an unsigned queue's are the bare body. The dead-letter queue's consumer must therefore be signed exactly when the source consumer is, in the same context, and a signed one must admit every sender the source does; otherwise it could not verify or decode a single dead letter, and each would be dropped. Make the dead-letter consumer admit the same `Foreign` actors, or point `deadLetter` at a queue whose consumer does.",
+        example: "actor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer admits unsigned messages\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Legacy { … }   // ✓ the same sender\n}",
+    },
+    Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
         blurb: "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must be able to decode every message of the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check is the one a producer's send gets: a type with the same fields under another name is the same type, and a consumer of a weaker refinement accepts a stronger one.",
         example: "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] by Producer { … }   // ✓ the same type\n}",
@@ -5455,6 +5503,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
     },
     Explain {
+        code: "bynk.test.revoked_needs_sessions_route",
+        blurb: "`by Revoked` sends a cookie for a session that was issued and then \
+                revoked in the session agent, so it needs a route whose seam \
+                checks one: a `SignedCookie` actor declared with `sessions = true`. \
+                A stateless cookie keeps no session to revoke, a route guarded by \
+                another scheme has no cookie, and a public route has no seam. \
+                Declare `sessions = true` on the actor, or test the cookie's \
+                signature and expiry with `by Forged` and `by Expired`.",
+        example: "// demo/api.bynk\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✗ without `sessions = true` there is no session to revoke\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✓ once the actor keeps sessions",
+    },
+    Explain {
         code: "bynk.test.service_bad_address",
         blurb: "A test addresses an http route by method and route pattern, as in \
                 `api.POST(\"/items\", body)`. The first argument must be that \
@@ -5599,6 +5663,17 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   // tests/api.test.bynk\n\
                   let r <- api.GET(\"/items\") by Ghost(\"x\")   // ✗ no actor `Ghost`\n\
                   let r <- api.GET(\"/items\") by User(\"x\")    // ✓",
+    },
+    Explain {
+        code: "bynk.test.violates_needs_in_process",
+        blurb: "`expect <call> violates <name>` claims that a commit was refused by a named invariant, transition or `@unique` constraint. At `system` a refused commit reaches the case as a `500` with no payload from the deployed Worker, not a throw that names the declaration, so claim it at `unit` or `integration`.",
+        example: "// tests/ledger.test.bynk\n\
+                  case \"an overdraft is refused\" as system {\n\
+                  \x20\x20\x20\x20expect api.GET(\"/a\") by User(\"bob\") violates non_negative   // ✗ a `system` refusal is a `500`\n\
+                  }\n\n\
+                  case \"an overdraft is refused\" {                           // ✓\n\
+                  \x20\x20\x20\x20expect Account(\"a\").withdraw(5) violates non_negative\n\
+                  }",
     },
     Explain {
         code: "bynk.test.wire_http_only",
@@ -6686,7 +6761,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 name, and that is fine until the name is written bare: then it could mean either, so \
                 the compiler refuses that reference and lists the qualified spellings. Choose one: give \
                 a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean \
-                (`uses billing { Amount }`), which also brings in only the names you list. A \
+                (`uses billing { Amount }`), which outranks the same name from a whole `uses` and brings \
+                in only the names you list; two selections of one name are still ambiguous. A \
                 declaration of the unit's own wins over a used name, and a `private` declaration is \
                 never imported, so neither can be ambiguous.",
         example: "// billing.bynk\n\
@@ -7238,7 +7314,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.actor.queue_actor_not_enforced",
-        "A queue consumer names a `Producer` refinement or a `Foreign` actor, which nothing enforces yet.",
+        "A queue consumer names a `Producer` refinement, or a `Foreign` actor in a sum or with a binder, which nothing enforces yet.",
     ),
     d(
         "bynk.actor.refinement_base_unsupported",
@@ -8229,6 +8305,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A call to, or reference to, a function that hands work to the execution context (`detach`, `within` or `race`, directly or through the functions it calls) appears where no execution context exists: an agent handler, a WebSocket handler or a provider operation.",
     ),
     dg(
+        "bynk.expect.ambiguous_invariant",
+        "A `violates` claim names an invariant, transition or `@unique` constraint that more than one agent this suite reaches declares; qualify it with its agent (`violates Account.non_negative`).",
+        &["faults_expr"],
+    ),
+    dg(
         "bynk.expect.faults_not_effect",
         "A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`.",
         &["faults_expr"],
@@ -8247,6 +8328,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.expect.outside_case",
         "`expect` was used outside a `case` body.",
         &["expect_expr"],
+    ),
+    dg(
+        "bynk.expect.unknown_invariant",
+        "A `violates` claim names something no agent this suite reaches declares as an invariant, a transition or a `@unique` constraint.",
+        &["faults_expr"],
     ),
     dg(
         "bynk.exports.capability_not_provided",
@@ -8685,6 +8771,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.cors_wildcard_credentials",
         "A `cors` policy combines `credentials: true` with the wildcard origin `[\"*\"]`.",
     ),
+    d(
+        "bynk.http.cors_wildcard_expose_credentials",
+        "A `cors` policy combines `credentials: true` with `expose: [\"*\"]`.",
+    ),
     dg(
         "bynk.http.duplicate_rejected",
         "A `from http` service declares `on rejected` more than once.",
@@ -8871,6 +8961,26 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.http.query_wrong_type",
         "An HTTP handler's `query` parameter is neither a record type nor `RequestQuery`.",
         &["http_handler"],
+    ),
+    d(
+        "bynk.http.rate_limit_bad_args",
+        "A `@rateLimit` is malformed: not a limiter and a `key:` the router knows.",
+    ),
+    d(
+        "bynk.http.rate_limit_duplicate",
+        "A route carries more than one `@rateLimit`.",
+    ),
+    d(
+        "bynk.http.rate_limit_key_unavailable",
+        "A `@rateLimit` uses `key: identity`, which the router cannot yet count by.",
+    ),
+    d(
+        "bynk.http.rate_limit_not_http",
+        "A `@rateLimit` annotates a handler that is not `on http`.",
+    ),
+    d(
+        "bynk.http.rate_limit_unknown_limiter",
+        "A `@rateLimit` names something that is not a `RateLimit` the context declares.",
     ),
     d(
         "bynk.http.raw_bad_content_type",
@@ -9752,6 +9862,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
     ),
+    d(
+        "bynk.queue.dead_letter_signing_mismatch",
+        "A signed queue's dead-letter consumer is not signed, is in another context, or does not admit the same senders (or the reverse).",
+    ),
     dg(
         "bynk.queue.dead_letter_type_mismatch",
         "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from.",
@@ -10574,6 +10688,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &["case"],
     ),
     dg(
+        "bynk.test.revoked_needs_sessions_route",
+        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
+        &["case"],
+    ),
+    dg(
         "bynk.test.service_bad_address",
         "A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string).",
         &["case"],
@@ -10636,6 +10755,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.unknown_actor",
         "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.violates_needs_in_process",
+        "A `system`-tier case claims a refused commit with `expect <call> violates <name>`; at `system` a refusal reaches the case as an error response from the deployed Worker, never a throw that names the declaration, so the claim belongs at `unit` or `integration`.",
         &["case"],
     ),
     dg(

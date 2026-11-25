@@ -1,0 +1,18 @@
+context events
+
+consumes bynk { SseEvent }
+
+// #3918: a structured event stream. `event`, `id` and `retry` are optional; a bare
+// `String` element keeps working beside them.
+service Events from http {
+	on GET("/events") () -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of([
+			SseEvent { data: "hello", event: Some("greeting"), id: Some("1"), retry: Some(3.seconds) },
+			SseEvent { data: "line one\nline two" },
+		]))
+	}
+
+	on GET("/plain") () -> Effect[HttpResult[()]] by v: Visitor {
+		Streaming(Stream.of(["a", "b"]))
+	}
+}

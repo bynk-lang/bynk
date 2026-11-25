@@ -1,0 +1,34 @@
+---
+#4035: a `violates` claim names the declaration that refused the commit.
+---
+suite demo.ledger
+
+case "a refused invariant is named" {
+	expect Account("a").withdraw(5) violates non_negative
+}
+
+case "a name may be qualified by its agent" {
+	expect Account("b").withdraw(5) violates Account.non_negative
+}
+
+case "a refused transition is named" {
+	do Account("c").note()
+	expect Account("c").forget() violates entries_only_grow
+}
+
+case "a refused unique constraint is named by its field and key" {
+	do Account("d").addContact("c1", "x@e.com")
+	expect Account("d").addContact("c2", "x@e.com") violates contacts.email
+}
+
+case "a different invariant is not the one named" {
+	expect Account("e").withdraw(5) violates few_entries
+}
+
+case "a fault that is not a refusal is not a violation" {
+	expect Account("f").crash() violates non_negative
+}
+
+case "a call that returns does not violate" {
+	expect Account("g").noop() violates non_negative
+}

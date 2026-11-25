@@ -1,0 +1,14 @@
+suite events
+
+consumes bynk { SseEvent }
+
+case "a structured stream yields its events" {
+	let r <- Events.GET("/events") by Visitor
+	match r {
+		Streaming(s) => {
+			let parts <- s.collect()
+			expect parts.length() == 2
+		}
+		_ => expect false
+	}
+}

@@ -205,7 +205,8 @@ fn handler_facts(cx: &LowerCtx, service: &str) -> Option<HandlerFacts> {
 }
 
 /// #3328: a case has no Email Routing to mint the `Sender` identity, so a handler that binds it
-/// reads the envelope sender with no DMARC verdict (`DmarcNone`) unless the case names a principal:
+/// reads the envelope sender with the verdict the case's own `authentication-results` header gives
+/// (#3888, by the Worker's rule), `DmarcNone` when there is none:
 /// `((__m: any) => svc.key(__m, { ...deps, identity: { ... } }))(mail)`.
 fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_ts::TsExpr {
     let c = vec![mail];
@@ -214,7 +215,10 @@ fn inbound_email_call(service: &str, key: &str, mail: bynk_ts::TsExpr) -> bynk_t
         ("address".to_string(), member(ident("__m"), "from")),
         (
             "dmarc".to_string(),
-            TsExpr::object(vec![("tag".to_string(), str_lit("DmarcNone"))]),
+            call(
+                ident("__dmarcVerdictOf"),
+                vec![member(ident("__m"), "headers")],
+            ),
         ),
     ]);
     let handler = call(
@@ -279,7 +283,18 @@ pub(in crate::emitter) fn lower_system_schedule_call(
         };
         if let Some(driver) = driver {
             let skip = usize::from(matches!(address, Some(HandlerAddress::Schedule { .. })));
-            let rest = lower_args(&args[skip..], cx, pre);
+            let mut rest = lower_args(&args[skip..], cx, pre);
+            // #3899: a signed consumer's driver takes the foreign actor the case acts as, after
+            // the (optional) delivery metadata.
+            if matches!(address, Some(HandlerAddress::Message { .. }))
+                && cx.system_queue_signed(&id.name)
+                && let Some(actor) = cx.call_site_actor.clone()
+            {
+                if rest.len() < 2 {
+                    rest.push(ident("undefined"));
+                }
+                rest.push(str_lit(actor));
+            }
             return Some({
                 let nodes = rest;
                 call(TsExpr::Ident(driver.clone()), nodes)
@@ -882,7 +897,7 @@ mod tests {
     /// The inbound-email arrow prints as the text it replaced.
     #[test]
     fn the_inbound_email_arrow_prints_as_the_text_it_replaced() {
-        let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))(mail)"#;
+        let want = r#"((__m: any) => svc.key(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))(mail)"#;
         assert_eq!(
             printed(inbound_email_call("svc", "key", node("mail"))),
             want

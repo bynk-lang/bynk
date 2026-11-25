@@ -15,6 +15,7 @@ use super::super::ts_types::{ts_ty_to_ts_type, ts_type_ref_to_ts_type};
 use super::{
     Lowered, PatPath, Pre, expect_location_raw, expect_source_text_raw,
     gather_is_bindings_for_emit, lower_expr, member_node, stmt_item, ternary_built,
+    type_member_node,
 };
 use crate::ts_build::{arrow_of, call, ident, num_lit, str_lit};
 
@@ -195,7 +196,7 @@ fn question_guard_node(tmp: &str, exit: &QuestionExit) -> bynk_ts::TsStmt {
             Some(call(
                 ident("Err"),
                 vec![call(
-                    member_node(ty_name, variant),
+                    type_member_node(ty_name, variant),
                     vec![member_node(tmp, "error")],
                 )],
             )),

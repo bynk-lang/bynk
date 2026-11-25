@@ -69,7 +69,8 @@ commons name is not a qualifier. A declaration MUST be read by one spelling in a
 (`bynk.uses.second_spelling`), since a type's identity is its name. Two used commons that
 declare one name do not collide at the `uses`: the name MUST NOT be written bare
 (`bynk.uses.ambiguous_name`, which lists the qualified spellings), and a declaration of the
-unit's own wins over a used name. The visibility of types
+unit's own wins over a used name, and a name a braced list selects wins over the same name
+from a whole `uses` (two selections of one name are still ambiguous). The visibility of types
 across context boundaries is governed by `exports` and `consumes`
 ([§5.8](#58-boundaries--cross-context)).
 
@@ -1705,8 +1706,13 @@ the same dependency-cycle check.
 `capability_op`'s optional `[T, …]` is resolved from an explicit type
 argument at the call site (`Cap.op[SomeType](…)`), or inferred from the arguments
 when they determine every parameter (#4113); it is never inferred from the
-expected type. Omitting it where the arguments do not determine `T` is rejected (`bynk.generics.uninferable_type_arg`); the wrong number of
-type arguments is `bynk.generics.type_arg_mismatch`. A capability with a
+expected type. Written type arguments bind the operation's **leading** type
+parameters and the arguments determine the rest (#4116): `Cap.op[A](…)` on
+`op[A, B]` fixes `A` and infers `B` from the argument whose parameter is exactly `B`.
+A parameter that neither a written argument nor the arguments determine is rejected
+(`bynk.generics.uninferable_type_arg`); more type arguments than parameters is
+`bynk.generics.type_arg_mismatch`. This rule is for capability operations only: a
+user-defined generic function still takes all of its type arguments or none. A capability with a
 generic operation MUST be implemented by an **external** provider
 (`bynk.provider.generic_op_requires_external`) — a Bynk-bodied provider's `T`
 has no expressive use, since its body can only return a value it already has —
@@ -2953,7 +2959,8 @@ Handled(HttpResult[T])`, and `BoundaryRejection` is the built-in sum
 `RefinementViolation(detail: String) | MalformedJson(detail: String) |
 StructuralMismatch(detail: String) | Unauthorized | MethodNotAllowed |
 PayloadTooLarge(detail: String) | UnsupportedMediaType(detail: String) |
-MalformedForm(detail: String) | MalformedPath(detail: String)`. Neither
+MalformedForm(detail: String) | MalformedPath(detail: String) |
+RateLimited(detail: String)`. Neither
 type can be named in source. An asset fetch (`svc.GET(asset)`) has type
 `Effect[HttpResult[()]]`.
 

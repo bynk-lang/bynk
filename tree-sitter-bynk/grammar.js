@@ -71,6 +71,15 @@ module.exports = grammar({
     // content (match arms / block statements vs field inits) decides which one
     // survives at parse time.
     [$.record_construction, $.record_spread, $._primary],
+    // #4403: the same ambiguity one segment on — after `a.b`, a `{` opens a match/if
+    // body (the expression `a.b`) or a record construction/spread `a.b { … }`.
+    [$.qualified_type_ref, $._primary],
+    // An `expect` also admits an observation over a capability seam, whose subject
+    // `Cap.op` overlaps a `field_access` (the start of an ordinary predicate) and,
+    // since #4403, a qualified record head `a.b { … }`. All parses survive until
+    // the token after the op reveals whether a matcher (`called`/`never`/`before`),
+    // a record body, or an ordinary continuation (`(`, an operator, …) follows.
+    [$.qualified_type_ref, $.observation_expr, $._primary],
     // v0.20a: `(x …` is ambiguous between a lambda parameter list and a
     // parenthesised expression (and `()` the unit literal) until the
     // closing `)` is followed — or not — by `=>`.
@@ -90,11 +99,6 @@ module.exports = grammar({
     // following `<n> times` count from the end of the observation — GLR keeps
     // both parses alive until the next token decides.
     [$.observation_expr],
-    // The subject `Cap.op` overlaps a `field_access` (start of an ordinary
-    // predicate); both parses survive until the token after the op reveals
-    // whether a matcher (`called`/`never`/`before`) or an ordinary continuation
-    // (`(`, an operator, …) follows.
-    [$.observation_expr, $._primary],
     // `trace` is contextual: `trace (` opens either the `trace(Cap.op)`
     // builtin or an ordinary call to a function named `trace` (the compiler
     // picks the builtin only on the exact `trace ( Ident . Ident )` shape). GLR
@@ -691,12 +695,25 @@ module.exports = grammar({
     // v0.157 (ADR 0183): `Name[Arg, …]` — an application of a user-declared
     // generic type. Distinct from `generic_type_ref` (the fixed built-in
     // generics); the head is a user identifier.
+    //
+    // #4403: the head may be a name read through a `uses` clause — `Y.Box[Int]`
+    // by an alias, `lib.y.Box[Int]` by the commons' full name — as it is a plain
+    // type name in `qualified_type_ref`.
     applied_type_ref: ($) =>
-      seq(
-        field("name", $.identifier),
-        "[",
-        sep1(field("arg", $._type_ref), ","),
-        "]",
+      choice(
+        seq(
+          field("name", $.identifier),
+          "[",
+          sep1(field("arg", $._type_ref), ","),
+          "]",
+        ),
+        seq(
+          field("qualifier", $.identifier),
+          repeat1(seq(".", field("name", $.identifier))),
+          "[",
+          sep1(field("arg", $._type_ref), ","),
+          "]",
+        ),
       ),
 
     // v0.20a: a function type — `A -> B`, `(A, B) -> C`, `() -> B`,
@@ -1812,8 +1829,15 @@ module.exports = grammar({
       seq(
         field("call", $._expression),
         optional(field("principal", $.call_site_actor)),
-        "faults",
+        choice("faults", seq("violates", field("name", $.violates_name))),
       ),
+
+    // #4035: `expect <call> violates <name>` holds when the named invariant,
+    // transition or `@unique` constraint refused the call's commit. `violates`
+    // is contextual, as `faults` is. The name is a dotted path: `name`,
+    // `Agent.name` or `field.index`.
+    violates_name: ($) =>
+      prec.right(seq($.identifier, repeat(seq(".", $.identifier)))),
 
     // #2842: a snapshot claim — `expect <value> matches snapshot "<name>"`
     // compares the value's canonical JSON with a stored snapshot. `matches` and
@@ -2254,9 +2278,11 @@ module.exports = grammar({
         "]",
       ),
 
+    // #4403: the type may be read through a `uses` clause — `Y.Point { … }` by an
+    // alias, `lib.y.Point { … }` by the commons' full name.
     record_construction: ($) =>
       seq(
-        field("type", $.identifier),
+        field("type", choice($.identifier, $.qualified_type_ref)),
         "{",
         optional(sep1($.field_init, ",")),
         optional(","),
@@ -2271,7 +2297,7 @@ module.exports = grammar({
     record_spread: ($) =>
       choice(
         seq(
-          field("type", $.identifier),
+          field("type", choice($.identifier, $.qualified_type_ref)),
           "{",
           "...",
           field("base", $._expression),

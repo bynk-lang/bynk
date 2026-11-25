@@ -372,6 +372,10 @@
       "summary": "A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler."
     },
     {
+      "code": "bynk.test.revoked_needs_sessions_route",
+      "summary": "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it."
+    },
+    {
       "code": "bynk.test.service_bad_address",
       "summary": "A test body addresses a service the wrong way for its protocol (e.g. an http route without a leading path string)."
     },
@@ -402,6 +406,10 @@
     {
       "code": "bynk.test.unknown_actor",
       "summary": "A call-site `by <Actor>` names an actor the target context does not declare and that is not a prelude actor."
+    },
+    {
+      "code": "bynk.test.violates_needs_in_process",
+      "summary": "A `system`-tier case claims a refused commit with `expect <call> violates <name>`; at `system` a refusal reaches the case as an error response from the deployed Worker, never a throw that names the declaration, so the claim belongs at `unit` or `integration`."
     },
     {
       "code": "bynk.test.wire_http_only",
@@ -746,8 +754,16 @@
   ],
   "faults_expr": [
     {
+      "code": "bynk.expect.ambiguous_invariant",
+      "summary": "A `violates` claim names an invariant, transition or `@unique` constraint that more than one agent this suite reaches declares; qualify it with its agent (`violates Account.non_negative`)."
+    },
+    {
       "code": "bynk.expect.faults_not_effect",
       "summary": "A fault claim's subject (`expect <call> faults`) is not an effectful call: a value, or a call whose type is not `Effect[_]`."
+    },
+    {
+      "code": "bynk.expect.unknown_invariant",
+      "summary": "A `violates` claim names something no agent this suite reaches declares as an invariant, a transition or a `@unique` constraint."
     }
   ],
   "field_access": [

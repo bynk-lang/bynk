@@ -1,0 +1,119 @@
+context media.store
+
+// #4049: `R2`'s range reads, conditional reads and delimited listing: a byte range as a stream, a
+// read gated on the etag answering `NotModified`, and a listing that folds keys into `prefixes`.
+
+consumes bynk.cloudflare
+consumes bynk.cloudflare { R2 }
+
+capability Videos = R2
+
+service put {
+	on call(key: String, text: String) -> Effect[String] by Caller given Videos {
+		let o <- Videos.put(key, Bytes.fromUtf8(text))
+		o.etag
+	}
+}
+
+// The text of a range, with the offset and length R2 served and the object's whole size.
+service range {
+	on call(
+		key: String,
+		offset: Int,
+		length: Option[Int]
+	) -> Effect[Option[String]] by Caller given Videos {
+		let found <- Videos.getRange(key, Span(offset, length))
+		match found {
+			Some(p) => {
+				let parts <- p.body.collect()
+				let text = parts
+					.fold(Bytes.fromUtf8(""), (acc, b) => acc.concat(b))
+					.decodeUtf8()
+					.getOrElse("?")
+				Some("\(text) @\(p.offset)+\(p.length) of \(p.object.size)")
+			},
+			None => None,
+		}
+	}
+}
+
+service tail {
+	on call(key: String, length: Int) -> Effect[Option[String]] by Caller given Videos {
+		let found <- Videos.getRange(key, Suffix(length))
+		match found {
+			Some(p) => {
+				let parts <- p.body.collect()
+				let text = parts
+					.fold(Bytes.fromUtf8(""), (acc, b) => acc.concat(b))
+					.decodeUtf8()
+					.getOrElse("?")
+				Some("\(text) @\(p.offset)+\(p.length)")
+			},
+			None => None,
+		}
+	}
+}
+
+// "found", "missing" or "not modified", for a read that needs the etag to match / to differ.
+service readMatching {
+	on call(key: String, etag: String) -> Effect[String] by Caller given Videos {
+		let r <- Videos.getStreamIf(key, IfEtagMatches(etag))
+		answer(r)
+	}
+}
+
+service readDiffering {
+	on call(key: String, etag: String) -> Effect[String] by Caller given Videos {
+		let r <- Videos.getStreamIf(key, IfEtagDiffers(etag))
+		answer(r)
+	}
+}
+
+service readAlways {
+	on call(key: String) -> Effect[String] by Caller given Videos {
+		let r <- Videos.getStreamIf(key, Unconditional)
+		answer(r)
+	}
+}
+
+// `EtagMatches` is `R2Condition`'s alone, so binding it first still compiles (the read-side variants are
+// `IfEtagMatches` and `IfEtagDiffers`, which do not share its name).
+service swap {
+	on call(key: String, etag: String, text: String) -> Effect[Bool] by Caller given Videos {
+		let cond = EtagMatches(etag)
+		let stored <- Videos.putWith(key, Bytes.fromUtf8(text), R2Put {
+			contentType: None,
+			metadata: Map.empty(),
+			onlyIf: cond,
+		})
+		stored.isSome()
+	}
+}
+
+fn answer(r: R2Read) -> String {
+	match r {
+		Present(b) => "found \(b.object.size)",
+		Missing => "missing",
+		NotModified(o) => "not modified \(o.size)",
+	}
+}
+
+// The folders and files directly under a path.
+service children {
+	on call(prefix: String) -> Effect[String] by Caller given Videos {
+		let page <- Videos.listWith(R2List {
+			prefix: Some(prefix),
+			cursor: None,
+			delimiter: Some("/"),
+		})
+		let keys = page.keys.map((o) => o.key).join(",")
+		"\(keys) | \(page.prefixes.join(","))"
+	}
+}
+
+service everything {
+	on call() -> Effect[Int] by Caller given Videos {
+		let page <- Videos.list(None, None)
+		page.keys.length() + page.prefixes.length()
+	}
+}

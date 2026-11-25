@@ -49,6 +49,12 @@ export const reserve = {
   },
 };
 
+export const stamped = {
+  async call(deps: { Idempotency: idempotency.Idempotency }): globalThis.Promise<number> {
+    return deps.Idempotency.stamp(5);
+  },
+};
+
 export interface __DemoOrdersDeps {
   readonly Idempotency: idempotency.Idempotency;
   readonly surface: { slots: globalThis.ReturnType<typeof demo_slots.__makeSurface> };
@@ -61,6 +67,9 @@ export function __makeSurface(deps: __DemoOrdersDeps) {
     },
     async reserve(): globalThis.Promise<number> {
       return reserve.call(deps);
+    },
+    async stamped(): globalThis.Promise<number> {
+      return stamped.call(deps);
     },
   };
 }

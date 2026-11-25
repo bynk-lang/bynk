@@ -270,6 +270,16 @@ pub fn by_clause_is_signed_cookie(by: &ByClause, actors: &HashMap<String, ActorD
             == Some(Scheme::SignedCookie)
 }
 
+/// #3938: whether a `by` clause names a single local `SignedCookie` actor with `sessions = true`
+/// (never a sum member), whose seam can refuse a cookie for a revoked session.
+pub fn by_clause_has_sessions(by: &ByClause, actors: &HashMap<String, ActorDecl>) -> bool {
+    by_clause_is_signed_cookie(by, actors)
+        && actors
+            .get(&by.primary().name)
+            .and_then(|a| signed_cookie_seam_of(a, None))
+            .is_some_and(|s| s.sessions)
+}
+
 pub fn bearer_seam_for(
     handler: &Handler,
     actors: &HashMap<String, ActorDecl>,
@@ -522,12 +532,36 @@ pub fn sender_binder_for(handler: &Handler, actors: &HashMap<String, ActorDecl>)
     if by.is_sum() {
         return None;
     }
-    let binder = by.binder.as_ref()?;
     let name = &by.primary().name;
-    (name == "Sender"
-        && !actors.contains_key(name)
-        && !handler.params.iter().any(|p| p.name.name == binder.name))
-    .then(|| binder.name.clone())
+    let refined = actors
+        .get(name)
+        .is_some_and(|decl| sender_refinement(decl, actors).is_some());
+    // #3888: the prelude `Sender`, or a local refinement over it, mints the same `SenderIdentity`.
+    let is_sender = (name == "Sender" && !actors.contains_key(name)) || refined;
+    // A refinement checks the identity's verdict before the handler runs, so a binder-less
+    // handler still receives it, under a name no source can write.
+    let binder = match by.binder.as_ref() {
+        Some(b) => b.name.clone(),
+        None if refined => SENDER_REFINEMENT_BINDER.to_string(),
+        None => return None,
+    };
+    (is_sender && !handler.params.iter().any(|p| p.name.name == binder)).then_some(binder)
+}
+
+/// The synthetic binder a binder-less `by <Sender refinement>` handler receives its identity under.
+pub const SENDER_REFINEMENT_BINDER: &str = "__sender";
+
+/// The DMARC verdicts the handler's `Sender` refinement admits, or `None` when its actor is not
+/// one (a plain `by Sender` admits all mail).
+pub fn sender_admits_for(
+    handler: &Handler,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<Vec<&'static str>> {
+    // The check reads the identity, so it exists only where the identity is passed.
+    sender_binder_for(handler, actors)?;
+    let by = handler.by_clause.as_ref()?;
+    let decl = actors.get(&by.primary().name)?;
+    sender_refinement(decl, actors).map(|p| p.admitted())
 }
 
 /// I3 (#1971): a declared foreign caller, as a `call` handler admits it: the
@@ -540,6 +574,9 @@ pub struct ForeignCaller {
     /// The foreign Worker's name, when the declaration gives one
     /// (`worker = "ledger-svc"`), so `bynk deploy`'s hand-off can name it.
     pub worker: Option<String>,
+    /// #3899: whether this sender signs queue messages to a `from queue` consumer, not calls
+    /// (an actor admitted on both is listed as a caller).
+    pub queue: bool,
 }
 
 /// I3 (#1971): the foreign caller an actor declaration describes, if it is a
@@ -553,6 +590,7 @@ pub fn foreign_caller_of(decl: &ActorDecl) -> Option<ForeignCaller> {
             .scheme_arg("worker")
             .and_then(|a| a.value.as_str())
             .map(str::to_string),
+        queue: false,
     })
 }
 
@@ -675,6 +713,51 @@ pub fn call_admission_for(
         admission.sum = Some(members);
     }
     Some(admission)
+}
+
+/// #3899: the foreign senders a `from queue` consumer admits. Such a consumer admits signed
+/// messages only: each must come from one of these actors, signed under that actor's secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueueAdmission {
+    /// The foreign senders admitted, in `by` order.
+    pub foreign: Vec<ForeignCaller>,
+}
+
+/// #3899: what a `from queue` consumer's `on message` admits, or `None` when it admits unsigned
+/// messages (`by Producer`, today's behaviour). A consumer whose `by` names only `Foreign` actors
+/// admits only messages signed under one of their secrets; the checker refuses a `by` that mixes
+/// them with an unsigned actor, so a signed consumer's every member is a foreign sender here.
+pub fn queue_admission_for(
+    handler: &Handler,
+    protocol: &ServiceProtocol,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<QueueAdmission> {
+    if !matches!(protocol, ServiceProtocol::Queue { .. })
+        || !matches!(handler.kind, HandlerKind::Message)
+    {
+        return None;
+    }
+    let mut foreign = Vec::new();
+    for actor in &handler.by_clause.as_ref()?.actors {
+        // A prelude actor (`Producer`) or a local non-`Foreign` one admits unsigned messages.
+        let decl = actors.get(&actor.name)?;
+        if decl.auth.as_ref().and_then(|a| Scheme::from_name(&a.name)) != Some(Scheme::Foreign) {
+            return None;
+        }
+        // Classified by scheme, not by whether the declaration is whole, as `call_admission_for`
+        // does: a malformed `Foreign` actor (the checker reports it) is still a signed sender, with
+        // an empty secret that no environment supplies, so the consumer refuses every message.
+        foreign.push(ForeignCaller {
+            queue: true,
+            ..foreign_caller_of(decl).unwrap_or_else(|| ForeignCaller {
+                actor: decl.name.name.clone(),
+                secret: String::new(),
+                worker: None,
+                queue: true,
+            })
+        });
+    }
+    (!foreign.is_empty()).then_some(QueueAdmission { foreign })
 }
 
 /// v0.51: the data the emitter needs to lower a Signature verification seam —
@@ -1006,8 +1089,9 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // external network request, so no external auth scheme applies.
         // I3 (#1971): a `call` also admits a declared foreign caller.
         ServiceProtocol::Call => matches!(scheme, Scheme::Internal | Scheme::Foreign),
-        // #3899: a queue consumer may name a `Foreign` producer; the checker
-        // refuses it as not yet enforced (`queue_actor_not_enforced`).
+        // #3899: a queue consumer may name a `Foreign` producer, whose messages it admits only when
+        // signed under its secret; the checker refuses the forms not yet enforced
+        // (`queue_actor_not_enforced`).
         ServiceProtocol::Queue { .. } => matches!(scheme, Scheme::Internal | Scheme::Foreign),
         ServiceProtocol::Cron | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)
@@ -1542,11 +1626,14 @@ pub enum BadCredential {
     WrongAudience,
     WrongAlgorithm,
     NoSubject,
+    /// #3938: a cookie correctly signed for a session that was then revoked (`revokeAll`), so
+    /// only a `SignedCookie` actor with `sessions = true` can refuse it.
+    Revoked,
 }
 
 impl BadCredential {
     /// Every bad-credential principal.
-    pub const ALL: [BadCredential; 7] = [
+    pub const ALL: [BadCredential; 8] = [
         BadCredential::Forged,
         BadCredential::Stale,
         BadCredential::Expired,
@@ -1554,6 +1641,7 @@ impl BadCredential {
         BadCredential::WrongAudience,
         BadCredential::WrongAlgorithm,
         BadCredential::NoSubject,
+        BadCredential::Revoked,
     ];
 
     /// The name written after `by`.
@@ -1566,6 +1654,7 @@ impl BadCredential {
             BadCredential::WrongAudience => "WrongAudience",
             BadCredential::WrongAlgorithm => "WrongAlgorithm",
             BadCredential::NoSubject => "NoSubject",
+            BadCredential::Revoked => "Revoked",
         }
     }
 
@@ -1579,6 +1668,7 @@ impl BadCredential {
             BadCredential::WrongAudience => "wrongaudience",
             BadCredential::WrongAlgorithm => "wrongalgorithm",
             BadCredential::NoSubject => "nosubject",
+            BadCredential::Revoked => "revoked",
         }
     }
 
@@ -1649,6 +1739,7 @@ mod call_site_principal_tests {
             ("WrongAudience", "wrongaudience"),
             ("WrongAlgorithm", "wrongalgorithm"),
             ("NoSubject", "nosubject"),
+            ("Revoked", "revoked"),
         ];
         assert_eq!(drivers.len(), BadCredential::ALL.len());
         for (name, driver) in drivers {

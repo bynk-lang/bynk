@@ -1,7 +1,7 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
 import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
-import type { HttpResult } from "./httpresult.ts";
+import type { HttpResult, SseEvent } from "./httpresult.ts";
 
 // #3908: the path's segments, percent-decoded once (empty segments dropped, so
 // `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
@@ -119,16 +119,50 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
 // Each stream element is one SSE event; a multi-line element becomes multiple
 // `data:` lines, terminated by a blank line. The body is a ReadableStream, so
 // this is a Web standard that runs unchanged on Workers and Node.
-function sseResponse(stream: AsyncIterable<string>): Response {
+function sseResponse(stream: AsyncIterable<string | SseEvent>, heartbeatMs?: number): Response {
   const encoder = new TextEncoder();
-  const body = pullBody(stream, (value) => [
-    ...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)),
-    encoder.encode("\n"),
-  ]);
+  const body = pullBody(
+    stream,
+    (value) => {
+      if (typeof value === "string") {
+        return [...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)), encoder.encode("\n")];
+      }
+      return sseEventChunks(value).map((line) => encoder.encode(line));
+    },
+    // A comment line (`:`) is ignored by every `EventSource`, so it only keeps the connection warm.
+    heartbeatMs === undefined ? undefined : { everyMs: heartbeatMs, chunk: encoder.encode(":\n\n") },
+  );
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
   });
+}
+
+// #3918: one structured event as the lines of the HTML event-stream format, `event:`, `id:` and
+// `retry:` before the `data:` lines, and a blank line to end it. `data` splits on any line break
+// (CRLF, LF or CR) into one `data:` line each, so an embedded break can never end the event early.
+// An `event` or `id` with a line break, an `id` with NUL, or a `retry` that is not a whole
+// number of milliseconds throws, which errors the body at this element, in-band, as a throw from
+// the source does: a value the wire cannot carry is never written as a different one.
+function sseEventChunks(e: SseEvent): string[] {
+  const out: string[] = [];
+  if (e.event.tag === "Some") {
+    if (/[\r\n]/.test(e.event.value)) throw new Error("bynk: an SSE `event` name cannot contain a line break");
+    out.push(`event: ${e.event.value}\n`);
+  }
+  if (e.id.tag === "Some") {
+    if (/[\r\n]/.test(e.id.value)) throw new Error("bynk: an SSE `id` cannot contain a line break");
+    if (e.id.value.includes("\0")) throw new Error("bynk: an SSE `id` cannot contain NUL");
+    out.push(`id: ${e.id.value}\n`);
+  }
+  if (e.retry.tag === "Some") {
+    const ms = e.retry.value;
+    if (!Number.isSafeInteger(ms) || ms < 0) throw new Error("bynk: an SSE `retry` must be a whole number of milliseconds");
+    out.push(`retry: ${ms}\n`);
+  }
+  for (const line of e.data.split(/\r\n|\r|\n/)) out.push(`data: ${line}\n`);
+  out.push("\n");
+  return out;
 }
 
 // K-streams (#2623): mark `stream` as read, or throw if it already was. A
@@ -157,19 +191,51 @@ export function claimStream(stream: object): void {
 // returns the iterator so an abandoned read releases the source promptly. A
 // throw from the source errors the body, aborting a response whose status is
 // already sent.
+// One read of a source stream: `done` once it has ended, else the next `value`.
+type Step<T> = { readonly done?: boolean; readonly value: T };
+
+// #3918: with a `heartbeat`, a pull that finds the source idle for `everyMs` writes `chunk`
+// and returns, keeping the pending read for the next pull, so the source is never advanced twice.
 function pullBody<T>(
   stream: AsyncIterable<T>,
   encode: (value: T) => readonly Uint8Array[],
+  heartbeat?: { readonly everyMs: number; readonly chunk: Uint8Array },
 ): ReadableStream<Uint8Array> {
   claimStream(stream);
   const iterator = stream[Symbol.asyncIterator]();
+  let pending: Promise<Step<T>> | undefined;
+  const nextOrIdle = async (): Promise<Step<T> | "idle"> => {
+    pending ??= iterator.next();
+    const read = pending;
+    if (heartbeat === undefined) {
+      pending = undefined;
+      return read;
+    }
+    read.catch(() => {}); // a rejection is surfaced when the read is awaited, not as unhandled
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const idle = new Promise<"idle">((resolve) => {
+      timer = setTimeout(() => resolve("idle"), heartbeat.everyMs);
+    });
+    try {
+      const got = await Promise.race([read, idle]);
+      if (got !== "idle") pending = undefined;
+      return got;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   return new ReadableStream<Uint8Array>(
     {
       // An element that encodes to nothing (an empty chunk) is skipped
       // here: a `pull` that enqueues nothing isn't called again.
       async pull(controller) {
         for (;;) {
-          const { value, done } = await iterator.next();
+          const got = await nextOrIdle();
+          if (got === "idle") {
+            controller.enqueue(heartbeat!.chunk);
+            return;
+          }
+          const { value, done } = got;
           if (done) {
             controller.close();
             return;
@@ -464,6 +530,12 @@ export function withRetryAfter<R extends object>(result: R, delayMillis: number)
   return withHeaderTriple(result, ["retry-after", String(Math.max(0, Math.ceil(delayMillis / 1000))), true]);
 }
 
+/** #3918: `Streaming(…).heartbeat(every)`: a comment line whenever the event stream is idle this long. */
+export function withHeartbeat<R extends object>(result: R, everyMillis: number): R {
+  if (!(everyMillis >= 1000)) throw new Error("heartbeat: the interval must be at least one second");
+  return { ...result, heartbeatMs: everyMillis };
+}
+
 /** `result.at(url)`: the `Location` of a created resource. */
 export function withLocation<R extends object>(result: R, url: string): R {
   return withHeaderTriple(result, ["location", encodeNonAscii(url), true]);
@@ -571,7 +643,7 @@ function baseHttpResultToResponse<T>(
     }
     // 200 with a streamed body — each stream element is one SSE event.
     case "Streaming":
-      return sseResponse(result.stream);
+      return sseResponse(result.stream, result.heartbeatMs);
     // 200 with a raw body — author-owned bytes with an explicit content-type.
     // No codec runs; the Uint8Array is written straight into the Response. The
     // `as BodyInit` cast satisfies TS 5.7, whose `Uint8Array<ArrayBufferLike>`
@@ -917,6 +989,7 @@ function rejectionDetail(body: Record<string, unknown>): string {
     case "MalformedPath":
     case "PayloadTooLarge":
     case "UnsupportedMediaType":
+    case "RateLimited":
       return str(body.details);
     case "StructuralMismatch":
       return `${str(body.path)}: expected ${str(body.expected)}, got ${str(body.actual)}`;
@@ -939,7 +1012,14 @@ async function rejectionOf(
 ): Promise<{ readonly tag: string; readonly detail: string } | null> {
   if (response.status === 401) return { tag: "Unauthorized", detail: "" };
   if (response.status === 405) return { tag: "MethodNotAllowed", detail: "" };
-  if (response.status !== 400 && response.status !== 413 && response.status !== 415) return null;
+  if (
+    response.status !== 400 &&
+    response.status !== 413 &&
+    response.status !== 415 &&
+    response.status !== 429
+  ) {
+    return null;
+  }
   let body: Record<string, unknown> | null = null;
   try {
     body = (await response.clone().json()) as Record<string, unknown>;
@@ -1930,14 +2010,21 @@ export async function responseToHttpOutcome<T>(
   // A capped route's `413` and a raw route's `415` are the router's own
   // synthesised refusals, told from a handler's `PayloadTooLarge`/
   // `UnsupportedMediaType` (whose body is `{ error }`) by the `kind` they carry.
-  if (response.status === 413 || response.status === 415) {
+  // #3926: and a `@rateLimit` route's `429`, told from a handler's `TooManyRequests`
+  // (whose body is `{ error }`) the same way.
+  if (response.status === 413 || response.status === 415 || response.status === 429) {
     let body: { kind?: unknown } | null = null;
     try {
       body = (await response.clone().json()) as { kind?: unknown };
     } catch {
       body = null;
     }
-    if (body && (body.kind === "PayloadTooLarge" || body.kind === "UnsupportedMediaType")) {
+    if (
+      body &&
+      (body.kind === "PayloadTooLarge" ||
+        body.kind === "UnsupportedMediaType" ||
+        body.kind === "RateLimited")
+    ) {
       const fields = body as Record<string, unknown>;
       return {
         tag: "Rejected",
@@ -1983,11 +2070,14 @@ export async function responseToUnauthOutcome<T>(
 // derived from the service's routes at emit time (never restated by the author);
 // `allowHeaders` carries the resolved list (the `content-type`/`Authorization`
 // default, or the author's override). `maxAgeSecs` is the `Access-Control-Max-Age`
-// in whole seconds, absent when the author gave no `maxAge`.
+// in whole seconds, absent when the author gave no `maxAge`. #3925: `exposeHeaders`
+// is the `Access-Control-Expose-Headers` list: the headers Bynk writes for a client to
+// read plus the author's `expose` names (or `["*"]`).
 export interface CorsPolicy {
   readonly origins: readonly string[];
   readonly allowMethods: readonly string[];
   readonly allowHeaders: readonly string[];
+  readonly exposeHeaders: readonly string[];
   readonly credentials: boolean;
   readonly maxAgeSecs: number | null;
 }
@@ -2002,6 +2092,35 @@ function corsResolveOrigin(policy: CorsPolicy, requestOrigin: string | null): st
   if (policy.origins.length === 1 && policy.origins[0] === "*") return "*";
   if (requestOrigin !== null && policy.origins.includes(requestOrigin)) return requestOrigin;
   return null;
+}
+
+// #3926: `@rateLimit(Limiter, key: clientIp)`. The router asks the limiter, before it reads
+// the request body, whether this client may have another request in the window.
+// Cloudflare's `CF-Connecting-IP` is the client's address and is reliable only behind
+// Cloudflare's edge; a request without it (`bynk dev`, a test that sets none) shares the
+// one `unknown` key rather than going uncounted.
+export async function rateLimitAllows(
+  limiter: { limit(options: { key: string }): Promise<{ success: boolean }> },
+  request: Request,
+): Promise<boolean> {
+  const key = request.headers.get("cf-connecting-ip") ?? "unknown";
+  return (await limiter.limit({ key })).success;
+}
+
+// #3926: the router's `429` to a client over its limit: `Retry-After` is the limiter's window
+// in seconds, and the body is the `RateLimited` rejection, so `on rejected` can render it and
+// a system test can assert `Rejected(RateLimited)`.
+export function rateLimitedResponse(periodSecs: number): Response {
+  return new Response(
+    JSON.stringify({
+      kind: "RateLimited",
+      details: `too many requests: try again in ${periodSecs} seconds`,
+    }),
+    {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": String(periodSecs) },
+    },
+  );
 }
 
 // Stamp the CORS response headers onto an already-built `Response`, in place.
@@ -2021,9 +2140,11 @@ export function applyCors<R extends Response>(
   response.headers.set("access-control-allow-origin", allowOrigin);
   if (allowOrigin !== "*") response.headers.append("vary", "Origin");
   if (policy.credentials) response.headers.set("access-control-allow-credentials", "true");
-  // #3914 (E): a `401`'s challenge is readable by a browser client.
-  if (response.headers.has("www-authenticate")) {
-    response.headers.append("access-control-expose-headers", "WWW-Authenticate");
+  // #3925: the headers a browser script may read from a cross-origin response: the ones Bynk
+  // writes for a client (a `401`'s challenge, #3914; `Retry-After`; `Location`; `ETag`) and the
+  // author's `expose` names. Naming a header the response does not carry is harmless.
+  if (policy.exposeHeaders.length > 0) {
+    response.headers.set("access-control-expose-headers", policy.exposeHeaders.join(", "));
   }
   return response;
 }
@@ -2294,5 +2415,5 @@ function stripWeakPrefix(tag: string): string {
 }
 
 // #1653: the `__` aliases emitted code imports.
-export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
+export { allowUnion as __allowUnion, applyCache as __applyCache, applyChallenge as __applyChallenge, applyCors as __applyCors, applyEdgeCache as __applyEdgeCache, applySecurityHeaders as __applySecurityHeaders, corsPreflightResponse as __corsPreflightResponse, edgeCacheGuard as __edgeCacheGuard, headResponse as __headResponse, headerPairs as __headerPairs, headersObject as __headersObject, withPlainJson as __withPlainJson, withResponseHeader as __withResponseHeader, withRetryAfter as __withRetryAfter, withHeartbeat as __withHeartbeat, withLocation as __withLocation, withDownload as __withDownload, resultHeaders as __resultHeaders, httpResultToResponse as __httpResultToResponse, untilBodyTooLarge as __untilBodyTooLarge, matchPath as __matchPath, jsonMediaTypeMatches as __jsonMediaTypeMatches, mediaTypeMatches as __mediaTypeMatches, multipartForm as __multipartForm, multipartMediaTypeMatches as __multipartMediaTypeMatches, multipartObject as __multipartObject, requestHeaders as __requestHeaders, formMediaTypeMatches as __formMediaTypeMatches, formDecode as __formDecode, formObject as __formObject, formString as __formString, cfObject as __cfObject, cookieObject as __cookieObject, cookieValue as __cookieValue, csrfAllowed as __csrfAllowed, sessionCookieOf as __sessionCookieOf, cookieString as __cookieString, queryObject as __queryObject, queryString as __queryString, requestCookies as __requestCookies, requestCookiesHeader as __requestCookiesHeader, requestQuery as __requestQuery, requestQuerySearch as __requestQuerySearch, renderRejection as __renderRejection, requestBodyStream as __requestBodyStream, requestHeaderPairs as __requestHeaderPairs, noStore as __noStore, privateByDefault as __privateByDefault, problemRejection as __problemRejection, rateLimitAllows as __rateLimitAllows, rateLimitedResponse as __rateLimitedResponse, pathLeaf as __pathLeaf, notModifiedIfMatch as __notModifiedIfMatch, responseToHttpOutcome as __responseToHttpOutcome, responseToHttpResult as __responseToHttpResult, responseToUnauthOutcome as __responseToUnauthOutcome, varyAcceptLanguage as __varyAcceptLanguage };
 export type { CorsPolicy as __CorsPolicy, SecurityPolicy as __SecurityPolicy };

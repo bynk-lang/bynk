@@ -415,7 +415,8 @@ uses lib.money { Money, format as formatMoney }  // only these names, any rename
 A braced list may rename a function, constant, asset or embed as well as a type; renaming a
 type leaves its variants' names as they are. Two commons that declare one name can be used
 together: writing the name bare is `bynk.uses.ambiguous_name`, which lists the qualified
-spellings, so alias one (`uses lib.y as Y`) or select the one you mean. A commons' full name
+spellings, so alias one (`uses lib.y as Y`) or select the one you mean, which outranks the same
+name from a whole `uses` (two selections of one name are still ambiguous). A commons' full name
 (`lib.y.Status`) qualifies as well as an alias does. A declaration is read by one spelling in a
 unit: a second is `bynk.uses.second_spelling`.
 
@@ -2364,9 +2365,24 @@ call throws (an injected `stub … fails`, a real provider's failure, an invaria
 violation) rather than returns. The subject is the call itself, not a value bound
 from it. An optional [`call_site_actor`](#rule-call_site_actor) between the call
 and `faults` supplies the caller identity the addressed handler reads (#1812).
-`faults` is a contextual keyword.
+`faults` is a contextual keyword. `expect <call> violates <name>` (#4035) takes the
+same position and holds only when the named invariant, transition or `@unique`
+constraint refused the call's commit; `violates` is contextual too, and the name is
+a dotted path (`name`, `Agent.name` or `field.index`).
 
-**See also.** [Claiming a fault](/reference/testing/#faults).
+**See also.** [Claiming a fault](/reference/testing/#faults),
+[Claiming a refused commit](/reference/testing/#violates).
+
+### violates_name {#rule-violates_name}
+
+{{#grammar violates_name}}
+
+The name a [`faults_expr`](#rule-faults_expr) claim `violates`: an invariant or
+transition (`name`, or `Agent.name` when two agents declare it) or a `@unique`
+constraint, named by its field and key (`customers.email`). The first `identifier`
+is the name; each further one narrows it.
+
+**See also.** [Claiming a refused commit](/reference/testing/#violates).
 
 ### trace_expr {#rule-trace_expr}
 

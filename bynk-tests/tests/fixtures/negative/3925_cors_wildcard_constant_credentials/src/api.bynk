@@ -1,0 +1,14 @@
+context api
+
+const AnyOrigin: String = "*"
+
+service api from http {
+  cors {
+    origins: [AnyOrigin],
+    credentials: true,
+  }
+
+  on GET("/ping") () -> Effect[HttpResult[String]] by v: Visitor {
+    Ok("pong")
+  }
+}

@@ -35,7 +35,7 @@ environment), so code that stays on this surface is portable.
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/concepts/localisation/understand-localisation/). |
-| **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` · `claim(key: String, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once senders (a retried command, a resent webhook). See below. |
+| **`Idempotency`** | `dedup[T, K: Key](key: K) -> Effect[Option[T]]` · `remember[T, K: Key](key: K, value: T, expiresAfter: Duration) -> Effect[()]` · `claim[K: Key](key: K, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once senders (a retried command, a resent webhook). See below. |
 | **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context. Delivery is at most once, and on Workers the emitter waits for it to finish. See below. |
 
 `Fetch` sends a request over the public internet. On Cloudflare that holds even
@@ -88,17 +88,31 @@ check `dedup` for a cached outcome, and on a miss, cache the value you compute w
 
 ```bynk,ignore
 on reserve(orderId: OrderId) -> ReserveOutcome given Idempotency {
-  let cached <- Idempotency.dedup[ReserveOutcome](Json.encode(orderId))
+  let cached <- Idempotency.dedup[ReserveOutcome](orderId)
   match cached {
     Some(outcome) => outcome,
     None => {
       let outcome = ... compute the real outcome ...
-      let _ <- Idempotency.remember[ReserveOutcome](Json.encode(orderId), outcome, 24.hours)
+      let _ <- Idempotency.remember[ReserveOutcome](orderId, outcome, 24.hours)
       outcome
     }
   }
 }
 ```
+
+The **key** may be any [`Key`](/reference/types/#keys) type: a `String`, a typed id such as
+`OrderId`, a record, a sum, an `Int`. A type that is not a key (a `Float`, a `Map`, a record
+holding one) is `bynk.types.not_keyable`, because two such keys could not be told apart. Two
+keys of one type share an entry exactly when they are `==`. A key that is text (a `String`, or
+a refined or opaque `String`) is stored as it is written, so entries made with
+`Json.encode(id)` or any other string still match; any other key is stored under the canonical
+encoding value collections use, with a `k:` prefix. Keys of *different* types are not kept
+apart: a `String` key spelled `k:…`, or two records of different types with the same fields,
+can land on one entry in the same handler. Do not build a text key from untrusted input if a
+typed key of the same handler could have the same encoding; give each key its own type and
+keep client-supplied text out of the `k:` prefix. Type `K` is inferred from the key, so you
+write only the type arguments no argument determines:
+`Idempotency.dedup[Quote](deliveryKey)`.
 
 Both operations are written with their type argument here (`dedup[ReserveOutcome]`,
 `remember[ReserveOutcome]`). `dedup` has no argument that mentions `T`, so it is always written;
@@ -487,7 +501,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 |---|---|
 | **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttl: KvTtl) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]` · `getValue[T: Codable](key) -> Effect[Option[T]]` · `putValue[T: Codable](key, value: T, options: KvPut) -> Effect[()]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values) and [Typed values](#typed-values). |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
-| **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]` · `getStream(key) -> Effect[Option[R2Body]]` · `putStream(key, body: Stream[Bytes], size: Int) -> Effect[R2Object]` · `putStreamWith(key, body, size, options: R2Put) -> Effect[Option[R2Object]]` · `createUpload(key, options: R2UploadOptions) -> Effect[R2Upload]` · `uploadPart(upload, partNumber: Int, body: Bytes) -> Effect[R2Part]` · `completeUpload(upload, parts: List[R2Part]) -> Effect[R2Object]` · `abortUpload(upload) -> Effect[()]`. Used only through a named instance; see below. |
+| **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]` · `getStream(key) -> Effect[Option[R2Body]]` · `getRange(key, range: R2Range) -> Effect[Option[R2Partial]]` · `getStreamIf(key, onlyIf: R2GetIf) -> Effect[R2Read]` · `listWith(options: R2List) -> Effect[R2Listing]` · `putStream(key, body: Stream[Bytes], size: Int) -> Effect[R2Object]` · `putStreamWith(key, body, size, options: R2Put) -> Effect[Option[R2Object]]` · `createUpload(key, options: R2UploadOptions) -> Effect[R2Upload]` · `uploadPart(upload, partNumber: Int, body: Bytes) -> Effect[R2Part]` · `completeUpload(upload, parts: List[R2Part]) -> Effect[R2Object]` · `abortUpload(upload) -> Effect[()]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
 | **`EdgeCache`** *(experimental)* | `purge(prefixes: List[String]) -> Effect[Bool]`. Used only through a named instance, at most one per context, which turns Cloudflare's edge cache on for the context's Worker; see below. |
 | **`Version`** *(experimental)* | `current() -> Effect[WorkerVersion]`. One per Worker, used bare; see [The running version](#the-running-version-version). |
@@ -670,7 +684,7 @@ objects stream, or are uploaded in parts (below).
   storage needs) or `EtagMatches(etag)` (compare and swap: what rewriting an
   index needs). It returns `None`, writing nothing, when the condition fails.
   `R2Condition` is extensible, so a `match` over it needs a wildcard.
-- `list` returns one `R2Listing { keys, cursor }`: up to 1000 objects in key
+- `list` returns one `R2Listing { keys, cursor, prefixes }`: up to 1000 objects in key
   order, optionally under a prefix. Pass the previous page's `cursor` for the
   next; `None` on the last page. A page may be shorter than 1000 while more
   remain, so trust the cursor, not the length.
@@ -679,6 +693,36 @@ objects stream, or are uploaded in parts (below).
   `RawStreamed(o.body, contentType)`, or `collect` it. The body can be read
   once; a second read faults. `R2Body` carries a stream, so it can't be stored,
   sent or JSON-encoded.
+- `listWith(R2List { prefix, cursor, delimiter })` is `list` with a **delimiter**. A
+  key that holds the delimiter after the prefix is not listed: the key up to and
+  including the delimiter appears once in `prefixes` instead, so listing under
+  `photos/` with delimiter `/` gives the immediate children of that path (`keys` the
+  files, `prefixes` the folders) without listing everything beneath it. A page counts
+  keys and prefixes together; `prefixes` is empty unless a delimiter was given, and
+  `list(prefix, cursor)` stays as the short form.
+- `getRange(key, range)` reads part of an object as a stream, for video, audio, resumed
+  downloads and `Range` requests. `R2Range` is `Span(offset, length)` (`length` bytes
+  from `offset`, to the end when `length` is `None`) or `Suffix(length)` (the last
+  `length` bytes). It gives `None` for a missing key, else an
+  `R2Partial { object, offset, length, body }`: the whole object's metadata (`object.size`
+  is its full size), the `offset` and `length` of the bytes `body` holds (a length past
+  the end is clamped, and a suffix longer than the object gives the whole object), and
+  the body, read once as `getStream`'s is. An HTTP `Content-Range` is
+  `bytes <offset>-<offset + length - 1>/<object.size>`. A range that **starts at or past
+  the end** of the object is not clamped: R2 refuses it
+  (`get: The requested range is not satisfiable (10039)`) and the read faults; check
+  `head`'s `size` first to answer such a request with `416`. The body is still
+  streamed, never buffered.
+- `getStreamIf(key, onlyIf)` reads only when an etag condition holds. `R2GetIf` is
+  `Unconditional`, `IfEtagMatches(etag)` or `IfEtagDiffers(etag)` (the read-side
+  counterpart of `R2Condition`, with distinct names so that `EtagMatches(etag)` stays
+  `R2Condition`'s alone; `Absent` means nothing for a read), and is extensible.
+  The answer is an `R2Read`: `Present(body)` (an `R2Body`, as `getStream` gives),
+  `Missing` for a key that holds nothing, or `NotModified(object)` with the object's
+  metadata when the condition did not hold, so a cache revalidation (`IfEtagDiffers`
+  with the etag the client already has) does not transfer an unchanged object. A
+  failed `IfEtagDiffers` is a cache hit (HTTP `304`); a failed `IfEtagMatches` is
+  HTTP `412 Precondition Failed`, which the name `NotModified` fits less well.
 - `putStream(key, body, size)` writes a stream of exactly `size` bytes. R2 needs
   a stream's length up front (on Workers it goes through a
   `FixedLengthStream`), so a stream holding more or fewer bytes faults the
@@ -694,6 +738,24 @@ objects stream, or are uploaded in parts (below).
   a completion R2 refuses faults, and R2 aborts an upload left incomplete for
   7 days.
 
+A range read answers the bytes and says what they are:
+
+```bynk,fragment
+on GET("/videos/:key") (key: String, start: Int, count: Int) -> Effect[HttpResult[()]] by v: Visitor given Videos {
+  let found <- Videos.getRange(key, Span(start, Some(count)))
+  match found {
+    Some(p) => RawStreamed(p.body, p.object.contentType.getOrElse("application/octet-stream"))
+      .withHeader("Content-Range", "bytes \(p.offset)-\(p.offset + p.length - 1)/\(p.object.size)")
+      .withHeader("Accept-Ranges", "bytes")
+    None => NotFound
+  }
+}
+```
+
+`HttpResult` has no `206 Partial Content` variant yet, so the response above is a `200`
+carrying the `Content-Range` of the bytes it holds; a client that sent `Range` needs the
+`206`, which is a follow-up.
+
 A `@raw` handler whose `body` is a `Stream[Bytes]` can pass it to `putStream`, so a
 client's upload streams into R2 without being held: read the length from the request's
 `content-length` header for `size`. See
@@ -701,8 +763,8 @@ client's upload streams into R2 without being held: read the length from the req
 upload has no length, so send a large object that way as a multipart upload, a part a
 request.
 
-Each instance has its own in-memory bucket in tests, honouring conditions,
-metadata, paging, declared sizes and part rules (all but the 5 MiB minimum, so
+Each instance has its own in-memory bucket in tests, honouring conditions, ranges,
+delimiters, metadata, paging, declared sizes and part rules (all but the 5 MiB minimum, so
 a test needn't build 5 MiB of bytes), so `stub Archives.get(_)` and `expect Archives.get called`
 work as for any capability. `R2` is experimental: list `"bynk.cloudflare.R2"`
 under `[unstable] allow`. `bynk deploy` creates and names the buckets; see
@@ -754,6 +816,10 @@ especially from many locations at once. That suits abuse and cost control. For
 an exact quota (billing, a hard per-account cap), use an agent, one per key,
 as the [rate limiter example](/by-example/projects/rate-limiter/) does. Each
 instance counts on its own: two limiters never share counts.
+
+A limit keyed on the client's address needs no handler code: name the limiter on the route
+with `@rateLimit(PublishLimit, key: clientIp)` and the router refuses a client over its limit
+with a `429` before it reads the body (see [HTTP → Rate limiting](/reference/http/#rate-limiting)).
 
 In tests each instance is a counter per key over windows of its `@period`, on
 the [harness clock](/reference/testing/#time-in-tests), so a case can

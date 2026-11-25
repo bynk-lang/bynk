@@ -33,7 +33,7 @@ use super::super::lower_ctx::LowerCtx;
 use super::super::ts_types::ts_type_ref_to_ts_type;
 use super::super::{ts_ident, ty_to_type_ref};
 use super::{Lowered, Pre, expect_location};
-use crate::ts_build::{call, ident, str_lit};
+use crate::ts_build::{call, ident, str_lit, type_ident};
 
 /// The parameter names of a capability operation, looked up from the capability
 /// declarations in scope (v0.117). Used to destructure a recorded call's
@@ -632,7 +632,7 @@ pub(super) fn lower_call(e: &Expr, name: &Ident, args: &[Expr], cx: &mut LowerCt
             Err(args) => args,
         };
         let callee = bynk_ts::TsExpr::Member {
-            object: Box::new(ident(&sum.name.name)),
+            object: Box::new(type_ident(&sum.name.name)),
             property: tag.to_string(),
         };
         return pre.finish(call(callee, args_lowered));

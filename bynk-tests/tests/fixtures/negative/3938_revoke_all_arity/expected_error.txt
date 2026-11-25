@@ -1,0 +1,2 @@
+bynk.types.method_arity
+# exact

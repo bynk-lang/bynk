@@ -8,6 +8,7 @@ import {
   EMAIL_MAX_RAW_BYTES,
   buildReply,
   dmarcVerdict,
+  dmarcVerdictOf,
   encodeHeaderText,
   handleEmail,
   parseInbound,
@@ -187,6 +188,21 @@ test("a route that lists admitted verdicts refuses other mail before the handler
     assert.equal(seen.mail !== undefined, admitted);
     assert.deepEqual(calls.rejects, admitted ? [] : ["sender not authenticated"]);
   }
+});
+
+test("dmarcVerdictOf reads a case's header map by the Worker's own rule (#3888)", () => {
+  const read = (value: string) => dmarcVerdictOf(new Map([["authentication-results", value]]));
+  const read2 = (key: string, value: string) => dmarcVerdictOf(new Map([[key, value]]));
+  assert.deepEqual(read("mx.cloudflare.net; dmarc=pass header.from=x"), { tag: "DmarcPass" });
+  assert.deepEqual(read("mx.cloudflare.net; dmarc=fail"), { tag: "DmarcFail" });
+  assert.deepEqual(read("evil.example; dmarc=pass"), { tag: "DmarcNone" });
+  assert.deepEqual(dmarcVerdictOf(new Map()), { tag: "DmarcNone" });
+  // Header names are case-insensitive, as at the Worker, where the parser lower-cases them.
+  assert.deepEqual(read2("Authentication-Results", "mx.cloudflare.net; dmarc=pass"), { tag: "DmarcPass" });
+  assert.deepEqual(
+    dmarcVerdictOf(new Map([["Authentication-Results", "mx.cloudflare.net; dmarc=fail"], ["authentication-results", "mx.cloudflare.net; dmarc=pass"]])),
+    { tag: "DmarcFail" },
+  );
 });
 
 test("a lone topmost mx.cloudflare.net header is read as written", async () => {

@@ -629,6 +629,7 @@ BoundaryRejection = RefinementViolation(detail: String)
                   | UnsupportedMediaType(detail: String)
                   | MalformedForm(detail: String)
                   | MalformedPath(detail: String)
+                  | RateLimited(detail: String)
 ```
 
 `Rejected` means the request was refused before the handler ran. `Handled`
@@ -681,7 +682,7 @@ segment only: on a queue, cron, `on call` or event address it is
 `bynk.test.wire_http_only`, and a queue message is passed as a typed value. No refined value is ever built
 from it: the router validates the raw string, which is the whole point.
 
-### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` and `by NoSubject` {#failure-principals}
+### Testing the auth seam with `by Nobody`, `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm`, `by NoSubject` and `by Revoked` {#failure-principals}
 
 `by User("bob")` presents a valid, framework-signed credential the real seam
 verifies. To test the *rejection* — an unauthenticated request — a `system`-tier
@@ -703,7 +704,7 @@ the bytes it sends (the serialised JSON of a typed call, the raw string of a
 [`env`](#env) entry for the actor's `secret`, else a fixed test secret. Below
 `system` nothing changes: the handler runs in process and the seam is skipped.
 
-Eight reserved principals drive the failures. Each yields the same
+Nine reserved principals drive the failures. Each yields the same
 [`HttpOutcome[T]`](#httpoutcome) as a `Wire` call, with the seam's `401` as
 `Rejected(Unauthorized)`:
 
@@ -717,6 +718,7 @@ Eight reserved principals drive the failures. Each yields the same
 | `by WrongAudience` | an `Oidc` token correctly signed and unexpired, whose `aud` is not the actor's audience | a route with an `Oidc` actor |
 | `by WrongAlgorithm` | two otherwise valid `Oidc` tokens under an algorithm the seam must refuse: one with `alg: none` (no signature), and one `HS256`-signed with the JWKS public key as the HMAC secret (algorithm confusion) | a route with an `Oidc` actor |
 | `by NoSubject` | two correctly signed, unexpired `Oidc` tokens with a `sub` the seam must refuse: one empty, one absent | a route with an `Oidc` actor |
+| `by Revoked` | a `SignedCookie` cookie correctly signed and unexpired, for a session that was issued and then revoked in the actor's session agent (`revokeAll`) | a route with a single `SignedCookie` actor declared with `sessions = true` |
 
 On an [actor sum](/book/guides/actors/multiple-callers/) the actor may be one
 member: `by Forged` and `by Stale` sign as the sum's first `Signature` member,
@@ -725,14 +727,15 @@ for its first Bearer member. A sum that admits `Visitor` (`by who: Processor |
 Visitor`) never answers `401`: a request with a missing or bad credential
 resolves as `Visitor`. So none of them is legal there.
 
-All eight are `system`-tier only: below it the seam is skipped and the identity
+All nine are `system`-tier only: below it the seam is skipped and the identity
 is given, so there is no credential to forge (`bynk.test.forged_needs_system`).
 `by Expired` on any other route is `bynk.test.expired_needs_bearer_route`, and
 `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` on a
 route with no `Oidc` actor is `bynk.test.wrong_issuer_needs_oidc_route`,
 `bynk.test.wrong_audience_needs_oidc_route`,
 `bynk.test.wrong_algorithm_needs_oidc_route` or
-`bynk.test.no_subject_needs_oidc_route`.
+`bynk.test.no_subject_needs_oidc_route`. `by Revoked` on a route without a `sessions = true`
+`SignedCookie` actor is `bynk.test.revoked_needs_sessions_route`.
 
 ```bynk,fragment
 case "unsigned, forged and stale notices are refused" as system {
@@ -1007,6 +1010,46 @@ case "the store recovers" {
   expect r is Ok(_)
 }
 ```
+
+### Claiming a refused commit — `expect <call> violates <name>` {#violates}
+
+`expect <call> faults` holds for any fault, so a case meant to prove that
+`paid_has_payment_ref` refuses a bad state also passes when a stub fails or a
+different invariant refuses the commit. `violates` names what refused it:
+
+```bynk,fragment
+case "an unpaid order can't become paid without a reference" {
+  expect Order(Val[OrderId]).markPaid() violates paid_has_payment_ref
+}
+
+case "a paid order can't go back" {
+  do Order(o).pay(ref)
+  expect Order(o).reopen() violates paid_is_terminal
+}
+```
+
+The claim awaits the call and holds only when the commit was refused by the named
+[invariant or transition](/reference/agent-invariants/) of an agent the suite reaches.
+It fails with what happened instead:
+
+| What happened | The failure says |
+|---|---|
+| The call returned | `the call returned without faulting` |
+| Another fault | `the call faulted, but not with a refusal: <kind>` |
+| Another declaration refused the commit | `the commit was refused by invariant few_lines, not paid_has_payment_ref` |
+
+- **The name is one declaration.** An invariant or a transition is named by its own
+  name. A `@unique` constraint is named by its field and key: `violates customers.email`
+  for `store customers: Map[…] @unique(by: email)`. An unknown name is
+  `bynk.expect.unknown_invariant`, which lists the reachable names. When several
+  declarations would refuse the commit at once, the runtime reports the first in
+  declaration order, and the claim matches that one.
+- **Two agents with one name need the agent.** If two agents the suite reaches declare
+  the same name, write `Agent.name`; the bare name is `bynk.expect.ambiguous_invariant`.
+- **It needs an in-process call**, as `faults` does: at `system` a refused commit is a
+  `500` with no payload, so a `system`-tier case cannot claim one
+  (`bynk.test.violates_needs_in_process`).
+- **It takes a call-site `by` clause** between the call and `violates`, as `faults` does.
 
 ### Snapshotting a value — `expect <value> matches snapshot "<name>"` {#snapshots}
 

@@ -1,0 +1,17 @@
+context shop.support
+
+consumes bynk.cloudflare {
+  InboundEmail,
+  EmailVerdict,
+  EmailReply,
+  DmarcVerdict,
+  SenderIdentity,
+}
+
+actor Authenticated = Sender where Dmarc(DmarcPass)
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by s: Authenticated {
+    Reply(EmailReply { text: Some("Thanks, we have your message.") })
+  }
+}

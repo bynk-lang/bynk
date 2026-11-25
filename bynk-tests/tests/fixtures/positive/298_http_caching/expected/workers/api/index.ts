@@ -22,7 +22,7 @@ export default {
       const path = url.pathname;
       const method = request.method;
       const surface = compose(env);
-      const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS", "POST"], allowHeaders: ["content-type"], credentials: false, maxAgeSecs: 3600 };
+      const __cors_api: __CorsPolicy = { origins: ["https://app.example.com"], allowMethods: ["GET", "HEAD", "OPTIONS", "POST"], allowHeaders: ["content-type"], exposeHeaders: ["WWW-Authenticate", "Retry-After", "Location", "ETag"], credentials: false, maxAgeSecs: 3600 };
       const __security_api: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
       let __route: string = "request";
       try {

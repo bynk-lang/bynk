@@ -137,6 +137,29 @@ pub(super) fn emit_system_job_support(
                     &type_ns,
                     runtime_use,
                 );
+                // #3899: a signed consumer's driver also takes the foreign actor the case acts as,
+                // and signs the message as that actor would (unsigned with none).
+                let signed =
+                    bynk_check::actors::queue_admission_for(h, &decl.protocol, &table.actors);
+                let body = match &signed {
+                    Some(admission) => await_expr(call(
+                        ident("__bynkSysQueueBody"),
+                        vec![
+                            env.clone(),
+                            TsExpr::object(
+                                admission
+                                    .foreign
+                                    .iter()
+                                    .map(|f| (f.actor.clone(), str_lit(f.secret.clone())))
+                                    .collect(),
+                            ),
+                            ident("as"),
+                            str_lit(name.clone()),
+                            body,
+                        ],
+                    )),
+                    None => body,
+                };
                 let mut forward_args = vec![ident("batch"), env.clone()];
                 if target_sends {
                     forward_args.push(ident("exec"));
@@ -164,8 +187,12 @@ pub(super) fn emit_system_job_support(
                     param_name,
                     Some(driver_param_type(&p.type_ref)),
                 )];
-                if has_delivery {
+                if has_delivery || signed.is_some() {
                     driver_params.push(TsParam::optional("delivery", Some(any_type())));
+                }
+                if signed.is_some() {
+                    driver_params.push(TsParam::optional("as", Some(TsType::named("string"))));
+                    services.signed_queue.insert(sname.clone());
                 }
                 drivers.push(async_driver(
                     format!("__sysdrive_message_{sname}"),
@@ -225,6 +252,10 @@ pub(super) fn emit_system_job_support(
         // #3328: only a target with an email service carries the email driver.
         if !services.email.is_empty() {
             code.push(TestRuntimeModule::JobsEmail.splice());
+        }
+        // #3899: only a target with a signed queue consumer carries the test producer's signer.
+        if !services.signed_queue.is_empty() {
+            code.push(TestRuntimeModule::QueueSigner.splice());
         }
         code.extend(drivers);
     }

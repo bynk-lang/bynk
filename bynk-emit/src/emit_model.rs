@@ -908,7 +908,8 @@ fn first_party_of(cap: &str, provider_ctx: &str) -> Option<FirstPartyCap> {
 }
 
 /// W30 (#2840): does any body in this unit call the first-party `Idempotency`
-/// (`claim`, `dedup` or `remember`)? A Worker that does declares the implicit
+/// (`claim`, `dedup` or `remember`), or (#3899) does it have a queue consumer that admits only
+/// signed messages, whose entry claims each message id? A Worker that does declares the implicit
 /// database that holds its claims and remembered values. The checker resolved each call's
 /// first-party identity (`consumes bynk { Idempotency }` makes `Idempotency` a local name for the
 /// `bynk` capability), so a same-named capability from another unit does not
@@ -917,6 +918,14 @@ pub fn unit_table_uses_idempotency(
     table: &UnitTable,
     callees: Option<&HashMap<ExprId, bynk_check::checker::Callee>>,
 ) -> bool {
+    let signed_consumer = table.services.values().any(|s| {
+        s.handlers.iter().any(|h| {
+            bynk_check::actors::queue_admission_for(h, &s.protocol, &table.actors).is_some()
+        })
+    });
+    if signed_consumer {
+        return true;
+    }
     let Some(callees) = callees else {
         return false;
     };

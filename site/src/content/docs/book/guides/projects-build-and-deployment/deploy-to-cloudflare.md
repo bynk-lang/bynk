@@ -39,10 +39,13 @@ kind, and a `bynk.toml` variable no constant reads are all build errors. Keep
 secrets out of `[vars]`: `bynk.toml` is committed, so use `Secrets` instead.
 
 `bynk deploy --env staging` builds with `[env.staging.vars]`, and the plan lists
-each constant with its value and where it came from, so you see a staging Worker
-about to use production's value before anything is pushed. Add
-`--strict-environments` to refuse that. See [Constants](/reference/constants/)
-for the full rules.
+each constant with its value and where it came from. A named environment that
+takes `default`'s value is called out as `shared with default: …` (also in
+`--format json`, as `shared_with_default`): an `env(…)` constant left to `[vars]`
+or its default, and a `Service @worker` or `Email @to` / `@allowedRecipients`
+equal to `default`'s, so you see a staging Worker about to use production's value
+before anything is pushed. Add `--strict-environments` to refuse that. See
+[Constants](/reference/constants/) for the full rules.
 
 ## Review a plan
 

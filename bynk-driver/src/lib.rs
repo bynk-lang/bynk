@@ -15,6 +15,8 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 use render::LabelHome;
 
+/// The name of the environment a build uses when `--env` is omitted (#3941).
+pub use bynk_project::vars::DEFAULT_ENVIRONMENT;
 pub mod colour;
 pub mod compile_cmd;
 pub mod contracts_lock;
@@ -1255,6 +1257,7 @@ pub fn run_check(
     short: bool,
     fix: Option<&[String]>,
     each: bool,
+    environment: &str,
 ) -> ExitCode {
     let scope = match fix.map(fix::Scope::codes).transpose() {
         Ok(scope) => scope,
@@ -1302,7 +1305,7 @@ pub fn run_check(
             if !short {
                 eprintln!("{}", member_header(member));
             }
-            failed |= !check_one(prog, member, short, Some(member));
+            failed |= !check_one(prog, member, short, Some(member), environment);
         }
         return if failed {
             ExitCode::FAILURE
@@ -1313,7 +1316,7 @@ pub fn run_check(
     let fixed = scope
         .as_ref()
         .is_none_or(|scope| fix::fix_all(prog, scope, &[(input, prog.to_string())]));
-    if check_one(prog, input, short, None) && fixed {
+    if check_one(prog, input, short, None, environment) && fixed {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
@@ -1441,7 +1444,13 @@ pub fn member_header(member: &Path) -> String {
 /// [`run_check`] over one project or file; `true` when it passes. `member`
 /// names the workspace member being checked, so a project-level error says
 /// which one it is.
-fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bool {
+fn check_one(
+    prog: &str,
+    input: &Path,
+    short: bool,
+    member: Option<&Path>,
+    environment: &str,
+) -> bool {
     let prog = match member {
         Some(m) => format!("{prog}: {}", shown(m)),
         None => prog.to_string(),
@@ -1449,7 +1458,8 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
     let prog = prog.as_str();
     if input.is_dir() {
         let options = match try_project_options(input) {
-            Ok(o) => o,
+            // #3941: `--env` selects whose `env(…)` values the check resolves.
+            Ok(o) => o.environment(environment),
             Err(e) => {
                 crate::emsg!("{prog}: error: {e}");
                 return false;
@@ -2108,6 +2118,250 @@ mod tests {
                 "commons config\n\nconst Lines: String = env(A, env(B, \"x\"))\n"
             ),
             Err(vec!["bynk.env.not_initialiser"])
+        );
+    }
+
+    /// #3942: a derived capability instance's option takes a constant, and the
+    /// binding is the one the literal gives. A constant of the wrong type keeps
+    /// the option's own error.
+    #[test]
+    fn instance_options_take_constants() {
+        let build = |name: &str, worker_arg: &str, consts: &str| {
+            let dir = scratch_dir(name);
+            fs::write(
+                dir.0.join("bynk.toml"),
+                "[project]\nname = \"p\"\n\n[unstable]\nallow = [\"bynk.cloudflare.Service\"]\n",
+            )
+            .unwrap();
+            fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+            let source = format!(
+                "context shop.billing\n\nconsumes bynk\nconsumes bynk.cloudflare {{ Service }}\n\n{consts}capability Billing = Service @worker({worker_arg})\n\nservice charge {{\n\ton call(id: String) -> Effect[Int] by Caller given Billing {{\n\t\tlet req = Request {{\n\t\t\tmethod: Post,\n\t\t\turl: \"https://legacy-billing/charge\",\n\t\t\tcontentType: Some(\"text/plain\"),\n\t\t\tauthorization: None,\n\t\t\theaders: Map.empty(),\n\t\t\tbody: Some(id),\n\t\t}}\n\t\tlet res <- Billing.send(req)\n\t\tmatch res {{\n\t\t\tOk(r) => r.status,\n\t\t\tErr(_) => 0,\n\t\t}}\n\t}}\n}}\n"
+            );
+            fs::write(dir.0.join("src/shop/billing.bynk"), source).unwrap();
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .target(project::BuildTarget::Workers);
+            project::compile_project(&options)
+                .map(|out| {
+                    out.artefacts
+                        .docs
+                        .iter()
+                        .filter(|(p, _)| p.ends_with("wrangler.toml"))
+                        .map(|(_, d)| d.text().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .map_err(|f| {
+                    f.errors
+                        .iter()
+                        .map(|e| e.error.category)
+                        .collect::<Vec<_>>()
+                })
+        };
+        let literal = build("inst_literal", "\"legacy-billing\"", "").expect("builds");
+        assert!(literal.contains("legacy-billing"), "{literal}");
+        let named = build(
+            "inst_const",
+            "BillingWorker",
+            "const BillingWorker: String = \"legacy-billing\"\n\n",
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "a constant gives the literal's binding");
+        let chained = build(
+            "inst_chain",
+            "Outer",
+            "const Inner: String = \"legacy-billing\"\nconst Outer: String = Inner\n\n",
+        )
+        .expect("builds");
+        assert_eq!(literal, chained);
+        // The wrong type is refused with the option's own error.
+        assert_eq!(
+            build("inst_wrong_type", "Lines", "const Lines: Int = 3\n\n"),
+            Err(vec!["bynk.capability.invalid_option"])
+        );
+    }
+
+    /// #3942 review: the `Int`, `Duration` and list options, a constant through
+    /// `uses`, and what an error about a constant's value says.
+    #[test]
+    fn instance_option_constants_cover_each_kind_and_say_where_a_value_came_from() {
+        // A context with `body` after the consumes line, plus extra files; the
+        // wrangler text, or each error as `(code, message, notes, labels)`.
+        type Failure = (String, String, Vec<String>, usize);
+        let build = |name: &str, base: &str, body: &str, extra: &[(&str, &str)]| {
+            let dir = scratch_dir(name);
+            fs::write(
+                dir.0.join("bynk.toml"),
+                format!(
+                    "[project]\nname = \"p\"\n\n[unstable]\nallow = [\"bynk.cloudflare.{}\"]\n",
+                    base.split(',').next().unwrap_or(base).trim()
+                ),
+            )
+            .unwrap();
+            fs::create_dir_all(dir.0.join("src/shop")).unwrap();
+            fs::write(
+                dir.0.join("src/shop/main.bynk"),
+                format!("context shop.main\n\nconsumes bynk\nconsumes bynk.cloudflare {{ {base} }}\n\n{body}"),
+            )
+            .unwrap();
+            for (rel, text) in extra {
+                fs::write(dir.0.join(rel), text).unwrap();
+            }
+            let options = try_project_options(&dir.0)
+                .expect("reads")
+                .target(project::BuildTarget::Workers);
+            project::compile_project(&options)
+                .map(|out| {
+                    out.artefacts
+                        .docs
+                        .iter()
+                        .filter(|(p, _)| p.ends_with("wrangler.toml"))
+                        .map(|(_, d)| d.text().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .map_err(|f| -> Vec<Failure> {
+                    f.errors
+                        .iter()
+                        .map(|e| {
+                            (
+                                e.error.category.to_string(),
+                                e.error.message.clone(),
+                                e.error.notes.clone(),
+                                e.error.labels.len(),
+                            )
+                        })
+                        .collect()
+                })
+        };
+        let use_rate = "service api from http {\n\ton GET(\"/x\") () -> Effect[HttpResult[String]] by Visitor given Gate {\n\t\tlet ok <- Gate.allow(\"k\")\n\t\tOk(\"x\")\n\t}\n}\n";
+        // `Int` and `Duration` options.
+        let literal = build(
+            "inst_rate_literal",
+            "RateLimit",
+            &format!("capability Gate = RateLimit @limit(20) @period(1.minute)\n\n{use_rate}"),
+            &[],
+        )
+        .expect("builds");
+        let named = build(
+            "inst_rate_const",
+            "RateLimit",
+            &format!("const Cap: Int = 20\nconst Window: Duration = 1.minute\n\ncapability Gate = RateLimit @limit(Cap) @period(Window)\n\n{use_rate}"),
+            &[],
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "`Int` and `Duration` constants");
+        // A `Duration` constant outside the window set keeps the window error,
+        // and says where the value came from.
+        let errors = build(
+            "inst_rate_bad_window",
+            "RateLimit",
+            &format!("const Odd: Duration = 7.seconds\n\ncapability Gate = RateLimit @limit(20) @period(Odd)\n\n{use_rate}"),
+            &[],
+        )
+        .expect_err("a window the platform does not offer");
+        assert!(
+            errors.iter().any(
+                |(code, _, notes, labels)| code == "bynk.capability.invalid_option"
+                    && notes
+                        .iter()
+                        .any(|n| n.contains("the value comes from `const Odd`"))
+                    && *labels == 1
+            ),
+            "{errors:?}"
+        );
+        // A correctly typed constant whose value fails the option's own rule.
+        let use_svc = "service charge {\n\ton call(id: String) -> Effect[Int] by Caller given Billing {\n\t\tlet req = Request { method: Post, url: \"https://x/c\", contentType: None, authorization: None, headers: Map.empty(), body: Some(id) }\n\t\tlet res <- Billing.send(req)\n\t\tmatch res { Ok(r) => r.status, Err(_) => 0 }\n\t}\n}\n";
+        let errors = build(
+            "inst_bad_value",
+            "Service",
+            &format!("const W: String = \"Legacy Billing\"\n\ncapability Billing = Service @worker(W)\n\n{use_svc}"),
+            &[],
+        )
+        .expect_err("not a Worker name");
+        assert!(
+            errors.iter().any(
+                |(code, message, notes, _)| code == "bynk.capability.invalid_option"
+                    && message.contains("Legacy Billing")
+                    && notes
+                        .iter()
+                        .any(|n| n.contains("the value comes from `const W`"))
+            ),
+            "{errors:?}"
+        );
+        // A constant reached through `uses` from a commons.
+        let names = (
+            "src/shop/names.bynk",
+            "commons shop.names\n\nconst BillingWorker: String = \"legacy-billing\"\n",
+        );
+        let through_uses = build(
+            "inst_uses",
+            "Service",
+            &format!(
+                "uses shop.names\n\ncapability Billing = Service @worker(BillingWorker)\n\n{use_svc}"
+            ),
+            &[names],
+        );
+        let via_literal = build(
+            "inst_uses_literal",
+            "Service",
+            &format!("capability Billing = Service @worker(\"legacy-billing\")\n\n{use_svc}"),
+            &[],
+        )
+        .expect("builds");
+        assert_eq!(
+            through_uses.expect("a used commons' constant resolves"),
+            via_literal
+        );
+        // List elements: a constant resolves; one of the wrong type is refused
+        // with the note on what a constant must be.
+        let use_mail = "service api from http {\n\ton POST(\"/r\") () -> Effect[HttpResult[String]] by Visitor given Mail {\n\t\tlet sent <- Mail.send(EmailMessage { from: \"a@shop.example\", to: [\"audit@shop.example\"], subject: \"s\", text: Some(\"t\") })\n\t\tOk(\"x\")\n\t}\n}\n";
+        let literal = build(
+            "inst_list_literal",
+            "Email, EmailMessage",
+            &format!(
+                "capability Mail = Email @allowedRecipients([\"audit@shop.example\"])\n\n{use_mail}"
+            ),
+            &[],
+        )
+        .expect("builds");
+        let named = build(
+            "inst_list_const",
+            "Email, EmailMessage",
+            &format!("const Audit: String = \"audit@shop.example\"\n\ncapability Mail = Email @allowedRecipients([Audit])\n\n{use_mail}"),
+            &[],
+        )
+        .expect("builds");
+        assert_eq!(literal, named, "a constant list element");
+        let errors = build(
+            "inst_list_unresolved",
+            "Email, EmailMessage",
+            &format!("const Bad: Int = 3\n\ncapability Mail = Email @allowedRecipients([Bad])\n\n{use_mail}"),
+            &[],
+        )
+        .expect_err("an `Int` is not an address");
+        assert!(
+            errors.iter().any(
+                |(code, _, notes, _)| code == "bynk.capability.invalid_option"
+                    && notes
+                        .iter()
+                        .any(|n| n.contains("`Bad` is not a constant declared exactly"))
+            ),
+            "{errors:?}"
+        );
+        // A constant element whose value is not an address says where it came from.
+        let errors = build(
+            "inst_list_bad_address",
+            "Email, EmailMessage",
+            &format!("const Audit: String = \"not an address\"\n\ncapability Mail = Email @allowedRecipients([Audit])\n\n{use_mail}"),
+            &[],
+        )
+        .expect_err("not an address");
+        assert!(
+            errors.iter().any(|(_, _, notes, _)| notes
+                .iter()
+                .any(|n| n.contains("some of the values come from `const Audit`"))),
+            "{errors:?}"
         );
     }
 

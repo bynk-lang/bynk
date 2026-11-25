@@ -4277,6 +4277,7 @@ impl<'a> Parser<'a> {
             value,
             span,
             from_const: None,
+            element_consts: Vec::new(),
         })
     }
 

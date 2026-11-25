@@ -113,7 +113,10 @@ annotation: `@name(VisitsCookie)`
 ([`@name`](/reference/types/#field-name)), `@ttl(SessionTtl)`,
 `@retain`, `@cache(maxAge: Fresh, immutable: Pinned)`,
 `@limit(maxBody: MaxUpload)`, `@schema`, `@raw(contentType: Png)` and
-`@example`. The compiler replaces the reference with the literal before it
+`@example`, and in a derived capability instance's options
+(`Service @worker(BillingWorker)`, `Queue @name(OrdersQueue)`,
+`RateLimit @limit(PerMinute)`; see
+[Derived capabilities](/reference/capabilities/#derived-capabilities)). The compiler replaces the reference with the literal before it
 reads the annotation, so the value is written once and checked as the literal
 would be. A keyword argument such as `@cache(scope: public)` is a word, not a
 value, and stays as written.
@@ -189,8 +192,11 @@ case) keeps its own name and meaning.
   lists every `env(…)` constant with its resolved value and where it came from
   (`[env.<name>.vars]`, `[vars]` or the constant's default). A named environment
   that leaves a constant to `[vars]` or its default would use another
-  environment's setting, so the plan says so, and `--strict-environments`
-  refuses it.
+  environment's setting, so the plan lists it as `shared with default`, as it
+  does a `Service @worker` or `Email @to` / `@allowedRecipients` whose value
+  equals `default`'s, in text and in `--format json`. Setting the variable under
+  `[env.<name>.vars]`, even to the same value, records the sharing as deliberate.
+  `--strict-environments` refuses it.
 - A package consumed as a dependency cannot declare an `env(…)` constant
   (`bynk.env.in_dependency`): reading deployment configuration is the
   application's business, and a library takes values as parameters.
@@ -198,5 +204,8 @@ case) keeps its own name and meaning.
   `*_PASSWORD` warns (`bynk.env.secret_like_name`): keep secrets in `Secrets`.
 
 A plain build, `bynk check`, `bynk test` and `bynk dev` use the `default`
-environment's values. `--env` on those commands comes in a following increment;
-today `bynk deploy --env` is the way to build another environment's values.
+environment's values. `--env <name>` on `bynk check`, `build`, `compile`, `test`
+and `dev`, as on `bynk deploy`, builds with another environment's: a required
+variable with no value in that environment (and none in `[vars]`) is
+`bynk.env.missing` there, so `bynk check --env staging` finds it before a deploy
+does. A suite's `env { … }` is run-time and unaffected.

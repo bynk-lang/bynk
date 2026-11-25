@@ -1,5 +1,5 @@
 {
-  "blurb": "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. A single string, an empty list, a computed entry or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
+  "blurb": "`origins` is the allowlist the router checks each request's `Origin` against, so it is required and must be a non-empty list of string literals: exact origins such as `\"https://app.example.com\"`, or `[\"*\"]` for any site. An entry may instead name a `String` constant, and the whole list may name a `List[String]` constant (one an `env(…)` constant can set per environment), since a constant is read as the literal it is bound to. A single string, an empty list, a computed entry, a constant of another type or no `origins` at all leaves nothing to compare, and is refused. The wildcard cannot be combined with `credentials: true`: `bynk.http.cors_wildcard_credentials`.",
   "category": "HTTP",
   "categoryAnchor": "http",
   "code": "bynk.http.cors_invalid_origins",

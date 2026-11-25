@@ -1,0 +1,30 @@
+suite shop as integration {
+  case "a record key is claimed once" {
+    let first <- claims.call("r", "d1")
+    let again <- claims.call("r", "d1")
+    let other <- claims.call("r", "d2")
+    expect first
+    expect !again
+    expect other
+  }
+
+  case "a sum key round-trips a remembered value" {
+    let n <- sums.call(true, 5)
+    expect n == 5
+  }
+
+  case "a refined String key round-trips" {
+    let n <- refined.call("abc", 7)
+    expect n == 7
+  }
+
+  case "an Int key round-trips" {
+    let n <- numbers.call(3, 9)
+    expect n == 9
+  }
+
+  case "a written type argument types its argument, with the key inferred" {
+    let n <- contextual.call(10)
+    expect n == 1
+  }
+}

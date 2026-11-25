@@ -241,7 +241,7 @@ locally](/book/guides/projects-build-and-deployment/run-locally/) for a worked
 walkthrough.
 
 ```text
-bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--local-worker NAME]... [--format human|json] [--log-events] [--trace-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
+bynk dev [PATH] [--context NAME]... [--base-port N] [--inspect] [--inspect-port N] [--env NAME] [--local-worker NAME]... [--format human|json] [--log-events] [--trace-events] [--rewrite-frames] [--ready-json FILE] [--no-install] [-- <wrangler args>]
 bynk dev inspect agents|agent …   # read a running session; see Inspecting agents
 ```
 
@@ -257,6 +257,7 @@ run it inside a member.
 | `--inspect` | off | Serve with the V8 inspector enabled (`wrangler dev --inspector-port`) so a JavaScript debugger can attach. Breakpoints set in `.bynk` sources resolve through the emitted source maps, composed into the worker bundle. Prints an inspector URL per context on start. |
 | `--inspect-port N` | `9229` under `--inspect` or with several contexts; a free port otherwise | First inspector port, allocated per context exactly as `--base-port` is, and always honoured, for a single context too. wrangler always starts an inspector, so left on its default every session would race for 9229. Several contexts, or `--inspect`, start from 9229 unless you pass a port; a single context without `--inspect` is given a free port, so sessions started together do not collide. A port something already holds is reported by `bynk dev` before wrangler starts. A range that overlaps the `--base-port` range is an error. |
 | `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
+| `--env NAME` | `default` | The environment whose `[env.<name>.vars]` values the project's [`env(…)` constants](/reference/constants/#values-that-differ-per-environment) take for the build `dev` runs, so a local run can use staging's values. With `-- --remote`, it also selects which `bynk.deploy.lock` section the remote resource ids are read from. |
 | `--local-worker NAME` | none | A Worker outside the project, named by a [`Service` instance](/book/guides/effects-and-capabilities/call-a-foreign-worker/) (`@worker("NAME")`), to reach in your own locally running `wrangler dev` of it instead of the stand-in `bynk dev` binds by default. **Repeatable.** A name no served context binds is warned about. |
 | `--format human\|json` | `human` | `human` is the readable stream on stderr. `json` adds one JSON lifecycle event per line on stdout (see [Lifecycle events](#lifecycle-events)), and moves `wrangler dev`'s own stdout to stderr so stdout carries only events. |
 | `--log-events` | off | With `--format json`, also write each line a worker prints as a `log` event (see [Worker logs](#worker-logs)). |
@@ -616,7 +617,7 @@ run it inside a member. Each member keeps its own deploy state.
 | `--worker NAME` | every Worker | Deploy one Worker by its directory name under `workers/`: a [`[deploy.workers.<key>]`](/reference/tooling/manifest/#worker-groups) group's key, or a context's worker-directory form (`a-b`). A group is one Worker, so it deploys as a unit; naming one of its members with `--context` is refused, with the Worker that holds it. Like `--context`, it assumes the Workers it binds to are already live. Not with `--context`. |
 | `--dry-run`, `--plan` | off | Print the per-context plan and resolved order, then exit without changing Cloudflare or `bynk.deploy.lock`. With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set it reads the account to check what it would create (see below); without them it works offline. |
 | `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
-| `--strict-environments` | off | Refuse a deploy to a named `--env` when an `env(…)` constant takes a `[vars]` or default value instead of that environment's own (`[env.<name>.vars]`): the Worker would use another environment's setting. The plan always lists each `env(…)` constant with its value and where it came from. |
+| `--strict-environments` | off | Refuse a deploy to a named `--env` that shares a value with `default`: an `env(…)` constant taking a `[vars]` or default value instead of the environment's own, or a `Service @worker` or `Email @to` / `@allowedRecipients` equal to `default`'s. The plan always lists each `env(…)` constant with its value and where it came from, and each shared value as `shared with default: …` (`shared_with_default` in `--format json`); setting the variable under `[env.<name>.vars]` records the sharing as deliberate. If `default` cannot be built, so the comparison cannot be made, the plan says so and this flag refuses. |
 | `--format FORMAT` | `short` | Plan output: line-oriented `short` or machine-readable `json`. |
 | `--yes` | off | Skip the confirmation required before a resource is created or a Worker is published. Required for non-interactive calls. |
 | `--secrets-file PATH` | — | Read secret **names and values** from a dotenv-style `NAME=value` file. Never committed, never persisted: values move to `wrangler secret put` and are dropped. |
@@ -739,7 +740,7 @@ fetched into it. With `--locked` it fails instead of writing the lock, as
 instead of fetching.
 
 ```text
-bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--locked] [--offline]
+bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [--env NAME] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -750,6 +751,7 @@ bynk check [INPUT] [--format rich|short] [--fix[=CODE,…]] [--emit] [--each] [-
 | `--fix[=CODE,…]` | off | Apply the machine-applicable fix suggestions to the sources, in place, before checking. With `=CODE` (comma-separated, or repeated), only those diagnostic codes' fixes. See [Applying fixes](#applying-fixes). |
 | `--emit` | off | After a passing check, generate the Workers TypeScript into a temporary directory and type-check it with `tsc`. See [Type-checking the generated code](#type-checking-the-generated-code). Needs a project directory, and `tsc` (with Node.js). |
 | `--each` | off | Check each project directly inside a directory that has no `bynk.toml`. See [A directory of projects](#a-directory-of-projects). |
+| `--env NAME` | `default` | The environment whose `[env.<name>.vars]` values the project's [`env(…)` constants](/reference/constants/#values-that-differ-per-environment) take: its own table, then `[vars]`, then each constant's default. |
 
 **Exit code** — `0` when the input type-checks (warnings are surfaced but do not
 fail the build, per the [diagnostics rule](#exit-codes-and-diagnostics));
@@ -877,7 +879,7 @@ Build a project into its output directory, taking its settings from
 equals `bynk compile . -o out` for a project with no `[build]` table.
 
 ```text
-bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--profile dev|release] [--locked] [--offline]
+bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--profile dev|release] [--env NAME] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -888,6 +890,7 @@ bynk build [INPUT] [--out DIR] [--target bundle|workers] [--platform cloudflare|
 | `--platform` | `[build] platform`, else `cloudflare` | The surface binding. |
 | `--emit` | `[build] emit`, else `ts` | `ts` or `js`. |
 | `--profile` | `release` | `release` builds without contract checks, the same bytes `compile` writes; `dev` builds with them. [`[profile.<name>]`](/reference/tooling/manifest/#profilename) overrides a profile's `contracts`. |
+| `--env NAME` | `default` | The environment whose `[env.<name>.vars]` values the project's [`env(…)` constants](/reference/constants/#values-that-differ-per-environment) take: its own table, then `[vars]`, then each constant's default. |
 
 Each setting is the flag, else the `[build]` key, else the default. On success
 `build` prints one line, `bynk: built <target> -> <out>` (a build that is not the plain release one adds its profile: `built bundle (dev profile, contracts on) -> out`); warnings print as
@@ -909,7 +912,7 @@ Compiled Output** view; for a build you deploy, use [`bynk dev`](#bynk-dev) or
 [`bynk deploy`](#bynk-deploy).
 
 ```text
-bynk compile [INPUT] --output DIR [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--sources-stdin] [--locked] [--offline]
+bynk compile [INPUT] --output DIR [--target bundle|workers] [--platform cloudflare|node|browser] [--emit ts|js] [--sources-stdin] [--env NAME] [--locked] [--offline]
 ```
 
 | Argument | Default | Meaning |
@@ -920,6 +923,7 @@ bynk compile [INPUT] --output DIR [--target bundle|workers] [--platform cloudfla
 | `--platform` | `cloudflare` | The surface binding: `cloudflare`, `node`, or `browser` (`bundle` only). |
 | `--emit` | `ts` | `ts` writes typed TypeScript; `js` writes the same modules with types stripped. |
 | `--sources-stdin` | off | Compile unsaved buffers: read a JSON object `{ "<absolute path>": "<text>" }` from stdin and layer it over the project's sources, so the overlay wins over the files on disk. A `.bynk` path inside the project that the build did not read is added, as an unsaved new file; a path outside the project, or one that is not a `.bynk` file, is an error and nothing is built. |
+| `--env NAME` | `default` | The environment whose `[env.<name>.vars]` values the project's [`env(…)` constants](/reference/constants/#values-that-differ-per-environment) take: its own table, then `[vars]`, then each constant's default. |
 
 `--sources-stdin` makes the run a **preview build**: `bynk.schema.lock` is
 neither read nor written, so nothing changes outside `--output`. Only `.bynk`
@@ -1124,7 +1128,7 @@ Discover and run a project's test declarations, **in-process**. It still starts 
 Node.js) or `tsx` on `PATH`.
 
 ```text
-bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--no-install] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
+bynk test [INPUT] [--each] [--env NAME] [-o OUTPUT] [--no-run] [--require-tests] [--format rich|json|ndjson] [--inspect] [--seed HEX] [--case NAME]... [--suite NAME]... [--coverage] [--against TARGET [--skip-unsupported] [--settle DURATION]] [--smoke [--print] [--smoke-unsafe]] [--no-install] [--update-snapshots] [--mutate [--only DECL] [--max-mutants N] [--mutate-timeout SECONDS] [--mutate-all-suites] [--mutate-fail-under PERCENT] [--changed GIT_REF] [--mutate-jobs N]]
 ```
 
 | Argument | Default | Meaning |
@@ -1133,6 +1137,7 @@ bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format ri
 | `-o, --output OUTPUT` | `<input>/out` | Where to write the compiled TypeScript test-runner modules. |
 | `--no-run` | off | Skip the runner. With `--format rich`, emit the generated test files; with `--format json`, emit a discovery document listing every suite and case without running them. |
 | `--each` | off | Test each project directly inside a directory that has no `bynk.toml`. See [A directory of projects](#a-directory-of-projects). |
+| `--env NAME` | `default` | The environment whose `[env.<name>.vars]` values the project's [`env(…)` constants](/reference/constants/#values-that-differ-per-environment) take, as for `bynk build`. A suite's `env { … }` is run-time and unaffected. Refused with `--mutate` and `--against`, which would ignore it. |
 | `--require-tests` | off | Fail when the project declares no tests. Without it, `bynk test` prints `warning: no tests found in <dir>` on stderr and exits 0; with it that is an `error:` and exit 1 (`error.kind == "no_tests"` under `--format json`). Applies with `--no-run`. At a workspace root, each member must declare a test. |
 | `--format` | `rich` | `rich` is the grouped ✓ / ✗ human output; `json` is a single pinned JSON document of results, for tooling; `ndjson` is the same results as a stream of one JSON event per line, written as each suite finishes (see [Streaming results](#streaming-results)). `ndjson` is refused with `--coverage` and `--no-run`, and across a workspace. |
 | `--inspect` | off | Launch the runner under Node's inspector (`node --inspect-brk`) and print the inspector URL. Requires Node ≥ 22.18 (or ≥ 23.6 unflagged). Does not run `tsc`. |
@@ -1148,7 +1153,7 @@ bynk test [INPUT] [--each] [-o OUTPUT] [--no-run] [--require-tests] [--format ri
 | `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command and `out`, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
 | `--smoke-unsafe` | off | With `--smoke --against <target>`, also call the routes that write (`POST`, `PUT`, `PATCH`, `DELETE`). |
 | `--update-snapshots` | off | Record snapshots instead of comparing: write each `expect … matches snapshot` that has no stored snapshot, refresh the ones whose value changed, and delete the obsolete ones, in `snapshots/<suite file>.snap.json`. Without it a missing snapshot fails the case, a changed one fails with a diff, and an obsolete one is only reported. See [Snapshots](/reference/testing/#snapshots). Incompatible with `--against`, `--smoke`, `--coverage`, `--inspect` and `--no-run`. |
-| `--mutate` | off | Check that the suites would notice a small change to the code: apply one typed mutation at a time to `src/`, run the suites that exercise the mutated unit, and report the mutants no suite failed on. See [Mutation testing](#mutation-testing). Incompatible with `--inspect`, `--no-run`, `--coverage`, `--against`, `--smoke`, `--update-snapshots`, `--case` and `--format ndjson`. |
+| `--mutate` | off | Check that the suites would notice a small change to the code: apply one typed mutation at a time to `src/`, run the suites that exercise the mutated unit, and report the mutants no suite failed on. See [Mutation testing](#mutation-testing). Incompatible with `--inspect`, `--no-run`, `--coverage`, `--against`, `--smoke`, `--update-snapshots`, `--case`, `--env` and `--format ndjson`. |
 | `--only DECL` | — | With `--mutate`, mutate only `unit.decl` (`orders.refund`), or every declaration of `unit`. |
 | `--max-mutants N` | — | With `--mutate`, stop after `N` mutants, in source order. |
 | `--mutate-timeout SECONDS` | 3× the unmutated run, at least 10 | With `--mutate`, kill a mutant's run after this long; it counts as killed. |

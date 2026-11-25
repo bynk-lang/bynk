@@ -29,6 +29,13 @@ pub(crate) fn ident(s: impl Into<String>) -> TsExpr {
     TsExpr::Ident(s.into())
 }
 
+/// A Bynk type's name as an identifier: a type a `uses` full-name qualifier names
+/// (`lib.y.Status`) is read through the unit's namespace import of the commons
+/// (#4397), as every other name written that way is.
+pub(crate) fn type_ident(name: &str) -> TsExpr {
+    ident(bynk_check::emitted_names::use_qualified_name(name).unwrap_or_else(|| name.to_string()))
+}
+
 /// `"text"`.
 pub(crate) fn str_lit(s: impl Into<String>) -> TsExpr {
     TsExpr::Lit(TsLit::Str(s.into()))
@@ -289,6 +296,23 @@ pub(crate) fn for_await_of(binding: impl Into<String>, iter: TsExpr, body: TsStm
 /// `switch (discriminant) { cases }`.
 pub(crate) fn switch_stmt(discriminant: TsExpr, cases: Vec<TsSwitchCase>) -> TsStmt {
     TsStmt::switch_stmt(discriminant, cases, None)
+}
+
+/// #4382: `actual` (a call's recorded type key, `"[Quote, Channel]"`) answers the type arguments
+/// a `stub` or an observation names (`key`, `"[Quote]"`): the same list, or one that starts with
+/// it. `dedup[A]` and `dedup[B]` stay apart; `dedup[Quote]` meets a call that inferred its key.
+pub(crate) fn type_key_matches(actual: TsExpr, key: &str) -> TsExpr {
+    let prefix = [key.strip_suffix(']').unwrap_or(key), ", "].concat();
+    or_expr(
+        strict_eq(actual.clone(), str_lit(key)),
+        call(
+            member(
+                call(member(ident("globalThis"), "String"), vec![actual]),
+                "startsWith",
+            ),
+            vec![str_lit(&prefix)],
+        ),
+    )
 }
 
 #[cfg(test)]

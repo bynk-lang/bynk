@@ -6,6 +6,27 @@
 use super::usefulness::{Coverage, FUTURE_VARIANT_CLOSE, FUTURE_VARIANT_OPEN};
 use super::*;
 
+/// #3918: whether `ty` is a `Stream[SseEvent]`, the `bynk` record a `Streaming` body may carry
+/// beside `Stream[String]`. The element is found by name and by its first-party declaration, so a
+/// user type of the same name is not mistaken for it.
+fn is_sse_event_stream(ty: TyId, ctx: &Ctx) -> bool {
+    let Ty::Stream(elem) = &*ctx.tys.get(ty) else {
+        return false;
+    };
+    let Ty::Named { name, .. } = &*ctx.tys.get(*elem) else {
+        return false;
+    };
+    name == "SseEvent"
+        && ctx.input.types.get("SseEvent").is_some_and(|d| {
+            crate::context_checks::is_std_bynk_type("SseEvent", &ctx.input.types, d)
+        })
+}
+
+/// #3918: whether a `Streaming` body is a `Stream[String]` or a `Stream[SseEvent]`.
+fn is_streaming_body(arg_ty: TyId, string_stream: TyId, tys: &Types, ctx: &Ctx) -> bool {
+    compatible(arg_ty, string_stream, tys) || is_sse_event_stream(arg_ty, ctx)
+}
+
 /// v0.26 (ADR 0054): the deletion span for `given` entry `i`, list-aware so
 /// the result never double-commas, leading-commas, or leaves `given ,`:
 /// an entry with a successor deletes through the successor's start
@@ -901,14 +922,29 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
 /// parameter types as declared, and counts every call. The wrong number of them, or any on an
 /// operation that is not generic, is `bynk.generics.type_arg_mismatch`.
 fn observation_type_args(
-    info: CapabilityOpInfo,
+    mut info: CapabilityOpInfo,
     o: &ObservationExpr,
     ctx: &mut Ctx,
 ) -> CapabilityOpInfo {
+    let tys = ctx.tys;
+    // #4116: the key a first-party `Idempotency` provider receives is the call site's encoded
+    // `String`, so `with key == "…"` reads it as one whatever `K` the call has.
+    if super::calls::local_first_party(&o.cap.name, ctx)
+        == Some(crate::firstparty::FirstPartyCap::Idempotency)
+        && let Some(first) = info.params.first().copied()
+        && let Ty::Var(name) = &*first.get(tys)
+    {
+        let text = HashMap::from([(name.clone(), tys.intern(Ty::Base(BaseType::String)))]);
+        info.params = info
+            .params
+            .iter()
+            .map(|p| crate::checker::substitute(*p, &text, tys))
+            .collect();
+    }
     if o.type_args.is_empty() {
         return info;
     }
-    if info.type_params.len() != o.type_args.len() {
+    if o.type_args.len() > info.type_params.len() {
         ctx.errors.push(CompileError::new(
             "bynk.generics.type_arg_mismatch",
             o.op.span,
@@ -922,7 +958,6 @@ fn observation_type_args(
         ));
         return info;
     }
-    let tys = ctx.tys;
     let mut subst: HashMap<String, TyId> = HashMap::new();
     for (name, t) in info.type_params.iter().zip(&o.type_args) {
         match resolve_type_ref(t, &ctx.input.types, tys) {
@@ -982,7 +1017,9 @@ fn impure_with_error(span: Span) -> CompileError {
 /// `bynk.test.faults_needs_in_process` and it is not validated here — the
 /// route-shape diagnostics would only bury that one.
 pub(crate) fn check_faults(faults: &FaultsExpr, span: Span, ctx: &mut Ctx) -> Option<TyId> {
-    let FaultsExpr { call, principal } = faults;
+    let FaultsExpr {
+        call, principal, ..
+    } = faults;
     let tys = ctx.tys;
     let bool_ty = tys.intern(Ty::Base(BaseType::Bool));
     if !ctx.in_test_body {
@@ -2818,7 +2855,8 @@ const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 ///   — argument must be `String`.
 /// - `Location` (`Found`, `SeeOther`, `PermanentRedirect`, …) — argument must
 ///   be `String`: the redirect target URL, emitted as a `Location` header.
-/// - `Streamed` (`Streaming`) — argument must be `Stream[String]`, SSE-framed.
+/// - `Streamed` (`Streaming`) — argument must be `Stream[String]` or (#3918)
+///   `Stream[SseEvent]`, SSE-framed.
 /// - `Raw` (`Raw`) — two arguments, a `Bytes` body then a `String` content-type;
 ///   the only two-argument shape.
 /// - `None` (`NoContent`, `NotFound`, `MethodNotAllowed`, …) — no argument
@@ -2946,7 +2984,7 @@ pub(crate) fn check_http_variant(
                     "bynk.types.variant_arity",
                     span,
                     format!(
-                        "`HttpResult.{}` expects 1 `Stream[String]` argument, but {} were given",
+                        "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
                         variant.name,
                         args.len(),
                     ),
@@ -2954,12 +2992,12 @@ pub(crate) fn check_http_variant(
                 return None;
             }
             let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
-            if !compatible(arg_ty, tys.intern(stream_str), tys) {
+            if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.argument_mismatch",
                     args[0].span,
                     format!(
-                        "`HttpResult.{}` expects a `Stream[String]` body, but got `{}`",
+                        "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
                         variant.name,
                         arg_ty.display(tys),
                     ),

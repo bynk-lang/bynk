@@ -331,8 +331,7 @@ pub(super) fn emit_test_module(
             }
         }
     }
-    uses_imports.sort();
-    uses_imports.dedup();
+    let uses_imports = sorted_with_qualifiers(uses_imports, target_name, unit_tables, unit_uses);
     for (ns, path) in &uses_imports {
         stmts.push(TsStmt::decl(
             TsDecl::ImportNamespace {
@@ -1582,4 +1581,28 @@ mod hosted_envelope_tests {
             )
         );
     }
+}
+
+/// #4403: `imports`, with the namespace imports a case's qualified names (`lib.x.Status`,
+/// `X.Status`) read through added (each as the binding name and the module it imports),
+/// sorted and without repeats.
+fn sorted_with_qualifiers(
+    mut imports: Vec<(String, String)>,
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+) -> Vec<(String, String)> {
+    imports.extend(
+        super::test_deps::use_qualifier_imports(target_name, unit_tables, unit_uses)
+            .into_iter()
+            .map(|(binding, commons)| {
+                (
+                    binding,
+                    relative_import_for_test(&commons_dir_for(&commons)),
+                )
+            }),
+    );
+    imports.sort();
+    imports.dedup();
+    imports
 }

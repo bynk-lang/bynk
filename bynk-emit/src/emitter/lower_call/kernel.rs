@@ -655,6 +655,7 @@ fn response_header_helper(op: HttpResultOp) -> Option<&'static str> {
         HttpResultOp::RetryAfter => Some("__withRetryAfter"),
         HttpResultOp::At => Some("__withLocation"),
         HttpResultOp::Download => Some("__withDownload"),
+        HttpResultOp::Heartbeat => Some("__withHeartbeat"),
         HttpResultOp::Headers => Some("__resultHeaders"),
         HttpResultOp::WithCookie | HttpResultOp::ClearCookie | HttpResultOp::Cookies => None,
     }

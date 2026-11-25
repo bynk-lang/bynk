@@ -617,7 +617,8 @@ pub struct UnitTable {
     pub use_views: std::collections::BTreeMap<String, UnitTable>,
     /// #4045: a bare name two used commons both bring in, with the qualified
     /// spelling of each, for `bynk.uses.ambiguous_name` where it is referenced.
-    pub ambiguous_uses: std::collections::BTreeMap<String, Vec<String>>,
+    pub ambiguous_uses:
+        std::collections::BTreeMap<String, Vec<crate::uses_view::AmbiguousProvider>>,
     /// #4045: on a [`UnitTable::use_views`] entry, each name the view files
     /// under a spelling other than the declared one, by its declared name, for
     /// the emitter's import.
@@ -740,7 +741,10 @@ impl UnitTable {
                 .iter()
                 .map(|(t, v)| (t, v.types.keys().collect::<std::collections::BTreeSet<_>>()))
                 .collect::<Vec<_>>(),
-            ambiguous_uses,
+            ambiguous_uses
+                .iter()
+                .map(|(k, ps)| (k, ps.iter().map(|p| &p.form).collect::<Vec<_>>()))
+                .collect::<Vec<_>>(),
         )
     }
 
@@ -2267,6 +2271,7 @@ pub fn build_cross_context_info(
                         tr
                     },
                     codable_params: crate::checker::codable::codable_op_params(op),
+                    key_params: crate::checker::codable::key_op_params(op),
                     reply_policy: crate::checker::codable::op_reply_policy(op),
                 })
                 .collect();
@@ -2943,6 +2948,11 @@ fn rename_decl_refs(decl: &TypeDecl, subst: &HashMap<String, String>) -> TypeDec
                 for f in &mut v.payload {
                     rename_type_ref(&mut f.type_ref, subst);
                 }
+            }
+            // #4397: an `embeds E as V` clause names a type too, and a `?` that
+            // converts an `E` error reads it under the spelling the unit uses.
+            for e in &mut sum.embeds {
+                rename_type_ref(&mut e.source_type, subst);
             }
         }
         TypeBody::Refined { .. } | TypeBody::Opaque { .. } => {}

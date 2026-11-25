@@ -369,6 +369,26 @@ export const Cookie = {
 };
 
 /**
+ * One server-sent event, for a `Streaming(...)` response that needs more than a
+ * `data:` line. `data` is the payload (a line break in it becomes several `data:`
+ * lines); `event` names the event type a browser's `EventSource` listens for;
+ * `id` sets its last event ID, which a reconnecting browser sends back as
+ * `Last-Event-ID`; `retry` is the reconnection delay the browser should wait, sent
+ * in whole milliseconds. `event` and `id` cannot hold a line break and `id`
+ * cannot hold NUL: an element that does faults the stream, in-band. A
+ * `Stream[String]` is still framed as plain `data:` events, unchanged.
+ */
+export interface SseEvent {
+  readonly data: string;
+  readonly event: Option<string>;
+  readonly id: Option<string>;
+  readonly retry: Option<number>;
+}
+
+export const SseEvent = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -550,29 +570,29 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  */
 export interface Idempotency {
   /**
-   * Checks for a cached outcome under `key`; a miss is `None`.
+   * Checks for a cached outcome under `key`, any `Key` type; a miss is `None`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  dedup(key: string): globalThis.Promise<unknown>;
+  dedup(key: unknown): globalThis.Promise<unknown>;
   /**
-   * Caches `value` under `key` for `expiresAfter`.
+   * Caches `value` under `key`, any `Key` type, for `expiresAfter`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  remember(key: string, value: unknown, expiresAfter: number): globalThis.Promise<void>;
+  remember(key: unknown, value: unknown, expiresAfter: number): globalThis.Promise<void>;
   /**
-   * Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+   * Claims `key`, any `Key` type, for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
+  claim(key: unknown, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
 export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");

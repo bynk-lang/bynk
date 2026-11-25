@@ -305,10 +305,14 @@ pub const RESERVED_PRINCIPALS: &[(&str, &str)] = &[
         "NoSubject",
         "Sends an `Oidc` route two tokens that are correctly signed by the test issuer and unexpired, one with an empty `sub` and one with no `sub` claim, so the real seam refuses both before the handler runs (`Rejected(Unauthorized)`), whatever the identity's refinement. Needs an `Oidc` actor. `system` tier only.",
     ),
+    (
+        "Revoked",
+        "Sends a `SignedCookie` route a cookie correctly signed for a session that was issued and then revoked in the actor's session agent (`revokeAll`), so the real seam refuses it (`Rejected(Unauthorized)`). Needs a `SignedCookie` actor declared with `sessions = true`. `system` tier only.",
+    ),
 ];
 
 /// #2135: hover for a reserved principal (`Nobody`, `Forged`, `Stale`,
-/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`) in a
+/// `Expired`, `WrongIssuer`, `WrongAudience`, `WrongAlgorithm`, `NoSubject`, `Revoked`) in a
 /// call-site `by` clause: what the driver sends. `None` when the cursor is not
 /// on one of those names right after `by`.
 pub fn describe_reserved_principal_at(source: &str, offset: usize) -> Option<String> {
@@ -760,6 +764,9 @@ pub fn describe_handler_annotation_at(source: &str, offset: usize) -> Option<Str
         for h in handlers {
             for ann in &h.annotations {
                 if span_covers(ann.span, offset) {
+                    if ann.name.name == "rateLimit" {
+                        return Some(render_rate_limit_hover(ann, items));
+                    }
                     return Some(render_handler_annotation_hover(ann, h, service_cap));
                 }
             }
@@ -1870,6 +1877,72 @@ fn cache_control_of(ann: &Annotation) -> Option<String> {
 /// closed handler-annotation set. `@cache`, `@limit` (v0.142) and `@raw` carry prose; any
 /// other name (a typo the checker will flag) still hovers as its formatted form so
 /// the surface is never silent.
+/// #3926: hover for `@rateLimit(Limiter, key: …)`: the limiter's limit and window, read from
+/// the `capability` declaration beside it in the same unit when it is there, the key, and
+/// where in the request the router asks it.
+fn render_rate_limit_hover(ann: &Annotation, items: &[CommonsItem]) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let sig = bynk_fmt::annotation_to_string(ann);
+    let ident_of = |e: Option<&bynk_syntax::ast::AnnotationArg>| {
+        e.and_then(|a| match &a.value.kind {
+            ExprKind::Ident(id) => Some(id.name.clone()),
+            _ => None,
+        })
+    };
+    let limiter = ident_of(ann.args.first());
+    let key = ident_of(
+        ann.args
+            .iter()
+            .find(|a| a.label.as_ref().is_some_and(|l| l.name == "key")),
+    );
+    let counts = limiter
+        .as_deref()
+        .and_then(|name| {
+            items.iter().find_map(|i| match i {
+                CommonsItem::Capability(c) if c.name.name == name => c.derived.as_ref(),
+                _ => None,
+            })
+        })
+        .filter(|d| d.base.name == "RateLimit")
+        .map(|d| {
+            let option = |name: &str| {
+                d.annotations
+                    .iter()
+                    .find(|a| a.name.name == name)
+                    .and_then(|a| a.args.first())
+                    .map(|a| match &a.value.kind {
+                        ExprKind::IntLit { value, .. } => value.to_string(),
+                        ExprKind::DurationLit { millis, .. } => format!("{}s", millis / 1_000),
+                        _ => "?".to_string(),
+                    })
+            };
+            format!(
+                "\n\n`{}` allows {} requests per {} for each key.",
+                limiter.as_deref().unwrap_or("?"),
+                option("limit").unwrap_or_else(|| "?".to_string()),
+                option("period").unwrap_or_else(|| "?".to_string()),
+            )
+        })
+        .unwrap_or_default();
+    let by = match key.as_deref() {
+        Some("clientIp") => {
+            "**`clientIp`** — the request's `CF-Connecting-IP`, reliable only behind Cloudflare's edge"
+        }
+        Some("identity") => {
+            "**`identity`** — the verified caller; not available yet (`bynk.http.rate_limit_key_unavailable`)"
+        }
+        _ => "an unknown key (`bynk.http.rate_limit_bad_args`)",
+    };
+    format!(
+        "```bynk\n{sig}\n```\n\n\
+         **`@rateLimit`** — refuse a client over its limit before this route's request body is \
+         read. The router asks the limiter first of all, ahead of the media-type and body-size \
+         checks and of authentication, and answers `429 Too Many Requests` with `Retry-After` \
+         (the limiter's window in seconds) and the rejection `RateLimited`, which `on rejected` \
+         can render.{counts}\n\n- **key** — counts by {by}."
+    )
+}
+
 fn render_handler_annotation_hover(
     ann: &Annotation,
     handler: &Handler,
@@ -2146,10 +2219,86 @@ pub fn describe_effect_method_at(
     )
 }
 
+/// What a `?` on an `Option` does where it stands (#4363): fixed by the declared
+/// return type of the function or handler around it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Propagation {
+    /// The body returns `Option` (or `Effect[Option]`): `None` is returned as it is.
+    NoneReturns,
+    /// The handler returns `HttpResult`: `None` answers `404 NotFound` (ADR 0177).
+    NotFound,
+    /// Not decided from the declaration: a `?` inside a lambda, or a return type
+    /// the tables do not name. The hover then describes both.
+    Either,
+}
+
+/// Whether `e`, or any expression below it, is a lambda holding `offset`: a `?`
+/// there propagates out of the lambda, not out of the declaration around it.
+fn lambda_holds(e: &Expr, offset: usize) -> bool {
+    if matches!(e.kind, ExprKind::Lambda(_)) && e.span.start <= offset && offset <= e.span.end {
+        return true;
+    }
+    expr_children(e)
+        .into_iter()
+        .any(|c| lambda_holds(c, offset))
+}
+
+/// [`Propagation`] for the `?` at `offset`, from the innermost function or
+/// handler body holding it.
+fn question_propagation(text: &str, offset: usize) -> Propagation {
+    let Ok(tokens) = tokenize(text) else {
+        return Propagation::Either;
+    };
+    let (Some(unit), _) = bynk_syntax::parser::parse_unit_with_recovery(&tokens, text) else {
+        return Propagation::Either;
+    };
+    // A suite's helper `fn`s are declarations like any other (#4363).
+    let suite_items = suite_fn_items(&unit);
+    let items: &[CommonsItem] = match &unit {
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => &suite_items,
+    };
+    let holds =
+        |body: &bynk_syntax::ast::Block| body.span.start <= offset && offset <= body.span.end;
+    let classify = |ret: &TypeRef, body: &bynk_syntax::ast::Block| {
+        let inner = match ret {
+            TypeRef::Effect(inner, _) => inner,
+            other => other,
+        };
+        let is_lambda = body.statements.iter().any(|s| {
+            let mut exprs = Vec::new();
+            statement_exprs(s, &mut exprs);
+            exprs.into_iter().any(|e| lambda_holds(e, offset))
+        }) || lambda_holds(&body.tail, offset);
+        if is_lambda {
+            return Propagation::Either;
+        }
+        match type_ref_str(inner).split('[').next().unwrap_or("").trim() {
+            "Option" => Propagation::NoneReturns,
+            "HttpResult" => Propagation::NotFound,
+            _ => Propagation::Either,
+        }
+    };
+    let handler = |h: &Handler| holds(&h.body).then(|| classify(&h.return_type, &h.body));
+    items
+        .iter()
+        .find_map(|item| match item {
+            CommonsItem::Fn(f) => holds(&f.body).then(|| classify(&f.return_type, &f.body)),
+            CommonsItem::Service(s) => s.handlers.iter().find_map(handler),
+            CommonsItem::Agent(a) => a.handlers.iter().find_map(handler),
+            _ => None,
+        })
+        .unwrap_or(Propagation::Either)
+}
+
 /// #2839: hover on the `?` of an `Option` value. An `Option` is only liftable
 /// by `?` inside a handler returning `HttpResult` (ADR 0177), where `None` answers
-/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns early. The
-/// hover names both and points at `let … else` for any other status. A `?` on a `Result` is not described.
+/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns
+/// early. The hover names the one that applies to the enclosing declaration's return
+/// type (#4363), both where that is not decided (a lambda), and points at
+/// `let … else` for any other status. A `?` on a `Result` is not described.
 pub fn describe_question_at(
     text: &str,
     offset: usize,
@@ -2166,16 +2315,115 @@ pub fn describe_question_at(
     if !matches!(&*tys.get(operand), bynk_check::checker::Ty::Option(_)) {
         return None;
     }
-    Some(
-        "```bynk\n? : None returns early\n```\n\n\
-         On an `Option`, `?` yields the value for `Some` and returns early for `None`. In a \
-         function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as \
-         it is; `Option` and `Result` never convert. In an `HttpResult` handler, `None` answers \
-         `404 NotFound`, which is right for \"the thing you asked for is not there\", but a \
-         missing or malformed request input is a `400`: write \
-         `let Some(x) = e else { BadRequest(\"…\") }` to answer another status."
-            .to_string(),
-    )
+    const NOT_FOUND: &str = "In an `HttpResult` handler, `None` answers `404 NotFound`, which is right for \"the thing you asked for is not there\", but a missing or malformed request input is a `400`: write `let Some(x) = e else { BadRequest(\"…\") }` to answer another status.";
+    const RETURNS: &str = "In a function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as it is; `Option` and `Result` never convert.";
+    Some(match question_propagation(text, tok.span.start) {
+        Propagation::NoneReturns => format!(
+            "```bynk\n? : None returns early\n```\n\n\
+             On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS}"
+        ),
+        Propagation::NotFound => format!(
+            "```bynk\n? : None answers 404 NotFound\n```\n\n\
+             On an `Option`, `?` yields the value for `Some`. {NOT_FOUND}"
+        ),
+        Propagation::Either => format!(
+            "```bynk\n? : None returns early\n```\n\n\
+             On an `Option`, `?` yields the value for `Some` and returns early for `None`. {RETURNS} {NOT_FOUND}"
+        ),
+    })
+}
+
+/// The `\( … )` hole of an interpolated string whose delimiter `offset` is on, as
+/// the span of the expression inside it (trimmed), found on the cursor's line.
+fn interpolation_hole_at(text: &str, offset: usize) -> Option<Span> {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = text[offset..].find('\n').map_or(text.len(), |i| offset + i);
+    let line = &text[line_start..line_end];
+    let mut from = 0;
+    while let Some(rel) = line[from..].find("\\(") {
+        let open = line_start + from + rel + 2;
+        let mut depth = 1usize;
+        let mut close = None;
+        for (i, c) in text[open..line_end].char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(open + i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let close = close?;
+        // On the hole's own delimiters, `\(` and `)`: an identifier inside keeps
+        // its own hover.
+        if (open - 2 <= offset && offset < open) || offset == close {
+            let inner = &text[open..close];
+            let start = open + (inner.len() - inner.trim_start().len());
+            let end = close - (inner.len() - inner.trim_end().len());
+            return (start < end).then(|| Span::new(start, end));
+        }
+        from = close + 1 - line_start;
+    }
+    None
+}
+
+/// #4363: hover on an interpolation hole's `\(` or `)` (`"… \(e) …"`) says how the
+/// hole's value is rendered, from its type: the scalar bases and refinements of them
+/// (ADR 0075, #3977). `None` outside a hole, or when the type has no string form.
+pub fn describe_interpolation_hole_at(
+    text: &str,
+    offset: usize,
+    expr_types: &[(Span, bynk_check::checker::TyId)],
+    tys: &bynk_check::checker::Types,
+) -> Option<String> {
+    use bynk_check::checker::{NamedKind, Ty};
+    let hole = interpolation_hole_at(text, offset)?;
+    let ty = bynk_check::expr_types::type_at_span(expr_types, hole)?;
+    // A refinement is named in the header and renders as its base does.
+    let (base, refined_as) = match &*tys.get(ty) {
+        Ty::Base(b) => (*b, None),
+        Ty::Named {
+            name,
+            kind: NamedKind::Refined(b),
+            ..
+        } => (*b, Some(name.clone())),
+        _ => return None,
+    };
+    let rendering = match base {
+        BaseType::String => "the text as it is",
+        BaseType::Int | BaseType::Float => "its `toString()` text",
+        BaseType::Bool => "`true` or `false`",
+        BaseType::Decimal => "its canonical text",
+        BaseType::Instant => {
+            "RFC 3339 text in UTC (`2026-11-22T10:00:00.000Z`), the text `toString()` gives"
+        }
+        BaseType::Duration => "units, largest first (`1h30m`), the text `toString()` gives",
+        _ => return None,
+    };
+    let base_name = match base {
+        BaseType::String => "String",
+        BaseType::Int => "Int",
+        BaseType::Float => "Float",
+        BaseType::Bool => "Bool",
+        BaseType::Decimal => "Decimal",
+        BaseType::Instant => "Instant",
+        BaseType::Duration => "Duration",
+        _ => return None,
+    };
+    let (shown, note) = match refined_as {
+        Some(name) => (
+            format!("{name} ({base_name})"),
+            " A refinement of a scalar renders as its base does.",
+        ),
+        None => (base_name.to_string(), ""),
+    };
+    Some(format!(
+        "```bynk\n\\(…) : {shown}\n```\n\nAn interpolation hole renders its value as {rendering}.{note}"
+    ))
 }
 
 /// v0.123 (editor-currency slice 2, DECISION B): if the identifier at
@@ -3636,12 +3884,41 @@ fn service_protocol_suffix(p: &ServiceProtocol) -> String {
     }
 }
 
+/// #3925: the `origins` as the source writes them. The hover's declaration is read
+/// from the source text, ahead of the pass that replaces a constant with its
+/// literal, so a name stays a name here (hover on it shows the constant); a
+/// literal list reads as before.
+fn origins_as_written(cors: &CorsPolicy) -> String {
+    use bynk_syntax::ast::ExprKind;
+    let item = |e: &bynk_syntax::ast::Expr| match &e.kind {
+        ExprKind::StrLit(s) => format!("{s:?}"),
+        ExprKind::Ident(id) => id.name.clone(),
+        _ => "…".to_string(),
+    };
+    match cors.field("origins").map(|e| (&e.kind, e)) {
+        Some((ExprKind::ListLit(items, ..), _)) => {
+            format!(
+                "[{}]",
+                items.iter().map(item).collect::<Vec<_>>().join(", ")
+            )
+        }
+        Some((_, e)) => item(e),
+        None => "[]".to_string(),
+    }
+}
+
 /// v0.131: a one-line summary of a `cors { }` policy for hover — the origins
 /// (always present), then `credentials`/`maxAge` when set.
 fn cors_summary(cors: &CorsPolicy) -> String {
-    let mut parts = vec![format!("origins: {:?}", cors.origins())];
+    let mut parts = vec![format!("origins: {}", origins_as_written(cors))];
     if cors.credentials() {
         parts.push("credentials: true".to_string());
+    }
+    // #3925: the headers a browser script may read, beside the ones Bynk writes
+    // for a client (`WWW-Authenticate`, `Retry-After`, `Location`, `ETag`).
+    let expose = cors.expose_headers();
+    if !expose.is_empty() {
+        parts.push(format!("expose: {expose:?} + Bynk's own headers"));
     }
     if let Some(secs) = cors.max_age_secs() {
         parts.push(format!("maxAge: {secs}s"));
@@ -3963,6 +4240,17 @@ pub fn type_ref_str(t: &TypeRef) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// #4363 review: a suite's helper `fn` returning `Option` narrows a `?` too.
+    #[test]
+    fn a_question_in_a_suite_helper_is_decided_by_its_return_type() {
+        let src = "suite shop.opt {\n  fn first(xs: List[Int]) -> Option[Int] {\n    let a = xs.first()?\n    Some(a)\n  }\n  case \"c\" {\n    expect first([1]) == Some(1)\n  }\n}\n";
+        let at = src.find("first()?").unwrap() + "first()".len();
+        assert_eq!(
+            super::question_propagation(src, at),
+            super::Propagation::NoneReturns
+        );
+    }
+
     /// #3458: hover on a typed read says what a reply that does not decode means,
     /// read off the operation's declared policy; any other operation says nothing.
     #[test]
@@ -5380,6 +5668,27 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    /// #3926: hovering `@rateLimit` says what it counts, where it runs and the limiter's limit and window.
+    #[test]
+    fn rate_limit_annotation_hovers_the_limiter_and_where_it_runs() {
+        let src = "context api\n\nconsumes bynk.cloudflare { RateLimit }\n\ncapability SignupLimit = RateLimit @limit(10) @period(60.seconds)\n\nservice api from http {\n  @rateLimit(SignupLimit, key: clientIp)\n  on POST(\"/signup\") (body: String) -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";
+        let at = src.find("@rateLimit").unwrap() + 3;
+        let hover = describe_handler_annotation_at(src, at).expect("the annotation hovers");
+        assert!(
+            hover.contains("@rateLimit(SignupLimit, key: clientIp)"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("`SignupLimit` allows 10 requests per 60s for each key"),
+            "{hover}"
+        );
+        assert!(
+            hover.contains("before this route's request body is read"),
+            "{hover}"
+        );
+        assert!(hover.contains("`clientIp`"), "{hover}");
     }
 
     const CACHE_SVC: &str = "context api\nservice api from http {\n  @cache(maxAge: 5.minutes, scope: public)\n  on GET(\"/x\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Ok(\"y\")\n  }\n}\n";

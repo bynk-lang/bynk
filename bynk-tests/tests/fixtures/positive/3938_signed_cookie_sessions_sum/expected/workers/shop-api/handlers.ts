@@ -10,6 +10,7 @@ import { __readStored, __commitStored } from "../../__bynk_runtime/entries.js";
 import { __rehydrationViolation, __reportUnknownStoredKeys, __checkStoredLayout, type __JsonValue, type __BoundaryError } from "../../__bynk_runtime/boundary.js";
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
 import { type __DurableObjectNamespace, __StateRegistry, __makeAgent, type __AgentWire, __decodeAgentArgs, __encodeAgentResult } from "../../__bynk_runtime/agent.js";
+import { __expireSessionCookie, __currentSession } from "../../__bynk_runtime/session.js";
 
 export type UserId = string & { readonly __brand: "shop.api.UserId" };
 
@@ -61,6 +62,37 @@ export const api = {
       case "ApiClient": {
         const c = deps.who.identity;
         return HttpResult.Ok(`token ${String(c)}`);
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_logout(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId } }): globalThis.Promise<HttpResult<void>> {
+    switch (deps.who.tag) {
+      case "User": {
+        const c = await (async () => {
+          const __current = __currentSession(deps);
+          if (__current !== null) await __makeUserSessions(__current.sub as UserId, deps.env).remove(__current.sid, deps);
+          return __expireSessionCookie("__Host-session", "Lax");
+        })();
+        return ((__r: any) => ({ ...__r, cookies: [...(__r.cookies ?? []), (c)] }))(HttpResult.NoContent);
+      }
+      case "ApiClient": {
+        return HttpResult.NoContent;
+      }
+    }
+    throw new globalThis.Error("non-exhaustive match");
+  },
+  async http_POST_revoke_all(deps: { env: { USER_SESSIONS: __DurableObjectNamespace }; who: { tag: "User"; identity: UserId } | { tag: "ApiClient"; identity: UserId } }): globalThis.Promise<HttpResult<void>> {
+    switch (deps.who.tag) {
+      case "User": {
+        const u = deps.who.identity;
+        const __r0 = await (async (__sub: UserId) => {
+          await __makeUserSessions(__sub, deps.env).revokeAll(deps);
+        })(u);
+        return HttpResult.NoContent;
+      }
+      case "ApiClient": {
+        return HttpResult.NoContent;
       }
     }
     throw new globalThis.Error("non-exhaustive match");

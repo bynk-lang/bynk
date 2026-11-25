@@ -394,7 +394,7 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 | Variant | Status | Payload |
 |---|---|---|
 | `Ok(value)` | 200 | the value, as JSON |
-| `Streaming(stream)` | 200 | a `Stream[String]`, SSE-framed (see [Streamed responses](#streamed-responses)) |
+| `Streaming(stream)` | 200 | a `Stream[String]` or `Stream[SseEvent]`, SSE-framed (see [Streamed responses](#streamed-responses) and [Structured events](#structured-events)) |
 | `Raw(body, contentType)` | 200 | a `Bytes` body under the given `content-type` (see [Raw responses](#raw-responses)) |
 | `RawTagged(body, contentType, etag)` | 200 | as `Raw`, sent with `etag` as its `ETag` (see [Supplying the validator](#supplying-the-validator-rawtagged)) |
 | `RawStreamed(body, contentType)` | 200 | a `Stream[Bytes]` body, streamed chunk by chunk (see [Streamed raw responses](#streamed-raw-responses)) |
@@ -545,6 +545,7 @@ here once:
 | `RefinementViolation` {#problem-refinement-violation} | `https://bynk-lang.org/problems/refinement-violation` | `400` |
 | `PayloadTooLarge` {#problem-payload-too-large} | `https://bynk-lang.org/problems/payload-too-large` | `413` |
 | `UnsupportedMediaType` {#problem-unsupported-media-type} | `https://bynk-lang.org/problems/unsupported-media-type` | `415` |
+| `RateLimited` {#problem-rate-limited} | `https://bynk-lang.org/problems/rate-limited` | `429` |
 
 The default is `format: bynk`, and with it every error body is what it always was, byte for byte.
 A handler overrides the service with `@errors(format: bynk)` or `@errors(format: problem)`; the route
@@ -584,7 +585,7 @@ on rejected(why: BoundaryRejection) -> Effect[HttpResult[()]] {
 `why` is the rejection: `MalformedJson(detail)`, `StructuralMismatch(detail)`,
 `RefinementViolation(detail)`, `PayloadTooLarge(detail)`,
 `UnsupportedMediaType(detail)`, `MalformedForm(detail)`, `MalformedPath(detail)`,
-`MethodNotAllowed` or `Unauthorized`.
+`RateLimited(detail)`, `MethodNotAllowed` or `Unauthorized`.
 
 The status is the rejection's own. The handler supplies the body, so it answers a
 `RawError` of that status; the router keeps its other headers (the `WWW-Authenticate` of a
@@ -1181,6 +1182,73 @@ on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
 }
 ```
 
+### Structured events
+
+A `Stream[SseEvent]` carries more than data. `SseEvent` is a record from `bynk`:
+
+| Field | Type | On the wire |
+|---|---|---|
+| `data` | `String` | one `data:` line per line of the text (CRLF, LF or CR) |
+| `event` | `Option[String]` | `event: <name>`, which a browser dispatches under that name |
+| `id` | `Option[String]` | `id: <value>`, echoed back as `Last-Event-ID` when the browser reconnects |
+| `retry` | `Option[Duration]` | `retry: <milliseconds>`, the reconnection delay the browser should use |
+
+Every field but `data` defaults to `None`, so a bare event is `SseEvent { data: "hi" }`:
+
+```bynk,fragment
+on GET("/events") () -> Effect[HttpResult[()]] by v: Visitor {
+  Streaming(Stream.of([
+    SseEvent { data: "hello", event: Some("greeting"), id: Some("1"), retry: Some(3.seconds) },
+    SseEvent { data: "line one\nline two" },
+  ]))
+}
+```
+
+A `Stream[String]` and a `Stream[SseEvent]` are both accepted; a plain string frames
+exactly as before. A value the wire cannot carry is an error, not a quiet change: an
+`event` or `id` containing a line break, an `id` containing NUL, or a `retry` that is not
+a whole number of milliseconds errors the body at that event, as any failure mid-stream
+does.
+
+A unit-tier test that matches `Streaming(s)` can drain `s` and count its events; `s` is typed
+`Stream[String]` whatever the handler streams, so do not read an `SseEvent` element as a `String` (tracked in #4394).
+
+### Heartbeats
+
+A proxy or load balancer closes a connection that carries no bytes for a while, so a stream that
+is idle between events needs something on the wire. `.heartbeat(every)` on a `Streaming(…)` result
+writes a comment line (`:`), which every `EventSource` ignores, whenever the stream has produced
+nothing for `every`:
+
+```bynk,fragment
+on GET("/feed") () -> Effect[HttpResult[()]] by v: Visitor {
+  Streaming(events).heartbeat(15.seconds)
+}
+```
+
+It is written on the `Streaming` variant itself, optionally after other response methods, and an
+interval under one second is refused: at compile time for a duration written out, and by
+faulting the request for one computed at run time. A heartbeat is only written while the stream is waiting: an
+event that is ready is never delayed, and no event is dropped or repeated. A heartbeat keeps the
+Worker invocation alive for as long as the connection is open, which is why it is opt-in, and it
+does not extend any platform limit on the response's total duration.
+
+### Resuming after a dropped connection
+
+A browser `EventSource` that loses its connection reconnects and sends the `id` of the last event
+it received as `Last-Event-ID`. Bynk keeps no event history, so resumption is the handler's: read
+the header through a typed [`headers`](#typed-headers) record, send what came after it, and give
+every event an `id`:
+
+```bynk,ignore
+type FeedHeaders = { @name("last-event-id") lastId: Option[String] }
+
+on GET("/feed") (headers: FeedHeaders) -> Effect[HttpResult[()]] by v: Visitor given Feed {
+  let events <- Feed.since(headers.lastId)
+  Streaming(events.map((e) => SseEvent { data: e.body, id: Some(e.id) })).heartbeat(15.seconds)
+}
+```
+
 ## Raw responses
 
 `Raw(body, contentType)` returns a **200** whose body is a raw
@@ -1253,8 +1321,8 @@ A producer that can fail mid-stream carries its outcome in-band — build a
 `Stream[Result[String, E]]` and `.map` it to `Stream[String]`, encoding an `Err`
 as an error event — because the HTTP status is already sent once streaming
 begins. A bounded `take` is the language-level guard against an unbounded
-response. A structured event type (named `event`/`id`/`retry` fields) is a
-planned follow-on; v1 streams plain `String` events.
+response. See [Structured events](#structured-events) for named
+events and resumption.
 
 ### Streamed raw responses
 
@@ -1634,15 +1702,19 @@ From this the compiler synthesises, for that service:
   credential-less by spec, so it must not be rejected by an actor check); and
 - **`Access-Control-Allow-Origin`** (plus `Vary: Origin`) stamped onto **every**
   response of the service — uniformly across the `Ok`/`Raw`/redirect/error/stream
-  variants. A `401` also lists `WWW-Authenticate` in `Access-Control-Expose-Headers`, so a
-  browser client can read the [challenge](/reference/actors/#the-401-challenge).
+  variants; and
+- **`Access-Control-Expose-Headers`** on every response that gets the grant, listing the
+  headers Bynk itself writes for a client to read (`WWW-Authenticate`, `Retry-After`,
+  `Location` and `ETag`) and any [`expose`](#exposed-headers) names, so a browser client can
+  read the [challenge](/reference/actors/#the-401-challenge) of a `401`.
 
 ### Fields
 
 | Field | Meaning | Default |
 |---|---|---|
-| `origins` | The allowed origins, as string literals — an exact allowlist (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`. **Required.** | — |
+| `origins` | The allowed origins, as string literals or [`String` constants](#origins-from-constants) — an exact allowlist (`["https://a.com", "https://b.com"]`), or the wildcard `["*"]`; or one `List[String]` constant. **Required.** | — |
 | `headers` | The `Access-Control-Allow-Headers` a preflight advertises. | `content-type` (plus `authorization` when the service has a [Bearer](/reference/actors/) route) |
+| `expose` | The response headers a browser script may read, beside the ones Bynk writes for a client ([below](#exposed-headers)). | the automatic set |
 | `credentials` | Whether credentialed requests (cookies / `Authorization`) are allowed — sends `Access-Control-Allow-Credentials: true`. | `false` |
 | `maxAge` | How long a browser may cache the preflight, as a [`Duration`](/reference/types/#duration) — sent as `Access-Control-Max-Age` seconds. | omitted (browser default) |
 
@@ -1658,6 +1730,53 @@ An exact allowlist compares the request's `Origin` and **reflects** the matched 
 not serve one origin's grant to another. A request from an origin not on the list gets
 **no** `Access-Control-Allow-Origin` — the browser blocks the read (fail closed). The
 wildcard `["*"]` answers every origin with a literal `*` (and needs no `Vary`).
+
+### Origins from constants
+
+An `origins` entry may name a `String` constant, and the whole list may name a
+`List[String]` constant, which is read as the literal it is bound to (the rule for a
+[constant in an annotation argument](/reference/constants/)): the constant must be declared
+exactly `String` (or `List[String]`) and bound to a literal or to another such constant, in
+the context or in a commons it `uses`. So the wildcard and credentials checks still see
+literal text. A list that differs per environment is an
+[`env(…)` constant](/reference/constants/#values-that-differ-per-environment), whose value comes from
+`bynk.toml` (`[env.staging.vars]`):
+
+```bynk,ignore
+const AppOrigins: List[String] = env(APP_ORIGINS, ["https://app.example.com"])
+
+service api from http {
+  cors { origins: AppOrigins, credentials: true }
+  …
+}
+```
+
+A constant of another type, or one bound to something that is not a literal, is
+`bynk.http.cors_invalid_origins`.
+
+### Exposed headers
+
+A browser script reading a cross-origin response sees only the CORS-safelisted headers
+unless the response lists the others in `Access-Control-Expose-Headers`. Every response a
+CORS service sends to an allowed origin lists the headers Bynk itself writes for a client:
+`WWW-Authenticate` (the [`401` challenge](/reference/actors/#the-401-challenge)),
+`Retry-After` and `Location` (the [response header helpers](#response-headers)) and `ETag`.
+Naming a header the response does not carry is harmless. `expose` adds the headers you set
+yourself, such as one written with `withHeader`:
+
+```bynk,ignore
+cors {
+  origins: ["https://app.example.com"],
+  expose:  ["x-request-id"],
+}
+```
+
+Each name is a header name (letters, digits and ``!#$%&'*+-.^_`|~``), or the list is `["*"]`
+alone, which exposes every header. A browser reads `*` as a header literally named `*` on a
+credentialed response, so `expose: ["*"]` with `credentials: true` is refused at compile
+time (`bynk.http.cors_wildcard_expose_credentials`); an invalid name, or `*` beside other
+names, is `bynk.http.cors_invalid_field`. The generated client and the OpenAPI document are
+unaffected: CORS is browser policy, not part of the contract.
 
 ### The credentials + wildcard rule
 
@@ -1956,6 +2075,49 @@ the tagged form (`Json.encodePlain` is the plain form outside a route), so `deco
 `bynk openapi` describes a plain route's `Option` as nullable, and `bynk client`
 generates it as `T | null` (see the [HTTP client](/reference/http-client/)).
 
+## Rate limiting
+
+A route can refuse a client that has made too many requests *before* its request body is
+read. Declare a `RateLimit` instance in the route's context (see
+[`RateLimit`](/reference/bynk-capabilities/#rate-limiting-ratelimit)) and name it on the route
+with `@rateLimit`:
+
+```bynk,ignore
+consumes bynk.cloudflare { RateLimit }
+
+capability SignupLimit = RateLimit @limit(10) @period(60.seconds)
+
+service api from http {
+  @rateLimit(SignupLimit, key: clientIp)
+  @form
+  on POST("/signup") (body: SignupForm) -> Effect[HttpResult[()]] by v: Visitor { … }
+}
+```
+
+The router asks the limiter first of all, ahead of the media-type check, the body-size check
+and authentication, so a flood costs a counter and a `429`, and a request whose body is over
+its cap still gets `429` once the limit is spent. The answer is `429 Too Many Requests` with
+`Retry-After` set to the limiter's period in seconds and a `{ "kind": "RateLimited" }` body
+(problem details under [`errors { format: problem }`](#error-bodies)). It is the rejection
+`RateLimited(detail)`, so [`on rejected`](#rendering-rejections) can render it and a `system`
+test can assert `Rejected(RateLimited(_))`.
+
+- `key: clientIp` counts by the request's `CF-Connecting-IP`, which is reliable only behind
+  Cloudflare's edge. Users behind one address (an office or carrier NAT) share a count. Without
+  the header (under `bynk dev`, or a test that sets none) every request counts as one client,
+  `unknown`.
+- `key: identity`, counting by the verified caller after authentication and before the body,
+  is not available yet: it is `bynk.http.rate_limit_key_unavailable`. A limit keyed on the
+  caller stays a call to the limiter's `allow(key)` in the handler.
+- The limiter is a named instance the route's context declares; the route needs no `given`.
+  A route carries at most one `@rateLimit` (`bynk.http.rate_limit_duplicate`), and a limiter named
+  by several routes counts across all of them, by key. An unknown limiter is
+  `bynk.http.rate_limit_unknown_limiter`, a malformed annotation `bynk.http.rate_limit_bad_args`,
+  and one on a handler that is not `on http` `bynk.http.rate_limit_not_http`.
+- `RateLimit` is experimental: it needs `bynk.cloudflare.RateLimit` in `bynk.toml`'s
+  `[unstable] allow`, and is refused off Cloudflare. Counting is approximate and per location,
+  as the capability's is. In tests the limiter runs on the harness clock.
+
 ## Request lifecycle
 
 ```mermaid
@@ -1967,19 +2129,24 @@ flowchart TD
   known -->|no| nf["404"]
   known -->|yes, OPTIONS| opt["204 + Allow"]
   known -->|yes, other| m405["405 + Allow"]
-  params --> ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
+  params --> rl{"@rateLimit within its limit?"}
+  rl -->|no| m429["429 + Retry-After"]
+  rl -->|yes| ctype{"@raw, @form, @multipart or JSON route and Content-Type matches?"}
   ctype -->|no| m415["415"]
-  ctype -->|yes| actor{"by actor admitted?"}
-  actor -->|no| m401["401 / 403"]
-  actor -->|yes| body{"body valid?"}
-  body -->|over the cap| m413["413"]
+  ctype -->|yes| len{"declared length over the cap?"}
+  len -->|yes| m413["413"]
+  len -->|no| body{"body read under its cap and valid?"}
+  body -->|over the cap| m413
   body -->|no| bad["400 at the boundary"]
+  body -->|yes| actor{"by actor admitted?"}
+  actor -->|no| m401["401 / 403"]
   m401 -.-> hook
   m405 -.-> hook["on rejected renders the body, if declared"]
   m415 -.-> hook
+  m429 -.-> hook
   m413 -.-> hook
   bad -.-> hook
-  body -->|yes| handler["handler runs — returns Effect"]
+  actor -->|yes| handler["handler runs — returns Effect"]
   handler --> result["HttpResult[T]"]
   result --> status["HTTP status + JSON body"]
 ```
@@ -1989,18 +2156,20 @@ flowchart TD
 Text equivalent: the Worker's `fetch` entry point (`index.ts`) routes the request
 on method **and** path. On a match, path parameters are bound (a path that is not valid percent-encoding is a
 `400 MalformedPath`, never a `500`) and a typed
-[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
+[`query`](#query-strings) is decoded and validated (`400` on a violation); a `@rateLimit` route's limiter is asked first of all (`429`, [below](#rate-limiting)); a `@raw`, `@form` or `@multipart` route's, or a JSON `body` route's,
 `Content-Type` is checked (`415`) and a capped route's `Content-Length` (`413`);
-then the handler's `by` actor is checked (`401` or `403`, see [Actors](/reference/actors/)),
-before any body is read; then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
-`400` at the boundary, before the handler runs. The handler then runs as an
+then any `body` is read under its cap, parsed and validated against its refined type — an invalid body is rejected with
+`400` at the boundary, before the handler runs; then the handler's `by` actor is checked (`401` or `403`, see
+[Actors](/reference/actors/)) by the handler's wrapper. (A multi-actor `by` and a `Signature` route's wrapper read the
+body themselves, verifying over the raw bytes first.) So a rate limit is the only check that runs ahead of the body read
+on every route. The handler then runs as an
 `Effect` and returns an `HttpResult[T]`, which is mapped to an HTTP status and
 JSON body per the table above. When no route matches, a request to a *live* path
 under an unhandled method is a `405 + Allow` (or `204 + Allow` for a plain
 `OPTIONS`); only a request to a path that exists under **no** method is a `404`
 (see [Method semantics](#method-semantics)). A service with
-[`on rejected`](#rendering-rejections) renders the router's `400`, `405`, `413` and
-`415` bodies itself, keeping their status.
+[`on rejected`](#rendering-rejections) renders the router's `400`, `405`, `413`, `415` and
+`429` bodies itself, keeping their status.
 
 ## Example
 

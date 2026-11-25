@@ -80,6 +80,7 @@ mod query_par;
 mod refined_range;
 mod refinements;
 mod result_more;
+mod session_calls;
 pub(crate) use expressions::empty_range_error;
 pub use refinements::refinement_example;
 pub use refinements::split_regex_flags;
@@ -846,6 +847,9 @@ pub enum Callee {
     /// actor: the session cookie the actor mints, or its matching deletion.
     /// `issue` reads the `Clock` and is an `Effect`; `expire` is pure.
     SignedCookie { actor: String, issue: bool },
+    /// #3938: `Actor.revokeAll(identity)` on a `SignedCookie` actor with `sessions = true`: end
+    /// every session of the identity in its session agent. An `Effect[()]`.
+    SessionRevokeAll { actor: String },
     /// #3446: `Record.field.cookie(value)` / `Record.field.expire()` on a cookie record: the
     /// `Cookie` the field's decoder reads back (named by its wire name, valued by the decoder's
     /// leaf rules), or its matching deletion.
@@ -883,6 +887,10 @@ pub enum Callee {
         /// written or inferred from the argument, once the owner check has accepted it. The one
         /// place the emitter and the architecture model read the emitted event from.
         event: Option<String>,
+        /// #4382: for a generic operation, the type arguments the call resolved to, in the
+        /// operation's declaration order (written, then inferred, #4116). Empty otherwise. A
+        /// test build keys a `stub` and an observation on the leading ones.
+        type_args: Vec<TyId>,
     },
     /// #2865: `Cap.select[T](tail, params)` / `Cap.firstAs[T](tail, params)` on
     /// a derived `D1` instance. Not a declared operation: the compiler writes
@@ -3870,6 +3878,8 @@ pub struct CapabilityOpInfo {
     pub return_ty: TyId,
     /// Slice 3: the op's type parameters declared `Codable`.
     pub codable_params: Vec<String>,
+    /// #4116: the op's type parameters declared `Key`.
+    pub key_params: Vec<String>,
     /// #3458: what an undecodable reply means for a typed read, as declared.
     pub reply_policy: codable::ReplyPolicy,
     /// #2634: for a flattened cross-unit operation, `(unit, type name, in a
@@ -7179,6 +7189,9 @@ pub const BOUNDARY_REJECTIONS: &[(&str, bool)] = &[
     ("MalformedForm", true),
     // #3908: the router's `400` to a path whose percent-encoding does not decode.
     ("MalformedPath", true),
+    // #3926: the router's `429` to a client over a `@rateLimit` route's limit. A
+    // breaking addition to a closed sum, as ADR 0586's was.
+    ("RateLimited", true),
 ];
 
 // ── v0.9.2: agent state-field zeroability ──────────────────────────────────

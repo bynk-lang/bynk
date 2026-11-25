@@ -371,6 +371,26 @@ export const Cookie = {
 };
 
 /**
+ * One server-sent event, for a `Streaming(...)` response that needs more than a
+ * `data:` line. `data` is the payload (a line break in it becomes several `data:`
+ * lines); `event` names the event type a browser's `EventSource` listens for;
+ * `id` sets its last event ID, which a reconnecting browser sends back as
+ * `Last-Event-ID`; `retry` is the reconnection delay the browser should wait, sent
+ * in whole milliseconds. `event` and `id` cannot hold a line break and `id`
+ * cannot hold NUL: an element that does faults the stream, in-band. A
+ * `Stream[String]` is still framed as plain `data:` events, unchanged.
+ */
+export interface SseEvent {
+  readonly data: string;
+  readonly event: Option<string>;
+  readonly id: Option<string>;
+  readonly retry: Option<number>;
+}
+
+export const SseEvent = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -552,29 +572,29 @@ export const __LocaleToken: symbol = globalThis.Symbol("Locale");
  */
 export interface Idempotency {
   /**
-   * Checks for a cached outcome under `key`; a miss is `None`.
+   * Checks for a cached outcome under `key`, any `Key` type; a miss is `None`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  dedup(key: string): globalThis.Promise<unknown>;
+  dedup(key: unknown): globalThis.Promise<unknown>;
   /**
-   * Caches `value` under `key` for `expiresAfter`.
+   * Caches `value` under `key`, any `Key` type, for `expiresAfter`.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  remember(key: string, value: unknown, expiresAfter: number): globalThis.Promise<void>;
+  remember(key: unknown, value: unknown, expiresAfter: number): globalThis.Promise<void>;
   /**
-   * Claims `key` for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
+   * Claims `key`, any `Key` type, for `expiresAfter`: `Claimed` to the first caller, `AlreadyClaimed` after.
    *
    * The provider follows the build's platform: D1-backed on Cloudflare
    * (durable and shared across isolates, in the Worker's `<worker>-idempotency`
    * database), in-memory on Node and in the browser (lost on restart).
    */
-  claim(key: string, expiresAfter: number): globalThis.Promise<Claim>;
+  claim(key: unknown, expiresAfter: number): globalThis.Promise<Claim>;
 }
 
 export const __IdempotencyToken: symbol = globalThis.Symbol("Idempotency");
@@ -1173,6 +1193,39 @@ export function __deserialise_SameSite(json: __JsonValue, path: string = "$"): R
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_SseEvent(value: SseEvent): __JsonValue {
+  return {
+    data: value.data as __JsonValue,
+    event: __serialise_Option_String(value.event),
+    id: __serialise_Option_String(value.id),
+    retry: __serialise_Option_Duration(value.retry),
+  };
+}
+
+export function __deserialise_SseEvent(json: __JsonValue, path: string = "$"): Result<SseEvent, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["data"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.data`, expected: "string", actual: typeof obj["data"] });
+  }
+  const __data = obj["data"];
+  const __d_event: __JsonValue = "event" in obj ? obj["event"] : { kind: "None" };
+  const __r_event = __deserialise_Option_String(__d_event, `${path}.event`);
+  if (__r_event.tag === "Err") return __r_event;
+  const __event = __r_event.value;
+  const __d_id: __JsonValue = "id" in obj ? obj["id"] : { kind: "None" };
+  const __r_id = __deserialise_Option_String(__d_id, `${path}.id`);
+  if (__r_id.tag === "Err") return __r_id;
+  const __id = __r_id.value;
+  const __d_retry: __JsonValue = "retry" in obj ? obj["retry"] : { kind: "None" };
+  const __r_retry = __deserialise_Option_Duration(__d_retry, `${path}.retry`);
+  if (__r_retry.tag === "Err") return __r_retry;
+  const __retry = __r_retry.value;
+  return Ok({ data: __data, event: __event, id: __id, retry: __retry } as SseEvent);
 }
 
 export function __serialise_TimedOut(value: TimedOut): __JsonValue {

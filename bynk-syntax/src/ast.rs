@@ -204,7 +204,6 @@ pub enum CommonsForm {
     Fragment,
 }
 
-/// A `uses other.commons` declaration (v0.3 §3.3).
 /// #4045: one qualified name a unit reads through a `uses` clause.
 #[derive(Debug, Clone)]
 pub struct QualifiedRef {
@@ -216,6 +215,7 @@ pub struct QualifiedRef {
     pub span: Span,
 }
 
+/// A `uses other.commons` declaration (v0.3 §3.3).
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub target: QualifiedName,
@@ -1296,8 +1296,8 @@ pub struct ServiceDecl {
 #[derive(Debug, Clone)]
 pub struct CorsPolicy {
     /// The `cors { }` fields as written, in source order. Field names are
-    /// validated against the closed set (`origins`/`headers`/`credentials`/
-    /// `maxAge`) by the checker, not the parser.
+    /// validated against the closed set (`origins`/`headers`/`expose`/
+    /// `credentials`/`maxAge`) by the checker, not the parser.
     pub fields: Vec<CorsField>,
     pub span: Span,
     /// #1786: comments before the closing `}`, an orphaned doc block among
@@ -1353,6 +1353,19 @@ impl CorsPolicy {
     /// a `headers:` list; `None` leaves the emitter to apply its smart default.
     pub fn allow_headers(&self) -> Option<Vec<String>> {
         self.field("headers").and_then(Self::str_list_of)
+    }
+
+    /// #3925: the `expose:` header names the author listed, in order (empty when
+    /// the field is absent or malformed; the checker has reported the shape).
+    pub fn expose_headers(&self) -> Vec<String> {
+        self.field("expose")
+            .and_then(Self::str_list_of)
+            .unwrap_or_default()
+    }
+
+    /// #3925: `true` iff `expose` is exactly the wildcard `["*"]`.
+    pub fn is_wildcard_expose(&self) -> bool {
+        self.expose_headers() == ["*"]
     }
 
     /// The `Access-Control-Max-Age` in whole seconds, if a `maxAge:` duration was
@@ -2023,6 +2036,10 @@ pub struct AnnotationArg {
     /// keeps the reference's span, so a diagnostic points where the author can
     /// act; this names the constant and where it is declared.
     pub from_const: Option<ConstRef>,
+    /// #3942: the constants a list argument's elements named
+    /// (`@allowedRecipients([OpsAddr])`), each with the reference's span, which
+    /// the resolved element keeps. Empty for every other argument.
+    pub element_consts: Vec<ConstRef>,
 }
 
 /// #3445: the constant an annotation argument named before the resolution pass
@@ -5355,6 +5372,10 @@ pub fn statement_exprs<'a>(s: &'a Statement, out: &mut Vec<&'a Expr>) {
 pub struct FaultsExpr {
     pub call: Expr,
     pub principal: Option<CallSiteActor>,
+    /// #4035: `expect <call> violates <name>`: the claim names the invariant, transition or
+    /// `@unique` constraint that refused the call's commit (a dotted path: `name`,
+    /// `Agent.name` or `field.index`). `None` is the bare `faults` claim, which any fault meets.
+    pub violates: Option<Vec<Ident>>,
 }
 
 /// An observation of a capability operation's recorded calls (v0.117, testing
@@ -6189,7 +6210,9 @@ fn f(x: Int) -> Int {
                 }
             }
             ExprKind::Faults(f) => {
-                let FaultsExpr { call, principal } = f.as_ref();
+                let FaultsExpr {
+                    call, principal, ..
+                } = f.as_ref();
                 if let Some(CallSiteActor {
                     actor: _,
                     identity,

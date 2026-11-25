@@ -96,6 +96,8 @@ pub(super) struct HttpRoute {
     /// #3916: the route answers its errors as RFC 9457 problem details — its
     /// `@errors(format:)`, else the service's `errors { }`.
     pub(super) error_problem: bool,
+    /// #3926: the route's `@rateLimit`, asked of the limiter before anything else.
+    pub(super) rate_limit: Option<bynk_check::http_rate_limit::RateLimitRoute>,
     /// #2854: the fields of the handler's typed `query` record, as the runtime's
     /// `queryObject` reads them off the query string: `(name, wire kind, list)`.
     /// `None` when the route has no typed `query` (a raw `RequestQuery` is not
@@ -612,6 +614,33 @@ pub(super) fn emit_http_route_dispatch(
     // #1825: names the route, by its pattern, for the fault log.
     let mut guarded = route_prelude(route, (cors_const, security_const, rejected));
 
+    // #3926: `@rateLimit(Limiter, key: clientIp)`: the limiter is asked before any other
+    // step (the media-type and body-size checks, the actor, the body read), so a flood
+    // costs a counter and a `429`, and a body over the cap still gets `429`, not `413`.
+    if let Some(limit) = &route.rate_limit {
+        guarded.push(if_(
+            TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(await_expr(call(
+                    ident("__rateLimitAllows"),
+                    vec![
+                        member(ident("env"), limit.binding.clone()),
+                        ident("request"),
+                    ],
+                ))),
+            },
+            block(vec![return_(Some(stamp_rejection(
+                call(
+                    ident("__rateLimitedResponse"),
+                    vec![num_lit(limit.period_secs.to_string())],
+                ),
+                cors_const,
+                security_const,
+                rejected,
+            )))]),
+        ));
+    }
+
     // v0.142 (ADR 0165): the request-body ceiling. A route with an effective cap
     // rejects an oversized body with a synthesised `413` derived from the declared
     // `Content-Length`, *before* the body is read — ahead of the `by`/Bearer/sum
@@ -649,64 +678,11 @@ pub(super) fn emit_http_route_dispatch(
         has_body,
         (cors_const, security_const, rejected),
     ));
-    // #3276: a `@form` route answers `415` to any `Content-Type` but a UTF-8
-    // `application/x-www-form-urlencoded`, at the same point as a `@raw` route.
-    if has_body && route.form_fields.is_some() {
-        let unsupported = stamp_rejection(
-            json_response(
-                json_error_kind(
-                    "UnsupportedMediaType",
-                    vec![(
-                        "details".to_string(),
-                        str_lit("expected Content-Type application/x-www-form-urlencoded (UTF-8)"),
-                    )],
-                ),
-                415,
-            ),
-            cors_const,
-            security_const,
-            rejected,
-        );
-        guarded.push(if_(
-            TsExpr::Unary {
-                op: bynk_ts::TsUnaryOp::Not,
-                expr: Box::new(call(
-                    ident("__formMediaTypeMatches"),
-                    vec![ident("request")],
-                )),
-            },
-            block(vec![return_(Some(unsupported))]),
-        ));
-    }
-    // #3276: a `@multipart` route answers `415` to any `Content-Type` but
-    // `multipart/form-data`; a body with no boundary is a `400 MalformedForm`, below.
-    if has_body && route.multipart.is_some() {
-        let unsupported = stamp_rejection(
-            json_response(
-                json_error_kind(
-                    "UnsupportedMediaType",
-                    vec![(
-                        "details".to_string(),
-                        str_lit("expected Content-Type multipart/form-data"),
-                    )],
-                ),
-                415,
-            ),
-            cors_const,
-            security_const,
-            rejected,
-        );
-        guarded.push(if_(
-            TsExpr::Unary {
-                op: bynk_ts::TsUnaryOp::Not,
-                expr: Box::new(call(
-                    ident("__multipartMediaTypeMatches"),
-                    vec![ident("request")],
-                )),
-            },
-            block(vec![return_(Some(unsupported))]),
-        ));
-    }
+    guarded.extend(form_media_guards(
+        route,
+        has_body,
+        (cors_const, security_const, rejected),
+    ));
     if let Some(cap) = route.max_body.filter(|_| has_body) {
         guarded.push(const_(
             "__contentLength",
@@ -1318,6 +1294,76 @@ pub(super) fn emit_http_route_dispatch(
     block(inner)
 }
 
+/// #3276: the `415` a `@form` or `@multipart` route answers to a body of another
+/// `Content-Type`, at the same point as a `@raw` route's. Empty for any other
+/// route, and for one with no body.
+fn form_media_guards(
+    route: &HttpRoute,
+    has_body: bool,
+    (cors_const, security_const, rejected): (Option<&str>, Option<&str>, Rejection),
+) -> Vec<TsStmt> {
+    let mut out: Vec<TsStmt> = Vec::new();
+    // #3276: a `@form` route answers `415` to any `Content-Type` but a UTF-8
+    // `application/x-www-form-urlencoded`, at the same point as a `@raw` route.
+    if has_body && route.form_fields.is_some() {
+        let unsupported = stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "UnsupportedMediaType",
+                    vec![(
+                        "details".to_string(),
+                        str_lit("expected Content-Type application/x-www-form-urlencoded (UTF-8)"),
+                    )],
+                ),
+                415,
+            ),
+            cors_const,
+            security_const,
+            rejected,
+        );
+        out.push(if_(
+            TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(call(
+                    ident("__formMediaTypeMatches"),
+                    vec![ident("request")],
+                )),
+            },
+            block(vec![return_(Some(unsupported))]),
+        ));
+    }
+    // #3276: a `@multipart` route answers `415` to any `Content-Type` but
+    // `multipart/form-data`; a body with no boundary is a `400 MalformedForm`, below.
+    if has_body && route.multipart.is_some() {
+        let unsupported = stamp_rejection(
+            json_response(
+                json_error_kind(
+                    "UnsupportedMediaType",
+                    vec![(
+                        "details".to_string(),
+                        str_lit("expected Content-Type multipart/form-data"),
+                    )],
+                ),
+                415,
+            ),
+            cors_const,
+            security_const,
+            rejected,
+        );
+        out.push(if_(
+            TsExpr::Unary {
+                op: bynk_ts::TsUnaryOp::Not,
+                expr: Box::new(call(
+                    ident("__multipartMediaTypeMatches"),
+                    vec![ident("request")],
+                )),
+            },
+            block(vec![return_(Some(unsupported))]),
+        ));
+    }
+    out
+}
+
 /// #3910: the path parameters of `h` that are read as something other than text.
 fn path_param_kinds(
     h: &Handler,
@@ -1549,7 +1595,10 @@ fn emit_path_param_construction(
             let construct = if consumed {
                 method_call(
                     ident("handlers"),
-                    format!("__deserialise_{}", id.name),
+                    format!(
+                        "__deserialise_{}",
+                        bynk_check::emitted_names::codec_key(&id.name)
+                    ),
                     vec![ident(raw), wire_path.clone()],
                 )
             } else {
@@ -1679,6 +1728,7 @@ pub(super) fn collect_http_routes(
                     signature: bynk_check::actors::signature_seam_for(h, &table.actors),
                     path_kinds,
                     challenges: route_challenges(h, table, context),
+                    rate_limit: bynk_check::http_rate_limit::route_rate_limit(h, table),
                     // v0.52: a multi-actor sum handler's wrapper owns the whole
                     // boundary (raw read, first-wins resolution, body parse), so
                     // the entry just passes `request` and skips the body parse.

@@ -722,8 +722,18 @@
         ]
       },
       "name": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "qualifier": {
+        "multiple": false,
+        "required": false,
         "types": [
           {
             "type": "identifier",
@@ -4813,6 +4823,16 @@
           },
           {
             "type": "wire_expr",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "violates_name",
             "named": true
           }
         ]
@@ -9809,6 +9829,10 @@
           {
             "type": "identifier",
             "named": true
+          },
+          {
+            "type": "qualified_type_ref",
+            "named": true
           }
         ]
       }
@@ -10260,6 +10284,10 @@
         "types": [
           {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_type_ref",
             "named": true
           }
         ]
@@ -13782,6 +13810,21 @@
     }
   },
   {
+    "type": "violates_name",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "where_bound",
     "named": true,
     "fields": {
@@ -14888,6 +14931,10 @@
   },
   {
     "type": "via",
+    "named": false
+  },
+  {
+    "type": "violates",
     "named": false
   },
   {

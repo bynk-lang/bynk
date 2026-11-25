@@ -641,6 +641,19 @@ pub(crate) fn foreign_hand_off(
     runner: &str,
 ) -> String {
     let context = context_of(worker);
+    if caller.queue {
+        // #3899: a producer of queue messages holds the value however its own Worker names it, and
+        // signs each message with it, so there is no key name or command to give.
+        return format!(
+            "bynk: note: minted {binding} for `{actor}`, a foreign producer of `{context}`'s queues. Its operator keeps this value where their producer reads it:\n\n  \
+             {value}\n\n  \
+             It signs each message it sends as `{actor}` under that key; see the signed queue messages section of the wire format reference.\n  \
+             This is the only time the value is shown: `{deploy} --force` mints a new one.\n",
+            binding = caller.binding,
+            actor = caller.actor,
+            deploy = deploy_command(environment),
+        );
+    }
     let key = bynk_emit::edge_key_to(&context).unwrap_or_else(|| "BYNK_CALL_KEY".to_string());
     let name = caller
         .worker
@@ -1752,6 +1765,7 @@ WITH_EQUALS=a=b
             actor: "Ledger".into(),
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
+            queue: false,
         };
         let text = foreign_hand_off("default", "shop-orders", &caller, "abc123", "npx");
         assert!(
@@ -1775,6 +1789,28 @@ WITH_EQUALS=a=b
         );
     }
 
+    /// #3899: a foreign producer of queue messages is told the value and what it is for, not a
+    /// `wrangler` key name for a call.
+    #[test]
+    fn a_queue_senders_hand_off_gives_the_value_and_no_call_key() {
+        let producer = ForeignCaller {
+            actor: "Legacy".into(),
+            binding: "LEGACY_QUEUE_KEY".into(),
+            worker: None,
+            queue: true,
+        };
+        let text = foreign_hand_off("default", "shop", &producer, "abc123", "npx");
+        assert!(text.contains("abc123"), "{text}");
+        assert!(
+            text.contains("a foreign producer of `shop`'s queues") && text.contains("`Legacy`"),
+            "{text}"
+        );
+        assert!(
+            !text.contains("BYNK_CALL_TO") && !text.contains("wrangler secret put"),
+            "a queue sender signs messages, it does not call: {text}"
+        );
+    }
+
     #[test]
     fn the_hand_off_names_the_detected_managers_runner() {
         use bynk_driver::npm_install::PackageManager::{Bun, Npm, Pnpm, Yarn};
@@ -1782,6 +1818,7 @@ WITH_EQUALS=a=b
             actor: "Ledger".into(),
             binding: "LEDGER_CALL_KEY".into(),
             worker: Some("ledger-svc".into()),
+            queue: false,
         };
         for (manager, runner) in [
             (Npm, "npx"),

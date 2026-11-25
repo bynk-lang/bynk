@@ -11,11 +11,11 @@
 //! The project-wide half (a dead-letter queue's own consumer must take the same
 //! message type) is [`phase_dead_letter_consumers`].
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bynk_project::{ParsedFile, UnitKind};
 use bynk_syntax::ast::{
-    CommonsItem, DeliveryPolicy, ExprKind, ServiceDecl, ServiceProtocol, SourceUnit,
+    ActorDecl, CommonsItem, DeliveryPolicy, ExprKind, ServiceDecl, ServiceProtocol, SourceUnit,
 };
 use bynk_syntax::error::CompileError;
 
@@ -254,6 +254,120 @@ pub fn phase_dead_letter_consumers(
     }
 }
 
+/// #3899: the foreign senders a queue service's `on message` admits, as (actor, secret), or `None`
+/// when it admits unsigned messages (`by Producer`).
+fn signed_senders(
+    service: &ServiceDecl,
+    actors: &HashMap<String, ActorDecl>,
+) -> Option<BTreeSet<(String, String)>> {
+    service
+        .handlers
+        .iter()
+        .find_map(|h| crate::actors::queue_admission_for(h, &service.protocol, actors))
+        .map(|a| a.foreign.into_iter().map(|f| (f.actor, f.secret)).collect())
+}
+
+/// #3899: a dead letter keeps whatever the source consumer received, so a signed queue's dead
+/// letters are the signed envelope and an unsigned queue's are the bare body. The dead-letter
+/// queue's consumer must therefore be signed exactly when the source is, in the same context
+/// (it verifies under the queues that dead-letter into its own context's), and a signed one must
+/// admit the source's senders, or every dead letter would fail to decode or verify and be dropped.
+/// A dead-letter queue nobody in the project consumes is read elsewhere, and is not checked.
+pub fn phase_dead_letter_signing(
+    parsed: &[ParsedFile],
+    groups: &BTreeMap<String, Vec<usize>>,
+    kinds: &BTreeMap<String, UnitKind>,
+    errors: &mut ErrorSink,
+) {
+    // Each queue's consumer: its context, its service and the senders it admits (`None`: unsigned).
+    type Info<'a> = (&'a str, &'a ServiceDecl, Option<BTreeSet<(String, String)>>);
+    let mut consumers: HashMap<&str, Info> = HashMap::new();
+    for (ctx_name, indices) in groups {
+        if kinds.get(ctx_name) != Some(&UnitKind::Context) {
+            continue;
+        }
+        let mut actors: HashMap<String, ActorDecl> = HashMap::new();
+        for &i in indices {
+            if let SourceUnit::Context(ctx) = parsed[i].unit() {
+                for item in &ctx.items {
+                    if let CommonsItem::Actor(a) = item {
+                        actors.insert(a.name.name.clone(), a.clone());
+                    }
+                }
+            }
+        }
+        for &i in indices {
+            let SourceUnit::Context(ctx) = parsed[i].unit() else {
+                continue;
+            };
+            for item in &ctx.items {
+                if let CommonsItem::Service(service) = item
+                    && let ServiceProtocol::Queue { name } = &service.protocol
+                {
+                    consumers.entry(name.as_str()).or_insert((
+                        ctx_name,
+                        service,
+                        signed_senders(service, &actors),
+                    ));
+                }
+            }
+        }
+    }
+    for (queue, (ctx_name, service, source)) in &consumers {
+        let Some(delivery) = &service.delivery else {
+            continue;
+        };
+        let Some(bynk_syntax::ast::DeadLetter::Queue(dlq)) = delivery.dead_letter() else {
+            continue;
+        };
+        let Some((dead_ctx, _, dead)) = consumers.get(dlq) else {
+            continue;
+        };
+        let problem = match (source, dead) {
+            (None, None) => continue,
+            (Some(_), None) => format!(
+                "the consumer of dead-letter queue `{dlq}` admits unsigned messages, but `{queue}` admits only signed ones"
+            ),
+            (None, Some(_)) => format!(
+                "the consumer of dead-letter queue `{dlq}` admits only signed messages, but `{queue}` is not signed"
+            ),
+            (Some(s), Some(d)) if dead_ctx != ctx_name => {
+                let _ = (s, d);
+                format!(
+                    "the consumer of dead-letter queue `{dlq}` is in context `{dead_ctx}`, but `{queue}` is signed in context `{ctx_name}`"
+                )
+            }
+            (Some(s), Some(d)) if !s.is_subset(d) => format!(
+                "the consumer of dead-letter queue `{dlq}` does not admit every sender `{queue}` does"
+            ),
+            (Some(_), Some(_)) => continue,
+        };
+        let span = delivery
+            .fields
+            .iter()
+            .rev()
+            .find(|f| f.name.name == "deadLetter")
+            .map_or(delivery.span, |f| f.value.span);
+        let file = groups
+            .get(*ctx_name)
+            .into_iter()
+            .flatten()
+            .find(|&&i| match parsed[i].unit() {
+                SourceUnit::Context(c) => c
+                    .items
+                    .iter()
+                    .any(|it| matches!(it, CommonsItem::Service(sv) if std::ptr::eq(sv, *service))),
+                _ => false,
+            })
+            .copied();
+        let err = CompileError::new("bynk.queue.dead_letter_signing_mismatch", span, problem)
+            .with_note(
+                "a dead letter keeps what the source consumer received, the signed envelope for a signed queue, so its consumer must verify the same senders in the same context (or neither queue is signed)",
+            );
+        errors.push_for(file.map(|i| parsed[i].identity_path()).as_deref(), err);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::testkit::analyse;
@@ -422,5 +536,36 @@ mod tests {
             ),
         )]);
         a.assert_reports("bynk.parse.duplicate_delivery");
+    }
+
+    /// #3899: a signed queue and its dead-letter queue, with the dead-letter consumer's `by`.
+    fn signed_pair(dead_by: &str) -> String {
+        format!(
+            "context t.q\n\nactor Legacy {{ auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }}\nactor Other {{ auth = Foreign(secret = \"OTHER_QUEUE_KEY\") }}\n\n\
+             service w from queue(\"jobs\") {{\n  delivery {{ deadLetter: \"jobs-dead\" }}\n  on message(m: String) -> Effect[QueueResult] by Legacy {{ Ack }}\n}}\n\n\
+             service d from queue(\"jobs-dead\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: String) -> Effect[QueueResult] by {dead_by} {{ Ack }}\n}}\n"
+        )
+    }
+
+    #[test]
+    fn a_signed_queues_dead_letter_consumer_must_admit_its_senders() {
+        // Signed by the same actor: clean (the one warning is the dead-letter queue's own missing one).
+        assert!(
+            !categories(&signed_pair("Legacy"))
+                .contains(&"bynk.queue.dead_letter_signing_mismatch")
+        );
+        // Unsigned, or signed by another actor: every dead letter would be dropped.
+        for by in ["Producer", "Other"] {
+            assert!(
+                categories(&signed_pair(by)).contains(&"bynk.queue.dead_letter_signing_mismatch"),
+                "{by}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unsigned_queues_signed_dead_letter_consumer_is_refused() {
+        let source = "context t.q\n\nactor Legacy { auth = Foreign(secret = \"LEGACY_QUEUE_KEY\") }\n\nservice w from queue(\"jobs\") {\n  delivery { deadLetter: \"jobs-dead\" }\n  on message(m: String) -> Effect[QueueResult] by Producer { Ack }\n}\n\nservice d from queue(\"jobs-dead\") {\n  delivery { deadLetter: None }\n  on message(m: String) -> Effect[QueueResult] by Legacy { Ack }\n}\n";
+        assert!(categories(source).contains(&"bynk.queue.dead_letter_signing_mismatch"));
     }
 }

@@ -3023,11 +3023,15 @@ mod classified {
     }
 }
 
-/// #3941 decision H: the plan's note about a named environment that takes
-/// another environment's `env(…)` values, and what `--strict-environments` does
-/// with it.
+/// #3941 decision H, #3943: the constants' lines, and what a named environment
+/// shares with `default`, in the text plan and the JSON one.
 mod env_constants {
-    use super::super::run::{EnvVerdict, env_constant_report};
+    use super::super::run::env_constant_lines;
+    use super::super::shared::{
+        SharedWithDefault, shared_bindings, shared_constants, strict_refusal,
+    };
+    use super::*;
+    use bynk_check::worker_bindings::{BindingSource, WorkerBinding};
     use bynk_project::vars::{ResolvedConst, ValueSource};
 
     fn fact(constant: &str, source: ValueSource) -> ResolvedConst {
@@ -3039,37 +3043,48 @@ mod env_constants {
         }
     }
 
-    #[test]
-    fn no_constants_say_nothing() {
-        assert_eq!(env_constant_report(&[], "staging", true), None);
+    fn bindings(list: Vec<WorkerBinding>) -> BTreeMap<String, Vec<WorkerBinding>> {
+        BTreeMap::from([("shop.billing".to_string(), list)])
+    }
+
+    fn service(name: &str, worker: &str) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::ForeignService {
+                capability: "Billing".into(),
+                worker: worker.into(),
+            },
+        }
+    }
+
+    fn email(name: &str, to: Option<&str>, recipients: &[&str]) -> WorkerBinding {
+        WorkerBinding {
+            name: name.to_string(),
+            source: BindingSource::Email {
+                capability: "Alerts".into(),
+                to: to.map(str::to_string),
+                allowed_recipients: recipients.iter().map(|s| s.to_string()).collect(),
+                allowed_senders: Vec::new(),
+            },
+        }
     }
 
     #[test]
-    fn the_default_environment_never_gets_the_note() {
+    fn no_constants_print_no_lines_and_one_per_constant_otherwise() {
+        assert!(env_constant_lines(&[], "staging").is_empty());
         let facts = [
             fact("Origin", ValueSource::Vars),
             fact("Lines", ValueSource::Default),
         ];
-        for strict in [false, true] {
-            let report = env_constant_report(&facts, "default", strict).unwrap();
-            assert_eq!(report.verdict, EnvVerdict::Fine);
-            assert_eq!(report.lines.len(), 3, "a header and one line each");
-        }
+        let lines = env_constant_lines(&facts, "staging");
+        assert_eq!(lines.len(), 3, "a header and one line each: {lines:?}");
+        assert!(lines[0].contains("`staging`"), "{lines:?}");
         // The empty name `DeployOptions::default()` carries is `default` too.
-        let report = env_constant_report(&facts, "", true).unwrap();
-        assert_eq!(report.verdict, EnvVerdict::Fine);
-        assert!(report.lines[0].contains("`default`"), "{:?}", report.lines);
+        assert!(env_constant_lines(&facts, "")[0].contains("`default`"));
     }
 
     #[test]
-    fn a_named_environment_with_its_own_values_is_fine() {
-        let facts = [fact("Origin", ValueSource::EnvVars("staging".into()))];
-        let report = env_constant_report(&facts, "staging", true).unwrap();
-        assert_eq!(report.verdict, EnvVerdict::Fine);
-    }
-
-    #[test]
-    fn a_named_environment_that_falls_back_is_noted_and_strict_refuses() {
+    fn a_named_environment_shares_the_constants_it_leaves_to_vars_or_a_default() {
         let facts = [
             fact("Origin", ValueSource::EnvVars("staging".into())),
             fact("Billing", ValueSource::Vars),
@@ -3077,21 +3092,234 @@ mod env_constants {
             // Another environment's own table is not staging's.
             fact("Region", ValueSource::EnvVars("prod".into())),
         ];
-        let EnvVerdict::Note(note) = env_constant_report(&facts, "staging", false)
-            .unwrap()
-            .verdict
-        else {
-            panic!("a note");
+        let names: Vec<_> = shared_constants(&facts, "staging")
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(names, ["Billing", "Lines", "Region"]);
+        // `default` shares nothing with itself.
+        assert!(shared_constants(&facts, "default").is_empty());
+    }
+
+    #[test]
+    fn a_foreign_service_and_email_values_equal_to_defaults_are_shared() {
+        let default = bindings(vec![
+            service("SERVICE_BILLING", "legacy-billing"),
+            service("SERVICE_AUDIT", "audit"),
+            service("SERVICE_CORE", "core"),
+            email(
+                "EMAIL_ALERTS",
+                Some("oncall@shop.example"),
+                &["a@shop.example"],
+            ),
+        ]);
+        let staging = bindings(vec![
+            // Equal and foreign: shared.
+            service("SERVICE_BILLING", "legacy-billing"),
+            // Its own value: not shared.
+            service("SERVICE_AUDIT", "audit-staging"),
+            // Equal but the build's own Worker: a project edge, named apart per environment.
+            service("SERVICE_CORE", "core"),
+            email(
+                "EMAIL_ALERTS",
+                Some("oncall@shop.example"),
+                &["a@shop.example"],
+            ),
+        ]);
+        // `core` is a Worker this build makes; the others are foreign.
+        let own = BTreeSet::from(["core".to_string()]);
+        let shared = shared_bindings(&staging, &default, &own);
+        let found: Vec<(&str, &str)> = shared.iter().map(|s| (s.kind, s.name.as_str())).collect();
+        assert_eq!(
+            found,
+            [
+                ("service", "SERVICE_BILLING"),
+                ("email_to", "EMAIL_ALERTS"),
+                ("email_allowed_recipients", "EMAIL_ALERTS"),
+            ]
+        );
+        assert_eq!(shared[0].value, "\"legacy-billing\"");
+        // Its own address, and an unpinned `Email`, share nothing.
+        let own_addr = bindings(vec![email(
+            "EMAIL_ALERTS",
+            Some("qa@shop.example"),
+            &["q@shop.example"],
+        )]);
+        assert!(shared_bindings(&own_addr, &default, &own).is_empty());
+        let open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
+        let default_open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
+        assert!(shared_bindings(&open, &default_open, &own).is_empty());
+    }
+
+    #[test]
+    fn a_binding_name_two_contexts_share_is_judged_per_context() {
+        use super::super::shared::has_comparable_bindings;
+        // Context A reaches a Worker outside the build; context B reaches the
+        // build's own `core` Worker, through a binding of the same name.
+        let both = |billing: &str| {
+            BTreeMap::from([
+                (
+                    "shop.a".to_string(),
+                    vec![service("SERVICE_BILLING", billing)],
+                ),
+                (
+                    "shop.b".to_string(),
+                    vec![service("SERVICE_BILLING", "core")],
+                ),
+            ])
         };
-        assert!(note.contains("Billing, Lines, Region"), "{note}");
-        assert!(!note.contains("Origin"), "{note}");
-        let EnvVerdict::Refuse(error) = env_constant_report(&facts, "staging", true)
-            .unwrap()
-            .verdict
-        else {
-            panic!("a refusal");
+        let own = BTreeSet::from(["core".to_string()]);
+        let shared = shared_bindings(&both("legacy-billing"), &both("legacy-billing"), &own);
+        let found: Vec<(&str, &str)> = shared.iter().map(|s| (s.kind, s.value.as_str())).collect();
+        assert_eq!(
+            found,
+            [("service", "\"legacy-billing\"")],
+            "only the foreign one: {shared:?}"
+        );
+        // Nothing comparable means `default` need not be built.
+        let edges_only = BTreeMap::from([(
+            "shop.b".to_string(),
+            vec![service("SERVICE_BILLING", "core")],
+        )]);
+        assert!(!has_comparable_bindings(&edges_only, &own));
+        assert!(has_comparable_bindings(&both("legacy-billing"), &own));
+        // An open `Email` (no `@to`, no `@allowedRecipients`) can never be shared, so it
+        // is not worth building `default` for; one with a value that could match is.
+        let open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
+        assert!(!has_comparable_bindings(&open, &own));
+        let pinned = bindings(vec![email("EMAIL_ALERTS", Some("a@shop.example"), &[])]);
+        assert!(has_comparable_bindings(&pinned, &own));
+        let allowed = bindings(vec![email("EMAIL_ALERTS", None, &["a@shop.example"])]);
+        assert!(has_comparable_bindings(&allowed, &own));
+        assert!(!has_comparable_bindings(&BTreeMap::new(), &own));
+    }
+
+    #[test]
+    fn an_unbuildable_default_is_said_and_a_strict_run_refuses() {
+        use super::super::shared::comparison_skipped;
+        let cause = "bynk.env.missing: `ORIGIN` has no value in the `default` environment";
+        let (note, refuse) = comparison_skipped("staging", false, cause);
+        assert!(
+            !refuse && note.starts_with("bynk: note:") && note.contains("`default`"),
+            "{note}"
+        );
+        let (error, refuse) = comparison_skipped("staging", true, cause);
+        assert!(
+            refuse && error.starts_with("bynk: error:") && error.contains("--strict-environments"),
+            "{error}"
+        );
+        // Both say why `default` failed and what to do about it.
+        for message in [&note, &error] {
+            assert!(message.contains(cause), "{message}");
+            assert!(message.contains("required variable"), "{message}");
+            assert!(message.contains("[env.default.vars]"), "{message}");
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_each_binding_once() {
+        let both = |kind| SharedWithDefault {
+            kind,
+            name: "EMAIL_ALERTS".into(),
+            value: "\"x\"".into(),
+            variable: None,
         };
-        assert!(error.starts_with("bynk: error:"), "{error}");
-        assert!(error.contains("Billing, Lines, Region"), "{error}");
+        let refusal = strict_refusal(
+            &[both("email_to"), both("email_allowed_recipients")],
+            "staging",
+        )
+        .unwrap();
+        assert!(refusal.contains("shares EMAIL_ALERTS with"), "{refusal}");
+        assert!(!refusal.contains("EMAIL_ALERTS, EMAIL_ALERTS"), "{refusal}");
+    }
+
+    #[test]
+    fn a_value_the_environment_sets_itself_records_the_sharing_as_deliberate() {
+        use super::super::shared::without_deliberate;
+        let shared = |kind, name: &str, value: &str| SharedWithDefault {
+            kind,
+            name: name.into(),
+            value: value.into(),
+            variable: None,
+        };
+        let items = vec![
+            shared("service", "SERVICE_BILLING", "\"legacy-billing\""),
+            shared("service", "SERVICE_AUDIT", "\"audit\""),
+            shared("env_constant", "Origin", "\"https://app\""),
+        ];
+        // `Billing` is set in `[env.staging.vars]` to the value `default` has.
+        let facts = [
+            fact_with(
+                "BillingWorker",
+                "\"legacy-billing\"",
+                ValueSource::EnvVars("staging".into()),
+            ),
+            fact_with("AuditWorker", "\"audit\"", ValueSource::Vars),
+        ];
+        let kept = without_deliberate(items, &facts, "staging");
+        let names: Vec<_> = kept.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["SERVICE_AUDIT", "Origin"]);
+    }
+
+    fn fact_with(constant: &str, value: &str, source: ValueSource) -> ResolvedConst {
+        ResolvedConst {
+            constant: constant.to_string(),
+            variable: constant.to_uppercase(),
+            value: value.to_string(),
+            source,
+        }
+    }
+
+    #[test]
+    fn strict_environments_refuses_only_a_non_empty_set() {
+        assert_eq!(strict_refusal(&[], "staging"), None);
+        let shared = [SharedWithDefault {
+            kind: "service",
+            name: "SERVICE_BILLING".into(),
+            value: "\"legacy-billing\"".into(),
+            variable: None,
+        }];
+        let refusal = strict_refusal(&shared, "staging").unwrap();
+        assert!(refusal.starts_with("bynk: error:"), "{refusal}");
+        assert!(refusal.contains("SERVICE_BILLING") && refusal.contains("[env.staging.vars]"));
+    }
+
+    #[test]
+    fn the_plan_lists_the_sharing_in_text_and_json_and_only_when_there_is_some() {
+        let order = names(&["shop"]);
+        let declared = project(vec![("shop", Resources::default())]);
+        let plain = plan_of(&order, &declared, &DeployLock::default());
+        let text = plan_report(&plain, DeployFormat::Short);
+        let json = plan_report(&plain, DeployFormat::Json);
+        assert!(!text.contains("shared with default"), "{text}");
+        assert!(!json.contains("shared_with_default"), "{json}");
+        let shared = vec![
+            SharedWithDefault {
+                kind: "service",
+                name: "SERVICE_BILLING".into(),
+                value: "\"legacy-billing\"".into(),
+                variable: None,
+            },
+            SharedWithDefault {
+                kind: "env_constant",
+                name: "Origin".into(),
+                value: "\"https://app\"".into(),
+                variable: Some("APP_ORIGIN".into()),
+            },
+        ];
+        let plan = plan_of(&order, &declared, &DeployLock::default()).with_shared(shared);
+        let text = plan_report(&plan, DeployFormat::Short);
+        assert!(
+            text.contains("shared with default: SERVICE_BILLING → \"legacy-billing\"\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("shared with default: Origin → \"https://app\" (APP_ORIGIN unset for "),
+            "{text}"
+        );
+        let json = plan_report(&plan, DeployFormat::Json);
+        assert!(json.contains("\"shared_with_default\""), "{json}");
+        assert!(json.contains("\"kind\": \"service\""), "{json}");
+        assert!(json.contains("\"variable\": \"APP_ORIGIN\""), "{json}");
     }
 }

@@ -9,6 +9,21 @@
 
 use crate::locals::{LocalBinding, LocalKind};
 
+/// #4403: a wire-codec helper's suffix for the type `key`. A name a `uses` clause
+/// qualifies (`lib.x.Status`, `Y.Status`) is one dotted key, which no TypeScript
+/// identifier can spell, so its helper is named with underscores
+/// (`__serialise_lib_x_Status`) and imported under that name from the module that
+/// declares the type (`__serialise_Status`).
+pub fn codec_key(key: &str) -> String {
+    key.replace('.', "_")
+}
+
+/// #4403: the name a type a `uses` clause qualifies is declared under (`Status` for
+/// `lib.x.Status`), or the key itself for any other name.
+pub fn declared_name_of_key(key: &str) -> &str {
+    key.rsplit('.').next().unwrap_or(key)
+}
+
 /// The TypeScript spelling of a user identifier in a *binding or reference*
 /// position (params, locals, function names, import names). Bynk identifiers
 /// that are illegal as TS binding names — the JS reserved words plus the
@@ -19,6 +34,9 @@ use crate::locals::{LocalBinding, LocalKind};
 /// through here: reserved words are legal there, and record field names are
 /// wire format.
 pub fn ts_ident(name: &str) -> String {
+    if let Some(qualified) = use_qualified_name(name) {
+        return qualified;
+    }
     const RESERVED: &[&str] = &[
         // ES reserved words.
         "break",
@@ -87,6 +105,26 @@ pub fn ts_ident(name: &str) -> String {
     }
 }
 
+/// #4397: the identifier a unit binds a commons' full name (`lib.y`) to, as one
+/// namespace import (`import * as __use_lib_y from "./lib/y.js"`), so a name read
+/// through that qualifier (`lib.y.Status`) is `__use_lib_y.Status` in TypeScript.
+/// A TypeScript `namespace` that hung the dotted name on a `lib` object would read
+/// as written, but is not erasable, which `--inspect` and the in-browser eval need.
+/// The `__` prefix is the generated-name space the parser keeps free of user names.
+pub fn use_qualifier_binding(qualifier: &str) -> String {
+    ["__use_", &qualifier.replace('.', "_")].concat()
+}
+
+/// #4397: `name` as TypeScript when it is read through a commons' full name
+/// (`lib.y.Status` → `__use_lib_y.Status`), and `None` for any other name. An alias
+/// qualifier (`Y.Status`) has one dot and is already a namespace import's name.
+pub fn use_qualified_name(name: &str) -> Option<String> {
+    let (qualifier, last) = name.rsplit_once('.')?;
+    qualifier
+        .contains('.')
+        .then(|| [&use_qualifier_binding(qualifier), ".", last].concat())
+}
+
 /// The JS identifier the emitter declares for `binding`, or `None` when it
 /// cannot be known from the source alone.
 ///
@@ -132,6 +170,28 @@ mod tests {
         assert_eq!(ts_ident("class"), "__id_class");
         assert_eq!(ts_ident("deps"), "__id_deps");
         assert_eq!(ts_ident("total"), "total");
+    }
+
+    /// #4397: a commons' full name is bound as one namespace import, so the name read
+    /// through it is a property of that binding; an alias (`Y.Status`) is already one.
+    #[test]
+    fn a_full_name_qualified_name_reads_through_its_namespace_import() {
+        assert_eq!(ts_ident("lib.y.Status"), "__use_lib_y.Status");
+        assert_eq!(ts_ident("a.b.c.Status"), "__use_a_b_c.Status");
+        assert_eq!(ts_ident("Y.Status"), "Y.Status");
+        assert_eq!(use_qualifier_binding("lib.y"), "__use_lib_y");
+    }
+
+    /// #4403: a codec helper for a qualified type is named without the dots, and is
+    /// imported from the module that declares the type under its declared name.
+    #[test]
+    fn a_qualified_type_names_its_codec_helper_without_dots() {
+        assert_eq!(codec_key("lib.y.Status"), "lib_y_Status");
+        assert_eq!(codec_key("Y.Status"), "Y_Status");
+        assert_eq!(codec_key("Status"), "Status");
+        assert_eq!(declared_name_of_key("lib.y.Status"), "Status");
+        assert_eq!(declared_name_of_key("Y.Status"), "Status");
+        assert_eq!(declared_name_of_key("Status"), "Status");
     }
 
     #[test]

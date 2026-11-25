@@ -56,6 +56,7 @@ pub fn build_capability_op_info(
         return_ty: checker::resolve_type_ref_in(&op.return_type, types, &vars, tys)
             .unwrap_or_else(|| tys.intern(Ty::Unit)),
         codable_params: checker::codable::codable_op_params(op),
+        key_params: checker::codable::key_op_params(op),
         reply_policy: checker::codable::op_reply_policy(op),
         boundary_conflict: None,
     }
@@ -793,6 +794,7 @@ pub fn check_context_declarations(
                     param_names: op.params.iter().map(|(n, _)| n.clone()).collect(),
                     return_ty,
                     codable_params: op.codable_params.clone(),
+                    key_params: op.key_params.clone(),
                     reply_policy: op.reply_policy,
                     boundary_conflict: conflict,
                 }
@@ -2198,7 +2200,7 @@ fn check_by_clause_contracts(
                     is_sender_refinement(a, table),
                 )
             }),
-            contract.scheme,
+            by_mixes_foreign(by, table, &actor_ref.name),
         ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
             errors.push(
@@ -2212,10 +2214,10 @@ fn check_by_clause_contracts(
                     ),
                 )
                 .with_note(match protocol {
-                    // I3 (#1971): a foreign caller calls a service, and only
-                    // by `call`.
+                    // I3 (#1971): a foreign caller calls a service, and (#3899) a foreign
+                    // producer sends to a queue consumer.
                     _ if contract.scheme == Scheme::Foreign => {
-                        "a `Foreign` actor is admitted only on an `on call` handler"
+                        "a `Foreign` actor is admitted only on an `on call` handler or a queue consumer's `on message`"
                     }
                     ServiceProtocol::Http => {
                         "public HTTP routes take an anonymous actor — write `by v: Visitor`"
@@ -2775,9 +2777,8 @@ fn actor_narrowing_refusal(
     protocol: &ServiceProtocol,
     by: &bynk_syntax::ast::ByClause,
     refinement: Option<(bool, bool)>,
-    scheme: crate::actors::Scheme,
+    mixes_foreign: bool,
 ) -> Option<CompileError> {
-    use crate::actors::Scheme;
     let (producer_refinement, sender_refinement) = refinement.unwrap_or_default();
     // #3888: likewise a refinement over `Sender` narrows inbound mail, and only an email
     // handler can name one: elsewhere its `Dmarc(…)` is never checked.
@@ -2817,20 +2818,42 @@ fn actor_narrowing_refusal(
             ),
         );
     }
-    if !on_queue || !(producer_refinement || scheme == Scheme::Foreign) {
+    // #3899: a `Foreign` actor on its own is enforced: the consumer admits only messages signed
+    // under its secret. A `Producer` refinement, or a `Foreign` actor in a sum or with a binder
+    // (no seam binds the resolved actor on a queue yet), is not yet.
+    if !on_queue || !(producer_refinement || mixes_foreign) {
         return None;
     }
     Some(
         CompileError::new(
             "bynk.actor.queue_actor_not_enforced",
             by.span,
-            "a queue consumer cannot narrow its actor yet: a `Producer` refinement or a `Foreign` actor is not enforced on `on message`",
+            "a queue consumer cannot narrow its actor this way yet: a `Producer` refinement, or a `Foreign` actor in a sum or with a binder, is not enforced on `on message`",
         )
         .with_note(
-            "nothing verifies who sent a queue message yet, so accepting this `by` would admit \
-             every producer while reading as if it did not — write `by Producer` for now",
+            "nothing verifies who sent such a message yet, so accepting this `by` would admit \
+             unsigned messages while reading as if it did not — write `by Producer`, or \
+             name one `Foreign` actor alone, with no binder",
         ),
     )
+}
+
+/// #3899: whether `actor` is the first `Foreign` member of a `by` clause that names it in a form a
+/// queue consumer cannot enforce yet: in a sum, or with a binder (the handler would read an actor the
+/// entry does not bind). A `Foreign` actor on its own, with no binder, is enforced. Said once, on the
+/// first `Foreign` member, not on each.
+fn by_mixes_foreign(by: &bynk_syntax::ast::ByClause, table: &UnitTable, actor: &str) -> bool {
+    use crate::actors::Scheme;
+    let foreign = |name: &str| {
+        by_actor_contract(name, table.actors.get(name), table)
+            .is_some_and(|c| c.scheme == Scheme::Foreign)
+    };
+    (by.is_sum() || by.binder.is_some())
+        && by
+            .actors
+            .iter()
+            .find(|a| foreign(&a.name))
+            .is_some_and(|a| a.name == actor)
 }
 
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
@@ -3638,6 +3661,7 @@ fn check_service_decls(
             validate_handler_annotations(handler, service_cap, kinds, errors);
         }
     }
+    crate::http_rate_limit::validate_rate_limits(table, errors);
     note_defaulted_body_caps(table, errors);
     for agent in table.agents.values() {
         crate::agent_busy::validate_agent_annotations(agent, errors);
@@ -5316,7 +5340,7 @@ fn validate_cors_policy(
     for field in &policy.fields {
         if !matches!(
             field.name.name.as_str(),
-            "origins" | "headers" | "credentials" | "maxAge"
+            "origins" | "headers" | "expose" | "credentials" | "maxAge"
         ) {
             errors.push(
                 CompileError::new(
@@ -5324,7 +5348,9 @@ fn validate_cors_policy(
                     field.name.span,
                     format!("unknown `cors` field `{}`", field.name.name),
                 )
-                .with_note("known fields are `origins`, `headers`, `credentials`, and `maxAge`"),
+                .with_note(
+                    "known fields are `origins`, `headers`, `expose`, `credentials`, and `maxAge`",
+                ),
             );
         }
     }
@@ -5343,15 +5369,33 @@ fn validate_cors_policy(
                         errors.push(CompileError::new(
                             "bynk.http.cors_invalid_origins",
                             item.span,
-                            "each `cors` origin must be a string literal (e.g. \"https://app.example.com\" or \"*\")",
+                            "each `cors` origin must be a string literal or a `String` constant (e.g. \"https://app.example.com\" or \"*\")",
                         ));
                     }
                 }
             }
+            // A bare name that did not resolve (ADR 0826): the pass left it as
+            // written, so say what the constant must be rather than repeat the
+            // rule a reader may think it already meets.
+            ExprKind::Ident(id) => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_origins",
+                    expr.span,
+                    format!(
+                        "`{}` does not name a `List[String]` constant bound to a list of string literals",
+                        id.name
+                    ),
+                )
+                .with_note(
+                    "a constant counts as its literal only when it is declared exactly `List[String]` \
+                     and bound to a list of string literals, or to another such constant (an \
+                     `env(…)` constant is, once `bynk.toml` gives it a value)",
+                ),
+            ),
             _ => errors.push(CompileError::new(
                 "bynk.http.cors_invalid_origins",
                 expr.span,
-                "`cors` `origins` must be a non-empty list of string literals",
+                "`cors` `origins` must be a non-empty list of string literals or `String` constants, or a `List[String]` constant",
             )),
         },
     }
@@ -5368,6 +5412,10 @@ fn validate_cors_policy(
             ));
         }
     }
+
+    // #3925: `expose`, when present, is a list of header names (RFC 9110 tokens),
+    // or the wildcard `["*"]` alone.
+    validate_cors_expose(policy, errors);
 
     // `credentials`, when present, is a boolean literal.
     if let Some(expr) = policy.field("credentials")
@@ -5407,6 +5455,82 @@ fn validate_cors_policy(
             ),
         );
     }
+}
+
+/// #3925: the `expose` list: header names that are RFC 9110 tokens, or `["*"]`
+/// alone (a `*` beside names is not the wildcard the Fetch standard defines).
+fn validate_cors_expose(policy: &CorsPolicy, errors: &mut Vec<CompileError>) {
+    let Some(expr) = policy.field("expose") else {
+        return;
+    };
+    // The Fetch standard ignores the wildcard on a credentialed response, so a
+    // `["*"]` that looks like it exposes everything would expose nothing.
+    if policy.credentials() && policy.is_wildcard_expose() {
+        errors.push(
+            CompileError::new(
+                "bynk.http.cors_wildcard_expose_credentials",
+                expr.span,
+                "`cors` cannot combine `credentials: true` with `expose: [\"*\"]`",
+            )
+            .with_note(
+                "on a credentialed response a browser reads `*` as a header literally named `*`, \
+                 not as every header; list the header names instead",
+            ),
+        );
+    }
+    let ExprKind::ListLit(items, ..) = &expr.kind else {
+        errors.push(CompileError::new(
+            "bynk.http.cors_invalid_field",
+            expr.span,
+            "`cors` `expose` must be a list of header names (string literals)",
+        ));
+        return;
+    };
+    let names: Vec<(&Expr, Option<&str>)> = items
+        .iter()
+        .map(|i| {
+            (
+                i,
+                match &i.kind {
+                    ExprKind::StrLit(s) => Some(s.as_str()),
+                    _ => None,
+                },
+            )
+        })
+        .collect();
+    for (item, name) in &names {
+        match name {
+            None => errors.push(CompileError::new(
+                "bynk.http.cors_invalid_field",
+                item.span,
+                "each `cors` `expose` entry must be a header name written as a string literal",
+            )),
+            Some("*") if names.len() > 1 => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_field",
+                    item.span,
+                    "`\"*\"` in `cors` `expose` must be the only entry",
+                )
+                .with_note("the wildcard exposes every header; list names or write `[\"*\"]`, not both"),
+            ),
+            Some(n) if *n != "*" && !is_header_token(n) => errors.push(
+                CompileError::new(
+                    "bynk.http.cors_invalid_field",
+                    item.span,
+                    format!("`{n}` is not a valid header name for `cors` `expose`"),
+                )
+                .with_note("a header name is letters, digits and ``!#$%&'*+-.^_`|~``, with no spaces, colons or commas"),
+            ),
+            _ => {}
+        }
+    }
+}
+
+/// RFC 9110 §5.6.2: a `token`, the grammar of a header field name.
+fn is_header_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b))
 }
 
 /// v0.141 (ADR 0164): validate a service's `security { }` policy. Security
@@ -7094,13 +7218,15 @@ fn validate_handler_annotations(
                     continue;
                 }
             }
+            // #3926: validated by `http_rate_limit`, which sees the context's limiters.
+            "rateLimit" => {}
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json` and `@errors`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json`, `@errors` and `@rateLimit`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),

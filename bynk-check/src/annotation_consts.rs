@@ -101,6 +101,35 @@ impl<'a> Scope<'a> {
     }
 }
 
+/// Resolve one annotation argument that is a bare constant name to the literal
+/// of type `base` it denotes, in place. Returns whether it changed; an argument
+/// that does not resolve is left as written.
+fn resolve_arg(
+    arg: &mut bynk_syntax::ast::AnnotationArg,
+    base: BaseType,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let ExprKind::Ident(id) = &arg.value.kind else {
+        return false;
+    };
+    let Some(found) =
+        crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, base)
+    else {
+        return false;
+    };
+    let same_file = found.owner.is_none() && scope.file_consts.contains(&id.name);
+    arg.from_const = Some(ConstRef {
+        name: id.clone(),
+        decl_span: same_file.then_some(found.decl.name.span),
+    });
+    // The reference is a use of the constant: go-to-definition, hover,
+    // find-references and rename see it as one (#3445 H).
+    refs.record(id.span, SymbolKind::Const, &id.name);
+    arg.value.kind = found.literal.kind.clone();
+    true
+}
+
 /// Rewrite the arguments of `annotations` named by `rules`. Returns whether any
 /// argument changed.
 fn rewrite_annotations(
@@ -112,33 +141,126 @@ fn rewrite_annotations(
     let mut changed = false;
     for ann in annotations {
         for arg in &mut ann.args {
-            let ExprKind::Ident(id) = &arg.value.kind else {
-                continue;
-            };
             let Some(rule) = rules.iter().find(|r| {
                 r.annotation == ann.name.name
                     && r.label == arg.label.as_ref().map(|l| l.name.as_str())
             }) else {
                 continue;
             };
-            let Some(found) = crate::consts::resolve_const_literal(
-                |u| scope.lookup(u),
-                scope.unit,
-                &id.name,
-                rule.base,
-            ) else {
-                continue;
-            };
-            let same_file = found.owner.is_none() && scope.file_consts.contains(&id.name);
-            arg.from_const = Some(ConstRef {
-                name: id.clone(),
-                decl_span: same_file.then_some(found.decl.name.span),
-            });
-            // The reference is a use of the constant: go-to-definition, hover,
-            // find-references and rename see it as one (#3445 H).
-            refs.record(id.span, SymbolKind::Const, &id.name);
-            arg.value.kind = found.literal.kind.clone();
-            changed = true;
+            changed |= resolve_arg(arg, rule.base, scope, refs);
+        }
+    }
+    changed
+}
+
+/// #3942: a derived capability instance's options (`Service @worker`, `Queue
+/// @name`, `Email @to`, `RateLimit @limit` and `@period`, …) take a constant
+/// by the same rule. The option's kind comes from the base kind's own table, so
+/// each option resolves to the literal its validator then reads. A list option
+/// (`@allowedRecipients`) takes constants for its string elements.
+fn rewrite_instance_options(
+    derived: &mut bynk_syntax::ast::DerivedCapability,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    use bynk_std::OptionKind;
+    let Some(kind) =
+        crate::firstparty::instantiable(crate::firstparty::CLOUDFLARE_UNIT, &derived.base.name)
+    else {
+        return false;
+    };
+    let mut changed = false;
+    for ann in &mut derived.annotations {
+        let Some(option) = kind.option_kind(&ann.name.name) else {
+            continue;
+        };
+        for arg in &mut ann.args {
+            match option {
+                OptionKind::Str => changed |= resolve_arg(arg, BaseType::String, scope, refs),
+                OptionKind::PositiveInt => changed |= resolve_arg(arg, BaseType::Int, scope, refs),
+                OptionKind::Duration => {
+                    changed |= resolve_arg(arg, BaseType::Duration, scope, refs)
+                }
+                OptionKind::StrList => {
+                    if let ExprKind::ListLit(items, ..) = &mut arg.value.kind {
+                        for item in items {
+                            if let Some(c) = resolve_element(item, BaseType::String, scope, refs) {
+                                arg.element_consts.push(c);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    changed
+}
+
+/// [`resolve_arg`] for a list element, which has no argument of its own to carry
+/// the constant: the reference is recorded as a use, and returned for the list
+/// argument's [`bynk_syntax::ast::AnnotationArg::element_consts`].
+fn resolve_element(
+    item: &mut bynk_syntax::ast::Expr,
+    base: BaseType,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> Option<ConstRef> {
+    let ExprKind::Ident(id) = &item.kind else {
+        return None;
+    };
+    let found =
+        crate::consts::resolve_const_literal(|u| scope.lookup(u), scope.unit, &id.name, base)?;
+    let same_file = found.owner.is_none() && scope.file_consts.contains(&id.name);
+    let reference = ConstRef {
+        name: id.clone(),
+        decl_span: same_file.then_some(found.decl.name.span),
+    };
+    refs.record(id.span, SymbolKind::Const, &id.name);
+    item.kind = found.literal.kind.clone();
+    Some(reference)
+}
+
+/// #3925: a `cors { origins: … }` value may name constants: the whole list as
+/// one `List[String]` constant (`origins: AppOrigins`), or any element of a
+/// written list as a `String` constant (`origins: [AppOrigin, "https://b.example"]`).
+/// Each resolves to the literal it is bound to, as an annotation argument does
+/// (ADR 0826), through the same helpers, so the checks for a wildcard and for
+/// credentials, and the emitter, read literal text. A name that does not resolve
+/// is left as written, so `bynk.http.cors_invalid_origins` fires on it.
+fn rewrite_cors(
+    policy: Option<&mut bynk_syntax::ast::CorsPolicy>,
+    scope: &Scope,
+    refs: &mut RefSink,
+) -> bool {
+    let Some(policy) = policy else {
+        return false;
+    };
+    let mut changed = false;
+    for field in policy
+        .fields
+        .iter_mut()
+        .filter(|f| f.name.name == "origins")
+    {
+        match &mut field.value.kind {
+            ExprKind::Ident(id) => {
+                let Some(found) = crate::consts::resolve_string_list_const(
+                    |u| scope.lookup(u),
+                    scope.unit,
+                    &id.name,
+                ) else {
+                    continue;
+                };
+                refs.record(id.span, SymbolKind::Const, &id.name);
+                field.value.kind = found.literal.kind.clone();
+                changed = true;
+            }
+            ExprKind::ListLit(items, ..) => {
+                for item in items {
+                    changed |= resolve_element(item, BaseType::String, scope, refs).is_some();
+                }
+            }
+            _ => {}
         }
     }
     changed
@@ -326,6 +448,7 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
             }
             CommonsItem::Service(svc) => {
                 changed |= rewrite_delivery(svc.delivery.as_mut(), scope, refs);
+                changed |= rewrite_cors(svc.cors.as_mut(), scope, refs);
                 changed |= rewrite_handlers(&mut svc.handlers, scope, refs)
             }
             CommonsItem::Agent(agent) => {
@@ -334,6 +457,11 @@ fn rewrite_items(items: &mut [CommonsItem], scope: &Scope, refs: &mut RefSink) -
                     changed |= rewrite_annotations(&mut f.annotations, STORE_RULES, scope, refs);
                 }
                 changed |= rewrite_handlers(&mut agent.handlers, scope, refs);
+            }
+            CommonsItem::Capability(cap) => {
+                if let Some(derived) = cap.derived.as_mut() {
+                    changed |= rewrite_instance_options(derived, scope, refs);
+                }
             }
             _ => {}
         }
@@ -400,8 +528,24 @@ pub fn resolve_annotation_consts(
 /// Attach the constant's declaration to `err` as a related span, when the
 /// argument was a reference to a constant in the same file.
 pub fn with_const_origin(err: CompileError, arg: &bynk_syntax::ast::AnnotationArg) -> CompileError {
-    let Some(c) = &arg.from_const else {
-        return err;
+    // A list argument's element is found by the reference's span, which the
+    // resolved element keeps (#3942).
+    let Some(c) = arg
+        .from_const
+        .as_ref()
+        .or_else(|| arg.element_consts.iter().find(|c| c.name.span == err.span))
+    else {
+        // A check that reports on the whole list, not an element: say which
+        // constants the list took values from.
+        if arg.element_consts.is_empty() {
+            return err;
+        }
+        let names: Vec<String> = arg
+            .element_consts
+            .iter()
+            .map(|c| format!("`const {}`", c.name.name))
+            .collect();
+        return err.with_note(format!("some of the values come from {}", names.join(", ")));
     };
     let err = match c.decl_span {
         Some(span) => err.with_label(span, format!("`{}` is declared here", c.name.name)),
