@@ -16,6 +16,9 @@
  *   resolution follows the `deps.Fetch` wiring in `compose.ts` to it;
  * - no `Result`/`Option` flow summaries: default taint tracking already
  *   follows the emitted `{ tag, value }` codecs and their switch-unwraps.
+ * What IS needed, beyond the source and the redirect sink, is `ReadBodyCappedStep`:
+ * `readCapped` copies the body through a stream reader and `Uint8Array.set`, which
+ * CodeQL does not follow (#4410).
  * If a canary stops firing, add the missing piece here, not before.
  */
 
@@ -69,6 +72,25 @@ class ResponseLocationHeader extends ServerSideUrlRedirect::Sink {
       c.getMethodName() = ["set", "append"] and
       c.getArgument(0).getStringValue().toLowerCase() = "location" and
       this = c.getArgument(1)
+    )
+  }
+}
+
+/**
+ * `__readBodyCapped(request, cap)` (boundary.ts `readCapped`), which the emitted
+ * entry uses to read a body under its `@limit(maxBody)`. It reads
+ * `request.body.getReader()` chunk by chunk and copies them into a fresh
+ * `Uint8Array` with `bytes.set(chunk, at)`; CodeQL models neither the stream
+ * reader nor the typed-array copy as taint-preserving, so the body stopped
+ * being tainted at this call and the three body canaries went unflagged (#4410).
+ * Its result is the request's bytes, so it is tainted when the request is.
+ */
+private class ReadBodyCappedStep extends TaintTracking::SharedTaintStep {
+  override predicate step(DataFlow::Node pred, DataFlow::Node succ) {
+    exists(DataFlow::CallNode c |
+      c.getCalleeName() = ["__readBodyCapped", "readCapped"] and
+      pred = c.getArgument(0) and
+      succ = c
     )
   }
 }

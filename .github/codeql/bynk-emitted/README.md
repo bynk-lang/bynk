@@ -18,11 +18,12 @@ Cloudflare module Worker. Over Bynk's output they find **no user input at all**.
 The #255 experiment got zero results from 89 queries, and a scan with only the
 stock models would pass whatever the emitter produced.
 
-[`BynkEmitted.qll`](BynkEmitted.qll) adds two models, and only two:
+[`BynkEmitted.qll`](BynkEmitted.qll) adds two models and one taint step:
 
 | model | what it is |
 |---|---|
 | `WorkerFetchRequest` | the `request` parameter of `export default { fetch(request, env, ctx) }`, as a remote source (and as a redirect source) |
+| `ReadBodyCappedStep` | a taint step through `__readBodyCapped(request, cap)`, which copies the body via a stream reader and `Uint8Array.set` (neither is followed by default); without it every JSON-body flow is cut at the capped read (#4410) |
 | `ResponseLocationHeader` | `new Response(_, { headers: { location: v } })` (how `httpResultToResponse` writes the 3xx `HttpResult`s), or `headers.set/append("location", v)`, as a URL-redirect sink |
 
 The canaries showed which other models are **not** needed:
