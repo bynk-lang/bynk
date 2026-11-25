@@ -35,7 +35,7 @@ environment), so code that stays on this surface is portable.
 | **`Fetch`** | `send(req: Request) -> Effect[Result[Response, FetchError]]` — an outbound HTTP request · `sendWith(req: Request, options: FetchOptions) -> Effect[Result[Response, FetchError]]` — with a timeout and a redirect policy (experimental) · `receiveBytes(req: Request, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` · `sendBytes(req: Request, body: Bytes, options: FetchOptions) -> Effect[Result[BytesResponse, FetchError]]` — binary bodies (experimental) · `receiveStream(req: Request, options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` · `sendStream(req: Request, body: Stream[Bytes], options: FetchOptions) -> Effect[Result[StreamResponse, FetchError]]` — streamed bodies (experimental). See [Timeouts and redirects](#timeouts-and-redirects), [Binary bodies](#binary-bodies) and [Streamed bodies](#streamed-bodies). |
 | **`Secrets`** | `get(name: String) -> Effect[Option[String]]` — read configuration/secrets; `None` if unset. |
 | **`Locale`** | `current() -> Effect[LocaleTag]` — the locale to render messages in. On Cloudflare, negotiated from the request's `Accept-Language` against a context's message bundle; a fixed `"en"` on every other platform, and on Cloudflare without a detectable bundle. See [Understand localisation](/book/concepts/localisation/understand-localisation/). |
-| **`Idempotency`** | `dedup[T](key: String) -> Effect[Option[T]]` · `remember[T](key: String, value: T, expiresAfter: Duration) -> Effect[()]` · `claim(key: String, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once senders (a retried command, a resent webhook). See below. |
+| **`Idempotency`** | `dedup[T, K: Key](key: K) -> Effect[Option[T]]` · `remember[T, K: Key](key: K, value: T, expiresAfter: Duration) -> Effect[()]` · `claim[K: Key](key: K, expiresAfter: Duration) -> Effect[Claim]` — mechanical dedup for at-least-once senders (a retried command, a resent webhook). See below. |
 | **`Events`** | `emit[E](event: E) -> Effect[()]` — emit an `event` declared by the calling context. Delivery is at most once, and on Workers the emitter waits for it to finish. See below. |
 
 `Fetch` sends a request over the public internet. On Cloudflare that holds even
@@ -88,17 +88,31 @@ check `dedup` for a cached outcome, and on a miss, cache the value you compute w
 
 ```bynk,ignore
 on reserve(orderId: OrderId) -> ReserveOutcome given Idempotency {
-  let cached <- Idempotency.dedup[ReserveOutcome](Json.encode(orderId))
+  let cached <- Idempotency.dedup[ReserveOutcome](orderId)
   match cached {
     Some(outcome) => outcome,
     None => {
       let outcome = ... compute the real outcome ...
-      let _ <- Idempotency.remember[ReserveOutcome](Json.encode(orderId), outcome, 24.hours)
+      let _ <- Idempotency.remember[ReserveOutcome](orderId, outcome, 24.hours)
       outcome
     }
   }
 }
 ```
+
+The **key** may be any [`Key`](/reference/types/#keys) type: a `String`, a typed id such as
+`OrderId`, a record, a sum, an `Int`. A type that is not a key (a `Float`, a `Map`, a record
+holding one) is `bynk.types.not_keyable`, because two such keys could not be told apart. Two
+keys of one type share an entry exactly when they are `==`. A key that is text (a `String`, or
+a refined or opaque `String`) is stored as it is written, so entries made with
+`Json.encode(id)` or any other string still match; any other key is stored under the canonical
+encoding value collections use, with a `k:` prefix. Keys of *different* types are not kept
+apart: a `String` key spelled `k:…`, or two records of different types with the same fields,
+can land on one entry in the same handler. Do not build a text key from untrusted input if a
+typed key of the same handler could have the same encoding; give each key its own type and
+keep client-supplied text out of the `k:` prefix. Type `K` is inferred from the key, so you
+write only the type arguments no argument determines:
+`Idempotency.dedup[Quote](deliveryKey)`.
 
 Both operations are written with their type argument here (`dedup[ReserveOutcome]`,
 `remember[ReserveOutcome]`). `dedup` has no argument that mentions `T`, so it is always written;

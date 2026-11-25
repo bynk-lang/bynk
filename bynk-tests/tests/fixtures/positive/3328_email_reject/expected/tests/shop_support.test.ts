@@ -2,6 +2,7 @@
 // test target: shop.support
 
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __dmarcVerdictOf } from "../__bynk_runtime/email.js";
 import * as __ns_shop_support from "./../shop/support.js";
 import * as __ns_bynk_cloudflare from "./../bynk/cloudflare.js";
 
@@ -103,7 +104,7 @@ async function test_an_oversized_message_is_rejected_with_its_reason() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", size: 5000, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [] });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", size: 5000, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [] });
     if (!(((__c: boolean) => __c)(r.tag === "Reject" && r.reason === "too large"))) { throw __bynkExpectFailure("tests/support.bynk:5:12", 257, 281, "expect r is Reject(\"too large\")", "r", () => __bynkShow(r)); }
     if (!(__bynkEq(r, EmailVerdict.Reject("too large")))) { throw __bynkExpectFailure("tests/support.bynk:6:12", 293, 317, "expect r == Reject(\"too large\")\n  expected: r == Reject(\"too large\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((EmailVerdict.Reject("too large")))); }
     return { pass: true };
@@ -208,7 +209,7 @@ async function test_a_small_message_gets_through() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", size: 10, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [] });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", size: 10, subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [] });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("tests/support.bynk:11:12", 479, 490, "expect r is Accept", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

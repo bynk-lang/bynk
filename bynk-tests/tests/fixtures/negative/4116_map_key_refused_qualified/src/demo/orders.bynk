@@ -1,0 +1,13 @@
+context demo.orders
+
+consumes bynk
+
+service reserve {
+  on call(m: Map[String, Int]) -> Effect[Bool] by Caller given bynk.Idempotency {
+    let c <- bynk.Idempotency.claim(m, 1.hour)
+    match c {
+      Claimed => true
+      AlreadyClaimed => false
+    }
+  }
+}

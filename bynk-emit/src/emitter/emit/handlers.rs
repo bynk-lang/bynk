@@ -246,6 +246,55 @@ pub(super) fn return_undefined_unless(test: bynk_ts::TsExpr) -> Item {
     )))
 }
 
+/// #3888: `if (!(["DmarcPass"].includes(deps.identity.dmarc.tag))) return { tag: "Reject", reason:
+/// "sender not authenticated" };`, the check a `Sender` refinement makes on the minted identity.
+fn sender_admission_guard(admits: &[&str]) -> Item {
+    use crate::ts_build::{ident, if_, not_expr, paren, return_, str_lit};
+    let verdicts = bynk_ts::TsExpr::array(admits.iter().map(|v| str_lit(*v)).collect());
+    let tag = bynk_ts::TsExpr::Member {
+        object: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(bynk_ts::TsExpr::Member {
+                object: Box::new(ident("deps")),
+                property: "identity".to_string(),
+            }),
+            property: "dmarc".to_string(),
+        }),
+        property: "tag".to_string(),
+    };
+    let admitted = bynk_ts::TsExpr::Call {
+        callee: Box::new(bynk_ts::TsExpr::Member {
+            object: Box::new(verdicts),
+            property: "includes".to_string(),
+        }),
+        args: vec![tag],
+    };
+    let refusal = bynk_ts::TsExpr::object(vec![
+        ("tag".to_string(), str_lit("Reject")),
+        ("reason".to_string(), str_lit("sender not authenticated")),
+    ]);
+    Item::Node(Box::new(if_(
+        not_expr(paren(admitted)),
+        return_(Some(refusal)),
+    )))
+}
+
+/// The prologue of a handler bound to a `Sender` refinement (#3888): it refuses mail whose DMARC
+/// verdict the refinement does not admit before the body runs, whichever tier calls the handler
+/// (the Worker, a unit case or a system case), as a rejection and not a fault. Empty otherwise.
+pub(super) fn sender_admission_guards(
+    handler: &bynk_syntax::ast::Handler,
+    kind: &bynk_model::IrHandlerKind,
+    actors: &std::collections::HashMap<String, bynk_syntax::ast::ActorDecl>,
+) -> crate::emitter::lower_stmt::Body {
+    let mut guards = crate::emitter::lower_stmt::Body::new();
+    if *kind == bynk_model::IrHandlerKind::Message
+        && let Some(admits) = bynk_check::actors::sender_admits_for(handler, actors)
+    {
+        guards.push(sender_admission_guard(&admits));
+    }
+    guards
+}
+
 /// `if (__events.length > 0) { await deps.__eventsDispatch(__events); }`, with
 /// the call on its own lines in a braced block, or `inline` on one.
 pub(super) fn events_flush_item(inline: bool) -> Item {

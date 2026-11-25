@@ -4,6 +4,7 @@
 use super::{
     append_deps_field, cron_handler_method_name, events_release_body, http_handler_method_name_ir,
     queue_handler_method_name, return_undefined_unless, seam_identity_ts_type,
+    sender_admission_guards,
 };
 use crate::emit_model::EmitProjectCtx;
 use crate::emitter::ctx::{BodyMode, HandlerShared, ModuleCtx};
@@ -268,7 +269,7 @@ pub(crate) fn emit_service(
             async_tail,
             Some(&handler.return_type),
         );
-        let mut guards = Body::new();
+        let mut guards = sender_admission_guards(handler, &handler_kind_ir, &ctx.actors);
         // Events track, slice 1 (spine #936): a `from Events(E { ... })`
         // subscription filter is deliver-and-filter (ADR 0286, unchanged by
         // this slice) — the fan-out mechanism still delivers every emission

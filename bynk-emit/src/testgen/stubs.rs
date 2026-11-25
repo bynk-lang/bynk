@@ -466,7 +466,7 @@ pub(super) fn emit_stub_class(
             if *scope != StubScope::Every {
                 cond_parts.insert(0, scopes_test(&[scope]));
             }
-            if generic {
+            if generic && !clause.type_args.is_empty() {
                 cond_parts.push(type_key_cond(&clause.type_args, &key_types, tys));
             }
             let cond = cond_parts
