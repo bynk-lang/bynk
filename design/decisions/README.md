@@ -17,6 +17,7 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0943](0943-integration-stub-wire.md) | **At integration a service stub's values cross the consumed context's wire codecs** (v0.681) — Where the codecs come from, what is wired, and how a failure shows | Accepted (v0.681) |
 | [0942](0942-query-par-for-each.md) | **Query.parTraverse becomes parForEach, matching List** (v0.680) — Renames the concurrent unit-returning step on a store or held Map query to parForEach, with an error and a fix for the old name | Accepted (v0.680) |
 | [0941](0941-queue-retry-after.md) | **A queue handler retries a message after a delay with RetryAfter(reason, delay)** (v0.679) — A new built-in QueueResult variant carries a delay, checked at compile time when written as a literal and clamped at run time when computed | Accepted (v0.679) |
 | [0940](0940-diagnostics-one-file-per-code.md) | **The diagnostic reference is one generated file per code, with the index assembled at site build time** (v0.678.2) — Per-code JSON committed, the index page built and not committed | Accepted (v0.678.2) |

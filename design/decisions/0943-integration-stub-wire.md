@@ -1,11 +1,6 @@
----
-level: minor
-changelog: At the `integration` tier a stubbed consumed service's arguments and result cross that context's wire codecs, so a value the wire cannot carry fails the call
----
+# 0943 — At integration a service stub's values cross the consumed context's wire codecs
 
-## ADR: integration-stub-wire
-title: At integration a service stub's values cross the consumed context's wire codecs
-summary: Where the codecs come from, what is wired, and how a failure shows
+- **Status:** Accepted (v0.681)
 
 **Context.** A consumed context's service is a `stub` seam at `unit` and `integration` (#3892), and the stub's values reached the handler directly at both tiers. A value the wire would not carry therefore passed an `integration` case that a real call would fail (#4190).
 
