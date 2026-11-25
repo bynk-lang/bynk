@@ -1,0 +1,50 @@
+suite sessions
+
+// #4048: typed values round-trip, a missing key is `None`, and an undecodable one faults.
+
+case "a record with a list, a sum and an option round-trips" {
+	let s = Session {
+		user: "ada",
+		roles: [Admin, Member],
+		label: Some("lead"),
+	}
+	do save.call("s:1", s)
+	let back <- load.call("s:1")
+	expect back == Some(s)
+}
+
+case "a missing key is None" {
+	let back <- load.call("s:none")
+	expect back is None
+}
+
+case "the stored text is what Json.encode writes" {
+	let s = Session {
+		user: "bob",
+		roles: [Member],
+		label: None,
+	}
+	do save.call("s:2", s)
+	let back <- readBack.call("s:2")
+	expect back == Some(s)
+}
+
+case "a stored value of the wrong shape faults" {
+	do saveOther.call("s:3")
+	expect load.call("s:3") faults
+}
+
+case "stored text that is not JSON faults" {
+	do saveText.call("s:4", "not json")
+	expect load.call("s:4") faults
+}
+
+case "putValue takes the options of putWith" {
+	let s = Session {
+		user: "cy",
+		roles: [],
+		label: None,
+	}
+	let kept <- saveExpiring.call("s:5", s)
+	expect kept
+}
