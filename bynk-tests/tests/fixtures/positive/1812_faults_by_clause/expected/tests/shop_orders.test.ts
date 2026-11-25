@@ -2,6 +2,7 @@
 // test target: shop.orders
 
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __tokenClaims } from "../__bynk_runtime/auth.js";
 import * as __ns_shop_orders from "./../shop/orders.js";
 
 <<bynk-shared: testing/expectation>>
@@ -38,7 +39,7 @@ async function test_a_ledger_fault_faults_bob_s_order() {
     type UserId = __ns_shop_orders.UserId;
     if (!((await (async () => {
       try {
-        await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("bob" as any) as any) }));
+        await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("bob" as any) as any), claims: __tokenClaims([]) }));
         return false;
       } catch (__e) {
         if (__e instanceof ExpectationError) {
@@ -63,7 +64,7 @@ async function test_alice_s_order_does_not_fault() {
     const { Order, UserId, api } = __ns_shop_orders;
     type Order = __ns_shop_orders.Order;
     type UserId = __ns_shop_orders.UserId;
-    const r = await api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("alice" as any) as any) });
+    const r = await api.http_POST_orders({ sku: "w" }, { ...deps, identity: (("alice" as any) as any), claims: __tokenClaims([]) });
     if (!(((__c: boolean) => __c)(r.tag === "Created" && r.value === 7))) { throw __bynkExpectFailure("tests/shop/orders.bynk:16:12", 566, 581, "expect r is Created(7)", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -84,7 +85,7 @@ async function test_the_principal_s_identity_may_be_any_expression() {
     const who: UserId = ("bob" as any);
     if (!((await (async () => {
       try {
-        await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (who as any) }));
+        await (api.http_POST_orders({ sku: "w" }, { ...deps, identity: (who as any), claims: __tokenClaims([]) }));
         return false;
       } catch (__e) {
         if (__e instanceof ExpectationError) {

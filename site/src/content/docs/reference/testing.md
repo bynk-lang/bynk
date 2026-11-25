@@ -202,7 +202,7 @@ handler route would receive for an asset's path still goes to the Worker; only
 
 ### Passing token claims — `by Workload("id", TokenClaims.of([…]))` {#token-claims}
 
-A handler guarded by an [`Oidc` actor](/reference/actors/#reading-claims)
+A handler guarded by an [`Oidc` or `Bearer` actor](/reference/actors/#reading-claims)
 reads its token's claims through its binder. At `unit` and `integration` a case
 supplies them as the principal's second argument, from `"name: value"` lines;
 with none, the handler sees no claims:
@@ -216,10 +216,11 @@ suite ci.release {
 }
 ```
 
-Each line is a string claim. Only an `Oidc` actor's principal takes claims
+Each line is a string claim. Only an `Oidc` or `Bearer` actor's principal takes claims
 (`bynk.test.principal_claims_not_oidc`). A `system` case mints the token itself:
 the [driver is the issuer](#failure-principals), signing a token whose `sub` is
-the identity and whose claims are those lines, and the Worker's real seam
+the identity and whose claims are those lines (for a refinement of a `Bearer` actor, beside the
+claims its predicate needs, which the principal's own override), and the Worker's real seam
 verifies it. There the claims must be written as a literal `TokenClaims.of([…])`
 in the principal (`bynk.test.system_claims_need_literal`), because the driver
 writes the lines into the token.
@@ -1546,8 +1547,9 @@ case "an issue event is recorded" {
   providers or `stub`s. A helper that declares `given` is not available in it (a
   commons has no one capability set), so keep effectful setup in the suite.
 - **Build.** A deployable build leaves a test-only commons out, as it does a suite;
-  `bynk test` emits it, and `bynk check` checks it. Its names reach every suite of the
-  target that `uses` it.
+  `bynk test` emits it, and `bynk check` checks it. Its names are in scope in a suite only when that suite
+  `uses` it, as for any commons; another suite of the same target that does not is
+  `bynk.resolve.unknown_name`.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 

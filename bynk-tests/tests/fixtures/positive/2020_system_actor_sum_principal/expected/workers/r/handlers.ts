@@ -30,7 +30,7 @@ export const api = {
     }
     throw new globalThis.Error("non-exhaustive match");
   },
-  async http_GET_plain(deps: { identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_plain(deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     return HttpResult.Ok(deps.identity);
   },
   async http_GET_greet(deps: { who: { tag: "User"; identity: UserId } | { tag: "Visitor" } }): globalThis.Promise<HttpResult<string>> {

@@ -92,6 +92,20 @@ struct WorkersTable {
     /// `wrangler.toml`, which each environment inherits. A worker group
     /// overrides it key by key under `[deploy.workers.<key>.observability]`.
     observability: Option<ObservabilityTable>,
+    /// The CPU time each Worker may use per request, in milliseconds, written as
+    /// `[limits] cpu_ms`: raise it for CPU-heavy work such as password hashing.
+    /// From `1` to `300000`; a limit above the account's plan is Cloudflare's
+    /// error at deploy. Unset leaves Cloudflare's default. A worker group
+    /// overrides it.
+    #[schemars(extend("minimum" = 1, "maximum" = 300000))]
+    cpu_ms: Option<u32>,
+    /// `"smart"` turns on Smart Placement for every Worker (written as
+    /// `[placement] mode = "smart"`): the Worker runs near the back end it
+    /// talks to, such as a `D1` database, rather than near the user. `"off"`
+    /// (the default) leaves Cloudflare's default placement. A worker group
+    /// overrides it.
+    #[schemars(extend("enum" = ["smart", "off"], "default" = "off"))]
+    placement: Option<String>,
 }
 
 /// `[workers.observability]` (and a worker group's own `observability`).
@@ -151,6 +165,12 @@ struct DeployWorkerEntry {
     /// This Worker's Workers Logs settings, laid over `[workers.observability]`
     /// key by key: `head_sampling_rate = 0.01` for a noisy Worker.
     observability: Option<ObservabilityTable>,
+    /// This Worker's CPU limit, in milliseconds, over `[workers] cpu_ms`.
+    #[schemars(extend("minimum" = 1, "maximum" = 300000))]
+    cpu_ms: Option<u32>,
+    /// This Worker's placement, `"smart"` or `"off"`, over `[workers] placement`.
+    #[schemars(extend("enum" = ["smart", "off"]))]
+    placement: Option<String>,
 }
 
 /// One `Container` capability's image at deploy.

@@ -24,7 +24,7 @@ export const api = {
     const __r0 = await deps.Logger.info("ping");
     return HttpResult.Ok("pong");
   },
-  async http_GET_me(deps: { Logger: bynk.Logger; identity: UserId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_me(deps: { Logger: bynk.Logger; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     const __r0 = await deps.Logger.info("me");
     return HttpResult.Ok(deps.identity);
   },

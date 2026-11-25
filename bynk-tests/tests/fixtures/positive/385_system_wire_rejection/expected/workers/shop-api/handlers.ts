@@ -146,14 +146,14 @@ export function __makeCart(key: UserId, env?: { CART?: __DurableObjectNamespace 
 }
 
 export const api = {
-  async http_POST_cart(body: Item, deps: { env: { CART: __DurableObjectNamespace }; identity: UserId }): globalThis.Promise<HttpResult<Item>> {
+  async http_POST_cart(body: Item, deps: { env: { CART: __DurableObjectNamespace }; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Item>> {
     const saved = await __makeCart(deps.identity, deps.env).add(body, deps);
     return HttpResult.Created(saved);
   },
-  async http_POST_reject(body: Item, deps: { identity: UserId }): globalThis.Promise<HttpResult<Item>> {
+  async http_POST_reject(body: Item, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Item>> {
     return HttpResult.BadRequest("the handler ran and rejected it");
   },
-  async http_PUT_cart_Param_sku(sku: Sku, body: Item, deps: { identity: UserId }): globalThis.Promise<HttpResult<Item>> {
+  async http_PUT_cart_Param_sku(sku: Sku, body: Item, deps: { identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<Item>> {
     return HttpResult.Created(body);
   },
 };

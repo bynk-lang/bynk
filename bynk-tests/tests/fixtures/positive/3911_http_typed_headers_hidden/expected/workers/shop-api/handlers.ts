@@ -27,7 +27,7 @@ export const Probe = {
 };
 
 export const api = {
-  async http_GET_probe(headers: Probe, deps: { identity: ReaderId }): globalThis.Promise<HttpResult<string>> {
+  async http_GET_probe(headers: Probe, deps: { identity: ReaderId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<string>> {
     const auth = ((__d) => {
       switch (__d.tag) {
         case "Some": {
