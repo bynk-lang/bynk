@@ -42,7 +42,7 @@ service audit {
 }
 
 service fulfilment from queue("order-events") {
-	on message(m: Placed) -> Effect[QueueResult] {
+	on message(m: Placed) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

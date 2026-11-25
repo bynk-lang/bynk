@@ -8,6 +8,9 @@ import {
   committedSize,
   decodeKeyPart,
   diffEntries,
+  eraseStored,
+  markErased,
+  newErasure,
   sameStored,
   encodeKeyPart,
   entryKeyOf,
@@ -720,4 +723,44 @@ test("committedSize: the stored count, an empty one, an inline wholesale collect
   assert.equal(await committedSize(s as never, "set", { set: { x: true } }), 1, "a wholesale Set counts its inline entries");
   assert.equal(await committedSize(s as never, "none", {}), 0, "neither: empty");
   assert.equal(await committedSize(s as never, "none", { none: null }), 0, "a null inline record is empty");
+});
+
+test("eraseStored deletes every key of the instance, per-entry keys, postings and markers included (#3931)", async () => {
+  const s = new InMemoryStorage();
+  await s.put("state", { email: "a@b.c", [LAYOUT_KEY]: LAYOUT_PER_ENTRY, __v: 1 });
+  await s.put(mapKey("orders", "o1"), { id: "o1" });
+  await s.put(mapKey("orders", "o2"), { id: "o2" });
+  await s.put(metaKey("orders"), { size: 2 });
+  await s.put(postingKey("orders", "status", "open", "o1"), true);
+  const self = {};
+  await eraseStored(self, s as never);
+  assert.deepEqual(keys(await s.list()), [], "nothing is left under the object's storage");
+});
+
+test("eraseStored forgets what was read, so the next commit diffs against nothing (#3931)", async () => {
+  const s = new InMemoryStorage();
+  await s.put("state", { email: "a@b.c", [LAYOUT_KEY]: LAYOUT_PER_ENTRY });
+  const self = {};
+  await eraseStored(self, s as never);
+  await eraseStored(self, s as never); // erasing an erased instance is a no-op
+  assert.deepEqual(keys(await s.list()), []);
+});
+
+test("an erasure is marked by the call and not before it (#3931)", async () => {
+  const e = newErasure();
+  assert.equal(e.erased, false);
+  const p = markErased(e);
+  assert.equal(e.erased, true, "marked as the call runs, not when it is awaited");
+  await p;
+});
+
+test("InMemoryStorage.deleteAll counts as one write of every key it removes, and refuses a transaction (#3931)", async () => {
+  const s = new InMemoryStorage();
+  await s.put({ a: 1, b: 2, c: 3 });
+  s.resetStats();
+  await s.deleteAll();
+  assert.equal(s.stats.writes, 1);
+  assert.equal(s.stats.keysWritten, 3);
+  assert.deepEqual(keys(await s.list()), []);
+  await assert.rejects(() => s.transaction(async () => s.deleteAll()), /cannot run inside a transaction/);
 });

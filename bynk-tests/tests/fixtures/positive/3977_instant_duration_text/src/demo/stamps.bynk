@@ -1,0 +1,11 @@
+commons demo.stamps
+
+type Backoff = Duration where AtLeast(1.second)
+
+fn message(id: String, expiry: Instant, retry: Duration) -> String {
+	"session \(id) expires at \(expiry), retry in \(retry)"
+}
+
+fn refined(b: Backoff) -> String {
+	"backoff \(b)"
+}

@@ -18,7 +18,7 @@ service intake from http {
 }
 
 service credit from queue("cents-credited") {
-  on message(amount: Cents) -> Effect[QueueResult] {
+  on message(amount: Cents) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

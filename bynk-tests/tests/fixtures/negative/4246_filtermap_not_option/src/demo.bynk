@@ -1,0 +1,12 @@
+context demo
+
+type Event = { at: Int, kind: String }
+
+agent Feed {
+  key id: String
+  store events: Map[String, Event]
+
+  on call times() -> Effect[List[Int]] {
+    events.values.filterMap((e) => e.at).collect()
+  }
+}

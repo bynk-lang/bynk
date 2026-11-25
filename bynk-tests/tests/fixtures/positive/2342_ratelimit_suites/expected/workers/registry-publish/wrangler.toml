@@ -14,3 +14,7 @@ name = "RATELIMIT_READ_LIMIT"
 namespace_id = "<RATELIMIT_READ_LIMIT_NAMESPACE>" # set at deploy time
 simple = { limit = 1, period = 10 }
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

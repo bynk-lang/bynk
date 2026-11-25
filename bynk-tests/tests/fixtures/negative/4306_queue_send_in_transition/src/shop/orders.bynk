@@ -22,5 +22,5 @@ agent Counter {
 
 service fulfil from queue("order-events") {
   delivery { deadLetter: None }
-  on message(order: Order) -> Effect[QueueResult] { Ack }
+  on message(order: Order) -> Effect[QueueResult] by Producer { Ack }
 }

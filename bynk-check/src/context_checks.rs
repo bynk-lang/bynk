@@ -2185,6 +2185,9 @@ fn check_by_clause_contracts(
             } else if is_sender_refinement(a, table) {
                 // #3888: a refinement over `Sender` inherits its scheme and identity.
                 actors::prelude_actor("Sender")
+            } else if is_producer_refinement(a, table) {
+                // #3899: a refinement over `Producer` inherits its contract.
+                actors::prelude_actor("Producer")
             } else {
                 scheme_actor
                     .and_then(|sa| sa.auth.as_ref())
@@ -2214,6 +2217,12 @@ fn check_by_clause_contracts(
             }
             continue;
         };
+        errors.extend(queue_actor_narrowing(
+            protocol,
+            by,
+            local.is_some_and(|a| is_producer_refinement(a, table)),
+            contract.scheme,
+        ));
         if !actors::scheme_admissible(protocol, contract.scheme) {
             errors.push(
                 CompileError::new(
@@ -2762,6 +2771,65 @@ pub(crate) fn is_sender_refinement(actor: &bynk_syntax::ast::ActorDecl, table: &
         .is_some_and(|r| r.base.name == "Sender" && !table.actors.contains_key("Sender"))
 }
 
+/// #3899: whether an actor declaration refines the prelude `Producer` (no local
+/// actor named `Producer` shadows it).
+pub(crate) fn is_producer_refinement(
+    actor: &bynk_syntax::ast::ActorDecl,
+    table: &UnitTable,
+) -> bool {
+    actor
+        .refinement
+        .as_ref()
+        .is_some_and(|r| r.base.name == "Producer" && !table.actors.contains_key("Producer"))
+}
+
+/// #3899: a queue consumer may name a `Producer` refinement or a `Foreign`
+/// actor, but nothing yet enforces either on delivery (the signed message
+/// format is a later part of #3899), so naming one is refused rather than
+/// accepted unenforced.
+fn queue_actor_narrowing(
+    protocol: &ServiceProtocol,
+    by: &bynk_syntax::ast::ByClause,
+    producer_refinement: bool,
+    scheme: crate::actors::Scheme,
+) -> Option<CompileError> {
+    use crate::actors::Scheme;
+    let on_queue = matches!(protocol, ServiceProtocol::Queue { .. });
+    // A refinement over `Producer` narrows a queue's senders, and only a queue
+    // consumer can name one; elsewhere nothing would enforce its `IsContext(…)`,
+    // so it is refused rather than read as narrowed.
+    if producer_refinement && !on_queue {
+        return Some(
+            CompileError::new(
+                "bynk.actor.scheme_not_admissible",
+                by.span,
+                format!(
+                    "a refinement over `Producer` is not admissible on a `{}` handler",
+                    protocol_label(protocol),
+                ),
+            )
+            .with_note(
+                "`Producer` refinements narrow who may send to a queue consumer — name one \
+                 only on `on message` of a `from queue` service",
+            ),
+        );
+    }
+    if !on_queue || !(producer_refinement || scheme == Scheme::Foreign) {
+        return None;
+    }
+    Some(
+        CompileError::new(
+            "bynk.actor.queue_actor_not_enforced",
+            by.span,
+            "a queue consumer cannot narrow its actor yet: a `Producer` refinement or a `Foreign` actor is not enforced on `on message`",
+        )
+        .with_note(
+            "nothing verifies who sent a queue message yet, so accepting this `by` would admit \
+             every producer while reading as if it did not — write `by Producer` for now",
+        ),
+    )
+}
+
 /// A handler with no `by` clause: edge protocols (HTTP, WebSocket) have no safe
 /// default actor; the internal protocols inherit one.
 fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut Vec<CompileError>) {
@@ -2772,6 +2840,13 @@ fn check_missing_by(handler: &Handler, protocol: &ServiceProtocol, errors: &mut 
         // Only a real `on call` handler: a stray kind in a call service has its own error.
         if handler.kind == HandlerKind::Call {
             errors.push(missing_by_on_call(handler));
+        }
+        return;
+    }
+    // #3899: a queue consumer states who may send to it.
+    if matches!(protocol, ServiceProtocol::Queue { .. }) {
+        if handler.kind == HandlerKind::Message {
+            errors.push(missing_by_on_queue(handler));
         }
         return;
     }
@@ -2827,6 +2902,26 @@ fn missing_by_on_call(handler: &Handler) -> CompileError {
     .with_suggestion(
         "add `by Caller`",
         vec![(Span::new_in(handler.span.file, at, at), " by Caller".to_string())],
+        Applicability::MachineApplicable,
+    )
+}
+
+/// #3899: an `on message` handler states who may send to it. The fix-it inserts `by Producer`
+/// (the former silent default: anyone on the account) after the return type.
+fn missing_by_on_queue(handler: &Handler) -> CompileError {
+    let at = handler.return_type.span().end;
+    CompileError::new(
+        "bynk.actor.missing_by_on_queue",
+        handler.span,
+        "an `on message` handler must declare its actor with a `by` clause",
+    )
+    .with_note(
+        "`by Producer` admits any producer on the Cloudflare account, which is what a queue consumer did before the clause was required. \
+         Migrate a project with `bynk check --fix=bynk.actor.missing_by_on_queue`",
+    )
+    .with_suggestion(
+        "add `by Producer`",
+        vec![(Span::new_in(handler.span.file, at, at), " by Producer".to_string())],
         Applicability::MachineApplicable,
     )
 }
@@ -2935,19 +3030,23 @@ fn check_refinement_actor(
         return;
     }
     if let Some(r) = &actor.refinement
-        && is_caller_refinement(actor, table)
+        && (is_caller_refinement(actor, table) || is_producer_refinement(actor, table))
     {
         // #3890: a refinement over the prelude `Caller` narrows which
-        // contexts may call, by the closed `IsContext(…)` vocabulary.
+        // contexts may call, by the closed `IsContext(…)` vocabulary; #3899
+        // gives a refinement over `Producer` the same vocabulary.
         if let Err(span) = actors::parse_caller_predicate(&r.predicate) {
             errors.push(
                     CompileError::new(
                         "bynk.actor.refinement_predicate_unsupported",
                         span,
-                        "a refinement over `Caller` must be `IsContext(<context>, …)`, composed with `&&`, `||`, `!`",
+                        format!(
+                            "a refinement over `{}` must be `IsContext(<context>, …)`, composed with `&&`, `||`, `!`",
+                            r.base.name
+                        ),
                     )
                     .with_note(
-                        "the calling context is the only thing a `Caller` carries; claims such as \
+                        "the context is the only thing a `Caller` or `Producer` carries; claims such as \
                          `hasClaim` belong to a `Bearer` actor",
                     ),
                 );
@@ -3556,6 +3655,8 @@ fn check_service_decls(
     for service in table.services.values() {
         crate::queue_delivery::validate_delivery(service, errors);
     }
+
+    validate_error_policies(table, errors);
 
     // #2858: validate each service's `json { }` policy, then refuse the one
     // ambiguous shape (`Option[Option[T]]`) in any plain-mode route's response.
@@ -5526,6 +5627,128 @@ fn validate_json_policy(
     }
 }
 
+/// #3916: validate each service's `errors { }` policy.
+fn validate_error_policies(table: &UnitTable, errors: &mut Vec<CompileError>) {
+    for service in table.services.values() {
+        if let Some(policy) = &service.errors {
+            validate_errors_policy(service, policy, errors);
+        }
+    }
+}
+
+/// #3916: validate a service's `errors { }` policy. The error-body shape is a
+/// property of the HTTP surface, so the section is only legal on a `from http`
+/// service; the closed field set is `format`, whose value is the bare
+/// identifier `bynk` or `problem`.
+fn validate_errors_policy(
+    service: &ServiceDecl,
+    policy: &ErrorsPolicy,
+    errors: &mut Vec<CompileError>,
+) {
+    if !matches!(service.protocol, ServiceProtocol::Http) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.errors_not_http",
+                policy.span,
+                "an `errors { }` policy is only valid on a `from http` service",
+            )
+            .with_note("the error-body shape governs the HTTP surface, which only a `from http` service has"),
+        );
+        return;
+    }
+    for field in &policy.fields {
+        if field.name.name != "format" {
+            errors.push(
+                CompileError::new(
+                    "bynk.http.errors_unknown_field",
+                    field.name.span,
+                    format!("unknown `errors` field `{}`", field.name.name),
+                )
+                .with_note("the only field is `format`"),
+            );
+        }
+    }
+    match policy.field("format") {
+        Some(expr) if ErrorFormat::from_expr(expr).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.errors_invalid_field",
+                expr.span,
+                "`errors` `format` must be `bynk` or `problem`",
+            ));
+        }
+        _ => {}
+    }
+}
+
+/// #3916: the placement rules of `@errors`: at most one, and only on an `on http`
+/// handler. `false` when the annotation is misplaced (already reported), so its
+/// arguments are not checked.
+fn check_errors_annotation(
+    ann: &Annotation,
+    handler: &Handler,
+    seen: &mut bool,
+    errors: &mut Vec<CompileError>,
+) -> bool {
+    if *seen {
+        errors.push(CompileError::new(
+            "bynk.http.errors_duplicate",
+            ann.span,
+            "a handler carries at most one `@errors` annotation",
+        ));
+        return false;
+    }
+    *seen = true;
+    if !matches!(handler.kind, HandlerKind::Http { .. }) {
+        errors.push(
+            CompileError::new(
+                "bynk.http.errors_not_http",
+                ann.span,
+                "`@errors` is only valid on an `on http` handler",
+            )
+            .with_note("it chooses the shape of an HTTP error body"),
+        );
+        return false;
+    }
+    validate_errors_args(ann, errors);
+    true
+}
+
+/// #3916: validate `@errors(format: bynk | problem)` on an HTTP handler.
+fn validate_errors_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
+    let mut format: Option<&AnnotationArg> = None;
+    for arg in &ann.args {
+        match arg.label.as_ref().map(|l| l.name.as_str()) {
+            Some("format") => format = Some(arg),
+            _ => errors.push(
+                CompileError::new(
+                    "bynk.http.errors_unknown_field",
+                    arg.span,
+                    "`@errors` accepts only the `format:` argument",
+                )
+                .with_note("write `@errors(format: problem)`"),
+            ),
+        }
+    }
+    match format {
+        None => errors.push(
+            CompileError::new(
+                "bynk.http.errors_invalid_field",
+                ann.span,
+                "`@errors` needs a `format:` argument",
+            )
+            .with_note("write `@errors(format: problem)`"),
+        ),
+        Some(arg) if ErrorFormat::from_expr(&arg.value).is_none() => {
+            errors.push(CompileError::new(
+                "bynk.http.errors_invalid_field",
+                arg.span,
+                "`@errors` `format` must be `bynk` or `problem`",
+            ));
+        }
+        Some(_) => {}
+    }
+}
+
 /// #2858: validate `@json(options: tagged | plain)` on an HTTP handler.
 fn validate_json_args(ann: &Annotation, errors: &mut Vec<CompileError>) {
     let mut options: Option<&AnnotationArg> = None;
@@ -6463,6 +6686,7 @@ fn validate_handler_annotations(
     let mut seen_raw = false;
     let mut seen_form = false;
     let mut seen_json = false;
+    let mut seen_errors = false;
     // #3276: `@raw` and `@form` each fix the body's one wire format, so a handler
     // carries at most one of them.
     let mut body_kind: Option<&str> = None;
@@ -6703,13 +6927,18 @@ fn validate_handler_annotations(
                 }
                 validate_json_args(ann, errors);
             }
+            "errors" => {
+                if !check_errors_annotation(ann, handler, &mut seen_errors, errors) {
+                    continue;
+                }
+            }
             other => {
                 errors.push(
                     CompileError::new(
                         "bynk.http.unknown_handler_annotation",
                         ann.name.span,
                         format!(
-                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart` and `@json`"
+                            "unknown handler annotation `@{other}` — the handler annotations are `@cache`, `@limit`, `@raw`, `@form`, `@multipart`, `@json` and `@errors`"
                         ),
                     )
                     .with_note("handler annotations are a closed set (ADR 0163, ADR 0165)"),
@@ -8110,6 +8339,7 @@ mod actor_binding_persistence_tests {
             panic!("expected a context unit, got {unit:?}")
         };
         let commons = Commons {
+            test_only: false,
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,

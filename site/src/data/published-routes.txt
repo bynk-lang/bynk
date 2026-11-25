@@ -46,6 +46,7 @@
 /book/guides/actors/public-and-authenticated/
 /book/guides/actors/verify-webhooks/
 /book/guides/agents-and-state/
+/book/guides/agents-and-state/delete-a-users-data/
 /book/guides/agents-and-state/state-machine/
 /book/guides/agents-and-state/stateful-agent/
 /book/guides/agents-and-state/the-agent-model/
@@ -257,6 +258,7 @@
 /book/reference/diagnostics/bynk.agent.return_not_effect/
 /book/reference/diagnostics/bynk.agent.state_name_conflict/
 /book/reference/diagnostics/bynk.agent.version_without_path/
+/book/reference/diagnostics/bynk.agent.write_after_erase/
 /book/reference/diagnostics/bynk.agents.bad_state_initialiser/
 /book/reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /book/reference/diagnostics/bynk.agents.self_operation/
@@ -503,6 +505,10 @@
 /book/reference/diagnostics/bynk.http.duplicate_rejected/
 /book/reference/diagnostics/bynk.http.duplicate_route/
 /book/reference/diagnostics/bynk.http.error_status_position/
+/book/reference/diagnostics/bynk.http.errors_duplicate/
+/book/reference/diagnostics/bynk.http.errors_invalid_field/
+/book/reference/diagnostics/bynk.http.errors_not_http/
+/book/reference/diagnostics/bynk.http.errors_unknown_field/
 /book/reference/diagnostics/bynk.http.extra_param/
 /book/reference/diagnostics/bynk.http.form_body_not_record/
 /book/reference/diagnostics/bynk.http.form_bool_without_default/
@@ -633,6 +639,7 @@
 /book/reference/diagnostics/bynk.parse.dangling_handler_annotation/
 /book/reference/diagnostics/bynk.parse.doc_block_contains_code/
 /book/reference/diagnostics/bynk.parse.duplicate_cors/
+/book/reference/diagnostics/bynk.parse.duplicate_errors/
 /book/reference/diagnostics/bynk.parse.duplicate_json/
 /book/reference/diagnostics/bynk.parse.duplicate_limits/
 /book/reference/diagnostics/bynk.parse.duplicate_security/
@@ -728,6 +735,7 @@
 /book/reference/diagnostics/bynk.query.join_key_mismatch/
 /book/reference/diagnostics/bynk.query.par_traverse_renamed/
 /book/reference/diagnostics/bynk.query.sum_needs_numeric/
+/book/reference/diagnostics/bynk.query.while_needs_order/
 /book/reference/diagnostics/bynk.queue.bad_params/
 /book/reference/diagnostics/bynk.queue.duplicate_consumer/
 /book/reference/diagnostics/bynk.queue.invalid_name/
@@ -873,6 +881,7 @@
 /book/reference/diagnostics/bynk.test.faults_needs_in_process/
 /book/reference/diagnostics/bynk.test.forged_needs_signature_route/
 /book/reference/diagnostics/bynk.test.forged_needs_system/
+/book/reference/diagnostics/bynk.test.helper_given_at_system/
 /book/reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /book/reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /book/reference/diagnostics/bynk.test.peek_not_a_database/
@@ -1052,6 +1061,7 @@
 /book/reference/diagnostics/bynk.uses.name_conflict/
 /book/reference/diagnostics/bynk.uses.self_reference/
 /book/reference/diagnostics/bynk.uses.target_is_context/
+/book/reference/diagnostics/bynk.uses.test_only_commons/
 /book/reference/diagnostics/bynk.uses.unknown_commons/
 /book/reference/diagnostics/bynk.val.agent_not_generable/
 /book/reference/diagnostics/bynk.val.arity/
@@ -1314,6 +1324,7 @@
 /reference/diagnostics/bynk.actor.missing_by_on_call/
 /reference/diagnostics/bynk.actor.missing_by_on_email/
 /reference/diagnostics/bynk.actor.missing_by_on_http/
+/reference/diagnostics/bynk.actor.missing_by_on_queue/
 /reference/diagnostics/bynk.actor.oidc_identity_not_string_constructible/
 /reference/diagnostics/bynk.actor.oidc_missing_audience/
 /reference/diagnostics/bynk.actor.oidc_missing_issuer/
@@ -1322,6 +1333,7 @@
 /reference/diagnostics/bynk.actor.oidc_trust_from_is_secret/
 /reference/diagnostics/bynk.actor.oidc_trust_from_not_string/
 /reference/diagnostics/bynk.actor.outside_context/
+/reference/diagnostics/bynk.actor.queue_actor_not_enforced/
 /reference/diagnostics/bynk.actor.refinement_base_unsupported/
 /reference/diagnostics/bynk.actor.refinement_in_sum/
 /reference/diagnostics/bynk.actor.refinement_predicate_unsupported/
@@ -1389,6 +1401,7 @@
 /reference/diagnostics/bynk.agent.return_not_effect/
 /reference/diagnostics/bynk.agent.state_name_conflict/
 /reference/diagnostics/bynk.agent.version_without_path/
+/reference/diagnostics/bynk.agent.write_after_erase/
 /reference/diagnostics/bynk.agents.bad_state_initialiser/
 /reference/diagnostics/bynk.agents.non_zeroable_state_field/
 /reference/diagnostics/bynk.agents.self_operation/
@@ -1522,6 +1535,15 @@
 /reference/diagnostics/bynk.embed.too_large/
 /reference/diagnostics/bynk.embed.unreadable_file/
 /reference/diagnostics/bynk.embed.unsafe_path/
+/reference/diagnostics/bynk.env.bad_value/
+/reference/diagnostics/bynk.env.conflicting_default/
+/reference/diagnostics/bynk.env.in_dependency/
+/reference/diagnostics/bynk.env.malformed_call/
+/reference/diagnostics/bynk.env.missing/
+/reference/diagnostics/bynk.env.not_initialiser/
+/reference/diagnostics/bynk.env.secret_like_name/
+/reference/diagnostics/bynk.env.unknown_variable/
+/reference/diagnostics/bynk.env.unsupported_type/
 /reference/diagnostics/bynk.event.bad_params/
 /reference/diagnostics/bynk.event.bad_schema_dispatch/
 /reference/diagnostics/bynk.event.bad_schema_version/
@@ -1642,6 +1664,10 @@
 /reference/diagnostics/bynk.http.duplicate_rejected/
 /reference/diagnostics/bynk.http.duplicate_route/
 /reference/diagnostics/bynk.http.error_status_position/
+/reference/diagnostics/bynk.http.errors_duplicate/
+/reference/diagnostics/bynk.http.errors_invalid_field/
+/reference/diagnostics/bynk.http.errors_not_http/
+/reference/diagnostics/bynk.http.errors_unknown_field/
 /reference/diagnostics/bynk.http.extra_param/
 /reference/diagnostics/bynk.http.form_body_not_record/
 /reference/diagnostics/bynk.http.form_bool_without_default/
@@ -1782,6 +1808,7 @@
 /reference/diagnostics/bynk.parse.doc_block_contains_code/
 /reference/diagnostics/bynk.parse.duplicate_cors/
 /reference/diagnostics/bynk.parse.duplicate_delivery/
+/reference/diagnostics/bynk.parse.duplicate_errors/
 /reference/diagnostics/bynk.parse.duplicate_json/
 /reference/diagnostics/bynk.parse.duplicate_limits/
 /reference/diagnostics/bynk.parse.duplicate_security/
@@ -1877,6 +1904,7 @@
 /reference/diagnostics/bynk.query.join_key_mismatch/
 /reference/diagnostics/bynk.query.par_traverse_renamed/
 /reference/diagnostics/bynk.query.sum_needs_numeric/
+/reference/diagnostics/bynk.query.while_needs_order/
 /reference/diagnostics/bynk.queue.bad_params/
 /reference/diagnostics/bynk.queue.dead_letter_type_mismatch/
 /reference/diagnostics/bynk.queue.delivery_bad_option/
@@ -2034,6 +2062,7 @@
 /reference/diagnostics/bynk.test.faults_needs_in_process/
 /reference/diagnostics/bynk.test.forged_needs_signature_route/
 /reference/diagnostics/bynk.test.forged_needs_system/
+/reference/diagnostics/bynk.test.helper_given_at_system/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /reference/diagnostics/bynk.test.peek_not_a_database/
@@ -2217,6 +2246,7 @@
 /reference/diagnostics/bynk.uses.name_conflict/
 /reference/diagnostics/bynk.uses.self_reference/
 /reference/diagnostics/bynk.uses.target_is_context/
+/reference/diagnostics/bynk.uses.test_only_commons/
 /reference/diagnostics/bynk.uses.unknown_commons/
 /reference/diagnostics/bynk.val.agent_not_generable/
 /reference/diagnostics/bynk.val.arity/

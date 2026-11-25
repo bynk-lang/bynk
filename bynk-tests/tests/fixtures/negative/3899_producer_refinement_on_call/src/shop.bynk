@@ -1,0 +1,9 @@
+context shop
+
+actor Web = Producer where IsContext(shop)
+
+service ping {
+  on call(n: Int) -> Effect[Int] by Web {
+    n
+  }
+}

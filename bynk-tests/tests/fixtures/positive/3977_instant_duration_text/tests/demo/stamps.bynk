@@ -1,0 +1,40 @@
+suite demo.stamps
+
+case "an instant and a duration interpolate as their toString" {
+	let expiry = Instant.fromEpochMillis(1_767_225_600_000)
+	expect message("s-1", expiry, 90.seconds) == "session s-1 expires at 2026-01-01T00:00:00.000Z, retry in 1m30s"
+}
+
+case "an instant's toString is its RFC 3339 text" {
+	expect Instant.fromEpochMillis(0).toString() == "1970-01-01T00:00:00.000Z"
+	expect Instant.fromEpochMillis(0).toString() == Instant.fromEpochMillis(0).toIso()
+	expect Instant.fromEpochMillis(-1).toString() == "1969-12-31T23:59:59.999Z"
+}
+
+case "expanded years" {
+	expect Instant.fromEpochMillis(253_402_300_800_000).toString() == "+010000-01-01T00:00:00.000Z"
+	expect Instant.fromEpochMillis(-62_167_219_200_000).toString() == "0000-01-01T00:00:00.000Z"
+}
+
+case "a duration's text shows units, largest first" {
+	expect 90.minutes.toString() == "1h30m"
+	expect 5.minutes.toString() == "5m"
+	expect 250.milliseconds.toString() == "250ms"
+	expect 26.hours.toString() == "1d2h"
+	expect 0.seconds.toString() == "0s"
+	expect (0.seconds - 5.seconds).toString() == "-5s"
+	expect 2.days.toString() == "2d"
+}
+
+case "a duration's ISO text" {
+	expect 90.minutes.toIso() == "PT1H30M"
+	expect 26.hours.toIso() == "P1DT2H"
+	expect 250.milliseconds.toIso() == "PT0.25S"
+	expect (0.seconds - 5.seconds).toIso() == "-PT5S"
+	expect 0.seconds.toIso() == "PT0S"
+	expect 1.day.toIso() == "P1D"
+}
+
+case "a refined duration interpolates" {
+	expect refined(2.minutes) == "backoff 2m"
+}

@@ -277,6 +277,10 @@ pub const CONTEXTUAL_KEYWORDS: &[KeywordInfo] = &[
         "Renames an agent class (`agent New replaces Old`): the old class's stored data and schema history move to the new one.",
     ),
     k("store", "A persisted agent-state field."),
+    k(
+        "tests",
+        "After `for` in a commons header (`commons shop.kit for tests`): a test-only commons, which only suites and other test-only commons may `uses`, left out of every deployable.",
+    ),
 ];
 
 /// The reserved lexer tokens the parser deliberately re-admits as identifiers

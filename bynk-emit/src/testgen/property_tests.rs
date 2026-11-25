@@ -173,10 +173,12 @@ pub(super) fn emit_test_property_function(
         )
     {
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
+        let caps = test_suites::target_capability_map(target_name, unit_tables, &helper_view, tys);
         out.extend(suite_fn_decls(
             suite_fns,
             helper_view,
             unit_tables.get(target_name),
+            Some((target_name, caps)),
             &mut typed,
             runtime_use,
             &mut harness_bound,
@@ -621,10 +623,13 @@ pub(super) fn emit_test_history_property_function(
                 tys,
             );
             if let Some(helper_view) = helper_view.take() {
+                let caps =
+                    test_suites::target_capability_map(target_name, unit_tables, &helper_view, tys);
                 out.extend(suite_fn_decls(
                     suite_fns,
                     helper_view,
                     unit_tables.get(target_name),
+                    Some((target_name, caps)),
                     &mut typed,
                     runtime_use,
                     &mut harness_bound,

@@ -172,21 +172,21 @@ pub fn prelude_actor(name: &str) -> Option<Contract> {
 
 /// The default actor a handler inherits when it omits `by`, by protocol (ADR
 /// Q5). HTTP and WebSocket have no safe default — `by` is required there — and
-/// neither has `call` (#3891, superseding ADR 0082's `Caller` default) or email (#3888).
+/// neither has `call` (#3891, superseding ADR 0082's `Caller` default) nor `queue`
+/// (#3899: who may send to a consumer is an access decision) nor email (#3888:
+/// whether to act on mail that failed DMARC is a written decision).
 pub fn default_actor(protocol: &ServiceProtocol) -> Option<&'static str> {
     match protocol {
         ServiceProtocol::Cron => Some("Scheduler"),
-        ServiceProtocol::Queue { .. } => Some("Producer"),
         // Events track, slice 0 (spine #936): delivery is runtime-triggered,
         // not an external caller — like `Queue`'s "Producer", the default
         // actor names the event's originating publisher.
         ServiceProtocol::Events { .. } => Some("Publisher"),
         // v0.103: like HTTP, a WebSocket upgrade has no safe default actor —
         // `by` is mandatory on `on open` (edge auth before accept, D-A).
-        // #3888: inbound mail arrives from the internet, so whether to act on mail
-        // that failed DMARC is a written decision, as it is for HTTP.
         ServiceProtocol::Call
         | ServiceProtocol::Http
+        | ServiceProtocol::Queue { .. }
         | ServiceProtocol::WebSocket { .. }
         | ServiceProtocol::Email { .. } => None,
     }
@@ -924,7 +924,10 @@ pub fn scheme_admissible(protocol: &ServiceProtocol, scheme: Scheme) -> bool {
         // external network request, so no external auth scheme applies.
         // I3 (#1971): a `call` also admits a declared foreign caller.
         ServiceProtocol::Call => matches!(scheme, Scheme::Internal | Scheme::Foreign),
-        ServiceProtocol::Cron | ServiceProtocol::Queue { .. } | ServiceProtocol::Events { .. } => {
+        // #3899: a queue consumer may name a `Foreign` producer; the checker
+        // refuses it as not yet enforced (`queue_actor_not_enforced`).
+        ServiceProtocol::Queue { .. } => matches!(scheme, Scheme::Internal | Scheme::Foreign),
+        ServiceProtocol::Cron | ServiceProtocol::Events { .. } => {
             matches!(scheme, Scheme::Internal)
         }
         // #3328: the platform delivers inbound mail, so the only admitted

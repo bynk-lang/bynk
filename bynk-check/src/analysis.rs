@@ -657,6 +657,8 @@ fn analyse_project_inner(
 
     // -- 2b. Normalize service-level `by`/`given` defaults (v0.155). --
     normalize_service_defaults(&mut parsed);
+    // #3941: `env(NAME)` constants take the default environment's values.
+    project_model::resolve_env_consts(&mut parsed, roots.project_root(), overlay, &mut errors);
     // #3243: `parsed` is final here. Register its files once, so the per-unit
     // attribution below does not re-register every file for every unit.
     errors.register_parsed(&parsed);

@@ -16,3 +16,7 @@ class_name = "__EventsFanout"
 type = "durable-object"
 storage = "sqlite"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

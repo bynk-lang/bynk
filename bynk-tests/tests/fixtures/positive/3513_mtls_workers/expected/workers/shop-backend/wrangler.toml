@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "MTLS_BACKEND"
 certificate_id = "acme-client" # the certificate's name; `bynk deploy` replaces it with the id it resolves
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

@@ -166,6 +166,8 @@ module.exports = grammar({
       seq(
         "commons",
         field("name", $.qualified_name),
+        // #3984: `commons x.y for tests`, a commons only suites may `uses`.
+        optional(seq("for", field("marker", alias("tests", $.test_only_marker)))),
         choice(
           seq("{", repeat($._commons_body_item), "}"),
           // Fragment form: header followed by items to EOF (or the next
@@ -912,6 +914,9 @@ module.exports = grammar({
         // #2858: the optional `json { }` policy, likewise a header-position
         // `from http` concern restricted by the checker.
         optional(field("json", $.json_policy)),
+        // #3916: the optional `errors { }` policy, likewise a header-position
+        // `from http` concern restricted by the checker.
+        optional(field("errors", $.errors_policy)),
         // #3877: the optional `delivery { }` policy, a header-position
         // `from queue` concern restricted by the checker.
         optional(field("delivery", $.delivery_policy)),
@@ -968,6 +973,18 @@ module.exports = grammar({
         "}",
       ),
     json_field: ($) =>
+      seq(field("name", $.identifier), ":", field("value", $._expression)),
+    // #3916: `errors { <name>: <value>, … }`. `errors` is a contextual keyword (like
+    // `json`); the one field name, `format`, is an ordinary identifier matched by
+    // the checker.
+    errors_policy: ($) =>
+      seq(
+        "errors",
+        "{",
+        repeat(seq($.errors_field, optional(","))),
+        "}",
+      ),
+    errors_field: ($) =>
       seq(field("name", $.identifier), ":", field("value", $._expression)),
     // #3877: `delivery { <name>: <value>, … }`. `delivery` is a contextual
     // keyword (like `json`); keys are ordinary identifiers matched against the
@@ -1459,6 +1476,8 @@ module.exports = grammar({
         // the operation.
         repeat(seq(field("path", $.identifier), ".")),
         field("op", $.identifier),
+        // #3945: a generic operation's type arguments, `stub Cap.op[T](…)`.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         "(",
         optional(
           seq(
@@ -1790,6 +1809,8 @@ module.exports = grammar({
         field("cap", $.identifier),
         ".",
         field("op", $.identifier),
+        // #3945: `Cap.op[T] called …` observes one type argument of a generic operation.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         choice(
           seq(
             "called",
