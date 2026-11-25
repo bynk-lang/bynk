@@ -113,9 +113,14 @@ pub(super) fn instantiated(
 ) -> Option<TyId> {
     let tys = ctx.tys;
     let ret = substitute(pattern, subst, tys);
-    if !has_nested_effect(ret, tys) || has_nested_effect(pattern, tys) {
+    // #4364: a generic type that holds its parameter under an `Effect` nests too, once its
+    // argument is an effect.
+    let wrapper = |t: TyId| super::nested_wrapper::nests_through_wrapper(t, tys, &ctx.input.types);
+    let nests = |t: TyId| has_nested_effect(t, tys) || wrapper(t).is_some();
+    if !nests(ret) || nests(pattern) {
         return Some(ret);
     }
+    let note = wrapper(ret);
     let mut carriers = Vec::new();
     effect_vars(pattern, subst, tys, &mut carriers);
     let span = args
@@ -129,8 +134,11 @@ pub(super) fn instantiated(
             })
         })
         .map_or(at, |(a, _)| a.span);
-    ctx.errors
-        .push(nested_effect_error(span, &ret.display(tys)));
+    let mut err = nested_effect_error(span, &ret.display(tys));
+    if let Some(note) = note {
+        err = err.with_note(note);
+    }
+    ctx.errors.push(err);
     None
 }
 
@@ -140,9 +148,14 @@ pub(super) fn instantiated(
 pub(super) fn method_result(r: Option<TyId>, at: Span, ctx: &mut Ctx) -> Option<TyId> {
     let tys = ctx.tys;
     let t = r?;
-    if !has_nested_effect(t, tys) {
+    let note = super::nested_wrapper::nests_through_wrapper(t, tys, &ctx.input.types);
+    if !has_nested_effect(t, tys) && note.is_none() {
         return Some(t);
     }
-    ctx.errors.push(nested_effect_error(at, &t.display(tys)));
+    let mut err = nested_effect_error(at, &t.display(tys));
+    if let Some(note) = note {
+        err = err.with_note(note);
+    }
+    ctx.errors.push(err);
     None
 }

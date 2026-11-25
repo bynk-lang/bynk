@@ -1,0 +1,9 @@
+context shop
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+service support from email("support@shop.example") {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] {
+    Accept
+  }
+}

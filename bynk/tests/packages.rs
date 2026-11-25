@@ -407,7 +407,7 @@ fn a_first_party_npm_package_is_a_lock_row_that_needs_no_approval() {
     );
     write(
         &shop.join("src/shop/mail.bynk"),
-        "context shop.mail\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"help@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] {\n    Accept\n  }\n}\n",
+        "context shop.mail\n\nconsumes bynk.cloudflare { InboundEmail, EmailVerdict }\n\nservice support from email(\"help@shop.example\") {\n  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {\n    Accept\n  }\n}\n",
     );
     let (code, out) = short(&shop);
     assert_eq!(code, 0, "{out}");

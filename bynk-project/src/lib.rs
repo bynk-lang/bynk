@@ -71,7 +71,9 @@ pub use discovery::{
     nested_projects, parse_sources, parse_sources_recovering, read_adapter_binding,
     read_adapter_include, read_source, suite_effective_tier_is_system,
 };
-pub use graph::{detect_consumes_cycles, detect_provider_dependency_cycles};
+pub use graph::{
+    detect_consumes_cycles, detect_dependency_cycles, detect_provider_dependency_cycles,
+};
 pub use json::json_string;
 pub use manifest::{
     DependencySource, DependencySpec, PackageConfig, RegistryConfig, WorkspaceConfig,

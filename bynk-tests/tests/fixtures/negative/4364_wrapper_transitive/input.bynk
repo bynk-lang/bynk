@@ -1,0 +1,8 @@
+commons demo.wrappertransitive
+
+type Wrap[T] = { v: Effect[T] }
+type Outer[U] = { w: Wrap[U] }
+
+fn hold(o: Outer[Effect[Int]]) -> Int {
+	0
+}

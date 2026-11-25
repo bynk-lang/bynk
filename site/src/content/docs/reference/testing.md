@@ -1547,8 +1547,9 @@ case "an issue event is recorded" {
   providers or `stub`s. A helper that declares `given` is not available in it (a
   commons has no one capability set), so keep effectful setup in the suite.
 - **Build.** A deployable build leaves a test-only commons out, as it does a suite;
-  `bynk test` emits it, and `bynk check` checks it. Its names reach every suite of the
-  target that `uses` it.
+  `bynk test` emits it, and `bynk check` checks it. Its names are in scope in a suite only when that suite
+  `uses` it, as for any commons; another suite of the same target that does not is
+  `bynk.resolve.unknown_name`.
 
 ## What a suite consumes — `consumes` {#suite-consumes}
 
