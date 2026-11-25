@@ -1,0 +1,17 @@
+context demo.orders
+
+consumes idempotency { Idempotency }
+
+service reserve {
+  on call() -> Effect[Int] by Caller given Idempotency {
+    let count <- Idempotency.dedup[Int]("order-key-1")
+    let label <- Idempotency.dedup[String]("order-key-2")
+    match count {
+      Some(n) => match label {
+        Some(_) => n
+        None => n + 100
+      }
+      None => 0
+    }
+  }
+}

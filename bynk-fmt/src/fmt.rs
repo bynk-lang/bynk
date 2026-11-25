@@ -3609,8 +3609,12 @@ fn stub_clause_to_string(pv: &StubClause) -> String {
         }
     };
     format!(
-        "stub {}.{}({}) {}",
-        pv.capability.name, pv.method.name, args, rhs
+        "stub {}.{}{}({}) {}",
+        pv.capability.name,
+        pv.method.name,
+        bynk_syntax::print::type_args_src(&pv.type_args),
+        args,
+        rhs
     )
 }
 

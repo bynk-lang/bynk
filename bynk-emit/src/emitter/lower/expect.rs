@@ -200,6 +200,45 @@ fn recorded_calls(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr {
     }))
 }
 
+/// #3945: the recorded calls of one generic operation at the type arguments an observation
+/// names (`Cap.dedup[Outcome] was called`): `<calls>.filter(__c => __c.typeKey === "[Outcome]")`.
+/// An observation without type arguments counts every call, whatever it was made at.
+fn keyed_calls(calls: bynk_ts::TsExpr, type_args: &[bynk_syntax::ast::TypeRef]) -> bynk_ts::TsExpr {
+    use bynk_ts::{TsArrowBody, TsBinaryOp, TsExpr, TsParam};
+    if type_args.is_empty() {
+        return calls;
+    }
+    let test = binary(
+        TsBinaryOp::StrictEq,
+        TsExpr::Member {
+            object: Box::new(TsExpr::Paren(Box::new(TsExpr::As {
+                expr: Box::new(bynk_ts::TsExpr::Ident("__c".to_string())),
+                ty: bynk_ts::TsType::Object(vec![bynk_ts::TsTypeMember::Prop {
+                    name: "typeKey".to_string(),
+                    ty: bynk_ts::TsType::named("string"),
+                    optional: true,
+                    readonly: false,
+                }]),
+            }))),
+            property: "typeKey".to_string(),
+        },
+        str_lit(bynk_syntax::print::type_args_src(type_args)),
+    );
+    TsExpr::Paren(Box::new(TsExpr::Call {
+        callee: Box::new(TsExpr::Member {
+            object: Box::new(calls),
+            property: "filter".to_string(),
+        }),
+        args: vec![TsExpr::Arrow {
+            params: vec![TsParam::new("__c".to_string(), None)],
+            is_async: false,
+            generics: Vec::new(),
+            return_type: None,
+            body: Box::new(TsArrowBody::Expr(Box::new(test))),
+        }],
+    }))
+}
+
 /// `{ args: unknown[] }`, the recorded call's shape as far as `.args` is read
 /// positionally (P7.2).
 fn call_args_type() -> bynk_ts::TsType {
@@ -269,7 +308,7 @@ pub(super) fn trace_node(cx: &LowerCtx, cap: &str, op: &str) -> bynk_ts::TsExpr 
 /// compares call order.
 pub(super) fn lower_observation(o: &ObservationExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
     use bynk_ts::{TsBinaryOp, TsExpr};
-    let calls = recorded_calls(cx, &o.cap.name, &o.op.name);
+    let calls = keyed_calls(recorded_calls(cx, &o.cap.name, &o.op.name), &o.type_args);
     let length = |calls: &TsExpr| TsExpr::Member {
         object: Box::new(calls.clone()),
         property: "length".to_string(),

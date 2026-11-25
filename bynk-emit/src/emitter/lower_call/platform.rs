@@ -80,6 +80,26 @@ fn capability_call_type_args_node(
         .collect()
 }
 
+/// #3945: the identity of a generic capability operation call's type arguments (as written: `[Outcome]`), as the trailing
+/// argument `...([{ __bynkTypeKey: "ReserveOutcome" }] as unknown as [])` of a test build: a stub
+/// or an observation that names the type arguments (`Cap.op[T]`) tells the calls apart by it. The
+/// real binding ignores a trailing argument, and the spread of an empty tuple keeps `tsc` quiet.
+/// `None` outside a test build, and for a call with no type arguments.
+fn type_key_arg(type_args: &[TypeRef], cx: &LowerCtx) -> Option<TsExpr> {
+    if !cx.typed_capability_calls() || type_args.is_empty() {
+        return None;
+    }
+    let key = bynk_syntax::print::type_args_src(type_args);
+    let entry = object(vec![("__bynkTypeKey", str_lit(&key))]);
+    Some(TsExpr::Spread(Box::new(TsExpr::As {
+        expr: Box::new(TsExpr::As {
+            expr: Box::new(TsExpr::array(vec![entry])),
+            ty: TsType::named("unknown"),
+        }),
+        ty: TsType::named("[]"),
+    })))
+}
+
 /// Constrained generics slice 3: how the capability call `e` encodes its
 /// `Codable` arguments, when it has any.
 pub(in crate::emitter) fn capability_wire(
@@ -640,7 +660,8 @@ pub(in crate::emitter) fn lower_capability_call(
     {
         let args_lowered = lower_args(args, cx, pre);
         let wire = capability_wire(e, cx);
-        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        args_lowered.extend(type_key_arg(type_args, cx));
         let call = capability_op_call(
             ident("deps"),
             &recv.name,
@@ -700,7 +721,8 @@ pub(in crate::emitter) fn lower_capability_call(
             return Some(tracked_claim_call(cap_node, args_lowered, cx));
         }
         let wire = capability_wire(e, cx);
-        let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+        args_lowered.extend(type_key_arg(type_args, cx));
         let call = capability_op_call(
             cx.cap_deps_node(),
             &recv.name,
@@ -745,7 +767,8 @@ pub(in crate::emitter) fn lower_cross_capability_call(
         return Some(tracked_claim_call(cap_node, args_lowered, cx));
     }
     let wire = capability_wire(e, cx);
-    let args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+    let mut args_lowered = encode_capability_args(wire.as_deref(), args_lowered, cx);
+    args_lowered.extend(type_key_arg(type_args, cx));
     let call = capability_op_call(
         cx.cap_deps_node(),
         &cap,

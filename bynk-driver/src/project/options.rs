@@ -57,6 +57,10 @@ pub struct CompileOptions {
     /// build, for `bynk dev`. `false` for every other build, so a deploy build's
     /// output is byte-identical. Dev-only by construction: only `bynk dev` sets it.
     pub inspect_agents: bool,
+    /// #3945: `true` (`bynk test`) makes a call to a generic capability operation carry its
+    /// type arguments' identity as a trailing argument, so a test's `stub Cap.op[T]` can tell
+    /// the calls apart. Never set by a build for deploy, whose output is unchanged.
+    pub typed_capability_calls: bool,
     /// #1821 (ADR 0147 D3): whether `suite`s are type-checked and emitted (the
     /// `tests/` modules and `tests/main.ts`). On by default; `bynk compile`
     /// and the driver's dev/deploy build turn it off, so a suite never reaches
@@ -187,6 +191,7 @@ impl CompileOptions {
             contracts: false,
             trace_requests: false,
             inspect_agents: false,
+            typed_capability_calls: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
@@ -219,6 +224,7 @@ impl CompileOptions {
             contracts: false,
             trace_requests: false,
             inspect_agents: false,
+            typed_capability_calls: false,
             tests: true,
             sources: None,
             schema_registry: SchemaLock::Off,
@@ -285,6 +291,12 @@ impl CompileOptions {
 
     /// #3581: emit the dev-only agent inspection into a Workers build (`bynk
     /// dev`). Off by default, and never set by `bynk compile` or `bynk deploy`.
+    /// #3945: see [`Self::typed_capability_calls`].
+    pub fn typed_capability_calls(mut self, on: bool) -> Self {
+        self.typed_capability_calls = on;
+        self
+    }
+
     pub fn inspect_agents(mut self, on: bool) -> Self {
         self.inspect_agents = on;
         self

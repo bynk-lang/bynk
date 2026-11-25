@@ -719,6 +719,7 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
         return None;
     }
     let op_info = resolve_observation_seam(&o.cap, &o.op, ctx);
+    let op_info = op_info.map(|info| observation_type_args(info, o, ctx));
     match &o.matcher {
         ObservationMatcher::Called { count, with_pred } => {
             // The parser accepts only `once` or a bare integer-literal token as a
@@ -774,6 +775,62 @@ pub(crate) fn check_observation(o: &ObservationExpr, _span: Span, ctx: &mut Ctx)
         }
     }
     Some(tys.intern(Ty::Base(BaseType::Bool)))
+}
+
+/// #3945: the operation an observation reads, with the observation's explicit type arguments
+/// substituted for its type parameters (`Idempotency.dedup[Outcome]`), so a `with` predicate
+/// types its parameters at `Outcome`. A generic operation observed without any keeps its
+/// parameter types as declared, and counts every call. The wrong number of them, or any on an
+/// operation that is not generic, is `bynk.generics.type_arg_mismatch`.
+fn observation_type_args(
+    info: CapabilityOpInfo,
+    o: &ObservationExpr,
+    ctx: &mut Ctx,
+) -> CapabilityOpInfo {
+    if o.type_args.is_empty() {
+        return info;
+    }
+    if info.type_params.len() != o.type_args.len() {
+        ctx.errors.push(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            o.op.span,
+            format!(
+                "`{}.{}` takes {} type argument(s), but the observation gives {}",
+                o.cap.name,
+                o.op.name,
+                info.type_params.len(),
+                o.type_args.len()
+            ),
+        ));
+        return info;
+    }
+    let tys = ctx.tys;
+    let mut subst: HashMap<String, TyId> = HashMap::new();
+    for (name, t) in info.type_params.iter().zip(&o.type_args) {
+        match resolve_type_ref(t, &ctx.input.types, tys) {
+            Some(ty) => {
+                subst.insert(name.clone(), ty);
+            }
+            None => {
+                ctx.errors.push(CompileError::new(
+                    "bynk.resolve.unknown_type",
+                    t.span(),
+                    format!(
+                        "unknown type `{}` in the type arguments of an observation",
+                        crate::context_checks::ts_type_ref_display(t)
+                    ),
+                ));
+                return info;
+            }
+        }
+    }
+    let mut out = info;
+    out.params = out
+        .params
+        .iter()
+        .map(|p| crate::checker::substitute(*p, &subst, tys))
+        .collect();
+    out
 }
 
 /// `bynk.observe.impure_with` at `span`.

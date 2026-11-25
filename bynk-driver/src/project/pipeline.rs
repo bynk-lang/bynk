@@ -397,6 +397,7 @@ pub(super) fn run_checks(
     contracts: bool,
     trace_requests: bool,
     inspect_agents: bool,
+    typed_capability_calls: bool,
     // #1821 (ADR 0147 D3): check and emit `suite`s. Off for a deployable build.
     tests: bool,
     // Events track, slice 3c (#980): `On` turns on `bynk.schema.lock`
@@ -1047,6 +1048,7 @@ pub(super) fn run_checks(
             contracts,
             trace_requests,
             inspect_agents,
+            typed_capability_calls,
             agent_deps_plan.as_ref(),
             &history_target_agents,
             &asset_served,

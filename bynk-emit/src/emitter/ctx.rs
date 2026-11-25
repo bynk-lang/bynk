@@ -68,6 +68,8 @@ pub(crate) struct ModuleCtx<'a> {
     /// #3580: [`crate::emit_model::EmitProjectCtx::trace`]. `None` (the default)
     /// emits no trace recording.
     pub(super) trace: Option<crate::emit_model::TraceLoc>,
+    /// #3945: [`crate::emit_model::EmitProjectCtx::typed_capability_calls`].
+    pub(crate) typed_capability_calls: bool,
     /// The per-unit facts a lowering reads but the body does not carry: the
     /// `.bynk` source of the unit (#2620) and its hidden-type spellings (#1927).
     pub(super) unit: UnitFacts<'a>,
@@ -119,6 +121,7 @@ impl<'a> ModuleCtx<'a> {
     pub(super) fn note_unit(&mut self, ctx: &EmitProjectCtx) {
         self.unit_name = ctx.commons_name.clone();
         self.trace = ctx.trace.clone();
+        self.typed_capability_calls = ctx.typed_capability_calls;
     }
 
     /// #2620: the `path:line:col` of a byte offset in the unit being emitted,
@@ -173,6 +176,7 @@ impl<'a> ModuleCtx<'a> {
                 .map(EmitProjectCtx::consumed_context_types)
                 .unwrap_or_default(),
             trace: None,
+            typed_capability_calls: false,
         }
     }
 }
