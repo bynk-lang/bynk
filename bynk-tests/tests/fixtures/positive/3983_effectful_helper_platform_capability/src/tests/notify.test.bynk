@@ -1,0 +1,13 @@
+suite notify {
+  consumes bynk { Logger }
+  fn warm() -> Effect[()] given Logger {
+    Logger.info("warm")
+  }
+
+  case "a helper names a flattened platform capability" {
+    do warm()
+    let n <- ping.call()
+    expect n == 1
+    expect Logger.info called 2 times
+  }
+}
