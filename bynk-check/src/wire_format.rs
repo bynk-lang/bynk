@@ -217,6 +217,11 @@ pub const HEADERS: &[Header] = &[
         meaning: "The wire version the caller speaks, exactly the decimal digits of an accepted version (`1`, not `01` or `+1`). Absent means `1`.",
     },
     Header {
+        name: "traceparent",
+        required: "no",
+        meaning: "The trace the call belongs to, as a [W3C `traceparent`](https://www.w3.org/TR/trace-context/): `00-<trace id>-<span id>-01`, the trace id 32 and the span id 16 lowercase hex digits, neither all zero. A Bynk caller sends it from inside a trace and never otherwise. The callee reads it only once the signature has held, and ignores one that is missing or malformed; it is not part of the signing input, and a call is never refused for it.",
+    },
+    Header {
         name: "content-type",
         required: "no",
         meaning: "Bynk callers send `application/json`. The callee does not check it.",

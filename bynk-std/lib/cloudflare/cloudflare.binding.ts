@@ -172,6 +172,32 @@ export class WorkersKv implements Kv {
     await this.ns().put(key, value, WorkersKv.putOptions(options));
   }
 
+  // `getValue[T: Codable]` (#4048): the stored text is the call site's `Json.encode` of the value,
+  // so the reply is the encoding of an `Option` over that JSON, which the call site decodes as `T`.
+  // A missing key is `None`. Text that is not JSON faults, naming the operation but never the text. It
+  // cannot take the ADR 0830 form (`Kv.getValue returned a value that does not decode as T: at $.f: …`):
+  // only the call site knows the capability instance, `T` and the path, and it sees a reply, not text.
+  // A value that parses but is the wrong shape gets that form from the call site.
+  async getValue(key: string): Promise<unknown> {
+    WorkersKv.checkKey(key);
+    const text = await this.ns().get(key);
+    if (text === null) return { kind: "None" };
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      WorkersKv.fault("getValue returned a value that is not JSON");
+    }
+    return { kind: "Some", value };
+  }
+
+  // `putValue[T: Codable]` (#4048): the call site has encoded `value` with the type's boundary
+  // codec, so it arrives as a JSON value; `JSON.stringify` is the text `Json.encode` writes.
+  async putValue(key: string, value: unknown, options: KvPut): Promise<void> {
+    WorkersKv.checkKey(key);
+    await this.ns().put(key, JSON.stringify(value), WorkersKv.putOptions(options));
+  }
+
   async listPage(options: KvList): Promise<KvListing> {
     const limit = options.limit.tag === "Some" ? options.limit.value : WorkersKv.MAX_PAGE;
     if (!Number.isInteger(limit) || limit < 1 || limit > WorkersKv.MAX_PAGE) {

@@ -142,6 +142,8 @@ fn fanout_program(
                         TsTypeMember::prop("publisherId", TsType::named("string")),
                         TsTypeMember::prop("emittedAt", TsType::named("number")),
                         TsTypeMember::prop("schemaVersion", TsType::named("number")),
+                        // #3895: the trace id of the emission, absent outside a trace.
+                        TsTypeMember::optional_prop("trace", TsType::named("string")),
                     ]),
                 ),
             ])

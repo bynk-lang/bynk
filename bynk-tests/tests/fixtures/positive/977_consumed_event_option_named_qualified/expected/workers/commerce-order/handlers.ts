@@ -2,6 +2,7 @@
 // context commerce.order
 
 import { None, type Option } from "../../__bynk_runtime/result.js";
+import { __currentTraceId } from "../../__bynk_runtime/traceparent.js";
 
 export type Region =
     { readonly tag: "Domestic" }
@@ -21,11 +22,11 @@ export const PaymentConfirmed = {
 };
 
 export const markPaid = {
-  async call(orderId: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
-    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number } }> = [];
+  async call(orderId: string, deps: { __eventsDispatch: (events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }>) => globalThis.Promise<void> }): globalThis.Promise<void> {
+    const __events: globalThis.Array<{ type: string; payload: unknown; envelope: { eventId: string; publisherId: string; emittedAt: number; schemaVersion: number; trace?: string } }> = [];
     const __result = await (async () => {
       return (async () => {
-        __events.push({ type: "PaymentConfirmed", payload: { orderId: orderId, region: None }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "commerce.order", emittedAt: globalThis.Date.now(), schemaVersion: 1 } });
+        __events.push({ type: "PaymentConfirmed", payload: { orderId: orderId, region: None }, envelope: { eventId: globalThis.crypto.randomUUID(), publisherId: "commerce.order", emittedAt: globalThis.Date.now(), schemaVersion: 1, trace: __currentTraceId() } });
       })();
     })();
     if (__events.length > 0) {
