@@ -617,7 +617,8 @@ pub struct UnitTable {
     pub use_views: std::collections::BTreeMap<String, UnitTable>,
     /// #4045: a bare name two used commons both bring in, with the qualified
     /// spelling of each, for `bynk.uses.ambiguous_name` where it is referenced.
-    pub ambiguous_uses: std::collections::BTreeMap<String, Vec<String>>,
+    pub ambiguous_uses:
+        std::collections::BTreeMap<String, Vec<crate::uses_view::AmbiguousProvider>>,
     /// #4045: on a [`UnitTable::use_views`] entry, each name the view files
     /// under a spelling other than the declared one, by its declared name, for
     /// the emitter's import.
@@ -740,7 +741,10 @@ impl UnitTable {
                 .iter()
                 .map(|(t, v)| (t, v.types.keys().collect::<std::collections::BTreeSet<_>>()))
                 .collect::<Vec<_>>(),
-            ambiguous_uses,
+            ambiguous_uses
+                .iter()
+                .map(|(k, ps)| (k, ps.iter().map(|p| &p.form).collect::<Vec<_>>()))
+                .collect::<Vec<_>>(),
         )
     }
 

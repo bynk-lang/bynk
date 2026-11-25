@@ -40,6 +40,26 @@ pub struct UseEntry {
     pub qualified: Vec<QualifiedRef>,
     /// Index of the file the clause is in, for attributing a diagnostic.
     pub file: usize,
+    /// Where the clause names its commons, for a fix that edits the clause.
+    pub target_span: bynk_syntax::span::Span,
+}
+
+/// One commons that declares a bare name two used commons share, with what a fix
+/// needs: the spelling that picks it, and where the plain clause that brought it in
+/// can be edited.
+#[derive(Debug, Clone)]
+pub struct AmbiguousProvider {
+    /// The qualified spelling, `lib.y.Status` or `Y.Status`.
+    pub form: String,
+    /// The commons' name.
+    pub target: String,
+    /// An alias that would name it, `Y` for `lib.y`.
+    pub alias: String,
+    /// The name as the commons declares it.
+    pub name: String,
+    /// The end of the commons' name in a clause that brings in the whole commons,
+    /// where `as Y` or `{ Status }` would go; `None` for any other clause.
+    pub clause_end: Option<bynk_syntax::span::Span>,
 }
 
 impl UseEntry {
@@ -51,6 +71,7 @@ impl UseEntry {
             selected: u.selected.clone(),
             qualified: u.qualified_refs.clone(),
             file,
+            target_span: u.target.span,
         }
     }
 
@@ -63,7 +84,7 @@ impl UseEntry {
 #[derive(Default)]
 pub struct UnitViews {
     pub views: BTreeMap<String, UnitTable>,
-    pub ambiguous: BTreeMap<String, Vec<String>>,
+    pub ambiguous: BTreeMap<String, Vec<AmbiguousProvider>>,
     /// `(file index, error)`.
     pub errors: Vec<(usize, CompileError)>,
 }
@@ -182,7 +203,7 @@ pub fn build_unit_views<'a>(
                 .iter()
                 .map(|(t, o)| {
                     let es: Vec<&UseEntry> = entries.iter().filter(|e| e.target == *t).collect();
-                    qualified_key(t, &es, o)
+                    ambiguous_provider(t, o, &es)
                 })
                 .collect();
             out.ambiguous.insert(key.clone(), forms);
@@ -232,6 +253,30 @@ pub fn build_unit_views<'a>(
     out
 }
 
+fn ambiguous_provider(target: &str, name: &str, entries: &[&UseEntry]) -> AmbiguousProvider {
+    let last = target.rsplit('.').next().unwrap_or(target);
+    let mut alias = last.to_string();
+    if let Some(first) = alias.get(..1) {
+        alias = first.to_uppercase() + &alias[1..];
+    }
+    AmbiguousProvider {
+        form: qualified_key(target, entries, name),
+        target: target.to_string(),
+        alias,
+        name: name.to_string(),
+        clause_end: entries
+            .iter()
+            .find(|e| e.alias.is_none() && e.selected.is_none())
+            .map(|e| {
+                bynk_syntax::span::Span::new_in(
+                    e.target_span.file,
+                    e.target_span.end,
+                    e.target_span.end,
+                )
+            }),
+    }
+}
+
 /// `bynk.uses.unknown_name`.
 fn unknown_name(target: &str, name: &Ident) -> CompileError {
     CompileError::new(
@@ -250,7 +295,7 @@ fn build_view(
     used: &UnitTable,
     entries: &[&UseEntry],
     bare: &[(String, String)],
-    ambiguous: &BTreeMap<String, Vec<String>>,
+    ambiguous: &BTreeMap<String, Vec<AmbiguousProvider>>,
 ) -> (UnitTable, Vec<(usize, CompileError)>) {
     let mut errors: Vec<(usize, CompileError)> = Vec::new();
     // Qualified names read: declared name -> its qualified spelling, checked.
@@ -538,16 +583,17 @@ pub fn add_ambiguous_imports(
 ) {
     for (name, forms) in &table.ambiguous_uses {
         let is_type = table.use_views.values().any(|v| v.types.contains_key(name));
+        let forms = forms.clone();
         // The ambiguity is the better answer where a local value also hides one of
         // the imports: the reference is unresolved either way.
         out.insert(
             name.clone(),
             crate::resolver::ShadowedImport {
-                unit: forms.first().cloned().unwrap_or_default(),
+                unit: forms.first().map(|f| f.target.clone()).unwrap_or_default(),
                 imported: if is_type { "type" } else { "ambiguous" },
                 local: "ambiguous",
                 local_span: bynk_syntax::span::Span::default(),
-                ambiguous: forms.clone(),
+                ambiguous: forms,
             },
         );
     }
@@ -702,6 +748,40 @@ mod tests {
             refs_in_app("lib.x", "Status"),
             1,
             "the bare name still reaches lib.x's"
+        );
+    }
+
+    /// The ambiguity offers to alias either commons or to select the name from
+    /// either, as edits of the plain `uses` clause that brought it in; none of them
+    /// is applied by `--fix`, since each changes what the file's other names mean.
+    #[test]
+    fn the_ambiguity_offers_an_alias_or_a_selection_for_each_commons() {
+        let a = app("uses lib.x\nuses lib.y\n\nfn f(s: Status) -> Int {\n  1\n}\n");
+        let err = a
+            .analysis
+            .errors
+            .iter()
+            .find(|e| e.error.category == "bynk.uses.ambiguous_name")
+            .expect("the ambiguity is reported");
+        let titles: Vec<&str> = err
+            .error
+            .suggestions
+            .iter()
+            .map(|s| s.message.as_str())
+            .collect();
+        for want in [
+            "alias `lib.x` as `X`",
+            "alias `lib.y` as `Y`",
+            "select `Status` from `lib.x`",
+            "select `Status` from `lib.y`",
+        ] {
+            assert!(titles.contains(&want), "{want}: {titles:?}");
+        }
+        assert!(
+            err.error
+                .suggestions
+                .iter()
+                .all(|s| { s.applicability == bynk_syntax::error::Applicability::MaybeIncorrect })
         );
     }
 }
