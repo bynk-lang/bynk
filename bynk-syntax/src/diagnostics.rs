@@ -4123,7 +4123,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.queue.bad_params",
         blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
-        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
+        example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
     },
     Explain {
         code: "bynk.queue.dead_letter_type_mismatch",
@@ -4168,7 +4168,7 @@ fn wait() -> Duration { 5.hours }     // ✓",
     Explain {
         code: "bynk.queue.return_not_queue_result",
         blurb: "A queue consumer answers the queue, not a caller, and the only answers it understands are `Ack` (the message is handled), `Retry(reason)` (deliver it again) and `RetryAfter(reason, delay)` (deliver it again after a delay). The handler's return type is therefore fixed at `Effect[QueueResult]`, so a `Result` or a value cannot be mistaken for a verdict. Return `Ack` on success and `Retry` with a reason when the message should come back. The cron counterpart is `bynk.cron.return_not_effect_result`.",
-        example: "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ `Ack` or `Retry(…)`",
+        example: "on message(message: String) -> Effect[Result[Int, String]] by Producer { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ `Ack` or `Retry(…)`",
     },
     Explain {
         code: "bynk.queue.undecodable_unreachable",

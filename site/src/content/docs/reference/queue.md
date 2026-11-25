@@ -16,6 +16,11 @@ service <Name> from queue("<name>") {
 }
 ```
 
+- **Actor:** the `by` clause says who may send to this queue, and is required
+  (`bynk.actor.missing_by_on_queue`). `by Producer` admits any producer on the Cloudflare
+  account, which is what a consumer did before the clause was required; a header default,
+  `service fulfil from queue("orders") by Producer`, covers every handler without its own.
+  `bynk check --fix=bynk.actor.missing_by_on_queue` adds it.
 - **Name:** the queue this consumer binds to, on the `from queue("…")` header.
   It must be a name Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`,
   starting and ending with a letter or digit (`bynk.queue.invalid_name`).

@@ -3,6 +3,7 @@ context shop
 type Order = { id: String }
 
 service fulfil from queue("orders") {
+  delivery { deadLetter: None }
   on message(order: Order) -> Effect[QueueResult] by Producer {
     Ack
   }
