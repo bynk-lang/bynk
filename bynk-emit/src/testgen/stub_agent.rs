@@ -73,7 +73,17 @@ pub(super) fn no_stub_match_stmt(rp: &ResolvedStub, message: String) -> TsStmt {
 /// factory, which runs the real agents, registers none (`__stubAgents([])`), so a stub an earlier
 /// unit case left cannot reach them. A class that holds scoped clauses is told the running case,
 /// and the running suite when one is scoped to a suite, as `stub_overlay` tells a `deps` entry.
-pub(super) fn agent_stub_registration(
+pub(super) fn agent_stub_body(
+    stubs: &HashMap<String, ResolvedStub>,
+    factory: &str,
+    target: &str,
+) -> Vec<TsStmt> {
+    agent_stub_registration(stubs, factory, target)
+        .into_iter()
+        .collect()
+}
+
+fn agent_stub_registration(
     stubs: &HashMap<String, ResolvedStub>,
     factory: &str,
     target: &str,

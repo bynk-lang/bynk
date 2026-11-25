@@ -261,9 +261,7 @@ pub(super) fn emit_test_deps(
     }
     let shared: BTreeSet<(String, String)> =
         built.iter().flat_map(|b| b.used.iter().cloned()).collect();
-    let mut body: Vec<TsStmt> = agent_stub_registration(stubs, name, target_name)
-        .into_iter()
-        .collect();
+    let mut body = agent_stub_body(stubs, name, target_name);
     let mut declared: BTreeSet<(String, String)> = BTreeSet::new();
     // Dependencies first: no provider chain is cyclic (the checker rejects
     // one), so this terminates.
