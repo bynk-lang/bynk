@@ -13,7 +13,7 @@ The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. For th
 source_file ::= (commons_decl | context_decl | adapter_decl | suite_decl)+ | item_fragment+ | expr_fragment
 item_fragment ::= context_body_item | handler | store_field | key_decl
 expr_fragment ::= statement+ expression? | expression
-commons_decl ::= "commons" qualified_name ("{" commons_body_item* "}" | commons_body_item*)
+commons_decl ::= "commons" qualified_name ("for" "tests")? ("{" commons_body_item* "}" | commons_body_item*)
 context_decl ::= "context" qualified_name ("{" context_body_item* "}" | context_body_item*)
 adapter_decl ::= "adapter" qualified_name ("{" adapter_body_item* "}" | adapter_body_item*)
 suite_decl ::= "suite" qualified_name ("as" ("unit" | "integration" | "system"))? ("{" test_body_item* "}" | test_body_item*)
@@ -72,7 +72,7 @@ messages_decl ::= visibility_modifier? "messages" string_literal store_annotatio
 message_entry ::= string_literal "=>" string_literal ","?
 provider_decl ::= "provides" identifier "=" identifier given_clause? ("{" provider_op* "}")?
 provider_op ::= "fn" identifier "(" (param ("," param)*)? ","? ")" "->" type_ref block
-service_decl ::= "service" identifier service_protocol? by_clause? given_clause? "{" cors_policy? security_policy? limits_policy? json_policy? delivery_policy? (store_annotation* handler)* "}"
+service_decl ::= "service" identifier service_protocol? by_clause? given_clause? "{" cors_policy? security_policy? limits_policy? json_policy? errors_policy? delivery_policy? (store_annotation* handler)* "}"
 cors_policy ::= "cors" "{" (cors_field ","?)* "}"
 cors_field ::= identifier ":" expression
 security_policy ::= "security" "{" (security_field ","?)* "}"
@@ -81,6 +81,8 @@ limits_policy ::= "limits" "{" (limits_field ","?)* "}"
 limits_field ::= identifier ":" expression
 json_policy ::= "json" "{" (json_field ","?)* "}"
 json_field ::= identifier ":" expression
+errors_policy ::= "errors" "{" (errors_field ","?)* "}"
+errors_field ::= identifier ":" expression
 delivery_policy ::= "delivery" "{" (delivery_field ","?)* "}"
 delivery_field ::= identifier ":" expression
 service_protocol ::= "from" ("http" | "cron" | "queue" "(" string_literal ")" | "email" "(" string_literal ")" | "websocket" "(" "in" ":" type_ref "," "out" ":" type_ref ","? ")" | "Events" "(" type_ref event_pattern? ")" schema_dispatch_clause?)

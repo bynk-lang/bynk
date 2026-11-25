@@ -19,7 +19,7 @@ type EmailJob = {
 }
 
 service outbox from queue("outbound-email") {
-	on message(message: EmailJob) -> Effect[QueueResult] {
+	on message(message: EmailJob) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }
@@ -40,7 +40,7 @@ of success or failure, so a poison message can be `Ack`'d to drop it:
 
 ```bynk,fragment
 service outbox from queue("outbound-email") {
-  on message(message: EmailJob) -> Effect[QueueResult] {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer {
     Retry("smtp unavailable")
   }
 }
@@ -58,7 +58,7 @@ back off a little longer each time:
 
 ```bynk,fragment
 service outbox from queue("outbound-email") {
-  on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] given Smtp {
+  on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] by Producer given Smtp {
     let sent <- Smtp.send(job.to, job.subject)
     match sent {
       Ok(_) => Ack,
@@ -86,7 +86,7 @@ service outbox from queue("outbound-email") {
     deadLetter: "outbound-email-dlq",
   }
 
-  on message(message: EmailJob) -> Effect[QueueResult] {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer {
     Retry("smtp unavailable")
   }
 }
@@ -101,7 +101,7 @@ service review from queue("outbound-email-dlq") {
     deadLetter: None,
   }
 
-  on message(message: EmailJob) -> Effect[QueueResult] given Logger {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer given Logger {
     let _ <- Logger.warn("gave up on an email to \(message.to)")
     Ack
   }
@@ -122,7 +122,7 @@ attempt or to notice a message that keeps failing:
 consumes bynk.cloudflare { QueueDelivery }
 
 service outbox from queue("outbound-email") {
-  on message(message: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] given Logger {
+  on message(message: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] by Producer given Logger {
     if delivery.attempts > 3 {
       let _ <- Logger.warn("giving up on \(message.id) after \(delivery.attempts) attempts")
       Ack
@@ -143,7 +143,7 @@ second delivery with the same key does nothing.
 A queue handler reaches the outside world through `given`, like any handler:
 
 ```bynk,fragment
-  on message(message: EmailJob) -> Effect[QueueResult] given Smtp {
+  on message(message: EmailJob) -> Effect[QueueResult] by Producer given Smtp {
     let _ <- Smtp.send(message.to, message.subject)
     Ack
   }

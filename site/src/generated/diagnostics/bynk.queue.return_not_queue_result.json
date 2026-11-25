@@ -6,7 +6,7 @@
   "constructs": [
     "handler"
   ],
-  "example": "on message(message: String) -> Effect[Result[Int, String]] { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] { … }   // ✓ `Ack` or `Retry(…)`",
+  "example": "on message(message: String) -> Effect[Result[Int, String]] by Producer { … }   // ✗ the queue needs a verdict\n\non message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓ `Ack` or `Retry(…)`",
   "severity": "error",
   "summary": "An `on message` handler does not return `Effect[QueueResult]`."
 }

@@ -230,9 +230,10 @@ capability operation's type parameter may carry.
 Two keys of one `Key` type are the same key exactly when they are `==`. A `Map`
 or `Set` MUST agree with `==`, so an implementation holds a composite key under a
 canonical encoding that is injective per type (§7.4.4). A store `Map`/`Set`/`Cache`
-key and an `@indexed` key keep the narrower `String`/`Int` rule
-(`bynk.store.unkeyable_key`, `bynk.index.unkeyable_key`): they persist as JSON
-object keys. A `Query`'s `distinct`, `groupBy` and join keys take any `Key` type.
+key and an `@indexed` key take any `Key` type too (`bynk.store.unkeyable_key`,
+`bynk.index.unkeyable_key` for a type that is not one): a `String`, an `Int` or a refined or
+opaque type over one persists as its own text, and any other key persists under the same canonical
+encoding. A `Query`'s `distinct`, `groupBy` and join keys take any `Key` type.
 
 ## §6.3 Refinement predicates
 

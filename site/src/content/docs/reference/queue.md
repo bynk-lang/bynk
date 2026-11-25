@@ -10,12 +10,17 @@ bound on the service header (`from queue("name")`), and each handler is an
 
 ```bynk,ignore
 service <Name> from queue("<name>") {
-  on message(message: T) -> Effect[QueueResult] {
+  on message(message: T) -> Effect[QueueResult] by Producer {
     …
   }
 }
 ```
 
+- **Actor:** the `by` clause says who may send to this queue, and is required
+  (`bynk.actor.missing_by_on_queue`). `by Producer` admits any producer on the Cloudflare
+  account, which is what a consumer did before the clause was required; a header default,
+  `service fulfil from queue("orders") by Producer`, covers every handler without its own.
+  `bynk check --fix=bynk.actor.missing_by_on_queue` adds it.
 - **Name:** the queue this consumer binds to, on the `from queue("…")` header.
   It must be a name Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`,
   starting and ending with a letter or digit (`bynk.queue.invalid_name`).
@@ -98,7 +103,7 @@ service outbox from queue("outbound-email") {
 		concurrency: 4,
 	}
 
-	on message(job: EmailJob) -> Effect[QueueResult] {
+	on message(job: EmailJob) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }
@@ -138,8 +143,10 @@ The dead-letter queue is an ordinary queue:
   `bynk.deploy.lock` only when Bynk created it, as for a queue the context only
   sends to;
 - a Bynk consumer may read it (`from queue("outbound-email-dlq")`), and that
-  consumer's message type must be the source consumer's
-  (`bynk.queue.dead_letter_type_mismatch`), since the dead letter is the same body.
+  consumer must accept the source consumer's message type
+  (`bynk.queue.dead_letter_type_mismatch`), since the dead letter is the same body. The
+  comparison is the one a producer's send gets: a type with the same fields under another
+  name is the same type, and a consumer of a weaker refinement accepts a stronger one.
 
 The environment-qualified name of any queue, consumer, producer or dead-letter,
 must still fit Cloudflare's 63 characters. Only the deploy knows the environment,
@@ -154,7 +161,7 @@ its type, so it may come before or after the message:
 
 ```bynk,fragment
 service outbox from queue("outbound-email") {
-	on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] {
+	on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] by Producer {
 		if delivery.attempts > 3 {
 			Ack
 		} else {
@@ -226,7 +233,7 @@ let _ <- OrderEvents.sendValue(Refund { id: r.id })   // ✗ bynk.queue.message_
 
 // shop.fulfil
 service fulfil from queue("order-events") {
-  on message(order: Order) -> Effect[QueueResult] { … }
+  on message(order: Order) -> Effect[QueueResult] by Producer { … }
 }
 ```
 
@@ -249,6 +256,10 @@ service fulfil from queue("order-events") {
 
 Changing a consumer's message type while messages are already queued is not caught.
 
+A send can be written in a function, a service or agent handler, or a provider operation. An
+agent's `transition` predicates and `migrate` steps are pure, so a `Queue` capability is not in
+scope there: naming it is `bynk.resolve.unknown_name`, with a note that it is a capability.
+
 ## Example
 
 ```bynk
@@ -260,7 +271,7 @@ type EmailJob = {
 }
 
 service outbox from queue("outbound-email") {
-	on message(message: EmailJob) -> Effect[QueueResult] {
+	on message(message: EmailJob) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

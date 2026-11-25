@@ -1,0 +1,45 @@
+context api
+
+// #3916: `errors { format: problem }` answers an error variant and a router
+// rejection as RFC 9457 `application/problem+json`; `@errors(format: bynk)`
+// overrides it for one route; `RawError` and body-less statuses are untouched; a
+// service with no `errors { }` is byte-for-byte what it was. Drives the
+// `http_problem_details` behaviour test.
+type Qty = Int where Positive
+
+type Widget = { qty: Qty }
+
+service api from http {
+  errors { format: problem }
+
+  on GET("/conflict") () -> Effect[HttpResult[String]] by v: Visitor {
+    Conflict("widget is out of stock")
+  }
+
+  on GET("/missing") () -> Effect[HttpResult[String]] by v: Visitor {
+    NotFound
+  }
+
+  on POST("/widgets") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {
+    Created("ok")
+  }
+
+  @errors(format: bynk)
+  on GET("/legacy") () -> Effect[HttpResult[String]] by v: Visitor {
+    Conflict("widget is out of stock")
+  }
+
+  on GET("/teapot") () -> Effect[HttpResult[String]] by v: Visitor {
+    RawError(Conflict, Bytes.fromUtf8("{\"error\":\"mine\"}"), "application/json")
+  }
+}
+
+service plain from http {
+  on GET("/plain/conflict") () -> Effect[HttpResult[String]] by v: Visitor {
+    Conflict("widget is out of stock")
+  }
+
+  on POST("/plain/widgets") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {
+    Created("ok")
+  }
+}

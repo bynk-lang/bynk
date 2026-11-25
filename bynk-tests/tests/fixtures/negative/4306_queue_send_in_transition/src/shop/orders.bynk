@@ -1,0 +1,26 @@
+context shop.orders
+
+consumes bynk.cloudflare { Queue }
+
+capability OrderEvents = Queue @name("order-events")
+
+type Order = { id: String, qty: Int }
+type Refund = { id: String }
+
+agent Counter {
+  key id: String
+  store count: Cell[Int] = 0
+
+  // ✗ a transition is a pure predicate over `old` and `new`; it cannot send.
+  transition sends: new.count >= old.count && OrderEvents.sendValue(Refund { id: "r" })
+
+  on call bump() -> Effect[()] {
+    count := 1
+    Effect.pure(())
+  }
+}
+
+service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Producer { Ack }
+}

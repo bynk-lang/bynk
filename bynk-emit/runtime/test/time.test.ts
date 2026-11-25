@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { Some, None } from "../src/result.ts";
-import { __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantToIso, __bynkIsCron, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
+import { __bynkDurationToIso, __bynkDurationToString, __bynkInstantFromIso, __bynkInstantFromPgText, __bynkInstantToIso, __bynkIsCron, __bynkIsIsoDate, __bynkPgRow } from "../src/time.ts";
 
 // Standard-library K3 (#2592).
 test("toIso writes UTC with three fraction digits and Z", () => {
@@ -213,4 +213,47 @@ test("isCron agrees with the Rust rule over the generated corpus", () => {
     n++;
   }
   assert.ok(n > 1000);
+});
+
+// #3977: the text of a Duration.
+test("a Duration's string form shows its units, largest first, leaving zero parts out", () => {
+  const text = __bynkDurationToString;
+  assert.equal(text(0), "0s");
+  assert.equal(text(250), "250ms");
+  assert.equal(text(5_000), "5s");
+  assert.equal(text(300_000), "5m");
+  assert.equal(text(5_400_000), "1h30m");
+  assert.equal(text(93_600_000), "1d2h");
+  assert.equal(text(90_061_001), "1d1h1m1s1ms");
+  assert.equal(text(-5_000), "-5s");
+  assert.equal(text(-1), "-1ms");
+  assert.equal(text(86_400_000 * 400), "400d");
+  // The largest exact span, split by BigInt, which cannot lose a digit to floating point.
+  let rest = BigInt(Number.MAX_SAFE_INTEGER);
+  let expected = "";
+  for (const [unit, ms] of [["d", 86_400_000n], ["h", 3_600_000n], ["m", 60_000n], ["s", 1_000n], ["ms", 1n]] as const) {
+    const n = rest / ms;
+    rest -= n * ms;
+    expected += n === 0n ? "" : `${n}${unit}`;
+  }
+  assert.equal(text(Number.MAX_SAFE_INTEGER), expected);
+  assert.throws(() => text(0.5), /not a whole number of milliseconds/);
+  assert.throws(() => text(Number.NaN), /not a whole number of milliseconds/);
+});
+
+test("a Duration's ISO 8601 form has days as its largest unit and the fraction on the seconds", () => {
+  const iso = __bynkDurationToIso;
+  assert.equal(iso(0), "PT0S");
+  assert.equal(iso(5_400_000), "PT1H30M");
+  assert.equal(iso(93_600_000), "P1DT2H");
+  assert.equal(iso(86_400_000), "P1D");
+  assert.equal(iso(250), "PT0.25S");
+  assert.equal(iso(1_250), "PT1.25S");
+  assert.equal(iso(1_005), "PT1.005S");
+  assert.equal(iso(-5_000), "-PT5S");
+  assert.equal(iso(-250), "-PT0.25S");
+  assert.equal(iso(-90_061_001), "-P1DT1H1M1.001S");
+  assert.equal(iso(60_000), "PT1M");
+  assert.equal(iso(3_600_000), "PT1H");
+  assert.equal(iso(90_061_001), "P1DT1H1M1.001S");
 });

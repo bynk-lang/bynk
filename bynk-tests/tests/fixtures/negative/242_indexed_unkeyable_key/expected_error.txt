@@ -1,2 +1,2 @@
 bynk.index.unkeyable_key
-not value-keyable
+is not `Key`

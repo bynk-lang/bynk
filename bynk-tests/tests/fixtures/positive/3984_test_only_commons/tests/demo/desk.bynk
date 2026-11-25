@@ -1,0 +1,9 @@
+suite demo.desk
+
+uses demo.kit
+
+case "local adds one" {
+  let n <- local.call(Start)
+  let p = pair(Start, n)
+  expect p.after == 2
+}

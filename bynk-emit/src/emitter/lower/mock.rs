@@ -378,11 +378,21 @@ fn mock_value_of(
                 ),
             }
         }
+        // #4120: `Val`'s fixed choice for a collection or an option is the empty one.
+        Ty::List(..) => bynk_ts::TsExpr::array(vec![]),
+        Ty::Set(..) => bynk_ts::TsExpr::New {
+            callee: Box::new(member_node("globalThis", "Set")),
+            args: Vec::new(),
+        },
+        Ty::Map(..) => bynk_ts::TsExpr::New {
+            callee: Box::new(member_node("globalThis", "Map")),
+            args: Vec::new(),
+        },
+        Ty::Option(..) => bynk_ts::TsExpr::Ident("None".to_string()),
         Ty::Base(BaseType::Bytes | BaseType::Duration | BaseType::Instant)
         | Ty::Error
         | Ty::Never
         | Ty::Result(..)
-        | Ty::Option(..)
         | Ty::Effect(..)
         | Ty::HttpResult(..)
         | Ty::QueueResult
@@ -393,9 +403,6 @@ fn mock_value_of(
         | Ty::RequestQuery
         | Ty::RequestCookies
         | Ty::TokenClaims
-        | Ty::List(..)
-        | Ty::Map(..)
-        | Ty::Set(..)
         | Ty::Query(..)
         | Ty::Stream(..)
         | Ty::Connection(..)

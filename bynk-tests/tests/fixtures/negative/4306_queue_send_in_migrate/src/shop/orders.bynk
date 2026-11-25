@@ -1,0 +1,29 @@
+context shop.orders
+
+consumes bynk.cloudflare { Queue }
+
+capability OrderEvents = Queue @name("order-events")
+
+type Order = { id: String, qty: Int }
+type Refund = { id: String }
+type CounterV1 = { total: Int }
+
+agent Counter {
+  key id: String
+  store count: Cell[Int] = 0
+
+  // ✗ a migration step is pure: it cannot send.
+  migrate from 1 (old: CounterV1) {
+    count := OrderEvents.sendValue(Refund { id: "r" })
+  }
+
+  on call bump() -> Effect[()] {
+    count := 1
+    Effect.pure(())
+  }
+}
+
+service fulfil from queue("order-events") {
+  delivery { deadLetter: None }
+  on message(order: Order) -> Effect[QueueResult] by Producer { Ack }
+}
