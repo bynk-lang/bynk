@@ -3,15 +3,13 @@
 
 declare const process: { exit(code: number): never; env: { [k: string]: string | undefined } };
 
-import * as test_0 from "./shop.test.js";
-import * as test_1 from "./integration_shop.test.js";
+import * as test_0 from "./integration_shop_orders.test.js";
 
 <<bynk-shared: testing/test_filter>>
 
 async function main() {
   const modules = [
-    { name: "shop", names: test_0.__bynkCases, run: test_0.run },
-    { name: "system · shop", names: test_1.__bynkCases, run: test_1.run },
+    { name: "system · shop.orders", names: test_0.__bynkCases, run: test_0.run },
   ];
 <<bynk-shared: test-runner#base>>
 }

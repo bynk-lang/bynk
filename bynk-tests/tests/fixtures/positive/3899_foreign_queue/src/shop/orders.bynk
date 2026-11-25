@@ -1,4 +1,4 @@
-context shop
+context shop.orders
 
 type Order = { id: String }
 

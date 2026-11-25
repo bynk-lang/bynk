@@ -1,4 +1,4 @@
-suite shop as system {
+suite shop.orders as system {
   case "a message signed by the foreign producer reaches the handler" {
     let r <- fulfil.message(Order { id: "o1" }) by Legacy
     expect r is Retry("reached the handler")

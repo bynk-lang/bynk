@@ -46,14 +46,14 @@ pub(super) enum TestRuntimeModule {
     JobsEmail,
     /// The `Authorization: Bearer …` signer (`__bynkSignHs256`).
     JwtSigner,
-    /// #3899: the test-only producer of a signed queue message (`__bynkSysQueueBody`).
-    QueueSigner,
     /// v0.117: the observation runtime (`Cap.op called …`, `trace(Cap.op)`).
     Observation,
     /// #3052: the test OIDC issuer an `Oidc` route's drivers mint tokens with.
     OidcIssuer,
     /// The value-property runtime (seeded generation and shrinking).
     Property,
+    /// #3899: the test-only producer of a signed queue message (`__bynkSysQueueBody`).
+    QueueSigner,
     /// A remote build's Service Bindings (`--against`).
     Remote,
     /// #2138: `__bynkRunId`, the value `run.id` reads in a remote build.
@@ -86,10 +86,10 @@ impl TestRuntimeModule {
         TestRuntimeModule::Jobs,
         TestRuntimeModule::JobsEmail,
         TestRuntimeModule::JwtSigner,
-        TestRuntimeModule::QueueSigner,
         TestRuntimeModule::Observation,
         TestRuntimeModule::OidcIssuer,
         TestRuntimeModule::Property,
+        TestRuntimeModule::QueueSigner,
         TestRuntimeModule::Remote,
         TestRuntimeModule::RunId,
         TestRuntimeModule::Send,
@@ -113,10 +113,10 @@ impl TestRuntimeModule {
             TestRuntimeModule::Jobs => "jobs",
             TestRuntimeModule::JobsEmail => "jobs_email",
             TestRuntimeModule::JwtSigner => "jwt_signer",
-            TestRuntimeModule::QueueSigner => "queue_signer",
             TestRuntimeModule::Observation => "observation",
             TestRuntimeModule::OidcIssuer => "oidc_issuer",
             TestRuntimeModule::Property => "property",
+            TestRuntimeModule::QueueSigner => "queue_signer",
             TestRuntimeModule::Remote => "remote",
             TestRuntimeModule::RunId => "run_id",
             TestRuntimeModule::Send => "send",
