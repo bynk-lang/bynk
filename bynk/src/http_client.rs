@@ -26,7 +26,7 @@ use bynk_ide::wire_contract::{
 use bynk_ide::{ContextBoundaryInfo, ProjectDiagnostics};
 use bynk_model::{IrHandlerKind, lower_handler_kind_ir};
 use bynk_syntax::ast::{
-    Handler, HttpVariantPayload, JsonOptions, TypeRef, effective_json_options, http_variant,
+    ErrorFormat, Handler, HttpVariantPayload, TypeRef, effective_error_format, http_variant,
 };
 
 use crate::openapi::{self, Error as ProjectError, Selected};
@@ -475,7 +475,10 @@ fn route_of(
         doc: h.documentation.as_ref().map(|d| d.text.trim().to_string()),
         params,
         success,
-        replies: replies_of(model, effective_json_options(sel.service.json.as_ref(), h))?,
+        replies: replies_of(
+            model,
+            effective_error_format(sel.service.errors.as_ref(), h) == ErrorFormat::Problem,
+        )?,
     })
 }
 
@@ -535,7 +538,7 @@ fn success_of(h: &Handler) -> Option<&TypeRef> {
 }
 
 /// The answers the handler can make: the set `bynk openapi` documents.
-fn replies_of(model: &WireContractModel, _json: JsonOptions) -> Result<Vec<ReplyInput>, String> {
+fn replies_of(model: &WireContractModel, problem: bool) -> Result<Vec<ReplyInput>, String> {
     let mut out = Vec::new();
     for resp in &model.responses {
         if resp.origin == ResponseOrigin::DeclaredSuccess && !model.ok_reachable {
@@ -543,6 +546,9 @@ fn replies_of(model: &WireContractModel, _json: JsonOptions) -> Result<Vec<Reply
         }
         let payload = if let ResponseOrigin::BoundaryImplicit { .. } = &resp.origin {
             match resp.variant.as_str() {
+                "StructuralMismatch" | "PayloadTooLarge" | "UnsupportedMediaType" if problem => {
+                    ReplyPayload::Problem
+                }
                 "StructuralMismatch" => ReplyPayload::BoundaryError,
                 "PayloadTooLarge" | "UnsupportedMediaType" => ReplyPayload::BoundaryRefusal,
                 _ => continue,
@@ -553,6 +559,7 @@ fn replies_of(model: &WireContractModel, _json: JsonOptions) -> Result<Vec<Reply
             };
             match v.payload {
                 HttpVariantPayload::Value => ReplyPayload::Value,
+                HttpVariantPayload::Message if problem => ReplyPayload::Problem,
                 HttpVariantPayload::Message => ReplyPayload::Message,
                 HttpVariantPayload::Location => ReplyPayload::Location,
                 HttpVariantPayload::None => ReplyPayload::None,

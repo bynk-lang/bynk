@@ -531,7 +531,9 @@ wins, then the service. What the format does not touch: a `RawError` body, which
 [`on rejected`](#rendering-rejections) handler, which still replaces the router's body; a status
 that has no body (`401`, `403`, `404`, `405`), because RFC 9457 does not require one; the `500` a
 fault answers; and every success body. A shared mapping function that returns `HttpResult[T]`
-needs no change: its variants render as problems in this mode.
+needs no change: its variants render as problems in this mode. `bynk openapi` documents the
+errors of such a route as `application/problem+json` with a shared `BynkProblemDetails`
+schema, and `bynk client` types them as `problem: Problem`.
 
 The section is legal only on a `from http` service (`bynk.http.errors_not_http`), at most once
 (`bynk.parse.duplicate_errors`), and its one field is `format` (`bynk.http.errors_unknown_field`),

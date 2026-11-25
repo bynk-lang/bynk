@@ -62,6 +62,7 @@ const SURFACE_TYPES: &[&str] = &[
     "ClientOptions",
     "JsonValue",
     "Option",
+    "Problem",
     "Result",
     "ValidationError",
 ];
@@ -199,6 +200,9 @@ pub enum ReplyPayload {
     BoundaryError,
     /// The boundary's own `413`/`415` body: `{ kind, details }`.
     BoundaryRefusal,
+    /// RFC 9457 problem details (#3916): an error variant's or a router rejection's body on a
+    /// route that answers its errors as `application/problem+json`.
+    Problem,
     /// An author-owned body, untouched (`RawCreated`, `RawStreamed`, `RawError`).
     Raw,
     /// A `Raw`: untouched, and on a small `GET` carrying a weak `ETag` the server made.
@@ -228,6 +232,7 @@ impl ReplyPayload {
             Self::None => "None",
             Self::BoundaryError => "BoundaryError",
             Self::BoundaryRefusal => "BoundaryRefusal",
+            Self::Problem => "Problem",
             Self::Raw => "Raw",
             Self::RawEtag => "RawEtag",
             Self::RawTagged => "RawTagged",
