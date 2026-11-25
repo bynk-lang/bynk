@@ -1,0 +1,17 @@
+suite shop.prices
+
+consumes bynk.cloudflare { SqlError, SqlRun }
+
+case "a Decimal read from a TEXT column keeps its digits" {
+  let saved <- save.call("a", "12.50")
+  expect saved is Ok(_)
+  let rows <- listing.call()
+  expect rows == Ok([Price { id: "a", amount: 12.50d }])
+}
+
+case "a Decimal read from a NUMERIC column does not decode" {
+  let saved <- save.call("b", "1.00")
+  expect saved is Ok(_)
+  let rows <- taxes.call()
+  expect rows is Err(_)
+}
