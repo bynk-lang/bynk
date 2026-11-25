@@ -793,6 +793,10 @@ pub(super) fn emit_project_imports(
 pub(super) fn extra_import_stmts(ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
     let mut stmts = Vec::new();
     for import in &ctx.extra_imports {
+        if let ExtraImport::Qualifier { qualifier, from } = import {
+            stmts.extend(qualifier_stmts(qualifier, from));
+            continue;
+        }
         let decl = match import {
             ExtraImport::Namespace { alias, from } => bynk_ts::TsDecl::ImportNamespace {
                 type_only: false,
@@ -808,10 +812,50 @@ pub(super) fn extra_import_stmts(ctx: &EmitProjectCtx) -> Vec<bynk_ts::TsStmt> {
                 names: names.clone(),
                 from: from.clone(),
             },
+            ExtraImport::Qualifier { .. } => unreachable!("handled above"),
         };
         stmts.push(bynk_ts::TsStmt::decl(decl, None));
     }
     stmts
+}
+
+/// #4045: the statements that make a `uses` qualifier readable in TypeScript. An
+/// alias (`Y`) is the module's namespace import. A commons' full name (`lib.y`) is
+/// imported under a private name and hung on a `namespace`, so `lib.y.describe(x)`
+/// and the type `lib.y.Status` read as written.
+fn qualifier_stmts(qualifier: &str, from: &str) -> Vec<bynk_ts::TsStmt> {
+    let Some((head, rest)) = qualifier.split_once('.') else {
+        return vec![bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::ImportNamespace {
+                type_only: false,
+                alias: qualifier.to_string(),
+                from: from.to_string(),
+            },
+            None,
+        )];
+    };
+    let private = format!("__use_{}", qualifier.replace('.', "_"));
+    let segments: Vec<&str> = rest.split('.').collect();
+    // `namespace a { export namespace b { export import c = __use_a_b_c; } }`
+    let mut open = format!("namespace {head} {{ ");
+    let mut close = String::from("}");
+    for seg in &segments[..segments.len() - 1] {
+        open.push_str(&format!("export namespace {seg} {{ "));
+        close.push_str(" }");
+    }
+    let last = segments[segments.len() - 1];
+    let text = format!("{open}export import {last} = {private}; {close}");
+    vec![
+        bynk_ts::TsStmt::decl(
+            bynk_ts::TsDecl::ImportNamespace {
+                type_only: false,
+                alias: private.clone(),
+                from: from.to_string(),
+            },
+            None,
+        ),
+        bynk_ts::TsStmt::raw_using(text, &[private.as_str()]),
+    ]
 }
 
 /// #2887: `n` as an import specifier. A type this unit renames with `consumes

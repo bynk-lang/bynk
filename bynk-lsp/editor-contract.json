@@ -239,7 +239,8 @@
       "constant",
       "keyword",
       "escape",
-      "string"
+      "string",
+      "namespace"
     ]
   }
 }

@@ -68,6 +68,10 @@ pub const TOKEN_TYPES: &[&str] = &[
     // #2619: a raw string's delimiters (`r#"`, `"#`). Appended at index 19;
     // standard LSP type.
     "string",
+    // #4045: the qualifier of a name read through a `uses` clause (`Y` of
+    // `Y.Status`, `lib.y` of `lib.y.describe`). Appended at index 20; standard
+    // LSP type.
+    "namespace",
 ];
 
 /// The token modifiers, in wire order (bit 0 first).
@@ -99,6 +103,8 @@ pub const STANDARD_TYPES: &[&str] = &[
     "keyword",
     // #2619: a raw string's delimiters.
     "string",
+    // #4045: a `uses` qualifier.
+    "namespace",
 ];
 
 /// The LSP-standard token modifiers, likewise.

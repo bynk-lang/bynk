@@ -6670,25 +6670,67 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Shape =\n  | Circle(radius: Int)\n  | Dot\n\nfn make() -> Shape {\n    Circle(\"big\")    // ✗ `radius` is an `Int`\n}\n\nfn make() -> Shape {\n    Circle(10)    // ✓\n}",
     },
     Explain {
-        code: "bynk.uses.name_conflict",
+        code: "bynk.uses.ambiguous_name",
         blurb: "A unit that `uses` a commons gets what it declares (types, functions, constants, assets \
-                and embeds) in scope under their own names, with no prefix. If two commons it uses \
-                both declare the same name, a mention of it could mean either, so the compiler \
-                refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the \
-                declarations, drop one of the `uses`, or mark the declaration `private` if only \
-                its own commons needs it, since a `private` declaration is never imported and so \
-                never conflicts.",
+                and embeds) in scope under their own names. Two commons it uses may declare the same \
+                name, and that is fine until the name is written bare: then it could mean either, so \
+                the compiler refuses that reference and lists the qualified spellings. Choose one: give \
+                a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean \
+                (`uses billing { Amount }`), which also brings in only the names you list. A \
+                declaration of the unit's own wins over a used name, and a `private` declaration is \
+                never imported, so neither can be ambiguous.",
         example: "// billing.bynk\n\
                   commons billing\n\n\
                   type Amount = Int where Positive\n\n\
                   // shipping.bynk\n\
                   commons shipping\n\n\
-                  type Amount = Int where NonNegative    // both declare `Amount`\n\
-                  type Postage = Int where NonNegative   // ✓ renamed\n\n\
+                  type Amount = Int where NonNegative    // both declare `Amount`\n\n\
                   // orders.bynk\n\
                   commons orders\n\n\
                   uses billing\n\
-                  uses shipping                          // ✗ `Amount` is also declared by `billing`",
+                  uses shipping as S                     // ✓ `S.Amount` is `shipping`'s\n\n\
+                  type Order = { total: Amount }         // ✗ `Amount` is declared by `billing` and `shipping`\n\
+                  type Order = { total: Amount, postage: S.Amount }    // ✓ the second one by its alias",
+    },
+    Explain {
+        code: "bynk.uses.name_conflict",
+        blurb: "A unit's own declaration shadows a `uses`-imported one of the same name, as it does in \
+                the emitted module, and a reference the local declaration cannot answer cannot mean \
+                the import either: a call to a type, a bare service name, a name written where the \
+                local declaration hides a type. Rename the local declaration, or `uses` the commons \
+                with an alias or a braced list that renames the import (`uses lib.util { total as \
+                totalOf }`). Two used commons that declare one name are not this: that is \
+                `bynk.uses.ambiguous_name`, reported where the name is written.",
+        example: "// lib/util.bynk\n\
+                  commons lib.util\n\n\
+                  fn total() -> Int {\n\
+                  \x20 1\n\
+                  }\n\n\
+                  // app/main.bynk\n\
+                  context app\n\n\
+                  uses lib.util\n\n\
+                  type total = { n: Int }\n\
+                  type Totals = { n: Int }               // ✓ a name of its own\n\n\
+                  fn sum() -> Int {\n\
+                  \x20 total()                              // ✗ the local type `total` hides the imported function\n\
+                  }",
+    },
+    Explain {
+        code: "bynk.uses.second_spelling",
+        blurb: "A unit reaches each declaration of a used commons by one spelling: the bare name \
+                its `uses` brings in, the alias (`uses lib.billing as B`, then `B.Amount`), or the \
+                full name (`lib.billing.Amount`). Reading the same declaration by a second spelling \
+                would make two names for one type, so the compiler refuses the second and names the \
+                one to keep. Use that spelling everywhere, or change the `uses` clauses so that only \
+                one spelling reaches it.",
+        example: "// lib/billing.bynk\n\
+                  commons lib.billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses lib.billing { Amount }\n\n\
+                  type Order = { a: Amount, b: lib.billing.Amount }    // ✗ `Amount` is already in scope\n\
+                  type Order = { a: Amount, b: Amount }                // ✓ one spelling",
     },
     Explain {
         code: "bynk.uses.self_reference",
@@ -6709,6 +6751,21 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.uses.unknown_commons",
         blurb: "`uses` brings a commons' types, functions and constants into scope, so it must name a commons in the project, and no unit of that name exists. Check the spelling against the `commons` line of the unit you mean. If the unit is a context, `uses` is the wrong clause: that is `bynk.uses.target_is_context`.",
         example: "// money.bynk\ncommons money\n\ntype Amount = Int where NonNegative\n\n// shop.bynk\ncontext shop\n\nuses mony                        // ✗ no commons `mony`\nuses money                       // ✓ the commons' declared name",
+    },
+    Explain {
+        code: "bynk.uses.unknown_name",
+        blurb: "A braced `uses` list, or a name written through a `uses` qualifier, names something the \
+                commons does not declare publicly. A type, function, constant, asset or embed that the \
+                commons marks `private` is never imported, so it cannot be listed either. Check the \
+                spelling against the commons' own declarations.",
+        example: "// billing.bynk\n\
+                  commons billing\n\n\
+                  type Amount = Int where Positive\n\n\
+                  // orders.bynk\n\
+                  commons orders\n\n\
+                  uses billing { Amont }                   // ✗ `billing` declares no `Amont`\n\
+                  uses billing { Amount }                  // ✓ the declared name\n\n\
+                  type Order = { id: Int }",
     },
     Explain {
         code: "bynk.val.agent_not_generable",
@@ -11250,8 +11307,18 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A variant payload has the wrong type.",
     ),
     dg(
+        "bynk.uses.ambiguous_name",
+        "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one.",
+        &["uses_decl"],
+    ),
+    dg(
         "bynk.uses.name_conflict",
-        "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        "A value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.second_spelling",
+        "A declaration of a used commons is read by a second spelling in one unit (a selected name beside its alias-qualified or full-name form); a type's identity is its name, so the second would be another type.",
         &["uses_decl"],
     ),
     dg(
@@ -11272,6 +11339,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.unknown_commons",
         "`uses` names a commons that does not exist.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.unknown_name",
+        "A braced `uses` list or a name written through a `uses` qualifier names something the commons does not declare publicly.",
         &["uses_decl"],
     ),
     dg(
