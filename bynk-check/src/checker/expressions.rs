@@ -4799,6 +4799,13 @@ fn check_pattern(pat: &Pattern, ty: TyId, ctx: &mut Ctx) {
             check_pattern(inner, ty, ctx);
             if let Some(base) = literal_base_of(ty, tys) {
                 check_refinement(base, *span, Some(predicate), ctx.errors);
+                // #3972: on an `Int` a range pattern is the stronger spelling.
+                if base == BaseType::Int
+                    && let Some(w) =
+                        super::refined_range::refined_pattern_is_range(inner, predicate, *span)
+                {
+                    ctx.errors.push(w);
+                }
             } else {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.pattern_type_mismatch",

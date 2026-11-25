@@ -7,6 +7,11 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.696.3** | The stamp keeps a ledger of the pending files it has consumed and never stamps one twice, and `check-pending` fails a branch that carries a consumed file |
+| **v0.696.2** | A `Map` or `Log` store query that asks `any` or `all`, or a `Log` query that asks `first`, `firstOrElse` or `take(n).collect()`, stops reading pages as soon as the answer is known |
+| **v0.696.1** | A SQLite row may hold a `Decimal` read from a `TEXT` column, the checker's admitted row bases are listed explicitly, and a `Decimal` read from a numeric-affinity column warns (`bynk.d1.decimal_numeric_affinity`) |
+| **v0.696.0** | `Effect[T]` gains `map(f)` and `andThen(f)`, legal in a pure helper, and a missing `Effect` method is `method_not_found` naming the real ones |
+| **v0.695.0** | A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) warns with `bynk.match.refined_pattern_is_range` and a fix to the range pattern that counts towards exhaustiveness |
 | **v0.694.0** | A `sendValue`, `sendValueWith` or `sendValueBatch` to a queue the project consumes is now checked against the consumer's message type (`bynk.queue.message_type_mismatch`), and the untyped `send`, `sendWith` and `sendBatch` to such a queue warn (`bynk.queue.untyped_send`) |
 | **v0.693.1** | Releases build both macOS binaries again, `aarch64-apple-darwin` cross-compiled on the Intel runner, and `install.sh` installs on macOS |
 | **v0.693.0** | `MapEntry` is a nameable prelude record, so `Map.of([MapEntry { key: k, value: v }])` builds a map from entries written in source |

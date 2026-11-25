@@ -337,6 +337,26 @@ A method not in this table is `bynk.types.method_not_found`.
 The [Result and Option guide](/book/guides/type-system/result-and-optionals/#methods)
 shows them in use.
 
+### `Effect` methods {#effect-methods}
+
+Every `Effect[T]` has these methods. `map` and `andThen` build an effect rather than
+run one, so they are legal in a pure helper; an effect is already started, so neither
+changes when `e` starts.
+
+| Method | Returns | |
+|---|---|---|
+| `e.andThen(f: T -> Effect[U])` | `Effect[U]` | a further effect, run after `e` |
+| `e.detach()` | `Effect[()]` | stops waiting for `e`; see [`within`, `race` and `detach`](/reference/capabilities/#within) |
+| `e.map(f: T -> U)` | `Effect[U]` | `f` applied to the effect's value |
+| `e.race(other: Effect[T])` | `Effect[T]` | the first side to succeed wins |
+| `e.within(d: Duration)` | `Effect[Result[T, TimedOut]]` | races `e` against a deadline |
+
+On an `Effect[Result[T, E]]`, `map` and `andThen` act on the whole `Result`; `mapOk`,
+`mapErr`, `flatMapOk` and `flatMapErr` act on its two sides (see the
+[specification](/reference/spec/static-semantics/)). A `map` function that returns an
+`Effect` is an error, since it would nest one effect in another: use `andThen`. A method
+an `Effect` does not have is `bynk.types.method_not_found`.
+
 `ValidationError` is the error type returned by refined-type `.of` constructors.
 
 A `ValidationError` has two `String` fields:
@@ -1201,6 +1221,11 @@ match age {
   `String` ranges are deliberate non-goals. A refined `Int` is matched as an
   `Int`: `Age = Int where InRange(0, 150)` still needs the whole of `Int` covered.
 - `lo > hi` is `bynk.types.empty_range_pattern`, whose fix swaps the bounds.
+- **Prefer a range to `_ where InRange(a, b)` on an `Int`.** A refined pattern is a guard and never counts towards exhaustiveness, so `_ where InRange(200, 299)` is
+  `bynk.match.refined_pattern_is_range`, a warning whose quick fix writes `200..299` (offered, never applied by `--fix`, since the range can make a later arm unreachable); `Positive`
+  and `NonNegative` become `1..` and `0..`, and a combined predicate that is one
+  interval becomes that interval. A refined pattern stays where a range cannot go: a
+  `String` predicate (`Matches`, a length predicate, `IsoDate`).
 - **Exhaustiveness is by interval.** The integers are the safe integers, and a
   column is split at every endpoint its patterns use, so `..-1` and `0..` cover
   every `Int` with no `_` arm. A match of literals alone is not split, and stays
@@ -1504,6 +1529,24 @@ into the storage capability the `store` fields already carry (no new `given`):
 | `.parForEach(f)` | `Effect[()]`, running the steps concurrently |
 
 On a `Query`, and so on a store or held `Map`, the concurrent step that returns `()` is `parForEach`, the name it has on a `List`. Before #4177 it was `parTraverse`; that spelling is now the error `bynk.query.par_traverse_renamed`, whose fix (`bynk check --fix`) renames the call. A `Query` has no value-returning `parTraverse`: `collect()` it, then `parTraverse` the list.
+
+### Which terminals stop reading early
+
+A terminal over a `store` collection reads its pages from storage. Where the answer is known
+before the last page, the read stops there, and the pages after it are never fetched:
+
+| Collection | Stops early | Reads every entry |
+|---|---|---|
+| `Log` | `.any(p)`, `.all(p)`, `.first()`, `.firstOrElse(d)`, `.take(n).collect()` | the other terminals |
+| `Map` | `.any(p)`, `.all(p)` | `.first()`, `.firstOrElse(d)`, `.take(n)`, and the other terminals |
+
+Only `filter`, `map` and `flatMap` (and `skip`, on a `Log`) may come before such a terminal. A
+`sortBy`, `sortByDescending`, `distinct`, `distinctBy`, `groupBy`, join or aggregate needs the whole
+input, so `sortBy(…).first()` reads everything while `first()` does not. A `Log` is read oldest first,
+so `first()` is its oldest match. A `Map` is scanned in insertion order, which only reading every
+entry recovers, so its order-dependent terminals read everything. An equality `filter` on an
+[`@indexed`](/reference/agents/#indexed-routing) field reads its posting list as before. A query
+held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
 
 ### Joins and grouping
 
