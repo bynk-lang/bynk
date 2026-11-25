@@ -495,6 +495,7 @@ function fakeR2(pageSize = 2) {
   const completions = [];
   const puts = [];
   const lists = [];
+  const reads = [];
   let version = 0;
   const meta = (o, include = []) => ({
     key: o.key,
@@ -508,23 +509,49 @@ function fakeR2(pageSize = 2) {
     objects,
     puts,
     lists,
-    async get(key) {
+    reads,
+    async get(key, options) {
       const o = objects.get(key);
       if (!o) return null;
+      // #4049: the options a read was given, and R2's answers to them: a condition that does not hold
+      // resolves the object with no body, a range is clamped to the object, and one that starts at
+      // or past its end is refused (10039).
+      reads.push({ key, options });
+      const { etagMatches, etagDoesNotMatch } = options?.onlyIf ?? {};
+      if ((etagMatches !== undefined && o.etag !== etagMatches) || (etagDoesNotMatch !== undefined && o.etag === etagDoesNotMatch)) {
+        return meta(o, ["httpMetadata", "customMetadata"]);
+      }
+      let served;
+      const r = options?.range;
+      if (r !== undefined) {
+        if ("suffix" in r) {
+          const length = Math.min(r.suffix, o.body.length);
+          served = { offset: o.body.length - length, length };
+        } else {
+          if (r.offset >= o.body.length) throw new Error("get: The requested range is not satisfiable (10039)");
+          served = { offset: r.offset, length: Math.min(r.length ?? o.body.length - r.offset, o.body.length - r.offset) };
+        }
+      }
+      const bytes = served === undefined ? o.body : o.body.slice(served.offset, served.offset + served.length);
       // P5b: the body streams two bytes a chunk, so chunking is exercised;
       // `cancelled` records a reader that stopped early.
       let at = 0;
       const body = new ReadableStream({
         pull(controller) {
-          if (at >= o.body.length) return controller.close();
-          controller.enqueue(o.body.slice(at, at + 2));
+          if (at >= bytes.length) return controller.close();
+          controller.enqueue(bytes.slice(at, at + 2));
           at += 2;
         },
         cancel() {
           o.cancelled = true;
         },
       });
-      return { ...meta(o, ["httpMetadata", "customMetadata"]), body, arrayBuffer: async () => o.body.slice().buffer };
+      return {
+        ...meta(o, ["httpMetadata", "customMetadata"]),
+        body,
+        ...(served === undefined ? {} : { range: served }),
+        arrayBuffer: async () => bytes.slice().buffer,
+      };
     },
     async head(key) {
       const o = objects.get(key);
@@ -556,16 +583,26 @@ function fakeR2(pageSize = 2) {
     async delete(key) {
       objects.delete(key);
     },
-    async list({ prefix, cursor, limit, include } = {}) {
-      lists.push({ prefix, cursor, include });
-      const keys = [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort();
+    async list({ prefix, cursor, limit, include, delimiter } = {}) {
+      lists.push({ prefix, cursor, include, delimiter });
+      // #4049: with a delimiter a key that holds it after the prefix folds into the key up to and including
+      // the delimiter, listed once, in `delimitedPrefixes`; a page counts both.
+      const entries = [];
+      for (const k of [...objects.keys()].filter((k) => !prefix || k.startsWith(prefix)).sort()) {
+        const at = delimiter ? k.indexOf(delimiter, (prefix ?? "").length) : -1;
+        const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + delimiter.length), folded: true };
+        if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+        entries.push(entry);
+      }
       const start = cursor === undefined ? 0 : Number(cursor);
       const size = Math.min(limit ?? 1000, pageSize);
-      const page = keys.slice(start, start + size).map((k) => meta(objects.get(k), include));
+      const slice = entries.slice(start, start + size);
+      const page = slice.filter((e) => !e.folded).map((e) => meta(objects.get(e.key), include));
+      const delimitedPrefixes = slice.filter((e) => e.folded).map((e) => e.key);
       const next = start + size;
-      return next < keys.length
-        ? { objects: page, truncated: true, cursor: String(next) }
-        : { objects: page, truncated: false };
+      return next < entries.length
+        ? { objects: page, delimitedPrefixes, truncated: true, cursor: String(next) }
+        : { objects: page, delimitedPrefixes, truncated: false };
     },
     // P5b: multipart, as R2 documents it. `resumeMultipartUpload` checks
     // nothing; an unknown upload fails at its first operation. `complete`
@@ -792,6 +829,103 @@ t("WorkersR2.getStream: the body is unclaimed until read, and stopping early can
     break;
   }
   assert.equal(r2.objects.get("k").cancelled, true);
+});
+
+// #4049: a read's body, drained.
+async function drain(body) {
+  const out = [];
+  for await (const c of body) out.push(...c);
+  return out;
+}
+
+t("WorkersR2.getRange: a range as R2 serves it, with the offset and length of the body, and None when absent", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), { httpMetadata: { contentType: "video/mp4" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.getRange("absent", { tag: "Span", offset: 0, length: None }), None);
+  const mid = await store.getRange("k", { tag: "Span", offset: 2, length: Some(4) });
+  assert.equal(mid.tag, "Some");
+  assert.deepEqual([mid.value.offset, mid.value.length, mid.value.object.size], [2, 4, 10]);
+  assert.deepEqual(await drain(mid.value.body), [2, 3, 4, 5]);
+  assert.deepEqual(mid.value.object.contentType, Some("video/mp4"));
+  assert.deepEqual(r2.reads.at(-1).options, { range: { offset: 2, length: 4 } });
+  const rest = await store.getRange("k", { tag: "Span", offset: 7, length: None });
+  assert.deepEqual([rest.value.offset, rest.value.length], [7, 3]);
+  assert.deepEqual(r2.reads.at(-1).options, { range: { offset: 7 } });
+  // A length past the end is clamped by R2, and the body says how much it holds.
+  const clamped = await store.getRange("k", { tag: "Span", offset: 8, length: Some(50) });
+  assert.deepEqual([clamped.value.offset, clamped.value.length], [8, 2]);
+  const last = await store.getRange("k", { tag: "Suffix", length: 3 });
+  assert.deepEqual([last.value.offset, last.value.length], [7, 3]);
+  assert.deepEqual(await drain(last.value.body), [7, 8, 9]);
+  assert.deepEqual(r2.reads.at(-1).options, { range: { suffix: 3 } });
+  const whole = await store.getRange("k", { tag: "Suffix", length: 50 });
+  assert.deepEqual([whole.value.offset, whole.value.length], [0, 10]);
+});
+
+t("WorkersR2.getRange: a range that starts at or past the end is R2's own refusal, not clamped", async () => {
+  const r2 = fakeR2();
+  await r2.put("k", bytes(0, 1, 2));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  await assert.rejects(store.getRange("k", { tag: "Span", offset: 3, length: None }), /not satisfiable/);
+  await assert.rejects(store.getRange("k", { tag: "Span", offset: 99, length: Some(1) }), /not satisfiable/);
+});
+
+t("WorkersR2.getStreamIf: reads when the condition holds, NotModified with the metadata when it does not, Missing when absent", async () => {
+  const r2 = fakeR2();
+  const o = await r2.put("k", bytes(1, 2, 3), { httpMetadata: { contentType: "text/plain" } });
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  assert.deepEqual(await store.getStreamIf("absent", { tag: "Unconditional" }), { tag: "Missing" });
+  assert.deepEqual(await store.getStreamIf("absent", { tag: "EtagMatches", etag: "x" }), { tag: "Missing" });
+  const always = await store.getStreamIf("k", { tag: "Unconditional" });
+  assert.equal(always.tag, "Found");
+  assert.deepEqual(await drain(always.body.body), [1, 2, 3]);
+  assert.deepEqual(r2.reads.at(-1).options, {});
+  const hit = await store.getStreamIf("k", { tag: "EtagMatches", etag: o.etag });
+  assert.equal(hit.tag, "Found");
+  assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagMatches: o.etag } });
+  const miss = await store.getStreamIf("k", { tag: "EtagMatches", etag: "other" });
+  assert.equal(miss.tag, "NotModified");
+  assert.equal(miss.object.size, 3);
+  assert.deepEqual(miss.object.contentType, Some("text/plain"));
+  const same = await store.getStreamIf("k", { tag: "EtagDiffers", etag: o.etag });
+  assert.equal(same.tag, "NotModified");
+  assert.deepEqual(r2.reads.at(-1).options, { onlyIf: { etagDoesNotMatch: o.etag } });
+  const changed = await store.getStreamIf("k", { tag: "EtagDiffers", etag: "other" });
+  assert.equal(changed.tag, "Found");
+});
+
+t("WorkersR2.listWith: a delimiter folds keys into prefixes, and no delimiter gives none; list is the short form", async () => {
+  const r2 = fakeR2(10);
+  for (const key of ["photos/2024/a.jpg", "photos/2024/b.jpg", "photos/2025/c.jpg", "photos/cover.jpg", "notes.txt"]) await r2.put(key, bytes(1));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const inside = await store.listWith({ prefix: Some("photos/"), cursor: None, delimiter: Some("/") });
+  assert.deepEqual(inside.keys.map((o) => o.key), ["photos/cover.jpg"]);
+  assert.deepEqual(inside.prefixes, ["photos/2024/", "photos/2025/"]);
+  assert.equal(r2.lists.at(-1).delimiter, "/");
+  const top = await store.listWith({ prefix: None, cursor: None, delimiter: Some("/") });
+  assert.deepEqual(top.keys.map((o) => o.key), ["notes.txt"]);
+  assert.deepEqual(top.prefixes, ["photos/"]);
+  const flat = await store.listWith({ prefix: Some("photos/"), cursor: None, delimiter: None });
+  assert.equal(flat.keys.length, 4);
+  assert.deepEqual(flat.prefixes, []);
+  assert.equal(r2.lists.at(-1).delimiter, undefined);
+  const short = await store.list(Some("photos/"), None);
+  assert.deepEqual(short.prefixes, []);
+});
+
+t("WorkersR2.listWith: a page counts objects and prefixes together, and a cursor on a prefix does not list it twice", async () => {
+  const r2 = fakeR2(2);
+  for (const key of ["a/1", "a/2", "b/1", "c.txt"]) await r2.put(key, bytes(1));
+  const store = new WorkersR2({ R2_ARCHIVES: r2 }, "R2_ARCHIVES");
+  const first = await store.listWith({ prefix: None, cursor: None, delimiter: Some("/") });
+  assert.deepEqual(first.prefixes, ["a/", "b/"]);
+  assert.deepEqual(first.keys, []);
+  assert.equal(first.cursor.tag, "Some");
+  const second = await store.listWith({ prefix: None, cursor: first.cursor, delimiter: Some("/") });
+  assert.deepEqual(second.keys.map((o) => o.key), ["c.txt"]);
+  assert.deepEqual(second.prefixes, []);
+  assert.deepEqual(second.cursor, None);
 });
 
 t("WorkersR2.putStream: writes a stream of the declared size, as a stream, and returns the object", async () => {

@@ -190,15 +190,102 @@ export const R2Put = {
 };
 
 /**
- * One page of an `R2.list`: the objects it holds, and the cursor of the next
- * page, `None` on the last.
+ * One page of an `R2.list` or `R2.listWith`: the objects it holds, and the
+ * cursor of the next page, `None` on the last. `prefixes` are the "folders"
+ * of a delimited listing (see `R2List`): empty unless a delimiter was given.
  */
 export interface R2Listing {
   readonly keys: readonly R2Object[];
   readonly cursor: Option<string>;
+  readonly prefixes: readonly string[];
 }
 
 export const R2Listing = {
+};
+
+/**
+ * The options of an `R2.listWith` page: the `prefix` to list under, the
+ * `cursor` of the previous page, and a `delimiter`. With a delimiter, a key
+ * that holds it after the prefix is not listed: the key up to and including
+ * the delimiter appears once in the listing's `prefixes` instead, so
+ * listing under `photos/` with delimiter `/` gives the immediate children
+ * of that path. `R2.list(prefix, cursor)` is the short form with no
+ * delimiter. Leave a field out for `None`.
+ */
+export interface R2List {
+  readonly prefix: Option<string>;
+  readonly cursor: Option<string>;
+  readonly delimiter: Option<string>;
+}
+
+export const R2List = {
+};
+
+/**
+ * The part of an object an `R2.getRange` reads. `Span(offset, length)` is
+ * `length` bytes from `offset` (to the end of the object when `length` is
+ * `None`); `Suffix(length)` is the last `length` bytes. A range R2 cannot
+ * satisfy (one that starts at or past the end of the object) is not clamped:
+ * R2 refuses it, and the read faults.
+ */
+export type R2Range =
+    { readonly tag: "Span"; readonly offset: number; readonly length: Option<number> }
+  | { readonly tag: "Suffix"; readonly length: number };
+
+export const R2Range = {
+  Span: (offset: number, length: Option<number>): R2Range => ({ tag: "Span", offset, length }),
+  Suffix: (length: number): R2Range => ({ tag: "Suffix", length }),
+};
+
+/**
+ * The condition of an `R2.getStreamIf` read, the read-side counterpart of
+ * `R2Condition`. `Unconditional` always reads; `EtagMatches(etag)` reads only
+ * when the object's etag is `etag`; `EtagDiffers(etag)` reads only when it
+ * is not (revalidating a cached copy). R2 has further conditions, so a
+ * `match` over this type needs a wildcard.
+ */
+export type R2GetIf =
+    { readonly tag: "Unconditional" }
+  | { readonly tag: "EtagMatches"; readonly etag: string }
+  | { readonly tag: "EtagDiffers"; readonly etag: string };
+
+export const R2GetIf = {
+  Unconditional: { tag: "Unconditional" } as R2GetIf,
+  EtagMatches: (etag: string): R2GetIf => ({ tag: "EtagMatches", etag }),
+  EtagDiffers: (etag: string): R2GetIf => ({ tag: "EtagDiffers", etag }),
+};
+
+/**
+ * A byte range of an object, as `R2.getRange` reads it: the object's
+ * metadata (its whole `size` included), the `offset` and `length` of the bytes
+ * the body holds, and the body as a stream, read once as `R2Body`'s is. An
+ * HTTP `206` response's `Content-Range` is
+ * `bytes <offset>-<offset + length - 1>/<object.size>`.
+ */
+export interface R2Partial {
+  readonly object: R2Object;
+  readonly offset: number;
+  readonly length: number;
+  readonly body: AsyncIterable<globalThis.Uint8Array>;
+}
+
+export const R2Partial = {
+};
+
+/**
+ * The answer of an `R2.getStreamIf` read: `Found` with the object, `Missing`
+ * when the key holds none, and `NotModified` with the object's metadata when
+ * the condition did not hold (a handler maps it to `304`).
+ */
+export type R2Read =
+    { readonly tag: "Found"; readonly body: R2Body }
+  | { readonly tag: "Missing" }
+  | { readonly tag: "NotModified"; readonly object: R2Object };
+
+export const R2Read = {
+  Found: (body: R2Body): R2Read => ({ tag: "Found", body }),
+  Missing: { tag: "Missing" } as R2Read,
+  NotModified: (object: R2Object): R2Read => ({ tag: "NotModified", object }),
 };
 
 /**
@@ -1558,7 +1645,11 @@ export const __ServiceToken: symbol = globalThis.Symbol("Service");
  * optionally under a prefix; pass the previous page's `cursor` for the next.
  *
  * Larger objects stream. `getStream` gives the object's metadata and its
- * body as a `Stream[Bytes]` (serve it with `RawStreamed`). `putStream` and
+ * body as a `Stream[Bytes]` (serve it with `RawStreamed`). `getRange` reads
+ * a byte range of an object as a stream (video, audio, resumed downloads and
+ * HTTP `Range` requests), `getStreamIf` reads only when an etag condition
+ * holds and answers `NotModified` otherwise, and `listWith` lists with a
+ * `delimiter`, giving the immediate children of a path as `prefixes`. `putStream` and
  * `putStreamWith` write a stream of exactly `size` bytes, which R2 needs to
  * know up front: a stream that holds more or fewer faults the write, and
  * nothing is stored.
@@ -1580,6 +1671,9 @@ export interface R2 {
   delete(key: string): globalThis.Promise<void>;
   list(prefix: Option<string>, cursor: Option<string>): globalThis.Promise<R2Listing>;
   getStream(key: string): globalThis.Promise<Option<R2Body>>;
+  getRange(key: string, range: R2Range): globalThis.Promise<Option<R2Partial>>;
+  getStreamIf(key: string, onlyIf: R2GetIf): globalThis.Promise<R2Read>;
+  listWith(options: R2List): globalThis.Promise<R2Listing>;
   putStream(key: string, body: AsyncIterable<globalThis.Uint8Array>, size: number): globalThis.Promise<R2Object>;
   putStreamWith(key: string, body: AsyncIterable<globalThis.Uint8Array>, size: number, options: R2Put): globalThis.Promise<Option<R2Object>>;
   createUpload(key: string, options: R2UploadOptions): globalThis.Promise<R2Upload>;
@@ -4388,10 +4482,80 @@ export function __deserialise_R2Condition(json: __JsonValue, path: string = "$")
   }
 }
 
+export function __serialise_R2GetIf(value: R2GetIf): __JsonValue {
+  switch (value.tag) {
+    case "Unconditional":
+      return { kind: "Unconditional" };
+    case "EtagMatches": {
+      return { kind: "EtagMatches", etag: value.etag as __JsonValue };
+    }
+    case "EtagDiffers": {
+      return { kind: "EtagDiffers", etag: value.etag as __JsonValue };
+    }
+  }
+}
+
+export function __deserialise_R2GetIf(json: __JsonValue, path: string = "$"): Result<R2GetIf, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Unconditional":
+      return Ok({ tag: "Unconditional" } as R2GetIf);
+    case "EtagMatches": {
+      if (typeof obj["etag"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.etag`, expected: "string", actual: typeof obj["etag"] });
+      }
+      const __etag = obj["etag"];
+      return Ok({ tag: "EtagMatches", etag: __etag } as R2GetIf);
+    }
+    case "EtagDiffers": {
+      if (typeof obj["etag"] !== "string") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.etag`, expected: "string", actual: typeof obj["etag"] });
+      }
+      const __etag = obj["etag"];
+      return Ok({ tag: "EtagDiffers", etag: __etag } as R2GetIf);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
+}
+
+export function __serialise_R2List(value: R2List): __JsonValue {
+  return {
+    prefix: __serialise_Option_String(value.prefix),
+    cursor: __serialise_Option_String(value.cursor),
+    delimiter: __serialise_Option_String(value.delimiter),
+  };
+}
+
+export function __deserialise_R2List(json: __JsonValue, path: string = "$"): Result<R2List, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const __d_prefix: __JsonValue = "prefix" in obj ? obj["prefix"] : { kind: "None" };
+  const __r_prefix = __deserialise_Option_String(__d_prefix, `${path}.prefix`);
+  if (__r_prefix.tag === "Err") return __r_prefix;
+  const __prefix = __r_prefix.value;
+  const __d_cursor: __JsonValue = "cursor" in obj ? obj["cursor"] : { kind: "None" };
+  const __r_cursor = __deserialise_Option_String(__d_cursor, `${path}.cursor`);
+  if (__r_cursor.tag === "Err") return __r_cursor;
+  const __cursor = __r_cursor.value;
+  const __d_delimiter: __JsonValue = "delimiter" in obj ? obj["delimiter"] : { kind: "None" };
+  const __r_delimiter = __deserialise_Option_String(__d_delimiter, `${path}.delimiter`);
+  if (__r_delimiter.tag === "Err") return __r_delimiter;
+  const __delimiter = __r_delimiter.value;
+  return Ok({ prefix: __prefix, cursor: __cursor, delimiter: __delimiter } as R2List);
+}
+
 export function __serialise_R2Listing(value: R2Listing): __JsonValue {
   return {
     keys: __serialise_List_R2Object(value.keys),
     cursor: __serialise_Option_String(value.cursor),
+    prefixes: __serialise_List_String(value.prefixes),
   };
 }
 
@@ -4406,7 +4570,10 @@ export function __deserialise_R2Listing(json: __JsonValue, path: string = "$"): 
   const __r_cursor = __deserialise_Option_String(obj["cursor"], `${path}.cursor`);
   if (__r_cursor.tag === "Err") return __r_cursor;
   const __cursor = __r_cursor.value;
-  return Ok({ keys: __keys, cursor: __cursor } as R2Listing);
+  const __r_prefixes = __deserialise_List_String(obj["prefixes"], `${path}.prefixes`);
+  if (__r_prefixes.tag === "Err") return __r_prefixes;
+  const __prefixes = __r_prefixes.value;
+  return Ok({ keys: __keys, cursor: __cursor, prefixes: __prefixes } as R2Listing);
 }
 
 export function __serialise_R2Object(value: R2Object): __JsonValue {
@@ -4508,6 +4675,52 @@ export function __deserialise_R2Put(json: __JsonValue, path: string = "$"): Resu
   if (__r_onlyIf.tag === "Err") return __r_onlyIf;
   const __onlyIf = __r_onlyIf.value;
   return Ok({ contentType: __contentType, metadata: __metadata, onlyIf: __onlyIf } as R2Put);
+}
+
+export function __serialise_R2Range(value: R2Range): __JsonValue {
+  switch (value.tag) {
+    case "Span": {
+      return { kind: "Span", offset: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.offset), length: __serialise_Option_Int(value.length) };
+    }
+    case "Suffix": {
+      return { kind: "Suffix", length: ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(value.length) };
+    }
+  }
+}
+
+export function __deserialise_R2Range(json: __JsonValue, path: string = "$"): Result<R2Range, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  const kind = obj["kind"];
+  switch (kind) {
+    case "Span": {
+      if (typeof obj["offset"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.offset`, expected: "number", actual: typeof obj["offset"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["offset"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.offset`, expected: "safe integer", actual: String(obj["offset"]) });
+      }
+      const __offset = obj["offset"];
+      const __r_length = __deserialise_Option_Int(obj["length"], `${path}.length`);
+      if (__r_length.tag === "Err") return __r_length;
+      const __length = __r_length.value;
+      return Ok({ tag: "Span", offset: __offset, length: __length } as R2Range);
+    }
+    case "Suffix": {
+      if (typeof obj["length"] !== "number") {
+        return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "number", actual: typeof obj["length"] });
+      }
+      if (!globalThis.Number.isSafeInteger(obj["length"])) {
+        return Err({ kind: "StructuralMismatch", path: `${path}.length`, expected: "safe integer", actual: String(obj["length"]) });
+      }
+      const __length = obj["length"];
+      return Ok({ tag: "Suffix", length: __length } as R2Range);
+    }
+    default:
+      return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
+  }
 }
 
 export function __serialise_R2Upload(value: R2Upload): __JsonValue {

@@ -1306,6 +1306,26 @@ pub(super) const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<st
     store.set(key, { body: body.slice(), etag: `etag-${version}`, contentType, metadata });
     return meta(key);
   };
+  const listPage = (prefix: Option<string>, cursor: Option<string>, delimiter: Option<string>) => {
+    const p = prefix.tag === "Some" ? prefix.value : "";
+    const d = delimiter.tag === "Some" && delimiter.value !== "" ? delimiter.value : undefined;
+    const after = cursor.tag === "Some" ? cursor.value : undefined;
+    // A cursor that is a folded prefix skips everything under it, so the prefix is not listed twice.
+    const past = (k: string) => after === undefined || (k > after && !(d !== undefined && after.endsWith(d) && k.startsWith(after)));
+    const entries: { key: string; folded: boolean }[] = [];
+    for (const k of [...store.keys()].filter((k) => k.startsWith(p) && past(k)).sort()) {
+      const at = d === undefined ? -1 : k.indexOf(d, p.length);
+      const entry = at < 0 ? { key: k, folded: false } : { key: k.slice(0, at + d!.length), folded: true };
+      if (entry.folded && entries.some((e) => e.folded && e.key === entry.key)) continue;
+      entries.push(entry);
+    }
+    const page = entries.slice(0, 1000);
+    return {
+      keys: page.filter((e) => !e.folded).map((e) => meta(e.key)),
+      cursor: entries.length > page.length ? Some(page[page.length - 1].key) : None,
+      prefixes: page.filter((e) => e.folded).map((e) => e.key),
+    };
+  };
   type Upload = {
     options: { readonly contentType: Option<string>; readonly metadata: globalThis.ReadonlyMap<string, string> };
     parts: globalThis.Map<number, { etag: string; body: globalThis.Uint8Array }>;
@@ -1366,11 +1386,49 @@ pub(super) const R2_DOUBLE_BODY: &str = r#"  const store = new globalThis.Map<st
       store.delete(key);
     },
     async list(prefix, cursor) {
-      const keys = [...store.keys()]
-        .filter((k) => (prefix.tag === "None" || k.startsWith(prefix.value)) && (cursor.tag === "None" || k > cursor.value))
-        .sort();
-      const page = keys.slice(0, 1000);
-      return { keys: page.map(meta), cursor: keys.length > page.length ? Some(page[page.length - 1]) : None };
+      return listPage(prefix, cursor, None);
+    },
+    // #4049: with a delimiter a key that holds it after the prefix folds into the key up to and including the
+    // delimiter, listed once, as R2 does; a page counts objects and prefixes together.
+    async listWith(options) {
+      return listPage(options.prefix, options.cursor, options.delimiter);
+    },
+    // #4049: a byte range as a stream. One that starts at or past the end is refused, as R2 refuses it (10039).
+    async getRange(key, range) {
+      const e = store.get(key);
+      if (e === undefined) return None;
+      const size = e.body.length;
+      let offset: number;
+      let length: number;
+      if (range.tag === "Suffix") {
+        if (range.length < 0) throw new globalThis.Error(`R2: a suffix range is not negative, not ${range.length}`);
+        length = globalThis.Math.min(range.length, size);
+        offset = size - length;
+      } else {
+        const wanted = range.length.tag === "Some" ? range.length.value : undefined;
+        if (range.offset < 0 || (wanted !== undefined && wanted < 0)) throw new globalThis.Error("R2: a range offset and length are not negative");
+        if (range.offset >= size) throw new globalThis.Error("R2: the requested range is not satisfiable (10039)");
+        offset = range.offset;
+        length = globalThis.Math.min(wanted ?? size - offset, size - offset);
+      }
+      const bytes = e.body.slice(offset, offset + length);
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return Some({ object: meta(key), offset, length, body: chunks() });
+    },
+    // #4049: a read gated on the etag; a condition that does not hold is `NotModified` with the metadata.
+    async getStreamIf(key, onlyIf) {
+      const e = store.get(key);
+      if (e === undefined) return { tag: "Missing" };
+      if ((onlyIf.tag === "EtagMatches" && e.etag !== onlyIf.etag) || (onlyIf.tag === "EtagDiffers" && e.etag === onlyIf.etag)) {
+        return { tag: "NotModified", object: meta(key) };
+      }
+      const bytes = e.body.slice();
+      const chunks = async function* () {
+        for (let at = 0; at < bytes.length; at += 65536) yield bytes.slice(at, at + 65536);
+      };
+      return { tag: "Found", body: { object: meta(key), body: chunks() } };
     },
     async getStream(key) {
       const e = store.get(key);

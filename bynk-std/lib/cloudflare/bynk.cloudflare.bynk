@@ -36,6 +36,11 @@ adapter bynk.cloudflare {
 		R2Put,
 		R2Condition,
 		R2Listing,
+		R2List,
+		R2Range,
+		R2GetIf,
+		R2Partial,
+		R2Read,
 		R2Body,
 		R2Upload,
 		R2UploadOptions,
@@ -297,13 +302,77 @@ adapter bynk.cloudflare {
 	}
 
 	---
-	One page of an `R2.list`: the objects it holds, and the cursor of the next
-	page, `None` on the last.
+	One page of an `R2.list` or `R2.listWith`: the objects it holds, and the
+	cursor of the next page, `None` on the last. `prefixes` are the "folders"
+	of a delimited listing (see `R2List`): empty unless a delimiter was given.
 	---
 	type R2Listing = {
 		keys: List[R2Object],
 		cursor: Option[String],
+		prefixes: List[String],
 	}
+
+	---
+	The options of an `R2.listWith` page: the `prefix` to list under, the
+	`cursor` of the previous page, and a `delimiter`. With a delimiter, a key
+	that holds it after the prefix is not listed: the key up to and including
+	the delimiter appears once in the listing's `prefixes` instead, so
+	listing under `photos/` with delimiter `/` gives the immediate children
+	of that path. `R2.list(prefix, cursor)` is the short form with no
+	delimiter. Leave a field out for `None`.
+	---
+	type R2List = {
+		prefix: Option[String] = None,
+		cursor: Option[String] = None,
+		delimiter: Option[String] = None,
+	}
+
+	---
+	The part of an object an `R2.getRange` reads. `Span(offset, length)` is
+	`length` bytes from `offset` (to the end of the object when `length` is
+	`None`); `Suffix(length)` is the last `length` bytes. A range R2 cannot
+	satisfy (one that starts at or past the end of the object) is not clamped:
+	R2 refuses it, and the read faults.
+	---
+	type R2Range =
+		| Span(offset: Int, length: Option[Int])
+		| Suffix(length: Int)
+
+	---
+	The condition of an `R2.getStreamIf` read, the read-side counterpart of
+	`R2Condition`. `Unconditional` always reads; `EtagMatches(etag)` reads only
+	when the object's etag is `etag`; `EtagDiffers(etag)` reads only when it
+	is not (revalidating a cached copy). R2 has further conditions, so a
+	`match` over this type needs a wildcard.
+	---
+	type R2GetIf =
+		| Unconditional
+		| EtagMatches(etag: String)
+		| EtagDiffers(etag: String)
+
+	---
+	A byte range of an object, as `R2.getRange` reads it: the object's
+	metadata (its whole `size` included), the `offset` and `length` of the bytes
+	the body holds, and the body as a stream, read once as `R2Body`'s is. An
+	HTTP `206` response's `Content-Range` is
+	`bytes <offset>-<offset + length - 1>/<object.size>`.
+	---
+	type R2Partial = {
+		object: R2Object,
+		offset: Int,
+		length: Int,
+		body: Stream[Bytes],
+	}
+
+	---
+	The answer of an `R2.getStreamIf` read: `Found` with the object, `Missing`
+	when the key holds none, and `NotModified` with the object's metadata when
+	the condition did not hold (a handler maps it to `304`).
+	---
+	type R2Read =
+		| Found(body: R2Body)
+		| Missing
+		| NotModified(object: R2Object)
 
 	---
 	An object read by `R2.getStream`: its metadata, and its body as a stream
@@ -788,7 +857,11 @@ adapter bynk.cloudflare {
 	optionally under a prefix; pass the previous page's `cursor` for the next.
 
 	Larger objects stream. `getStream` gives the object's metadata and its
-	body as a `Stream[Bytes]` (serve it with `RawStreamed`). `putStream` and
+	body as a `Stream[Bytes]` (serve it with `RawStreamed`). `getRange` reads
+	a byte range of an object as a stream (video, audio, resumed downloads and
+	HTTP `Range` requests), `getStreamIf` reads only when an etag condition
+	holds and answers `NotModified` otherwise, and `listWith` lists with a
+	`delimiter`, giving the immediate children of a path as `prefixes`. `putStream` and
 	`putStreamWith` write a stream of exactly `size` bytes, which R2 needs to
 	know up front: a stream that holds more or fewer faults the write, and
 	nothing is stored.
@@ -810,6 +883,9 @@ adapter bynk.cloudflare {
 		fn delete(key: String) -> Effect[()]
 		fn list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]
 		fn getStream(key: String) -> Effect[Option[R2Body]]
+		fn getRange(key: String, range: R2Range) -> Effect[Option[R2Partial]]
+		fn getStreamIf(key: String, onlyIf: R2GetIf) -> Effect[R2Read]
+		fn listWith(options: R2List) -> Effect[R2Listing]
 		fn putStream(key: String, body: Stream[Bytes], size: Int) -> Effect[R2Object]
 		fn putStreamWith(
 			key: String,

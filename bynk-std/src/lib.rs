@@ -1041,6 +1041,7 @@ pub const UNITS: &[Unit] = &[
         ],
         extensible: &[
             "R2Condition",
+            "R2GetIf",
             "KvExpiration",
             "SqlError",
             "EmailError",
@@ -2141,6 +2142,7 @@ mod tests {
                 ("bynk", "Method"),
                 ("bynk", "Redirect"),
                 ("bynk.cloudflare", "R2Condition"),
+                ("bynk.cloudflare", "R2GetIf"),
                 ("bynk.cloudflare", "KvExpiration"),
                 ("bynk.cloudflare", "SqlError"),
                 ("bynk.cloudflare", "EmailError"),
