@@ -529,7 +529,6 @@
 /book/reference/diagnostics/bynk.http.limits_invalid_field/
 /book/reference/diagnostics/bynk.http.limits_not_http/
 /book/reference/diagnostics/bynk.http.limits_unknown_field/
-/book/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /book/reference/diagnostics/bynk.http.multipart_large_cap/
 /book/reference/diagnostics/bynk.http.path_param_not_stringy/
 /book/reference/diagnostics/bynk.http.query_field_not_stringy/
@@ -1595,6 +1594,7 @@
 /reference/diagnostics/bynk.history.not_generable/
 /reference/diagnostics/bynk.history.outside_property/
 /reference/diagnostics/bynk.history.restates_invariant/
+/reference/diagnostics/bynk.http.body_cap_defaulted/
 /reference/diagnostics/bynk.http.body_kind_conflict/
 /reference/diagnostics/bynk.http.body_on_get_or_delete/
 /reference/diagnostics/bynk.http.cache_bad_immutable/
@@ -1658,7 +1658,6 @@
 /reference/diagnostics/bynk.http.limits_invalid_field/
 /reference/diagnostics/bynk.http.limits_not_http/
 /reference/diagnostics/bynk.http.limits_unknown_field/
-/reference/diagnostics/bynk.http.multipart_body_unbounded/
 /reference/diagnostics/bynk.http.multipart_large_cap/
 /reference/diagnostics/bynk.http.path_param_not_stringy/
 /reference/diagnostics/bynk.http.query_field_not_stringy/

@@ -1456,6 +1456,15 @@ impl LimitsPolicy {
 /// otherwise.
 pub const DEFAULT_MAX_PARTS: i64 = 64;
 
+/// #3921: the request-body ceiling, in bytes (1 MiB), of an HTTP route that takes a
+/// `body` when neither `@limit(maxBody:)` nor the service's `limits { maxBody }`
+/// says otherwise. It is the cross-context call wire's own cap.
+pub const DEFAULT_MAX_BODY: i64 = 1_048_576;
+
+/// #3921: the largest `maxBody` a literal may declare, in bytes (500 MB, the
+/// request-body ceiling of the largest Cloudflare plan). There is no "unlimited".
+pub const MAX_BODY_CEILING: i64 = 524_288_000;
+
 /// How an `Option` is written in an HTTP response body (#2858).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JsonOptions {
@@ -2140,6 +2149,18 @@ impl Handler {
                 }
                 _ => None,
             })
+    }
+
+    /// #3921: the route's effective request-body cap, in bytes: its `@limit`, else
+    /// `service_cap` (the service's `limits { maxBody }`), else
+    /// [`DEFAULT_MAX_BODY`] when it is an HTTP route that takes a `body`. `None`
+    /// only for a route with no body (and for a non-HTTP handler).
+    pub fn effective_max_body(&self, service_cap: Option<i64>) -> Option<i64> {
+        self.limit_max_body().or(service_cap).or_else(|| {
+            (matches!(self.kind, HandlerKind::Http { .. })
+                && self.params.iter().any(|p| p.name.name == "body"))
+            .then_some(DEFAULT_MAX_BODY)
+        })
     }
 
     /// #3276: the handler's own `@limit(maxFile:)` per-file byte cap, if any.
