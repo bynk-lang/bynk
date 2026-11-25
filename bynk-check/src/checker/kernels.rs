@@ -2801,6 +2801,7 @@ pub(crate) fn check_effect_method(
     match method.name.as_str() {
         "within" => check_effect_within_method(method, args, inner, span, ctx),
         "race" => check_effect_race_method(args, inner, span, ctx),
+        "map" | "andThen" => super::effect_more::check_map_and_then(method, args, inner, span, ctx),
         _ => check_effect_detach_method(receiver, args, span, ctx),
     }
 }
@@ -3490,7 +3491,7 @@ pub(crate) fn check_effect_result_kernel_method(
                 method.span,
                 format!(
                     "the built-in `Effect[Result[{}, {}]]` type has no method `{}` — the kernel is \
-                     `mapOk`, `mapErr`, `flatMapOk`, `flatMapErr`",
+                     `mapOk`, `mapErr`, `flatMapOk`, `flatMapErr`, and `map`, `andThen`, `within`, `race`, `detach` on any `Effect`",
                     ok.display(tys),
                     err.display(tys),
                     method.name

@@ -619,18 +619,23 @@ intervening `<-` peel and `match`:
 chains a further effectful-fallible step on success (keeping the single error
 type `E`, exactly as `?` does); `flatMapErr` attempts an effectful recovery on
 error (its recovery MUST produce the receiver's success type `T`). The naming is
-verb-first, matching `map`/`mapErr` on `Result`. A method outside the four is
-`bynk.types.method_not_found`; a `flatMapOk`/`flatMapErr` argument that does not
+verb-first, matching `map`/`mapErr` on `Result`. A method outside the four, and
+outside the methods every `Effect` has (`map`, `andThen`, `within`, `race`,
+`detach`), is `bynk.types.method_not_found`; a `flatMapOk`/`flatMapErr` argument that does not
 return `Effect[Result[…]]`, or whose error/success side does not line up, is
 `bynk.types.combinator_return_mismatch`. Only an `Effect` wrapping a
-`Result` carries these — any other `Effect[_]` has no kernel methods. Unlike the
+`Result` carries these. Unlike the
 eager `List.forEach`/`traverseTry` iterators, these **produce** an `Effect`
 rather than running one, so they are **not** effectful-context-confined: a pure
 helper may reshape an `Effect[Result[…]]` it was handed and return it. `.map`
-and `.flatMap` on such a receiver remain Effect's own (operating on the whole
+and `.andThen` on such a receiver are Effect's own (#3965; operating on the whole
 `Result`); the four named methods remove the "which `.map`?" ambiguity. Other
 `Effect`-of-X shapes (`Effect[Option[T]]`, `Effect[List[T]]`) have no synthesised
-methods — write `e.map((r) => …)` explicitly.
+methods — write `e.map((r) => …)` explicitly. Every `Effect[T]` has `e.map(f: T -> U)`,
+`Effect[U]` and `e.andThen(f: T -> Effect[U])`, `Effect[U]`; like the four, they
+produce an `Effect` rather than run one, so a pure helper may use them. A `map` function
+that returns an `Effect`, or an `andThen` function that does not, is
+`bynk.types.combinator_return_mismatch`.
 
 **Declared error embeddings and `?` conversion** (v0.154, ADR 0178). A sum type
 MAY declare error embeddings — `type OrderError = … embeds PaymentError as

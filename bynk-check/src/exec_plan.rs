@@ -381,7 +381,13 @@ fn scan_with<'a>(
                 recv,
                 op: KernelOp::Effect(op),
             }) => {
-                if matches!(&*tys.get(*recv), Ty::Effect(_)) {
+                // #3965: `map` and `andThen` build an effect; they use no execution context.
+                if matches!(&*tys.get(*recv), Ty::Effect(_))
+                    && !matches!(
+                        op,
+                        crate::kernel_op::EffectOp::Map | crate::kernel_op::EffectOp::AndThen
+                    )
+                {
                     // `detach` registers no timer, so it does not put a test
                     // module on virtual time.
                     facts.timed |= !matches!(op, crate::kernel_op::EffectOp::Detach);

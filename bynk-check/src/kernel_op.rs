@@ -433,7 +433,7 @@ kernel_ops! {
         Send = "send", "send(frame: F) -> Effect[()]";
         Close = "close", "close() -> Effect[()]";
     }
-/// `Effect[T]` (#2683, #2711, #3437): `within`, `race` and `detach`, on every `Effect`.
+/// `Effect[T]` (#2683, #2711, #3437, #3965): `within`, `race`, `detach`, `map` and `andThen`, on every `Effect`.
     EffectOp {
         // #2683: `e.within(d)` races `e` against a deadline and hands the
         // abandoned effect to the execution context's `waitUntil`; it is never
@@ -447,6 +447,11 @@ kernel_ops! {
         // has been handed to the runtime, not once it has finished. A fault or
         // an `Err` in it is reported by the runtime, never lost.
         Detach = "detach", "detach() -> Effect[()]";
+        // #3965: `e.map(f)` and `e.andThen(f)` build an effect rather than run one, so they
+        // are legal in a pure helper; an effect is an eager promise, so neither changes
+        // when `e` starts. On an `Effect[Result]` they act on the whole `Result`.
+        Map = "map", "map(f: T -> U) -> Effect[U]";
+        AndThen = "andThen", "andThen(f: T -> Effect[U]) -> Effect[U]";
     }
 /// The `Effect[Result[T, E]]` combinators (v0.152, ADR 0176; design doc §2.8.3),
 /// beyond [`EffectOp`]: the compiler-synthesised methods on the universal
