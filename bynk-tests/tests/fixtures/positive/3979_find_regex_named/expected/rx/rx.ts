@@ -47,14 +47,26 @@ export function side(s: string): string {
           const text = __d.value.value;
           return text;
         }
-        return "-";
+        if (__d.tag === "Some" && __d.value.tag === "None") {
+          return "-";
+        }
+        if (__d.tag === "None") {
+          return "missing";
+        }
+        throw new globalThis.Error("non-exhaustive match");
       })(((__m: ReadonlyMap<string, Option<string>>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as Option<string>) : None)(v, "left"));
       const r = ((__d) => {
         if (__d.tag === "Some" && __d.value.tag === "Some") {
           const text = __d.value.value;
           return text;
         }
-        return "-";
+        if (__d.tag === "Some" && __d.value.tag === "None") {
+          return "-";
+        }
+        if (__d.tag === "None") {
+          return "missing";
+        }
+        throw new globalThis.Error("non-exhaustive match");
       })(((__m: ReadonlyMap<string, Option<string>>, __k: string) => __m.has(__k) ? Some(__m.get(__k) as Option<string>) : None)(v, "right"));
       return `${String(l)}/${String(r)}`;
     }

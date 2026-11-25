@@ -6274,6 +6274,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "type Status = enum { Open, Paid }\n\nfn code(s: Status) -> Int {\n    match s {\n        Status { .. } => 1    // ✗ `Status` is an enum, not a record\n        _ => 2\n    }\n}\n\nfn code(s: Status) -> Int {\n    match s {\n        Open => 1             // ✓ name the variants\n        Paid => 2\n    }\n}",
     },
     Explain {
+        code: "bynk.types.regex_duplicate_group_name",
+        blurb: "`findRegexNamed` keys its result by the pattern's group names, and a name may belong to one group only: the runtimes refuse a repeated name, even across alternatives, when the pattern is built, so the program would fail at run time. Give each group its own name.",
+        example: "fn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<side>a)|(?<side>b)\")          // ✗ `side` names two groups\n}\n\nfn side(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<left>a)|(?<right>b)\")         // ✓\n}",
+    },
+    Explain {
         code: "bynk.types.regex_no_named_groups",
         blurb: "`findRegexNamed` returns the first match's capture groups keyed by their names, and the names come from the pattern, which is a literal checked when the program compiles. A pattern with no named group, `(?<name>…)`, has nothing to key the result by, so it is refused. Name the groups you want, or use `findRegex`, which returns the groups by position (the whole match first).",
         example: "fn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(\\\\d{4})-(\\\\d{2})\")                 // ✗ no group is named\n}\n\nfn year(s: String) -> Option[Map[String, Option[String]]] {\n    s.findRegexNamed(\"(?<year>\\\\d{4})-(?<month>\\\\d{2})\")  // ✓\n}",
@@ -10687,6 +10692,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.types.record_pattern_on_non_record",
         "A record pattern names a type that is not a record (a sum, enum, refined or opaque type, or a built-in).",
         &["record_pattern"],
+    ),
+    dg(
+        "bynk.types.regex_duplicate_group_name",
+        "`findRegexNamed`'s pattern names a capture group more than once, which the runtimes refuse when the pattern is built.",
+        &["method_call"],
     ),
     dg(
         "bynk.types.regex_no_named_groups",

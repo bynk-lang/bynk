@@ -21,11 +21,13 @@ fn side(s: String) -> String {
     Some(v) => {
       let l = match v.get("left") {
         Some(Some(text)) => text,
-        _ => "-",
+        Some(None) => "-",
+        None => "missing",
       }
       let r = match v.get("right") {
         Some(Some(text)) => text,
-        _ => "-",
+        Some(None) => "-",
+        None => "missing",
       }
       "\(l)/\(r)"
     }

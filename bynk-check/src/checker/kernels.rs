@@ -2705,10 +2705,12 @@ pub(crate) fn check_string_kernel_method(
             ExprKind::StrLit(literal) => {
                 if let Err(e) = super::refinements::check_regex_literal(literal, pattern.span) {
                     ctx.errors.push(e);
-                } else if matches!(op, Some(StringOp::FindRegexNamed))
-                    && crate::regex_groups::group_names(literal).is_empty()
-                {
-                    ctx.errors.push(no_named_groups(pattern.span));
+                } else if matches!(op, Some(StringOp::FindRegexNamed)) {
+                    if let Some(name) = crate::regex_groups::duplicate_group_name(literal) {
+                        ctx.errors.push(duplicate_group_name(&name, pattern.span));
+                    } else if crate::regex_groups::group_names(literal).is_empty() {
+                        ctx.errors.push(no_named_groups(pattern.span));
+                    }
                 }
             }
             _ => ctx.errors.push(
@@ -2728,6 +2730,17 @@ pub(crate) fn check_string_kernel_method(
         }
     }
     Some(tys.intern(ret))
+}
+
+/// #3979: a group name used twice is refused by the runtimes, even across
+/// alternatives, so the pattern would throw when it is built.
+fn duplicate_group_name(name: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.types.regex_duplicate_group_name",
+        span,
+        format!("the pattern of `String.findRegexNamed` names the group `{name}` more than once"),
+    )
+    .with_note("give each group its own name; a repeated name is refused when the pattern is built")
 }
 
 /// #3979: `findRegexNamed` reads a pattern's named groups, so a pattern with

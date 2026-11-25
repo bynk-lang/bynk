@@ -1744,7 +1744,9 @@ pattern, and the compiler checks them identically.
   The result is a `Map` keyed by the pattern's group names, each value `None` for a
   group that did not take part. The whole match and unnamed groups are not in it. The
   names come from the literal pattern, so a pattern with none is
-  `bynk.types.regex_no_named_groups`, which points at `findRegex`. There is no
+  `bynk.types.regex_no_named_groups`, which points at `findRegex`. A name used
+  by two groups, even across alternatives, is `bynk.types.regex_duplicate_group_name`,
+  because the runtimes refuse it when the pattern is built. There is no
   `findAllRegexNamed` yet.
 - **Flags** go at the start of the pattern: `(?i)` ignores case, `(?m)` lets
   `^`/`$` match at line breaks, `(?s)` lets `.` match a newline.

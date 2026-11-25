@@ -6,9 +6,9 @@
 //! name. Both read the names through this one function, so they cannot disagree.
 
 /// The names of `pattern`'s named capture groups (`(?<major>\d+)`), in the order
-/// they first appear, each once. A lookbehind (`(?<=…)`, `(?<!…)`), an escaped
-/// parenthesis and a parenthesis inside a character class are not groups.
-pub fn group_names(pattern: &str) -> Vec<String> {
+/// they appear. A lookbehind (`(?<=…)`, `(?<!…)`), an escaped parenthesis and a
+/// parenthesis inside a character class are not groups.
+fn scan(pattern: &str) -> Vec<String> {
     let chars: Vec<char> = pattern.chars().collect();
     let mut names: Vec<String> = Vec::new();
     let mut i = 0;
@@ -26,7 +26,7 @@ pub fn group_names(pattern: &str) -> Vec<String> {
             {
                 let name: String = chars[i + 3..].iter().take_while(|c| **c != '>').collect();
                 let end = i + 3 + name.chars().count();
-                if chars.get(end) == Some(&'>') && !name.is_empty() && !names.contains(&name) {
+                if chars.get(end) == Some(&'>') && !name.is_empty() {
                     names.push(name);
                 }
             }
@@ -37,9 +37,33 @@ pub fn group_names(pattern: &str) -> Vec<String> {
     names
 }
 
+/// The names of `pattern`'s named capture groups, each once, in the order they
+/// first appear.
+pub fn group_names(pattern: &str) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for name in scan(pattern) {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// The first group name `pattern` uses more than once, if any. The target
+/// runtimes refuse one (`new RegExp` throws "Duplicate capture group name"
+/// before ES2025's duplicate-names-in-alternatives), so it is a compile error.
+pub fn duplicate_group_name(pattern: &str) -> Option<String> {
+    let names = scan(pattern);
+    names
+        .iter()
+        .enumerate()
+        .find(|(i, n)| names[..*i].contains(n))
+        .map(|(_, n)| n.clone())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::group_names;
+    use super::{duplicate_group_name, group_names};
 
     #[test]
     fn named_groups_come_out_in_order() {
@@ -62,7 +86,12 @@ mod tests {
     }
 
     #[test]
-    fn a_name_repeated_in_alternatives_is_one_key() {
+    fn a_repeated_name_is_one_key_and_is_reported() {
         assert_eq!(group_names(r"(?<n>a)|(?<n>b)"), ["n"]);
+        assert_eq!(
+            duplicate_group_name(r"(?<n>a)|(?<n>b)").as_deref(),
+            Some("n")
+        );
+        assert_eq!(duplicate_group_name(r"(?<n>a)(?<m>b)"), None);
     }
 }
