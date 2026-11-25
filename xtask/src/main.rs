@@ -659,8 +659,18 @@ fn greenfield_check_growth(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // The base ledger: a stamp PR moves a consumed `raises:` into the ledger, so the rows it
+    // gained since the base are what excuse its rises. No ledger at the base reads as empty.
+    let base_ledger = git_stdout(
+        &root,
+        &[
+            "show",
+            &format!("{base}:{}", xtask::stamp::RAISE_LEDGER_PATH),
+        ],
+    )
+    .unwrap_or_default();
     let live = xtask::greenfield_status::run_gated(&root);
-    match xtask::greenfield_status::check_growth(&live, &base_table, &root) {
+    match xtask::greenfield_status::check_growth_against(&live, &base_table, &base_ledger, &root) {
         Ok(()) => {
             println!("greenfield-status: no growth probe rose against {base}");
             ExitCode::SUCCESS

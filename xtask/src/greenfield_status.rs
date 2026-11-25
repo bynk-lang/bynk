@@ -4012,18 +4012,44 @@ pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>
 /// launder a rise). Compares `live`'s growth probes with `base_table`'s rows and
 /// requires a pending file under `root` to `raises:` each rise.
 pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(), String> {
+    // With no base ledger to compare, the working-tree ledger has no new rows.
+    let ledger =
+        std::fs::read_to_string(root.join(crate::stamp::RAISE_LEDGER_PATH)).unwrap_or_default();
+    check_growth_against(live, base_table, &ledger, root)
+}
+
+/// [`check_growth`] for a PR whose base ledger is `base_ledger` (the text of
+/// `design/greenfield-status-raises.md` at the base revision; empty when it had none).
+/// A rise is also excused by a row the working-tree ledger gained since then for that
+/// probe with exactly this `from` and `to`: the stamp records a consumed `raises:` there
+/// and deletes the pending file, so a stamp PR carries its justification in the ledger and
+/// not in `design/pending` (#4415). A row already in the base ledger never excuses a rise,
+/// so an old row cannot launder a later one.
+pub fn check_growth_against(
+    live: &[Probe],
+    base_table: &str,
+    base_ledger: &str,
+    root: &Path,
+) -> Result<(), String> {
     let rises = growth_rises(live, base_table)
         .map_err(|errs| format!("growth probe reading unusable:\n{}", errs.join("\n")))?;
     if rises.is_empty() {
         return Ok(());
     }
-    let raised = crate::raised_probes_checked(root).map_err(|errs| {
+    let mut raised = crate::raised_probes_checked(root).map_err(|errs| {
         format!(
             "growth probe(s) rose, and the pending files are invalid, so no `raises:` could be \
              read. Fix them first (run `cargo xtask check-pending`):\n{}",
             errs.join("\n")
         )
     })?;
+    let ledger =
+        std::fs::read_to_string(root.join(crate::stamp::RAISE_LEDGER_PATH)).unwrap_or_default();
+    for r in &rises {
+        if ledger_records_rise(&ledger, base_ledger, r) {
+            raised.insert(r.probe.to_string());
+        }
+    }
     let left = unraised(rises, &raised);
     if left.is_empty() {
         return Ok(());
@@ -4039,6 +4065,20 @@ pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(),
             .collect::<Vec<_>>()
             .join("\n")
     ))
+}
+
+/// Whether `ledger` (the raise ledger's text) holds a row for `rise`'s probe with exactly its
+/// `from` and `to` that `base_ledger` does not: the stamp's record of this very rise.
+fn ledger_records_rise(ledger: &str, base_ledger: &str, rise: &GrowthRise) -> bool {
+    let base: BTreeSet<&str> = base_ledger.lines().collect();
+    ledger.lines().filter(|l| !base.contains(*l)).any(|line| {
+        let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+        // `| probe | from | to | version | PR | reason |`: an empty cell before the first bar.
+        cells.len() > 3
+            && cells[1] == rise.probe
+            && cells[2].parse::<usize>() == Ok(rise.from)
+            && cells[3].parse::<usize>() == Ok(rise.to)
+    })
 }
 
 /// The `rises` no pending file `raised` — the ones that must fail the gate.
@@ -5473,6 +5513,36 @@ mod tests {
         )
         .unwrap();
         assert!(check_growth(&live, GROWTH_TABLE, &root).is_ok());
+    }
+
+    #[test]
+    fn a_stamp_prs_ledger_row_excuses_the_rise_it_records_and_only_that() {
+        let root = std::env::temp_dir().join("xtask-check-growth-ledger");
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("design/pending")).unwrap();
+        let live = growth_live("101", "4");
+        let row = "| ts_writes | 100 | 101 | v1.2.3 | #1 | why |";
+        let header = "# Growth-probe raises\n\n| Probe | From | To | Version | PR | Reason |\n|---|---|---|---|---|---|\n";
+        let write = |rows: &str| {
+            std::fs::write(
+                root.join(crate::stamp::RAISE_LEDGER_PATH),
+                format!("{header}{rows}"),
+            )
+            .unwrap();
+        };
+        // No ledger row, no pending file: refused, as before.
+        assert!(check_growth_against(&live, GROWTH_TABLE, "", &root).is_err());
+        // A row the base ledger lacks, for exactly this rise: the stamp recorded it.
+        write(&format!("{row}\n"));
+        assert!(check_growth_against(&live, GROWTH_TABLE, header, &root).is_ok());
+        // A row already in the base ledger excuses nothing (an old rise cannot launder this one).
+        let base = format!("{header}{row}\n");
+        assert!(check_growth_against(&live, GROWTH_TABLE, &base, &root).is_err());
+        // A new row for a different rise, or a different probe, does not excuse it.
+        write("| ts_writes | 100 | 102 | v1.2.3 | #1 | why |\n");
+        assert!(check_growth_against(&live, GROWTH_TABLE, header, &root).is_err());
+        write("| ts_any | 100 | 101 | v1.2.3 | #1 | why |\n");
+        assert!(check_growth_against(&live, GROWTH_TABLE, header, &root).is_err());
     }
 
     #[test]
