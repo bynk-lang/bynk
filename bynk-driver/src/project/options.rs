@@ -373,13 +373,13 @@ impl CompileOptions {
         self
     }
 
-    /// #4128: the project's CPU limit and placement. See the field's own doc.
     /// Build for the named environment's `env(…)` values (#3941).
     pub fn environment(mut self, name: impl Into<String>) -> Self {
         self.environment = name.into();
         self
     }
 
+    /// #4128: the project's CPU limit and placement. See the field's own doc.
     pub fn tuning(mut self, tuning: bynk_project::worker_tuning::WorkerTuning) -> Self {
         self.tuning = tuning;
         self
