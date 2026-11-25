@@ -43,6 +43,9 @@ pub struct WorkerGroup {
     pub routes: Vec<String>,
     /// Custom domains (`pay.example.com`) the Worker is attached to.
     pub custom_domains: Vec<String>,
+    /// #4127: this Worker's Workers Logs settings, laid over the project's
+    /// `[workers.observability]` key by key; `None` when the group sets none.
+    pub observability: Option<crate::observability::ObservabilityOverride>,
 }
 
 impl WorkerGroup {
@@ -56,7 +59,13 @@ impl WorkerGroup {
 pub type WorkerGroups = BTreeMap<String, WorkerGroup>;
 
 /// The keys of a `[deploy.workers.<key>]` entry.
-pub const GROUP_KEYS: &[&str] = &["contexts", "name", "routes", "custom_domains"];
+pub const GROUP_KEYS: &[&str] = &[
+    "contexts",
+    "name",
+    "routes",
+    "custom_domains",
+    "observability",
+];
 
 fn bad(key: &str, reason: String) -> ProjectPathsError {
     ProjectPathsError::BadWorkerGroup {
@@ -162,7 +171,7 @@ fn group_from(key: &str, value: &toml::Value) -> Result<WorkerGroup, ProjectPath
             return Err(bad(
                 key,
                 format!(
-                    "has no key named `{k}`{hint} (its keys are `contexts`, `name`, `routes` and `custom_domains`)"
+                    "has no key named `{k}`{hint} (its keys are `contexts`, `name`, `routes`, `custom_domains` and `observability`)"
                 ),
             ));
         }
@@ -228,11 +237,26 @@ fn group_from(key: &str, value: &toml::Value) -> Result<WorkerGroup, ProjectPath
             ),
         ));
     }
+    let observability = match entry.get("observability") {
+        None => None,
+        Some(toml::Value::Table(t)) => Some(
+            crate::observability::from_table(t)
+                .map_err(|reason| bad(key, format!("`observability` {reason}")))?,
+        ),
+        Some(_) => {
+            return Err(bad(
+                key,
+                "`observability` must be a table, like `[deploy.workers.<key>.observability]`"
+                    .to_string(),
+            ));
+        }
+    };
     Ok(WorkerGroup {
         contexts,
         name,
         routes,
         custom_domains,
+        observability,
     })
 }
 

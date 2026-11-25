@@ -685,6 +685,7 @@ pub(super) fn emit_integration_module(
             input.suite_fns,
             test_suites::integration_resolved(view, cross_context, test_suites::SuiteItems::NONE),
             participants.first().and_then(|p| unit_tables.get(p)),
+            None,
             &mut typed,
             runtime_use,
             &mut harness_bound,

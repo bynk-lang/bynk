@@ -1,0 +1,13 @@
+suite demo.desk {
+  fn warm() -> Effect[Int] given Meter {
+    let first <- Meter.read()
+    Effect.pure(first)
+  }
+
+  stub Meter.read() returns warm()
+
+  case "a stub value cannot run a helper" {
+    let n <- local.call(5)
+    expect n == 6
+  }
+}

@@ -428,10 +428,13 @@ pub(super) fn suite_late_codec_stmts(
 /// *without* the helpers (they are added here, as the check pass adds them); the
 /// helpers' types are merged into `typed`, and their names into `bound` so a
 /// case `let` that reuses one is renamed. A helper's body carries no source map.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn suite_fn_decls(
     suite_fns: test_suites::SuiteItems<'_>,
     mut resolved: ResolvedCommons,
     target: Option<&UnitTable>,
+    // #3983: the target's name and capabilities, which an effectful helper's `given` names.
+    caps: Option<(&str, HashMap<String, bynk_check::checker::CapabilityInfo>)>,
     typed: &mut checker::TypedCommons,
     runtime_use: &RuntimeUse,
     bound: &mut HashSet<String>,
@@ -455,6 +458,7 @@ pub(super) fn suite_fn_decls(
         suite_fns.fns,
         &mut resolved,
         target,
+        caps.as_ref().map(|(_, m)| m),
         &mut errs,
         &mut RefSink::new(),
         &mut LocalsSink::new(),
@@ -510,6 +514,15 @@ pub(super) fn suite_fn_decls(
             crate::ts_build::ident(fixture_ident(&f.path)),
         ));
     }
+    // #3983: an effectful helper's `deps` parameter names its capabilities' types, which the
+    // test module reaches through the target's namespace (`type Meter = __ns_demo_desk.Meter`).
+    if let Some((target_name, _)) = &caps {
+        stmts.extend(suite_given_aliases(
+            suite_fns.fns,
+            target_name,
+            &resolved.cross_context,
+        ));
+    }
     for f in suite_fns.fns {
         let FnName::Free(name) = &f.name else {
             continue;
@@ -518,6 +531,37 @@ pub(super) fn suite_fn_decls(
         stmts.extend(emitter::emit_suite_fn(f, typed, runtime_use));
     }
     stmts
+}
+
+/// #3983: one `type Cap = <namespace>.Cap` alias per capability the suite's helpers name in
+/// `given`: the target's own under its namespace, a flattened one under its declaring unit's.
+pub(super) fn suite_given_aliases(
+    fns: &[bynk_syntax::ast::FnDecl],
+    target_name: &str,
+    cross_context: &bynk_check::resolver::CrossContextInfo,
+) -> Vec<TsStmt> {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut out: Vec<TsStmt> = Vec::new();
+    for f in fns {
+        for c in &f.given {
+            if c.prefix().is_some() || !seen.insert(c.key().to_string()) {
+                continue;
+            }
+            let ns = cross_context
+                .flattened_caps
+                .get(c.key())
+                .map_or_else(|| test_ns(target_name), |unit| test_ns(unit));
+            out.push(TsStmt::decl(
+                TsDecl::TypeAlias {
+                    name: c.key().to_string(),
+                    type_params: Vec::new(),
+                    ty: TsType::named([ns.as_str(), ".", c.key()].concat()),
+                },
+                None,
+            ));
+        }
+    }
+    out
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -654,10 +698,12 @@ pub(super) fn emit_test_case_function(
     {
         let mut helper_view = helper_view;
         test_suites::register_call_record_types(&mut helper_view, target_name, unit_tables);
+        let caps = test_suites::target_capability_map(target_name, unit_tables, &helper_view, tys);
         out.extend(suite_fn_decls(
             suite_fns,
             helper_view,
             unit_tables.get(target_name),
+            Some((target_name, caps)),
             &mut typed,
             runtime_use,
             &mut harness_bound,

@@ -26,3 +26,7 @@ max_concurrency = 4
 queue = "outbound-email-dlq"
 max_batch_size = 10
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
