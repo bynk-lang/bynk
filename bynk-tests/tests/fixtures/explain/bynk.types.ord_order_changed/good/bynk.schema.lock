@@ -1,0 +1,15 @@
+version = 3
+
+[events]
+
+[orders."tasks.Priority"]
+kind = "sum"
+
+[[orders."tasks.Priority".members]]
+name = "Low"
+
+[[orders."tasks.Priority".members]]
+name = "Medium"
+
+[[orders."tasks.Priority".members]]
+name = "High"

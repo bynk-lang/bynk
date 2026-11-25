@@ -1,0 +1,12 @@
+{
+  "blurb": "`by Expired` sends an expired token, so it needs a route whose seam checks one: a `Bearer` or `Oidc` actor. A public route, or one guarded by a `Signature` actor, has no token to expire; for a `Signature` route `by Stale` sends a stale signature. Drive a route guarded by a `Bearer` or `Oidc` actor. See `bynk.test.nobody_needs_secured_route` for the same limit on `Nobody`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.expired_needs_bearer_route",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\non GET(\"/a\") () -> Effect[HttpResult[Int]] by u: User { … }\non GET(\"/health\") () -> Effect[HttpResult[Int]] by v: Visitor { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/health\") by Expired   // ✗ a public route has no token\nlet r <- api.GET(\"/a\") by Expired        // ✓",
+  "severity": "error",
+  "summary": "A case drives `by Expired` at an address that is not an http route with a `Bearer` actor (alone, or as a member of an actor sum) or an `Oidc` actor; it sends a correctly signed token whose `exp` has passed, so only a `Bearer` or `Oidc` seam can refuse it."
+}

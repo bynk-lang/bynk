@@ -1,0 +1,12 @@
+{
+  "blurb": "A unit that `uses` a commons gets what it declares (types, functions, constants, assets and embeds) in scope under their own names, with no prefix. If two commons it uses both declare the same name, a mention of it could mean either, so the compiler refuses the second `uses`. `uses` has no `as` rename yet. Rename one of the declarations, drop one of the `uses`, or mark the declaration `private` if only its own commons needs it, since a `private` declaration is never imported and so never conflicts.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.name_conflict",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// billing.bynk\ncommons billing\n\ntype Amount = Int where Positive\n\n// shipping.bynk\ncommons shipping\n\ntype Amount = Int where NonNegative    // both declare `Amount`\ntype Postage = Int where NonNegative   // ✓ renamed\n\n// orders.bynk\ncommons orders\n\nuses billing\nuses shipping                          // ✗ `Amount` is also declared by `billing`",
+  "severity": "error",
+  "summary": "Two commons a unit `uses` declare the same type, function, constant, asset or embed; or a value crosses between a unit's code and an imported declaration's position whose type the unit shadows; or a reference names an import the unit's own declaration shadows."
+}

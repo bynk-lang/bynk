@@ -994,7 +994,16 @@ impl Components {
                         "properties": {
                             "kind": { "const": "RefinementViolation" },
                             "path": { "type": "string" },
-                            "violation": { "type": "object" },
+                            "violation": {
+                                "description": "The refinement a value broke. The offending value \
+                                                is never echoed.",
+                                "type": "object",
+                                "required": ["field", "message"],
+                                "properties": {
+                                    "field": { "type": "string" },
+                                    "message": { "type": "string" },
+                                },
+                            },
                         },
                     },
                 ],

@@ -1,0 +1,10 @@
+{
+  "blurb": "An invariant is checked at every commit, over the state about to be written, so it may only read: state fields, operators and pure value methods. `Effect.pure`, `?`, `expect`, `Val` and the other test-only forms are refused, as is anything that performs an effect. Rewrite the predicate as a plain `Bool` expression over the fields. The mirror rule for steps is `bynk.transition.impure_predicate`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.invariant.impure_predicate",
+  "constructs": [],
+  "example": "invariant positive: Effect.pure(count >= 0)   // ✗ an effect, not a pure predicate\n\ninvariant positive: count >= 0                // ✓ a plain `Bool` expression",
+  "severity": "error",
+  "summary": "An invariant predicate uses an effectful or test-only construct."
+}

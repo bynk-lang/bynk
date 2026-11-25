@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent handler reads and writes the agent's stored state, and may call other agents and capabilities, so it does work in the world, not just compute a value. Bynk marks that in the type: a handler must return `Effect[T]`, and its caller takes the result with `<-`. A bare `Int` would claim the handler is pure. Wrap the return type in `Effect`. A plain `fn`, which really is pure, returns an ordinary value.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.return_not_effect",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "on call get() -> Int {           // ✗ a handler that reads state is an effect\n  n\n}\n\non call get() -> Effect[Int] {   // ✓\n  n\n}",
+  "severity": "error",
+  "summary": "An agent handler's return type is not an `Effect`."
+}

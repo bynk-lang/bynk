@@ -1,0 +1,10 @@
+{
+  "blurb": "A function's name on its own is the function, not its result. It is a value only where a function type is expected, such as an argument to `map`; anywhere else it is nearly always a forgotten call. Call it with its arguments, or pass it where a function is wanted.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.fn_without_call",
+  "constructs": [],
+  "example": "fn double(x: Int) -> Int { x * 2 }\n\nfn run() -> Int {\n    let d = double      // ✗ the function itself, not a call\n    5\n}\n\nfn run() -> Int {\n    let d = double(5)   // ✓ the result of calling it\n    d\n}",
+  "severity": "error",
+  "summary": "A function was referenced without being called."
+}

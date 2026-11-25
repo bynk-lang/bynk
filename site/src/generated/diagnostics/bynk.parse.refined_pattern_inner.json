@@ -1,0 +1,12 @@
+{
+  "blurb": "A `where` guard on a `match` arm is written on the wildcard, as `_ where InRange(0, 100)`. In this version no other pattern can carry one, a name included, so binding the matched value together with a guard is not yet supported. Write `_ where …`, and refer to the value by the name it already has.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.refined_pattern_inner",
+  "constructs": [
+    "refined_pattern"
+  ],
+  "example": "match n {\n    n where InRange(0, 100) => 1      // ✗ only `_` can take a `where`\n    _ => 0\n}\n\nmatch n {\n    _ where InRange(0, 100) => 1      // ✓\n    _ => 0\n}",
+  "severity": "error",
+  "summary": "A refined pattern's inner form is something other than `_`."
+}

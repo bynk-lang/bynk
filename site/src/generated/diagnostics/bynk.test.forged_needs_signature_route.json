@@ -1,0 +1,12 @@
+{
+  "blurb": "`by Forged` and `by Stale` send a bad credential to a real auth seam, so the route must have a seam that can refuse it. `Forged` needs a `Signature`, `Bearer` or `Oidc` actor. `Stale` needs a `Signature` actor, since only a signature carries a timestamp to age. On any other route there is nothing to refuse and the case would test nothing, so it is refused. Drive a route with the right seam. See `bynk.test.stale_needs_timestamp` for a `Signature` actor with no timestamp.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.forged_needs_signature_route",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non POST(\"/hook\") (body: String) -> Effect[HttpResult[String]] by Hook { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by Stale             // ✗ a `Bearer` route has no signature to age\nlet r <- api.POST(\"/hook\", \"x\") by Stale     // ✓ `Hook` is a `Signature` actor",
+  "severity": "error",
+  "summary": "A case drives `by Forged` at an address that is not an http route with a `Signature`, `Bearer` or `Oidc` actor, or `by Stale` at one with no `Signature` actor (alone, or as a member of an actor sum); they send a bad credential, so only a `Signature`, `Bearer` or `Oidc` seam can refuse them."
+}

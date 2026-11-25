@@ -1,0 +1,10 @@
+{
+  "blurb": "`agent New replaces Old` renames a class: `Old`'s stored data and its recorded history move to `New`. That only works for a class bynk.schema.lock records for this context, so a misspelt old name, or a class that was never built with this context, is refused rather than quietly starting `New` from nothing. Check the old name against the `[agents.\"…\"]` entries in the lock. The old class must also be gone from source, as `bynk.agent.replaces_live` requires.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.replaces_unknown",
+  "constructs": [],
+  "example": "agent Basket replaces Trolley {   // ✗ the lock records no class `shop.Trolley`\n\nagent Basket replaces Cart {      // ✓ a recorded class, and no longer declared",
+  "severity": "error",
+  "summary": "`agent New replaces Old` names an `Old` that `bynk.schema.lock` does not record for this context, so there is no recorded class to rename."
+}

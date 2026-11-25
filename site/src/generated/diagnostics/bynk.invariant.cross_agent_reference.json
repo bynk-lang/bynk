@@ -1,0 +1,10 @@
+{
+  "blurb": "An invariant is checked inside one agent's commit, against that agent's own state. Reading another agent would mean a call out to it, whose value could change before the commit lands, so the claim could not be held. A property that spans agents belongs in a saga or a scenario. Keep the invariant to this agent's fields. The mirror rule for steps is `bynk.transition.cross_agent_reference`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.invariant.cross_agent_reference",
+  "constructs": [],
+  "example": "invariant within_total: count <= Total(\"all\").get()   // ✗ reads another agent\n\ninvariant non_negative: count >= 0                    // ✓ this agent's own state",
+  "severity": "error",
+  "summary": "An invariant predicate references another agent; invariants are per-agent."
+}

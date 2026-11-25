@@ -1,0 +1,12 @@
+{
+  "blurb": "`as` renames a type that the consumed context exports, for use in this one. A capability keeps its own name wherever it is used, in `given` and in calls. Select it bare, `consumes payment { Gateway }`, or consume the context without braces and write `given payment.Gateway`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.type_alias_capability",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// payment.bynk\ncontext payment\n\nexports capability { Gateway }\n\n// shop.bynk\ncontext shop\n\nconsumes payment { Gateway as Pay }   // ✗ a capability cannot be aliased\n\nconsumes payment { Gateway }          // ✓ select it bare",
+  "severity": "error",
+  "summary": "A capability was aliased in `consumes U { Cap as Alias }`; only exported types can be aliased."
+}

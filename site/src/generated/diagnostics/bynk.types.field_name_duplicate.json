@@ -1,0 +1,12 @@
+{
+  "blurb": "A field's wire name is the key a request reader looks it up by, so two fields of one record cannot share one: both would read the same value. A field's wire name is its `@name`, or its own name when it has none. A field may also carry only one `@name`. Give each field its own key. Names differing only in case are `bynk.types.field_name_case_conflict`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_name_duplicate",
+  "constructs": [
+    "record_field"
+  ],
+  "example": "type Filter = {\n    @name(\"page\") a: Option[Int],\n    page: Option[Int],       // ✗ reads `page` again\n}\n\ntype Filter = {\n    @name(\"page\") a: Option[Int],\n    size: Option[Int],       // ✓\n}",
+  "severity": "error",
+  "summary": "A field has more than one `@name`, or two fields of a request record read the same wire name."
+}

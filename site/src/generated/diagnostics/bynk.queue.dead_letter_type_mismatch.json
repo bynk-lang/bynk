@@ -1,0 +1,12 @@
+{
+  "blurb": "A message that reaches the retry limit is written to the dead-letter queue unchanged, and a dead-letter queue is an ordinary queue, so a Bynk consumer may read it. That consumer decodes the same body, so it must take the same message type as the consumer the message came from; a different type would fail to decode what it is given. Change one handler's message type to match, or point `deadLetter` at a queue whose consumer takes it. The check compares the types as written.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.dead_letter_type_mismatch",
+  "constructs": [
+    "delivery_policy"
+  ],
+  "example": "service outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✗ its consumer takes `String`, not `EmailJob`\n    on message(message: EmailJob) -> Effect[QueueResult] { … }\n}\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice review from queue(\"outbound-email-dlq\") {\n    delivery { deadLetter: None }\n    on message(message: EmailJob) -> Effect[QueueResult] { … }   // ✓ the same type\n}",
+  "severity": "error",
+  "summary": "A dead-letter queue's Bynk consumer takes a different message type from the consumer it receives from."
+}

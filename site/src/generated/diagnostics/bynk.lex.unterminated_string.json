@@ -1,0 +1,12 @@
+{
+  "blurb": "An ordinary string literal, `\"…\"`, closes on the line it opens on. This one reaches the end of the line with no closing `\"`, so the lexer reports it at the opening quote and skips the rest of the line. Add the closing quote. For a line break in the value write `\\n`, or use a multi-line string literal.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.unterminated_string",
+  "constructs": [
+    "string_literal"
+  ],
+  "example": "const Greeting: String = \"hello      // ✗ no closing quote\nconst Greeting: String = \"hello\"   // ✓",
+  "severity": "error",
+  "summary": "A string literal is not terminated."
+}

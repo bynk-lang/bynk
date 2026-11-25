@@ -1,0 +1,10 @@
+{
+  "blurb": "A message bundle is a set of locale blocks, and the compiler checks every locale against one of them, the reference, marked `@reference`. It is also the fallback when a requested locale is not declared. With no reference there is nothing to check the others against, so exactly one block per commons must carry the mark. Add `@reference` to the locale your strings are written in first. Two marked blocks are `bynk.messages.multiple_reference`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.missing_reference",
+  "constructs": [],
+  "example": "messages \"en\" {                         // ✗ no block is marked @reference\n  \"cart.empty\" => \"Your basket is empty.\"\n}\n\nmessages \"en\" @reference {              // ✓\n  \"cart.empty\" => \"Your basket is empty.\"\n}",
+  "severity": "error",
+  "summary": "A message bundle has no `@reference` block."
+}

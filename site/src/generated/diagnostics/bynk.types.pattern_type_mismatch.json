@@ -1,0 +1,12 @@
+{
+  "blurb": "A pattern can only match values of the type it describes, so a pattern of another kind than the value being matched can never succeed and is refused. A literal pattern must have the scrutinee's type, so `\"one\"` cannot match an `Int`. A variant pattern needs a sum value, a record pattern needs that record, and a qualified pattern such as `Status.Active` must name the scrutinee's own type. Match on the type the value has, or convert the value before the `match`. A pattern with the wrong number of bindings is `bynk.types.pattern_arity`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.pattern_type_mismatch",
+  "constructs": [
+    "variant_pattern"
+  ],
+  "example": "fn word(n: Int) -> String {\n    match n {\n        \"one\" => \"uno\"    // ✗ a `String` pattern, an `Int` scrutinee\n        _ => \"other\"\n    }\n}\n\nfn word(n: Int) -> String {\n    match n {\n        1 => \"uno\"        // ✓\n        _ => \"other\"\n    }\n}",
+  "severity": "error",
+  "summary": "A pattern's type does not match the matched value."
+}

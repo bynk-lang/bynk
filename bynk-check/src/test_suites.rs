@@ -5703,6 +5703,7 @@ pub fn privileged_view(
             imported.push(t.clone());
         }
     }
+    unalias_own_declarations(&mut view, local, unit_tables);
     view.merge_assets(owning_unit, unit_tables, unit_uses);
     view.merge_embeds(owning_unit, unit_tables, unit_uses);
     view.merge_consts(owning_unit, unit_tables, unit_uses);
@@ -5727,6 +5728,82 @@ pub fn privileged_view(
         .retain(|n, _| local.consts.contains_key(n) || !hidden_by_local(n));
     view.close(&imported, unit_tables, unit_uses, false);
     Some(view)
+}
+
+/// #4261: a suite is not a consuming context (#2890), so it names a consumed
+/// type by the name its unit declares and never by the target's alias. The
+/// target's own declarations, though, are written with its aliases
+/// (`consumes shapes { Code as Tag }`, `fn tag() -> Tag`). They enter the view
+/// with each alias replaced by the key the view files the aliased declaration
+/// under, so a case calling one gets a type instead of `Ty::Error`, which the
+/// emitter cannot render.
+///
+/// The key is the declared name when the view holds that same declaration under
+/// it. When the target has a different type of that name (the usual reason to
+/// alias), or another alias names the same original, the bare name is not the
+/// aliased type's: it is filed under `{target}__{original}`, as
+/// [`crate::symbols`] files a clashing borrowed type (#2087, #2901).
+fn unalias_own_declarations(
+    view: &mut SuiteView,
+    local: &UnitTable,
+    unit_tables: &HashMap<String, UnitTable>,
+) {
+    if local.consumed_type_aliases.is_empty() {
+        return;
+    }
+    let mut renames: HashMap<String, String> = HashMap::new();
+    for (alias, a) in &local.consumed_type_aliases {
+        let Some(decl) = unit_tables
+            .get(&a.target)
+            .and_then(|t| t.types.get(&a.original))
+        else {
+            continue;
+        };
+        let same = |d: &Arc<TypeDecl>| Arc::ptr_eq(d, decl) || d.span == decl.span;
+        let key = if view.types.get(&a.original).is_some_and(same) {
+            a.original.clone()
+        } else {
+            let key = format!("{}__{}", a.target.replace('.', "_"), a.original);
+            let mut renamed = (**decl).clone();
+            renamed.name.name = key.clone();
+            view.types
+                .entry(key.clone())
+                .or_insert_with(|| Arc::new(renamed));
+            key
+        };
+        renames.insert(alias.clone(), key);
+    }
+    let unalias = |decl: &Arc<FnDecl>| {
+        let mut out = (**decl).clone();
+        for p in &mut out.params {
+            crate::symbols::rename_type_ref(&mut p.type_ref, &renames);
+        }
+        crate::symbols::rename_type_ref(&mut out.return_type, &renames);
+        Arc::new(out)
+    };
+    for name in local.fns.keys() {
+        if let Some(decl) = view.fns.get_mut(name) {
+            *decl = unalias(decl);
+        }
+    }
+    for (ty, table) in &local.methods {
+        let Some(mine) = view.methods.get_mut(ty) else {
+            continue;
+        };
+        for (m, decl) in &table.instance {
+            mine.instance.insert(m.clone(), unalias(decl));
+        }
+        for (m, decl) in &table.statics {
+            mine.statics.insert(m.clone(), unalias(decl));
+        }
+    }
+    for (name, decl) in &local.types {
+        let own = decl.name.name.clone();
+        view.types.insert(
+            name.clone(),
+            crate::symbols::rename_consumed_decl(decl, &own, &renames),
+        );
+    }
 }
 
 /// #1814: a `system` case's harness view: types, fns and methods from the

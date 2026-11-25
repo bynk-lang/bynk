@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent is its storage and the `on call` handlers that read and change it. One with no handler can never be called, so it is refused, as is one with no `store` field (`bynk.parse.expected_agent_storage`). Add a handler.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.empty_agent",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "agent Tally {                                              // ✗ no handler\n    key id: String\n    store count: Cell[Int]\n}\n\nagent Tally {\n    key id: String\n    store count: Cell[Int]\n\n    on call get() -> Effect[Result[Int, String]] {         // ✓\n        Ok(count)\n    }\n}",
+  "severity": "error",
+  "summary": "An `agent` body is empty."
+}

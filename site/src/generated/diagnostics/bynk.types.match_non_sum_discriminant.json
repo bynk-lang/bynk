@@ -1,0 +1,12 @@
+{
+  "blurb": "`match` chooses between alternatives, so it needs a value that has some: a sum, an enum, a `Result` or `Option`, an `Int`, `String` or `Bool`, or a list matched by list patterns. A `Float` or a function has none, and a record has a single shape, so it can be matched only with a record pattern such as `Point { x, .. }`. Read a field directly, and use `if` to branch on a condition.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.match_non_sum_discriminant",
+  "constructs": [
+    "match_expr"
+  ],
+  "example": "type Point = { x: Int, y: Int }\n\nfn first(p: Point) -> Int {\n    match p {         // ✗ a record has one shape, not variants\n        _ => 1\n    }\n}\n\nfn first(p: Point) -> Int {\n    p.x               // ✓ read the field\n}",
+  "severity": "error",
+  "summary": "`match` was applied to a value that is not a sum type."
+}

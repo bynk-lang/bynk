@@ -1,0 +1,12 @@
+{
+  "blurb": "A method call names an instance method that the receiver's type does not have. An instance method is a function declared with `self` as its first parameter. A function declared on a type without `self` is static, and is called on the type, as `Counter.zero()`, never on a value. This also fires on a typo, and on a built-in type that has methods but not this one, since only the methods the type documents exist.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.method_not_found",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "type Counter = { count: Int }\n\nfn Counter.zero() -> Counter {\n    Counter { count: 0 }\n}\n\nfn reset(c: Counter) -> Counter {\n    c.zero()          // ✗ `zero` has no `self`: not an instance method\n}\n\nfn reset(c: Counter) -> Counter {\n    Counter.zero()    // ✓ a static function is called on the type\n}",
+  "severity": "error",
+  "summary": "Called a method the type does not have."
+}

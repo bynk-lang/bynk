@@ -1,0 +1,10 @@
+{
+  "blurb": "`@schema(N)` states the version an event is at, so that the number can be reviewed in the source and is checked against the version the registry computes. `N` must be one positive `Int` literal, given by position, and `@schema` may appear once on an event: `@schema(0)`, `@schema(\"2\")`, `@schema(v: 2)` and a second `@schema` are all refused. Write `@schema(2)`, or drop the annotation, since the registry tracks the version anyway.",
+  "category": "Events",
+  "categoryAnchor": "events",
+  "code": "bynk.event.bad_schema_version",
+  "constructs": [],
+  "example": "event Paid @schema(0) = {    // ✗ versions start at 1\nevent Paid @schema(1) = {    // ✓\n    id: String,\n}\n\nconst Version: Int = 1\nevent Refunded @schema(Version) = {    // ✓ an `Int` constant bound to a literal\n    id: String,\n}",
+  "severity": "error",
+  "summary": "An event's `@schema(N)` annotation is malformed — `N` must be a single, positive, positional `Int` literal, and `@schema` may appear at most once on an event."
+}

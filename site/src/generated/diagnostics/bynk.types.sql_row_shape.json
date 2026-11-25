@@ -1,0 +1,12 @@
+{
+  "blurb": "`select[T]`, `firstAs[T]` and `Json.decodeSql` read each SQL row into a record, and a column holds only a plain value. So `T` must be a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes`, or a refined or opaque type over one, or an `Option` of either (Postgres and MySQL also read `Decimal`); a nested record, a list or an enum has no column to read. `T` is the row itself, so `select[List[Row]]` is refused too. Flatten the record.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.sql_row_shape",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "type Money = { cents: Int }\ntype Order = { id: String, total: Money }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✗ `total` is a record\n\ntype Order = { id: String, total: Int }\nlet _ <- Orders.select[Order](\"FROM orders\", [])    // ✓",
+  "severity": "error",
+  "summary": "`Json.decodeSql[T]`'s (or `select[T]`'s, `firstAs[T]`'s) `T` is not a SQL row: a record whose fields are `Int`, `Float`, `String`, `Bool` or `Bytes` (or a refined or opaque type over one, or an `Option` of either), or a `List` of such records (standard-library P4c). A `Postgres` row may also hold a `Decimal` or an `Instant` (Hyperdrive H3)."
+}

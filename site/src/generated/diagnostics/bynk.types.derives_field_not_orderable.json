@@ -1,0 +1,12 @@
+{
+  "blurb": "`derives Ord` orders a type field by field, in declaration order, so every field or payload must itself have an order. A `Bool`, a `Map`, a `Set`, a function, and a named type that does not derive `Ord` itself have none. Change the field to an orderable type, such as an `Int` rank, or give the field's own type `derives Ord`, or drop `derives Ord` and sort by a key with `sortBy`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.derives_field_not_orderable",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type Task = { title: String, done: Bool } derives Ord        // ✗ a `Bool` has no order\n\ntype Task = { title: String, priority: Int } derives Ord      // ✓",
+  "severity": "error",
+  "summary": "A type declares `derives Ord`, but one of its fields or payloads is not `Ord` (for example a `Map`, a `Set`, a `Bool`, a function, or a record that does not itself derive `Ord`); every part must be orderable for the declaration order to be a total order (constrained-generics slice 1)."
+}

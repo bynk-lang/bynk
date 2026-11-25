@@ -1,0 +1,12 @@
+{
+  "blurb": "Imports are per file. A unit's own declarations are shared by all its files, but a name from another unit, a type or a bare variant of one of its sums, is in scope only in a file that itself has a `consumes` bringing it in, and where the list is braced, only if it is listed. Naming a type that this file's own `consumes` does not bring in is an error, whether the clause lists other names or only another file of the unit consumes the unit; `bynk check --fix=bynk.consumes.type_not_selected` adds the name to this file's `consumes`, or adds one. A bare `consumes U`, with no braces, brings in all of `U`'s names for that file.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.type_not_selected",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop/context.bynk\nconsumes bynk { Logger }                   // ✗ `TimedOut` is not listed\n\nconsumes bynk { Logger, TimedOut }          // ✓\n\nfn at(t: TimedOut) -> Bool {\n    true\n}\n\n// shop/audit.bynk, another file of the same context\nfn late(t: TimedOut) -> Bool {   // ✗ this file does not consume `bynk`\n    true\n}\n\nconsumes bynk { TimedOut }        // ✓ each file consumes what it names",
+  "severity": "error",
+  "summary": "A type (or a bare variant of a sum) of a consumed unit is named in a file whose own `consumes` does not bring it in: it lists other names, or only another file of the unit consumes the unit."
+}

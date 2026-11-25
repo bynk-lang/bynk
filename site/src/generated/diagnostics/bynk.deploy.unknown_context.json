@@ -1,0 +1,10 @@
+{
+  "blurb": "A `[deploy.workers.<key>]` group names its members by their qualified context names, and each must be a context the project declares. A name that matches none is usually a typo, or a context that has since been renamed, and a group cannot deploy a context that does not exist. The note suggests the nearest name. Correct the entry, or remove it.",
+  "category": "Deployment",
+  "categoryAnchor": "deployment",
+  "code": "bynk.deploy.unknown_context",
+  "constructs": [],
+  "example": "[deploy.workers.core]\ncontexts = [\"shop.ordres\"]   // ✗ no such context\n\ncontexts = [\"shop.orders\"]   // ✓",
+  "severity": "error",
+  "summary": "A `[deploy.workers.<key>]` group lists a context the project does not declare."
+}

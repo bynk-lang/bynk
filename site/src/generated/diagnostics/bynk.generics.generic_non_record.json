@@ -1,0 +1,12 @@
+{
+  "blurb": "Type parameters are for a type whose shape can mention them: a record, `{ value: T }`, or a sum whose variants carry payloads. A refined, opaque or alias type has a fixed base, so a parameter would have nowhere to go. Give the type a record or sum body that uses its parameters, or drop the parameters.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.generic_non_record",
+  "constructs": [
+    "type_decl"
+  ],
+  "example": "type Wrapped[T] = Int            // ✗ `T` has nowhere to be used\n\ntype Wrapped[T] = { value: T }   // ✓ a record may be generic",
+  "severity": "error",
+  "summary": "A `type` declaration carries type parameters on a refined, opaque or alias body; only a record (`type Name[T] = { … }`) or sum (`type Name[T] = | … | …`) body may be generic (v0.157/#593, ADRs 0183/0197)."
+}

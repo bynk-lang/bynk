@@ -1,0 +1,10 @@
+{
+  "blurb": null,
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.needs_project",
+  "constructs": [],
+  "example": null,
+  "severity": "error",
+  "summary": "A single-file build met an `embed` declaration, which needs a project's `embeds/` folder."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A line of three or more dashes opens a documentation block, and a line of exactly the same number of dashes closes it. Here no closing line follows, so the compiler cannot tell where the documentation ends. There is no standalone `---` divider; a divider is a comment, `// ---`. Add the closing line.",
+  "category": "Lexer",
+  "categoryAnchor": "lexer",
+  "code": "bynk.lex.unclosed_doc_block",
+  "constructs": [],
+  "example": "---                                // ✗ never closed\nDoubles a number.\nfn double(n: Int) -> Int { n * 2 }\n\n---\nDoubles a number.\n---                                // ✓ closed with as many dashes\nfn double(n: Int) -> Int { n * 2 }",
+  "severity": "error",
+  "summary": "A documentation block is not closed."
+}

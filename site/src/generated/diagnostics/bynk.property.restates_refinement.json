@@ -1,0 +1,12 @@
+{
+  "blurb": "A `for all q: Quantity` property draws only valid values of `Quantity`, so a body that just asserts the type's refinement, `expect q > 0` over `Int where Positive`, cannot fail and proves nothing about your code. The compiler flags it. The check is narrow: it fires only when the body is that one `expect`, restating `Positive` or `NonNegative` over the bound value, so a near-copy may pass. Assert something about what your code does with the value, or delete the property.",
+  "category": "Properties (generative tests)",
+  "categoryAnchor": "properties-generative-tests",
+  "code": "bynk.property.restates_refinement",
+  "constructs": [
+    "for_all"
+  ],
+  "example": "// demo.bynk\ntype Quantity = Int where Positive\n\n// tests/demo.test.bynk\nfor all q: Quantity { expect q > 0 }            // ✗ the type already says this\nfor all q: Quantity { expect double(q) > q }    // ✓ a claim about `double`",
+  "severity": "error",
+  "summary": "A `property` merely re-checks a refinement its type already guarantees."
+}

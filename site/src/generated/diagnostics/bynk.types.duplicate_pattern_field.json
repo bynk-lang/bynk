@@ -1,0 +1,12 @@
+{
+  "blurb": "A record pattern lists the fields it reads, and each may be named once. Naming a field twice would bind or test the same value twice, which is almost always a slip for a different field. Keep one mention, and give it the name you want to use, as in `total: t`. The `..` at the end covers every field you leave out.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.duplicate_pattern_field",
+  "constructs": [
+    "record_pattern"
+  ],
+  "example": "type Order = { id: String, total: Int }\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total, total: t, .. } => t    // ✗ `total` is named twice\n    }\n}\n\nfn amount(o: Order) -> Int {\n    match o {\n        Order { total: t, .. } => t           // ✓\n    }\n}",
+  "severity": "error",
+  "summary": "A record pattern lists the same field twice."
+}

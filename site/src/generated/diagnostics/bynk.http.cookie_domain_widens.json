@@ -1,0 +1,12 @@
+{
+  "blurb": "A cookie with no `Domain` attribute belongs to exactly the host that set it. Setting `domain` makes it available to that domain and every subdomain, so a sibling service, or a subdomain an attacker can take over, receives it and can set a cookie of the same name. That is rarely wanted, so it is a warning. Drop `domain`; or, if the cookie is a session cookie, name it `__Host-…`, which makes the compiler refuse a `domain` altogether (`bynk.http.cookie_host_prefix`). Keep `domain` only when subdomains genuinely share the login.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cookie_domain_widens",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "Created(\"ok\").withCookie(Cookie { name: \"sid\", value: \"a\", domain: Some(\"example.com\") })   // ⚠ every subdomain receives it\n\nCreated(\"ok\").withCookie(Cookie { name: \"__Host-sid\", value: \"a\" })                           // ✓ this host only",
+  "severity": "warning",
+  "summary": "A cookie literal outside the `__Host-` prefix sets a `domain`, so every subdomain receives it (warning)."
+}

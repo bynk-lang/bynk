@@ -1,0 +1,12 @@
+{
+  "blurb": "A `@name` has to be usable as a key where the record is read. It may not be empty, and on a `cookies` record it must be a cookie name, an RFC 9110 token: no spaces, quotes or separators such as `;` `,` or `=`. A name the request could never carry would make the field unreachable. Use a valid token, such as `__Host-sid`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.field_name_invalid",
+  "constructs": [
+    "record_field"
+  ],
+  "example": "type Session = {\n    @name(\"session id\") sid: Option[String],    // ✗ a space is not allowed in a cookie name\n}\n\ntype Session = {\n    @name(\"session-id\") sid: Option[String],    // ✓\n}",
+  "severity": "error",
+  "summary": "A field's `@name` is not a valid name for where the record is read (a cookie name that is not a token, or an empty name)."
+}

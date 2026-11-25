@@ -1,0 +1,10 @@
+{
+  "blurb": "An agent's declarations come in phases: `store` fields, then `invariant`s, then `on` handlers. An invariant after a handler is refused, so that every property the handlers must preserve sits together above them. Move the invariant above the first handler.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.invariant_after_handler",
+  "constructs": [],
+  "example": "agent Tally {\n    key id: String\n    store count: Cell[Int]\n\n    on call get() -> Effect[Result[Int, String]] {\n        Ok(count)\n    }\n\n    invariant nonNegative: count >= 0                // ✗ after a handler\n}\n\nagent Tally {\n    key id: String\n    store count: Cell[Int]\n\n    invariant nonNegative: count >= 0                // ✓ before the handlers\n\n    on call get() -> Effect[Result[Int, String]] {\n        Ok(count)\n    }\n}",
+  "severity": "error",
+  "summary": "An `invariant` was declared after a handler; invariants precede handlers."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "An `asset` is a file the platform serves, shipped with each context that declares it or `uses` a commons that does. An adapter is the host boundary, not a deployed unit of its own, so an `asset` there is refused. Declare it in a context or a commons. For text compiled into the program rather than served, see `bynk.embed.outside_context_or_commons`.",
+  "category": "Static assets",
+  "categoryAnchor": "static-assets",
+  "code": "bynk.asset.outside_context_or_commons",
+  "constructs": [],
+  "example": "// app/host.bynk\nadapter app.host\n\nbinding \"./host.binding.ts\"\n\nasset style = \"assets/board.css\"        // ✗ an adapter cannot declare an asset\n\n// app/page.bynk\ncommons app.page\n\nasset style = \"assets/board.css\"        // ✓ in a commons",
+  "severity": "error",
+  "summary": "An `asset` declaration appears outside a context or commons."
+}

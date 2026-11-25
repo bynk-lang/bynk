@@ -1,0 +1,13 @@
+{
+  "blurb": "A variant of a sum type or enum is written like a constant: an uppercase letter, then letters, digits or `_` (`Active`, `NotFound`). A lowercase variant such as `suspended` is refused. Capitalise the name.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.variant_name_case",
+  "constructs": [
+    "sum_variant",
+    "enum_type"
+  ],
+  "example": "type Status =\n    | Active\n    | suspended   // ✗ a variant starts with a capital\n\ntype Status =\n    | Active\n    | Suspended   // ✓",
+  "severity": "error",
+  "summary": "A sum-type or enum variant name is not capitalised."
+}

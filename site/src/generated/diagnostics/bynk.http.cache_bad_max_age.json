@@ -1,0 +1,10 @@
+{
+  "blurb": "`@cache` says how long a client or cache may reuse a `GET` response without asking again, so it needs a `maxAge`, and that must be a positive `Duration` literal. A bare number or a string is refused; write a `Duration` literal whose unit agrees with its number: `30.seconds`, `5.minutes`, `1.hour`. A positive duration that is not a whole number of seconds is `bynk.http.cache_max_age_fractional_seconds`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_bad_max_age",
+  "constructs": [],
+  "example": "@cache(maxAge: 3600)      // ✗ a bare number, not a `Duration`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hour)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hour\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal."
+}

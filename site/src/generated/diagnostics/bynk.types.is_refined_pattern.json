@@ -1,0 +1,12 @@
+{
+  "blurb": "`is` tests a value against a type or a variant. An inline refinement, `_ where Positive`, is a pattern for a `match` arm, and is not accepted after `is`: a rule worth testing is worth a name, which also lets every other place use it. Declare a refined type and write `n is Natural`, or move the test into a `match` arm.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.is_refined_pattern",
+  "constructs": [
+    "is_expr"
+  ],
+  "example": "n is _ where Positive    // ✗ not a pattern for `is`\n\ntype Natural = Int where Positive\n\nn is Natural             // ✓ name the refinement",
+  "severity": "error",
+  "summary": "A refined (`where`) pattern was used on the right of `is`; refined patterns are `match`-only."
+}

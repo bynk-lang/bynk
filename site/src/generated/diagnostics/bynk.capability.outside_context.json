@@ -1,0 +1,12 @@
+{
+  "blurb": "A capability is a typed interface to the outside world: a context declares it, provides it and asks for it in `given`, and the compiler wires the provider to the services that need it. A commons holds only pure declarations, so it cannot declare one. Move the capability into the context that uses it, or, for one several contexts share, into a context that exports it.",
+  "category": "Capabilities",
+  "categoryAnchor": "capabilities",
+  "code": "bynk.capability.outside_context",
+  "constructs": [
+    "capability_decl"
+  ],
+  "example": "commons demo\n\ncapability Logger {                     // ✗ a commons cannot declare a capability\n  fn log(message: String) -> Effect[()]\n}\n\ncontext demo\n\ncapability Logger {                     // ✓ a context can\n  fn log(message: String) -> Effect[()]\n}",
+  "severity": "error",
+  "summary": "A `capability` was declared outside a context."
+}

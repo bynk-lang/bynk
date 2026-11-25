@@ -1,0 +1,12 @@
+{
+  "blurb": "A typed `query` record is filled from a query string, a set of keys with text values, so each field must be one a single value can fill: a `String`, `Int`, `Bool` or `Decimal`, an enum, or a refined or opaque type over one, optionally in an `Option` or a `List` (a repeated key). A nested record or any other type is refused. Flatten the record, or take `query: RequestQuery` and read the keys yourself. A `@form` body has the same rule: `bynk.http.form_field_not_stringy`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.query_field_not_stringy",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "type Range = { from: Int, to: Int }\ntype Filter = { range: Range }   // ✗ a query string has no nesting\n\ntype Filter = { from: Int, to: Int }   // ✓ flat keys",
+  "severity": "error",
+  "summary": "A field of an HTTP handler's `query` record has a type a query string cannot carry."
+}

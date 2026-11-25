@@ -1,0 +1,12 @@
+{
+  "blurb": "A value that only faults, such as `unreachable(\"…\")` or `todo(\"…\")`, has the bottom type `never returns`, which stands in for any type. If an unannotated `let` or `<-` binding took it, every later use would type-check whatever it was used as, and the type cannot be written in source to say otherwise. Annotate the binding with the type it is meant to have. A lambda that only faults is annotated with a function type.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.never_inferred",
+  "constructs": [
+    "let_stmt"
+  ],
+  "example": "fn later() -> Int {\n    let x = unreachable(\"never\")    // ✗ `x` would have no usable type\n    x\n}\n\nfn later() -> Int {\n    let x: Int = unreachable(\"never\")    // ✓\n    x\n}",
+  "severity": "error",
+  "summary": "An unannotated `let` or `<-` binding has a type that is, or contains, the bottom type (`never returns`) because its value only faults (a faulting lambda bound this way included); the type cannot be written in source, so an annotation is needed."
+}

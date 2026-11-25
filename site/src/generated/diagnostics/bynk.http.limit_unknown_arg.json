@@ -1,0 +1,10 @@
+{
+  "blurb": "`@limit` accepts `maxBody` and, on a `@multipart` route, `maxFile` and `maxParts`. The set is closed, so a misspelt or invented cap is refused rather than ignored, which would leave the route with a ceiling you did not set. Rename the argument or remove it. The ceilings are checked by `bynk.http.limit_bad_max_body` and `bynk.http.limit_bad_max_file`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.limit_unknown_arg",
+  "constructs": [],
+  "example": "type Note = { text: String }\n\n@limit(maxBody: 1_000_000, maxSize: 10)   // ✗ not an argument of `@limit`\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@limit(maxBody: 1_000_000)                // ✓\non POST(\"/notes\") (body: Note) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@limit` annotation has an argument outside the closed set (`maxBody`)."
+}

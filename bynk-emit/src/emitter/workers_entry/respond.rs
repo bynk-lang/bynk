@@ -309,6 +309,14 @@ pub(super) fn status_json_headers_obj(status: i64) -> TsExpr {
 /// "content-type": "application/json" } })` — the dominant JSON-error-
 /// response shape across this module's own real content.
 pub(super) fn json_response(body: TsExpr, status: i64) -> TsExpr {
+    // #4278: a `400` body is a boundary refusal, and one that is a
+    // `RefinementViolation` must not carry the rejected value. The runtime
+    // helper drops it and passes every other body through unchanged.
+    let body = if status == 400 {
+        call(ident("__wireRefusal"), vec![body])
+    } else {
+        body
+    };
     new_response(vec![json_stringify(body), status_json_headers_obj(status)])
 }
 

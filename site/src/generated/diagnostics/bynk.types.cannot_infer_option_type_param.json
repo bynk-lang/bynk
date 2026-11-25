@@ -1,0 +1,12 @@
+{
+  "blurb": "`None` carries no value, so its `Option[T]` takes `T` from where it is used: an annotation, a parameter, or the function's return type. A `let` of a bare `None` has none, and the compiler will not guess, because `T` becomes part of everything the binding touches. Annotate it, as in `let missing: Option[Int] = None`, or use `None` where an `Option` is expected.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.cannot_infer_option_type_param",
+  "constructs": [
+    "none_expr"
+  ],
+  "example": "fn run() -> Int {\n    let missing = None    // ✗ an `Option` of what?\n    1\n}\n\nfn run() -> Int {\n    let missing: Option[Int] = None    // ✓\n    1\n}",
+  "severity": "error",
+  "summary": "The value type of `None` could not be inferred."
+}

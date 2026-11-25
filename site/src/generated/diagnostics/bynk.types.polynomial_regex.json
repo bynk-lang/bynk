@@ -1,0 +1,12 @@
+{
+  "blurb": "A `Matches` pattern runs under a backtracking `RegExp` on untrusted input. Two repetitions in sequence that can match the same characters, as in `\\d*\\d*`, let the engine split a run between them many ways, so the time grows as a power of the input's length. That is slower to hurt than `bynk.types.catastrophic_regex` but can still stall a handler. A `MaxLength`, `Length` or `IsoDate` predicate that keeps the input short enough makes it the warning `bynk.types.polynomial_regex_capped`; a regex method has no such bound. Rewrite it so the repetitions cannot overlap.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.polynomial_regex",
+  "constructs": [
+    "refinement"
+  ],
+  "example": "type Digits = String where Matches(\"\\\\d*\\\\d*\")    // ✗ two loops over the same digits\n\ntype Digits = String where Matches(\"\\\\d*\")         // ✓ one way to match",
+  "severity": "error",
+  "summary": "A `Matches` pattern can split the same text between repetitions, so matching time grows polynomially with input length, and no length predicate bounds the input small enough for its degree; a regex method's pattern has no bound to excuse it."
+}

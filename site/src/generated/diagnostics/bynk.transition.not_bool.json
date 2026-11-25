@@ -1,0 +1,10 @@
+{
+  "blurb": "A `transition` is a claim about a step, from `old` to `new`, that is either kept or broken, so its predicate must be a `Bool`. A bare `new.count` is a value, not a claim. Compare it with the old state: `new.count >= old.count`. An `invariant` is held to the same rule (`bynk.invariant.not_bool`).",
+  "category": "Transitions (step invariants)",
+  "categoryAnchor": "transitions-step-invariants",
+  "code": "bynk.transition.not_bool",
+  "constructs": [],
+  "example": "transition grows: new.count                // ✗ an `Int`, not a `Bool`\n\ntransition grows: new.count >= old.count   // ✓ a claim about the step",
+  "severity": "error",
+  "summary": "A transition predicate does not have type `Bool`."
+}

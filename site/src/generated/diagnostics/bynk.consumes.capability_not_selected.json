@@ -1,0 +1,12 @@
+{
+  "blurb": "Imports are per file, for capabilities as for types. A braced `consumes U { Cap }` brings the capability `Cap` into scope as a bare name, but only in the file that writes it: a `given Cap` clause, a call `Cap.op(…)`, a `provides Cap = …`, a derived capability's base, or a suite's `stub Cap.op`. A file that names one its own `consumes` does not list is an error; `bynk check --fix=bynk.consumes.capability_not_selected` adds the name to this file's `consumes`, or adds one. The unit's wiring and deploy order still follow the union of its files' `consumes`.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.capability_not_selected",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop/context.bynk\nconsumes bynk { Clock }\n\n// shop/audit.bynk, another file of the same context\nservice stamp {\n    on call() -> Effect[Instant] by Caller given Clock {   // ✗ this file does not consume `bynk`\n        Clock.now()\n    }\n}\n\nconsumes bynk { Clock }                          // ✓ each file consumes what it names",
+  "severity": "error",
+  "summary": "A capability a consumed unit exports is named (a `given` clause, a call, `provides`, a `stub`) in a file whose own `consumes` does not list it."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`==` and `!=` work on a type parameter only if the function says so with an `Eq` bound. A type parameter stands for any type, and some types cannot be compared: a function, an `Effect`, a `Query`, a `Stream` or a held `Connection`. The bound puts that requirement in the signature, where a caller, hover and signature help can see it, instead of leaving it to fail inside the body. The same rule applies when a generic passes its own parameter to an `Eq`-bounded parameter of another generic, so a bound appears at every link of a chain of calls. Declare `T: Eq`; `T: Ord` and `T: Key` also allow `==`. The diagnostic's fix adds the bound, and `bynk check --fix` applies it across a project.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.missing_eq_bound",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "fn same[T](a: T, b: T) -> Bool {\n    a == b                  // ✗ `T` could be a function\n}\n\nfn same[T: Eq](a: T, b: T) -> Bool {\n    a == b                  // ✓ the bound is in the signature\n}",
+  "severity": "error",
+  "summary": "A type parameter is compared with `==`/`!=`, or passed to an `Eq`-bounded parameter of another generic, but is not declared `Eq` (`[T: Eq]`, or `where A: Eq` for a receiver type's parameter). The diagnostic carries a machine-applicable fix (ADR 0430, amended by constrained-generics slice 0)."
+}

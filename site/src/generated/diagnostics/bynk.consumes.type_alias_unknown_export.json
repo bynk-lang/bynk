@@ -1,0 +1,12 @@
+{
+  "blurb": "`consumes payment { AuthId as Auth }` brings a type that `payment` exports in under another name, so the type has to be one it exports. A misspelt name, or a type that `payment` keeps to itself, is the usual cause. Correct the name, or ask `payment` to export the type.",
+  "category": "Consumes",
+  "categoryAnchor": "consumes",
+  "code": "bynk.consumes.type_alias_unknown_export",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "// shop.bynk\ncontext shop\n\nconsumes payment { AuthIdd as Auth }   // ✗ `payment` exports no `AuthIdd`\n\nconsumes payment { AuthId as Auth }    // ✓ a type it exports",
+  "severity": "error",
+  "summary": "`consumes U { T as Alias }` names a type `U` does not export."
+}

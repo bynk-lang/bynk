@@ -1,0 +1,12 @@
+{
+  "blurb": "A `provides` block says how a context's own capability is implemented, so it belongs in the context that declares the capability. A commons holds only pure declarations, with no effects to provide. Move the provider into the context. A `capability` in a commons is refused for the same reason, as `bynk.capability.outside_context`.",
+  "category": "Providers",
+  "categoryAnchor": "providers",
+  "code": "bynk.provider.outside_context",
+  "constructs": [
+    "provider_decl"
+  ],
+  "example": "commons demo\n\nprovides Clock = FixedClock {   // ✗ a commons cannot provide a capability\n    fn now() -> Effect[Int] { … }\n}\n\ncontext demo\n\ncapability Clock { fn now() -> Effect[Int] }\n\nprovides Clock = FixedClock {   // ✓ in the context that declares `Clock`\n    fn now() -> Effect[Int] { … }\n}",
+  "severity": "error",
+  "summary": "`provides` was declared outside a context."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": null,
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.par.single_binding",
+  "constructs": [
+    "par_stmt"
+  ],
+  "example": null,
+  "severity": "warning",
+  "summary": "A `par { … }` block has a single binding, which is a plain `let x <- e` with extra syntax (warning)."
+}

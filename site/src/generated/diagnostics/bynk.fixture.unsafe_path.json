@@ -1,0 +1,12 @@
+{
+  "blurb": "A fixture's path is joined onto the project root to find the file, so it must stay inside the project: it may not be empty or absolute, and it may not contain a `..` segment, which could climb out of it. Write the path relative to the project root, inside `fixtures/`. A relative path that is only outside `fixtures/` is `bynk.fixture.outside_fixtures_dir`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.unsafe_path",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": "fixture note = \"fixtures/../note.txt\"    // ✗ a `..` segment\n\nfixture note = \"fixtures/note.txt\"       // ✓",
+  "severity": "error",
+  "summary": "A suite's `fixture` path is empty, absolute or contains a `..` segment."
+}

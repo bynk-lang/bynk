@@ -1,0 +1,10 @@
+{
+  "blurb": "A Worker's bindings share one `env`, so each name can be declared once. Bynk names the bindings after what the context declares: an agent, a consumed context, a derived capability, and the `Kv` namespace of `bynk.cloudflare`, whose binding is `KV`. Here the consumed context `kv` also becomes a Service Binding named `KV`, and the two would overwrite each other. Rename the declaration behind one of them. The error is on the one you can rename, not on the `bynk.cloudflare` clause. A bundle build has no bindings, so only the Workers target checks this.",
+  "category": "Contexts",
+  "categoryAnchor": "contexts",
+  "code": "bynk.context.duplicate_binding",
+  "constructs": [],
+  "example": "// ops/hub.bynk\nconsumes bynk.cloudflare { Kv }   // the KV namespace is bound as `KV`\nconsumes kv                       // ✗ a Service Binding, also named `KV`\n\n// ops/hub.bynk\nconsumes counter                  // ✓ a binding named `COUNTER`",
+  "severity": "error",
+  "summary": "A Worker would declare two bindings with the same name, such as an agent `Kv` and the `bynk.cloudflare` KV namespace (both `KV`)."
+}

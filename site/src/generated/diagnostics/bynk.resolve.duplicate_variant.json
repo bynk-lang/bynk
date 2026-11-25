@@ -1,0 +1,12 @@
+{
+  "blurb": "A sum value is identified by its variant name: in a `match` pattern, in a constructor, and as the `kind` of its JSON form. So each variant appears once in a type. A repeat is usually two different variants meant, or a line pasted twice. Rename one of them, or delete the repeat. A payload field repeated within one variant is `bynk.resolve.duplicate_field`.",
+  "category": "Resolution",
+  "categoryAnchor": "resolution",
+  "code": "bynk.resolve.duplicate_variant",
+  "constructs": [
+    "sum_type"
+  ],
+  "example": "type Colour = | Red | Red     // ✗ `Red` declared twice\n\ntype Colour = | Red | Green   // ✓ distinct variants",
+  "severity": "error",
+  "summary": "A sum type declares a variant twice."
+}

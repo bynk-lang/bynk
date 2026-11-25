@@ -1,0 +1,10 @@
+{
+  "blurb": "The `with` predicate of `expect Cap.op called with …` is tested against every recorded call, so it must be a pure expression of the operation's arguments. `trace(…)`, a capability call or anything else effectful or test-only could give a different answer each time. Compare the arguments, or bind `trace(Cap.op)` first and assert on the list.",
+  "category": "Observation",
+  "categoryAnchor": "observation",
+  "code": "bynk.observe.impure_with",
+  "constructs": [],
+  "example": "// tests/t.test.bynk\nexpect Logger.log called with trace(Logger.log).length() > 0   // ✗ not a pure predicate\nexpect Logger.log called with msg == \"x\"                      // ✓",
+  "severity": "error",
+  "summary": "A `with` predicate uses an effectful or test-only construct, or an effectful call (a sub-expression of type `Effect[_]`); it must be pure."
+}
