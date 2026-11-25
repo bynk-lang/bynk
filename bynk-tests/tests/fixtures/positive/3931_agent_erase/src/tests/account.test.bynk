@@ -1,0 +1,55 @@
+suite shop.account {
+	case "close deletes the instance, which then reads as a fresh key" {
+		let _ <- Account("a").open("a@b.c")
+		let _ <- Account("a").close()
+		let mail <- Account("a").readEmail()
+		expect mail == "none"
+	}
+
+	case "a Map's entries and its indexed postings are gone" {
+		let _ <- Account("a").open("a@b.c")
+		let before <- Account("a").openOrders()
+		let _ <- Account("a").close()
+		let after <- Account("a").openOrders()
+		let size <- Account("a").orderCount()
+		expect before == 2
+		expect after == 0
+		expect size == 0
+	}
+
+	case "only the erased key goes" {
+		let _ <- Account("a").open("a@b.c")
+		let _ <- Account("b").open("b@b.c")
+		let _ <- Account("a").close()
+		let kept <- Account("b").readEmail()
+		expect kept == "b@b.c"
+	}
+
+	case "a handler that faults after erase() erased nothing" {
+		let _ <- Account("a").open("a@b.c")
+		let r <- Account("a").closeOrFault.outcome(true)
+		let mail <- Account("a").readEmail()
+		expect mail == "a@b.c"
+	}
+
+	case "the instance can be erased and reopened" {
+		let _ <- Account("a").open("first")
+		let _ <- Account("a").close()
+		let _ <- Account("a").open("second")
+		let mail <- Account("a").readEmail()
+		expect mail == "second"
+	}
+
+	case "a write before erase() is discarded with the rest" {
+		let _ <- Account("a").open("kept?")
+		let _ <- Account("a").writeThenErase()
+		let mail <- Account("a").readEmail()
+		expect mail == "none"
+	}
+
+	case "an event emitted alongside the erase is released" {
+		let _ <- Account("a").open("a@b.c")
+		let _ <- Account("a").close()
+		expect Events.emit called once
+	}
+}

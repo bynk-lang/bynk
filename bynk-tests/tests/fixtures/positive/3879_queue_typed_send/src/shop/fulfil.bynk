@@ -6,7 +6,7 @@ type Order = { id: String, qty: Int }
 
 service fulfil from queue("order-events") {
   delivery { deadLetter: None }
-  on message(order: Order) -> Effect[QueueResult] {
+  on message(order: Order) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

@@ -1,0 +1,9 @@
+suite demo.d {
+  // #4120: a collection is generable when its elements are; the diagnostic names the path to the
+  // part that is not.
+  property "orders cannot be generated" {
+    for all o: Order {
+      expect o == o
+    }
+  }
+}

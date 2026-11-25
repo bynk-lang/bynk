@@ -562,6 +562,60 @@ fn a_plain_json_route_and_a_tagged_one_decode_to_the_same_null() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// #3916: on a route that answers its errors as problem details, a handler's `BadRequest` and the
+/// router's `400` share a status and a `Problem` shape, and the client tells them apart: the variant's
+/// problem has no `kind` and the rejection's has one.
+const PROBLEM_DRIVER: &str = r#"
+import worker from "./out/workers/api/index.js";
+import { createClient } from "./dist/api.js";
+// A call whose body the client would refuse to send is sent as written here, so the router rejects it.
+const send = (body) => (url, init) => worker.fetch(new Request(url, body === undefined ? init : { ...init, body }), {});
+const show = (label, v) => console.log(label, JSON.stringify(v));
+const ok = createClient({ baseUrl: "http://api.test", fetch: send(undefined) });
+const bad = createClient({ baseUrl: "http://api.test", fetch: send('{"qty":"many"}') });
+show("variant", await ok.api.postWidgets({ qty: 1 }));
+show("rejection", await bad.api.postWidgets({ qty: 2 }));
+"#;
+
+#[test]
+fn a_problem_variant_and_a_problem_rejection_at_one_status_are_told_apart() {
+    if skip_without_tools() {
+        return;
+    }
+    let dir = scratch("problem");
+    let proj = dir.join("project");
+    fs::create_dir_all(proj.join("src")).unwrap();
+    fs::write(
+        proj.join("bynk.toml"),
+        "[project]\nname = \"problems\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        proj.join("src/api.bynk"),
+        "context api\n\ntype Widget = { qty: Int }\n\n\
+         service api from http {\n  errors { format: problem }\n\n  \
+           on POST(\"/widgets\") (body: Widget) -> Effect[HttpResult[String]] by v: Visitor {\n    \
+             if body.qty == 1 { BadRequest(\"no such widget\") } else { Created(\"ok\") }\n  }\n}\n",
+    )
+    .unwrap();
+    generate(&proj, &dir, &[]);
+    compile_worker(&proj, &dir);
+    tsc(&dir, "the problem-details client");
+    let out = run_driver(&dir, PROBLEM_DRIVER, &[]);
+    let variant: serde_json::Value = serde_json::from_str(line(&out, "variant")).unwrap();
+    assert_eq!(variant["kind"], "BadRequest", "{out}");
+    assert_eq!(variant["problem"]["type"], "about:blank", "{out}");
+    assert_eq!(variant["problem"]["detail"], "no such widget", "{out}");
+    let rejection: serde_json::Value = serde_json::from_str(line(&out, "rejection")).unwrap();
+    assert_eq!(rejection["kind"], "StructuralMismatch", "{out}");
+    assert_eq!(
+        rejection["problem"]["type"], "https://bynk-lang.org/problems/structural-mismatch",
+        "{out}"
+    );
+    assert_eq!(rejection["problem"]["kind"], "StructuralMismatch", "{out}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
 /// #3910: a typed path parameter is written as its text: an `Int` its digits, an enum its
 /// variant's name, and the router decodes it back.
 const PATH_DRIVER: &str = r#"

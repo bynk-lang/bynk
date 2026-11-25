@@ -37,6 +37,8 @@ export interface DurableObjectStorage {
   delete(key: string): Promise<boolean>;
   delete(keys: readonly string[]): Promise<number>;
   list<T>(options?: DurableObjectListOptions): Promise<Map<string, T>>;
+  // Deletes every key of this object's storage (#3931: `self.erase()`).
+  deleteAll(): Promise<void>;
   // Runs `closure` as one atomic unit: every write commits together when it
   // returns, none when it throws or calls `rollback()`.
   transaction<T>(closure: (txn: DurableObjectTransaction) => Promise<T>): Promise<T>;
@@ -173,6 +175,13 @@ export class InMemoryStorage implements DurableObjectStorage {
     let n = 0;
     for (const k of keyOrKeys) if (this.data.delete(k)) n += 1;
     return n;
+  }
+
+  async deleteAll(): Promise<void> {
+    if (this.inTransaction) throw new Error("InMemoryStorage: deleteAll cannot run inside a transaction");
+    this.stats.writes += 1;
+    this.stats.keysWritten += this.data.size;
+    this.data.clear();
   }
 
   async list<T>(options?: DurableObjectListOptions): Promise<Map<string, T>> {

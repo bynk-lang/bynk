@@ -9,7 +9,7 @@ type Job = { id: String, code: Code }
 service inbox from queue("jobs") {
   delivery { deadLetter: None }
 
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }
@@ -17,7 +17,7 @@ service inbox from queue("jobs") {
 service kept from queue("kept-jobs") {
   delivery { deadLetter: "kept-jobs-dlq" }
 
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     if job.id == "retry" {
       Retry("asked to")
     } else {

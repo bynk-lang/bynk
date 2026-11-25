@@ -35,6 +35,59 @@ export function __bynkInstantToIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+// #3977: the text of a `Duration`, which erases to a number of milliseconds. Both forms break
+// the span into whole days (24-hour spans, as `1.day` is), hours, minutes, seconds and
+// milliseconds with integer arithmetic only, so a large span is exact. A negative span takes a
+// leading `-`, and the parts are those of its magnitude.
+function durationParts(ms: number): { neg: boolean; d: number; h: number; m: number; s: number; ms: number } {
+  if (!Number.isFinite(ms) || !Number.isInteger(ms)) {
+    throw new Error(`Duration text: ${ms} is not a whole number of milliseconds`);
+  }
+  const neg = ms < 0;
+  let rest = Math.abs(ms);
+  const part = (unit: number): number => {
+    const n = Math.floor(rest / unit);
+    rest -= n * unit;
+    return n;
+  };
+  const d = part(86_400_000);
+  const h = part(3_600_000);
+  const m = part(60_000);
+  const s = part(1000);
+  return { neg, d, h, m, s, ms: rest };
+}
+
+// `1d2h`, `1h30m`, `5m`, `250ms`, `-5s`, `0s`: units largest first, a zero part left out, and
+// `0s` for a zero span. The units are the ones a `Duration` literal is written in.
+export function __bynkDurationToString(ms: number): string {
+  const p = durationParts(ms);
+  const text =
+    (p.d ? `${p.d}d` : "") +
+    (p.h ? `${p.h}h` : "") +
+    (p.m ? `${p.m}m` : "") +
+    (p.s ? `${p.s}s` : "") +
+    (p.ms ? `${p.ms}ms` : "");
+  if (text === "") {
+    return "0s";
+  }
+  return p.neg ? `-${text}` : text;
+}
+
+// ISO 8601: `PT1H30M`, `P1DT2H`, `PT0.25S`, `-PT5S`, `PT0S`. Days are the largest unit (months and
+// years are not fixed spans), the seconds carry the millisecond fraction without trailing zeros,
+// and a negative span takes a leading `-`, a widely accepted extension.
+export function __bynkDurationToIso(ms: number): string {
+  const p = durationParts(ms);
+  const fraction = p.ms ? `.${String(p.ms).padStart(3, "0").replace(/0+$/, "")}` : "";
+  const seconds = p.s || p.ms ? `${p.s}${fraction}S` : "";
+  const time = (p.h ? `${p.h}H` : "") + (p.m ? `${p.m}M` : "") + seconds;
+  const date = p.d ? `${p.d}D` : "";
+  if (date === "" && time === "") {
+    return "PT0S";
+  }
+  return `${p.neg ? "-" : ""}P${date}${time === "" ? "" : `T${time}`}`;
+}
+
 // The RFC 3339 date-time profile: `T` or `t`, a fraction of any length, and
 // `Z`, `z` or a `±HH:mm` offset. Nothing else.
 const ISO =
@@ -381,6 +434,24 @@ export interface WireViolation {
   readonly rule: WireValidationRule;
 }
 
+/**
+ * An error answered as RFC 9457 problem details (a service with `errors { format: problem }`): an error
+ * variant has `type` `about:blank`; a router rejection has a `https://bynk-lang.org/problems/<kind>` type
+ * and its own members: `kind`, `path`, a structural mismatch's `expected` and `actual`, and a refinement's
+ * `violation`.
+ */
+export interface Problem {
+  readonly type: string;
+  readonly title: string;
+  readonly status: number;
+  readonly detail?: string;
+  readonly kind?: string;
+  readonly path?: string;
+  readonly expected?: string;
+  readonly actual?: string;
+  readonly violation?: WireViolation;
+}
+
 /** What a boundary refuses a value with: the server's `400` body, and what the client reports for a value it refuses to send. */
 export type BoundaryError =
   | { readonly kind: "MalformedJson"; readonly details: string }
@@ -474,8 +545,8 @@ export function viaBinding(
 /** What one reply of a route is. */
 export interface __Reply {
   readonly kind: string;
-  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, or nothing. */
-  readonly body: "value" | "message" | "location" | "boundary" | "raw" | "events" | "none";
+  /** What its body carries: a decoded value, `{ error: string }`, a `Location` header, a boundary error, problem details, or nothing. */
+  readonly body: "value" | "message" | "location" | "boundary" | "problem" | "problem-rejection" | "raw" | "events" | "none";
   /** A `raw` reply's `ETag`: `maybe` when the server may leave it out, `required` when it always sends one. */
   readonly etag?: "maybe" | "required";
   readonly decode?: (json: JsonValue) => Result<unknown, BoundaryError>;
@@ -711,6 +782,11 @@ function __isObject(v: JsonValue): v is { [k: string]: JsonValue } {
   return typeof v === "object" && v !== null && !globalThis.Array.isArray(v);
 }
 
+/** RFC 9457 problem details as the interface promises them: a string `type` and `title` and a numeric `status`. */
+function __isProblem(v: JsonValue): v is { [k: string]: JsonValue } {
+  return __isObject(v) && typeof v.type === "string" && typeof v.title === "string" && typeof v.status === "number";
+}
+
 /** The reply of `route` that `response` is, or why it is none. */
 function __classify(route: __Route, response: globalThis.Response, text: string): unknown {
   const status = response.status;
@@ -745,6 +821,15 @@ function __classify(route: __Route, response: globalThis.Response, text: string)
         if (parsed && __isObject(json) && typeof json.kind === "string") {
           return { status, kind: reply.kind, error: json };
         }
+        break;
+      // An error variant's problem has no `kind` (its `type` is `about:blank`); a router rejection's has a
+      // string `kind`. Both can answer at one status (a handler's `BadRequest` beside the boundary's `400`), so
+      // the two body kinds are told apart by it.
+      case "problem":
+        if (parsed && __isProblem(json) && json.kind === undefined) return { status, kind: reply.kind, problem: json };
+        break;
+      case "problem-rejection":
+        if (parsed && __isProblem(json) && typeof json.kind === "string") return { status, kind: reply.kind, problem: json };
         break;
       case "value": {
         if (!parsed) break;
