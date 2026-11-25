@@ -66,8 +66,14 @@ If `Reps.of(n)` is `Err(e)`, `doubled` returns `Err(e)` immediately; otherwise
 
 ```bynk
 commons demo {
-	type Addr = { city: Option[String], country: String }
-	type Order = { address: Option[Addr] }
+	type Addr = {
+		city: Option[String],
+		country: String,
+	}
+
+	type Order = {
+		address: Option[Addr],
+	}
 
 	fn shipTo(o: Order) -> Option[String] {
 		let addr = o.address?

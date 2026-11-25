@@ -1,6 +1,6 @@
 ---
 level: minor
-changelog: "`?` on an `Option` returns `None` early in a function that returns `Option` (or `Effect[Option]`), and in a lambda that returns one"
+changelog: `?` on an `Option` returns `None` early in a function that returns `Option` (or `Effect[Option]`), and in a lambda that returns one
 ---
 
 ## ADR: question-on-option-in-option-fn
