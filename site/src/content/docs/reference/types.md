@@ -1,7 +1,11 @@
 ---
 title: Type system
 ---
+<!-- sorted: headings -->
+
 ## Built-in base types
+
+<!-- sorted: table -->
 
 | Type | Values | Emits |
 |---|---|---|
@@ -14,6 +18,8 @@ title: Type system
 | `Int` | integer literals (`0`, `-42`); a JS safe integer, ±(2^53 − 1) | `number` |
 | `String` | string literals (`"…"`) | `string` |
 
+<!-- /sorted -->
+
 The unit type is written `()`. `Int` and `Float` are **distinct and
 incompatible** — there is no implicit coercion (`bynk.types.no_numeric_coercion`).
 Convert explicitly: `i.toFloat()` (Int → Float, total) or `f.round()` /
@@ -23,6 +29,8 @@ result is not a safe integer); parse a string with `Int.parse(s)` /
 decimal only (`" 7 "`, `"0x10"` and, for `Int`, `"1e3"` are `None`). An `Int`
 is a JS safe integer at every entry point: a larger literal, a wire value, a
 parse result or a conversion is rejected, and `Int` division by zero faults.
+
+<!-- sorted: headings -->
 
 ### Bytes
 
@@ -302,7 +310,11 @@ is deprecated for it. URLs and query strings are in `bynk.url`, written over `pe
 [Related first-party modules](/reference/bynk-capabilities/#related-first-party-modules)).
 A method not in this table is `bynk.types.method_not_found`.
 
+<!-- /sorted -->
+
 ## Built-in generic types
+
+<!-- sorted: table -->
 
 | Type | Variants | Purpose |
 |---|---|---|
@@ -313,6 +325,8 @@ A method not in this table is `bynk.types.method_not_found`.
 | `Result[T, E]` | `Ok(T)`, `Err(E)` | success or error |
 | `Set[T]` | — | an immutable set of [`Key`](#keys) elements (see [Set](#set)) |
 | `Stream[T]` | — | a value-over-time source (see [Stream](#stream)) |
+
+<!-- /sorted -->
 
 ### `Option` and `Result` methods {#option-and-result-methods}
 
@@ -570,6 +584,8 @@ be generic (its base is a fixed primitive); only a record or **sum** body may be
 The types an `on http` handler uses for cookies and uploaded files. See
 [HTTP](/reference/http/) for how a handler uses them.
 
+<!-- sorted: headings -->
+
 ### Cookie and SameSite {#cookie}
 
 `Cookie` is the record a handler attaches to a result with
@@ -610,6 +626,8 @@ handler's `cookies` parameter when it needs a name a record field cannot spell. 
 and is built in a test with `RequestCookies.of(pairs)` or `RequestCookies.empty()`. It is not
 a boundary type: it cannot be stored, sent or returned. See
 [Reading a prefixed cookie](/reference/http/#request-cookies).
+
+<!-- /sorted -->
 
 ## The JSON codec
 
@@ -1066,6 +1084,8 @@ A narrower arm may precede a wider one (`Some(Red)` then `Some(_)`), and a
 guarded arm never counts as covering, because its guard may fail. So an
 unguarded arm with the same pattern can always follow it.
 
+<!-- sorted: headings -->
+
 ### Exhaustiveness and reachability
 
 Both checks are one rule (patterns track, slice 3, #2665): an arm is reachable
@@ -1287,6 +1307,8 @@ record pattern (`bynk.parse.lambda_pattern_not_record`) and takes no annotation
 generic record takes its type arguments from the expected function type. Function,
 method and handler parameters stay plain names.
 
+<!-- /sorted -->
+
 ## Named types
 
 ```bynk
@@ -1505,6 +1527,8 @@ into the storage capability the `store` fields already carry (no new `given`):
 
 On a `Query`, and so on a store or held `Map`, the concurrent step that returns `()` is `parForEach`, the name it has on a `List`. Before #4177 it was `parTraverse`; that spelling is now the error `bynk.query.par_traverse_renamed`, whose fix (`bynk check --fix`) renames the call. A `Query` has no value-returning `parTraverse`: `collect()` it, then `parTraverse` the list.
 
+<!-- sorted: headings -->
+
 ### Joins and grouping
 
 Joins and grouping (v0.92+; ADR 0120) take an **`into:` combiner** that projects
@@ -1548,6 +1572,8 @@ items.entries.map((e) => TodoItem { id: e.key, seq: e.value.seq, title: e.value.
 This is what lets a stored value drop the denormalised copy of its own key. The
 accessors are paren-less builders on the *storage* map, distinct from the eager
 in-memory `Map` value methods `.keys()`/`.values()` that return `List`s.
+
+<!-- /sorted -->
 
 ## Record types
 
@@ -2005,3 +2031,5 @@ sum declares and works inside a context but has no codec yet, so it is refused
 where a codec is required, with `bynk.generics.recursive_generic_at_boundary`
 (see [Generic record types](#generic-record-types)). A generic sum may not carry an
 `embeds` clause (`bynk.generics.generic_sum_embeds`).
+
+<!-- /sorted -->
