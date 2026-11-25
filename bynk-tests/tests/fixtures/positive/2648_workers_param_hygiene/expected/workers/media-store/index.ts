@@ -3,7 +3,7 @@
 
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -200,7 +200,7 @@ export default {
           const __raw_result = __m.params["result"];
           const __id_result = __raw_result;
           const result = await surface.http_GET_bearer_Param_request_Param_result(request, __id_request, __id_result);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bearer realm=\"media.store\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bearer realm=\"media.store\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
@@ -216,7 +216,7 @@ export default {
           const __raw_result = __m.params["result"];
           const __id_result = __raw_result;
           const result = await surface.http_GET_sum_Param_request_Param_result(request, __id_request, __id_result);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bearer realm=\"media.store\"", "Bynk realm=\"media.store\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: number) => ((v: number) => { if (!globalThis.Number.isSafeInteger(v)) throw new globalThis.Error("Int outside the safe-integer range at boundary"); return v as __JsonValue; })(__v), { weakEtag: true }), request), request, ["Bearer realm=\"media.store\"", "Bynk realm=\"media.store\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }

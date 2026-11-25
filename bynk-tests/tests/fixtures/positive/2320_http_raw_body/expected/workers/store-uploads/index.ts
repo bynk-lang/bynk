@@ -4,7 +4,7 @@
 import { Ok, Err } from "../../__bynk_runtime/result.js";
 import { __bynkBytesFromBase64 } from "../../__bynk_runtime/bytes.js";
 import { type __JsonValue, type __BoundaryError, __verifyCall, __faultResponse, __readBodyCapped, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __mediaTypeMatches, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { __verifySignatureHmacSha256 } from "../../__bynk_runtime/auth.js";
 import { compose, type Env } from "./compose.js";
@@ -67,7 +67,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 64 bytes" }), { status: 413, headers: { "content-type": "application/json" } }), __security_uploads);
           }
           const result = await surface.http_POST_either(request);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""]), __security_uploads);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\"", "Bearer realm=\"store.uploads\""])), __security_uploads);
         }
       }
       {
@@ -129,7 +129,7 @@ export default {
           if (!__ok) return __applySecurityHeaders(__applyChallenge(new globalThis.Response(null, { status: 401 }), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
           const body = __bytes;
           const result = await surface.http_POST_signed(body);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""]), __security_uploads);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bynk-Signature realm=\"store.uploads\", header=\"X-Sig\""])), __security_uploads);
         }
       }
       {
