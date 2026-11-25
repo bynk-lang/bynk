@@ -1,0 +1,11 @@
+suite demo.desk as system {
+  fn seed() -> Effect[()] given Meter {
+    let _ <- Meter.read()
+    Effect.pure(())
+  }
+
+  case "the desk checks" {
+    let n <- demo.desk.check(5)
+    expect n == 5
+  }
+}

@@ -294,10 +294,16 @@ specialise a generic operation's `T` against:
   has. This means a capability with a generic operation can only be declared
   inside an `adapter`, never a plain `context` (whose provider must have a
   Bynk body).
-- **A generic operation cannot be stubbed in a test** (`bynk.stub.generic_op`)
-  — a `stub` clause's body has no way to construct a value of an unconstrained
-  `T`. Stubbing another, non-generic operation of the same capability is
-  unaffected.
+- **A `stub` of a generic operation names its type argument**
+  (`stub Idempotency.dedup[Int](_) returns None`). Writing the type argument the
+  way a call site does makes the clause typed: its arguments and its `returns`
+  value are checked against the operation with `T` replaced by `Int`, and the
+  clause answers only the calls made at `Int`. A call at another type argument
+  finds no matching clause, as a call with an unmatched argument does. A `stub`
+  without the type argument is refused (`bynk.stub.generic_op`), as is one that
+  gives the wrong number of them (`bynk.generics.type_arg_mismatch`). Stubbing
+  another, non-generic operation of the same capability is unaffected. See
+  [`stub`](/reference/testing/#stub).
 
 A generic operation is called the same way through a cross-context capability,
 both flattened (`consumes Adapter { Cap }` → `Cap.op[T](…)`) and qualified

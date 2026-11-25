@@ -1,0 +1,12 @@
+suite demo.desk as integration {
+  fn warm() -> Effect[Int] given Meter {
+    let first <- Meter.read()
+    Effect.pure(first)
+  }
+
+  case "a helper at integration reaches the real provider" {
+    let m <- warm()
+    let n <- local.call(m)
+    expect n == 2
+  }
+}

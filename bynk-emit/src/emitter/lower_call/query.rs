@@ -285,6 +285,8 @@ pub(in crate::emitter) fn lower_query_by_name(
         .and_then(|op| lower_query_method(source, op, a, result_ty, shape, tys))
 }
 
+mod more;
+
 // ---- The callers' sources ---------------------------------------------------------------
 
 /// What a query operation reads: an array-valued source, or a `Query` receiver, which is a
@@ -491,6 +493,9 @@ pub(in crate::emitter) fn lower_query_method(
         (QueryOp::SortBy, 1) => arm.sort_by(false),
         (QueryOp::SortByDescending, 1) => arm.sort_by(true),
         (QueryOp::Take, 1) => arm.slice(true),
+        (QueryOp::FilterMap, 1) => arm.filter_map(),
+        (QueryOp::TakeWhile, 1) => arm.while_prefix(true),
+        (QueryOp::SkipWhile, 1) => arm.while_prefix(false),
         (QueryOp::Skip, 1) => arm.slice(false),
         (QueryOp::Distinct, 0) if keyed => arm.keyed_helper("__bynkDistinct", false),
         (QueryOp::DistinctBy, 1) if keyed => arm.keyed_helper("__bynkDistinctBy", false),
@@ -508,6 +513,7 @@ pub(in crate::emitter) fn lower_query_method(
         (QueryOp::First, 0) => arm.first(),
         (QueryOp::FirstOrElse, 1) => arm.first_or_else(),
         (QueryOp::Count, 0) => arm.count(),
+        (QueryOp::Count, 1) => arm.count_where(),
         (QueryOp::Fold, 2) => arm.fold(),
         (QueryOp::Any, 1) => arm.predicate("some"),
         (QueryOp::All, 1) => arm.predicate("every"),
@@ -985,6 +991,9 @@ mod tests {
         (QueryOp::SortByDescending, &["key"], false),
         (QueryOp::Take, &["n"], false),
         (QueryOp::Skip, &["n"], false),
+        (QueryOp::FilterMap, &["f"], false),
+        (QueryOp::TakeWhile, &["p"], false),
+        (QueryOp::SkipWhile, &["p"], false),
         (QueryOp::Distinct, &[], false),
         (QueryOp::Distinct, &[], true),
         (QueryOp::DistinctBy, &["key"], false),
@@ -1004,6 +1013,7 @@ mod tests {
         (QueryOp::First, &[], false),
         (QueryOp::FirstOrElse, &["d"], false),
         (QueryOp::Count, &[], false),
+        (QueryOp::Count, &["p"], false),
         (QueryOp::Fold, &["init", "f"], false),
         (QueryOp::Any, &["p"], false),
         (QueryOp::All, &["p"], false),
@@ -1079,6 +1089,9 @@ mod tests {
             | QueryOp::SortByDescending
             | QueryOp::Take
             | QueryOp::Skip
+            | QueryOp::FilterMap
+            | QueryOp::TakeWhile
+            | QueryOp::SkipWhile
             | QueryOp::Distinct
             | QueryOp::DistinctBy
             | QueryOp::JoinOn

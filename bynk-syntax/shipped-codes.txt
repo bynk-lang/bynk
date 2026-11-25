@@ -561,6 +561,7 @@ bynk.provider.signature_mismatch
 bynk.provider.unknown_capability
 bynk.query.join_key_mismatch
 bynk.query.sum_needs_numeric
+bynk.query.while_needs_order
 bynk.queue.bad_params
 bynk.queue.dead_letter_type_mismatch
 bynk.queue.delivery_bad_option

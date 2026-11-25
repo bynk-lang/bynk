@@ -4166,6 +4166,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
     },
     Explain {
+        code: "bynk.query.while_needs_order",
+        blurb: "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first, or a window of one (`since`, `before`, `between`, `recent`, `reversed`). A `flatMap` loses the order, because each inner query is joined in its own. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+        example: "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+    },
+    Explain {
         code: "bynk.queue.bad_params",
         blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
@@ -4841,8 +4846,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.stub.generic_op",
-        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names, and a fixed value cannot be that. Such an operation cannot be stubbed. Test through the capability's real provider, and stub the other, non-generic operations of the capability if you need to.",
-        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None   // ✗ `dedup` has its own type parameter\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()   // ✓ the real provider answers\n    expect result is None\n}",
+        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names. A `stub` of it names the type argument, as the call site does, so its answer has a concrete type, and it answers only the calls made at that type: `stub Idempotency.dedup[Int](_) returns None`. Without the type argument the clause could not be typed, and is refused.",
+        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None        // ✗ `dedup` has its own type parameter\nstub Idempotency.dedup[Int](_) returns None   // ✓ the type argument, as the call writes it\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()\n    expect result is None\n}",
     },
     Explain {
         code: "bynk.stub.not_a_seam",
@@ -4962,13 +4967,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.suite.fn_effectful",
-        blurb: "A suite helper is a pure function that builds a value for a \
-                case: a request, a fixture, an expected result. Returning an \
-                `Effect` would hide a step of the test inside a helper. Build \
-                the value in the helper and run the effect in the `case`, \
+        blurb: "A suite helper that returns an `Effect` must say which capabilities it \
+                uses, with `given`, so a case's dependency on it is visible where it \
+                is called: `fn seed() -> Effect[()] given Stock { … }`. Without \
+                `given` it is a pure function that builds a value for a case, so \
+                build the value in the helper and run the effect in the `case`, \
                 where each step is visible with `<-`.",
         example: "// tests/desk.test.bynk\n\
-                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`, with no `given`\n\
                   fn start() -> Int { 1 }                            // ✓ build the value\n\
                   let n <- local.call(start())                       // ✓ run it in the case",
     },
@@ -5227,6 +5233,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
                   \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
                   }",
+    },
+    Explain {
+        code: "bynk.test.helper_given_at_system",
+        blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
+        example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
     },
     Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
@@ -6399,8 +6410,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.question_option_outside_http",
-        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a handler that returns an `HttpResult`, `None` becomes a `NotFound` response. Elsewhere an `Option` has no error to carry, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
-        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ no `HttpResult` to answer `NotFound`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
+        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a function returning an `Option` (or an `Effect` of one) the `None` is the result, and in a handler returning an `HttpResult` it becomes a `NotFound` response. Elsewhere there is nowhere to return it, and an `Option` never converts to a `Result` implicitly, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
+        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ `double` returns a `Result`, not an `Option`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
     },
     Explain {
         code: "bynk.types.question_outside_result",
@@ -9601,6 +9612,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &[],
     ),
     dg(
+        "bynk.query.while_needs_order",
+        "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.queue.bad_params",
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
@@ -10136,7 +10152,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.stub.generic_op",
-        "A test `stub` targets a capability operation that declares its own type parameter — not supported at v1.",
+        "A test `stub` targets a capability operation that declares its own type parameter without naming its type argument (`stub Cap.op[T](…)`).",
     ),
     d(
         "bynk.stub.not_a_seam",
@@ -10318,6 +10334,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.test.forged_needs_system",
         "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
         &["case"],
+    ),
+    d(
+        "bynk.test.helper_given_at_system",
+        "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
     ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",
@@ -11024,7 +11044,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.question_option_outside_http",
-        "`?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
+        "`?` on an `Option` needs a function returning `Option` (`None` returns early) or `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
         &["question_expr"],
     ),
     dg(

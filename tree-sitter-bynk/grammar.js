@@ -1498,6 +1498,8 @@ module.exports = grammar({
         // the operation.
         repeat(seq(field("path", $.identifier), ".")),
         field("op", $.identifier),
+        // #3945: a generic operation's type arguments, `stub Cap.op[T](…)`.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         "(",
         optional(
           seq(
@@ -1829,6 +1831,8 @@ module.exports = grammar({
         field("cap", $.identifier),
         ".",
         field("op", $.identifier),
+        // #3945: `Cap.op[T] called …` observes one type argument of a generic operation.
+        optional(seq("[", sep1(field("type_arg", $._type_ref), ","), "]")),
         choice(
           seq(
             "called",

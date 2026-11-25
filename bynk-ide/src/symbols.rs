@@ -2146,9 +2146,9 @@ pub fn describe_effect_method_at(
 }
 
 /// #2839: hover on the `?` of an `Option` value. An `Option` is only liftable
-/// by `?` inside a handler returning `HttpResult` (ADR 0177), so an `Option`
-/// operand means `None` answers `404 NotFound`: the hover says so, and points
-/// at `let … else` for any other status. A `?` on a `Result` is not described.
+/// by `?` inside a handler returning `HttpResult` (ADR 0177), where `None` answers
+/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns early. The
+/// hover names both and points at `let … else` for any other status. A `?` on a `Result` is not described.
 pub fn describe_question_at(
     text: &str,
     offset: usize,
@@ -2166,10 +2166,12 @@ pub fn describe_question_at(
         return None;
     }
     Some(
-        "```bynk\n? : None → 404 NotFound\n```\n\n\
-         On an `Option` in an `HttpResult` handler, `?` yields the value for `Some` and \
-         answers `404 NotFound` for `None`. That is right for \"the thing you asked for is not \
-         there\", but a missing or malformed request input is a `400`: write \
+        "```bynk\n? : None returns early\n```\n\n\
+         On an `Option`, `?` yields the value for `Some` and returns early for `None`. In a \
+         function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as \
+         it is; `Option` and `Result` never convert. In an `HttpResult` handler, `None` answers \
+         `404 NotFound`, which is right for \"the thing you asked for is not there\", but a \
+         missing or malformed request input is a `400`: write \
          `let Some(x) = e else { BadRequest(\"…\") }` to answer another status."
             .to_string(),
     )

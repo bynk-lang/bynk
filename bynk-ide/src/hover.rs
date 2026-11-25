@@ -1117,6 +1117,17 @@ mod tests {
         }
     }
 
+    /// #3983: a suite helper that declares `given` hovers with it, at the declaration and at the
+    /// call in a case.
+    #[test]
+    fn a_suite_helper_hovers_with_its_given() {
+        let src = "suite demo.m {\n  fn warm() -> Effect[Int] given Meter {\n    Meter.read()\n  }\n\n  case \"c\" {\n    let n <- warm()\n    expect n == 1\n  }\n}\n";
+        for nth in [0, 1] {
+            let h = hover_at(src, "warm", nth).expect("`warm` hovers");
+            assert!(h.contains("warm() -> Effect[Int] given Meter"), "{h}");
+        }
+    }
+
     /// #3984: the `tests` of a test-only commons' header hovers with what the marker means.
     #[test]
     fn a_test_only_commons_marker_hovers() {
