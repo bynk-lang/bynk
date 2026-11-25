@@ -84,6 +84,7 @@ pub mod queue_consumers;
 pub mod queue_delivery;
 pub mod recovery;
 pub mod refinement_consts;
+pub mod regex_walk;
 pub mod requirements;
 pub mod resolver;
 pub mod route_order;
