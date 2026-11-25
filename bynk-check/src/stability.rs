@@ -446,6 +446,8 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
+                "bynk.cloudflare.Kv.getValue",
+                "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto"
             ]
         );

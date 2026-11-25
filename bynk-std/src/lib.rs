@@ -1038,6 +1038,8 @@ pub const UNITS: &[Unit] = &[
             "Kv.getBytes",
             "Kv.putBytes",
             "Kv.listPage",
+            "Kv.getValue",
+            "Kv.putValue",
         ],
         extensible: &[
             "R2Condition",
@@ -2128,6 +2130,8 @@ mod tests {
                 "bynk.cloudflare.Kv.getBytes",
                 "bynk.cloudflare.Kv.putBytes",
                 "bynk.cloudflare.Kv.listPage",
+                "bynk.cloudflare.Kv.getValue",
+                "bynk.cloudflare.Kv.putValue",
                 "bynk.crypto"
             ]
         );

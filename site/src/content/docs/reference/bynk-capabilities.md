@@ -482,7 +482,7 @@ Consuming it **locks the deployment unit to Cloudflare** (it cannot then target
 
 | Capability | Operations |
 |---|---|
-| **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttl: KvTtl) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values). |
+| **`Kv`** | `get(key: String) -> Effect[Option[String]]` · `put(key: String, value: String) -> Effect[()]` · `putTtl(key: String, value: String, ttl: KvTtl) -> Effect[()]` · `delete(key: String) -> Effect[()]` · `list(prefix: Option[String]) -> Effect[List[String]]` · *(experimental)* `getWith(key, options: KvGet) -> Effect[Option[KvEntry]]` · `putWith(key, value: String, options: KvPut) -> Effect[()]` · `getBytes(key) -> Effect[Option[Bytes]]` · `putBytes(key, value: Bytes, options: KvPut) -> Effect[()]` · `listPage(options: KvList) -> Effect[KvListing]` · `getValue[T: Codable](key) -> Effect[Option[T]]` · `putValue[T: Codable](key, value: T, options: KvPut) -> Effect[()]`; see [Metadata, expiry and binary values](#metadata-expiry-and-binary-values) and [Typed values](#typed-values). |
 | **`Service`** *(experimental)* | `send(req: Request) -> Effect[Result[Response, FetchError]]`. Used only through a named instance; see below. |
 | **`R2`** *(experimental)* | `get(key) -> Effect[Option[Bytes]]` · `head(key) -> Effect[Option[R2Object]]` · `put(key, body: Bytes) -> Effect[R2Object]` · `putWith(key, body, options: R2Put) -> Effect[Option[R2Object]]` · `delete(key) -> Effect[()]` · `list(prefix: Option[String], cursor: Option[String]) -> Effect[R2Listing]` · `getStream(key) -> Effect[Option[R2Body]]` · `getRange(key, range: R2Range) -> Effect[Option[R2Partial]]` · `getStreamIf(key, onlyIf: R2GetIf) -> Effect[R2Read]` · `listWith(options: R2List) -> Effect[R2Listing]` · `putStream(key, body: Stream[Bytes], size: Int) -> Effect[R2Object]` · `putStreamWith(key, body, size, options: R2Put) -> Effect[Option[R2Object]]` · `createUpload(key, options: R2UploadOptions) -> Effect[R2Upload]` · `uploadPart(upload, partNumber: Int, body: Bytes) -> Effect[R2Part]` · `completeUpload(upload, parts: List[R2Part]) -> Effect[R2Object]` · `abortUpload(upload) -> Effect[()]`. Used only through a named instance; see below. |
 | **`RateLimit`** *(experimental)* | `allow(key: String) -> Effect[Bool]`. Used only through a named instance that sets its limit and window; see below. |
@@ -527,7 +527,7 @@ when it does. See [Derived capabilities](/reference/capabilities/#derived-capabi
 
 ### Metadata, expiry and binary values
 
-Five more `Kv` operations reach what the platform has beyond text. They are
+Five more `Kv` operations reach what the platform has beyond text (`getValue` and `putValue`, [below](#typed-values), store values of your own types). They are
 experimental: list each one you use under `[unstable] allow`
 (`"bynk.cloudflare.Kv.putWith"` and so on). The existing operations are
 unchanged.
@@ -579,6 +579,40 @@ a computed span goes through `KvTtl.of(d)`, which returns a `ValidationError`
 when it is too short; `30.seconds` is `bynk.refine.literal_violates`. A value over 25 MiB faults with the platform's
 error. In tests the namespace is in memory: it keeps metadata and expiry
 (expiry is not enforced), checks the same limits, and pages in key order.
+
+### Typed values {#typed-values}
+
+`putValue` and `getValue` store and read any `Codable` value without a hand-written
+`Json.encode` and `Json.decode` at every call site. They are experimental, listed as
+`"bynk.cloudflare.Kv.putValue"` and `"bynk.cloudflare.Kv.getValue"` under
+`[unstable] allow`.
+
+```bynk,fragment
+let _ <- Sessions.putValue(id, session, KvPut { expiration: After(30.minutes), metadata: Map.empty() })
+let s <- Sessions.getValue[Session](id)          // Option[Session]
+```
+
+Here `Session` is any `Codable` type, such as `{ user: UserId, created: Instant, roles: List[Role] }`.
+
+- `putValue(key, value, options)` stores `Json.encode(value)`, so `Json.decode` of a
+  `get` result reads it, and `getValue[T]` reads what `putValue` wrote exactly. `options`
+  is `putWith`'s `KvPut`, so expiry and metadata work the same; the 25 MiB limit applies
+  to the encoded text.
+- `getValue[T](key)` is `None` for a missing key.
+- **A stored value that does not decode as `T` faults**, naming the capability
+  instance, the operation, the type and the path, never the value:
+  `Kv.getValue returned a value that does not decode as Session: at $.created: expected
+  number, got string`. Text that is not JSON at all faults too, in the binding's own words
+  (`bynk.cloudflare.Kv: getValue returned a value that is not JSON`): only the call site
+  knows the instance, the type and the path, and it sees a reply that already parsed. There is no
+  miss-on-undecodable form; read with `get` and `Json.decode` to treat a bad value as
+  absent.
+- **Changing `T` while values are stored under the old shape** faults at the first read of
+  an old value. Keep the type additive (a new field takes a default or is an `Option`),
+  or version the key prefix (`v2:`), as for stored agent state.
+
+In tests the namespace stores the encoded text, so a case runs the round trip production
+does.
 
 ### Calling a Worker outside the project: `Service`
 

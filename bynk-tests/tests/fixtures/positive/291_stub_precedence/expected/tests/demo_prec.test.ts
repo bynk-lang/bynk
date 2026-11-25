@@ -19,6 +19,8 @@ type __Kv_putWith_Call = { key: string; value: string; options: __ns_bynk_cloudf
 type __Kv_getBytes_Call = { key: string };
 type __Kv_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: __ns_bynk_cloudflare.KvPut };
 type __Kv_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
+type __Kv_getValue_Call = { key: string };
+type __Kv_putValue_Call = { key: string; value: unknown; options: __ns_bynk_cloudflare.KvPut };
 
 class __Stub_Kv {
   __case: string | undefined;
@@ -199,6 +201,23 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     async putBytes(key, value, options) {
       write(key, value.slice(), options);
     },
+    // #4048: the encoded text is stored, so a test runs the round trip production does; the reply
+    // is the encoding of an `Option` over the parsed JSON, which the call site decodes.
+    async getValue(key) {
+      checkKey(key);
+      const e = store.get(key);
+      if (e === undefined) return { kind: "None" };
+      let value: unknown;
+      try {
+        value = globalThis.JSON.parse(dec.decode(e.bytes));
+      } catch {
+        fault("getValue returned a value that is not JSON");
+      }
+      return { kind: "Some", value };
+    },
+    async putValue(key, value, options) {
+      write(key, enc.encode(globalThis.JSON.stringify(value)), options);
+    },
     async listPage(options) {
       const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
       if (!globalThis.Number.isInteger(limit) || limit < 1 || limit > 1000) fault(`a page holds 1 to 1000 keys, not ${limit}`);
@@ -226,7 +245,7 @@ function __makeTestDeps(__case?: string) {
 async function test_a_suite_stub_beats_the_double() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"] }, __obs);
     const { store } = __ns_demo_prec;
     const { AiError, AnalyticsSqlError, AnalyticsSqlResult, AnalyticsSqlStatistics, ChatMessage, ChatRole, Condition, ContainerError, DataPoint, DmarcVerdict, EmailAttachment, EmailError, EmailMessage, EmailReply, EmailVerdict, FilterOp, GenerateRequest, Generation, ImageFit, ImageFormat, ImageInfo, ImageResult, ImageStream, ImagesError, InboundAttachment, InboundEmail, IndexInfo, KvCacheTtl, KvEntry, KvExpiration, KvGet, KvKey, KvList, KvListing, KvPut, KvTtl, MetaValue, MetadataScope, Mutation, MySqlError, MySqlReadError, MySqlRun, MySqlStatement, MySqlValue, OutputOptions, Overlay, PgError, PgReadError, PgRun, PgStatement, PgValue, QueryOptions, QueueDelay, QueueDelivery, QueueSend, R2Body, R2Condition, R2GetIf, R2List, R2Listing, R2Object, R2Part, R2Partial, R2Put, R2Range, R2Read, R2Upload, R2UploadOptions, RequestCf, RetrievalType, SearchAnswer, SearchError, SearchHit, SearchOptions, SenderIdentity, SqlError, SqlReadError, SqlRun, SqlStatement, SqlValue, TokenUsage, TransformOptions, Vector, VectorError, VectorMatch, VectorOf, WorkerVersion } = __ns_bynk_cloudflare;
     type AiError = __ns_bynk_cloudflare.AiError;

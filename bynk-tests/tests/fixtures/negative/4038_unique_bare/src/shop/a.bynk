@@ -1,0 +1,17 @@
+context shop.a
+
+type R = {
+	id: String,
+	email: String,
+}
+
+agent A {
+	key k: String
+
+	store m: Map[String, R] @unique
+
+	on call howMany() -> Effect[Int] {
+		let n <- m.size()
+		Effect.pure(n)
+	}
+}

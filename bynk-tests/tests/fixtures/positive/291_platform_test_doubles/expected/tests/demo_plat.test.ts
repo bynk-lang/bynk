@@ -31,6 +31,8 @@ type __Kv_putWith_Call = { key: string; value: string; options: __ns_bynk_cloudf
 type __Kv_getBytes_Call = { key: string };
 type __Kv_putBytes_Call = { key: string; value: globalThis.Uint8Array; options: __ns_bynk_cloudflare.KvPut };
 type __Kv_listPage_Call = { options: __ns_bynk_cloudflare.KvList };
+type __Kv_getValue_Call = { key: string };
+type __Kv_putValue_Call = { key: string; value: unknown; options: __ns_bynk_cloudflare.KvPut };
 type __Locale_current_Call = {};
 type __Logger_info_Call = { msg: string };
 type __Logger_error_Call = { msg: string };
@@ -454,6 +456,23 @@ function __bynkTest_Kv(): __ns_bynk_cloudflare.Kv {
     },
     async putBytes(key, value, options) {
       write(key, value.slice(), options);
+    },
+    // #4048: the encoded text is stored, so a test runs the round trip production does; the reply
+    // is the encoding of an `Option` over the parsed JSON, which the call site decodes.
+    async getValue(key) {
+      checkKey(key);
+      const e = store.get(key);
+      if (e === undefined) return { kind: "None" };
+      let value: unknown;
+      try {
+        value = globalThis.JSON.parse(dec.decode(e.bytes));
+      } catch {
+        fault("getValue returned a value that is not JSON");
+      }
+      return { kind: "Some", value };
+    },
+    async putValue(key, value, options) {
+      write(key, enc.encode(globalThis.JSON.stringify(value)), options);
     },
     async listPage(options) {
       const limit = options.limit.tag === "Some" ? options.limit.value : 1000;
@@ -1184,7 +1203,7 @@ async function test_the_locale_is_en() {
 async function test_the_logger_records_without_printing() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -1581,7 +1600,7 @@ async function test_idempotency_is_fresh_per_case() {
 async function test_kv_is_in_memory() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps(), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -1846,7 +1865,7 @@ async function test_kv_is_fresh_per_case() {
 async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed operation answers; the rest reach the double"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -1978,7 +1997,7 @@ async function test_a_stubbed_operation_answers__the_rest_reach_the_double() {
 async function test_a_stubbed_fetch_answers_for_the_network() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a stubbed fetch answers for the network"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
@@ -2113,7 +2132,7 @@ async function test_a_stubbed_fetch_answers_for_the_network() {
 async function test_a_fetch_double_sees_the_request_s_headers() {
   try {
     const __obs = { log: {} as globalThis.Record<string, { args: unknown[]; order: number }[]>, n: 0 };
-    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
+    const deps = __bynkRecordDeps(__makeTestDeps("a fetch double sees the request's headers"), { Clock: ["now"], Fetch: ["receiveBytes", "receiveStream", "send", "sendBytes", "sendStream", "sendWith"], Idempotency: ["claim", "dedup", "remember"], Kv: ["delete", "get", "getBytes", "getValue", "getWith", "list", "listPage", "put", "putBytes", "putTtl", "putValue", "putWith"], Locale: ["current"], Logger: ["debug", "error", "info", "log", "warn"], Random: ["bytes", "int", "uuid"], Secrets: ["get"] }, __obs);
     const { clock, draws, greet, ids, locale, lookup, once, relay, secret, store } = __ns_demo_plat;
     const { LocaleTag, Message, MessageArg } = __ns_bynk_locale_types;
     type LocaleTag = __ns_bynk_locale_types.LocaleTag;
