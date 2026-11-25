@@ -4012,10 +4012,8 @@ pub fn growth_rises(probes: &[Probe], committed: &str) -> Result<Vec<GrowthRise>
 /// launder a rise). Compares `live`'s growth probes with `base_table`'s rows and
 /// requires a pending file under `root` to `raises:` each rise.
 pub fn check_growth(live: &[Probe], base_table: &str, root: &Path) -> Result<(), String> {
-    // With no base ledger to compare, the working-tree ledger has no new rows.
-    let ledger =
-        std::fs::read_to_string(root.join(crate::stamp::RAISE_LEDGER_PATH)).unwrap_or_default();
-    check_growth_against(live, base_table, (&ledger, &BTreeSet::new()), root)
+    // No base revision means no consumed `raises:`, so no ledger row can excuse a rise here.
+    check_growth_against(live, base_table, ("", &BTreeSet::new()), root)
 }
 
 /// [`check_growth`] for a PR against a base revision, `(base_ledger, consumed)`: the text of
