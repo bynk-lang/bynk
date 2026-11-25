@@ -225,6 +225,36 @@ pub fn validated_pending_in(root: &Path) -> Result<Vec<(String, Pending)>, Vec<S
     }
 }
 
+/// Warnings for pending files whose slug the stamp ledger holds with different content (#4319):
+/// a reused slug, or an edited near-copy of a consumed file. They never fail the check.
+pub fn check_warnings_in(root: &Path) -> Vec<String> {
+    let Ok(ledger) = stamped::read(root) else {
+        return Vec::new();
+    };
+    let Ok(names) = fs::read_dir(root.join("design/pending")) else {
+        return Vec::new();
+    };
+    let mut files: Vec<String> = names
+        .filter_map(Result::ok)
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".md") && n != "README.md")
+        .collect();
+    files.sort();
+    let mut warnings = Vec::new();
+    for file in files {
+        let Ok(bytes) = fs::read(root.join("design/pending").join(&file)) else {
+            continue;
+        };
+        let slug = file.strip_suffix(".md").unwrap_or(&file);
+        let hash = stamped::content_hash(&bytes);
+        let same_slug = ledger.iter().rev().find(|e| e.slug == slug);
+        if let Some(entry) = same_slug.filter(|_| stamped::find(&ledger, slug, &hash).is_none()) {
+            warnings.push(stamped::reused_slug_warning(&file, entry));
+        }
+    }
+    warnings
+}
+
 /// Validate a single pending file's `content`. `filename` is used to check the
 /// stem is a kebab-case slug. Returns every problem found (not just the first),
 /// so a malformed file reports completely.

@@ -38,14 +38,21 @@ pub struct Entry {
     pub adrs: Vec<String>,
 }
 
-/// A stable 64-bit FNV-1a hash of `bytes`, as 16 hex digits. Not cryptographic: the ledger asks
-/// whether this exact file was stamped, and a pending file is not an adversary. It needs no
-/// dependency, and the same value is computable from any language (the back-fill used Python).
+/// A stable 64-bit FNV-1a hash of `bytes`, as 16 hex digits, over the bytes with every `\r\n`
+/// read as `\n`: a Windows checkout with CRLF line endings must match the file the stamp read on
+/// Linux. Not cryptographic: the ledger asks whether this exact file was stamped, and a pending
+/// file is not an adversary. It needs no dependency, and the same value is computable from any
+/// language (the back-fill used Python).
 pub fn content_hash(bytes: &[u8]) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in bytes {
-        h ^= u64::from(*b);
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\r' && bytes.get(i + 1) == Some(&b'\n') {
+            i += 1;
+        }
+        h ^= u64::from(bytes[i]);
         h = h.wrapping_mul(0x0000_0100_0000_01b3);
+        i += 1;
     }
     format!("{h:016x}")
 }
@@ -110,6 +117,19 @@ pub fn appended(existing: &str, lines: &[String]) -> String {
     out
 }
 
+/// The warning `check-pending` prints for a pending file whose slug is on the ledger with
+/// different content (#4319): a reused slug is legitimate, but an edited near-copy of a consumed
+/// file looks the same, so it is made visible.
+pub fn reused_slug_warning(file: &str, entry: &Entry) -> String {
+    let slug = file.strip_suffix(".md").unwrap_or(file);
+    format!(
+        "warning: {file}: slug `{slug}` was stamped before, as v{}, with different content; \
+         fine for a new increment under a reused name, but if this is an edited copy of that \
+         increment's file, drop it",
+        entry.version
+    )
+}
+
 /// What `check-pending` says about a pending file the stamp has already consumed.
 pub fn already_stamped_message(file: &str, entry: &Entry) -> String {
     let slug = file.strip_suffix(".md").unwrap_or(file);
@@ -131,6 +151,14 @@ mod tests {
         assert_eq!(content_hash(b""), "cbf29ce484222325");
         assert_eq!(content_hash(b"a"), "af63dc4c8601ec8c");
         assert_eq!(content_hash(b"foobar"), "85944171f73967e8");
+    }
+
+    #[test]
+    fn the_hash_ignores_crlf_line_endings() {
+        assert_eq!(content_hash(b"a\r\nb\r\n"), content_hash(b"a\nb\n"));
+        // A lone CR is content, not a line ending.
+        assert_ne!(content_hash(b"a\rb"), content_hash(b"a\nb"));
+        assert_ne!(content_hash(b"a\n"), content_hash(b"a\n\n"));
     }
 
     #[test]

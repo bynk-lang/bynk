@@ -389,6 +389,9 @@ fn editor_contract(args: &[String]) -> ExitCode {
 }
 
 fn check_pending() -> ExitCode {
+    for warning in xtask::check_warnings_in(&xtask::repo_root()) {
+        eprintln!("{warning}");
+    }
     match xtask::check_all() {
         Ok(n) => {
             println!("check-pending: {n} pending file(s) valid");

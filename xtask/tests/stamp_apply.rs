@@ -776,3 +776,41 @@ fn check_pending_names_the_slug_and_version_of_a_stamped_file() {
     .unwrap();
     assert_eq!(xtask::check_all_in(&root), Ok(1));
 }
+
+#[test]
+fn a_reused_slug_warns_and_a_crlf_copy_of_a_stamped_file_still_fails() {
+    let root = fixture("warn-and-crlf");
+    fs::write(root.join("design/pending/feat-thing.md"), THING).unwrap();
+    let plan = stamp::plan(&root).expect("plan");
+    stamp::apply(&root, &plan, None, bumper(&root)).expect("stamp");
+
+    // The same bytes with Windows line endings are still the stamped file.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        THING.replace('\n', "\r\n"),
+    )
+    .unwrap();
+    assert!(xtask::check_all_in(&root).is_err(), "a CRLF copy is caught");
+    assert!(
+        xtask::check_warnings_in(&root).is_empty(),
+        "and is no mere warning"
+    );
+    let again = stamp::plan(&root).expect("plan");
+    assert_eq!(again.already_stamped.len(), 1, "the stamp drops it too");
+
+    // The same slug with different content passes, with a warning that names the version.
+    fs::write(
+        root.join("design/pending/feat-thing.md"),
+        "---\nlevel: patch\nchangelog: A different fix\n---\n",
+    )
+    .unwrap();
+    assert_eq!(xtask::check_all_in(&root), Ok(1));
+    let warnings = xtask::check_warnings_in(&root);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0].starts_with(
+            "warning: feat-thing.md: slug `feat-thing` was stamped before, as v0.186.0"
+        ),
+        "{warnings:?}"
+    );
+}
