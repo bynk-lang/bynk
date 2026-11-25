@@ -1164,6 +1164,14 @@ triad: `consumes` *declares* a seam, `given` *requires* it, and `stub`
 *substitutes* it under test (its own keyword since #548; formerly a pun on the
 production `provides`).
 
+A [generic operation](/reference/capabilities/#generic-operations) is stubbed at a
+type argument, written as at a call site: `stub Idempotency.dedup[Int](_) returns
+Some(7)`. The clause is typed against the operation with the type argument
+substituted, and it answers only calls made at that type argument, so
+`dedup[Int]` and `dedup[String]` carry separate stubs. The test build passes the
+call's type arguments as a trailing marker argument that the real binding
+ignores; the code the compiler emits for a production build is unchanged.
+
 - **The left is `Cap.method(<pattern>, …)`** — the capability, the method, and an
   **argument pattern** per parameter. A pattern is the [one predicate
   surface](/reference/testing/#expect): a literal (`"GBP"`, `1000`), `_`
@@ -2202,6 +2210,10 @@ The subject is a **`Cap.op` reference** — the capability and one of its operat
 | `expect Cap.op called with <pred>` | at least one call whose arguments satisfy `<pred>` |
 | `expect Cap.op called <n> times with <pred>` | exactly `<n>` calls, and they match |
 | `expect A.op before B.op` | both occurred, and the first `A.op` precedes the first `B.op` |
+
+A generic operation is observed per type argument: `expect Idempotency.dedup[Int]
+called once` counts only the calls made at `Int`. Without the type argument an
+observation counts the calls at every type argument.
 
 `before` compares the order calls were **issued** in, not the order they finished.
 Inside a [`par` block](/reference/capabilities/#par) the first call of each

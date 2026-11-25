@@ -73,8 +73,12 @@ pub fn lower_test_case_stmts(
 ) -> (Vec<bynk_ts::TsStmt>, Option<bynk_syntax::span::Span>) {
     let mut sink = StatementSink::new();
     {
+        // #3945: a case's own call of a generic capability operation carries its type key, so
+        // a stub that names the type arguments answers it.
+        let mut module = ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached());
+        module.typed_capability_calls = true;
         let mut cx = LowerCtx::new(
-            ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached()),
+            module,
             BodyMode::TestCase {
                 test: TestShared {
                     test_scaffold: true,
@@ -163,6 +167,7 @@ pub fn lower_integration_case_body(
     let (tail_stmts, tail_span) = {
         let mut module = ModuleCtx::new(typed, cross_context, runtime_use, UnitFacts::detached());
         module.target = BuildTarget::Workers;
+        module.typed_capability_calls = true;
         let mut cx = LowerCtx::new(
             module,
             BodyMode::IntegrationCase {

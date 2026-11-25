@@ -517,27 +517,12 @@ fn resolve_stubs(
             ));
             continue;
         };
-        // #926 (Decision F): a generic capability operation cannot be stubbed
-        // — `__Stub_Cap`'s per-op method body has no way to construct a
-        // value of the op's unconstrained `T`. Deferred rather than
-        // supported: the stub class carries no `implements` clause (its
-        // members are duck-typed through an untyped `deps` seam), so
-        // stubbing another, non-generic op of the same capability keeps
-        // type-checking.
-        if !op_decl.type_params.is_empty() {
-            errors.push(
-                CompileError::new(
-                    "bynk.stub.generic_op",
-                    pc.method.span,
-                    format!(
-                        "`{cap_name}.{}` declares its own type parameter — a generic capability operation cannot be stubbed at v1",
-                        pc.method.name
-                    ),
-                )
-                .with_note(
-                    "test through the capability's real (external) provider instead, or restructure the test to avoid stubbing this operation",
-                ),
-            );
+        // #926 (Decision F), #3945: a generic capability operation is stubbed through its
+        // explicit type arguments (`stub Cap.op[T](…)`), the way a call site names them (ADR
+        // 0281), so the value is typed with `T` substituted. Without them the stub's value has
+        // no type to construct.
+        if let Some(why) = stub_type_args_error(op_decl, &pc, &cap_name) {
+            errors.push(why);
             continue;
         }
         if let StubRhs::ReturnsEach(outcomes, span) = &pc.rhs
@@ -576,6 +561,89 @@ fn resolve_stubs(
     out
 }
 
+/// #3945: the error a stub's explicit type arguments earn against the operation they name, if
+/// any: a generic operation needs all of them, and any other takes none.
+fn stub_type_args_error(
+    op_decl: &CapabilityOp,
+    pc: &StubClause,
+    cap_name: &str,
+) -> Option<CompileError> {
+    let want = op_decl.type_params.len();
+    if want == 0 && pc.type_args.is_empty() {
+        return None;
+    }
+    if want == 0 {
+        return Some(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            pc.method.span,
+            format!(
+                "`{cap_name}.{}` takes no type arguments, but the `stub` gives {}",
+                pc.method.name,
+                pc.type_args.len()
+            ),
+        ));
+    }
+    if pc.type_args.is_empty() {
+        return Some(
+            CompileError::new(
+                "bynk.stub.generic_op",
+                pc.method.span,
+                format!(
+                    "`{cap_name}.{}` declares its own type parameter, so a `stub` of it names the type argument",
+                    pc.method.name
+                ),
+            )
+            .with_note(format!(
+                "write `stub {cap_name}.{}[<type>](…) returns …`, naming the type as the call site does; to test through the capability's real (external) provider instead, leave the operation unstubbed",
+                pc.method.name
+            )),
+        );
+    }
+    if pc.type_args.len() != want {
+        return Some(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            pc.method.span,
+            format!(
+                "`{cap_name}.{}` takes {want} type argument(s), but the `stub` gives {}",
+                pc.method.name,
+                pc.type_args.len()
+            ),
+        ));
+    }
+    None
+}
+
+impl ResolvedStub {
+    /// #3945: the operation clause `idx` answers, with the clause's explicit type arguments
+    /// substituted for the operation's type parameters (`dedup[Outcome]` is
+    /// `fn dedup(key: String) -> Effect[Option[Outcome]]`). The declared operation for a clause
+    /// without any; `None` when the clause names no operation of the seam.
+    pub fn op_for_clause(&self, idx: usize) -> Option<CapabilityOp> {
+        let clause = self.clauses.get(idx)?;
+        let op = self
+            .cap_decl
+            .ops
+            .iter()
+            .find(|o| o.name.name == clause.method.name)?;
+        if op.type_params.is_empty() || op.type_params.len() != clause.type_args.len() {
+            return Some(op.clone());
+        }
+        let subst: HashMap<String, TypeRef> = op
+            .type_params
+            .iter()
+            .zip(&clause.type_args)
+            .map(|(p, a)| (p.name.name.clone(), a.clone()))
+            .collect();
+        let mut out = op.clone();
+        out.type_params = Vec::new();
+        for p in &mut out.params {
+            p.type_ref = crate::wire::subst_type_ref(&p.type_ref, &subst);
+        }
+        out.return_type = crate::wire::subst_type_ref(&out.return_type, &subst);
+        Some(out)
+    }
+}
+
 /// #3892: fold a `stub <context>.<service>(…)` clause into the seam map. The
 /// consumed context is the seam and each stubbed service one operation of it,
 /// typed from the service's `on call` handler, so the clause is checked and
@@ -595,6 +663,19 @@ fn resolve_service_stub(
     out: &mut HashMap<String, ResolvedStub>,
     errors: &mut Vec<CompileError>,
 ) {
+    // #3945: a service takes no type arguments.
+    if !pc.type_args.is_empty() {
+        errors.push(CompileError::new(
+            "bynk.generics.type_arg_mismatch",
+            pc.method.span,
+            format!(
+                "`{seam}.{}` is a service and takes no type arguments, but the `stub` gives {}",
+                pc.method.name,
+                pc.type_args.len()
+            ),
+        ));
+        return;
+    }
     let handler = unit_tables
         .get(ctx)
         .and_then(|t| t.services.get(&pc.method.name))
@@ -1991,6 +2072,27 @@ fn first_test_target_span(indices: &[usize], parsed: &[ParsedFile]) -> Span {
         .unwrap_or_default()
 }
 
+/// #3945: each explicit type argument of a `stub` names a type in scope of its clause.
+fn stub_type_arg_errors(
+    clause: &StubClause,
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+    errors: &mut Vec<CompileError>,
+) {
+    for t in &clause.type_args {
+        if checker::resolve_type_ref(t, &resolved.types, tys).is_none() {
+            errors.push(CompileError::new(
+                "bynk.resolve.unknown_type",
+                t.span(),
+                format!(
+                    "unknown type `{}` in the type arguments of a `stub`",
+                    ts_type_ref_display(t)
+                ),
+            ));
+        }
+    }
+}
+
 /// Type-check test/property bodies for a target and validate `stub` RHS
 /// value types (v0.118). Bodies use the target's privileged view; a `stub`
 /// value whose type disagrees with the overridden op's return is
@@ -2034,14 +2136,10 @@ fn check_test_bodies(
         for rp in stubs.values() {
             refs.enter_file(&rp.identity_path, target_name, false);
             for (clause_idx, clause) in rp.clauses.iter().enumerate() {
-                let Some(op) = rp
-                    .cap_decl
-                    .ops
-                    .iter()
-                    .find(|o| o.name.name == clause.method.name)
-                else {
+                let Some(op) = rp.op_for_clause(clause_idx) else {
                     continue;
                 };
+                let op = &op;
                 let clause_view = stub_clause_view(
                     rp,
                     clause_idx,
@@ -2049,6 +2147,7 @@ fn check_test_bodies(
                     (unit_tables, unit_uses, unit_consumes, unit_consumes_aliases),
                 );
                 let resolved = clause_view.as_ref().unwrap_or(resolved);
+                stub_type_arg_errors(clause, resolved, tys, &mut errors);
                 let check_value = |e: &Expr, errors: &mut Vec<CompileError>| {
                     let errs = stub_value_errors(e, op, resolved, tys);
                     if errs.is_empty() {

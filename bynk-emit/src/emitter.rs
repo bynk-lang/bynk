@@ -79,6 +79,7 @@ pub mod contracts;
 pub(crate) mod events_fanout;
 pub(crate) mod harness_names;
 pub mod http_client;
+mod observability;
 pub mod secrets;
 pub mod serialisation;
 pub mod toml_doc;
@@ -98,6 +99,7 @@ pub use compose::{
 };
 pub use containers::{container_class_names, emit_containers_ts};
 pub use events_fanout::{emit_events_fanout_do, emit_group_events_fanout_do};
+pub use observability::observability_block;
 pub use secrets::emit_secrets_manifest;
 pub use toml_doc::print_toml_document;
 pub use workers_entry::{
@@ -344,6 +346,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         contracts: false,
         trace: None,
         inspect_agents: false,
+        typed_capability_calls: false,
         source_path: PathBuf::new(),
         identity_path: String::new(),
         commons_name: String::new(),

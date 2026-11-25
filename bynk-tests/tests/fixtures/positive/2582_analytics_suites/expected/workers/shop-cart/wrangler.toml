@@ -11,3 +11,7 @@ dataset = "shop_cart_signups"
 [vars]
 BYNK_DATASET_ANALYTICS_SIGNUPS = "shop_cart_signups"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

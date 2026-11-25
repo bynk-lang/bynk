@@ -239,6 +239,26 @@
                 "description": "The Worker's script name on Cloudflare: 1 to 63 lowercase letters,\ndigits or `-`. Default: the group's key. The key stays the group's\nidentity (its ledger entry, `--worker` selector and `workers/<key>/`\ndirectory); changing the key or the name makes a different Worker.",
                 "type": "string"
               },
+              "observability": {
+                "additionalProperties": false,
+                "description": "This Worker's Workers Logs settings, laid over `[workers.observability]`\nkey by key: `head_sampling_rate = 0.01` for a noisy Worker.",
+                "properties": {
+                  "enabled": {
+                    "default": true,
+                    "description": "Whether Workers Logs collects the Worker's logs. Default: `true`.",
+                    "type": "boolean"
+                  },
+                  "head_sampling_rate": {
+                    "default": 1,
+                    "description": "The fraction of invocations whose logs are kept, from `0` to `1`: lower\nit for a noisy Worker. Default: `1`.",
+                    "format": "double",
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
               "routes": {
                 "description": "Route patterns the Worker is attached to, like `pay.example.com/*`.",
                 "items": {
@@ -749,6 +769,26 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "observability": {
+          "additionalProperties": false,
+          "description": "Workers Logs, so `Logger.log`'s structured fields are queryable on\nCloudflare. On by default; written as `[observability]` into every\n`wrangler.toml`, which each environment inherits. A worker group\noverrides it key by key under `[deploy.workers.<key>.observability]`.",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "description": "Whether Workers Logs collects the Worker's logs. Default: `true`.",
+              "type": "boolean"
+            },
+            "head_sampling_rate": {
+              "default": 1,
+              "description": "The fraction of invocations whose logs are kept, from `0` to `1`: lower\nit for a noisy Worker. Default: `1`.",
+              "format": "double",
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "type": "object"
         },
         "workers_dev": {
           "description": "Whether every Worker is served on its `*.workers.dev` URL: written as\n`workers_dev` in each `wrangler.toml`. Set `false` to take the Workers\noff `workers.dev`. Unset leaves the key out, so Cloudflare's default\n(on) applies.",
