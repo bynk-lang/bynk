@@ -1,0 +1,9 @@
+# 1014 — A typed read's stub reply is encoded for the call site, and a stub matches on the leading resolved type arguments
+
+- **Status:** Accepted (v0.746.2)
+
+**Context.** #3945 gave capability operations typed stubs, keyed on the type arguments a call writes. Two gaps followed (#4382). A stub reply for an operation whose `Effect[P]` reply is decoded whole (`Idempotency.dedup[T]`) was handed to the runtime as the raw value, which expects the plain-JSON form, so `returns Some(q)` read as a miss with a warning and a stub could only exercise the miss path. And a call whose type arguments are inferred, which #4113 and #4116 made common (`remember(key, value, ttl)`), carried no key at all, so a clause naming them never matched it.
+
+**Decision.** The stub class encodes a `returns` value, and each value of `returns each`, with the serialiser the call site uses for the payload of the reply, when the operation declares an `Effect[P]` reply that mentions a `Codable` type parameter; the payload is the operation's reply with the clause's written type arguments substituted, and its serialiser is generated with the value's other codecs. Every other reply, and the undecodable-reply policy, are unchanged. A test build's call carries the resolved type arguments in declaration order, the written ones as a `stub` spells them and the inferred ones after, and a clause or an observation that names the leading ones matches a call whose list is the same or starts with it, so `dedup[A]` and `dedup[B]` stay apart while `dedup[Quote]` meets a call that inferred its key type. A qualified cross-context call still carries only its written arguments.
+
+**Consequences.** A stub of a typed read can now return `Some(value)` and the handler sees it. An observation of `Cap.op[T]` counts calls made at `T` whether or not they wrote it. Test modules gain the marker on a generic call that wrote no type arguments, which the real binding ignores. No syntax, name or type is added.
