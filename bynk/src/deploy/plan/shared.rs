@@ -74,7 +74,12 @@ pub(crate) fn has_comparable_bindings(
 ) -> bool {
     bindings.values().flatten().any(|b| match &b.source {
         BindingSource::ForeignService { worker, .. } => !own_scripts.contains(worker),
-        BindingSource::Email { .. } => true,
+        // Only an `Email` with a value that could match: an open one is never shared.
+        BindingSource::Email {
+            to,
+            allowed_recipients,
+            ..
+        } => to.is_some() || !allowed_recipients.is_empty(),
         _ => false,
     })
 }
@@ -82,18 +87,21 @@ pub(crate) fn has_comparable_bindings(
 /// What to say, and whether to refuse, when `default` could not be built so its
 /// `Service` and `Email` values were not compared: a literal worker name is the
 /// same in every build, so `--strict-environments` cannot vouch for isolation.
-pub(crate) fn comparison_skipped(environment: &str, strict: bool) -> (String, bool) {
+/// `cause` is why it failed to build (its first error); both messages carry it and
+/// what to do about it.
+pub(crate) fn comparison_skipped(environment: &str, strict: bool, cause: &str) -> (String, bool) {
+    const REMEDY: &str = "fix `default` (often a required variable only an environment sets: give it a value under `[vars]` or `[env.default.vars]`) to see what is shared";
     if strict {
         (
             format!(
-                "bynk: error: `default` could not be built, so whether `{environment}` shares a `Service` worker or an `Email` address with it was not checked (`--strict-environments`)"
+                "bynk: error: `default` could not be built ({cause}), so whether `{environment}` shares a `Service` worker or an `Email` address with it was not checked (`--strict-environments`); {REMEDY}"
             ),
             true,
         )
     } else {
         (
             format!(
-                "bynk: note: `default` could not be built, so `{environment}`'s `Service` workers and `Email` addresses were not compared with it; fix `default` (often a required variable only an environment sets) to see what is shared"
+                "bynk: note: `default` could not be built ({cause}), so `{environment}`'s `Service` workers and `Email` addresses were not compared with it; {REMEDY}"
             ),
             false,
         )

@@ -3183,24 +3183,37 @@ mod env_constants {
         )]);
         assert!(!has_comparable_bindings(&edges_only, &own));
         assert!(has_comparable_bindings(&both("legacy-billing"), &own));
-        let mail = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
-        assert!(has_comparable_bindings(&mail, &own));
+        // An open `Email` (no `@to`, no `@allowedRecipients`) can never be shared, so it
+        // is not worth building `default` for; one with a value that could match is.
+        let open = bindings(vec![email("EMAIL_ALERTS", None, &[])]);
+        assert!(!has_comparable_bindings(&open, &own));
+        let pinned = bindings(vec![email("EMAIL_ALERTS", Some("a@shop.example"), &[])]);
+        assert!(has_comparable_bindings(&pinned, &own));
+        let allowed = bindings(vec![email("EMAIL_ALERTS", None, &["a@shop.example"])]);
+        assert!(has_comparable_bindings(&allowed, &own));
         assert!(!has_comparable_bindings(&BTreeMap::new(), &own));
     }
 
     #[test]
     fn an_unbuildable_default_is_said_and_a_strict_run_refuses() {
         use super::super::shared::comparison_skipped;
-        let (note, refuse) = comparison_skipped("staging", false);
+        let cause = "bynk.env.missing: `ORIGIN` has no value in the `default` environment";
+        let (note, refuse) = comparison_skipped("staging", false, cause);
         assert!(
             !refuse && note.starts_with("bynk: note:") && note.contains("`default`"),
             "{note}"
         );
-        let (error, refuse) = comparison_skipped("staging", true);
+        let (error, refuse) = comparison_skipped("staging", true, cause);
         assert!(
             refuse && error.starts_with("bynk: error:") && error.contains("--strict-environments"),
             "{error}"
         );
+        // Both say why `default` failed and what to do about it.
+        for message in [&note, &error] {
+            assert!(message.contains(cause), "{message}");
+            assert!(message.contains("required variable"), "{message}");
+            assert!(message.contains("[env.default.vars]"), "{message}");
+        }
     }
 
     #[test]

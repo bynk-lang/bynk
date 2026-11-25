@@ -631,11 +631,19 @@ fn shared_with_default(
             .environment(DEFAULT_ENVIRONMENT)
             .target(bynk_driver::project::BuildTarget::Workers)
             .tests(false);
-        match bynk_driver::project::compile_project(&default_build)
-            .ok()
-            .and_then(|out| out.workers)
-        {
-            Some(default_model) => shared.extend(without_deliberate(
+        let built = bynk_driver::project::compile_project(&default_build)
+            .map_err(|failure| {
+                failure.errors.first().map_or_else(
+                    || "it has errors".to_string(),
+                    |e| format!("{}: {}", e.error.category, e.error.message),
+                )
+            })
+            .and_then(|out| {
+                out.workers
+                    .ok_or_else(|| "it builds no Workers".to_string())
+            });
+        match built {
+            Ok(default_model) => shared.extend(without_deliberate(
                 shared_bindings(
                     model.bindings.by_context(),
                     default_model.bindings.by_context(),
@@ -644,9 +652,10 @@ fn shared_with_default(
                 &facts,
                 environment,
             )),
-            None => {
+            Err(cause) => {
                 // Said, not skipped quietly: a strict run must not pass unchecked.
-                let (message, refuse) = comparison_skipped(environment, opts.strict_environments);
+                let (message, refuse) =
+                    comparison_skipped(environment, opts.strict_environments, &cause);
                 emsg!("{message}");
                 if refuse {
                     return Err(());

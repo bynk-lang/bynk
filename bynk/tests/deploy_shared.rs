@@ -87,6 +87,8 @@ fn an_unbuildable_default_is_said_and_strict_refuses_instead_of_passing() {
     assert!(plain.status.success(), "{}", err(&plain));
     let said = err(&plain);
     assert!(said.contains("`default` could not be built"), "{said}");
+    assert!(said.contains("bynk.env.missing"), "the cause: {said}");
+    assert!(said.contains("[env.default.vars]"), "the remedy: {said}");
     assert!(
         !String::from_utf8_lossy(&plain.stdout).contains("shared with default"),
         "nothing was compared"
@@ -94,4 +96,32 @@ fn an_unbuildable_default_is_said_and_strict_refuses_instead_of_passing() {
     let strict = dry_run(&dir, &["--strict-environments"]);
     assert!(!strict.status.success(), "isolation was not checked");
     assert!(err(&strict).contains("was not checked"), "{}", err(&strict));
+    assert!(
+        err(&strict).contains("bynk.env.missing"),
+        "the cause: {}",
+        err(&strict)
+    );
+}
+
+#[test]
+fn an_open_email_has_nothing_to_share_so_an_unbuildable_default_is_not_refused() {
+    // The only binding is an unpinned `Email` (no `@to`, no `@allowedRecipients`), which can
+    // never be shared; `default` cannot be built (only staging sets `ORIGIN`). A strict run
+    // has nothing to check, so it passes rather than refusing on a comparison it never needs.
+    let dir = scratch("open_email");
+    write(
+        &dir.join("bynk.toml"),
+        "[project]\nname = \"mail\"\nversion = \"0.1.0\"\n\n[paths]\ninclude = [\"src\"]\n\n[unstable]\nallow = [\"bynk.cloudflare.Email\"]\n\n[env.staging.vars]\nORIGIN = \"https://staging\"\n",
+    );
+    write(
+        &dir.join("src/shop/orders.bynk"),
+        "context shop.orders\n\nconsumes bynk\nconsumes bynk.cloudflare { Email, EmailMessage }\n\nconst Origin: String = env(ORIGIN)\n\ncapability Alerts = Email\n\nservice api from http {\n\ton POST(\"/a\") () -> Effect[HttpResult[String]] by Visitor given Alerts {\n\t\tlet _ <- Alerts.send(EmailMessage { from: \"alerts@shop.example\", to: [\"ops@shop.example\"], subject: \"Alert\", text: Some(\"up\") })\n\t\tOk(\"sent\")\n\t}\n}\n",
+    );
+    let strict = dry_run(&dir, &["--strict-environments"]);
+    assert!(strict.status.success(), "{}", err(&strict));
+    assert!(
+        !err(&strict).contains("could not be built"),
+        "{}",
+        err(&strict)
+    );
 }
