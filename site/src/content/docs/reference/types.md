@@ -1708,8 +1708,9 @@ Only `filter`, `map` and `flatMap` (and `skip`, on a `Log`) may come before such
 input, so `sortBy(…).first()` reads everything while `first()` does not. A `Log` is read oldest first,
 so `first()` is its oldest match. A `Map` is scanned in insertion order, which only reading every
 entry recovers, so its order-dependent terminals read everything. An equality `filter` on an
-[`@indexed`](/reference/agents/#indexed-routing) field reads its posting list as before. A query
-held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
+[`@indexed`](/reference/agents/#indexed-routing) field reads that value's posting list, and `any` and
+`all` over it read the list a page at a time and stop at the answer, while `first` and `take` read it all.
+A query held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
 
 <!-- /sorted -->
 

@@ -705,6 +705,8 @@ pub fn phase_parse(
 
     // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
     crate::implicit_uses::add_implicit_uses(&mut parsed);
+    // #4181: a commons that names a transparent type of the `bynk` adapter reaches it.
+    crate::implicit_uses::add_implicit_consumes(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }

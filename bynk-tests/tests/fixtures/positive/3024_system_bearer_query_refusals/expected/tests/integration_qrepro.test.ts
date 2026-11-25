@@ -31,15 +31,15 @@ function __makeHarness() {
 <<bynk-shared: testing/jwt_signer>>
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["READER_SECRET"] = "__bynk_test_secret";
-async function __sysdrive_api_http_GET_report(query: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_GET_report(query: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/report${__queryString(__ns_qrepro.__serialise_Window(query))}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["READER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["READER_SECRET"] ?? ""))}` } });
+  const __req = new globalThis.Request(`https://test/report${__queryString(__ns_qrepro.__serialise_Window(query))}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["READER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["READER_SECRET"] ?? ""))}` } });
   const __res = await __h.env.QREPRO.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_report(query: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_GET_report(query: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/report${query}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["READER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["READER_SECRET"] ?? ""))}` } });
+  const __req = new globalThis.Request(`https://test/report${query}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["READER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["READER_SECRET"] ?? ""))}` } });
   const __res = await __h.env.QREPRO.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -96,7 +96,7 @@ async function test_a_reader_gets_the_report_through_the_seam() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_report({ days: 7 }, undefined, ("someone" as any));
+    const r = await __sysdrive_api_http_GET_report({ days: 7 }, undefined, ("someone" as any), {});
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "7 days for someone"))) { throw __bynkExpectFailure("tests/seam.bynk:8:10", 207, 236, "expect r is Ok(\"7 days for someone\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

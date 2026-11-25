@@ -1,0 +1,12 @@
+---
+#4181: a function over `Uuid` in a commons.
+---
+suite ops.schedules
+
+case "a canonical id is accepted" {
+	expect parseId("123e4567-e89b-12d3-a456-426614174000") is Ok(_)
+}
+
+case "a malformed id is refused" {
+	expect parseId("nope") is Err(_)
+}

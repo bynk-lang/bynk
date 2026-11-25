@@ -1,0 +1,22 @@
+context api
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "AUTH_JWT_SECRET"), identity = UserId }
+
+// A `Bearer` binder's claims are read where the token arrives, never kept or passed on.
+agent Seen {
+  key id: String
+  store n: Cell[Int]
+
+  on call note(c: TokenClaims) -> Effect[()] {
+    Effect.pure(())
+  }
+}
+
+service api from http {
+  on GET("/x") () -> Effect[HttpResult[String]] by u: User {
+    do Seen("a").note(u.claims)
+    Ok("ok")
+  }
+}

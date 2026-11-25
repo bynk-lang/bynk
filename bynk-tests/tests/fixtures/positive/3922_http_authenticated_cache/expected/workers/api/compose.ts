@@ -2,7 +2,7 @@
 // composition root for `api` Worker.
 
 import { HttpResult } from "../../__bynk_runtime/httpresult.js";
-import { __verifyBearerJwtHs256 } from "../../__bynk_runtime/auth.js";
+import { __verifyBearerJwtHs256, __tokenClaims } from "../../__bynk_runtime/auth.js";
 import * as handlers from "./handlers.js";
 
 export interface Env {
@@ -20,7 +20,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_me({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_me({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_missing(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -31,7 +31,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_missing({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_missing({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_POST_things(request: globalThis.Request, body: string) {
       const __authz = request.headers.get("Authorization");
@@ -42,7 +42,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_POST_things(body, { ...deps, identity: __id.value });
+      return handlers.api.http_POST_things(body, { ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_cached(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -53,7 +53,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_cached({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_cached({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_tokens(request: globalThis.Request) {
       const __authz = request.headers.get("Authorization");
@@ -64,7 +64,7 @@ export function compose(env: Env) {
       if (__claims.tag === "Err") return HttpResult.Unauthorized;
       const __id = handlers.UserId.of(__claims.value.sub);
       if (__id.tag === "Err") return HttpResult.Unauthorized;
-      return handlers.api.http_GET_tokens({ ...deps, identity: __id.value });
+      return handlers.api.http_GET_tokens({ ...deps, identity: __id.value, claims: __tokenClaims(__claims.value.claims) });
     },
     async http_GET_open_tokens() {
       return handlers.api.http_GET_open_tokens(deps);
