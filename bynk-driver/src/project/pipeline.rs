@@ -397,12 +397,11 @@ pub(super) fn run_checks(
     contracts: bool,
     trace_requests: bool,
     inspect_agents: bool,
+    typed_capability_calls: bool,
     // #1821 (ADR 0147 D3): check and emit `suite`s. Off for a deployable build.
     tests: bool,
-    // Events track, slice 3c (#980): `On` turns on `bynk.schema.lock`
-    // reconciliation, with its pre-read content; `Off` (every in-memory/
-    // test/LSP caller) skips it entirely. See `CompileOptions::schema_registry`
-    // and `SchemaLock`. #1078: no disk access here — the caller pre-reads.
+    // Events track, slice 3c (#980): `On` reconciles `bynk.schema.lock` from its pre-read
+    // content (#1078: no disk access here); `Off` skips it. See `CompileOptions::schema_registry`.
     schema_registry: &SchemaLock,
     // #2138: a remote test build (`CompileOptions::remote_tests`); `None`
     // for every other build.
@@ -1048,6 +1047,7 @@ pub(super) fn run_checks(
             contracts,
             trace_requests,
             inspect_agents,
+            typed_capability_calls,
             agent_deps_plan.as_ref(),
             &history_target_agents,
             &asset_served,

@@ -4667,6 +4667,25 @@ pub fn embedding_for(
     None
 }
 
+/// #3945: the identity of a generic capability operation's explicit type arguments, which a call
+/// site and a `stub` or observation naming them must agree on: each resolved type's display, so
+/// `Outcome`, `orders.Outcome` and an alias of it are one key. A type that does not resolve (a
+/// suite's own type, which no call site can name) falls back to the arguments as written.
+pub fn capability_type_key(
+    type_args: &[TypeRef],
+    types: &HashMap<String, Arc<TypeDecl>>,
+    tys: &Types,
+) -> String {
+    let resolved: Option<Vec<String>> = type_args
+        .iter()
+        .map(|t| resolve_type_ref(t, types, tys).map(|id| tys.display(id)))
+        .collect();
+    match resolved {
+        Some(shown) => ["[", shown.join(", ").as_str(), "]"].concat(),
+        None => bynk_syntax::print::type_args_src(type_args),
+    }
+}
+
 pub fn resolve_type_ref(
     r: &TypeRef,
     types: &HashMap<String, Arc<TypeDecl>>,
