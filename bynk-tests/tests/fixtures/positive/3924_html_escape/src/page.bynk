@@ -3,6 +3,10 @@ context page
 
 // #3924: the two escapes by context, in a page built by replacement.
 
+// `src` is a constant the page owns, so it is not escaped here. Neither escape makes an
+// untrusted value a safe URL (`javascript:` passes), so a URL taken from a request needs its
+// scheme checked, not escaping.
+
 fn title(t: String) -> String {
 	"<h1>\(escapeText(t))</h1>"
 }
