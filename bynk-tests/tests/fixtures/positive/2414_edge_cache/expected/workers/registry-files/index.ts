@@ -12,7 +12,7 @@ async function __bynkFetch(request: globalThis.Request, env: Env, ctx?: { waitUn
   const path = url.pathname;
   const method = request.method;
   const surface = compose(env, ctx);
-  const __security_files: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null };
+  const __security_files: __SecurityPolicy = { nosniff: true, hstsMaxAgeSecs: null, htmlCsp: "frame-ancestors 'none'", htmlReferrerPolicy: "strict-origin-when-cross-origin" };
   let __route: string = "request";
   try {
     if (path.startsWith("/_bynk/call/")) {
