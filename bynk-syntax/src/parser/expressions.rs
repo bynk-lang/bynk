@@ -132,6 +132,22 @@ impl<'a> Parser<'a> {
                 kind: ExprKind::Faults(Box::new(FaultsExpr {
                     call: subject,
                     principal,
+                    violates: None,
+                })),
+                span,
+            });
+        }
+        // #4035: `expect <call> violates <name>`, `violates` contextual as `faults` is.
+        if self.peek_kind() == Some(TokenKind::Ident) && self.nth_text(0) == "violates" {
+            self.bump(); // `violates`
+            let violates = self.parse_violates_name()?;
+            let span = subject.span.merge(self.prev_span());
+            return Ok(Expr {
+                id: self.alloc_expr_id(),
+                kind: ExprKind::Faults(Box::new(FaultsExpr {
+                    call: subject,
+                    principal,
+                    violates: Some(violates),
                 })),
                 span,
             });
@@ -142,16 +158,29 @@ impl<'a> Parser<'a> {
                 Some(t) => CompileError::new(
                     "bynk.parse.expected_token",
                     t.span,
-                    format!("expected `faults` {ctx}, found {}", t.kind.describe()),
+                    format!(
+                        "expected `faults` or `violates` {ctx}, found {}",
+                        t.kind.describe()
+                    ),
                 ),
                 None => CompileError::new(
                     "bynk.parse.unexpected_eof",
                     self.eof_span(),
-                    format!("expected `faults` {ctx}, found end of file"),
+                    format!("expected `faults` or `violates` {ctx}, found end of file"),
                 ),
             });
         }
         Ok(subject)
+    }
+
+    /// #4035: the dotted name after `violates`: `name`, `Agent.name` or `field.index`.
+    fn parse_violates_name(&mut self) -> Result<Vec<Ident>, CompileError> {
+        let mut path = vec![self.expect_ident("after `violates`")?];
+        while self.peek_kind() == Some(TokenKind::Dot) {
+            self.bump();
+            path.push(self.expect_ident("after `violates`")?);
+        }
+        Ok(path)
     }
 
     /// #3945: whether an observation matcher word (`called` / `never` / `before`) is at `at`,

@@ -2,6 +2,7 @@
 // test target: shop.support
 
 import { __bynkEq } from "../__bynk_runtime/equality.js";
+import { __dmarcVerdictOf } from "../__bynk_runtime/email.js";
 import * as __ns_shop_support from "./../shop/support.js";
 import * as __ns_bynk_cloudflare from "./../bynk/cloudflare.js";
 
@@ -98,7 +99,7 @@ async function test_a_message_is_accepted() {
     type VectorMatch = __ns_bynk_cloudflare.VectorMatch;
     type VectorOf<M> = __ns_bynk_cloudflare.VectorOf<M>;
     type WorkerVersion = __ns_bynk_cloudflare.WorkerVersion;
-    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: { tag: "DmarcNone" } } }))({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
+    const r = await ((__m: any) => support.queue_support_0(__m, { ...deps, identity: { address: __m.from, dmarc: __dmarcVerdictOf(__m.headers) } }))({ from: "a@b.example", to: "support@shop.example", subject: "", messageId: "", headers: new globalThis.Map(), text: { tag: "None" as const }, html: { tag: "None" as const }, attachments: [], size: 0 });
     if (!(((__c: boolean) => __c)(r.tag === "Accept"))) { throw __bynkExpectFailure("tests/support.bynk:5:12", 218, 229, "expect r is Accept", "r", () => __bynkShow(r)); }
     if (!(__bynkEq(r, EmailVerdict.Accept))) { throw __bynkExpectFailure("tests/support.bynk:6:12", 241, 252, "expect r == Accept\n  expected: r == Accept\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((EmailVerdict.Accept))); }
     if (!(!__bynkEq(r, EmailVerdict.Reject("no")))) { throw __bynkExpectFailure("tests/support.bynk:7:12", 264, 281, "expect r != Reject(\"no\")\n  expected: r != Reject(\"no\")\n  actual:   " + __bynkShow((r)) + " != " + __bynkShow((EmailVerdict.Reject("no")))); }

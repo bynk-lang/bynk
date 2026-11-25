@@ -1,0 +1,12 @@
+{
+  "blurb": "`expect <call> violates <name>` claims that the named invariant, transition or `@unique` constraint refused the call's commit. The name must be one an agent this suite reaches declares: an invariant or transition by its name, or a `@unique` constraint by its field and key (`customers.email`). A name nothing declares could never be raised, so the claim could never hold. The note lists the names that are reachable.",
+  "category": "Expectations",
+  "categoryAnchor": "expectations",
+  "code": "bynk.expect.unknown_invariant",
+  "constructs": [
+    "faults_expr"
+  ],
+  "example": "// tests/ledger.test.bynk\nexpect Account(\"a\").withdraw(5) violates non_negatve   // ✗ no such invariant\nexpect Account(\"a\").withdraw(5) violates non_negative  // ✓",
+  "severity": "error",
+  "summary": "A `violates` claim names something no agent this suite reaches declares as an invariant, a transition or a `@unique` constraint."
+}

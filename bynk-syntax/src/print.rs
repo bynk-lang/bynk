@@ -538,14 +538,27 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
         // #1706: the fault claim — the call, then the contextual `faults`.
         // #1812: the call-site principal sits between the call and `faults`,
         // in the same position as on an effect-let.
-        ExprKind::Faults(f) => match &f.principal {
-            Some(p) => format!(
-                "{} {} faults",
-                expr_with_prec(&f.call, 0),
-                call_site_actor_src(p)
-            ),
-            None => format!("{} faults", expr_with_prec(&f.call, 0)),
-        },
+        ExprKind::Faults(f) => {
+            // #4035: `violates <name>` in place of `faults`.
+            let claim = match &f.violates {
+                Some(path) => format!(
+                    "violates {}",
+                    path.iter()
+                        .map(|i| i.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(".")
+                ),
+                None => "faults".to_string(),
+            };
+            match &f.principal {
+                Some(p) => format!(
+                    "{} {} {claim}",
+                    expr_with_prec(&f.call, 0),
+                    call_site_actor_src(p)
+                ),
+                None => format!("{} {claim}", expr_with_prec(&f.call, 0)),
+            }
+        }
         ExprKind::Observation(o) => {
             let subject = format!(
                 "{}.{}{}",

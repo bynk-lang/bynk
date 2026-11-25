@@ -1,0 +1,24 @@
+context demo.ledger
+
+type UserId = String where NonEmpty
+
+actor User { auth = Bearer(secret = "S"), identity = UserId }
+
+agent Account {
+	key id: String
+
+	store balance: Cell[Int] = 0
+
+	invariant non_negative:
+		balance >= 0
+
+	on call withdraw(n: Int) -> Effect[()] {
+		balance.update((b) => b - n)
+	}
+}
+
+service api from http {
+	on GET("/a") () -> Effect[HttpResult[Int]] by u: User {
+		Ok(1)
+	}
+}

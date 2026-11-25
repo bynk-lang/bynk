@@ -111,8 +111,16 @@ pub(super) fn expect_built(inner: &Expr, pre: &mut Pre, cx: &mut LowerCtx) -> by
 /// hoists is placed inside the `try`, not in the enclosing statement's
 /// prelude: a fault raised while evaluating the call's arguments is the call
 /// faulting too, and must not escape the claim.
-pub(super) fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> bynk_ts::TsExpr {
-    let FaultsExpr { call, principal } = faults;
+pub(super) fn lower_faults(
+    faults: &FaultsExpr,
+    span: bynk_syntax::span::Span,
+    cx: &mut LowerCtx,
+) -> bynk_ts::TsExpr {
+    let FaultsExpr {
+        call,
+        principal,
+        violates,
+    } = faults;
     let saved_identity = cx.call_site_identity.take();
     let saved_actor = cx.call_site_actor.take();
     let saved_no_credential = std::mem::replace(&mut cx.call_site_no_credential, false);
@@ -153,10 +161,37 @@ pub(super) fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> bynk_ts::T
             TsExpr::Await(Box::new(TsExpr::Paren(Box::new(one(c))))),
             None,
         ));
-        try_body.push(TsStmt::return_stmt(
-            Some(TsExpr::Lit(TsLit::Bool(false))),
-            None,
-        ));
+        // #4035: a `violates` claim reports a call that returned itself, with the claim's text.
+        let violates_args = violates.as_ref().map(|path| {
+            let name = path
+                .iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join(".");
+            (
+                name,
+                expect_location_raw(cx, span.start),
+                format!("expect {}", expect_source_text_raw(cx, span)),
+            )
+        });
+        match &violates_args {
+            Some((_, location, src)) => try_body.push(TsStmt::expr_stmt(
+                TsExpr::Call {
+                    callee: Box::new(ident("__bynkViolatesNone")),
+                    args: vec![
+                        str_lit(location.clone()),
+                        num_lit(span.start.to_string()),
+                        num_lit(span.end.to_string()),
+                        str_lit(src.clone()),
+                    ],
+                },
+                None,
+            )),
+            None => try_body.push(TsStmt::return_stmt(
+                Some(TsExpr::Lit(TsLit::Bool(false))),
+                None,
+            )),
+        }
         let rethrow = TsStmt::if_stmt(
             TsExpr::Binary {
                 op: TsBinaryOp::InstanceOf,
@@ -166,10 +201,21 @@ pub(super) fn lower_faults(faults: &FaultsExpr, cx: &mut LowerCtx) -> bynk_ts::T
             TsStmt::block(vec![TsStmt::throw_stmt(ident("__e"), None)], None),
             None,
         );
-        let catch_body = vec![
-            rethrow,
-            TsStmt::return_stmt(Some(TsExpr::Lit(TsLit::Bool(true))), None),
-        ];
+        let caught = match violates_args {
+            Some((name, location, src)) => TsExpr::Call {
+                callee: Box::new(ident("__bynkViolates")),
+                args: vec![
+                    ident("__e"),
+                    str_lit(name),
+                    str_lit(location),
+                    num_lit(span.start.to_string()),
+                    num_lit(span.end.to_string()),
+                    str_lit(src),
+                ],
+            },
+            None => TsExpr::Lit(TsLit::Bool(true)),
+        };
+        let catch_body = vec![rethrow, TsStmt::return_stmt(Some(caught), None)];
         let try_catch = TsStmt::try_catch(
             TsStmt::block(try_body, None),
             Some("__e"),
