@@ -374,26 +374,39 @@ mod tests {
         .categories()
     }
 
-    /// #4306: a transition predicate and a `migrate` step are pure, so a queue send there is
-    /// refused, and the note says a capability is why.
+    /// #4306: a pure position (a transition predicate, a `migrate` step, an invariant) has no
+    /// capability in scope, so a queue send there is refused, and the note says a capability is
+    /// why, whether the capability is declared in the unit or consumed from another.
     #[test]
-    fn a_send_in_a_transition_or_a_migrate_step_is_refused_with_a_capability_note() {
+    fn a_send_in_a_pure_agent_position_is_refused_with_a_capability_note() {
         let agent = |item: &str| {
             format!(
                 "context shop.orders\n\nconsumes bynk.cloudflare {{ Queue }}\n\ncapability OrderEvents = Queue @name(\"order-events\")\n\n{TYPES}\ntype CounterV1 = {{ total: Int }}\n\nagent Counter {{\n  key id: String\n  store count: Cell[Int] = 0\n  {item}\n  on call bump() -> Effect[()] {{\n    count := 1\n    Effect.pure(())\n  }}\n}}\n"
             )
         };
-        for item in [
-            "transition sends: new.count >= old.count && OrderEvents.sendValue(Refund { id: \"r\" })",
-            "migrate from 1 (old: CounterV1) {\n    count := OrderEvents.sendValue(Refund { id: \"r\" })\n  }",
+        let send = "OrderEvents.sendValue(Refund { id: \"r\" })";
+        for (item, capability) in [
+            (
+                format!("transition sends: new.count >= old.count && {send}"),
+                "OrderEvents",
+            ),
+            (
+                format!("migrate from 1 (old: CounterV1) {{\n    count := {send}\n  }}"),
+                "OrderEvents",
+            ),
+            (
+                format!("invariant sends: count >= 0 && {send}"),
+                "OrderEvents",
+            ),
+            (
+                "transition consumed: new.count >= old.count && Queue.send(\"x\")".to_string(),
+                "Queue",
+            ),
         ] {
-            let a = analyse(&[("shop/orders.bynk", &agent(item))]);
+            let a = analyse(&[("shop/orders.bynk", &agent(&item))]);
             a.assert_reports("bynk.resolve.unknown_name");
-            assert!(
-                a.notes()
-                    .iter()
-                    .any(|n| n.contains("`OrderEvents` is a capability"))
-            );
+            let note = format!("`{capability}` is a capability");
+            assert!(a.notes().iter().any(|n| n.contains(&note)), "{item}");
         }
     }
 
