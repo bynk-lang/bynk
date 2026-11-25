@@ -7,8 +7,9 @@
 //! `Effect[Result]` combinators (ADR 0176). On an `Effect[Result[T, E]]` they act on the whole
 //! `Result`; `mapOk`/`flatMapOk` keep acting on the success side.
 
-use super::kernels::check_kernel_fn_arg;
+use super::kernels::{check_kernel_fn_arg, kernel_vocabulary};
 use super::*;
+use crate::kernel_methods::EFFECT_METHODS;
 
 /// Type `e.map(f)` or `e.andThen(f)` on an `Effect[inner]`.
 pub(super) fn check_map_and_then(
@@ -80,9 +81,9 @@ pub(super) fn report_missing_method(method: &Ident, args: &[Expr], ctx: &mut Ctx
         "bynk.types.method_not_found",
         method.span,
         format!(
-            "the built-in `Effect` type has no method `{}` — the kernel is `map`, `andThen`, \
-             `within`, `race`, `detach`",
-            method.name
+            "the built-in `Effect` type has no method `{}` — the kernel is {}",
+            method.name,
+            kernel_vocabulary(EFFECT_METHODS)
         ),
     ));
     for a in args {

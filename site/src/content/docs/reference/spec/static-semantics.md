@@ -631,8 +631,8 @@ helper may reshape an `Effect[Result[…]]` it was handed and return it. `.map`
 and `.andThen` on such a receiver are Effect's own (#3965; operating on the whole
 `Result`); the four named methods remove the "which `.map`?" ambiguity. Other
 `Effect`-of-X shapes (`Effect[Option[T]]`, `Effect[List[T]]`) have no synthesised
-methods — write `e.map((r) => …)` explicitly. Every `Effect[T]` has `e.map(f: T -> U)`,
-`Effect[U]` and `e.andThen(f: T -> Effect[U])`, `Effect[U]`; like the four, they
+methods — write `e.map((r) => …)` explicitly. Every `Effect[T]` has `e.map(f: T -> U)`, returning
+`Effect[U]`, and `e.andThen(f: T -> Effect[U])`, also returning `Effect[U]`; like the four, they
 produce an `Effect` rather than run one, so a pure helper may use them. A `map` function
 that returns an `Effect`, or an `andThen` function that does not, is
 `bynk.types.combinator_return_mismatch`.
