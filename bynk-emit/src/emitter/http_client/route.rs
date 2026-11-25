@@ -86,7 +86,7 @@ impl Gen {
                         ]),
                     ));
                 }
-                ReplyPayload::Problem => {
+                ReplyPayload::Problem | ReplyPayload::ProblemRejection => {
                     fields.push(TsTypeMember::readonly_prop(
                         "problem",
                         TsType::named("Problem"),
@@ -188,6 +188,7 @@ impl Gen {
                 | other @ ReplyPayload::BoundaryError
                 | other @ ReplyPayload::BoundaryRefusal
                 | other @ ReplyPayload::Problem
+                | other @ ReplyPayload::ProblemRejection
                 | other @ ReplyPayload::Raw
                 | other @ ReplyPayload::RawEtag
                 | other @ ReplyPayload::RawTagged
@@ -197,6 +198,7 @@ impl Gen {
                         ReplyPayload::Location => "location",
                         ReplyPayload::BoundaryError | ReplyPayload::BoundaryRefusal => "boundary",
                         ReplyPayload::Problem => "problem",
+                        ReplyPayload::ProblemRejection => "problem-rejection",
                         ReplyPayload::Events => "events",
                         ReplyPayload::Value
                         | ReplyPayload::None
@@ -440,6 +442,7 @@ impl Gen {
                 | p @ ReplyPayload::BoundaryError
                 | p @ ReplyPayload::BoundaryRefusal
                 | p @ ReplyPayload::Problem
+                | p @ ReplyPayload::ProblemRejection
                 | p @ ReplyPayload::Raw
                 | p @ ReplyPayload::RawEtag
                 | p @ ReplyPayload::RawTagged

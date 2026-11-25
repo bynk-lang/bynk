@@ -547,7 +547,7 @@ fn replies_of(model: &WireContractModel, problem: bool) -> Result<Vec<ReplyInput
         let payload = if let ResponseOrigin::BoundaryImplicit { .. } = &resp.origin {
             match resp.variant.as_str() {
                 "StructuralMismatch" | "PayloadTooLarge" | "UnsupportedMediaType" if problem => {
-                    ReplyPayload::Problem
+                    ReplyPayload::ProblemRejection
                 }
                 "StructuralMismatch" => ReplyPayload::BoundaryError,
                 "PayloadTooLarge" | "UnsupportedMediaType" => ReplyPayload::BoundaryRefusal,

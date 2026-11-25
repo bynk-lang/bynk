@@ -95,6 +95,13 @@ async function main(): Promise<void> {
   assert(b.detail === "widget is out of stock", `detail is the message (got ${b.detail})`);
   assert(!("error" in b), "no Bynk `error` member");
 
+  // A write route's error variant is a problem too, not only a read route's.
+  r = await send("/reserve", "POST", JSON.stringify({ qty: 1 }));
+  assert(r.status === 409, `POST /reserve is 409 (got ${r.status})`);
+  assert(r.headers.get("content-type") === "application/problem+json", `a write's variant is problem+json (got ${r.headers.get("content-type")})`);
+  b = (await r.json()) as Record<string, unknown>;
+  assert(b.type === "about:blank" && b.detail === "widget is out of stock", "a write's variant carries its detail");
+
   // A router rejection carries a stable type URI, its kind and path.
   r = await send("/widgets", "POST", JSON.stringify({ qty: 0 }));
   assert(r.status === 400, `refinement violation is 400 (got ${r.status})`);

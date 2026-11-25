@@ -140,7 +140,7 @@ documents for the route: the declared success when the handler can return it, ea
 | `Ok(v)`, `Created(v)`, `Accepted(v)` | `{ status, kind, body: V }` |
 | `NoContent`, `NotFound`, `Unauthorized`, … | `{ status, kind }` |
 | `Conflict("…")`, `BadRequest("…")` and the other message variants | `{ status, kind, error: string }` |
-| the same, on a route that answers its errors as [problem details](/reference/http/#problem-details) | `{ status, kind, problem: Problem }`, where `Problem` is `{ type, title, status, detail?, kind?, path? }` |
+| the same, on a route that answers its errors as [problem details](/reference/http/#problem-details) | `{ status, kind, problem: Problem }`, where `Problem` is `{ type, title, status, detail?, kind?, path?, expected?, actual?, violation? }`; on such a route the boundary's `400`, `413` and `415` are `problem: Problem` too, told apart from a handler's error variant at the same status by the `kind` only a router rejection carries |
 | a redirect | `{ status, kind, location: string }` |
 | the boundary's `400` | `{ status: 400, kind: "StructuralMismatch", error: BoundaryError }` |
 | `Raw`, `RawTagged`, `RawCreated`, `RawStreamed`, `RawError` | `{ status, kind, contentType, body, bytes(), text() }`, with `etag` where the server sends one; see [Raw bodies](#raw-bodies-and-streams) |
