@@ -3217,8 +3217,8 @@ fn gate_suite(g: &mut Gate<'_>, suite: &SuiteDecl) {
     }
 }
 
-fn unknown_type_error(id: &Ident) -> CompileError {
-    CompileError::new(
+pub(crate) fn unknown_type_error(id: &Ident) -> CompileError {
+    let err = CompileError::new(
         "bynk.resolve.unknown_type",
         id.span,
         format!("unknown type `{}`", id.name),
@@ -3227,7 +3227,16 @@ fn unknown_type_error(id: &Ident) -> CompileError {
         "in scope are the base types (`Int`, `Float`, `String`, `Bool`, `Duration`, \
          `Instant`, `Bytes`), the built-in generics (`List`, `Map`, `Option`, `Result`, …), \
          `ValidationError`, and the types this unit declares or imports",
-    )
+    );
+    // #4181: a capability is not a type, and a commons stays pure by naming
+    // none, so say that rather than leave the reader to guess.
+    if crate::implicit_uses::is_bynk_capability(&id.name) {
+        return err.with_note(format!(
+            "`{}` is a capability, not a type: a context uses one with `consumes bynk {{ {} }}` and `given`; a commons declares and names none",
+            id.name, id.name
+        ));
+    }
+    err
 }
 
 /// v0.157 (ADR 0183): a generic type named without its `[…]` arguments.
@@ -5064,5 +5073,38 @@ mod consumes_position_tests {
     fn a_header_not_followed_by_a_brace_gets_no_position() {
         let src = "suite s as unit\n\ncase \"c\" { }\n";
         assert!(insert(src, None, "as unit", true).is_none());
+    }
+}
+
+/// #4181: the unknown-type error tells a capability's name from a type's.
+#[cfg(test)]
+mod unknown_type_note_tests {
+    use super::unknown_type_error;
+    use bynk_syntax::ast::Ident;
+    use bynk_syntax::span::Span;
+
+    fn ident(name: &str) -> Ident {
+        Ident {
+            name: name.to_string(),
+            span: Span::default(),
+        }
+    }
+
+    #[test]
+    fn a_capability_name_gets_the_capability_note_and_a_type_name_does_not() {
+        let cap = unknown_type_error(&ident("Clock"));
+        assert!(
+            cap.notes
+                .iter()
+                .any(|n| n.contains("`Clock` is a capability, not a type")),
+            "{:?}",
+            cap.notes
+        );
+        let ty = unknown_type_error(&ident("Nope"));
+        assert!(
+            ty.notes.iter().all(|n| !n.contains("is a capability")),
+            "{:?}",
+            ty.notes
+        );
     }
 }

@@ -3,6 +3,7 @@
 
 import { __bynkEq } from "../__bynk_runtime/equality.js";
 import { HttpResult } from "../__bynk_runtime/httpresult.js";
+import { __tokenClaims } from "../__bynk_runtime/auth.js";
 import * as __ns_app from "./../app.js";
 import * as __ns_bynk from "./../bynk.js";
 
@@ -88,7 +89,7 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
-    const r = await api.http_GET_me({ ...deps, identity: (("ada" as any) as any) });
+    const r = await api.http_GET_me({ ...deps, identity: (("ada" as any) as any), claims: __tokenClaims([]) });
     if (!(__bynkEq(r, HttpResult.Ok("ada")))) { throw __bynkExpectFailure("tests/app.bynk:10:9", 244, 258, "expect r == Ok(\"ada\")\n  expected: r == Ok(\"ada\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("ada")))); }
     return { pass: true };
   } catch (e) {

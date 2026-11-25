@@ -39,7 +39,7 @@ export class RealLedger implements Ledger {
 export const __RealLedgerProvider = { token: __LedgerToken, factory: () => new RealLedger() };
 
 export const api = {
-  async http_POST_orders(body: Order, deps: { Ledger: Ledger; identity: UserId }): globalThis.Promise<HttpResult<number>> {
+  async http_POST_orders(body: Order, deps: { Ledger: Ledger; identity: UserId; claims: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; has(name: string): boolean } }): globalThis.Promise<HttpResult<number>> {
     const n = await deps.Ledger.post(deps.identity, body.sku);
     return HttpResult.Created(n);
   },

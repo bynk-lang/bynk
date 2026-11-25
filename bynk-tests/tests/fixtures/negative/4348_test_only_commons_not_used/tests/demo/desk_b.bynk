@@ -1,0 +1,6 @@
+suite demo.desk
+
+case "a suite that does not use the kit does not see it" {
+  let n <- local.call(Start)
+  expect twice(n) == 4
+}

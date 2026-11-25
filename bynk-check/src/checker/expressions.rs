@@ -3971,9 +3971,9 @@ pub(crate) fn check_field_access(
         if field.name == "identity" {
             return Some(*identity);
         }
-        // #2380 (L5): an `Oidc` binder also exposes its token's verified claims.
-        let oidc = matches!(&receiver.kind, ExprKind::Ident(id) if ctx.oidc_binder.as_deref() == Some(id.name.as_str()));
-        if field.name == "claims" && oidc {
+        // #2380 (L5), #3937: an `Oidc` or `Bearer` binder also exposes its token's verified claims.
+        let has_claims = matches!(&receiver.kind, ExprKind::Ident(id) if ctx.claims_binder.as_deref() == Some(id.name.as_str()));
+        if field.name == "claims" && has_claims {
             return Some(tys.intern(Ty::TokenClaims));
         }
         ctx.errors.push(
@@ -3982,12 +3982,12 @@ pub(crate) fn check_field_access(
                 field.span,
                 format!(
                     "a verified actor exposes `.identity`{}, not `.{}`",
-                    if oidc { " and `.claims`" } else { "" },
+                    if has_claims { " and `.claims`" } else { "" },
                     field.name
                 ),
             )
             .with_note(if field.name == "claims" {
-                "`.claims` is on an `Oidc` actor's binder: the verified token's claims"
+                "`.claims` is on the binder of an `Oidc` or `Bearer` actor: the verified token's claims"
             } else {
                 "`.identity` is the identity the actor's seam verified"
             }),

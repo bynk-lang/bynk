@@ -3827,8 +3827,7 @@ fn check_service_decls(
                     report_unused: true,
                     actor_binding,
                     borrowed_held,
-                    oidc_binder: crate::actors::oidc_seam_for(handler, &table.actors)
-                        .and_then(|seam| seam.binder),
+                    claims_binder: crate::actors::claims_binder_for(handler, &table.actors),
                     // #2683: a WebSocket handler runs in the connection-hosting
                     // Durable Object, whose `deps` carry no execution context.
                     service_handler: !is_ws_lifecycle,
@@ -8343,6 +8342,7 @@ mod actor_binding_persistence_tests {
             name: ctx.name,
             items: ctx.items,
             uses: ctx.uses,
+            consumes: Vec::new(),
             documentation: ctx.documentation,
             form: ctx.form,
             span: ctx.span,

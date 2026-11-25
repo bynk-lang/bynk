@@ -220,7 +220,9 @@ pub(super) fn compile_fixture_with(
         bynk_driver::project::compile_project(&with_schema(
             bynk_testkit::compile_options_split(fixture_root.to_path_buf(), paths)
                 .target(target)
-                .compatibility_flags(workers.compatibility_flags),
+                .compatibility_flags(workers.compatibility_flags)
+                .observability(workers.observability)
+                .tuning(workers.tuning),
         ))
     } else {
         let src_dir = fixture_root.join("src");

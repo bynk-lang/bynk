@@ -444,7 +444,7 @@ async function test_a_valid_token_is_admitted() {
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkOidcClaims([]));
+    const r = await __sysdrive_api_http_GET_who(undefined, ("wid" as any), __bynkClaimLines([]));
     if (!(((__c: boolean) => __c)(r.tag === "Ok" && r.value === "who wid"))) { throw __bynkExpectFailure("tests/api.bynk:13:10", 694, 712, "expect r is Ok(\"who wid\")", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {
@@ -495,7 +495,7 @@ async function test_an_empty_sub_and_a_missing_sub_are_refused_when_the_identity
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_api_http_GET_anyone(undefined, ("someone" as any), __bynkOidcClaims([]));
+    const ok = await __sysdrive_api_http_GET_anyone(undefined, ("someone" as any), __bynkClaimLines([]));
     const r = await __sysdrive_nosubject_api_http_GET_anyone(undefined, "");
     if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "anyone [someone]"))) { throw __bynkExpectFailure("tests/api.bynk:29:10", 1231, 1259, "expect ok is Ok(\"anyone [someone]\")", "ok", () => __bynkShow(ok)); }
     if (!(((__c: boolean) => __c)(r.tag === "Rejected" && r.value.tag === "Unauthorized"))) { throw __bynkExpectFailure("tests/api.bynk:30:10", 1269, 1296, "expect r is Rejected(Unauthorized)", "r", () => __bynkShow(r)); }
@@ -548,7 +548,7 @@ async function test_the_trustFrom_variable_does_not_make_either_refusal_go_away(
     __bynkHarness = undefined;
     __bynkClockNow = 0;
     const deps = __makeHarness();
-    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkOidcClaims([]));
+    const ok = await __sysdrive_api_http_GET_pinned(undefined, ("pid" as any), __bynkClaimLines([]));
     const alg = await __sysdrive_wrongalgorithm_api_http_GET_pinned(undefined, "");
     const sub = await __sysdrive_nosubject_api_http_GET_pinned(undefined, "");
     if (!(((__c: boolean) => __c)(ok.tag === "Ok" && ok.value === "pinned pid"))) { throw __bynkExpectFailure("tests/api.bynk:48:10", 1986, 2008, "expect ok is Ok(\"pinned pid\")", "ok", () => __bynkShow(ok)); }

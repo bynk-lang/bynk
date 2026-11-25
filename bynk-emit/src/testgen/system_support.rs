@@ -271,6 +271,7 @@ pub(super) fn emit_system_http_support(
         routes: std::collections::HashSet::new(),
         sum_routes: HashMap::new(),
         oidc_routes: std::collections::HashSet::new(),
+        bearer_claim_routes: std::collections::HashSet::new(),
         actors: table
             .actors
             .iter()
@@ -460,14 +461,13 @@ pub(super) fn emit_system_http_support(
             let auth_header: Entries = match bynk_check::actors::bearer_seam_for(h, &table.actors) {
                 Some(seam) => {
                     secrets.insert(seam.secret.clone());
-                    signs_claims = seam.authorization.is_some();
+                    signs_claims = claims.register_bearer(
+                        (sname.clone(), method.as_str().to_string(), path.clone()),
+                        seam.authorization.is_some(),
+                        bynk_check::actors::claims_binder_for(h, &table.actors).is_some(),
+                    );
                     let mut claim_entries = Vec::new();
                     if signs_claims {
-                        claims.routes.insert((
-                            sname.clone(),
-                            method.as_str().to_string(),
-                            path.clone(),
-                        ));
                         claim_entries.push(TsObjectEntry::Spread(ident("__claims")));
                     }
                     claim_entries.push(TsObjectEntry::prop("sub", ident("__sub")));

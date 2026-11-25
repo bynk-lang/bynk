@@ -517,6 +517,42 @@ pub struct SystemHttpClaims {
     /// claims to mint into the token, from the call-site principal's
     /// `TokenClaims.of` lines (else none).
     pub oidc_routes: HashSet<(String, String, String)>,
+    /// #3937: the `Bearer` routes whose binder reads `.claims`. Their valid-token drivers take the
+    /// claims too: the principal's `TokenClaims.of` lines when it gives some, beside a refinement's
+    /// witness claims (else just those, as before).
+    pub bearer_claim_routes: HashSet<(String, String, String)>,
+}
+
+impl SystemHttpClaims {
+    /// The witness claims `actor` presents on `route`, when it is refinement-guarded (#2019).
+    pub(crate) fn witness_on(
+        &self,
+        route: &(String, String, String),
+        actor: Option<&String>,
+    ) -> Option<&[(String, bynk_check::actors::WitnessValue)]> {
+        self.routes
+            .contains(route)
+            .then(|| actor.and_then(|a| self.actors.get(a)).map(Vec::as_slice))
+            .flatten()
+    }
+
+    /// Record a `Bearer` route (#2019, #3937) and say whether its drivers sign claims into the token:
+    /// a refinement-guarded route signs its witness claims, and one whose binder reads `.claims`
+    /// signs the principal's own.
+    pub(crate) fn register_bearer(
+        &mut self,
+        route: (String, String, String),
+        refined: bool,
+        reads_claims: bool,
+    ) -> bool {
+        if refined {
+            self.routes.insert(route.clone());
+        }
+        if reads_claims {
+            self.bearer_claim_routes.insert(route);
+        }
+        refined || reads_claims
+    }
 }
 
 /// #1750: the slot and label a statement-form value expression's tails assign

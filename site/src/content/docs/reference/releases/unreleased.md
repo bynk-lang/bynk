@@ -7,6 +7,19 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.717.0** | A constant takes a per-environment value from `bynk.toml`: `const X: T = env(NAME[, default])`, read from `[vars]` and `[env.<name>.vars]`, so a value no longer needs its own table per feature |
+| **v0.716.0** | A `Query` has `filterMap`, `takeWhile`, `skipWhile` and `count(p)`, as `List` does; `takeWhile` and `skipWhile` need a declared order (`bynk.query.while_needs_order`) |
+| **v0.715.0** | A `stub` and an observation of a generic capability operation name its type argument, as in `stub Idempotency.dedup[Outcome](_) returns None`, and answer only the calls made at that type argument |
+| **v0.714.0** | Every generated `wrangler.toml` turns Workers Logs on, so `Logger.log`'s structured fields are queryable; `[workers.observability]` switches it off or samples it, and a worker group overrides it |
+| **v0.713.0** | A suite helper may return an `Effect` and declare `given`, naming its target's capabilities, so setup that runs effects is written once and called from each case |
+| **v0.712.0** | `?` on an `Option` returns `None` early in a function that returns `Option` (or `Effect[Option]`), and in a lambda that returns one |
+| **v0.711.0** | bynk openapi describes the errors of an errors { format: problem } route as application/problem+json, and bynk client types them as problem details |
+| **v0.710.1** | Member completion after `old.lines.`, `new.lines.` and a bare collection in an agent invariant or transition offers `size`, and only `size` |
+| **v0.710.0** | A commons declared `for tests` holds helpers, types and constants that suites share, and is left out of every deployable |
+| **v0.709.0** | A queue consumer's `on message` handler must state its actor with a `by` clause (`bynk.actor.missing_by_on_queue`); `by Producer` is the explicit form of the former default, and `bynk check --fix=bynk.actor.missing_by_on_queue` migrates a project |
+| **v0.708.0** | An agent handler deletes its own instance's stored state with `self.erase()`: when it commits, every field, entry, index posting and marker for the key goes, the next call starts from the initial state, a faulting handler erases nothing, and a `:=` after it is `bynk.agent.write_after_erase` |
+| **v0.707.0** | Completion offers the expected type's variants first after `lhs ==`/`!=`, in an annotated `let`, and in a call argument |
+| **v0.706.1** | The `bynk check --help` text no longer says the command writes nothing; it says a project with dependencies gets `bynk.lock` on first check, and `--locked` fails instead |
 | **v0.706.0** | `Instant.toString()` is RFC 3339 text, `Duration.toString()` is units (`1h30m`), `Duration.toIso()` is ISO 8601, and both types interpolate |
 | **v0.705.0** | A service opts in to RFC 9457 problem details with errors { format: problem }, or a route with @errors(format:); an error variant and a router rejection then answer application/problem+json, and the default is unchanged byte for byte |
 | **v0.704.1** | The dead-letter consumer check compares message types structurally, as a producer's send does, so a type with the same fields under another name and a weaker refinement are accepted |

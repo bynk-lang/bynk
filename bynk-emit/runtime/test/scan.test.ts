@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EntryOverlay } from "../src/entries.ts";
 import { LazyStoreLog, LazyStoreMap, SCAN_PAGE } from "../src/lazy.ts";
+import type { Indexer } from "../src/store.ts";
 import { None, Some } from "../src/result.ts";
 import { scanAll, scanAny, scanFilter, scanFirst, scanFirstOrElse, scanFlatMap, scanMap, scanSkip, scanTake } from "../src/scan.ts";
 import { InMemoryStorage } from "../src/storage.ts";
@@ -112,4 +113,40 @@ test("a Map scan reads every entry in key order, and any gives the same answer a
   s.lists = 0;
   assert.equal(await scanAny(items.lazyValues(), (x) => x === N - 1), true);
   assert.equal(s.lists, 1, "the last-inserted value has the smallest key: the first page");
+});
+
+// #4300: an equality filter on an `@indexed` field reads that value's posting list, and `any` and `all`
+// over it read the list a page at a time.
+test("lazyByIndex yields the posting list's values, and any stops at the first page that answers", async () => {
+  interface Row {
+    team: string;
+    n: number;
+  }
+  const BY: Indexer<Row> = { index: "by", of: (r) => r.team };
+  const s = new CountingStorage();
+  const overlay = new EntryOverlay(s as never);
+  const codec = { read: (e: { v: Row }) => e.v, write: (v: Row, i: number) => ({ i, v }) };
+  const write = new LazyStoreMap<Row>(overlay, "rows", codec, [BY]);
+  const total = SCAN_PAGE * 2 + 5;
+  for (let i = 0; i < total; i += 1) await write.put(String(i).padStart(6, "0"), { team: i % 3 === 0 ? "red" : "blue", n: i });
+  write.finish();
+  await overlay.flush({ state: { __layout: 2 } });
+  const rows = new LazyStoreMap<Row>(new EntryOverlay(s as never), "rows", codec, [BY]);
+
+  const red = await rows.byIndex("by", "red");
+  const lazy = await drain(rows.lazyByIndex("by", "red"));
+  assert.deepEqual(lazy.map((r) => r.n).sort((a, b) => a - b), red.map((r) => r.n).sort((a, b) => a - b), "the same values");
+  assert.equal(lazy.every((r) => r.team === "red"), true);
+
+  s.lists = 0;
+  assert.equal(await scanAny(rows.lazyByIndex("by", "red"), (r) => r.n === 0), true);
+  assert.equal(s.lists, 1, "a match on the first page of postings reads one page");
+  s.lists = 0;
+  assert.equal(await scanAll(rows.lazyByIndex("by", "red"), (r) => r.n % 3 !== 0), false);
+  assert.equal(s.lists, 1, "the first counter-example is on the first page");
+  s.lists = 0;
+  assert.equal(await scanAny(rows.lazyByIndex("by", "red"), (r) => r.n < 0), false);
+  assert.equal(s.lists, 1 + Math.floor(red.length / SCAN_PAGE), "no match reads every page of that value's postings");
+  assert.deepEqual(await drain(rows.lazyByIndex("by", "none")), []);
+  await assert.rejects(() => drain(rows.lazyByIndex("nope", "red")), /no index "nope"/);
 });

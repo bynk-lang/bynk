@@ -504,6 +504,8 @@ pub struct UnitTable {
     /// already holds.
     pub exec_plan: Arc<crate::exec_plan::ExecPlan>,
     pub kind: Option<UnitKind>,
+    /// #4348: a `commons … for tests`, which only suites reach.
+    pub test_only: bool,
     pub types: HashMap<String, Arc<TypeDecl>>,
     pub fns: HashMap<String, Arc<FnDecl>>,
     pub methods: HashMap<String, ResolverMethodTable>,
@@ -645,6 +647,8 @@ impl UnitTable {
             // Stamped after every unit is checked.
             exec_plan: _,
             kind,
+            // Set by `build_unit_table` from the unit's own files.
+            test_only: _,
             // Built by `phase_symbol_tables` from the unit's own files.
             types: _,
             fns: _,
@@ -1215,8 +1219,12 @@ pub fn build_unit_table(
     parsed: &[ParsedFile],
     out: &mut Vec<(PathBuf, CompileError)>,
 ) -> UnitTable {
+    let test_only = indices
+        .iter()
+        .any(|&i| matches!(parsed[i].unit(), SourceUnit::Commons(c) if c.test_only));
     let mut table = UnitTable {
         kind: Some(kind),
+        test_only,
         ..UnitTable::default()
     };
     for &i in indices {
@@ -3142,6 +3150,7 @@ mod detect_context_message_bundle_tests {
                 name: qualified(name),
                 items: vec![CommonsItem::Messages(messages)],
                 uses: Vec::new(),
+                consumes: Vec::new(),
                 documentation: None,
                 form: CommonsForm::Brace,
                 span: Span::default(),

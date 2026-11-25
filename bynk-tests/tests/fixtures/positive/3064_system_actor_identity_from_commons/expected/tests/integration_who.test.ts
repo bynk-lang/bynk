@@ -34,15 +34,15 @@ function __makeHarness() {
 <<bynk-shared: testing/jwt_signer>>
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process = (globalThis as unknown as { process?: { env: globalThis.Record<string, string> } }).process ?? { env: {} };
 (globalThis as unknown as { process: { env: globalThis.Record<string, string> } }).process.env["USER_SECRET"] = "__bynk_test_secret";
-async function __sysdrive_api_http_GET_me(query: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_api_http_GET_me(query: any, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me${__queryString(__ns_who.__serialise_Window(query))}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["USER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["USER_SECRET"] ?? ""))}` } });
+  const __req = new globalThis.Request(`https://test/me${__queryString(__ns_who.__serialise_Window(query))}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["USER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["USER_SECRET"] ?? ""))}` } });
   const __res = await __h.env.WHO.fetch(__req);
   return __responseToHttpResult(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
-async function __sysdrive_raw_api_http_GET_me(query: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string) {
+async function __sysdrive_raw_api_http_GET_me(query: string, __extraHeaders: { get(name: string): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; bearer(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" }; clientIp(): { readonly tag: "Some"; readonly value: string } | { readonly tag: "None" } } | undefined, __sub: string, __claims: globalThis.Record<string, unknown>) {
   const __h = __makeHarness();
-  const __req = new globalThis.Request(`https://test/me${query}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["USER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["USER_SECRET"] ?? ""))}` } });
+  const __req = new globalThis.Request(`https://test/me${query}`, { method: "GET", headers: { ...(__extraHeaders ? __requestHeaderPairs(__extraHeaders, true) : {}), "authorization": `Bearer ${await __bynkSignHs256({ ...__claims, sub: __sub, exp: __bynkNow() + 3600 }, (__bynkEnv["USER_SECRET"] ?? (globalThis as { process?: { env?: globalThis.Record<string, string> } }).process?.env?.["USER_SECRET"] ?? ""))}` } });
   const __res = await __h.env.WHO.fetch(__req);
   return __responseToHttpOutcome(__res, (__j: __JsonValue) => ((__v) => typeof __v === "string" ? Ok(__v) : Err({ kind: "StructuralMismatch", path: "$", expected: "string", actual: typeof __v } as __BoundaryError))(__j));
 }
@@ -101,7 +101,7 @@ async function test_typed_driver__with_an_identity() {
     const deps = __makeHarness();
     const { UserId } = __ns_shared_ids;
     type UserId = __ns_shared_ids.UserId;
-    const r = await __sysdrive_api_http_GET_me({ days: (7 as any) }, undefined, ("alice" as any));
+    const r = await __sysdrive_api_http_GET_me({ days: (7 as any) }, undefined, ("alice" as any), {});
     if (!(__bynkEq(r, HttpResult.Ok("alice 7")))) { throw __bynkExpectFailure("tests/seam.bynk:8:10", 166, 184, "expect r == Ok(\"alice 7\")\n  expected: r == Ok(\"alice 7\")\n  actual:   " + __bynkShow((r)) + " == " + __bynkShow((HttpResult.Ok("alice 7")))); }
     return { pass: true };
   } catch (e) {
@@ -120,7 +120,7 @@ async function test_raw_driver__with_an_identity() {
     const deps = __makeHarness();
     const { UserId } = __ns_shared_ids;
     type UserId = __ns_shared_ids.UserId;
-    const r = await __sysdrive_raw_api_http_GET_me("?days=7", undefined, ("alice" as any));
+    const r = await __sysdrive_raw_api_http_GET_me("?days=7", undefined, ("alice" as any), {});
     if (!(((__c: boolean) => __c)(r.tag === "Handled" && r.value.tag === "Ok"))) { throw __bynkExpectFailure("tests/seam.bynk:13:10", 297, 316, "expect r is Handled(Ok(_))", "r", () => __bynkShow(r)); }
     return { pass: true };
   } catch (e) {

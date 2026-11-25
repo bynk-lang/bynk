@@ -1,0 +1,8 @@
+suite demo.desk
+
+uses demo.kit
+
+case "a suite that uses the kit sees it" {
+  let n <- local.call(Start)
+  expect twice(n) == 4
+}

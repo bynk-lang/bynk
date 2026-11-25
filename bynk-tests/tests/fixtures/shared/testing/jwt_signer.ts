@@ -9,3 +9,14 @@ async function __bynkSignHs256(payload: Record<string, unknown>, secret: string)
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(`${h}.${p}`) as BufferSource);
   return `${h}.${p}.${__bytesB64url(new Uint8Array(sig))}`;
 }
+// A claim list is `"name: value"` lines, read as `TokenClaims.of` reads them in
+// process: every value is a trimmed string (`"n: 1"` is the string `"1"`), so
+// the `system` and `integration` tiers see the same claims.
+function __bynkClaimLines(lines: readonly string[]): globalThis.Record<string, unknown> {
+  const claims: globalThis.Record<string, unknown> = {};
+  for (const line of lines) {
+    const i = line.indexOf(":");
+    if (i > 0) claims[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  }
+  return claims;
+}

@@ -705,6 +705,8 @@ pub fn phase_parse(
 
     // #3955: a unit that mentions `compare`/`sortWith`/`Ordering` reaches `bynk.ordering`.
     crate::implicit_uses::add_implicit_uses(&mut parsed);
+    // #4181: a commons that names a transparent type of the `bynk` adapter reaches it.
+    crate::implicit_uses::add_implicit_consumes(&mut parsed);
     let injected = inject_firstparty(&mut parsed, errors);
     Ok((parsed, injected, broken))
 }
@@ -2393,13 +2395,15 @@ fn conflicts_with_first_party_pin(
     true
 }
 
-/// #3984: the `uses` map a suite's checking and emission see: each target's own, plus the
-/// test-only commons its suites `uses`, so a suite's view and its test module reach them as they
-/// reach the target's own commons. Only the test pass reads it, so no deployable module imports
-/// a test-only commons.
+/// #3984/#4348: the `uses` map a suite's view sees: each target's own, plus the test-only commons
+/// the `suites` (indices into `parsed`) `uses`, so those names reach them as they reach the
+/// target's own commons. Only the test pass reads it, so no deployable module imports a
+/// test-only commons. Checking passes one suite at a time, so a test-only commons is in scope only
+/// where it is `uses`d; the emitted test module passes every suite.
 pub fn unit_uses_with_suite_uses(
     unit_uses: &HashMap<String, Vec<String>>,
     parsed: &[ParsedFile],
+    suites: &[usize],
 ) -> HashMap<String, Vec<String>> {
     let test_only: HashSet<String> = parsed
         .iter()
@@ -2409,7 +2413,7 @@ pub fn unit_uses_with_suite_uses(
         })
         .collect();
     let mut out = unit_uses.clone();
-    for pf in parsed {
+    for pf in suites.iter().map(|&i| &parsed[i]) {
         let SourceUnit::Suite(t) = pf.unit() else {
             continue;
         };
@@ -7666,6 +7670,7 @@ mod native_platform_closure_tests {
         UnitTable {
             exec_plan: Default::default(),
             kind: None,
+            test_only: false,
             removed_agents: Vec::new(),
             types: StdHashMap::new(),
             fns: StdHashMap::new(),
