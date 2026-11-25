@@ -113,7 +113,10 @@ annotation: `@name(VisitsCookie)`
 ([`@name`](/reference/types/#field-name)), `@ttl(SessionTtl)`,
 `@retain`, `@cache(maxAge: Fresh, immutable: Pinned)`,
 `@limit(maxBody: MaxUpload)`, `@schema`, `@raw(contentType: Png)` and
-`@example`. The compiler replaces the reference with the literal before it
+`@example`, and in a derived capability instance's options
+(`Service @worker(BillingWorker)`, `Queue @name(OrdersQueue)`,
+`RateLimit @limit(PerMinute)`; see
+[Derived capabilities](/reference/capabilities/#derived-capabilities)). The compiler replaces the reference with the literal before it
 reads the annotation, so the value is written once and checked as the literal
 would be. A keyword argument such as `@cache(scope: public)` is a word, not a
 value, and stays as written.

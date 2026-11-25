@@ -276,9 +276,13 @@ service reserve {
 }
 ```
 
-Omitting `[T]` when no parameter's type mentions it is
-`bynk.generics.uninferable_type_arg`; the wrong number of type arguments is
-`bynk.generics.type_arg_mismatch`. The operation is emitted as a genuine
+Written type arguments bind the operation's **leading** type parameters, and the arguments
+determine the rest: for `fn dedup[T: Codable, K: Key](key: K)`, `Idempotency.dedup[Quote](id)`
+names `T` and takes `K` from `id` (#4116). Omitting a type argument that no argument determines is
+`bynk.generics.uninferable_type_arg`; more type arguments than parameters is
+`bynk.generics.type_arg_mismatch`. A qualified cross-context call (`B.Cap.op(…)`) infers a
+left-out type parameter only from an argument whose parameter is exactly that parameter
+(`key: K`). The operation is emitted as a genuine
 generic TypeScript interface method (`dedup<T>(key: string): Promise<Option<T>>`)
 — no monomorphisation, no erasure — and the call site names the type argument
 explicitly in the emitted TypeScript too, since nothing else at the call site
@@ -380,12 +384,18 @@ on it unchanged.
 - The base must be a capability the context selects with `consumes U { K }`
   (`bynk.capability.unknown_base`), and a resource kind with instances
   (`bynk.capability.base_not_instantiable`). Today that is `bynk.cloudflare`'s
-  `Kv`, `Service`, `R2`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
+  `Kv`, `Service`, `R2`, `D1`, `RateLimit`, `Queue`, `Analytics`, `EdgeCache`,
   `StoredSecret`, `Email`, `Postgres` and `MySql`. `Version` is not: a Worker has one Version metadata binding, so it is used
   bare, with `given Version`.
 - Options follow the base as `@annotations`, from the kind's own set
   (`bynk.capability.unknown_option`), each one literal of the option's kind,
-  given once (`bynk.capability.invalid_option`). `Kv` takes none. `Service`
+  given once (`bynk.capability.invalid_option`). An option also takes a
+  [constant](/reference/constants/) declared exactly the option's type and bound
+  to a literal, or to another such constant (`@worker(BillingWorker)`); a list
+  option such as `@allowedRecipients` takes constants for its string elements.
+  The constant is replaced by its literal before the option is checked, so every
+  rule below applies to its value, and a constant that does not qualify keeps the
+  option's own error. `Kv` takes none. `Service`
   requires `@worker("name")`, the Worker it reaches
   (`bynk.capability.missing_option`), which must not be one of the project's own
   contexts' Workers. `R2` takes an optional `@jurisdiction("eu")`. `RateLimit`

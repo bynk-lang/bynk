@@ -1812,8 +1812,15 @@ module.exports = grammar({
       seq(
         field("call", $._expression),
         optional(field("principal", $.call_site_actor)),
-        "faults",
+        choice("faults", seq("violates", field("name", $.violates_name))),
       ),
+
+    // #4035: `expect <call> violates <name>` holds when the named invariant,
+    // transition or `@unique` constraint refused the call's commit. `violates`
+    // is contextual, as `faults` is. The name is a dotted path: `name`,
+    // `Agent.name` or `field.index`.
+    violates_name: ($) =>
+      prec.right(seq($.identifier, repeat(seq(".", $.identifier)))),
 
     // #2842: a snapshot claim — `expect <value> matches snapshot "<name>"`
     // compares the value's canonical JSON with a stored snapshot. `matches` and

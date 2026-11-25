@@ -1,0 +1,5 @@
+suite demo.ledger {
+	case "an overdraft is refused" {
+		expect Account("a").withdraw(5) violates non_negative
+	}
+}
