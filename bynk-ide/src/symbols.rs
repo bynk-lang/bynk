@@ -1076,6 +1076,7 @@ pub fn describe_advance_at(source: &str, offset: usize) -> Option<String> {
 pub fn describe_contextual_word_at(source: &str, offset: usize) -> Option<String> {
     describe_advance_at(source, offset)
         .or_else(|| crate::queue_delivery::describe_delivery_at(source, offset))
+        .or_else(|| crate::email_fallback::describe_fallback_at(source, offset))
         .or_else(|| crate::queue_delivery::describe_retry_after_at(source, offset))
 }
 

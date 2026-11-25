@@ -65,6 +65,7 @@ pub mod completion;
 pub mod doc_link_urls;
 pub mod documentation;
 mod duration_completion;
+pub mod email_fallback;
 pub mod env_const;
 pub mod expected_type;
 pub mod first_party_docs;

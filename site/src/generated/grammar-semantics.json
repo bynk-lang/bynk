@@ -756,6 +756,20 @@
       "summary": "`exports` appears after other declarations."
     }
   ],
+  "fallback_policy": [
+    {
+      "code": "bynk.email.fallback_bad_option",
+      "summary": "A `fallback { }` block has a field other than one `forward` address, or its address is not a bare address."
+    },
+    {
+      "code": "bynk.email.fallback_claimed",
+      "summary": "A `fallback` address is one a `from email` service of the project claims."
+    },
+    {
+      "code": "bynk.email.fallback_not_email",
+      "summary": "A `fallback { }` block is on a service that is not `from email`."
+    }
+  ],
   "faults_expr": [
     {
       "code": "bynk.expect.ambiguous_invariant",
@@ -1788,6 +1802,10 @@
     {
       "code": "bynk.parse.duplicate_errors",
       "summary": "A service declares more than one `errors { }` policy."
+    },
+    {
+      "code": "bynk.parse.duplicate_fallback",
+      "summary": "A service declares more than one `fallback { }` policy."
     },
     {
       "code": "bynk.parse.duplicate_json",

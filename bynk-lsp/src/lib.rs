@@ -2564,6 +2564,12 @@ impl Backend {
                 .into_iter()
                 .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
         );
+        // #3885: each `fallback` section keyword of an email service, as `keyword`.
+        dt.extend(
+            bynk_ide::email_fallback::fallback_keyword_spans(text)
+                .into_iter()
+                .map(|s| (s, crate::semantic_tokens::TOK_KEYWORD)),
+        );
         // #2842: the contextual `matches` and `snapshot` of a snapshot claim.
         dt.extend(
             crate::symbols::snapshot_keyword_spans(text)
@@ -4041,6 +4047,9 @@ impl LanguageServer for Backend {
         // #3877: inside a `delivery { }` block, the keys not yet written; at a
         // service-body item start, the `delivery` section keyword.
         items.extend(delivery_completions(&text, offset, &line_prefix));
+        // #3885: inside a `fallback { }` block, the `forward` key; at a service-body item
+        // start, the `fallback` section keyword.
+        items.extend(fallback_completions(&text, offset, &line_prefix));
         items.extend(json_completions(&text, offset, &line_prefix));
         items.extend(errors_completions(&text, offset, &line_prefix));
         // v0.142 (ADR 0165): inside `@limit( … )`, offer the annotation argument
@@ -5869,6 +5878,38 @@ fn http_param_completions(text: &str, offset: usize) -> Vec<CompletionItem> {
             ..Default::default()
         })
         .collect()
+}
+
+/// #3885: the email fallback completion cells, as `delivery_completions`: the `forward` key inside
+/// a `fallback { }` block until it is written, and the `fallback` section keyword at a
+/// service-body item start.
+fn fallback_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if bynk_ide::email_fallback::in_fallback_field_position(text, offset) {
+        if bynk_ide::email_fallback::forward_written(text, offset) {
+            return Vec::new();
+        }
+        return vec![CompletionItem {
+            label: "forward".to_string(),
+            kind: Some(CompletionItemKind::FIELD),
+            detail: Some(bynk_ide::email_fallback::FORWARD_DOC.to_string()),
+            insert_text: Some("forward: \"$0\"".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    if completion::in_service_body_item_position(text, offset, line) {
+        return vec![CompletionItem {
+            label: "fallback".to_string(),
+            kind: Some(CompletionItemKind::KEYWORD),
+            detail: Some(
+                "where mail this email service could not process is forwarded".to_string(),
+            ),
+            insert_text: Some("fallback { forward: \"$0\" }".to_string()),
+            insert_text_format: Some(InsertTextFormat::SNIPPET),
+            ..Default::default()
+        }];
+    }
+    Vec::new()
 }
 
 /// #3880: the `QueueDelivery` parameter of a queue consumer's `on message`, at a

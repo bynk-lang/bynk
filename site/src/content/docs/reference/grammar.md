@@ -1416,6 +1416,40 @@ is on a `from queue` service.
 
 One `name: value` field inside a `delivery { }` policy.
 
+### fallback_policy {#rule-fallback_policy}
+
+{{#grammar fallback_policy}}
+
+The optional fallback of a `from email` service (#3885), in header position after
+`delivery`. `fallback` is a contextual keyword, so it stays an ordinary identifier
+elsewhere.
+
+**Example.**
+```bynk
+context shop.support
+
+consumes bynk.cloudflare { InboundEmail, EmailVerdict }
+
+service support from email("support@shop.example") {
+	fallback {
+		forward: "ops@shop.example",
+	}
+
+	on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+		Accept
+	}
+}
+```
+
+The checker validates the closed key set (`forward`), that its value is an address and
+that the section is on a `from email` service.
+
+### fallback_field {#rule-fallback_field}
+
+{{#grammar fallback_field}}
+
+One `name: value` field inside a `fallback { }` policy.
+
 ### handler {#rule-handler}
 
 {{#grammar handler}}
