@@ -593,6 +593,8 @@ fn dev_build(opts: &DevOptions) -> crate::workers::Build {
         .no_install(opts.no_install)
         .trace_requests(opts.trace_events)
         .inspect_agents(true)
+        // #3941: `--env` selects whose `env(…)` values the build resolves.
+        .environment(&opts.environment)
 }
 
 /// #1957: N parallel first-run `npx wrangler dev`s race to install into the

@@ -165,13 +165,14 @@ fn run() -> ExitCode {
             fix,
             emit,
             each,
+            env,
             lock,
         } => {
             let prepared = prepare_each(&input, each, lock.options());
             if matches!(prepared, Prepared::Stop) {
                 return ExitCode::FAILURE;
             }
-            prepared.finish(run_check(input, format, fix, emit, each))
+            prepared.finish(run_check(input, format, fix, emit, each, env))
         }
         Command::Client {
             input,
@@ -241,6 +242,7 @@ fn run() -> ExitCode {
             platform,
             emit,
             profile,
+            env,
             lock,
         } => run_build_command(
             bynk_driver::BuildArgs {
@@ -250,6 +252,7 @@ fn run() -> ExitCode {
                 platform,
                 emit,
                 profile,
+                environment: env,
             },
             lock.options(),
         ),
@@ -260,6 +263,7 @@ fn run() -> ExitCode {
             platform,
             emit,
             sources_stdin,
+            env,
             lock,
         } => {
             if !prepare(&input, lock.options()) {
@@ -273,6 +277,7 @@ fn run() -> ExitCode {
                 emit,
                 sources_stdin,
                 contracts: false,
+                environment: env,
             })
         }
         Command::Fmt { args } => run_fmt(args),
@@ -450,9 +455,7 @@ fn run() -> ExitCode {
             if !prepare(&root, bynk::fetch::FetchOptions::default()) {
                 return ExitCode::FAILURE;
             }
-            if run_check(root.clone(), CheckFormatArg::Short, None, false, false)
-                != ExitCode::SUCCESS
-            {
+            if check_default(root.clone()) != ExitCode::SUCCESS {
                 emsg!("bynk: error: not published: the package doesn't check");
                 return ExitCode::FAILURE;
             }
@@ -1167,8 +1170,21 @@ fn run_check(
     fix: Option<Vec<String>>,
     emit: bool,
     each: bool,
+    environment: String,
 ) -> ExitCode {
-    check::run(input, format, fix, emit, each)
+    check::run(input, format, fix, emit, each, &environment)
+}
+
+/// The short `bynk check` of the `default` environment: what publishing runs first.
+fn check_default(root: PathBuf) -> ExitCode {
+    run_check(
+        root,
+        CheckFormatArg::Short,
+        None,
+        false,
+        false,
+        "default".to_string(),
+    )
 }
 
 /// `bynk fmt` (#487): format in-process via `bynk-fmt`.
