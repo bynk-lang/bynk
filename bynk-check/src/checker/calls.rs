@@ -2708,8 +2708,15 @@ pub(crate) fn check_store_log_op(
         }
         // The general query vocabulary over the entry values.
         name if is_query_op(name) => {
-            let r =
-                check_query_kernel_method(method, QueryOp::from_name(name), args, elem, span, ctx);
+            let r = check_query_kernel_method(
+                method,
+                QueryOp::from_name(name),
+                args,
+                elem,
+                None,
+                span,
+                ctx,
+            );
             par::reject_store_write_in_closure(method, args, ctx);
             r
         }
@@ -3405,7 +3412,7 @@ pub(crate) fn check_method_call(
         // v0.91 (ADR 0115): a chained builder/terminal on a lazy `Query[T]`.
         Ty::Query(elem) => {
             let kop = QueryOp::from_name(&method.name);
-            let r = check_query_kernel_method(method, kop, args, *elem, span, ctx);
+            let r = check_query_kernel_method(method, kop, args, *elem, Some(receiver), span, ctx);
             par::reject_store_write_in_closure(method, args, ctx);
             return record_kernel(ctx, expr_id, recv_ty, kop.map(KernelOp::Query), method, r);
         }

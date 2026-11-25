@@ -203,6 +203,11 @@ kernel_ops! {
         SortByDescending = "sortByDescending", "sortByDescending(key: T -> K) -> Query[T]";
         Take = "take", "take(n: Int) -> Query[T]";
         Skip = "skip", "skip(n: Int) -> Query[T]";
+        // #4246: the #3963 List combinators on a query. `takeWhile` and `skipWhile` stop on
+        // order, so they need a query that has one (`bynk.query.while_needs_order`).
+        FilterMap = "filterMap", "filterMap(f: T -> Option[U]) -> Query[U]";
+        TakeWhile = "takeWhile", "takeWhile(p: T -> Bool) -> Query[T]";
+        SkipWhile = "skipWhile", "skipWhile(p: T -> Bool) -> Query[T]";
         Distinct = "distinct", "distinct() -> Query[T]";
         DistinctBy = "distinctBy", "distinctBy(key: T -> K) -> Query[T]";
         JoinOn = "joinOn", "joinOn(other: Query[U], left: T -> K, right: U -> K, into: (T, U) -> V) -> Query[V]";
@@ -212,7 +217,7 @@ kernel_ops! {
         Collect = "collect", "collect() -> Effect[List[T]]";
         First = "first", "first() -> Effect[Option[T]]";
         FirstOrElse = "firstOrElse", "firstOrElse(default: T) -> Effect[T]";
-        Count = "count", "count() -> Effect[Int]";
+        Count = "count", "count() -> Effect[Int]", "count(p: T -> Bool) -> Effect[Int]";
         Fold = "fold", "fold(init: U, step: (U, T) -> U) -> Effect[U]";
         Any = "any", "any(p: T -> Bool) -> Effect[Bool]";
         All = "all", "all(p: T -> Bool) -> Effect[Bool]";

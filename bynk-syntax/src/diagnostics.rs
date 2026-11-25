@@ -4126,6 +4126,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
     },
     Explain {
+        code: "bynk.query.while_needs_order",
+        blurb: "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `flatMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+        example: "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+    },
+    Explain {
         code: "bynk.queue.bad_params",
         blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] { … }   // ✓ one message",
@@ -9457,6 +9462,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "bynk.query.sum_needs_numeric",
         "A `sum`/`average` key function does not return a numeric type (`Int`, `Float`, or `Duration`; `sum` also takes a `Decimal`, `average` does not).",
         &[],
+    ),
+    dg(
+        "bynk.query.while_needs_order",
+        "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`.",
+        &["method_call"],
     ),
     dg(
         "bynk.queue.bad_params",

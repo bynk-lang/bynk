@@ -71,6 +71,7 @@ mod list_more;
 mod list_par;
 mod list_par_with;
 mod par;
+mod query_more;
 mod query_par;
 mod refined_range;
 mod refinements;
@@ -5874,6 +5875,7 @@ pub(crate) fn type_of(expr: &Expr, expected: Option<TyId>, ctx: &mut Ctx) -> Opt
                                 QueryOp::from_name(&method.name),
                                 args,
                                 v,
+                                Some(receiver),
                                 expr.span,
                                 ctx,
                             );

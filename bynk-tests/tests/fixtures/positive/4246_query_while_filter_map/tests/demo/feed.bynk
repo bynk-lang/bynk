@@ -1,0 +1,65 @@
+suite demo.feed
+
+case "filterMap keeps the Somes, mapped" {
+  let s = Scores("a")
+  let _ <- s.put("w", 1)
+  let _ <- s.put("x", 2)
+  let _ <- s.put("y", 3)
+  let _ <- s.put("z", 4)
+  let out <- s.evens()
+  expect out == [20, 40]
+}
+
+case "count with a predicate" {
+  let s = Scores("b")
+  let _ <- s.put("w", 1)
+  let _ <- s.put("x", 5)
+  let _ <- s.put("y", 9)
+  let n <- s.over(4)
+  let none <- s.over(100)
+  expect n == 2
+  expect none == 0
+}
+
+case "takeWhile and skipWhile follow an explicit order" {
+  let s = Scores("c")
+  let _ <- s.put("w", 7)
+  let _ <- s.put("x", 2)
+  let _ <- s.put("y", 5)
+  let _ <- s.put("z", 9)
+  let low <- s.below(6)
+  let high <- s.atLeast(6)
+  expect low == [2, 5]
+  expect high == [7, 9]
+}
+
+case "takeWhile and skipWhile stop at the first failure, not the last" {
+  let s = Scores("d")
+  let _ <- s.put("w", 1)
+  let _ <- s.put("x", 8)
+  let _ <- s.put("y", 2)
+  let low <- s.below(3)
+  expect low == [1, 2]
+}
+
+case "an empty query yields nothing" {
+  let s = Scores("e")
+  let low <- s.below(10)
+  let high <- s.atLeast(0)
+  let out <- s.evens()
+  expect low == []
+  expect high == []
+  expect out == []
+}
+
+case "a Log takes and skips in the order it was written" {
+  let s = Scores("f")
+  let _ <- s.note(1)
+  let _ <- s.note(2)
+  let _ <- s.note(9)
+  let _ <- s.note(3)
+  let lead <- s.leading(5)
+  let rest <- s.trailing(5)
+  expect lead == [1, 2]
+  expect rest == [9, 3]
+}

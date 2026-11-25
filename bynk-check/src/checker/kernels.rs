@@ -937,6 +937,7 @@ pub(crate) fn check_query_kernel_method(
     op: Option<QueryOp>,
     args: &[Expr],
     elem: TyId,
+    receiver: Option<&Expr>,
     span: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
@@ -1065,6 +1066,12 @@ pub(crate) fn check_query_kernel_method(
             }
             check_arg(&args[0], elem, "the `Query.firstOrElse` fallback", ctx);
             Some(eff(elem))
+        }
+        Some(o @ (QueryOp::FilterMap | QueryOp::TakeWhile | QueryOp::SkipWhile)) => {
+            super::query_more::check_query_more(method, o, args, elem, receiver, span, ctx)
+        }
+        Some(o @ QueryOp::Count) if !args.is_empty() => {
+            super::query_more::check_query_more(method, o, args, elem, receiver, span, ctx)
         }
         Some(QueryOp::Count) => {
             if !arity(0, ctx) {

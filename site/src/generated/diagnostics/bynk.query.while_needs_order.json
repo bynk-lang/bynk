@@ -1,0 +1,12 @@
+{
+  "blurb": "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `flatMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.query.while_needs_order",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+  "severity": "error",
+  "summary": "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`."
+}
