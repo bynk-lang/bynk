@@ -2264,6 +2264,27 @@ fn check_by_clause_contracts(
                 ),
             );
         }
+        // #3899: a refinement over `Producer` narrows a queue's senders, and only
+        // a queue consumer can name one; elsewhere nothing would enforce its
+        // `IsContext(…)`, so it is refused rather than read as narrowed.
+        if local.is_some_and(|a| is_producer_refinement(a, table))
+            && !matches!(protocol, ServiceProtocol::Queue { .. })
+        {
+            errors.push(
+                CompileError::new(
+                    "bynk.actor.scheme_not_admissible",
+                    by.span,
+                    format!(
+                        "a refinement over `Producer` is not admissible on a `{}` handler",
+                        protocol_label(protocol),
+                    ),
+                )
+                .with_note(
+                    "`Producer` refinements narrow who may send to a queue consumer — name one \
+                     only on `on message` of a `from queue` service",
+                ),
+            );
+        }
         // v0.151: `Oidc` is single-actor only this slice — a multi-actor sum owns
         // the whole boundary and reads the body once, a shape the OIDC seam (JWKS
         // fetch + async key import) does not yet fit. Reject it as a peer.
@@ -2965,7 +2986,7 @@ fn check_refinement_actor(
                         ),
                     )
                     .with_note(
-                        "the calling context is the only thing a `Caller` carries; claims such as \
+                        "the context is the only thing a `Caller` or `Producer` carries; claims such as \
                          `hasClaim` belong to a `Bearer` actor",
                     ),
                 );
