@@ -1678,8 +1678,10 @@ elements `p` holds for.
 `takeWhile` and `skipWhile` stop where `p` first fails, so what they keep depends on the order the
 elements come in, and a query plan does not express that as a filter. They are therefore accepted
 only on a query with a **declared order**: an explicit `sortBy` or `sortByDescending` before them,
-with only `filter`, `map`, `filterMap`, `flatMap`, `skip`, `take` or another `takeWhile` or
-`skipWhile` between, or a [`Log`](#which-terminals-stop-reading-early), which is read oldest first.
+with only `filter`, `map`, `filterMap`, `skip`, `take` or another `takeWhile` or
+`skipWhile` between, or a [`Log`](#which-terminals-stop-reading-early), which is read oldest first, or
+a window of one (`since`, `before`, `between`, `recent` or `reversed`, which flips it). A `flatMap` loses
+the order, since each inner query is joined in its own.
 A `Map` scan, a join, a grouping, a `distinct` and a query held in a `let` have none the author can
 see, so the call is `bynk.query.while_needs_order` instead of a guess; put a `sortBy` before it.
 

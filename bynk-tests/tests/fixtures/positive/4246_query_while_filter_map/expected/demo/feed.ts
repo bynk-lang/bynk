@@ -184,6 +184,34 @@ export class Scores {
     })))(), (__q) => __q);
   }
 
+  async windowed(limit: number, deps: {}): globalThis.Promise<readonly number[]> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(((() => __state.history.since(0)))(), (__q) => {
+      const __i = __q.findIndex((__x) => !((n: number) => n < limit)(__x));
+      return __q.slice(0, __i < 0 ? __q.length : __i);
+    })))(), (__q) => __q);
+  }
+
+  async newestFirst(limit: number, deps: {}): globalThis.Promise<readonly number[]> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(((() => __state.history.reversed()))(), (__q) => {
+      const __i = __q.findIndex((__x) => !((n: number) => n > limit)(__x));
+      return __q.slice(0, __i < 0 ? __q.length : __i);
+    })))(), (__q) => __q);
+  }
+
+  async evenRun(deps: {}): globalThis.Promise<readonly number[]> {
+    const __state = await this.loadState();
+    return __bynkThen(((() => __bynkThen(((() => __bynkThen(((() => __state.points.values()))(), (__q) => [...__q].sort((__a, __b) => {
+      const __ka = ((n: number) => n)(__a);
+      const __kb = ((n: number) => n)(__b);
+      return __ka < __kb ? -1 : __ka > __kb ? 1 : 0;
+    }))))(), (__q) => {
+      const __i = __q.findIndex((__x) => !((n: number) => __bynkIntRem(n, 2) === 0)(__x));
+      return __q.slice(0, __i < 0 ? __q.length : __i);
+    })))(), (__q) => __q);
+  }
+
   async trailing(limit: number, deps: {}): globalThis.Promise<readonly number[]> {
     const __state = await this.loadState();
     return __bynkThen(((() => __bynkThen(((() => __bynkThen(__state.history.values(), (__q) => __q.filter((__x) => ((n: number) => n >= 0)(__x)))))(), (__q) => {

@@ -3,7 +3,7 @@
 //!
 //! `takeWhile` and `skipWhile` stop on order, which a query plan does not express as a filter,
 //! so a query they read must have a declared one: an explicit `sortBy`/`sortByDescending`, or a
-//! `store Log`, which is read oldest first. A `Map` scan, a joined, grouped or distinct query,
+//! `store Log` (or a window of one), which is read oldest first. A `Map` scan, a joined, grouped or distinct query,
 //! and a query held in a `let` have none the author can see, so the call is
 //! `bynk.query.while_needs_order` rather than a guess.
 
@@ -98,12 +98,19 @@ fn is_ordered(receiver: &Expr, ctx: &Ctx) -> bool {
             ..
         } => match method.name.as_str() {
             "sortBy" | "sortByDescending" => true,
-            "filter" | "map" | "filterMap" | "flatMap" | "skip" | "take" | "takeWhile"
-            | "skipWhile" => is_ordered(inner, ctx),
+            // The `Log` windows slice the log in its append order, and `reversed` flips it
+            // explicitly, so they keep the order a `Log` has. `flatMap` is not on the list: each
+            // inner query is concatenated in its own order, which may be an undeclared one.
+            "filter" | "map" | "filterMap" | "skip" | "take" | "takeWhile" | "skipWhile"
+            | "since" | "before" | "between" | "recent" | "reversed" => is_ordered(inner, ctx),
             _ => false,
         },
         ExprKind::Paren(inner) => is_ordered(inner, ctx),
-        ExprKind::Ident(id) => matches!(ctx.store_fields.get(&id.name), Some(StoreField::Log(_))),
+        // A local of the same name shadows the store field, as it does in the store dispatch.
+        ExprKind::Ident(id) => {
+            ctx.lookup(id.name.as_str()).is_none()
+                && matches!(ctx.store_fields.get(&id.name), Some(StoreField::Log(_)))
+        }
         _ => false,
     }
 }

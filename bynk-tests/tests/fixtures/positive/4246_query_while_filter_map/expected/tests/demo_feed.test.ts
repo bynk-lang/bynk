@@ -145,9 +145,55 @@ async function test_a_Log_takes_and_skips_in_the_order_it_was_written() {
   }
 }
 
+// case tier: unit
+async function test_the_windows_of_a_Log_and_reversed_keep_an_order_to_stop_on() {
+  try {
+    __ns_demo_feed.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Scores, __makeScores, tenIfEven } = __ns_demo_feed;
+    const s = __makeScores("g");
+    const __r0 = await s.note(1, deps);
+    const __r1 = await s.note(2, deps);
+    const __r2 = await s.note(9, deps);
+    const __r3 = await s.note(3, deps);
+    const early = await s.windowed(5, deps);
+    const newest = await s.newestFirst(2, deps);
+    if (!(__bynkEq(early, [1, 2]))) { throw __bynkExpectFailure("tests/demo/feed.bynk:75:10", 1661, 1676, "expect early == [1, 2]\n  expected: early == [1, 2]\n  actual:   " + __bynkShow((early)) + " == " + __bynkShow(([1, 2]))); }
+    if (!(__bynkEq(newest, [3, 9]))) { throw __bynkExpectFailure("tests/demo/feed.bynk:76:10", 1686, 1702, "expect newest == [3, 9]\n  expected: newest == [3, 9]\n  actual:   " + __bynkShow((newest)) + " == " + __bynkShow(([3, 9]))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
+// case tier: unit
+async function test_a_prefix_stops_at_the_first_odd_value__where_a_filter_would_keep_the_later_even_ones() {
+  try {
+    __ns_demo_feed.__resetAgents();
+    const deps = __makeTestDeps();
+    const { Scores, __makeScores, tenIfEven } = __ns_demo_feed;
+    const s = __makeScores("h");
+    const __r0 = await s.put("w", 6, deps);
+    const __r1 = await s.put("x", 2, deps);
+    const __r2 = await s.put("y", 5, deps);
+    const __r3 = await s.put("z", 4, deps);
+    const run = await s.evenRun(deps);
+    if (!(__bynkEq(run, [2, 4]))) { throw __bynkExpectFailure("tests/demo/feed.bynk:86:10", 1956, 1969, "expect run == [2, 4]\n  expected: run == [2, 4]\n  actual:   " + __bynkShow((run)) + " == " + __bynkShow(([2, 4]))); }
+    return { pass: true };
+  } catch (e) {
+    if (e instanceof ExpectationError) {
+      return { pass: false, error: { message: e.message, location: e.location, actual: e.actual } };
+    }
+    return { pass: false, error: { message: String(e), location: "unknown", violation: __bynkViolationOf(e) } };
+  }
+}
+
 <<bynk-shared: testing/case_timing>>
 
-export const __bynkCases: readonly string[] = ["filterMap keeps the Somes, mapped", "count with a predicate", "takeWhile and skipWhile follow an explicit order", "takeWhile and skipWhile stop at the first failure, not the last", "an empty query yields nothing", "a Log takes and skips in the order it was written"];
+export const __bynkCases: readonly string[] = ["filterMap keeps the Somes, mapped", "count with a predicate", "takeWhile and skipWhile follow an explicit order", "takeWhile and skipWhile stop at the first failure, not the last", "an empty query yields nothing", "a Log takes and skips in the order it was written", "the windows of a Log and reversed keep an order to stop on", "a prefix stops at the first odd value, where a filter would keep the later even ones"];
 
 export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   const results: CaseResult[] = [];
@@ -185,6 +231,18 @@ export async function run(only?: string, onCase?: (a0: CaseResult) => void) {
   if (want("a Log takes and skips in the order it was written")) {
     const started = __bynkCaseNow();
     const r = { name: "a Log takes and skips in the order it was written", ...(await test_a_Log_takes_and_skips_in_the_order_it_was_written()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("the windows of a Log and reversed keep an order to stop on")) {
+    const started = __bynkCaseNow();
+    const r = { name: "the windows of a Log and reversed keep an order to stop on", ...(await test_the_windows_of_a_Log_and_reversed_keep_an_order_to_stop_on()), durationMs: __bynkCaseSince(started) };
+    results.push(r);
+    if (onCase) onCase(r);
+  }
+  if (want("a prefix stops at the first odd value, where a filter would keep the later even ones")) {
+    const started = __bynkCaseNow();
+    const r = { name: "a prefix stops at the first odd value, where a filter would keep the later even ones", ...(await test_a_prefix_stops_at_the_first_odd_value__where_a_filter_would_keep_the_later_even_ones()), durationMs: __bynkCaseSince(started) };
     results.push(r);
     if (onCase) onCase(r);
   }

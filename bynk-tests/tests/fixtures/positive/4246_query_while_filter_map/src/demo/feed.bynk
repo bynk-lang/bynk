@@ -53,6 +53,20 @@ agent Scores {
     history.takeWhile((n) => n < limit).collect()
   }
 
+  // The windows of a `Log` keep its order, and `reversed` flips it explicitly.
+  on call windowed(limit: Int) -> Effect[List[Int]] {
+    history.since(Instant.fromEpochMillis(0)).takeWhile((n) => n < limit).collect()
+  }
+
+  on call newestFirst(limit: Int) -> Effect[List[Int]] {
+    history.reversed().takeWhile((n) => n > limit).collect()
+  }
+
+  // A predicate that does not follow the sort key: a prefix cut is not a filter.
+  on call evenRun() -> Effect[List[Int]] {
+    points.values.sortBy((n) => n).takeWhile((n) => n.rem(2) == 0).collect()
+  }
+
   on call trailing(limit: Int) -> Effect[List[Int]] {
     history.filter((n) => n >= 0).skipWhile((n) => n < limit).collect()
   }
