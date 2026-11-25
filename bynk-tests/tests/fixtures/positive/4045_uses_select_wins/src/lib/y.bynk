@@ -1,0 +1,5 @@
+commons lib.y
+
+type Status = Int where NonNegative
+
+fn level(s: Status) -> Int { s }

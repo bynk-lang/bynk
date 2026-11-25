@@ -1,0 +1,10 @@
+commons lib.x
+
+type Status = | Idle | Busy
+
+fn describe(s: Status) -> String {
+  match s {
+    Idle => "idle",
+    Busy => "busy",
+  }
+}
