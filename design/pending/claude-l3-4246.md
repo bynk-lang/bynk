@@ -1,5 +1,6 @@
 ---
 level: minor
+probes: emit_diagnostics, diagnostic_coverage, explained_codes
 changelog: A `Query` has `filterMap`, `takeWhile`, `skipWhile` and `count(p)`, as `List` does; `takeWhile` and `skipWhile` need a declared order (`bynk.query.while_needs_order`)
 ---
 
