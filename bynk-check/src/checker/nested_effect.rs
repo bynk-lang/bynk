@@ -82,13 +82,14 @@ pub(super) fn pure(inner_ty: TyId, inner_span: Span, ctx: &mut Ctx) -> Option<Ty
 /// carried the effect, else at `at`.
 pub(super) fn instantiated(
     pattern: TyId,
-    ret: TyId,
+    subst: &HashMap<String, TyId>,
     args: &[Expr],
     arg_tys: &[Option<TyId>],
     at: Span,
     ctx: &mut Ctx,
 ) -> Option<TyId> {
     let tys = ctx.tys;
+    let ret = substitute(pattern, subst, tys);
     if !has_nested_effect(ret, tys) || has_nested_effect(pattern, tys) {
         return Some(ret);
     }
