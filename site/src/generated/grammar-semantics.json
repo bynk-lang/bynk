@@ -1860,6 +1860,10 @@
   ],
   "stub_clause": [
     {
+      "code": "bynk.stub.agent_stub",
+      "summary": "A test `stub` on an agent operation is not `faulted` or `unreachable`, is in an `integration`-tier case or suite, or names an agent of another context than the one under test."
+    },
+    {
       "code": "bynk.stub.at_system",
       "summary": "A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override."
     },

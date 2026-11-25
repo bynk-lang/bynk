@@ -94,6 +94,7 @@ pub mod shadow_uses;
 pub mod stability;
 pub mod store_ops;
 pub mod store_write;
+pub mod stub_agent;
 pub mod stub_outcome;
 pub mod symbols;
 pub mod test_env;

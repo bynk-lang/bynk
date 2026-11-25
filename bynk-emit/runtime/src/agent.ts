@@ -64,6 +64,35 @@ export class StateRegistry<K> {
 
   reset(): void {
     this.states.clear();
+    // #4215: a case's agent stubs end with it, as its agents' state does.
+    agentStubs.clear();
+  }
+}
+
+// #4215: the unit tier's agent stubs (`stub Basket.add(_) faulted | unreachable`), by agent name.
+// A stub is the class the test module emits for the clauses: a method per stubbed operation,
+// which throws the outcome its matched clause stands for, or, when no clause matches the call,
+// an error marked `bynkNoStub`, and the real operation runs. The unit tier's deps factory
+// registers them each case, after the registries are reset.
+const agentStubs = new Map<string, object>();
+
+export function stubAgents(stubs: Record<string, object>): void {
+  agentStubs.clear();
+  for (const [agent, stub] of Object.entries(stubs)) agentStubs.set(agent, stub);
+}
+
+// Asks the agent's stub, if it has one that applies, about a call before the real operation runs.
+async function applyAgentStub(agent: string, op: string, args: unknown[]): Promise<void> {
+  const stub = agentStubs.get(agent) as
+    | (Record<string, unknown> & { __applies?: (op: string) => boolean })
+    | undefined;
+  const stubbed = stub?.[op];
+  if (stub === undefined || typeof stubbed !== "function") return;
+  if (stub.__applies !== undefined && !stub.__applies(op)) return;
+  try {
+    await Reflect.apply(stubbed, stub, args);
+  } catch (e) {
+    if ((e as { bynkNoStub?: unknown } | null)?.bynkNoStub !== true) throw e;
   }
 }
 
@@ -525,6 +554,12 @@ export async function callAgentOutcome<R>(call: Promise<R>, target: string): Pro
     if (contention?.kind === "AgentBusy" && (contention.agent === undefined || contention.agent === target.split(".")[0])) {
       return { tag: "Unreachable", status: None };
     }
+    // #4215: a stubbed operation of the called agent stands for the outcome its clause names; one
+    // of another agent, met inside a handler that ran, is a fault of that handler.
+    const stubbed = (e as { bynkCallStub?: { tag: string; agent?: string } } | null)?.bynkCallStub;
+    if (stubbed?.tag === "Unreachable" && stubbed.agent === target.split(".")[0]) {
+      return { tag: "Unreachable", status: None };
+    }
     if (contention?.kind === "ReentrantAgentCall" || (e as { boundaryError?: unknown } | null)?.boundaryError !== undefined) {
       throw e;
     }
@@ -628,8 +663,10 @@ export function serialiseBundleAgent<C>(
     get(target, prop, receiver) {
       const v = Reflect.get(target, prop, receiver) as unknown;
       if (typeof v !== "function" || typeof prop !== "string") return v;
-      return (...args: unknown[]): Promise<unknown> =>
-        q.run(agent, waitMs, async () => Reflect.apply(v, target, args));
+      return async (...args: unknown[]): Promise<unknown> => {
+        await applyAgentStub(agent, prop, args);
+        return q.run(agent, waitMs, async () => Reflect.apply(v, target, args));
+      };
     },
   }) as C;
 }

@@ -830,6 +830,7 @@
 /book/reference/diagnostics/bynk.store.unknown_map_accessor/
 /book/reference/diagnostics/bynk.store.unknown_op/
 /book/reference/diagnostics/bynk.stub.after_type/
+/book/reference/diagnostics/bynk.stub.agent_stub/
 /book/reference/diagnostics/bynk.stub.at_system/
 /book/reference/diagnostics/bynk.stub.bad_sequence/
 /book/reference/diagnostics/bynk.stub.generic_op/
@@ -1973,6 +1974,7 @@
 /reference/diagnostics/bynk.string.deprecated_function/
 /reference/diagnostics/bynk.string.empty_pad_fill/
 /reference/diagnostics/bynk.stub.after_type/
+/reference/diagnostics/bynk.stub.agent_stub/
 /reference/diagnostics/bynk.stub.at_system/
 /reference/diagnostics/bynk.stub.bad_sequence/
 /reference/diagnostics/bynk.stub.generic_op/
