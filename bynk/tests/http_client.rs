@@ -652,3 +652,42 @@ service api from http {
         "{text}"
     );
 }
+
+/// #3916: a route that answers its errors as problem details is typed with a `problem: Problem`
+/// reply, decoded from the `problem` body kind; a route that does not keeps `error: string`.
+#[test]
+fn problem_details_replies_are_typed_as_problem() {
+    let dir = scratch("problem-details");
+    std::fs::write(
+        dir.join("bynk.toml"),
+        "[project]\nname = \"problems\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/api.bynk"),
+        "context api\n\n\
+         service problems from http {\n  errors { format: problem }\n\n  \
+           on GET(\"/reserve\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n}\n\n\
+         service plain from http {\n  \
+           on GET(\"/plain\") () -> Effect[HttpResult[String]] by v: Visitor {\n    Conflict(\"out of stock\")\n  }\n}\n",
+    )
+    .unwrap();
+    let text = module(&dir, &[]);
+    assert!(
+        text.contains("export interface Problem {"),
+        "the module declares Problem"
+    );
+    assert!(
+        text.contains("readonly problem: Problem"),
+        "a problem reply is typed"
+    );
+    assert!(
+        text.contains("body: \"problem\""),
+        "and decoded as the problem body kind"
+    );
+    assert!(
+        text.contains("readonly error: string"),
+        "a plain route keeps `error: string`"
+    );
+}
