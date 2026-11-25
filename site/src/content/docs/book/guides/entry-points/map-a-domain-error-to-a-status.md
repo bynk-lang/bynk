@@ -53,8 +53,9 @@ so no handler can quietly answer it differently.
 ## Answer in a standard shape
 
 With `errors { format: problem }` on the service (see [Problem
-details](/reference/http/#problem-details)), the same function's variants render as RFC 9457
-bodies, with nothing in the mapping to change.
+details](/reference/http/#problem-details)), the same function's variants that carry a body
+render as RFC 9457 bodies (here, the `409`), with nothing in the mapping to change; a status
+with no body, such as the `404`, still answers without one.
 
 **See also:** [Reference: HTTP, answering another status](/reference/http/#answering-another-status),
 [Handle an HTTP request](/book/guides/entry-points/http/).
