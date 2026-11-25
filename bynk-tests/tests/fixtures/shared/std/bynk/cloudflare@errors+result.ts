@@ -282,7 +282,7 @@ export type QueueDelay = number & { readonly __brand: "QueueDelay" };
 export const QueueDelay = {
   of(value: number): Result<QueueDelay, ValidationError> {
     if (!(value >= 0 && value <= 86400000)) {
-      return Err({ field: "QueueDelay", message: "must be in range [0.seconds, 24.hours]", value });
+      return Err({ field: "QueueDelay", message: "must be in range [0.seconds, 24.hours]", rule: { tag: "InRange", lo: { tag: "DurationBound", value: 0 }, hi: { tag: "DurationBound", value: 86400000 } }, value });
     }
     return Ok(value as QueueDelay);
   },
