@@ -122,6 +122,19 @@ pub struct Cut {
     pub index: String,
 }
 
+/// The shipped-codes list (#4277): every diagnostic code any release has carried.
+pub const SHIPPED_CODES: &str = "bynk-syntax/shipped-codes.txt";
+
+/// `existing` (one code per line) with `codes` added, sorted and without duplicates. The release
+/// cut appends the registry's codes, so the list grows at each release without any change
+/// touching it, and a code later removed must then be tombstoned in `RETIRED`.
+pub fn with_shipped_codes(existing: &str, codes: &[&str]) -> String {
+    let mut all: std::collections::BTreeSet<&str> =
+        existing.lines().filter(|l| !l.is_empty()).collect();
+    all.extend(codes.iter().copied());
+    all.into_iter().map(|c| format!("{c}\n")).collect()
+}
+
 /// Cut Unreleased into the release page for `version`, released on `date`
 /// (`YYYY-MM-DD`). Refuses an Unreleased with no rows: there is nothing to
 /// release.
@@ -200,6 +213,12 @@ mod tests {
             "---\ntitle: Unreleased\n---\nSince v0.1.0.\n\n{TABLE}\n{}\n",
             rows.join("\n")
         )
+    }
+
+    #[test]
+    fn shipped_codes_grow_sorted_and_never_lose_a_code() {
+        let out = with_shipped_codes("code-b\ncode-a\n", &["code-c", "code-a"]);
+        assert_eq!(out, "code-a\ncode-b\ncode-c\n");
     }
 
     #[test]

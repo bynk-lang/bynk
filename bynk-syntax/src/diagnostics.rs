@@ -2353,6 +2353,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "@cache(maxAge: 3600)      // ✗ a bare number, not a `Duration`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hour)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hour\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.cache_bad_no_store",
+        blurb: "`noStore` on `@cache` forbids any cache from keeping the response, which is a yes or a no, so the value must be the literal `true` or `false`; a bare word, a string or a number is refused. Write `noStore: true` for data that must never be stored, such as a one-time token. See also `bynk.http.cache_no_store_conflict`.",
+        example: "@cache(noStore: yes)    // ✗ `true` or `false`\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)   // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.cache_bad_scope",
         blurb: "`scope` says who may store a cached response: `private` means the user's own browser only, and `public` also lets a shared cache, such as a CDN, keep it. Those are the only two values, written bare rather than as strings, so `shared` or `\"public\"` is refused. Choose one, or omit `scope` for `private`. Use `public` only for a response that is the same for everyone: `bynk.http.cache_public_reads_cookies`.",
         example: "@cache(maxAge: 5.minutes, scope: shared)   // ✗ `public` or `private`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes, scope: public)   // ✓",
@@ -2368,9 +2373,19 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "@cache(maxAge: 1500.milliseconds)   // ✗ not a whole number of seconds\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 2.seconds)           // ✓",
     },
     Explain {
+        code: "bynk.http.cache_no_store_conflict",
+        blurb: "`@cache(noStore: true)` sends `Cache-Control: no-store`, which tells every cache to keep nothing, and drops the automatic `ETag`, because nothing is stored to revalidate. `maxAge`, `scope` and `immutable` describe how a stored response may be reused, so they contradict it and are refused. Keep `noStore: true` alone to forbid storing, or drop it and declare the freshness you want.",
+        example: "@cache(noStore: true, maxAge: 5.minutes)   // ✗ no-store and a freshness window\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)                          // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.cache_on_non_get",
-        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all.",
+        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all. The one form that is not for reads is `@cache(noStore: true)`, which sends `Cache-Control: no-store` and is legal on a route of any HTTP method; it is still refused on a handler that is not HTTP, and on an agent.",
         example: "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.cache_public_authenticated",
+        blurb: "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",
+        example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ one member's answer, stored for everyone\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
     },
     Explain {
         code: "bynk.http.cache_public_reads_cookies",
@@ -2780,6 +2795,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         code: "bynk.internal.missing_checker_fact",
         blurb: "This is a compiler fault, not a mistake in your program. The code generator needs a fact the checker should have recorded about a construct (its type, the callee it resolves to, how many arguments it takes, a field's default value) and did not find one. Every program the checker accepts carries these facts, so no source you write can cause this on purpose. The diagnostic points at the construct being compiled when the fact was missing. Please report it at https://github.com/bynk-lang/bynk/issues with the source around that location, which is all that is needed to reproduce it. The compiler stops before it writes any output for the unit, rather than emit a program that might mean something other than what you wrote.",
         example: "// bynk internal error: the checker recorded no type for a `fold` call, which the code generator needs here.\n// This is a compiler fault, not a problem in your program; please report it at https://github.com/bynk-lang/bynk/issues\n//\n// There is no program to fix: the report is the fix.",
+    },
+    Explain {
+        code: "bynk.invariant.collection_scan",
+        blurb: "An invariant is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()`: the commit already knows the staged count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Bound the collection with `size()`, or check the property in the handler that writes the collection, where the one entry in hand is known. The mirror rule for steps is `bynk.transition.collection_scan`.",
+        example: "invariant has_x: lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ninvariant few_lines: lines.size() <= 100   // ✓ one count, read at the commit",
     },
     Explain {
         code: "bynk.invariant.cross_agent_reference",
@@ -5508,6 +5528,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         example: "suite commerce.payment as system {   // ✗ no other context, and no `http`, `queue` or `email` service\n    case \"authorises\" { … }\n}\n\nsuite commerce.payment as integration {   // ✓ real collaborators, no wire\n    case \"authorises\" { … }\n}",
     },
     Explain {
+        code: "bynk.transition.collection_scan",
+        blurb: "A transition is checked at every commit, so what it reads is read at every commit. A `store` `Map` or `Set` field can be asked its `size()` in `old` and `new`: the commit knows the staged count, and the last committed one is a single stored count, so that reads one count and nothing else. Any other read of a collection (`contains`, `get`, a query, the field itself, a bare field name) would scan the collection each time; a `Log` has no `size()` at all, and a `Cache` counts only its live entries, which a commit has no clock to judge. Compare the sizes, or check the property in the handler that writes the collection. The mirror rule for states is `bynk.invariant.collection_scan`.",
+        example: "transition keeps_x: old.lines.contains(\"x\") implies new.lines.contains(\"x\")   // ✗ reads the collection at every commit\n\ntransition never_shrinks: new.lines.size() >= old.lines.size()   // ✓ one count each",
+    },
+    Explain {
         code: "bynk.transition.cross_agent_reference",
         blurb: "A transition is checked inside one agent's commit, between that agent's own old and new states. Reading another agent would mean a call out to it, whose value could change before the commit lands, so the claim could not be held. A property that spans agents belongs in a saga or a scenario. Keep the transition to this agent's `old` and `new`. The mirror rule for states is `bynk.invariant.cross_agent_reference`.",
         example: "transition within_total: new.count <= Total(\"all\").get()   // ✗ reads another agent\n\ntransition grows: new.count >= old.count                   // ✓ this agent's own step",
@@ -6788,6 +6813,40 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
 /// no explanation yet (the designed graceful-fallback state, DECISION B).
 pub fn explain(code: &str) -> Option<&'static Explain> {
     EXPLANATIONS.iter().find(|e| e.code == code)
+}
+
+/// A diagnostic code that no longer exists (#4277): the tombstone `bynk explain` answers with
+/// in place of "unknown", and the generated reference lists under "Retired codes". A user
+/// upgrading, or reading an old CI log or issue, still gets an explanation.
+///
+/// A code added and removed between two releases never shipped, so it needs no tombstone: the
+/// shipped list (`bynk-syntax/shipped-codes.txt`, extended at each release cut) is what holds
+/// a code to being live or retired.
+pub struct Retired {
+    /// The retired code.
+    pub code: &'static str,
+    /// The last release that carried the code, as `X.Y.Z`. The change that removes a code cannot know
+    /// the version that will retire it (the merge-time stamp assigns that), so this is the latest
+    /// release page when the change is written.
+    pub last_release: &'static str,
+    /// One sentence on why it went.
+    pub why: &'static str,
+    /// The code or feature that replaced it, if any.
+    pub replacement: Option<&'static str>,
+}
+
+/// Every retired diagnostic code, sorted by code. Add an entry in the change that removes the
+/// code from [`REGISTRY`].
+pub const RETIRED: &[Retired] = &[Retired {
+    code: "bynk.http.multipart_body_unbounded",
+    last_release: "0.661.1",
+    why: "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded.",
+    replacement: Some("the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`"),
+}];
+
+/// The tombstone for a retired `code`, or `None` when it was never retired.
+pub fn retired(code: &str) -> Option<&'static Retired> {
+    RETIRED.iter().find(|r| r.code == code)
 }
 
 /// The hosted diagnostic index page (the generated `reference/diagnostics`
@@ -8183,6 +8242,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal.",
     ),
     d(
+        "bynk.http.cache_bad_no_store",
+        "A `@cache` annotation's `noStore` is not a `Bool` literal.",
+    ),
+    d(
         "bynk.http.cache_bad_scope",
         "A `@cache` annotation's `scope` is not `public` or `private`.",
     ),
@@ -8195,8 +8258,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds.",
     ),
     d(
+        "bynk.http.cache_no_store_conflict",
+        "A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`.",
+    ),
+    d(
         "bynk.http.cache_on_non_get",
-        "A `@cache` annotation is placed on a handler that is not `on http GET`.",
+        "A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).",
+    ),
+    d(
+        "bynk.http.cache_public_authenticated",
+        "A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.",
     ),
     dg(
         "bynk.http.cache_public_reads_cookies",
@@ -8576,6 +8647,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.internal.missing_checker_fact",
         "A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues.",
+    ),
+    d(
+        "bynk.invariant.collection_scan",
+        "An invariant reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
     ),
     d(
         "bynk.invariant.cross_agent_reference",
@@ -10236,6 +10311,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "An `as system` suite whose target has no serialisation edge: it consumes no other context and exposes no `http`, `queue` or `email` service, so there is no wire for a `system` case to cross.",
     ),
     d(
+        "bynk.transition.collection_scan",
+        "A transition reads a `store` collection beyond its `size()`; a predicate runs at every commit.",
+    ),
+    d(
         "bynk.transition.cross_agent_reference",
         "A transition predicate references another agent; step invariants are per-agent.",
     ),
@@ -11132,6 +11211,27 @@ pub fn render_json_per_code() -> Vec<(String, String)> {
             let mut out = serde_json::to_string_pretty(&doc).expect("diagnostic serialises");
             out.push('\n');
             (info.code.to_string(), out)
+        })
+        .collect()
+}
+
+/// Every tombstone as JSON, one document per retired code, as `(code, json)` sorted by code
+/// (#4277). Written to `site/src/generated/diagnostics/retired/<code>.json`, which
+/// `site/scripts/build-diagnostics-index.mjs` lists under "Retired codes".
+pub fn render_retired_json() -> Vec<(String, String)> {
+    let mut all: Vec<&Retired> = RETIRED.iter().collect();
+    all.sort_by_key(|r| r.code);
+    all.iter()
+        .map(|r| {
+            let doc = serde_json::json!({
+                "code": r.code,
+                "lastRelease": r.last_release,
+                "why": r.why,
+                "replacement": r.replacement,
+            });
+            let mut out = serde_json::to_string_pretty(&doc).expect("tombstone serialises");
+            out.push('\n');
+            (r.code.to_string(), out)
         })
         .collect()
 }
