@@ -1,0 +1,1 @@
+bynk.commons.consumes_not_types `bynk` does not export a type named `NoSuchType`

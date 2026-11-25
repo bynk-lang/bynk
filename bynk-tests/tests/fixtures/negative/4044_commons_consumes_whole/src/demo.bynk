@@ -1,0 +1,10 @@
+---
+#4044: a commons cannot write a whole-unit `consumes`: that brings services and capabilities, which a pure commons has none of.
+---
+commons demo
+
+consumes bynk
+
+fn id(x: Int) -> Int {
+	x
+}

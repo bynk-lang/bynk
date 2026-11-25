@@ -53,6 +53,7 @@ export const EMAIL_REJECT_UNPARSEABLE = "message could not be read";
 export const EMAIL_REJECT_FAULT = "message could not be processed";
 export const EMAIL_REJECT_REPLY = "reply refused";
 export const EMAIL_REJECT_FORWARD = "forward refused";
+export const EMAIL_REJECT_UNAUTHENTICATED = "sender not authenticated";
 
 export type DmarcVerdict =
   | { readonly tag: "DmarcPass" }
@@ -134,6 +135,8 @@ export interface InboundMessage {
 /** One `from email(…)` service: the address it claims and its handler. */
 export interface EmailRoute {
   readonly address: string;
+  /** #3888: the DMARC verdict tags the handler's `Sender` refinement admits; absent admits any mail. */
+  readonly admits?: readonly DmarcVerdict["tag"][];
   handle(mail: InboundEmail, sender: SenderIdentity): Promise<EmailVerdict>;
 }
 
@@ -630,6 +633,14 @@ export async function handleEmail(
   if (!parsed.ok) {
     log(`${where}: parse failed (${parsed.code})`);
     message.setReject(parsed.reason);
+    return;
+  }
+  // #3888: a `Sender` refinement (`actor Authenticated = Sender where Dmarc(DmarcPass)`)
+  // lists the verdicts it admits; other mail is refused before the handler runs. Logged
+  // by outcome only: the message is not a fault, so no `fallback` receives it.
+  if (route.admits !== undefined && !route.admits.includes(parsed.dmarc.tag)) {
+    log(`${where}: sender not authenticated`);
+    message.setReject(EMAIL_REJECT_UNAUTHENTICATED);
     return;
   }
   let verdict: EmailVerdict;

@@ -258,6 +258,9 @@
 
 (qualified_name (identifier) @module)
 (uses_decl target: (qualified_name) @module)
+; #4045: the alias of `uses lib.y as Y`, and the qualifier of a name read through it.
+(uses_decl alias: (identifier) @module)
+(qualified_type_ref qualifier: (identifier) @module)
 (consumes_decl target: (qualified_name) @module)
 ; #2890: the name a `consumes U { T as Alias }` item introduces is a type.
 (consumes_item alias: (identifier) @type)

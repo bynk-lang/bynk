@@ -224,6 +224,9 @@ module.exports = grammar({
     _commons_body_item: ($) =>
       choice(
         $.uses_decl,
+        // #4044: a commons may `consumes` types (braced, type-only); the
+        // checker refuses every other form (`bynk.commons.consumes_not_types`).
+        $.consumes_decl,
         $.type_decl,
         $.fn_decl,
         $.messages_decl,
@@ -304,7 +307,20 @@ module.exports = grammar({
 
     // -- Headers / clauses --
 
-    uses_decl: ($) => seq("uses", field("target", $.qualified_name)),
+    uses_decl: ($) =>
+      seq(
+        "uses",
+        field("target", $.qualified_name),
+        optional(
+          choice(
+            // #4045: `uses lib.y as Y` — the commons' names are read as `Y.Status`.
+            seq("as", field("alias", $.identifier)),
+            // #4045: `uses lib.y { Status as YStatus, describe }` — selected
+            // names, any of them renamed with `as`.
+            seq("{", optional(sep1($.consumes_item, ",")), optional(","), "}"),
+          ),
+        ),
+      ),
     consumes_decl: ($) =>
       seq(
         "consumes",
@@ -660,7 +676,16 @@ module.exports = grammar({
         $.validation_error_type,
         $.generic_type_ref,
         $.applied_type_ref,
+        $.qualified_type_ref,
         $.identifier,
+      ),
+
+    // #4045: a type named through a `uses` clause, `Y.Status` by an alias or
+    // `lib.y.Status` by the commons' full name.
+    qualified_type_ref: ($) =>
+      seq(
+        field("qualifier", $.identifier),
+        repeat1(seq(".", field("name", $.identifier))),
       ),
 
     // v0.157 (ADR 0183): `Name[Arg, …]` — an application of a user-declared

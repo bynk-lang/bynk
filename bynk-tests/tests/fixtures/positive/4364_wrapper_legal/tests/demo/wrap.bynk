@@ -1,0 +1,18 @@
+suite demo.wrap
+
+case "a wrapper of a plain value runs" {
+	let n <- runWrap(wrapped(4))
+	expect n == 4
+}
+
+case "a generic wrapper builder instantiated with a plain value runs" {
+	let w = lifts(5)
+	let n <- runWrap(w)
+	expect n == 5
+}
+
+case "a record holding an effect directly is not a nested effect" {
+	let b = boxed(Effect.pure(6))
+	let n <- runBox(b)
+	expect n == 6
+}

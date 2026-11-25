@@ -1,0 +1,10 @@
+---
+#4044: only a type the unit exports can be listed.
+---
+commons demo
+
+consumes bynk { NoSuchType }
+
+fn id(x: Int) -> Int {
+	x
+}

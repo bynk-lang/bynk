@@ -2560,7 +2560,7 @@ in with `uses` (not `consumes`) — `bynk.list`, `bynk.map` and `bynk.set`
 fix to it; `bynk.set` has `union`,
 `intersect`, `difference`, `isSubsetOf`, `filterSet` and `mapSet`),
 `bynk.string` (deprecated: its one function, `join`, is now `xs.join(sep)` on a `List[String]`, and a call warns with a fix to it)
-and `bynk.url` (URLs and query strings, below).
+`bynk.url` (URLs and query strings, below) and `bynk.html` (HTML escaping, below).
 These are ordinary functions with no effects; see the
 [type system reference](/reference/types/).
 
@@ -2640,6 +2640,28 @@ let res <- Fetch.send(Request { method: Get, url: "https://api.test/search?".con
 
 `Url` is a record in a commons, not a built-in type, so a project's own `Url`
 type is untouched unless it also writes `uses bynk.url`.
+
+### HTML escaping: `bynk.html`
+
+`uses bynk.html` brings in two pure functions (#3924), written in Bynk over `String.replace`,
+available on every target with no capability. Escaping a value you substitute into markup is
+yours to do, since an embed hands you text and nothing more, and a missing or incomplete escape
+around request data is a cross-site scripting hole.
+
+- `escapeText(s)` is for **element text**: `&`, `<` and `>` become `&amp;`, `&lt;` and `&gt;`.
+  The `&` is replaced first, so an escape it writes is not escaped again.
+- `escapeAttr(s)` is for a **quoted attribute value**: everything `escapeText` escapes, and
+  `"`, `'` and a backtick as `&quot;`, `&#39;` and `&#96;`, so it is safe in either quote style
+  (and against old browsers that took a backtick as a quote).
+
+```bynk,fragment
+shell.replace("{{title}}", escapeText(title))
+     .replace("{{alt}}", escapeAttr(alt))
+```
+
+Neither is safe in an unquoted attribute, in a URL attribute such as `href` or `src` (where
+`javascript:` passes), or inside `<script>` or `<style>`; escaping cannot make an untrusted
+value a safe URL or script. Typed HTML is the track that builds on these two.
 
 Two more serve the `Locale` capability above.
 **`bynk.locale.types`** is a dependency-free leaf declaring `LocaleTag`,

@@ -1,0 +1,11 @@
+commons app.z
+
+// #4045: `uses` takes a braced list and an alias, and two used commons that share a
+// name clash only where it is written bare.
+uses lib.x
+uses lib.y as Y
+uses lib.money { Money, format as formatMoney }
+
+fn f(s: Status, t: Y.Status, m: Money) -> String {
+  "\(describe(s)) \(Y.describe(t)) \(formatMoney(m)) \(Y.Limit)"
+}

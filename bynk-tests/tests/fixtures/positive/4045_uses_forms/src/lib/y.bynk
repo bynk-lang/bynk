@@ -1,0 +1,9 @@
+commons lib.y
+
+type Status = | On | Off
+
+fn describe(s: Status) -> String {
+  "y"
+}
+
+const Limit: Int = 2

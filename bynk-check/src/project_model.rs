@@ -50,7 +50,7 @@ use crate::symbols::{
 use bynk_project::{
     AttributedError, LabelFile, ParsedFile, UnitKind, check_directory_kind_consistency,
     check_directory_name_consistency, check_file_directory_conflicts, check_group_kind_consistency,
-    check_group_module_docs, check_path_name_alignment, detect_consumes_cycles,
+    check_group_module_docs, check_path_name_alignment, detect_dependency_cycles,
     discover_bynk_files, is_unpinned_range, normalize_rel, parse_sources, parse_sources_recovering,
     read_adapter_binding, read_adapter_include, read_source,
 };
@@ -3093,37 +3093,33 @@ pub fn phase_resolve_consumes(
                     );
                     continue;
                 }
+                // #4044: a commons consumes types only: braced, from an adapter.
+                if kind == UnitKind::Commons
+                    && let Some(err) = commons_consumes_refusal(
+                        c,
+                        &target,
+                        target_kind,
+                        unit_tables,
+                        &exports_type,
+                    )
+                {
+                    errors.push_for(Some(&parsed[i].identity_path()), err);
+                    continue;
+                }
                 // v0.18: adapter dependencies are adapter-to-adapter (spec §4.5) —
                 // an adapter consuming a *context* would pull service logic into
                 // the host boundary.
                 if kind == UnitKind::Adapter && target_kind == UnitKind::Context {
-                    errors.push_for(Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.adapter.consumes_context",
-                            c.span,
-                            format!(
-                                "adapter `{name}` cannot `consumes` the context `{target}` — adapter dependencies are adapter-to-adapter"
-                            ),
-                        )
-                        .with_note(
-                            "an adapter may only depend on capabilities exported by other adapters (e.g. the `bynk` surface)",
-                        ),
+                    errors.push_for(
+                        Some(&parsed[i].identity_path()),
+                        adapter_consumes_context(name, &target, c.span),
                     );
                     continue;
                 }
                 if target == *name {
-                    let kind_word = if kind == UnitKind::Adapter {
-                        "adapter"
-                    } else {
-                        "context"
-                    };
                     errors.push_for(
                         Some(&parsed[i].identity_path()),
-                        CompileError::new(
-                            "bynk.consumes.self_reference",
-                            c.span,
-                            format!("{kind_word} `{name}` cannot `consumes` itself"),
-                        ),
+                        consumes_self_reference(kind, name, c.span),
                     );
                     continue;
                 }
@@ -3661,163 +3657,6 @@ pub fn phase_private_in_public(
                     if private_types.contains(&n.name.name) {
                         report(n.name.span, "`exports` list", &n.name.name);
                     }
-                }
-            }
-        }
-    }
-}
-
-/// Phase 6: for each unit, detect when two `uses`-imported commons declare the
-/// same (non-shadowed) type or function name — an unrenamable conflict at the use
-/// site. Diagnostics go into `errors`.
-pub fn phase_uses_name_conflicts(
-    unit_uses: &HashMap<String, Vec<String>>,
-    unit_tables: &HashMap<String, UnitTable>,
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    errors: &mut ErrorSink,
-) {
-    for (name, targets) in unit_uses {
-        let local = unit_tables.get(name).expect("unit table present");
-        let mut imported: HashMap<String, String> = HashMap::new();
-        for t in targets {
-            // #2618: `private` declarations never come in, so never conflict.
-            let used = unit_tables
-                .get(t)
-                .expect("used unit table present")
-                .importable();
-            for type_name in used.types.keys() {
-                // Unlike the fn and asset loops below, a local service, agent,
-                // provider or asset does not skip this (#1927, review of
-                // #1933). It hides an imported type from naming, but the type
-                // stays composed so its values resolve, and with two used
-                // commons declaring it, which one the unit's values carry is
-                // still ambiguous.
-                if local.types.contains_key(type_name) || local.fns.contains_key(type_name) {
-                    continue;
-                }
-                if let Some(prev) = imported.get(type_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{type_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(type_name.clone(), t.clone());
-                }
-            }
-            for fn_name in used.fns.keys() {
-                // #1925: any local value hides the import (`shadowed_imports`),
-                // so two used commons declaring it leave nothing ambiguous.
-                if crate::symbols::local_value_kind(local, fn_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(fn_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{fn_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(fn_name.clone(), t.clone());
-                }
-            }
-            // #1883, slice 1a ([DECISION G]): a commons' assets come in
-            // through `uses` like its functions, and share their namespace.
-            for asset_name in used.assets.keys() {
-                // #1925: any local value hides the import, as above.
-                if crate::symbols::local_value_kind(local, asset_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(asset_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{asset_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(asset_name.clone(), t.clone());
-                }
-            }
-            // #2387, slice 1: a commons' embeds come in through `uses` the
-            // same way, in the same namespace.
-            for embed_name in used.embeds.keys() {
-                if crate::symbols::local_value_kind(local, embed_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(embed_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{embed_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(embed_name.clone(), t.clone());
-                }
-            }
-            // #2617: and its constants, the same way.
-            for const_name in used.consts.keys() {
-                if crate::symbols::local_value_kind(local, const_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(const_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{const_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(const_name.clone(), t.clone());
                 }
             }
         }
@@ -6460,6 +6299,93 @@ fn suggest_alias(target: &str, type_name: &str) -> String {
     format!("{head}{}{type_name}", chars.as_str())
 }
 
+/// `bynk.consumes.self_reference`: a unit that `consumes` itself.
+fn consumes_self_reference(kind: UnitKind, name: &str, span: Span) -> CompileError {
+    let kind_word = if kind == UnitKind::Adapter {
+        "adapter"
+    } else {
+        "context"
+    };
+    CompileError::new(
+        "bynk.consumes.self_reference",
+        span,
+        format!("{kind_word} `{name}` cannot `consumes` itself"),
+    )
+}
+
+/// `bynk.adapter.consumes_context`: adapter dependencies are adapter-to-adapter
+/// (spec §4.5), so an adapter consuming a context would pull service logic into
+/// the host boundary.
+fn adapter_consumes_context(name: &str, target: &str, span: Span) -> CompileError {
+    CompileError::new(
+        "bynk.adapter.consumes_context",
+        span,
+        format!(
+            "adapter `{name}` cannot `consumes` the context `{target}` — adapter dependencies are adapter-to-adapter"
+        ),
+    )
+    .with_note(
+        "an adapter may only depend on capabilities exported by other adapters (e.g. the `bynk` surface)",
+    )
+}
+
+/// #4044: why a commons may not write this `consumes`, or `None` when it names
+/// only types an adapter exports, in braces. A commons is shared, pure code, so
+/// it takes types from another unit and nothing else: no whole-unit or aliased
+/// form (those bring services), no capability, and no context (a context's
+/// exported types belong to its boundary, and naming one would tie shared code
+/// to one deployable). `T as Alias` stays allowed, as in a context's `consumes`.
+fn commons_consumes_refusal(
+    c: &bynk_syntax::ast::ConsumesDecl,
+    target: &str,
+    target_kind: UnitKind,
+    unit_tables: &HashMap<String, UnitTable>,
+    exports_type: &dyn Fn(&str, &str) -> bool,
+) -> Option<CompileError> {
+    const CODE: &str = "bynk.commons.consumes_not_types";
+    let capabilities = unit_tables.get(target).map(|t| &t.exported_capabilities);
+    let refuse = |span: Span, msg: String, note: &str| {
+        Some(CompileError::new(CODE, span, msg).with_note(note.to_string()))
+    };
+    let Some(names) = &c.selected else {
+        let form = if c.alias.is_some() {
+            "an aliased"
+        } else {
+            "a whole-unit"
+        };
+        return refuse(
+            c.span,
+            format!("a commons cannot write {form} `consumes {target}`"),
+            "a commons may list types only: write `consumes U { Type, … }`",
+        );
+    };
+    if target_kind == UnitKind::Context {
+        return refuse(
+            c.target.span,
+            format!("a commons cannot consume the context `{target}`"),
+            "a context's exported types belong to its boundary, so a commons that named one would tie shared code to one deployable; a commons consumes types of an adapter",
+        );
+    }
+    for item in names {
+        let n = &item.name;
+        if capabilities.is_some_and(|caps| caps.contains(&n.name)) {
+            return refuse(
+                n.span,
+                format!("`{}` is a capability of `{target}`, not a type", n.name),
+                "a commons stays pure: it names types, and a context uses a capability with `consumes` and `given`",
+            );
+        }
+        if !exports_type(target, &n.name) {
+            return refuse(
+                n.span,
+                format!("`{target}` does not export a type named `{}`", n.name),
+                "a commons may list only the types an adapter exports: `consumes U { Type, … }`",
+            );
+        }
+    }
+    None
+}
+
 /// Phase 8b: merge one context's `consumes` exports into the composed symbol
 /// space, recording visibility metadata in the returned `consumed_types`. The
 /// per-export `continue`s (missing decl, name conflict) stay internal to the
@@ -7377,6 +7303,7 @@ pub fn compose_unit_symbols(
             .expect("used unit present")
             .table
             .importable();
+        let used = local_table.seen_through(t, &used);
         for (type_name, decl) in &used.types {
             if !combined_types.contains_key(type_name) {
                 combined_types.insert(type_name.clone(), decl.clone());
@@ -7478,12 +7405,16 @@ pub fn shadowed_imports(
     let Some(info) = unit_info.get(name) else {
         return HashMap::new();
     };
-    shadowed_imports_in(
+    let mut out = shadowed_imports_in(
         &info.table,
-        info.uses
-            .iter()
-            .filter_map(|t| unit_info.get(t).map(|u| (t, &u.table))),
-    )
+        info.uses.iter().filter_map(|t| {
+            unit_info
+                .get(t)
+                .map(|u| (t, info.table.seen_through(t, &u.table)))
+        }),
+    );
+    crate::uses_view::add_ambiguous_imports(&info.table, &mut out);
+    out
 }
 
 /// [`shadowed_imports`] over a unit's own table and its `uses` targets'
@@ -7515,6 +7446,7 @@ pub fn shadowed_imports_in<'a>(
                     imported,
                     local: kind,
                     local_span,
+                    ambiguous: Vec::new(),
                 };
                 // The first `uses` target to declare a name decides, except
                 // that a type replaces a function or asset (review of #1933).
@@ -7549,8 +7481,15 @@ pub fn phase_detect_consumes_cycles(
     errors: &mut ErrorSink,
 ) {
     let mut consumes_sites: HashMap<(String, String), (PathBuf, Span)> = HashMap::new();
+    // #4044: a commons may `consumes` an adapter that `uses` it, so the cycle
+    // check walks each unit's `uses` edges too.
+    let mut unit_uses: HashMap<String, Vec<String>> = HashMap::new();
     for (name, indices) in groups {
         for &i in indices {
+            unit_uses
+                .entry(name.clone())
+                .or_default()
+                .extend(parsed[i].uses().iter().map(|u| u.target.joined()));
             if parsed[i].is_synthetic() {
                 continue;
             }
@@ -7562,7 +7501,12 @@ pub fn phase_detect_consumes_cycles(
         }
     }
     let mut cycle_errors: Vec<(Option<PathBuf>, CompileError)> = Vec::new();
-    detect_consumes_cycles(unit_consumes, &consumes_sites, &mut cycle_errors);
+    detect_dependency_cycles(
+        unit_consumes,
+        &unit_uses,
+        &consumes_sites,
+        &mut cycle_errors,
+    );
     for (path, err) in cycle_errors {
         errors.push_for(path.as_deref(), err);
     }
@@ -7690,6 +7634,9 @@ mod native_platform_closure_tests {
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
             derived: StdHashMap::new(),
+            use_views: Default::default(),
+            ambiguous_uses: Default::default(),
+            use_origin: Default::default(),
         }
     }
 

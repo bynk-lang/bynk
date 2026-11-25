@@ -1,0 +1,5 @@
+commons orders
+
+uses billing { Amont }
+
+type Order = { id: Int }

@@ -898,7 +898,7 @@ impl<'a> Formatter<'a> {
         for u in &a.uses {
             self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
@@ -1008,7 +1008,7 @@ impl<'a> Formatter<'a> {
                 self.newline();
             }
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             first = false;
         }
@@ -1209,7 +1209,7 @@ impl<'a> Formatter<'a> {
                 self.push(" {");
                 self.newline();
                 self.indented(|f| {
-                    f.format_commons_body(&c.uses, &c.items, &c.trailing_comments);
+                    f.format_commons_body(&c.uses, &c.consumes, &c.items, &c.trailing_comments);
                 });
                 self.push("}");
                 self.newline();
@@ -1218,7 +1218,7 @@ impl<'a> Formatter<'a> {
                 self.push(&header);
                 self.newline();
                 self.newline();
-                self.format_commons_body(&c.uses, &c.items, &c.trailing_comments);
+                self.format_commons_body(&c.uses, &c.consumes, &c.items, &c.trailing_comments);
             }
         }
     }
@@ -1226,6 +1226,7 @@ impl<'a> Formatter<'a> {
     fn format_commons_body(
         &mut self,
         uses: &[UsesDecl],
+        consumes: &[ConsumesDecl],
         items: &[CommonsItem],
         trailing_comments: &[Comment],
     ) {
@@ -1233,8 +1234,13 @@ impl<'a> Formatter<'a> {
         for u in uses {
             self.header_comment_gap(any_uses, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
+            any_uses = true;
+        }
+        // #4044: a commons' type-only `consumes` lines follow its `uses`.
+        for c in consumes {
+            self.format_consumes(c, any_uses);
             any_uses = true;
         }
         if any_uses && !items.is_empty() {
@@ -1343,7 +1349,7 @@ impl<'a> Formatter<'a> {
         for u in uses {
             self.header_comment_gap(any_header, u.blank_before, &u.trivia.leading);
             self.emit_leading_comments(&u.trivia.leading);
-            self.push(&format!("uses {}", u.target.joined()));
+            self.push(&uses_text(u));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
             any_header = true;
         }
@@ -3723,6 +3729,28 @@ fn holds_comments(e: &Expr) -> bool {
         .any(holds_comments)
 }
 
+/// #4045: the text of a `uses` clause in any of its three forms: the whole
+/// commons, `uses lib.y as Y`, or the braced `uses lib.y { Status as YStatus, f }`.
+fn uses_text(u: &UsesDecl) -> String {
+    match (&u.alias, &u.selected) {
+        (Some(alias), _) => format!("uses {} as {}", u.target.joined(), alias.name),
+        (None, Some(selected)) if selected.is_empty() => {
+            format!("uses {} {{ }}", u.target.joined())
+        }
+        (None, Some(selected)) => {
+            let names: Vec<String> = selected
+                .iter()
+                .map(|i| match &i.alias {
+                    Some(a) => format!("{} as {}", i.name.name, a.name),
+                    None => i.name.name.clone(),
+                })
+                .collect();
+            format!("uses {} {{ {} }}", u.target.joined(), names.join(", "))
+        }
+        (None, None) => format!("uses {}", u.target.joined()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4055,6 +4083,22 @@ mod tests {
         let out = fmt(src);
         assert_eq!(out, src);
         assert_eq!(fmt(&out), out);
+    }
+
+    /// #4045: the three `uses` forms and a name qualified by one are written as
+    /// they were, and formatting is idempotent.
+    #[test]
+    fn uses_forms_and_qualified_names_round_trip() {
+        let src = "commons app.z\n\nuses lib.x\nuses lib.y as Y\nuses lib.money { Money, format as formatMoney }\n\nfn f(t: Y.Status, m: Money) -> String {\n\tY.describe(t)\n}\n\nfn g(s: lib.x.Status) -> String {\n\tlib.x.describe(s)\n}\n";
+        let out = fmt(src);
+        assert_eq!(out, src);
+        assert_eq!(fmt(&out), out);
+        // A braced list is laid out on one line, with its entries spaced.
+        let squeezed = fmt("commons app.z\n\nuses lib.money {Money,format as formatMoney}\n");
+        assert!(
+            squeezed.contains("uses lib.money { Money, format as formatMoney }"),
+            "{squeezed}"
+        );
     }
 
     #[test]
