@@ -994,4 +994,20 @@ fn a_batch_is_numbered_in_merge_order_with_each_increments_own_pr() {
         ledger.contains("| R2.4 | v0.186.1 | #21 | Merged second |"),
         "{ledger}"
     );
+
+    // #4322's stamp ledger gains one line per file, appended in merge order too.
+    let stamped = fs::read_to_string(root.join("design/stamped.txt")).unwrap();
+    let lines: Vec<(&str, &str)> = stamped
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .map(|l| {
+            let f: Vec<&str> = l.split_whitespace().collect();
+            (f[0], f[2])
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        vec![("l2-second-name", "0.186.0"), ("l11-first-name", "0.186.1")],
+        "{stamped}"
+    );
 }
