@@ -12,7 +12,7 @@ import * as __ns_bynk from "./../bynk.js";
 
 class __Stub_Audit {
   async note(n: number): globalThis.Promise<number> {
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -31,6 +31,7 @@ class __Stub_Audit {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -52,7 +53,7 @@ async function __prop_test_the_audit_is_never_reached_while_it_is_stubbed() {
   __ns_shop_gate.__resetAgents();
   const deps = __makeTestDeps();
   const { Audit, Door, __makeAudit, __makeDoor } = __ns_shop_gate;
-  const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+  const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
   type BytesResponse = __ns_bynk.BytesResponse;
   type CallFailure = __ns_bynk.CallFailure;
   type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -71,6 +72,7 @@ async function __prop_test_the_audit_is_never_reached_while_it_is_stubbed() {
   type Request = __ns_bynk.Request;
   type Response = __ns_bynk.Response;
   type SameSite = __ns_bynk.SameSite;
+  type SseEvent = __ns_bynk.SseEvent;
   type StreamResponse = __ns_bynk.StreamResponse;
   type TimedOut = __ns_bynk.TimedOut;
   type Uuid = __ns_bynk.Uuid;

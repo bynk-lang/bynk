@@ -6,6 +6,27 @@
 use super::usefulness::{Coverage, FUTURE_VARIANT_CLOSE, FUTURE_VARIANT_OPEN};
 use super::*;
 
+/// #3918: whether `ty` is a `Stream[SseEvent]`, the `bynk` record a `Streaming` body may carry
+/// beside `Stream[String]`. The element is found by name and by its first-party declaration, so a
+/// user type of the same name is not mistaken for it.
+fn is_sse_event_stream(ty: TyId, ctx: &Ctx) -> bool {
+    let Ty::Stream(elem) = &*ctx.tys.get(ty) else {
+        return false;
+    };
+    let Ty::Named { name, .. } = &*ctx.tys.get(*elem) else {
+        return false;
+    };
+    name == "SseEvent"
+        && ctx.input.types.get("SseEvent").is_some_and(|d| {
+            crate::context_checks::is_std_bynk_type("SseEvent", &ctx.input.types, d)
+        })
+}
+
+/// #3918: whether a `Streaming` body is a `Stream[String]` or a `Stream[SseEvent]`.
+fn is_streaming_body(arg_ty: TyId, string_stream: TyId, tys: &Types, ctx: &Ctx) -> bool {
+    compatible(arg_ty, string_stream, tys) || is_sse_event_stream(arg_ty, ctx)
+}
+
 /// v0.26 (ADR 0054): the deletion span for `given` entry `i`, list-aware so
 /// the result never double-commas, leading-commas, or leaves `given ,`:
 /// an entry with a successor deletes through the successor's start
@@ -2834,7 +2855,8 @@ const MAX_RETRY_DELAY_MS: i64 = 86_400_000;
 ///   — argument must be `String`.
 /// - `Location` (`Found`, `SeeOther`, `PermanentRedirect`, …) — argument must
 ///   be `String`: the redirect target URL, emitted as a `Location` header.
-/// - `Streamed` (`Streaming`) — argument must be `Stream[String]`, SSE-framed.
+/// - `Streamed` (`Streaming`) — argument must be `Stream[String]` or (#3918)
+///   `Stream[SseEvent]`, SSE-framed.
 /// - `Raw` (`Raw`) — two arguments, a `Bytes` body then a `String` content-type;
 ///   the only two-argument shape.
 /// - `None` (`NoContent`, `NotFound`, `MethodNotAllowed`, …) — no argument
@@ -2962,7 +2984,7 @@ pub(crate) fn check_http_variant(
                     "bynk.types.variant_arity",
                     span,
                     format!(
-                        "`HttpResult.{}` expects 1 `Stream[String]` argument, but {} were given",
+                        "`HttpResult.{}` expects 1 `Stream[String]` or `Stream[SseEvent]` argument, but {} were given",
                         variant.name,
                         args.len(),
                     ),
@@ -2970,12 +2992,12 @@ pub(crate) fn check_http_variant(
                 return None;
             }
             let arg_ty = type_of(&args[0], Some(tys.intern(stream_str.clone())), ctx)?;
-            if !compatible(arg_ty, tys.intern(stream_str), tys) {
+            if !is_streaming_body(arg_ty, tys.intern(stream_str), tys, ctx) {
                 ctx.errors.push(CompileError::new(
                     "bynk.types.argument_mismatch",
                     args[0].span,
                     format!(
-                        "`HttpResult.{}` expects a `Stream[String]` body, but got `{}`",
+                        "`HttpResult.{}` expects a `Stream[String]` or `Stream[SseEvent]` body, but got `{}`",
                         variant.name,
                         arg_ty.display(tys),
                     ),

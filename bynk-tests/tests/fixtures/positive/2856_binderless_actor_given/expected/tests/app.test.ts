@@ -28,7 +28,7 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -47,6 +47,7 @@ async function test_a_binder_less_Bearer_route_that_takes_a_capability() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -67,7 +68,7 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -86,6 +87,7 @@ async function test_a_binding_Bearer_route_that_takes_a_capability() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
@@ -106,7 +108,7 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     const deps = __makeTestDeps();
     const { UserId, api } = __ns_app;
     type UserId = __ns_app.UserId;
-    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, StreamResponse, TimedOut, Uuid } = __ns_bynk;
+    const { BytesResponse, CallFailure, CallOutcome, Claim, Cookie, CronSchedule, EventEnvelope, FetchError, FetchOptions, File, LogLevel, Method, ParOptions, Redirect, Refusal, Request, Response, SameSite, SseEvent, StreamResponse, TimedOut, Uuid } = __ns_bynk;
     type BytesResponse = __ns_bynk.BytesResponse;
     type CallFailure = __ns_bynk.CallFailure;
     type CallOutcome<R> = __ns_bynk.CallOutcome<R>;
@@ -125,6 +127,7 @@ async function test_a_binder_less_Bearer_route_without_a_capability() {
     type Request = __ns_bynk.Request;
     type Response = __ns_bynk.Response;
     type SameSite = __ns_bynk.SameSite;
+    type SseEvent = __ns_bynk.SseEvent;
     type StreamResponse = __ns_bynk.StreamResponse;
     type TimedOut = __ns_bynk.TimedOut;
     type Uuid = __ns_bynk.Uuid;
