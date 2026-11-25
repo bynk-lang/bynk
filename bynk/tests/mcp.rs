@@ -23,7 +23,7 @@ type Item = {
   qty: Int where Positive,
 }
 
-service api from http {
+service api from http { limits { maxBody: 1_048_576 }
   on POST("/items") (body: Item) -> Effect[HttpResult[Item]] by Visitor {
     Created(body)
   }

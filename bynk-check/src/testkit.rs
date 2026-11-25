@@ -153,10 +153,14 @@ impl Analysed {
             .collect()
     }
 
-    /// Panic, listing every diagnostic, unless the project has none at all.
+    /// Panic, listing every diagnostic, unless the project has none at all. A hint
+    /// is a suggestion, not a finding, so it does not count.
     pub(crate) fn assert_clean(&self) {
         assert!(
-            self.analysis.errors.is_empty(),
+            self.analysis
+                .errors
+                .iter()
+                .all(|e| Severity::for_error(&e.error) == Severity::Hint),
             "expected a clean project, got:\n{}",
             self.render()
         );
