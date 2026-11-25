@@ -1102,7 +1102,9 @@ pub(crate) fn check_call(
     // a silent `None` here admitted any unknown call and emitted it verbatim.
     // Mirror the resolver's ladder. #1708: test bodies were exempt, for the
     // same since-repaired reason as `check_ident`'s twin gate; dropped with it.
-    for a in args {
+    // #3941: `env(NAME, …)` names its variable bare, which is no reference.
+    let env_call = name.name == "env" && owners.is_empty();
+    for a in args.iter().skip(usize::from(env_call)) {
         let _ = type_of(a, None, ctx);
     }
     if owners.len() > 1 {
@@ -1126,6 +1128,12 @@ pub(crate) fn check_call(
                 name.name, name.name, name.name
             ),
         ));
+        return None;
+    }
+    if env_call {
+        // #3941: `env(…)` is a constant's whole initialiser, wherever else it
+        // is written (handler and test bodies never reach the resolver's walk).
+        ctx.errors.push(crate::env_consts::not_initialiser(span));
         return None;
     }
     ctx.errors.push(
@@ -7553,6 +7561,20 @@ mod tests {
              fn misuse() -> Int { let y = first_of(5)\n 0 }\n",
         );
         a.assert_reports("bynk.generics.uninferable_type_arg");
+    }
+
+    /// #3941: `env(…)` in a handler body (which the resolver's walk never
+    /// reaches) is the same refusal as in a function body, reported once, with
+    /// no unknown-function or unknown-name echo.
+    #[test]
+    fn env_in_a_handler_body_is_not_an_initialiser() {
+        let a = context(
+            "service api from http {\n\ton GET(\"/x\") () -> Effect[HttpResult[String]] by Visitor {\n\t\tOk(env(APP_ORIGIN, \"x\"))\n\t}\n}\n",
+        );
+        a.assert_reports("bynk.env.not_initialiser");
+        let cats = a.categories();
+        assert!(!cats.contains(&"bynk.resolve.unknown_function"), "{cats:?}");
+        assert!(!cats.contains(&"bynk.resolve.unknown_name"), "{cats:?}");
     }
 
     #[test]

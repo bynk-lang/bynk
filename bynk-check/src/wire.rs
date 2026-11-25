@@ -718,7 +718,7 @@ pub fn sum_inst_variants(
 /// `Pair[User, String]` → `Pair_User_String`. #593: shared with generic sums.
 /// Renamed from `app_ts_name` in the move from `bynk-emit`.
 pub fn inst_codec_suffix(name: &str, args: &[TypeRef]) -> String {
-    let mut s = name.to_string();
+    let mut s = crate::emitted_names::codec_key(name);
     for a in args {
         s.push('_');
         s.push_str(&codec_suffix(a));
@@ -746,7 +746,7 @@ pub fn codec_suffix(t: &TypeRef) -> String {
         // v0.174 (#592): the codec suffix for a generic-record instantiation —
         // `Paginated[User]` → `Paginated_User`.
         TypeRef::App { name, args, .. } => inst_codec_suffix(&name.name, args),
-        TypeRef::Named(id) => id.name.clone(),
+        TypeRef::Named(id) => crate::emitted_names::codec_key(&id.name),
         TypeRef::Result(a, b, _) => format!("Result_{}_{}", codec_suffix(a), codec_suffix(b)),
         TypeRef::Option(a, _) => format!("Option_{}", codec_suffix(a)),
         TypeRef::Effect(a, _) => format!("Effect_{}", codec_suffix(a)),

@@ -15,6 +15,8 @@ use bynk_fmt::{FormatOptions, IndentStyle, format_source};
 use project::{CompileOptions, ProjectPathsError, try_read_project_paths_with};
 use render::LabelHome;
 
+/// The name of the environment a build uses when `--env` is omitted (#3941).
+pub use bynk_project::vars::DEFAULT_ENVIRONMENT;
 pub mod colour;
 pub mod compile_cmd;
 pub mod contracts_lock;
@@ -1255,6 +1257,7 @@ pub fn run_check(
     short: bool,
     fix: Option<&[String]>,
     each: bool,
+    environment: &str,
 ) -> ExitCode {
     let scope = match fix.map(fix::Scope::codes).transpose() {
         Ok(scope) => scope,
@@ -1302,7 +1305,7 @@ pub fn run_check(
             if !short {
                 eprintln!("{}", member_header(member));
             }
-            failed |= !check_one(prog, member, short, Some(member));
+            failed |= !check_one(prog, member, short, Some(member), environment);
         }
         return if failed {
             ExitCode::FAILURE
@@ -1313,7 +1316,7 @@ pub fn run_check(
     let fixed = scope
         .as_ref()
         .is_none_or(|scope| fix::fix_all(prog, scope, &[(input, prog.to_string())]));
-    if check_one(prog, input, short, None) && fixed {
+    if check_one(prog, input, short, None, environment) && fixed {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
@@ -1441,7 +1444,13 @@ pub fn member_header(member: &Path) -> String {
 /// [`run_check`] over one project or file; `true` when it passes. `member`
 /// names the workspace member being checked, so a project-level error says
 /// which one it is.
-fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bool {
+fn check_one(
+    prog: &str,
+    input: &Path,
+    short: bool,
+    member: Option<&Path>,
+    environment: &str,
+) -> bool {
     let prog = match member {
         Some(m) => format!("{prog}: {}", shown(m)),
         None => prog.to_string(),
@@ -1449,7 +1458,8 @@ fn check_one(prog: &str, input: &Path, short: bool, member: Option<&Path>) -> bo
     let prog = prog.as_str();
     if input.is_dir() {
         let options = match try_project_options(input) {
-            Ok(o) => o,
+            // #3941: `--env` selects whose `env(…)` values the check resolves.
+            Ok(o) => o.environment(environment),
             Err(e) => {
                 crate::emsg!("{prog}: error: {e}");
                 return false;
@@ -2106,6 +2116,24 @@ mod tests {
                 "env_nested_in_env",
                 project,
                 "commons config\n\nconst Lines: String = env(A, env(B, \"x\"))\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+        // In a function body it is the same refusal, not an unknown function.
+        assert_eq!(
+            build(
+                "env_in_fn_body",
+                project,
+                "commons config\n\nfn origin() -> String { env(APP_ORIGIN, \"x\") }\n"
+            ),
+            Err(vec!["bynk.env.not_initialiser"])
+        );
+        // Nested where the default cannot stand in, it is reported once.
+        assert_eq!(
+            build(
+                "env_in_arithmetic",
+                project,
+                "commons config\n\nconst Lines: Int = env(A, 1) + 1\n"
             ),
             Err(vec!["bynk.env.not_initialiser"])
         );

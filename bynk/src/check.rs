@@ -18,17 +18,19 @@ pub fn run(
     fix: Option<Vec<String>>,
     emit: bool,
     each: bool,
+    environment: &str,
 ) -> ExitCode {
     let short = format == CheckFormatArg::Short;
     if emit && !input.is_dir() {
         emsg!("bynk check: error: `--emit` takes a project directory, not a single file");
         return ExitCode::FAILURE;
     }
-    let checked = bynk_driver::run_check("bynk", &input, short, fix.as_deref(), each);
+    let checked = bynk_driver::run_check("bynk", &input, short, fix.as_deref(), each, environment);
     // #3068: `--emit` type-checks the generated TypeScript, but only for a
     // program that passed the check; a failed check has nothing to emit.
     if emit && checked == ExitCode::SUCCESS {
-        return if bynk_driver::tsc_report::check_emit_all("bynk", &input, short, each) {
+        return if bynk_driver::tsc_report::check_emit_all("bynk", &input, short, each, environment)
+        {
             ExitCode::SUCCESS
         } else {
             ExitCode::FAILURE
