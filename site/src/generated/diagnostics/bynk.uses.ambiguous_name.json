@@ -1,0 +1,12 @@
+{
+  "blurb": "A unit that `uses` a commons gets what it declares (types, functions, constants, assets and embeds) in scope under their own names. Two commons it uses may declare the same name, and that is fine until the name is written bare: then it could mean either, so the compiler refuses that reference and lists the qualified spellings. Choose one: give a commons an alias (`uses shipping as S`, then `S.Amount`), or select the one you mean (`uses billing { Amount }`), which also brings in only the names you list. A declaration of the unit's own wins over a used name, and a `private` declaration is never imported, so neither can be ambiguous.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.ambiguous_name",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// billing.bynk\ncommons billing\n\ntype Amount = Int where Positive\n\n// shipping.bynk\ncommons shipping\n\ntype Amount = Int where NonNegative    // both declare `Amount`\n\n// orders.bynk\ncommons orders\n\nuses billing\nuses shipping as S                     // ✓ `S.Amount` is `shipping`'s\n\ntype Order = { total: Amount }         // ✗ `Amount` is declared by `billing` and `shipping`\ntype Order = { total: Amount, postage: S.Amount }    // ✓ the second one by its alias",
+  "severity": "error",
+  "summary": "A bare name is declared by more than one commons a unit `uses` (type, function, constant, asset or embed); the qualified spellings are listed, and an alias or a braced list picks one."
+}

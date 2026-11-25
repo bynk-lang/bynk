@@ -1026,11 +1026,7 @@ impl<'a> Parser<'a> {
             | TokenKind::Messages
             | TokenKind::On
             | TokenKind::Suite => {
-                self.bump();
-                let ident = Ident {
-                    name: self.slice(t.span).to_string(),
-                    span: t.span,
-                };
+                let ident = self.bump_ident_maybe_qualified(t);
                 // v0.9.4: `Val[T]` / `Val[T](args)` — test-context construction.
                 if ident.name == "Val" && self.peek_kind() == Some(TokenKind::LBracket) {
                     return self.parse_val_expr(ident.span);
@@ -2406,8 +2402,12 @@ impl<'a> Parser<'a> {
         // ids the outer parser allocates *after* this hole don't re-collide
         // with ones the sub-parse just handed out.
         sub.next_expr_id = self.next_expr_id;
+        // #4045: the hole reads the qualifiers the unit's `uses` clauses made, and
+        // the names it qualifies are the unit's to hand back.
+        sub.use_prefixes = self.use_prefixes.clone();
         let expr = sub.parse_expr()?;
         self.next_expr_id = sub.next_expr_id;
+        self.qualified_refs.append(&mut sub.qualified_refs);
         if let Some(extra) = sub.peek() {
             return Err(CompileError::new(
                 "bynk.parse.extra_tokens",

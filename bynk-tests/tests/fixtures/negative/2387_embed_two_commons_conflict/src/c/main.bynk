@@ -2,3 +2,7 @@ context c
 
 uses a
 uses b
+
+fn f() -> String {
+  shell
+}

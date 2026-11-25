@@ -163,9 +163,10 @@ Note what the context `uses`: `bynk.locale.types` (for `LocaleTag`, which
 
 > **That omission is required, not stylistic.** `bynk.locale` exports a
 > `render`, and so does every message-bundle commons — a context that `uses`
-> both hits `bynk.uses.name_conflict` on the shared name, whether or not it ever
-> calls either. Keeping the `render`/`message`/`with*` calls inside the bundle's
-> own commons, behind a wrapper function, is the pattern that avoids it.
+> both hits `bynk.uses.ambiguous_name` on the shared name where it calls
+> `render` bare. Keeping the `render`/`message`/`with*` calls inside the bundle's
+> own commons, behind a wrapper function, is the pattern that avoids it; or
+> alias one (`uses bynk.locale as Locale`).
 
 ## What a bundle exports
 

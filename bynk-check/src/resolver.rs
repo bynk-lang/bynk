@@ -637,10 +637,34 @@ pub struct ShadowedImport {
     pub local: &'static str,
     /// The local declaration's name.
     pub local_span: Span,
+    /// #4045: for a name two used commons both declare (`imported` is
+    /// `"ambiguous"`), the qualified spelling of each, which the diagnostic lists.
+    pub ambiguous: Vec<String>,
+}
+
+/// #4045: `bynk.uses.ambiguous_name` for a bare reference to `name`, which
+/// more than one used commons declares.
+fn ambiguous_name_error(name: &str, span: Span, forms: &[String]) -> CompileError {
+    let listed = forms
+        .iter()
+        .map(|f| format!("`{f}`"))
+        .collect::<Vec<_>>()
+        .join(" or ");
+    CompileError::new(
+        "bynk.uses.ambiguous_name",
+        span,
+        format!("`{name}` is declared by more than one used commons: write {listed}"),
+    )
+    .with_note(format!(
+        "alias one commons (`uses lib.y as Y`, then `Y.{name}`), or select the one you mean (`uses lib.y {{ {name} }}`)"
+    ))
 }
 
 /// `bynk.uses.name_conflict` for a reference to `name`, a shadowed import.
 pub(crate) fn shadowed_import_error(name: &str, span: Span, s: &ShadowedImport) -> CompileError {
+    if !s.ambiguous.is_empty() {
+        return ambiguous_name_error(name, span, &s.ambiguous);
+    }
     CompileError::new(
         "bynk.uses.name_conflict",
         span,
@@ -2988,7 +3012,10 @@ fn shadowed_type_gate(
     let mut variants = std::collections::BTreeMap::new();
     for (name, s) in shadowed.iter().filter(|(_, s)| s.imported == "type") {
         gated.insert(name.clone(), s.unit.clone());
-        if let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body) {
+        // #4045: an ambiguous type's variants are not gated; only its name is.
+        if s.ambiguous.is_empty()
+            && let Some(TypeBody::Sum(sum)) = types.get(name).map(|t| &t.body)
+        {
             for v in &sum.variants {
                 variants.insert(v.name.name.clone(), name.clone());
             }

@@ -1211,8 +1211,7 @@ impl<'a> Parser<'a> {
                     Ok(TypeRef::Effect(Box::new(arg), t.span.merge(close.span)))
                 }
                 TokenKind::Ident => {
-                    self.bump();
-                    let name = self.slice(t.span).to_string();
+                    let (name, t) = self.bump_type_name(t);
                     // Built-in type-name dispatch. Each arm below uses the exact
                     // `name == "<Name>"` idiom: the drift guard
                     // `builtin_type_names_match_parser_dispatch`
