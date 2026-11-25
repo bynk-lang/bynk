@@ -701,9 +701,7 @@ pub fn emit_worker_entry(
         &[],
     ));
     program.push(TsStmt::decl(
-        TsDecl::ExportDefault(TsExpr::multiline_object_entries(trace_scope::enter_trace(
-            default_entries,
-        ))),
+        TsDecl::ExportDefault(trace_scope::export_default(default_entries)),
         None,
     ));
 

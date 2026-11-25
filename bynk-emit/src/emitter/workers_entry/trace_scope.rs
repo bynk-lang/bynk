@@ -12,10 +12,15 @@
 //! runtime runs the body as it is and nothing is carried.
 
 use crate::ts_build::{block_arrow, call, ident, return_};
-use bynk_ts::TsObjectEntry;
+use bynk_ts::{TsExpr, TsObjectEntry};
 
 /// The entry points a request, a cron run, a queue batch or an email reaches.
 const ENTRY_POINTS: &[&str] = &["fetch", "scheduled", "queue", "email"];
+
+/// The Worker's default export: its entries, each entry point run under a trace.
+pub(crate) fn export_default(entries: Vec<TsObjectEntry>) -> TsExpr {
+    TsExpr::multiline_object_entries(enter_trace(entries))
+}
 
 /// `entries` with each entry point's body run under a new trace.
 pub(crate) fn enter_trace(entries: Vec<TsObjectEntry>) -> Vec<TsObjectEntry> {

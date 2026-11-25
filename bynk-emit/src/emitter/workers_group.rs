@@ -977,9 +977,7 @@ pub fn emit_group_entry(entry: &GroupEntry<'_>) -> TsProgram {
         handlers.push(email(&members));
     }
     program.push(TsStmt::decl(
-        TsDecl::ExportDefault(TsExpr::multiline_object_entries(
-            super::workers_entry::trace_scope::enter_trace(handlers),
-        )),
+        TsDecl::ExportDefault(super::workers_entry::trace_scope::export_default(handlers)),
         None,
     ));
     program
