@@ -5656,7 +5656,7 @@ fn Box.size(self) -> Int { 1 }
             .into_iter()
             .map(|c| c.label)
             .collect();
-        assert_eq!(got, ["Ack", "Retry", "Undecodable"]);
+        assert_eq!(got, ["Ack", "Retry", "RetryAfter", "Undecodable"]);
     }
 
     #[test]

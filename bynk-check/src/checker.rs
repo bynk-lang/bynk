@@ -6856,6 +6856,13 @@ pub fn variants_of(
                         QueueVariantPayload::Message => {
                             vec![("reason".to_string(), tys.intern(Ty::Base(BaseType::String)))]
                         }
+                        QueueVariantPayload::MessageDelay => vec![
+                            ("reason".to_string(), tys.intern(Ty::Base(BaseType::String))),
+                            (
+                                "delay".to_string(),
+                                tys.intern(Ty::Base(BaseType::Duration)),
+                            ),
+                        ],
                     },
                 })
                 // #3878: a `system` case reads a body that did not decode as

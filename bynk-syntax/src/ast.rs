@@ -2664,6 +2664,8 @@ pub enum QueueVariantPayload {
     None,
     /// Carries a `String` reason (`Retry`).
     Message,
+    /// Carries a `String` reason and a `Duration` delay (`RetryAfter`, #3881).
+    MessageDelay,
 }
 
 /// One variant of the built-in `QueueResult` sum (v0.44).
@@ -2674,7 +2676,8 @@ pub struct QueueVariant {
 }
 
 /// All `QueueResult` variants, in declaration order. `Ack` confirms the
-/// message; `Retry` redelivers it, carrying a reason for observability.
+/// message; `Retry` redelivers it, carrying a reason for observability;
+/// `RetryAfter` redelivers it after a delay (#3881).
 pub const QUEUE_VARIANTS: &[QueueVariant] = &[
     QueueVariant {
         name: "Ack",
@@ -2683,6 +2686,10 @@ pub const QUEUE_VARIANTS: &[QueueVariant] = &[
     QueueVariant {
         name: "Retry",
         payload: QueueVariantPayload::Message,
+    },
+    QueueVariant {
+        name: "RetryAfter",
+        payload: QueueVariantPayload::MessageDelay,
     },
 ];
 
