@@ -371,6 +371,26 @@ export const Cookie = {
 };
 
 /**
+ * One server-sent event, for a `Streaming(...)` response that needs more than a
+ * `data:` line. `data` is the payload (a line break in it becomes several `data:`
+ * lines); `event` names the event type a browser's `EventSource` listens for;
+ * `id` sets its last event ID, which a reconnecting browser sends back as
+ * `Last-Event-ID`; `retry` is the reconnection delay the browser should wait, sent
+ * in whole milliseconds. `event` and `id` cannot hold a line break and `id`
+ * cannot hold NUL: an element that does faults the stream, in-band. A
+ * `Stream[String]` is still framed as plain `data:` events, unchanged.
+ */
+export interface SseEvent {
+  readonly data: string;
+  readonly event: Option<string>;
+  readonly id: Option<string>;
+  readonly retry: Option<number>;
+}
+
+export const SseEvent = {
+};
+
+/**
  * An HTTP response whose body streams as it is read, as `Fetch.receiveStream`
  * and `Fetch.sendStream` return it. `headers` are as `Response`'s. `body` is
  * single-pass: a second read faults. A network failure partway through the
@@ -1160,6 +1180,39 @@ export function __deserialise_SameSite(json: __JsonValue, path: string = "$"): R
     default:
       return Err({ kind: "StructuralMismatch", path, expected: "sum variant kind", actual: String(kind) });
   }
+}
+
+export function __serialise_SseEvent(value: SseEvent): __JsonValue {
+  return {
+    data: value.data as __JsonValue,
+    event: __serialise_Option_String(value.event),
+    id: __serialise_Option_String(value.id),
+    retry: __serialise_Option_Duration(value.retry),
+  };
+}
+
+export function __deserialise_SseEvent(json: __JsonValue, path: string = "$"): Result<SseEvent, __BoundaryError> {
+  if (typeof json !== "object" || json === null || globalThis.Array.isArray(json)) {
+    return Err({ kind: "StructuralMismatch", path, expected: "object", actual: typeof json });
+  }
+  const obj = json as { [k: string]: __JsonValue };
+  if (typeof obj["data"] !== "string") {
+    return Err({ kind: "StructuralMismatch", path: `${path}.data`, expected: "string", actual: typeof obj["data"] });
+  }
+  const __data = obj["data"];
+  const __d_event: __JsonValue = "event" in obj ? obj["event"] : { kind: "None" };
+  const __r_event = __deserialise_Option_String(__d_event, `${path}.event`);
+  if (__r_event.tag === "Err") return __r_event;
+  const __event = __r_event.value;
+  const __d_id: __JsonValue = "id" in obj ? obj["id"] : { kind: "None" };
+  const __r_id = __deserialise_Option_String(__d_id, `${path}.id`);
+  if (__r_id.tag === "Err") return __r_id;
+  const __id = __r_id.value;
+  const __d_retry: __JsonValue = "retry" in obj ? obj["retry"] : { kind: "None" };
+  const __r_retry = __deserialise_Option_Duration(__d_retry, `${path}.retry`);
+  if (__r_retry.tag === "Err") return __r_retry;
+  const __retry = __r_retry.value;
+  return Ok({ data: __data, event: __event, id: __id, retry: __retry } as SseEvent);
 }
 
 export function __serialise_TimedOut(value: TimedOut): __JsonValue {

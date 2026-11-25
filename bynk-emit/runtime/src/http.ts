@@ -1,7 +1,7 @@
 import type { JsonValue, BoundaryError } from "./boundary.ts";
 import type { DecodeError } from "./errors.ts";
 import type { Result, Option } from "./result.ts";
-import type { HttpResult } from "./httpresult.ts";
+import type { HttpResult, SseEvent } from "./httpresult.ts";
 
 // #3908: the path's segments, percent-decoded once (empty segments dropped, so
 // `/items`, `/items/` and `//items` agree). `null` when a segment is not valid
@@ -117,16 +117,45 @@ const HTTP_STATUS: Record<Exclude<HttpResult<unknown>["tag"], "RawError">, numbe
 // Each stream element is one SSE event; a multi-line element becomes multiple
 // `data:` lines, terminated by a blank line. The body is a ReadableStream, so
 // this is a Web standard that runs unchanged on Workers and Node.
-function sseResponse(stream: AsyncIterable<string>): Response {
+function sseResponse(stream: AsyncIterable<string | SseEvent>): Response {
   const encoder = new TextEncoder();
-  const body = pullBody(stream, (value) => [
-    ...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)),
-    encoder.encode("\n"),
-  ]);
+  const body = pullBody(stream, (value) => {
+    if (typeof value === "string") {
+      return [...value.split("\n").map((line) => encoder.encode(`data: ${line}\n`)), encoder.encode("\n")];
+    }
+    return sseEventChunks(value).map((line) => encoder.encode(line));
+  });
   return new Response(body, {
     status: 200,
     headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
   });
+}
+
+// #3918: one structured event as the lines of the HTML event-stream format, `event:`, `id:` and
+// `retry:` before the `data:` lines, and a blank line to end it. `data` splits on any line break
+// (CRLF, LF or CR) into one `data:` line each, so an embedded break can never end the event early.
+// An `event` or `id` with a line break, an `id` with NUL, or a `retry` that is not a whole
+// number of milliseconds throws, which errors the body at this element, in-band, as a throw from
+// the source does: a value the wire cannot carry is never written as a different one.
+function sseEventChunks(e: SseEvent): string[] {
+  const out: string[] = [];
+  if (e.event.tag === "Some") {
+    if (/[\r\n]/.test(e.event.value)) throw new Error("bynk: an SSE `event` name cannot contain a line break");
+    out.push(`event: ${e.event.value}\n`);
+  }
+  if (e.id.tag === "Some") {
+    if (/[\r\n]/.test(e.id.value)) throw new Error("bynk: an SSE `id` cannot contain a line break");
+    if (e.id.value.includes("\0")) throw new Error("bynk: an SSE `id` cannot contain NUL");
+    out.push(`id: ${e.id.value}\n`);
+  }
+  if (e.retry.tag === "Some") {
+    const ms = e.retry.value;
+    if (!Number.isInteger(ms) || ms < 0) throw new Error("bynk: an SSE `retry` must be a whole number of milliseconds");
+    out.push(`retry: ${ms}\n`);
+  }
+  for (const line of e.data.split(/\r\n|\r|\n/)) out.push(`data: ${line}\n`);
+  out.push("\n");
+  return out;
 }
 
 // K-streams (#2623): mark `stream` as read, or throw if it already was. A

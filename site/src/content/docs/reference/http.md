@@ -389,7 +389,7 @@ emitted as an SSE (`text/event-stream`) body (`Streamed`), a raw
 | Variant | Status | Payload |
 |---|---|---|
 | `Ok(value)` | 200 | the value, as JSON |
-| `Streaming(stream)` | 200 | a `Stream[String]`, SSE-framed (see [Streamed responses](#streamed-responses)) |
+| `Streaming(stream)` | 200 | a `Stream[String]` or `Stream[SseEvent]`, SSE-framed (see [Streamed responses](#streamed-responses) and [Structured events](#structured-events)) |
 | `Raw(body, contentType)` | 200 | a `Bytes` body under the given `content-type` (see [Raw responses](#raw-responses)) |
 | `RawTagged(body, contentType, etag)` | 200 | as `Raw`, sent with `etag` as its `ETag` (see [Supplying the validator](#supplying-the-validator-rawtagged)) |
 | `RawStreamed(body, contentType)` | 200 | a `Stream[Bytes]` body, streamed chunk by chunk (see [Streamed raw responses](#streamed-raw-responses)) |
@@ -1127,6 +1127,37 @@ on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by v: Visitor {
 }
 ```
 
+### Structured events
+
+A `Stream[SseEvent]` carries more than data. `SseEvent` is a record from `bynk`:
+
+| Field | Type | On the wire |
+|---|---|---|
+| `data` | `String` | one `data:` line per line of the text (CRLF, LF or CR) |
+| `event` | `Option[String]` | `event: <name>`, which a browser dispatches under that name |
+| `id` | `Option[String]` | `id: <value>`, echoed back as `Last-Event-ID` when the browser reconnects |
+| `retry` | `Option[Duration]` | `retry: <milliseconds>`, the reconnection delay the browser should use |
+
+Every field but `data` defaults to `None`, so a bare event is `SseEvent { data: "hi" }`:
+
+```bynk,fragment
+on GET("/events") () -> Effect[HttpResult[()]] by v: Visitor {
+  Streaming(Stream.of([
+    SseEvent { data: "hello", event: Some("greeting"), id: Some("1"), retry: Some(3.seconds) },
+    SseEvent { data: "line one\nline two" },
+  ]))
+}
+```
+
+A `Stream[String]` and a `Stream[SseEvent]` are both accepted; a plain string frames
+exactly as before. A value the wire cannot carry is an error, not a quiet change: an
+`event` or `id` containing a line break, an `id` containing NUL, or a `retry` that is not
+a whole number of milliseconds errors the body at that event, as any failure mid-stream
+does.
+
+A unit-tier test that matches `Streaming(s)` can drain `s` and count its events; `s` is typed
+`Stream[String]` whatever the handler streams, so do not read an `SseEvent` element as a `String`.
+
 ## Raw responses
 
 `Raw(body, contentType)` returns a **200** whose body is a raw
@@ -1199,8 +1230,8 @@ A producer that can fail mid-stream carries its outcome in-band — build a
 `Stream[Result[String, E]]` and `.map` it to `Stream[String]`, encoding an `Err`
 as an error event — because the HTTP status is already sent once streaming
 begins. A bounded `take` is the language-level guard against an unbounded
-response. A structured event type (named `event`/`id`/`retry` fields) is a
-planned follow-on; v1 streams plain `String` events.
+response. See [Structured events](#structured-events) for named
+events and resumption.
 
 ### Streamed raw responses
 

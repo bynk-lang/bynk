@@ -13,6 +13,7 @@ adapter bynk {
 		File,
 		Cookie,
 		SameSite,
+		SseEvent,
 		FetchOptions,
 		ParOptions,
 		Redirect,
@@ -253,6 +254,23 @@ adapter bynk {
 		httpOnly: Bool = true,
 		sameSite: SameSite = Lax,
 		partitioned: Bool = false,
+	}
+
+	---
+	One server-sent event, for a `Streaming(...)` response that needs more than a
+	`data:` line. `data` is the payload (a line break in it becomes several `data:`
+	lines); `event` names the event type a browser's `EventSource` listens for;
+	`id` sets its last event ID, which a reconnecting browser sends back as
+	`Last-Event-ID`; `retry` is the reconnection delay the browser should wait, sent
+	in whole milliseconds. `event` and `id` cannot hold a line break and `id`
+	cannot hold NUL: an element that does faults the stream, in-band. A
+	`Stream[String]` is still framed as plain `data:` events, unchanged.
+	---
+	type SseEvent = {
+		data: String,
+		event: Option[String] = None,
+		id: Option[String] = None,
+		retry: Option[Duration] = None,
 	}
 
 	---

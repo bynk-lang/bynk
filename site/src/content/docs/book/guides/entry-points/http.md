@@ -201,6 +201,41 @@ on GET("/feed/:mode") (mode: String) -> Effect[HttpResult[()]] by Visitor {
 See [HTTP → Streamed responses](/reference/http/#streamed-responses) for
 the framing rules and the mid-stream-error pattern.
 
+## Stream events a browser can resume
+
+A browser's `EventSource` reconnects when a stream drops and sends the last `id` it
+saw as `Last-Event-ID`. To give it something to resume from, stream `SseEvent`
+records (from `bynk`) instead of plain strings: `id` names the event, `event` picks
+the name it is dispatched under, and `retry` sets the reconnection delay.
+
+```bynk
+context updates
+
+consumes bynk { SseEvent }
+
+service Updates from http {
+	on GET("/updates") () -> Effect[HttpResult[()]] by Visitor {
+		Streaming(Stream.of([
+			SseEvent {
+				data: "first",
+				id: Some("1"),
+				event: Some("update"),
+			},
+			SseEvent {
+				data: "second",
+				id: Some("2"),
+				event: Some("update"),
+				retry: Some(5.seconds),
+			},
+		]))
+	}
+}
+```
+
+Only `data` is required. See
+[HTTP → Structured events](/reference/http/#structured-events) for the framing and the
+values the wire cannot carry.
+
 ## Return a non-JSON body
 
 Handlers return typed values, serialised as JSON. To serve something that is

@@ -1,10 +1,21 @@
 // v0.9: HttpResult — the built-in HTTP-result sum.
 
+// #3918: a server-sent event with more than a `data:` line, as the `bynk` record
+// `SseEvent` is at run time (`Duration` erases to milliseconds).
+// (`Option` is spelled out so this module reaches no other runtime module.)
+type Opt<T> = { readonly tag: "Some"; readonly value: T } | { readonly tag: "None" };
+export interface SseEvent {
+  readonly data: string;
+  readonly event: Opt<string>;
+  readonly id: Opt<string>;
+  readonly retry: Opt<number>;
+}
+
 export type HttpResult<T> =
   // 2xx success — carries the serialised value.
   | { readonly tag: "Ok"; readonly value: T }
   // 2xx streamed body — SSE-framed (real-time track slice 1).
-  | { readonly tag: "Streaming"; readonly stream: AsyncIterable<string> }
+  | { readonly tag: "Streaming"; readonly stream: AsyncIterable<string | SseEvent> }
   // 2xx raw body — author-owned bytes with an explicit content-type (v0.111).
   | { readonly tag: "Raw"; readonly body: Uint8Array; readonly contentType: string }
   // 2xx raw body with a handler-supplied entity tag, sent as its `ETag` (caching raw responses).
@@ -66,7 +77,7 @@ export const HttpResult = {
   // 2xx success.
   Ok: <T>(value: T): HttpResult<T> => ({ tag: "Ok", value }),
   // 2xx streamed body — the argument is a stream of SSE event payloads.
-  Streaming: (stream: AsyncIterable<string>): HttpResult<never> => ({ tag: "Streaming", stream }),
+  Streaming: (stream: AsyncIterable<string | SseEvent>): HttpResult<never> => ({ tag: "Streaming", stream }),
   // 2xx raw body — the arguments are the octets and their content-type.
   Raw: (body: Uint8Array, contentType: string): HttpResult<never> => ({ tag: "Raw", body, contentType }),
   // 2xx raw body with its validator — the octets, their content-type, and the
