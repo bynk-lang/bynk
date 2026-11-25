@@ -185,6 +185,9 @@ case) keeps its own name and meaning.
   (`bynk.env.unknown_variable`), so a typo cannot leave a default in force; two
   constants reading one variable must give it the same default
   (`bynk.env.conflicting_default`).
+- A package consumed as a dependency cannot declare an `env(…)` constant
+  (`bynk.env.in_dependency`): reading deployment configuration is the
+  application's business, and a library takes values as parameters.
 - `bynk.toml` is committed, so a variable named `*_KEY`, `*_SECRET`, `*_TOKEN` or
   `*_PASSWORD` warns (`bynk.env.secret_like_name`): keep secrets in `Secrets`.
 

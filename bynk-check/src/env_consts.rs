@@ -184,6 +184,10 @@ pub fn resolve(parsed: &mut [ParsedFile], vars: &ProjectVars, environment: &str)
     // Each variable's first default, to compare a second constant's against.
     let mut defaults: BTreeMap<String, String> = BTreeMap::new();
     for pf in parsed.iter_mut() {
+        // #3941 decision I: a package consumed as a dependency takes values as
+        // parameters; reading the consuming project's deployment configuration
+        // is the application's business.
+        let in_dependency = pf.package().is_some();
         let items = match pf.unit_mut() {
             SourceUnit::Commons(c) => &mut c.items,
             SourceUnit::Context(c) => &mut c.items,
@@ -194,15 +198,19 @@ pub fn resolve(parsed: &mut [ParsedFile], vars: &ProjectVars, environment: &str)
         let snapshot: Vec<CommonsItem> = items.clone();
         for item in items.iter_mut() {
             if let CommonsItem::Const(c) = item {
-                resolve_const(
-                    c,
-                    &snapshot,
-                    vars,
-                    environment,
-                    &mut read,
-                    &mut defaults,
-                    &mut out,
-                );
+                if in_dependency {
+                    refuse_in_dependency(c, &mut out);
+                } else {
+                    resolve_const(
+                        c,
+                        &snapshot,
+                        vars,
+                        environment,
+                        &mut read,
+                        &mut defaults,
+                        &mut out,
+                    );
+                }
             }
         }
     }
@@ -219,6 +227,32 @@ pub fn resolve(parsed: &mut [ParsedFile], vars: &ProjectVars, environment: &str)
         }
     }
     out
+}
+
+/// A constant of a dependency package: `env(…)` is refused, and the default (if
+/// there is one) stands in so the refusal does not cascade.
+fn refuse_in_dependency(c: &mut ConstDecl, out: &mut Outcome) {
+    if !is_env_call(&c.init) {
+        return;
+    }
+    out.source.push(
+        CompileError::new(
+            "bynk.env.in_dependency",
+            c.init.span,
+            format!(
+                "constant `{}` reads a `bynk.toml` variable, but a package consumed as a dependency cannot",
+                c.name.name
+            ),
+        )
+        .with_note(
+            "reading deployment configuration is the application's business: take the value as a parameter, and let the application read it with its own `env(…)` constant",
+        ),
+    );
+    if let ExprKind::Call { args, .. } = &c.init.kind
+        && let Some(default) = args.get(1).cloned()
+    {
+        c.init = default;
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -7950,6 +7950,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "Two `env(…)` constants name one variable but give it different defaults.",
     ),
     d(
+        "bynk.env.in_dependency",
+        "A constant of a package consumed as a dependency reads a `bynk.toml` variable with `env(…)`: deployment configuration is the application's to read.",
+    ),
+    d(
         "bynk.env.malformed_call",
         "`env(…)` is not `env(NAME)` or `env(NAME, default)`.",
     ),

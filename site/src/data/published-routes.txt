@@ -1523,6 +1523,7 @@
 /reference/diagnostics/bynk.embed.unsafe_path/
 /reference/diagnostics/bynk.env.bad_value/
 /reference/diagnostics/bynk.env.conflicting_default/
+/reference/diagnostics/bynk.env.in_dependency/
 /reference/diagnostics/bynk.env.malformed_call/
 /reference/diagnostics/bynk.env.missing/
 /reference/diagnostics/bynk.env.not_initialiser/

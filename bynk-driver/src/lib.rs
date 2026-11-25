@@ -1957,6 +1957,44 @@ mod tests {
         );
     }
 
+    /// #3941 decision I: a package consumed as a dependency cannot read the
+    /// consuming project's variables.
+    #[test]
+    fn env_constants_are_refused_in_a_dependency() {
+        let root = scratch_dir("env_in_dependency");
+        let write = |rel: &str, text: &str| {
+            let path = root.0.join(rel);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, text).unwrap();
+        };
+        write(
+            "bynk.toml",
+            "[workspace]\nmembers = [\"packages/*\", \"apps/*\"]\n",
+        );
+        write(
+            "packages/money/bynk.toml",
+            "[package]\nname = \"acme/money\"\nversion = \"1.0.0\"\nexports = [\"currency\"]\n",
+        );
+        write(
+            "packages/money/src/currency.bynk",
+            "commons currency\n\nconst Home: String = env(HOME_ORIGIN, \"https://x\")\n\nfn id(n: Int) -> Int {\n  n\n}\n",
+        );
+        write(
+            "apps/shop/bynk.toml",
+            "[project]\nname = \"shop\"\n\n[dependencies]\nmoney = { package = \"acme/money\", path = \"../../packages/money\" }\n\n[vars]\nHOME_ORIGIN = \"https://app\"\n",
+        );
+        write(
+            "apps/shop/src/pricing.bynk",
+            "commons pricing\n\nuses money.currency\n\nfn total(n: Int) -> Int {\n  id(n)\n}\n",
+        );
+        let options = try_project_options(&root.0.join("apps/shop")).expect("reads");
+        let codes: Vec<&str> = match project::compile_project(&options) {
+            Ok(_) => Vec::new(),
+            Err(f) => f.errors.iter().map(|e| e.error.category).collect(),
+        };
+        assert!(codes.contains(&"bynk.env.in_dependency"), "{codes:?}");
+    }
+
     /// #1890: with no `[workers]` table, a Worker still gets the default flag.
     #[test]
     fn a_worker_gets_the_default_compatibility_flag_without_a_workers_table() {
