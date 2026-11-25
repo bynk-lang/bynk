@@ -1,0 +1,29 @@
+commons demo.eff
+
+fn twice(e: Effect[Int]) -> Effect[Int] {
+	e.map((n) => n * 2)
+}
+
+fn lengthOr(e: Effect[Option[String]]) -> Effect[Int] {
+	e.map((o) => o.map((s) => s.length()).getOrElse(0))
+}
+
+fn plusOne(n: Int) -> Effect[Int] {
+	Effect.pure(n + 1)
+}
+
+fn chained(e: Effect[Int]) -> Effect[Int] {
+	e.andThen(plusOne)
+}
+
+fn isOk(e: Effect[Result[Int, String]]) -> Effect[Bool] {
+	e.map((r) => r.isOk())
+}
+
+fn okOrZero(e: Effect[Result[Int, String]]) -> Effect[Int] {
+	e.andThen((r) => Effect.pure(r.getOrElse(0)))
+}
+
+fn pipeline(e: Effect[Int]) -> Effect[Int] {
+	e.map((n) => n * 2).andThen(plusOne).map((n) => n * 10)
+}

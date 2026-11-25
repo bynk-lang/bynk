@@ -1,0 +1,5 @@
+commons demo.effectmethodnotfound
+
+fn bad(e: Effect[Int]) -> Effect[Int] {
+	e.flatMap((n) => Effect.pure(n))
+}

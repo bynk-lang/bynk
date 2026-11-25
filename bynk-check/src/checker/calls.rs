@@ -3582,7 +3582,10 @@ pub(crate) fn check_method_call(
             // `Effect[T]`, and win over the `Effect[Result]` combinators (they are
             // not among them), so `Effect[Result[T, E]].within(d)` is the plain
             // nested case.
-            if matches!(method.name.as_str(), "within" | "race" | "detach") {
+            if matches!(
+                method.name.as_str(),
+                "within" | "race" | "detach" | "map" | "andThen"
+            ) {
                 let op = EffectOp::from_name(&method.name).map(KernelOp::Effect);
                 let r = check_effect_method(method, receiver, args, *inner, span, ctx);
                 return record_kernel(ctx, expr_id, recv_ty, op, method, r);
@@ -3605,6 +3608,11 @@ pub(crate) fn check_method_call(
     // Find a named type for the receiver, then look up its instance methods.
     let type_name = match &*tys.get(recv_ty) {
         Ty::Named { name, .. } => name.clone(),
+        // #3965: an `Effect` has methods, so a missing one is `method_not_found`, listing them.
+        Ty::Effect(_) => {
+            super::effect_more::report_missing_method(method, args, ctx);
+            return None;
+        }
         _ => {
             ctx.errors.push(CompileError::new(
                 "bynk.types.method_on_non_named_type",
