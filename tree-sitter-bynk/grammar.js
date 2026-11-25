@@ -222,6 +222,9 @@ module.exports = grammar({
     _commons_body_item: ($) =>
       choice(
         $.uses_decl,
+        // #4044: a commons may `consumes` types (braced, type-only); the
+        // checker refuses every other form (`bynk.commons.consumes_not_types`).
+        $.consumes_decl,
         $.type_decl,
         $.fn_decl,
         $.messages_decl,

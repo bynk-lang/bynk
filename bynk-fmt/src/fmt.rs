@@ -1205,7 +1205,7 @@ impl<'a> Formatter<'a> {
                 self.push(" {");
                 self.newline();
                 self.indented(|f| {
-                    f.format_commons_body(&c.uses, &c.items, &c.trailing_comments);
+                    f.format_commons_body(&c.uses, &c.consumes, &c.items, &c.trailing_comments);
                 });
                 self.push("}");
                 self.newline();
@@ -1214,7 +1214,7 @@ impl<'a> Formatter<'a> {
                 self.push(&header);
                 self.newline();
                 self.newline();
-                self.format_commons_body(&c.uses, &c.items, &c.trailing_comments);
+                self.format_commons_body(&c.uses, &c.consumes, &c.items, &c.trailing_comments);
             }
         }
     }
@@ -1222,6 +1222,7 @@ impl<'a> Formatter<'a> {
     fn format_commons_body(
         &mut self,
         uses: &[UsesDecl],
+        consumes: &[ConsumesDecl],
         items: &[CommonsItem],
         trailing_comments: &[Comment],
     ) {
@@ -1231,6 +1232,11 @@ impl<'a> Formatter<'a> {
             self.emit_leading_comments(&u.trivia.leading);
             self.push(&format!("uses {}", u.target.joined()));
             self.emit_trailing_comment_or_newline(u.trivia.trailing.as_deref());
+            any_uses = true;
+        }
+        // #4044: a commons' type-only `consumes` lines follow its `uses`.
+        for c in consumes {
+            self.format_consumes(c, any_uses);
             any_uses = true;
         }
         if any_uses && !items.is_empty() {
