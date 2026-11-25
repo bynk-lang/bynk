@@ -5,7 +5,7 @@ consumes bynk.cloudflare { EdgeCache }
 capability Edge = EdgeCache
 
 service purges from queue("purges") {
-    on message(path: String) -> Effect[QueueResult] given Edge {
+    on message(path: String) -> Effect[QueueResult] by Producer given Edge {
         let purged <- Edge.purge([path])
         if purged { Ack } else { Retry("refused") }
     }

@@ -6,7 +6,7 @@
   "constructs": [
     "queue_handler"
   ],
-  "example": "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] { … }   // ✓\n}",
+  "example": "service worker from queue(\"Order_Events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✗ capitals and `_` in the name\n}\n\nservice worker from queue(\"order-events\") {\n    on message(message: String) -> Effect[QueueResult] by Producer { … }   // ✓\n}",
   "severity": "error",
   "summary": "A `from queue(\"…\")` binding has an empty queue name, or one Cloudflare refuses."
 }

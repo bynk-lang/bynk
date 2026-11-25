@@ -6,7 +6,7 @@
   "constructs": [
     "delivery_policy"
   ],
-  "example": "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+  "example": "service outbox from queue(\"outbound-email\") {   // ⚠ messages that exhaust their retries are deleted\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { deadLetter: \"outbound-email-dlq\" }   // ✓ kept for inspection\n    on message(message: String) -> Effect[QueueResult] by Producer { … }\n}",
   "severity": "warning",
   "summary": "A queue consumer has no dead-letter queue, so a message that reaches the retry limit is deleted (warning)."
 }

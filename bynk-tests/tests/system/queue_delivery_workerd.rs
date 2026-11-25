@@ -50,7 +50,7 @@ service worker from queue("dlq-jobs") {
     batchWait: 1.second,
   }
 
-  on message(m: Job) -> Effect[QueueResult] given Logger {
+  on message(m: Job) -> Effect[QueueResult] by Producer given Logger {
     let _ <- Logger.info("attempt for \(m.id)")
     Retry("never works")
   }
@@ -62,7 +62,7 @@ service review from queue("dlq-jobs-dead") {
     batchWait: 1.second,
   }
 
-  on message(m: Job) -> Effect[QueueResult] given Logger {
+  on message(m: Job) -> Effect[QueueResult] by Producer given Logger {
     let _ <- Logger.warn("dead-lettered \(m.id)")
     Ack
   }

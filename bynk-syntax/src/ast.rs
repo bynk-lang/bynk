@@ -139,6 +139,9 @@ impl Trivia {
 #[derive(Debug, Clone)]
 pub struct Commons {
     pub name: QualifiedName,
+    /// #3984: `commons x.y for tests`: a commons only suites and other test-only commons may
+    /// `uses`, left out of every deployable.
+    pub test_only: bool,
     pub items: Vec<CommonsItem>,
     /// `uses` clauses declared in this file.
     pub uses: Vec<UsesDecl>,

@@ -3138,6 +3138,7 @@ mod detect_context_message_bundle_tests {
             None,
             String::new(),
             SourceUnit::Commons(Commons {
+                test_only: false,
                 name: qualified(name),
                 items: vec![CommonsItem::Messages(messages)],
                 uses: Vec::new(),

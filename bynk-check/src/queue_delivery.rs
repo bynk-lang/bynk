@@ -261,7 +261,7 @@ mod tests {
     /// A one-service context holding `body` after a queue header, with a handler.
     fn consumer(queue: &str, body: &str) -> String {
         format!(
-            "context t.q\n\nservice w from queue(\"{queue}\") {{\n{body}\n  on message(m: String) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+            "context t.q\n\nservice w from queue(\"{queue}\") {{\n{body}\n  on message(m: String) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
         )
     }
 
@@ -351,7 +351,7 @@ mod tests {
 
     #[test]
     fn a_constant_stands_for_a_literal_of_its_type() {
-        let source = "context t.q\n\nconst Backoff: Duration = 30.seconds\nconst Limit: Int = 7\nconst Dlq: String = \"jobs-dlq\"\n\nservice w from queue(\"jobs\") {\n  delivery { retries: Limit, retryDelay: Backoff, deadLetter: Dlq }\n  on message(m: String) -> Effect[QueueResult] { Ack }\n}\n";
+        let source = "context t.q\n\nconst Backoff: Duration = 30.seconds\nconst Limit: Int = 7\nconst Dlq: String = \"jobs-dlq\"\n\nservice w from queue(\"jobs\") {\n  delivery { retries: Limit, retryDelay: Backoff, deadLetter: Dlq }\n  on message(m: String) -> Effect[QueueResult] by Producer { Ack }\n}\n";
         analyse(&[("t/q.bynk", source)]).assert_clean();
         // A constant of the wrong type is left as written, and refused.
         let wrong = source.replace("const Limit: Int = 7", "const Limit: String = \"7\"");
@@ -368,7 +368,7 @@ mod tests {
     fn a_dead_letter_queues_consumer_must_take_the_same_message() {
         let source = |dlq_ty: &str| {
             format!(
-                "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: \"jobs-dlq\" }}\n  on message(m: String) -> Effect[QueueResult] {{ Ack }}\n}}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {dlq_ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+                "context t.q\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: \"jobs-dlq\" }}\n  on message(m: String) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {dlq_ty}) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
             )
         };
         analyse(&[("t/q.bynk", &source("String"))]).assert_clean();
@@ -383,10 +383,10 @@ mod tests {
     /// are not.
     #[test]
     fn dead_letter_consumers_in_two_contexts_are_compared_in_their_own_namespaces() {
-        let source = "context t.a\n\ntype Job = { id: String }\n\nservice w from queue(\"jobs\") {\n  delivery { deadLetter: \"jobs-dlq\" }\n  on message(m: Job) -> Effect[QueueResult] { Ack }\n}\n";
+        let source = "context t.a\n\ntype Job = { id: String }\n\nservice w from queue(\"jobs\") {\n  delivery { deadLetter: \"jobs-dlq\" }\n  on message(m: Job) -> Effect[QueueResult] by Producer { Ack }\n}\n";
         let review = |fields: &str| {
             format!(
-                "context t.b\n\ntype Job = {{ {fields} }}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: Job) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+                "context t.b\n\ntype Job = {{ {fields} }}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: Job) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
             )
         };
         analyse(&[("t/a.bynk", source), ("t/b.bynk", &review("id: String"))]).assert_clean();
@@ -402,7 +402,7 @@ mod tests {
     fn a_dead_letter_consumer_may_take_a_weaker_refinement_but_not_a_stronger() {
         let pair = |source_ty: &str, dlq_ty: &str| {
             format!(
-                "context t.q\n\ntype Small = Int where InRange(1, 10)\ntype Wide = Int where InRange(1, 100)\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: \"jobs-dlq\" }}\n  on message(m: {source_ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {dlq_ty}) -> Effect[QueueResult] {{ Ack }}\n}}\n"
+                "context t.q\n\ntype Small = Int where InRange(1, 10)\ntype Wide = Int where InRange(1, 100)\n\nservice w from queue(\"jobs\") {{\n  delivery {{ deadLetter: \"jobs-dlq\" }}\n  on message(m: {source_ty}) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n\nservice review from queue(\"jobs-dlq\") {{\n  delivery {{ deadLetter: None }}\n  on message(m: {dlq_ty}) -> Effect[QueueResult] by Producer {{ Ack }}\n}}\n"
             )
         };
         analyse(&[("t/q.bynk", &pair("Small", "Wide"))]).assert_clean();

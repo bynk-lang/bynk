@@ -1,0 +1,7 @@
+context shop
+
+uses kit
+
+service ping {
+  on call() -> Effect[Int] by Caller { 1 }
+}

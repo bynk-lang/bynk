@@ -10,12 +10,17 @@ bound on the service header (`from queue("name")`), and each handler is an
 
 ```bynk,ignore
 service <Name> from queue("<name>") {
-  on message(message: T) -> Effect[QueueResult] {
+  on message(message: T) -> Effect[QueueResult] by Producer {
     …
   }
 }
 ```
 
+- **Actor:** the `by` clause says who may send to this queue, and is required
+  (`bynk.actor.missing_by_on_queue`). `by Producer` admits any producer on the Cloudflare
+  account, which is what a consumer did before the clause was required; a header default,
+  `service fulfil from queue("orders") by Producer`, covers every handler without its own.
+  `bynk check --fix=bynk.actor.missing_by_on_queue` adds it.
 - **Name:** the queue this consumer binds to, on the `from queue("…")` header.
   It must be a name Cloudflare accepts: 1 to 63 lowercase letters, digits or `-`,
   starting and ending with a letter or digit (`bynk.queue.invalid_name`).
@@ -98,7 +103,7 @@ service outbox from queue("outbound-email") {
 		concurrency: 4,
 	}
 
-	on message(job: EmailJob) -> Effect[QueueResult] {
+	on message(job: EmailJob) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }
@@ -156,7 +161,7 @@ its type, so it may come before or after the message:
 
 ```bynk,fragment
 service outbox from queue("outbound-email") {
-	on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] {
+	on message(job: EmailJob, delivery: QueueDelivery) -> Effect[QueueResult] by Producer {
 		if delivery.attempts > 3 {
 			Ack
 		} else {
@@ -228,7 +233,7 @@ let _ <- OrderEvents.sendValue(Refund { id: r.id })   // ✗ bynk.queue.message_
 
 // shop.fulfil
 service fulfil from queue("order-events") {
-  on message(order: Order) -> Effect[QueueResult] { … }
+  on message(order: Order) -> Effect[QueueResult] by Producer { … }
 }
 ```
 
@@ -266,7 +271,7 @@ type EmailJob = {
 }
 
 service outbox from queue("outbound-email") {
-	on message(message: EmailJob) -> Effect[QueueResult] {
+	on message(message: EmailJob) -> Effect[QueueResult] by Producer {
 		Ack
 	}
 }

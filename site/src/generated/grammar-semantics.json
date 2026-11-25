@@ -1984,6 +1984,10 @@
       "summary": "`uses` targets a context instead of a commons."
     },
     {
+      "code": "bynk.uses.test_only_commons",
+      "summary": "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`."
+    },
+    {
       "code": "bynk.uses.unknown_commons",
       "summary": "`uses` names a commons that does not exist."
     }

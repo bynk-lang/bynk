@@ -1668,6 +1668,12 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans: Vec<Span> = items.iter().filter_map(CommonsItem::private_span).collect();
+    // #3984: and a test-only commons' `for tests` marker.
+    if let SourceUnit::Commons(c) = &unit
+        && c.test_only
+    {
+        spans.extend(test_only_marker_spans(source, &tokens, c.name.span.end));
+    }
     // #2841: and each suite `fixture` keyword — contextual as well.
     if let SourceUnit::Suite(s) = &unit {
         spans.extend(
@@ -1677,6 +1683,48 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         );
     }
     spans
+}
+
+/// #3984: the spans of the `for` and `tests` words of a `commons x.y for tests` header, after the
+/// name that ends at `name_end`.
+fn test_only_marker_spans(
+    source: &str,
+    tokens: &[bynk_syntax::lexer::Token],
+    name_end: usize,
+) -> Vec<Span> {
+    let Some(idx) = tokens.iter().position(|t| t.span.start >= name_end) else {
+        return Vec::new();
+    };
+    tokens[idx..]
+        .iter()
+        .take(2)
+        .filter(|t| matches!(&source[t.span.start..t.span.end], "for" | "tests"))
+        .map(|t| t.span)
+        .collect()
+}
+
+/// #3984: a hover for the `tests` of a `commons x.y for tests` header: the word after `for` after a
+/// `commons` name. `None` anywhere else, where `tests` is an ordinary name.
+pub fn describe_test_only_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "tests"
+        || text(idx.checked_sub(1)?)? != "for"
+        || tokens.get(idx)?.kind != TokenKind::Ident
+        || !tokens[..idx].iter().any(|t| t.kind == TokenKind::Commons)
+    {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "tests")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\nfor tests\n```\n\n{doc}"))
 }
 
 /// #2837: the span of every reserved word written as a name, with whether it
@@ -4054,7 +4102,7 @@ mod tests {
     /// named `message`, and not at a lower tier.
     #[test]
     fn system_job_hover_needs_a_job_service_receiver() {
-        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] {\n    Ack\n  }\n}\n";
+        const CTX: &str = "context cr.jobs\n\ntype Envelope = { message: String }\n\nservice sweeper from cron {\n  on schedule(\"*/5 * * * *\") () -> Effect[Result[(), String]] {\n    Ok(())\n  }\n}\n\nservice deliveries from queue(\"d\") {\n  on message(e: Envelope) -> Effect[QueueResult] by Producer {\n    Ack\n  }\n}\n";
         let suite = |tier: &str| {
             format!(
                 "suite cr.jobs{tier} {{\n  case \"c\" {{\n    let e = Envelope {{ message: \"hi\" }}\n    let m = e.message\n    let r <- deliveries.message(e)\n    let s <- sweeper.schedule(\"*/5 * * * *\")\n    expect m == \"hi\"\n  }}\n}}\n"
