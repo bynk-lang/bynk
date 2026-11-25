@@ -1,0 +1,12 @@
+{
+  "blurb": "In an agent handler, a store write is not work to detach: it is staged and committed atomically with the rest of the handler, so there is nothing to leave running. `detach` is refused there for any effect, and a store operation gets its own code to point at the fix. Drop the `.detach()` and write `do field.op(…)`; the write is committed with the handler. For a `detach` that is not of a store operation see `bynk.detach.in_agent_handler`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.detach.store_op",
+  "constructs": [
+    "method_call"
+  ],
+  "example": "on call bump() -> Effect[()] {\n    do count.update((n) => n + 1).detach()   // ✗ a store write is not detached\n}\n\non call bump() -> Effect[()] {\n    do count.update((n) => n + 1)            // ✓ staged, committed with the handler\n}",
+  "severity": "error",
+  "summary": "A `detach` targets an agent store operation, which is part of the handler's atomic commit and cannot be detached."
+}

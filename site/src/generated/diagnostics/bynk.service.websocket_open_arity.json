@@ -1,0 +1,10 @@
+{
+  "blurb": "A WebSocket service has exactly one `on open`, the handler that accepts the upgrade and receives the connection, and at most one `on message` and one `on close`. A service with no `on open` could never accept a client, and a second of any handler would leave it unclear which one runs. Add the missing `on open`, or remove the duplicate.",
+  "category": "Services",
+  "categoryAnchor": "services",
+  "code": "bynk.service.websocket_open_arity",
+  "constructs": [],
+  "example": "service gateway from websocket(in: Frame, out: Frame) {   // ✗ no `on open`\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }\n}\n\nservice gateway from websocket(in: Frame, out: Frame) {\n    on open (room: RoomId) -> Effect[()] by user: Member { … }   // ✓\n    on message (room: RoomId, frame: Frame) -> Effect[()] by user: Member { … }\n}",
+  "severity": "error",
+  "summary": "A `from websocket` service must hold exactly one `on open` handler (the edge upgrade), and at most one `on message` (inbound) and one `on close` (real-time track slice 3/3b-iii)."
+}

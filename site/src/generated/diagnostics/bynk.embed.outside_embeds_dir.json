@@ -1,0 +1,10 @@
+{
+  "blurb": "An embed is compiled into the deployed code, so it may come only from the project's `embeds/` folder. If any path were allowed, a declaration could pull `.env` or a source file into the bundle just by naming it. Move the file into `embeds/` and name it there. A path that is empty, absolute or contains `..` is `bynk.embed.unsafe_path` instead.",
+  "category": "Embedded text",
+  "categoryAnchor": "embedded-text",
+  "code": "bynk.embed.outside_embeds_dir",
+  "constructs": [],
+  "example": "embed shell = \"templates/page.html\"    // ✗ not in the embeds/ folder\n\nembed shell = \"embeds/page.html\"       // ✓",
+  "severity": "error",
+  "summary": "An `embed` names a file outside the project's `embeds/` folder."
+}

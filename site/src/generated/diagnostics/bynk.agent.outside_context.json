@@ -1,0 +1,12 @@
+{
+  "blurb": "An agent holds state, and a context is the unit that owns it. A `commons` is code shared between contexts, which each `uses` it, so it is not given an agent, a service, an actor or a capability: those are only allowed in a `context`. Declare the agent in a context. A type the agent and other contexts both need can stay in the commons.",
+  "category": "Agents",
+  "categoryAnchor": "agents",
+  "code": "bynk.agent.outside_context",
+  "constructs": [
+    "agent_decl"
+  ],
+  "example": "commons shop\n\nagent Counter { … }   // ✗ a commons has no state\n\ncontext shop\n\nagent Counter { … }   // ✓ a context owns it",
+  "severity": "error",
+  "summary": "An `agent` was declared outside a context."
+}

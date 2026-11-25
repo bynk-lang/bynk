@@ -1,0 +1,10 @@
+{
+  "blurb": "`@raw` says the route reads its body as untouched bytes and names the one media type it accepts. A handler has one body, so a second `@raw` has no meaning: the router would have two media types to compare with and nothing to decide between them. Keep one. To accept more than one type, use `\"*/*\"`, or write a route for each. Another body annotation on the same route is `bynk.http.body_kind_conflict`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.raw_duplicate",
+  "constructs": [],
+  "example": "@raw(contentType: \"image/png\")\n@raw(contentType: \"image/jpeg\")    // ✗ a second `@raw`\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@raw(contentType: \"*/*\")           // ✓ one `@raw`, any type\n@limit(maxBody: 1_000_000)\non POST(\"/avatars\") (body: Bytes) -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries more than one `@raw` annotation."
+}

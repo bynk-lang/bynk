@@ -1,0 +1,12 @@
+{
+  "blurb": "A `let` that takes a value apart with a pattern must say what the block produces when the value does not match, so it needs an `else`. Only a record pattern that cannot fail (every field a bare name, `f: name` or `f: _`) may leave it out. Add `else { … }` after the value, or write a `match`. The note names the first field that can fail to match.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.let_pattern_without_else",
+  "constructs": [
+    "let_else_stmt"
+  ],
+  "example": "fn head(xs: List[Int]) -> Int {\n    let [x, ..] = xs               // ✗ an empty list does not match\n    x\n}\n\nfn head(xs: List[Int]) -> Int {\n    let [x, ..] = xs else { 0 }    // ✓ says what an empty list gives\n    x\n}",
+  "severity": "error",
+  "summary": "A `let` binds a pattern but has no `else` saying what the block produces when the value does not match; only a record pattern that cannot fail may omit it."
+}

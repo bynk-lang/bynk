@@ -1,0 +1,12 @@
+{
+  "blurb": "`by WrongAudience` sends a correctly signed, unexpired token whose `aud` is not the actor's audience. Only an `Oidc` actor has an audience to check: a `Bearer` token has none, and a `Signature` or public route has no token. On any other route the case is refused. Drive a route guarded by an `Oidc` actor. The same holds for `bynk.test.wrong_issuer_needs_oidc_route`, `bynk.test.wrong_algorithm_needs_oidc_route` and `bynk.test.no_subject_needs_oidc_route`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.wrong_audience_needs_oidc_route",
+  "constructs": [
+    "case"
+  ],
+  "example": "// demo/api.bynk\nactor User { auth = Bearer(secret = \"S\"), identity = UserId }\nactor Workload { auth = Oidc(…\non GET(\"/me\") () -> Effect[HttpResult[String]] by u: User { … }\non GET(\"/who\") () -> Effect[HttpResult[String]] by w: Workload { … }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by WrongAudience      // ✗ a `Bearer` token has no audience\nlet r <- api.GET(\"/who\") by WrongAudience     // ✓",
+  "severity": "error",
+  "summary": "A case drives `by WrongAudience` at an address that is not an http route with an `Oidc` actor; it sends a correctly signed token whose `aud` is not the actor's, so only an `Oidc` seam can refuse it."
+}

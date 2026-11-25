@@ -1,0 +1,12 @@
+{
+  "blurb": "The base of a spread supplies the fields that are not overridden, so it has to be a value of a record type. An `Int`, a `List` or a sum value has no fields to copy. Spread a record, or build the record with every field written out. A base of a different record is `bynk.record_spread.type_mismatch`.",
+  "category": "Record spread",
+  "categoryAnchor": "record-spread",
+  "code": "bynk.record_spread.non_record_base",
+  "constructs": [
+    "record_spread"
+  ],
+  "example": "type Counter = { n: Int }\n\nfn bump(count: Int, c: Counter) -> Counter {\n    Counter { ...count, n: 1 }   // ✗ `count` is an `Int`, not a record\n}\n\nfn bump(count: Int, c: Counter) -> Counter {\n    Counter { ...c, n: count }   // ✓ spread the record, override the field\n}",
+  "severity": "error",
+  "summary": "The base of a record spread is not a record."
+}

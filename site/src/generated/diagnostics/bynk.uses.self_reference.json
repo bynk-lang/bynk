@@ -1,0 +1,12 @@
+{
+  "blurb": "`uses` brings another commons into scope. A commons' own declarations are already there, so using itself adds nothing, and a unit that depends on itself is a cycle of length one. Delete the clause, or, if you meant another commons, name it. The mirror of this for contexts is `bynk.consumes.self_reference`.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.self_reference",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// tax.bynk\ncommons tax\n\nfn rate() -> Int { 20 }\n\n// money.bynk\ncommons money\n\nuses money                       // ✗ a commons cannot use itself\nuses tax                         // ✓ a different commons\n\ntype Amount = Int where NonNegative",
+  "severity": "error",
+  "summary": "A commons `uses` itself."
+}

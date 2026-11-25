@@ -1,0 +1,10 @@
+{
+  "blurb": "A handler annotation, such as `@cache(maxAge: 5.minutes)`, applies to the handler after it, so it must sit directly above an `on`. Here something else, or the end of the service, follows it. Move the annotation to just above its handler.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.dangling_handler_annotation",
+  "constructs": [],
+  "example": "service api from http {\n    on GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }\n    @cache(maxAge: 5.minutes)\n}                                  // ✗ the annotation has no handler to apply to\n\nservice api from http {\n    @cache(maxAge: 5.minutes)      // ✓ directly above its handler\n    on GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A handler-position annotation (e.g. `@cache`) is not followed by an `on` handler."
+}

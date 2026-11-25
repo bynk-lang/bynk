@@ -1,0 +1,12 @@
+{
+  "blurb": "A route is a method and a path, and the router needs exactly one handler to answer it. Two handlers that declare the same pair, in one service or in two services of a context, leave it nothing to choose between, so the later one is refused. Merge them, or give one a different path or method.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.duplicate_route",
+  "constructs": [
+    "http_handler"
+  ],
+  "example": "on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\non GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }        // ✗ already declared above\n\non GET(\"/items/:id\") (id: String) -> Effect[HttpResult[String]] by v: Visitor { … }   // ✓ a different path",
+  "severity": "error",
+  "summary": "Two handlers share the same method and route."
+}

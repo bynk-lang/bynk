@@ -1,0 +1,12 @@
+{
+  "blurb": "At the `system` tier each context runs as the Worker it deploys as, and that Worker builds its own capability providers, so there is no seam for a `stub` to override. A `stub` there would be accepted and then ignored, so it is refused. Move the case to a suite below `system`, where a `stub` replaces the seam, or remove the stub and test the real provider.",
+  "category": "Stubs",
+  "categoryAnchor": "stubs",
+  "code": "bynk.stub.at_system",
+  "constructs": [
+    "stub_clause"
+  ],
+  "example": "suite demo.desk as system {\n    stub Meter.read() returns 7   // ✗ a `system` suite has no seam to stub\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    stub Meter.read() returns 7   // ✓ below `system` the seam can be stubbed\n\n    case \"the desk checks\" { … }\n}",
+  "severity": "error",
+  "summary": "A test `stub` is in a `system`-tier case, or at the scope of a `suite … as system` (or a suite whose cases run `as system`); each context runs as the Worker it deploys as, which builds its own capability providers, so there is no seam to override."
+}

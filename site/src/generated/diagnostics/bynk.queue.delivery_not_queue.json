@@ -1,0 +1,12 @@
+{
+  "blurb": "A `delivery { }` section sets how a queue consumer's messages are retried, delayed, dead-lettered and batched. Only a `from queue` service consumes a queue, so on any other service the section has nothing to govern. Move it to the `from queue` service it was meant for, or delete it.",
+  "category": "Queue",
+  "categoryAnchor": "queue",
+  "code": "bynk.queue.delivery_not_queue",
+  "constructs": [
+    "delivery_policy"
+  ],
+  "example": "service sweeper from cron {\n    delivery { retries: 5 }   // ✗ a cron service consumes no queue\n    on schedule(\"0 * * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice outbox from queue(\"outbound-email\") {\n    delivery { retries: 5, deadLetter: \"outbound-email-dlq\" }   // ✓\n    on message(message: String) -> Effect[QueueResult] { … }\n}",
+  "severity": "error",
+  "summary": "A `delivery { }` policy on a service that is not `from queue`."
+}

@@ -1,0 +1,12 @@
+{
+  "blurb": "`T.unsafe(v)` wraps a base value as an opaque type without checking it, which is sound only where the type's own unit vouches for the value, so it is allowed only in the unit that declares the type. Elsewhere use `T.of(v)`, which returns a `Result` so the check is explicit. Reading the base value back is `bynk.types.opaque_raw_outside`.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.opaque_unsafe_outside",
+  "constructs": [
+    "field_access"
+  ],
+  "example": "// token.bynk\ntype Token = opaque String\n\n// app.bynk\nfn make(s: String) -> Token {\n    Token.unsafe(s)    // ✗ only `token` may skip the check\n}\n\nfn make(s: String) -> Result[Token, ValidationError] {\n    Token.of(s)    // ✓ the checked constructor\n}",
+  "severity": "error",
+  "summary": "`.unsafe` on an opaque type was used outside its defining context."
+}

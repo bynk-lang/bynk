@@ -40,10 +40,11 @@ fn can_run() -> bool {
 }
 
 /// The run's document: the fixture at a fixed seed, so the shrunk values are stable.
-/// Every test reads the same document, so the CLI runs once. Running it per test, in
-/// parallel threads, would share one `--output`, and the runner derives the executed
-/// tree as a sibling of that directory, so the emitted `.js` of one run would race
-/// another's.
+/// The `OnceLock` makes the threads of **one process** share one CLI run. It cannot
+/// do that across processes: nextest runs each test in a process of its own, so each
+/// has its own lock and its own run. What keeps those runs apart is [`run_once`]'s
+/// output directory, which is per process: the runner derives the executed tree as a
+/// sibling of `--output`, so two runs sharing one would clear each other's `.js`.
 fn run() -> &'static serde_json::Value {
     static DOC: OnceLock<serde_json::Value> = OnceLock::new();
     DOC.get_or_init(|| run_once("failure_explanation"))
@@ -60,9 +61,12 @@ fn run_once(fixture: &str) -> serde_json::Value {
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/behaviour")
         .join(fixture);
-    let out_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+    // The runner executes a tree beside `--output`, so both live under this
+    // per-process directory, which is removed once the document has parsed.
+    let run_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(fixture.replace('_', "-"))
-        .join("out");
+        .join(std::process::id().to_string());
+    let out_root = run_dir.join("out");
     let out = Command::new(env!("CARGO_BIN_EXE_bynk-under-test"))
         .arg("test")
         .arg(project)
@@ -71,13 +75,16 @@ fn run_once(fixture: &str) -> serde_json::Value {
         .args(["--format", "json", "--seed", "0x5f3a"])
         .output()
         .expect("run bynk test");
-    serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+    let doc = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| {
+        // Left in place on this path, for whoever debugs the run.
         panic!(
             "stdout is one JSON document: {e}\nstdout: {}\nstderr: {}",
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         )
-    })
+    });
+    let _ = std::fs::remove_dir_all(&run_dir);
+    doc
 }
 
 fn case<'a>(doc: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {

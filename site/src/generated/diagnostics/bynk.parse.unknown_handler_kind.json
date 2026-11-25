@@ -1,0 +1,12 @@
+{
+  "blurb": "A handler is `on` and a kind the compiler knows: `call`, an HTTP method, `schedule`, `message` and the like. An HTTP method is written in capitals, `GET`, `POST`, `PUT`, `PATCH` or `DELETE`, so `on get(…)` is not a handler. Spell the kind as one of these.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.unknown_handler_kind",
+  "constructs": [
+    "handler"
+  ],
+  "example": "service api from http {\n    on get(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✗ methods are capitals\n}\n\nservice api from http {\n    on GET(\"/rows\") () -> Effect[HttpResult[List[Row]]] by v: Visitor { … }   // ✓\n}",
+  "severity": "error",
+  "summary": "An unknown handler form (expected `call`, an HTTP method, `schedule`, or `message`)."
+}

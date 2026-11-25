@@ -1,0 +1,10 @@
+{
+  "blurb": "`@json(options: …)` chooses how one route's response bodies write an `Option`. A handler has one, because two would give the same body two encodings with nothing to say which wins, so the second is refused. Keep the one you mean. To set the encoding for every route of a service, use a `json { }` section instead. A handler may likewise carry only one `@cache` (`bynk.http.cache_duplicate`), `@limit` or `@raw`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.json_duplicate",
+  "constructs": [],
+  "example": "@json(options: plain)\n@json(options: tagged)    // ✗ a second `@json`\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@json(options: plain)     // ✓\non GET(\"/activity\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A handler carries more than one `@json` annotation."
+}

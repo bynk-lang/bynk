@@ -1,0 +1,12 @@
+{
+  "blurb": "`private` hides a `fn`, `type`, `messages`, `asset`, `embed` or `const` from the units that import its commons or context. It does not apply to a service, agent, capability, provider, actor or event, or to anything in an adapter: how far those reach is decided by a context's `exports` and `consumes`, and an adapter's `exports`. Remove `private`. See `bynk.visibility.private_item` for using something that is private.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.visibility.private_not_allowed",
+  "constructs": [
+    "visibility_modifier"
+  ],
+  "example": "private service total { … }        // ✗ `private` does not apply to a service\nservice total { … }                // ✓ reach is governed by `exports`",
+  "severity": "error",
+  "summary": "`private` modifies a declaration it does not apply to: anything but a `fn`, `type`, `messages`, `asset`, `embed` or `const` in a commons or context."
+}

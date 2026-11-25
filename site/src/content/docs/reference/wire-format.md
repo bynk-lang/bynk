@@ -136,7 +136,7 @@ Every JSON error body is an object with a `kind`:
 | `ContractMismatch` | `409` | `service`, `expected` (the callee's hash), `actual` (the header as received) |
 | `MalformedJson` | `400` | `details` |
 | `StructuralMismatch` | `400` | `path`, `expected`, `actual`: the value had the wrong shape |
-| `RefinementViolation` | `400` | `path`, `violation`: `{"field", "message", "value"}`, a value of the right shape broke a predicate |
+| `RefinementViolation` | `400` | `path`, `violation`: `{"field", "message"}`, a value of the right shape broke a predicate. The rejected value is never echoed |
 
 `path` is a JSONPath-like location in the body: `$` is the whole body (one
 parameter), `$.<param>` a parameter (several), then `.<field>` or `[<index>]`

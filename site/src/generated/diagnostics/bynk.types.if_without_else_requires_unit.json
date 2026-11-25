@@ -1,0 +1,12 @@
+{
+  "blurb": "An `if` with no `else` has nothing to produce when its condition is false, so Bynk gives that path the value `()`. The `then` branch must therefore be `()` too, or `Effect[()]` for a branch that only performs effects; a branch that yields a `String` would leave the other path without one. Add an `else` that produces a value of the same type, or make the branch a unit effect.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.if_without_else_requires_unit",
+  "constructs": [
+    "if_expr"
+  ],
+  "example": "fn sign(n: Int) -> String {\n    if n > 0 { \"positive\" }    // ✗ no `else`, so the value would be `()`\n}\n\nfn sign(n: Int) -> String {\n    if n > 0 { \"positive\" } else { \"not positive\" }    // ✓\n}",
+  "severity": "error",
+  "summary": "An `if` with no `else` branch has a non-unit then-branch; the missing else defaults to `()`, so the branch must be `()` or `Effect[()]`."
+}

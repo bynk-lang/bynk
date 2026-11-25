@@ -1,0 +1,12 @@
+{
+  "blurb": "A `fixture` becomes a `String` in the test code, so its file must be text. A file holding a NUL byte is binary, and a `String` made from it would be meaningless. Keep a text form of the data in the fixture, such as base64, and decode it in the case with `Bytes.fromBase64`. Text that is not valid UTF-8 is `bynk.fixture.invalid_encoding`.",
+  "category": "Other",
+  "categoryAnchor": "other",
+  "code": "bynk.fixture.binary_content",
+  "constructs": [
+    "fixture_decl"
+  ],
+  "example": "fixture blob = \"fixtures/blob.bin\"    // ✗ the file has a NUL byte\n\nfixture blob = \"fixtures/blob.b64\"    // ✓ its base64 text",
+  "severity": "error",
+  "summary": "A suite's `fixture` names a file that contains a NUL byte, so it is binary, not text."
+}

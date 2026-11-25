@@ -1,0 +1,12 @@
+{
+  "blurb": "A static method on a generic type (one with no `self`) is generic over the type's parameters, and a call has to be able to fix each of them: from its arguments, from the type the call is expected to have, or from explicit type arguments. If the method's parameter and return types never mention one of the type's parameters, nothing in a call can determine it, so the declaration is refused once, here, rather than every call being ambiguous. Mention the parameter in the signature, or make the method a free function. An instance method (with `self`) is not affected, since the receiver carries the type. A call that leaves a parameter open anyway is `bynk.generics.uninferable_type_arg`.",
+  "category": "Generics",
+  "categoryAnchor": "generics",
+  "code": "bynk.generics.method_on_generic_type",
+  "constructs": [
+    "fn_decl"
+  ],
+  "example": "type Box[T] = { value: T }\n\nfn Box.empty() -> Box[Int] {              // ✗ never mentions `T`\n    Box { value: 0 }\n}\n\nfn Box.empty() -> Box[Option[T]] {        // ✓ `T` appears in the return type\n    Box { value: None }\n}",
+  "severity": "error",
+  "summary": "A *static* method on a generic type never mentions one of the type's parameters in its parameter or return types, so no call could determine it from the arguments or the expected type. Mention the parameter in the signature, or make the method a free function (constrained-generics slice 4; instance methods are supported, #594)."
+}

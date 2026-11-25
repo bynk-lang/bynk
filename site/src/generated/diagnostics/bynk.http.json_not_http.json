@@ -1,0 +1,10 @@
+{
+  "blurb": "A `json { }` section chooses how a service's HTTP response bodies write `Option`, tagged or plain. Only a `from http` service has response bodies, so on a `cron` or other service the section is refused. Move it to the HTTP service it was meant for, or delete it. The `cors`, `security` and `limits` sections have the same rule: `bynk.http.cors_not_http`, `bynk.http.security_not_http`, `bynk.http.limits_not_http`. For the per-route form, see `bynk.http.json_on_non_http`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.json_not_http",
+  "constructs": [],
+  "example": "service jobs from cron {\n    json { options: plain }   // ✗ a schedule has no response body\n    on schedule(\"0 0 * * *\") () -> Effect[Result[(), String]] { … }\n}\n\nservice api from http {\n    json { options: plain }   // ✓\n    on GET(\"/items\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n}",
+  "severity": "error",
+  "summary": "A `json { }` policy appears on a service that is not `from http`."
+}

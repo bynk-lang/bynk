@@ -1,0 +1,12 @@
+{
+  "blurb": "An adapter depends on another adapter's capabilities, never on its services, so its `consumes` must say which: `consumes logging { Log }`. The whole-unit form and `as Alias` belong to contexts. Braces that select only types are refused too, since they name no capability. List the capabilities the adapter needs.",
+  "category": "Adapters",
+  "categoryAnchor": "adapters",
+  "code": "bynk.adapter.consumes_requires_selection",
+  "constructs": [
+    "consumes_decl"
+  ],
+  "example": "adapter tokens {\n    consumes logging              // ✗ which capabilities?\n}\n\nadapter tokens {\n    consumes logging { Log }      // ✓ the capabilities it needs\n}",
+  "severity": "error",
+  "summary": "An `adapter` used a whole-unit or aliased `consumes`; adapters must select capabilities with `consumes U { Cap, … }`."
+}

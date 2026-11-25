@@ -1,0 +1,10 @@
+{
+  "blurb": "A stateless signed cookie cannot be revoked before it expires: a copy a user already took keeps working for the whole `ttl`. Beyond 30 days that is a long exposure, so it warns. Shorten the `ttl`, or keep the session on the server (see `examples/sessions`) if you need to log out everywhere.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.signed_cookie_ttl_long",
+  "constructs": [],
+  "example": "actor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 31.days), identity = UserId }   // ⚠ long-lived\n\nactor User { auth = SignedCookie(secret = \"SESSION_KEY\", ttl = 12.hours), identity = UserId }   // ✓",
+  "severity": "warning",
+  "summary": "A `SignedCookie` `ttl` is longer than 30 days (warning)."
+}

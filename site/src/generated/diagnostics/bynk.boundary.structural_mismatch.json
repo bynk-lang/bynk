@@ -1,0 +1,10 @@
+{
+  "blurb": "A value that crosses a context boundary, as an argument to a consumed context's service or as its result, is matched by shape, not by name. So where both contexts declare a `Box`, the two must have the same shape, or the value is not a `Box` on the other side. Give them the same fields, or rename one so the names stop meeting. A type both sides need can live in a `commons` that each `uses`.",
+  "category": "Boundaries",
+  "categoryAnchor": "boundaries",
+  "code": "bynk.boundary.structural_mismatch",
+  "constructs": [],
+  "example": "// shop.bynk\ncontext shop\n\ntype Box = { weight: Int }\n\nservice weigh {\n    on call(b: Box) -> Effect[Int] by Caller { … }\n}\n\n// depot.bynk\ncontext depot\n\nconsumes shop\n\ntype Box = { label: String }\n\nshop.weigh(Box { label: \"a\" })        // ✗ a `depot` `Box` is not shaped like `shop`'s\n\ntype Box = { weight: Int }\n\nshop.weigh(Box { weight: 3 })         // ✓ the same shape on both sides",
+  "severity": "error",
+  "summary": "Data crossing a context boundary did not match the expected shape."
+}

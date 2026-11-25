@@ -1,0 +1,12 @@
+{
+  "blurb": "After `type Name =` the parser found something that is not a record `{ … }`, a sum starting with `|`, an `enum` or an `opaque` type, so it wanted a base type (`Int`, `String`, `Bool`, `Float`, `Duration`, `Instant`, `Bytes` or `Decimal`) to build on. The commonest cause is a sum written without its leading `|`. Another is naming an existing record or sum, as in `type Id = Order`, which a type declaration cannot do; for a distinct type, use `opaque` over a base type. The position is the first token after the `=`.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.expected_base_type",
+  "constructs": [
+    "base_type"
+  ],
+  "example": "type Shape = Circle | Square              // ✗ a sum starts with `|`\ntype Shape = | Circle | Square            // ✓",
+  "severity": "error",
+  "summary": "Expected a base type."
+}

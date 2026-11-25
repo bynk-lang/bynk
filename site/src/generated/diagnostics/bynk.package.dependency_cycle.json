@@ -1,0 +1,10 @@
+{
+  "blurb": "A package's units are resolved against the packages it depends on, so the package graph needs an order: no package may depend, directly or through others, on itself or on the project. A cycle usually means two packages each want something of the other. Move what both need into a third package that each of them depends on, or merge the two.",
+  "category": "Packages",
+  "categoryAnchor": "packages",
+  "code": "bynk.package.dependency_cycle",
+  "constructs": [],
+  "example": "# packages/money/bynk.toml\n[dependencies]\ntax = { package = \"acme/tax\", path = \"../tax\" }\n\n# packages/tax/bynk.toml\n[dependencies]\nmoney = { package = \"acme/money\", path = \"../money\" }   // ✗ `acme/money` depends on `acme/tax`\n\ncore = { package = \"acme/core\", path = \"../core\" }      // ✓ what both need, in a package of its own",
+  "severity": "error",
+  "summary": "The package graph has a cycle: a dependency depends, directly or not, on itself or on the project."
+}

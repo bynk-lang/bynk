@@ -1967,6 +1967,8 @@
 /reference/diagnostics/bynk.store.unknown_kind/
 /reference/diagnostics/bynk.store.unknown_map_accessor/
 /reference/diagnostics/bynk.store.unknown_op/
+/reference/diagnostics/bynk.string.deprecated_function/
+/reference/diagnostics/bynk.string.empty_pad_fill/
 /reference/diagnostics/bynk.stub.after_type/
 /reference/diagnostics/bynk.stub.at_system/
 /reference/diagnostics/bynk.stub.bad_sequence/
@@ -2144,6 +2146,7 @@
 /reference/diagnostics/bynk.types.opaque_unsafe_outside/
 /reference/diagnostics/bynk.types.or_pattern_binding_mismatch/
 /reference/diagnostics/bynk.types.or_pattern_type_mismatch/
+/reference/diagnostics/bynk.types.ord_order_changed/
 /reference/diagnostics/bynk.types.pattern_arity/
 /reference/diagnostics/bynk.types.pattern_type_mismatch/
 /reference/diagnostics/bynk.types.polynomial_regex/

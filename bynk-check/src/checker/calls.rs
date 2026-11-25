@@ -747,7 +747,7 @@ pub const BYNK_LIST_DEPRECATED: &[(&str, &str)] = &[
 fn warn_bynk_list_deprecation(name: &Ident, args: &[Expr], call_span: Span, ctx: &mut Ctx) {
     let module = ctx.input.imported_from.get(&name.name).map(String::as_str);
     // #3961: `bynk.map` and `bynk.set` are deprecated the same way.
-    if matches!(module, Some("bynk.map" | "bynk.set")) {
+    if matches!(module, Some("bynk.map" | "bynk.set" | "bynk.string")) {
         return super::collections::warn_deprecated_collection_fn(name, args, call_span, ctx);
     }
     if module != Some("bynk.list") {

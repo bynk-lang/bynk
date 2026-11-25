@@ -1,0 +1,10 @@
+{
+  "blurb": "Bynk has no `%` operator. Remainder is a method with its sign spelled out: `a.rem(b)` takes the dividend's sign (the C, Java and JavaScript `%`), `a.mod(b)` takes the divisor's (Python's `%`; use it for a cyclic index). When both operands are plain names or integer literals the error offers a `.rem` fix, never applied automatically: check that the sign is the one you want.",
+  "category": "Parser",
+  "categoryAnchor": "parser",
+  "code": "bynk.parse.no_remainder_operator",
+  "constructs": [],
+  "example": "fn parity(n: Int) -> Int {\n    n % 2          // ✗ there is no `%`\n}\n\nfn parity(n: Int) -> Int {\n    n.rem(2)       // ✓ the dividend's sign, as `%` in C\n}\n\nfn slot(n: Int) -> Int {\n    n.mod(2)       // ✓ the divisor's sign, as `%` in Python\n}",
+  "severity": "error",
+  "summary": "`%` is not an operator; use `Int.rem` (the dividend's sign) or `Int.mod` (the divisor's)."
+}

@@ -1,0 +1,10 @@
+{
+  "blurb": "A message bundle is checked against one reference locale, which is also the fallback when a requested locale is not declared. With two blocks marked `@reference` there are two answers, so exactly one per commons may carry the mark. Keep `@reference` on the locale your strings are written in first and take it off the others. No block marked at all is `bynk.messages.missing_reference`.",
+  "category": "Message bundles",
+  "categoryAnchor": "message-bundles",
+  "code": "bynk.messages.multiple_reference",
+  "constructs": [],
+  "example": "messages \"en\" @reference { … }\nmessages \"fr\" @reference { … }   // ✗ a second reference\n\nmessages \"fr\" { … }              // ✓",
+  "severity": "error",
+  "summary": "A message bundle has more than one `@reference` block."
+}

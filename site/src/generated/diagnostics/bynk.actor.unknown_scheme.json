@@ -1,0 +1,10 @@
+{
+  "blurb": "An actor's `auth` names how its callers are verified, and the compiler writes that check itself, so the scheme must be one it knows: `None`, `Internal`, `Bearer`, `Signature`, `Oidc`, `Foreign` or `SignedCookie`. There are no user-defined schemes, and a name outside the set is usually a typo or a scheme borrowed from another framework. Choose the one that matches how callers prove who they are, such as `Bearer` for a JWT signed with a shared key; the actors page lists what each one needs.",
+  "category": "Actors",
+  "categoryAnchor": "actors",
+  "code": "bynk.actor.unknown_scheme",
+  "constructs": [],
+  "example": "actor Robot { auth = Bogus }   // ✗ not a scheme the compiler knows\n\nactor Robot { auth = None }    // ✓ one of the seven",
+  "severity": "error",
+  "summary": "An actor declares an authentication scheme that is not compiler-known."
+}

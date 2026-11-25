@@ -1,0 +1,12 @@
+{
+  "blurb": "`D1.peek(<participant>.<Capability>)` gives an `integration` or `system` case a read-only handle on a participant's test database. Only those tiers stand one up, so the handle is refused in a `unit` case, a `property`, and in the app's own code. A `unit` case reads the capability it stubs.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.peek_outside_case",
+  "constructs": [
+    "case"
+  ],
+  "example": "// tests/orders.test.bynk\nsuite shop.orders {\n  case \"peeks\" {\n    let db = D1.peek(shop.orders.Orders)   // ✗ a unit suite has no participant database\n    expect true\n  }\n}\n\nsuite shop.orders as system {\n  case \"peeks\" {\n    let db = D1.peek(shop.orders.Orders)   // ✓\n    expect true\n  }\n}",
+  "severity": "error",
+  "summary": "`D1.peek` is used outside an `integration` or `system` case; only those tiers stand up a participant's test database."
+}

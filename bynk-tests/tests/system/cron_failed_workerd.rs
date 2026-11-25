@@ -130,8 +130,7 @@ fn a_failed_cron_run_is_reported_on_workerd() {
     let dir = tmp.join("workers/cronfail");
     assert!(dir.join("index.js").is_file(), "expected {dir:?}");
 
-    let base = 10_000 + 2 * (std::process::id() % 4_000) as u16;
-    let (port, inspector) = (base, base + 1);
+    let [port, inspector] = wrangler::ports::free_ports();
     let log_path = tmp.join("wrangler.log");
     let spawned = (|| -> std::io::Result<wrangler::Wrangler> {
         let out_log = fs::File::create(&log_path)?;

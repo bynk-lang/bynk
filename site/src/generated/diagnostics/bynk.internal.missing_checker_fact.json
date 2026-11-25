@@ -1,0 +1,10 @@
+{
+  "blurb": "This is a compiler fault, not a mistake in your program. The code generator needs a fact the checker should have recorded about a construct (its type, the callee it resolves to, how many arguments it takes, a field's default value) and did not find one. Every program the checker accepts carries these facts, so no source you write can cause this on purpose. The diagnostic points at the construct being compiled when the fact was missing. Please report it at https://github.com/bynk-lang/bynk/issues with the source around that location, which is all that is needed to reproduce it. The compiler stops before it writes any output for the unit, rather than emit a program that might mean something other than what you wrote.",
+  "category": "Internal errors",
+  "categoryAnchor": "internal-errors",
+  "code": "bynk.internal.missing_checker_fact",
+  "constructs": [],
+  "example": "// bynk internal error: the checker recorded no type for a `fold` call, which the code generator needs here.\n// This is a compiler fault, not a problem in your program; please report it at https://github.com/bynk-lang/bynk/issues\n//\n// There is no program to fix: the report is the fix.",
+  "severity": "error",
+  "summary": "A compiler fault, not a mistake in the program: the code generator needed a fact the checker should have recorded (a type, a callee, an argument count, a field default) and found none. The diagnostic points at the construct being compiled; report it at https://github.com/bynk-lang/bynk/issues."
+}

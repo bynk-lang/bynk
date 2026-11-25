@@ -1,0 +1,10 @@
+{
+  "blurb": "`embeds E as V` lets `?` wrap an `E` error in the variant `V` of the same sum, so `V` must be one of that sum's variants. Here it names none, usually a misspelling. Correct the name, or add the variant it should wrap into.",
+  "category": "Type checking",
+  "categoryAnchor": "type-checking",
+  "code": "bynk.types.embeds_unknown_variant",
+  "constructs": [],
+  "example": "type OrderError =\n    | Payment(reason: PayError)\n    embeds PayError as Pay        // ✗ no variant `Pay`\n\ntype OrderError =\n    | Payment(reason: PayError)\n    embeds PayError as Payment    // ✓",
+  "severity": "error",
+  "summary": "An `embeds … as V` clause names a variant the sum does not declare."
+}
