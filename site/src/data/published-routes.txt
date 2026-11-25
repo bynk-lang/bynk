@@ -1443,6 +1443,7 @@
 /reference/diagnostics/bynk.cloudflare.edge_cache_in_schedule/
 /reference/diagnostics/bynk.cloudflare.edge_cache_public_authenticated/
 /reference/diagnostics/bynk.codegen.tsc_failed/
+/reference/diagnostics/bynk.commons.consumes_not_types/
 /reference/diagnostics/bynk.consumes.alias_conflict/
 /reference/diagnostics/bynk.consumes.capability_name_clash/
 /reference/diagnostics/bynk.consumes.capability_not_selected/

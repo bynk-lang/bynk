@@ -2653,9 +2653,14 @@ convention, not syntax ([ADR 0294](https://github.com/bynk-lang/bynk/blob/main/d
 
 ## §5.8 Boundaries & cross-context
 
-`consumes` MUST appear only in a context or an adapter (a `commons` or `suite`
-cannot declare one: `bynk.parse.expected_item`),
-MUST name an existing context or adapter — not a `commons`
+`consumes` MUST appear only in a context, an adapter or a `commons` (a `suite`
+cannot declare one: `bynk.parse.expected_item`). A commons takes types only: its
+`consumes` MUST be the braced list `consumes U { T, … }`, MUST name an adapter
+(not a context), and MUST list only types `U` exports, so no whole-unit or
+aliased form, no capability and no service (`bynk.commons.consumes_not_types`);
+`T as Alias` is allowed. A unit that `uses` the commons does not get the listed
+types in scope through it. A `consumes` MUST
+name an existing context or adapter — not a `commons`
 (`bynk.consumes.unknown_context`, `bynk.consumes.target_is_commons`) — and not the
 consumer itself (`bynk.consumes.self_reference`), and MUST NOT produce colliding
 names or aliases (the `bynk.consumes.*` codes). Calling another context's service

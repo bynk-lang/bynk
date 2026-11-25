@@ -1,0 +1,18 @@
+context audit.log
+
+// This context uses the commons and consumes nothing: a public signature that
+// mentions a consumed type is fine while the context does not name it.
+uses app.errors
+
+fn label(e: AppError) -> String {
+	match e {
+		Slow(after) => "slow",
+		Storage(message) => message,
+	}
+}
+
+service sweeper from cron {
+	on schedule("30 * * * *") (at: Instant) -> Effect[Result[(), String]] {
+		Ok(())
+	}
+}
