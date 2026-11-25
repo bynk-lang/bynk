@@ -13,7 +13,7 @@ The complete Bynk grammar, generated from the `tree-sitter-bynk` grammar. For th
 source_file ::= (commons_decl | context_decl | adapter_decl | suite_decl)+ | item_fragment+ | expr_fragment
 item_fragment ::= context_body_item | handler | store_field | key_decl
 expr_fragment ::= statement+ expression? | expression
-commons_decl ::= "commons" qualified_name ("{" commons_body_item* "}" | commons_body_item*)
+commons_decl ::= "commons" qualified_name ("for" "tests")? ("{" commons_body_item* "}" | commons_body_item*)
 context_decl ::= "context" qualified_name ("{" context_body_item* "}" | context_body_item*)
 adapter_decl ::= "adapter" qualified_name ("{" adapter_body_item* "}" | adapter_body_item*)
 suite_decl ::= "suite" qualified_name ("as" ("unit" | "integration" | "system"))? ("{" test_body_item* "}" | test_body_item*)

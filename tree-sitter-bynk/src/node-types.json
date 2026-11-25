@@ -2262,6 +2262,16 @@
     "type": "commons_decl",
     "named": true,
     "fields": {
+      "marker": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "test_only_marker",
+            "named": true
+          }
+        ]
+      },
       "name": {
         "multiple": false,
         "required": true,
@@ -14747,6 +14757,10 @@
   {
     "type": "system",
     "named": false
+  },
+  {
+    "type": "test_only_marker",
+    "named": true
   },
   {
     "type": "times",

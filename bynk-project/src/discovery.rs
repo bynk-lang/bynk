@@ -463,6 +463,8 @@ impl ParsedFile {
             ),
         };
         Commons {
+            // #3984: a test-only commons' synthetic commons stays test-only.
+            test_only: matches!(&self.unit, SourceUnit::Commons(c) if c.test_only),
             name,
             items,
             uses,

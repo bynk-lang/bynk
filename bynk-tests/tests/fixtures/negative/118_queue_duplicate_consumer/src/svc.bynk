@@ -1,11 +1,11 @@
 context svc
 
 service worker from queue("q") {
-  on message(message: String) -> Effect[QueueResult] {
+  on message(message: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 
-  on message(message: String) -> Effect[QueueResult] {
+  on message(message: String) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

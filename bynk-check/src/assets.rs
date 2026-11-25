@@ -1548,7 +1548,7 @@ mod tests {
     /// Worker ships — so nothing nameable can answer `NotFound`.
     #[test]
     fn asset_fetches_are_http_only_and_target_scoped() {
-        let web = "context t.web\n\nasset style = \"assets/board.css\"\n\nservice jobs from queue(\"q\") {\n  on message(m: String) -> Effect[QueueResult] {\n    Ack\n  }\n}\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(style.url)\n  }\n}\n";
+        let web = "context t.web\n\nasset style = \"assets/board.css\"\n\nservice jobs from queue(\"q\") {\n  on message(m: String) -> Effect[QueueResult] by Producer {\n    Ack\n  }\n}\n\nservice api from http {\n  on GET(\"/\") () -> Effect[HttpResult[String]] by Visitor {\n    Ok(style.url)\n  }\n}\n";
         let a = analyse(&[
             ("t/web.bynk", web),
             (

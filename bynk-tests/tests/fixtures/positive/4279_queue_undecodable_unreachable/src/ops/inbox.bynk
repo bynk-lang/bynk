@@ -15,7 +15,7 @@ fn describe(r: QueueResult) -> String {
 
 service inbox from queue("inbox-jobs") {
   delivery { deadLetter: None }
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

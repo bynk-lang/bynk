@@ -152,6 +152,25 @@ pub fn complete_in(
     doc_text: &str,
     files: Option<&HashMap<PathBuf, String>>,
 ) -> Vec<Completion> {
+    let mut items = complete_base(project_root, line_prefix, doc_text, files);
+    // #3931: `self.<cursor>` in a document with an agent — `erase`, offered beside whatever else the
+    // position offers (the key's fields), not instead of it.
+    if let Some(erase) = crate::agent_erase::erase_member_candidates(line_prefix, doc_text) {
+        for e in erase {
+            if !items.iter().any(|i| i.label == e.label) {
+                items.push(e);
+            }
+        }
+    }
+    items
+}
+
+fn complete_base(
+    project_root: Option<&Path>,
+    line_prefix: &str,
+    doc_text: &str,
+    files: Option<&HashMap<PathBuf, String>>,
+) -> Vec<Completion> {
     // #2223: the project's own files and its dependencies' reachable units,
     // resolved once per request and only by the branches that name units.
     let split = || split_dependency_files(files, project_root);
@@ -2251,7 +2270,7 @@ pub fn nested_variant_completions(
 }
 
 /// The built-in variant names of `Result`/`Option` as `Variant` completions.
-fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
+pub(crate) fn built_in_variants(names: &[&str], of: &str) -> Vec<Completion> {
     names
         .iter()
         .map(|v| {
@@ -3809,6 +3828,41 @@ pub fn value_receiver_rewrite(text: &str, offset: usize) -> Option<(String, usiz
     Some((rewritten, dot.saturating_sub(1)))
 }
 
+/// #4312: like [`value_receiver_rewrite`], for a store field reached through
+/// `old.` or `new.` in a transition predicate (`old.lines.`): the buffer with
+/// the trailing `.partial` dropped, and the offset of the field's last
+/// character. `None` for any other dotted receiver.
+pub fn predicate_field_rewrite(text: &str, offset: usize) -> Option<(String, usize)> {
+    let prefix = text.get(..offset)?;
+    let head = prefix
+        .trim_end_matches(|c: char| c.is_alphanumeric() || c == '_')
+        .strip_suffix('.')?;
+    let (_, field_start) = ident_ending_at(head, head.len())?;
+    let before = head[..field_start].strip_suffix('.')?;
+    let (state, state_start) = ident_ending_at(before, before.len())?;
+    if !matches!(state, "old" | "new") || before[..state_start].ends_with('.') {
+        return None;
+    }
+    let dot = head.len();
+    let rewritten = format!("{}{}", &text[..dot], &text[offset..]);
+    Some((rewritten, dot.saturating_sub(1)))
+}
+
+/// #4312: the members of a store field read in an invariant or transition
+/// predicate — `size` for a `Map` or `Set`, nothing for a `Log` —
+/// when the receiver is a store field there; `None` for any other receiver, so
+/// the caller falls back to the general path. A predicate allows no other
+/// member of a collection, so the receiver's kernel vocabulary must not leak in.
+pub fn predicate_store_member_candidates(
+    rewritten: &str,
+    recv_offset: usize,
+    locals: &[LocalBinding],
+) -> Option<Vec<Completion>> {
+    crate::symbols::store_field_kind_at(rewritten, recv_offset + 1, locals)?;
+    crate::symbols::store_field_in_predicate_at(rewritten, recv_offset + 1)
+        .then(|| store_field_member_candidates(rewritten, recv_offset, locals))
+}
+
 /// The identifier run ending at byte `end` in `text` — `(name, start)` — the
 /// trim-back-to-a-non-identifier-boundary scan shared by every receiver/
 /// identifier extraction in the LSP: [`value_receiver_rewrite`] above,
@@ -5235,6 +5289,48 @@ fn Box.size(self) -> Int { 1 }
         assert!(labels(&notes, "quiet: notes.").is_empty());
         let handler = format!("{head}  on call g() -> Effect[()] {{\n    lines.\n  }}\n}}\n");
         assert!(labels(&handler, "    lines.").len() > 1);
+    }
+
+    #[test]
+    fn predicate_receivers_reach_a_store_field_through_old_new_and_bare() {
+        // #4312: `old.lines.`, `new.lines.` and a bare `lines.` in a predicate
+        // each offer `size` and nothing else; a `Log` offers nothing.
+        let head = "context shop\n\nagent Basket {\n  key id: String\n  store lines: Map[String, Int]\n  store notes: Log[String]\n\n";
+        let tail = "\n  on call f() -> Effect[()] {\n    Effect.pure(())\n  }\n}\n";
+        let labels = |pred: &str, marker: &str| -> Option<Vec<String>> {
+            let doc = format!("{head}  {pred}\n{tail}");
+            let at = doc.find(marker).unwrap() + marker.len();
+            let (rewritten, recv) =
+                value_receiver_rewrite(&doc, at).or_else(|| predicate_field_rewrite(&doc, at))?;
+            predicate_store_member_candidates(&rewritten, recv, &[])
+                .map(|v| v.into_iter().map(|c| c.label).collect())
+        };
+        assert_eq!(
+            labels("invariant bounded: lines.", "lines."),
+            Some(vec!["size".to_string()])
+        );
+        assert_eq!(
+            labels("transition grows: new.lines.", "new.lines."),
+            Some(vec!["size".to_string()])
+        );
+        assert_eq!(
+            labels("transition grows: old.lines.", "old.lines."),
+            Some(vec!["size".to_string()])
+        );
+        assert_eq!(
+            labels("transition quiet: old.notes.", "old.notes."),
+            Some(vec![]),
+            "a `Log` has no `size()`"
+        );
+        // Not a predicate receiver: a handler body, and a dotted receiver that
+        // is neither `old` nor `new`.
+        let doc = format!("{head}  on call g() -> Effect[()] {{\n    old.lines.\n  }}\n}}\n");
+        let at = doc.find("old.lines.").unwrap() + "old.lines.".len();
+        let (rewritten, recv) = predicate_field_rewrite(&doc, at).expect("dotted receiver");
+        assert!(predicate_store_member_candidates(&rewritten, recv, &[]).is_none());
+        let other = format!("{head}  invariant x: a.lines.\n{tail}");
+        let at = other.find("a.lines.").unwrap() + "a.lines.".len();
+        assert!(predicate_field_rewrite(&other, at).is_none());
     }
 
     #[test]

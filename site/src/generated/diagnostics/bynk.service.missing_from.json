@@ -6,7 +6,7 @@
   "constructs": [
     "service_decl"
   ],
-  "example": "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] { … }\n}",
+  "example": "service worker {\n    on message(m: String) -> Effect[QueueResult] { … }   // ✗ no `from` clause\n}\n\nservice worker from queue(\"jobs\") {   // ✓ the protocol is named\n    on message(m: String) -> Effect[QueueResult] by Producer { … }\n}",
   "severity": "error",
   "summary": "A `from`-less service has a handler other than `on call`."
 }

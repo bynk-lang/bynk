@@ -166,6 +166,8 @@ module.exports = grammar({
       seq(
         "commons",
         field("name", $.qualified_name),
+        // #3984: `commons x.y for tests`, a commons only suites may `uses`.
+        optional(seq("for", field("marker", alias("tests", $.test_only_marker)))),
         choice(
           seq("{", repeat($._commons_body_item), "}"),
           // Fragment form: header followed by items to EOF (or the next

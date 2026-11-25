@@ -1,0 +1,12 @@
+{
+  "blurb": "A commons declared `for tests` holds what suites share (helpers, types, constants and test-only values) and is left out of every deployable. Only a suite or another test-only commons may `uses` it, so production code cannot depend on code that is not there. Move what the unit needs into a commons that is not marked `for tests`.",
+  "category": "Uses",
+  "categoryAnchor": "uses",
+  "code": "bynk.uses.test_only_commons",
+  "constructs": [
+    "uses_decl"
+  ],
+  "example": "// kit.bynk\ncommons kit for tests\n\nconst Start: Int = 1\n\n// shop.bynk\ncontext shop\n\nuses kit                         // ✗ `kit` is test-only\n\n// tests/shop.test.bynk\nsuite shop\n\nuses kit                         // ✓ a suite may use it",
+  "severity": "error",
+  "summary": "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`."
+}

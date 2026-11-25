@@ -4,7 +4,7 @@ type Job = { id: String }
 
 service outbox from queue("outbound-email") {
   delivery { deadLetter: None }
-  on message(job: Job) -> Effect[QueueResult] {
+  on message(job: Job) -> Effect[QueueResult] by Producer {
     RetryAfter("down", 25.hours)
   }
 }

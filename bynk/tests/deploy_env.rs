@@ -40,7 +40,7 @@ service place {
 }
 
 service intake from queue("job-intake") {
-  on message(message: Job) -> Effect[QueueResult] {
+  on message(message: Job) -> Effect[QueueResult] by Producer {
     Ack
   }
 }

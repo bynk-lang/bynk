@@ -19,6 +19,59 @@ export function __bynkInstantToIso(ms: number): string {
   return new Date(ms).toISOString();
 }
 
+// #3977: the text of a `Duration`, which erases to a number of milliseconds. Both forms break
+// the span into whole days (24-hour spans, as `1.day` is), hours, minutes, seconds and
+// milliseconds with integer arithmetic only, so a large span is exact. A negative span takes a
+// leading `-`, and the parts are those of its magnitude.
+function durationParts(ms: number): { neg: boolean; d: number; h: number; m: number; s: number; ms: number } {
+  if (!Number.isFinite(ms) || !Number.isInteger(ms)) {
+    throw new Error(`Duration text: ${ms} is not a whole number of milliseconds`);
+  }
+  const neg = ms < 0;
+  let rest = Math.abs(ms);
+  const part = (unit: number): number => {
+    const n = Math.floor(rest / unit);
+    rest -= n * unit;
+    return n;
+  };
+  const d = part(86_400_000);
+  const h = part(3_600_000);
+  const m = part(60_000);
+  const s = part(1000);
+  return { neg, d, h, m, s, ms: rest };
+}
+
+// `1d2h`, `1h30m`, `5m`, `250ms`, `-5s`, `0s`: units largest first, a zero part left out, and
+// `0s` for a zero span. The units are the ones a `Duration` literal is written in.
+export function __bynkDurationToString(ms: number): string {
+  const p = durationParts(ms);
+  const text =
+    (p.d ? `${p.d}d` : "") +
+    (p.h ? `${p.h}h` : "") +
+    (p.m ? `${p.m}m` : "") +
+    (p.s ? `${p.s}s` : "") +
+    (p.ms ? `${p.ms}ms` : "");
+  if (text === "") {
+    return "0s";
+  }
+  return p.neg ? `-${text}` : text;
+}
+
+// ISO 8601: `PT1H30M`, `P1DT2H`, `PT0.25S`, `-PT5S`, `PT0S`. Days are the largest unit (months and
+// years are not fixed spans), the seconds carry the millisecond fraction without trailing zeros,
+// and a negative span takes a leading `-`, a widely accepted extension.
+export function __bynkDurationToIso(ms: number): string {
+  const p = durationParts(ms);
+  const fraction = p.ms ? `.${String(p.ms).padStart(3, "0").replace(/0+$/, "")}` : "";
+  const seconds = p.s || p.ms ? `${p.s}${fraction}S` : "";
+  const time = (p.h ? `${p.h}H` : "") + (p.m ? `${p.m}M` : "") + seconds;
+  const date = p.d ? `${p.d}D` : "";
+  if (date === "" && time === "") {
+    return "PT0S";
+  }
+  return `${p.neg ? "-" : ""}P${date}${time === "" ? "" : `T${time}`}`;
+}
+
 // The RFC 3339 date-time profile: `T` or `t`, a fraction of any length, and
 // `Z`, `z` or a `±HH:mm` offset. Nothing else.
 const ISO =
