@@ -89,6 +89,9 @@ pub struct DeployOptions {
     /// `--no-install` (or `BYNK_NO_INSTALL`): stop on a missing npm package
     /// instead of installing it (#3350).
     pub no_install: bool,
+    /// `--strict-environments` (#3941): refuse a named environment whose
+    /// `env(…)` constants fall back to `[vars]` or their default.
+    pub strict_environments: bool,
     pub format: DeployFormat,
     pub yes: bool,
     /// `--context NAME` — deploy this context alone, assuming the contexts it
@@ -407,6 +410,9 @@ fn deploy(
         Lives::for_plan(&hyperdrive_wants),
     )
     .checked_against_account();
+    if report_env_constants(project_root, opts).is_err() {
+        return Err(ExitCode::FAILURE);
+    }
     print_plan_then_forward_warnings(&plan, opts, &order, &resources, project_root);
     if opts.dry_run {
         return Ok(());
@@ -551,4 +557,59 @@ fn select_workers(
         "no Worker `{name}` was built (available: {})",
         available.join(", ")
     ))
+}
+
+/// #3941 decision H: each `env(…)` constant with its resolved value and where it
+/// came from, ahead of the plan, on stderr (the plan's own stdout, `--format
+/// json` included, is untouched). For a named environment, a constant that takes
+/// a `[vars]` or default value rather than the environment's own is called out,
+/// since that Worker would use another environment's setting; `--strict-environments`
+/// refuses it.
+fn report_env_constants(project_root: &Path, opts: &DeployOptions) -> Result<(), ()> {
+    use bynk_project::vars::{DEFAULT_ENVIRONMENT, ValueSource};
+    let Ok(options) = bynk_driver::try_project_options(project_root) else {
+        return Ok(());
+    };
+    let options = options.environment(opts.environment.as_str());
+    let facts = bynk_driver::project::env_const_report(&options);
+    if facts.is_empty() {
+        return Ok(());
+    }
+    let environment = if opts.environment.is_empty() {
+        DEFAULT_ENVIRONMENT
+    } else {
+        opts.environment.as_str()
+    };
+    emsg!("Environment constants for `{environment}`:");
+    for f in &facts {
+        emsg!(
+            "  {} = {}   ({} from {})",
+            f.constant,
+            f.value,
+            f.variable,
+            f.source.label()
+        );
+    }
+    if environment == DEFAULT_ENVIRONMENT {
+        return Ok(());
+    }
+    let shared: Vec<&str> = facts
+        .iter()
+        .filter(|f| f.source != ValueSource::EnvVars(environment.to_string()))
+        .map(|f| f.constant.as_str())
+        .collect();
+    if shared.is_empty() {
+        return Ok(());
+    }
+    let names = shared.join(", ");
+    if opts.strict_environments {
+        emsg!(
+            "bynk: error: `{environment}` takes the value of another environment for {names}; set them under `[env.{environment}.vars]` (`--strict-environments`)"
+        );
+        return Err(());
+    }
+    emsg!(
+        "bynk: note: `{environment}` takes the value of another environment for {names}; set them under `[env.{environment}.vars]`, or pass `--strict-environments` to refuse this"
+    );
+    Ok(())
 }

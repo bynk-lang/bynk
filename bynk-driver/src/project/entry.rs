@@ -100,7 +100,7 @@ type Discovered = Vec<Vec<PathBuf>>;
 /// ([`Roots::trees`]) and then each path dependency's
 /// ([`bynk_project::dependency_trees`]) — so the source map partitions a
 /// dependency's files into their own tree rather than the last one.
-fn project_trees(options: &CompileOptions) -> Vec<(PathBuf, PathBuf)> {
+pub(super) fn project_trees(options: &CompileOptions) -> Vec<(PathBuf, PathBuf)> {
     let mut trees = options.roots.trees();
     if let Roots::Split { project_root, .. } = &options.roots {
         let empty = HashMap::new();

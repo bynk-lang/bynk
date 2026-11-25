@@ -43,6 +43,20 @@ pub enum VarValue {
 }
 
 impl VarValue {
+    /// The value as a literal is written (`"x"`, `3`, `true`, `["a", "b"]`).
+    pub fn shown(&self) -> String {
+        match self {
+            Self::Str(s) => format!("{s:?}"),
+            Self::Int(n) => n.to_string(),
+            Self::Bool(b) => b.to_string(),
+            Self::List(items) => {
+                let parts: Vec<String> = items.iter().map(|i| format!("{i:?}")).collect();
+                format!("[{}]", parts.join(", "))
+            }
+            Self::Other(kind) => (*kind).to_string(),
+        }
+    }
+
     fn from_toml(v: &toml::Value) -> Self {
         match v {
             toml::Value::String(s) => Self::Str(s.clone()),
@@ -86,6 +100,51 @@ impl Origin {
         match self {
             Self::EnvVars(name) => format!("[env.{name}.vars]"),
             Self::Vars => "[vars]".to_string(),
+        }
+    }
+}
+
+/// What a build resolved one `env(…)` constant to, and where the value came
+/// from: what the deploy plan lists (#3941 decision H).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedConst {
+    /// The constant's name.
+    pub constant: String,
+    /// The `bynk.toml` variable it reads.
+    pub variable: String,
+    /// The value, as a literal is written.
+    pub value: String,
+    /// `[env.<name>.vars]`, `[vars]`, or the constant's own default.
+    pub source: ValueSource,
+}
+
+/// Where a resolved `env(…)` constant's value came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValueSource {
+    /// `[env.<name>.vars]`.
+    EnvVars(String),
+    /// `[vars]`.
+    Vars,
+    /// The default given to `env(NAME, default)`.
+    Default,
+}
+
+impl ValueSource {
+    /// `[env.staging.vars]`, `[vars]` or `default`, as the plan prints it.
+    pub fn label(&self) -> String {
+        match self {
+            Self::EnvVars(name) => format!("[env.{name}.vars]"),
+            Self::Vars => "[vars]".to_string(),
+            Self::Default => "the constant's default".to_string(),
+        }
+    }
+}
+
+impl From<Origin> for ValueSource {
+    fn from(o: Origin) -> Self {
+        match o {
+            Origin::EnvVars(name) => Self::EnvVars(name),
+            Origin::Vars => Self::Vars,
         }
     }
 }
