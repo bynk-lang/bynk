@@ -372,17 +372,36 @@ pub(crate) fn check_ident(
         );
         return None;
     }
-    ctx.errors.push(
-        CompileError::new(
-            "bynk.resolve.unknown_name",
-            id.span,
-            format!("unknown name `{}`", id.name),
-        )
-        .with_note(
-            "only parameters, `let` bindings, and functions declared \
-             in this commons are in scope",
-        ),
+    let mut err = CompileError::new(
+        "bynk.resolve.unknown_name",
+        id.span,
+        format!("unknown name `{}`", id.name),
+    )
+    .with_note(
+        "only parameters, `let` bindings, and functions declared \
+         in this commons are in scope",
     );
+    // #4306: a capability is called from a body that is given it. A pure position (a
+    // transition, a `migrate` step, an invariant, a contract) has none in scope, whether the
+    // capability is declared here or consumed from another unit.
+    if ctx
+        .input
+        .commons
+        .items
+        .iter()
+        .any(|i| matches!(i, CommonsItem::Capability(c) if c.name.name == id.name))
+        || ctx
+            .input
+            .cross_context
+            .flattened_caps
+            .contains_key(&id.name)
+    {
+        err = err.with_note(format!(
+            "`{}` is a capability: only a handler or function body that is `given` it can call it, and this position is pure",
+            id.name
+        ));
+    }
+    ctx.errors.push(err);
     None
 }
 
