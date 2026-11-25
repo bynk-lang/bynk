@@ -41,6 +41,34 @@ fn keys(object: &Value) -> BTreeSet<String> {
         .unwrap_or_default()
 }
 
+/// #3941: tables whose keys are the user's own names (`[vars]`'s variables,
+/// `[env]`'s environments): their key lists are empty, and the schema takes any
+/// name their grammar allows, so they are not closed like the others.
+const FREE_KEY_TABLES: &[&str] = &["vars", "env"];
+
+#[test]
+fn free_key_tables_take_names_their_grammar_allows() {
+    let schema = generate();
+    let vars = table(&schema, "vars");
+    assert_eq!(vars["type"], "object");
+    assert!(
+        vars["propertyNames"]["pattern"].is_string(),
+        "`[vars]` constrains its names"
+    );
+    assert!(
+        vars["additionalProperties"].is_object(),
+        "`[vars]` takes values"
+    );
+    let env = table(&schema, "env");
+    assert_eq!(env["type"], "object");
+    assert_eq!(
+        keys(&env["additionalProperties"]["properties"]),
+        BTreeSet::from(["vars".to_string()]),
+        "an `[env.<name>]` entry holds `vars`"
+    );
+    assert_eq!(env["additionalProperties"]["additionalProperties"], false);
+}
+
 #[test]
 fn the_committed_schema_is_current() {
     let fresh = render();
@@ -66,7 +94,7 @@ fn the_schema_has_exactly_the_manifest_tables_and_keys() {
     for (name, expected) in bynk_project::MANIFEST_TABLES {
         // `[fmt]`'s keys are `bynk-fmt`'s (its list here is empty); the schema
         // is derived from that crate's reader, checked below.
-        if *name == "fmt" {
+        if *name == "fmt" || FREE_KEY_TABLES.contains(name) {
             continue;
         }
         let expected: BTreeSet<String> = expected.iter().map(|k| (*k).to_string()).collect();
@@ -101,6 +129,9 @@ fn unknown_tables_and_keys_are_flagged() {
         );
     };
     for (name, _) in bynk_project::MANIFEST_TABLES {
+        if FREE_KEY_TABLES.contains(name) {
+            continue;
+        }
         let t = table(&schema, name);
         assert_eq!(t["type"], "object", "`[{name}]` is a table");
         assert_eq!(t["additionalProperties"], false, "`[{name}]`");

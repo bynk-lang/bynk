@@ -668,6 +668,28 @@ A [worker group](#worker-groups) overrides either key for its own Worker under
 `head_sampling_rate` keeps the project's `enabled`. A deployment environment
 inherits the setting, so `bynk deploy --env` doesn't repeat it.
 
+## `[vars]` and `[env.<name>.vars]`
+
+Build-time values for the project's [`env(NAME)` constants](/reference/constants/#values-that-differ-per-environment).
+A variable's name is capital letters, digits and `_`, starting with a capital
+letter, and its value is a string, a whole number, `true` or `false`, or an array
+of strings.
+
+```toml
+[vars]                                   # every environment, `default` included
+APP_ORIGIN = "https://app.shop.example"
+
+[env.staging.vars]                       # this environment, over `[vars]`
+APP_ORIGIN = "https://staging.app.shop.example"
+BILLING_WORKER = "legacy-billing-staging"
+```
+
+The value a build uses is its environment's own `[env.<name>.vars]`, then
+`[vars]`, then the constant's default. These are not Wrangler's run-time `[vars]`:
+they are read when the project is built, from this committed file only. A
+variable no `env(…)` constant reads is an error (`bynk.env.unknown_variable`).
+`[env.<name>]` holds `vars` and nothing else.
+
 ## `[deploy]` and `[dev]`
 
 Where a `Postgres` instance (`capability Main = Postgres`), or a `MySql` one
