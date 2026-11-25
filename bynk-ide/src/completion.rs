@@ -202,6 +202,11 @@ fn complete_base(
     if in_schedule_argument(line_prefix) {
         return schedule_constant_candidates(doc_text, files);
     }
+    // 0a''. #3889: inside `from email(<cursor>` — the in-scope constants declared exactly
+    //       `String`, which name an address.
+    if in_email_address_argument(line_prefix) {
+        return constants_of_types(doc_text, files, &["String"]);
+    }
     // 0a'. #3951: inside a refinement predicate's argument list — the in-scope
     //      constants of the type that argument takes.
     if let Some(types) = predicate_argument_types(line_prefix) {
@@ -1361,6 +1366,16 @@ pub fn in_schedule_argument(line_prefix: &str) -> bool {
         return false;
     };
     let after = &line_prefix[at + "on schedule(".len()..];
+    after.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// #3889: whether the cursor is inside the parentheses of `from email(`, at a bare
+/// (possibly empty) name: an address written as a string literal has nothing to complete.
+pub fn in_email_address_argument(line_prefix: &str) -> bool {
+    let Some(at) = line_prefix.rfind("from email(") else {
+        return false;
+    };
+    let after = &line_prefix[at + "from email(".len()..];
     after.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
@@ -4296,6 +4311,20 @@ mod tests {
         let got = complete("  on schedule(", doc, None);
         let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
         assert_eq!(labels, ["Nightly"], "{labels:?}");
+    }
+
+    /// #3889: inside `from email(` the constants declared exactly `String` are offered, and
+    /// no other (an address has no refined type).
+    #[test]
+    fn email_argument_offers_string_constants() {
+        assert!(in_email_address_argument("service s from email("));
+        assert!(in_email_address_argument("service s from email(Supp"));
+        assert!(!in_email_address_argument("service s from email(\"a@b"));
+        assert!(!in_email_address_argument("service s from http"));
+        let doc = "context app.support\n\ntype Short = String where MaxLength(9)\n\nconst Support: String = \"support@shop.example\"\nconst Limit: Int = 3\nconst Tight: Short = \"a@b.c\"\n\nfn helper() -> Int { 1 }\n";
+        let got = complete("service s from email(", doc, None);
+        let labels: Vec<&str> = got.iter().map(|c| c.label.as_str()).collect();
+        assert_eq!(labels, ["Support"], "{labels:?}");
     }
 
     /// #3951: inside a refinement predicate's argument list the constants of the

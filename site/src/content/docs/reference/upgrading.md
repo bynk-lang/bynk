@@ -17,6 +17,26 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.743.0
+
+`BoundaryRejection` gains `RateLimited(detail)`: a `match` over it with no wildcard stops compiling (`bynk.types.non_exhaustive_match` names the missing variant); add an arm for `RateLimited(_)`, or a wildcard
+
+## v0.724.1
+
+a program that gives an `Effect` to a generic type's parameter where the type's declaration puts that parameter directly under an `Effect` (`type Wrap[T] = { v: Effect[T] }` used as `Wrap[Effect[Int]]`, written or returned by a generic call) now gets `bynk.types.nested_effect`; such a program type-checked before but had a field `Effect[Effect[Int]]`, which cannot exist at run time.
+
+## v0.724.0
+
+An email `on message` handler with no `by` clause, and no `by` on its service header, is now a compile error (`bynk.actor.missing_by_on_email`). It meant "any mail, whatever its DMARC verdict" before; the fix inserts `by Sender`, which means the same, so behaviour is unchanged once migrated
+
+## v0.723.0
+
+A route whose typed headers record has a required field reading a header the route's actor consumes (authorization on a Bearer, Oidc or sum route, a signature header, cookie on a SignedCookie route) no longer compiles; the field was never present, except `cookie` on a SignedCookie route, which was present when the request carried a second cookie and is refused on purpose, so read cookies through a `cookies` record and the identity through the actor.
+
+## v0.718.0
+
+A bounded generic type applied to a type parameter that lacks the bound (`fn mk[U](xs: List[U]) -> Sorted[U]` over `type Sorted[T: Ord]`), or built by a literal whose inferred argument fails the bound (`Sorted { items: [true] }`), is now an error: `bynk.generics.missing_ord_bound` (and `missing_eq_bound`, `missing_key_bound`, `missing_codable_bound`) or `bynk.types.not_orderable` (and `not_comparable`, `not_keyable`, `not_codable`); `bynk check --fix` declares the missing bounds down a chain of generic types and functions
+
 ## v0.709.0
 
 An `on message` handler with no `by` clause, and no `by` on its service header, is now a compile error (`bynk.actor.missing_by_on_queue`). It meant "any producer on the Cloudflare account" before; the fix inserts `by Producer`, which means the same, so behaviour is unchanged once migrated

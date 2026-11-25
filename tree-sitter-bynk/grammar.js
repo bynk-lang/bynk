@@ -1060,7 +1060,13 @@ module.exports = grammar({
           seq("queue", "(", field("name", $.string_literal), ")"),
           // #3328: `from email("support@shop.example")` — inbound email.
           // `email` is contextual, like `websocket`.
-          seq("email", "(", field("address", $.string_literal), ")"),
+          // #3889: a string literal, or the name of a constant that is one.
+          seq(
+            "email",
+            "(",
+            field("address", choice($.string_literal, $.identifier)),
+            ")",
+          ),
           seq(
             "websocket",
             "(",

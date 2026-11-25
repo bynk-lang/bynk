@@ -42,6 +42,40 @@ and the catch-all for its domain may both be claimed: the literal address wins,
 and the catch-all takes the rest. A recipient no service claims is rejected
 with the fixed reason `recipient not accepted`.
 
+### Naming an address with a constant
+
+An address written once can be shared by a service, a `Forward` in another service
+and a test: `from email(…)` takes a string literal, or the name of a constant.
+
+```bynk,ignore
+commons shop.addresses
+
+const Support: String = "support@shop.example"
+const Billing: String = "billing@shop.example"
+```
+
+```bynk,ignore
+context shop.support
+uses shop.addresses
+
+service support from email(Support) {
+  on message(mail: InboundEmail) -> Effect[EmailVerdict] by Sender {
+    Forward(Billing)
+  }
+}
+```
+
+The name resolves to its literal at compile time, so routing, dispatch, the
+project-wide duplicate check, the generated route table, `wrangler.toml`'s
+`addresses` and the deploy ledger are all the literal text. A constant is accepted
+when it is declared exactly `String` and is bound to a literal or to another such
+constant, in the same file, a sibling file or a used commons. A constant that is not
+(a refined type such as `String where MaxLength(40)`, an `Int`) is
+`bynk.email.invalid_address`, with a note naming the constant and its declared
+type; an unknown name is `bynk.resolve.unknown_name`, and a private constant of
+another unit is `bynk.visibility.private_item`. Two services claiming the same
+address, one through a constant, are `bynk.email.duplicate_address`.
+
 Routing is project-wide: Email Routing keeps one rule per address on the
 account, so two *contexts* claiming the same address is also
 `bynk.email.duplicate_address`. Dispatch runs on the envelope recipient

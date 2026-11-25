@@ -525,6 +525,8 @@ mod system {
     mod signed_cookie_loop_workerd;
     #[path = "snapshot_behaviour.rs"]
     mod snapshot_behaviour;
+    #[path = "sse_browser.rs"]
+    mod sse_browser;
     #[path = "stale_workers_output_behaviour.rs"]
     mod stale_workers_output_behaviour;
     #[path = "store_behaviour.rs"]
