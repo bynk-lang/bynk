@@ -161,18 +161,11 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         if let Some(section) = capability_path_section(a) {
             return Some(section);
         }
-        // 2. #611 (gap C): a `store` field's operation (`items.put(…)`) — a
-        //    structural match on the enclosing agent's declared field, so it
-        //    outranks the locals rung below, which guesses by name in scope.
-        //    Takes `locals` to honour the checker's by-provenance dispatch: a
-        //    local shadowing the field makes this an ordinary value method.
-        if let Some(text) = a.snapshots.get(a.rel)
-            && let Some(content) = crate::symbols::describe_store_op_at(
-                text,
-                a.offset,
-                a.locals.get(a.rel).map_or(&[], |l| l.as_slice()),
-            )
-        {
+        // 2. #611 (gap C): a `store` field's operation (`items.put(…)`), and (#4036) the
+        //    terminal of a `Map`/`Log` pipeline. A structural match on the enclosing agent's
+        //    declared field, so it outranks the locals rung below, which guesses by name in
+        //    scope; a local shadowing the field makes this an ordinary value method.
+        if let Some(content) = store_op_hover(a) {
             return Some(content);
         }
         // 2b. #2839: the `?` of an `Option` — `None` answers `404 NotFound`. Ahead of the locals rung, which
@@ -430,7 +423,19 @@ pub fn hover_content(input: &HoverInput<'_>) -> Option<String> {
         .or_else(|| describe_iso_date_predicate(&name, &text[..span.start]))
 }
 
-/// #3873: hover for the `Cron` predicate name after `where` or `&&`: its rule.
+/// A `store` field's operation hover (#611) and, on the terminal of a `Map`/`Log` pipeline
+/// (#4036), a note on whether it reads every entry, under the signature when the terminal is
+/// called directly on the field.
+fn store_op_hover(a: &HoverAnalysis<'_>) -> Option<String> {
+    let text = a.snapshots.get(a.rel)?;
+    let locals = a.locals.get(a.rel).map_or(&[][..], |l| l.as_slice());
+    let op = crate::symbols::describe_store_op_at(text, a.offset, locals);
+    match crate::symbols::describe_scan_reads_at(text, a.offset, locals) {
+        Some(note) => Some(op.map_or(note.clone(), |op| format!("{op}\n\n{note}"))),
+        None => op,
+    }
+}
+
 fn describe_cron_predicate(name: &str, before: &str) -> Option<String> {
     if name != "Cron" {
         return None;

@@ -370,7 +370,7 @@ fn terminal_node(orig: TsExpr, expr: TsExpr) -> TsExpr {
 
 /// `(__x) => (f)(__x)`: the callback is wrapped in a one-parameter arrow so the array index
 /// never reaches a one-parameter Bynk function.
-fn each(f: TsExpr) -> TsExpr {
+pub(in crate::emitter) fn each(f: TsExpr) -> TsExpr {
     arrow(vec![TsParam::new("__x", None)], applied(f, ident("__x")))
 }
 

@@ -1491,6 +1491,24 @@ into the storage capability the `store` fields already carry (no new `given`):
 | `.fold(init, f)` | `Effect[acc]` |
 | `.forEach(f)` | `Effect[()]` |
 
+### Which terminals stop reading early
+
+A terminal over a `store` collection reads its pages from storage. Where the answer is known
+before the last page, the read stops there, and the pages after it are never fetched:
+
+| Collection | Stops early | Reads every entry |
+|---|---|---|
+| `Log` | `.any(p)`, `.all(p)`, `.first()`, `.firstOrElse(d)`, `.take(n).collect()` | the other terminals |
+| `Map` | `.any(p)`, `.all(p)` | `.first()`, `.firstOrElse(d)`, `.take(n)`, and the other terminals |
+
+Only `filter`, `map` and `flatMap` (and `skip`, on a `Log`) may come before such a terminal. A
+`sortBy`, `sortByDescending`, `distinct`, `distinctBy`, `groupBy`, join or aggregate needs the whole
+input, so `sortBy(…).first()` reads everything while `first()` does not. A `Log` is read oldest first,
+so `first()` is its oldest match. A `Map` is scanned in insertion order, which only reading every
+entry recovers, so its order-dependent terminals read everything. An equality `filter` on an
+[`@indexed`](/reference/agents/#indexed-routing) field reads its posting list as before. A query
+held in a `let` reads its pages whole. The answer is the same either way; only the cost differs.
+
 ### Joins and grouping
 
 Joins and grouping (v0.92+; ADR 0120) take an **`into:` combiner** that projects

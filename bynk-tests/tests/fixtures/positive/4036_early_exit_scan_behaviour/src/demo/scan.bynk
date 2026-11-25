@@ -1,0 +1,102 @@
+---
+#4036: `any` and `all` over a store `Map` or `Log`, and `first`, `firstOrElse` and
+`take(n).collect()` over a `Log`, stop reading pages once the answer is known. Each answer
+here equals the one the same query gives over the whole collection read as a `List`.
+---
+context demo.scan
+
+capability Clock {
+	fn now() -> Effect[Instant]
+}
+
+provides Clock = FixedClock {
+	fn now() -> Effect[Instant] {
+		Instant.fromEpochMillis(0)
+	}
+}
+
+agent Tally {
+	key id: String
+
+	store scores: Map[String, Int]
+	store trail: Log[Int] @retain(30.days)
+
+	on call score(k: String, n: Int) -> Effect[()] {
+		let _ <- scores.put(k, n)
+	}
+
+	on call log(n: Int) -> Effect[()] given Clock {
+		let _ <- trail.append(n)
+	}
+
+	on call anyScore(n: Int) -> Effect[Bool] {
+		scores.any((s) => s == n)
+	}
+
+	on call anyScoreWhole(n: Int) -> Effect[Bool] {
+		let all <- scores.collect()
+		all.any((s) => s == n)
+	}
+
+	on call allScores(n: Int) -> Effect[Bool] {
+		scores.all((s) => s >= n)
+	}
+
+	on call allScoresWhole(n: Int) -> Effect[Bool] {
+		let all <- scores.collect()
+		all.all((s) => s >= n)
+	}
+
+	on call anyDoubled(n: Int) -> Effect[Bool] {
+		scores.filter((s) => s > 1).map((s) => s * 2).any((s) => s == n)
+	}
+
+	on call anyDoubledWhole(n: Int) -> Effect[Bool] {
+		let all <- scores.collect()
+		all.filter((s) => s > 1).map((s) => s * 2).any((s) => s == n)
+	}
+
+	on call anyLogged(n: Int) -> Effect[Bool] {
+		trail.any((s) => s == n)
+	}
+
+	on call allLogged(n: Int) -> Effect[Bool] {
+		trail.all((s) => s < n)
+	}
+
+	on call firstLogged() -> Effect[Option[Int]] {
+		trail.first()
+	}
+
+	on call firstLoggedWhole() -> Effect[Option[Int]] {
+		let all <- trail.collect()
+		all.first()
+	}
+
+	on call firstOver(n: Int) -> Effect[Int] {
+		trail.filter((s) => s > n).firstOrElse(-1)
+	}
+
+	on call firstOverWhole(n: Int) -> Effect[Int] {
+		let all <- trail.collect()
+		all.filter((s) => s > n).firstOrElse(-1)
+	}
+
+	on call oldest(n: Int) -> Effect[List[Int]] {
+		trail.take(n).collect()
+	}
+
+	on call oldestWhole(n: Int) -> Effect[List[Int]] {
+		let all <- trail.collect()
+		all.take(n)
+	}
+
+	on call afterSkip(skip: Int, n: Int) -> Effect[List[Int]] {
+		trail.skip(skip).take(n).collect()
+	}
+
+	on call afterSkipWhole(skip: Int, n: Int) -> Effect[List[Int]] {
+		let all <- trail.collect()
+		all.skip(skip).take(n)
+	}
+}

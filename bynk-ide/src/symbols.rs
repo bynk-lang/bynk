@@ -501,6 +501,118 @@ pub fn describe_store_op_at(
     None
 }
 
+/// #4036: hover on the terminal of a `store Map`/`Log` pipeline (`orders.filter(…).first()`) says
+/// whether the pipeline stops reading pages at its answer or reads every entry. Reads the tokens
+/// back from the terminal over balanced argument lists to the store field the chain starts at, so
+/// it needs no analysis; `None` when the cursor is not on such a terminal.
+pub fn describe_scan_reads_at(
+    source: &str,
+    offset: usize,
+    locals: &[bynk_check::locals::LocalBinding],
+) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let at = tokens
+        .iter()
+        .position(|t| t.kind == TokenKind::Ident && span_covers(t.span, offset))?;
+    let text = |i: usize| source.get(tokens[i].span.start..tokens[i].span.end);
+    let terminal = text(at)?;
+    if !matches!(
+        terminal,
+        "any" | "all" | "first" | "firstOrElse" | "collect"
+    ) {
+        return None;
+    }
+    // Back over `.name(args)` segments, outermost first, to the bare receiver.
+    let mut stages: Vec<&str> = Vec::new();
+    let mut i = at;
+    let field_at = loop {
+        if i == 0 || tokens[i - 1].kind != TokenKind::Dot {
+            return None;
+        }
+        let before = i.checked_sub(2)?;
+        if tokens[before].kind == TokenKind::Ident {
+            break before;
+        }
+        if tokens[before].kind != TokenKind::RParen {
+            return None;
+        }
+        let mut depth = 0usize;
+        let mut open = before;
+        loop {
+            match tokens[open].kind {
+                TokenKind::RParen => depth += 1,
+                TokenKind::LParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
+            }
+            open = open.checked_sub(1)?;
+        }
+        let name = open.checked_sub(1)?;
+        if tokens[name].kind != TokenKind::Ident {
+            return None;
+        }
+        stages.push(text(name)?);
+        i = name;
+    };
+    let field = text(field_at)?;
+    if field_at > 0 && tokens[field_at - 1].kind == TokenKind::Dot {
+        return None;
+    }
+    if bynk_check::locals::locals_at(locals, tokens[field_at].span.start)
+        .iter()
+        .any(|b| b.name == field)
+    {
+        return None;
+    }
+    let (unit, _errs) = parse_unit_with_recovery(&tokens, source);
+    let items: &[CommonsItem] = match unit.as_ref()? {
+        SourceUnit::Context(c) => &c.items,
+        SourceUnit::Commons(c) => &c.items,
+        SourceUnit::Adapter(a) => &a.items,
+        SourceUnit::Suite(_) => return None,
+    };
+    let kind = items.iter().find_map(|item| match item {
+        CommonsItem::Agent(a) if in_state_scope(a, offset) => a
+            .store_fields
+            .iter()
+            .find(|f| f.name.name == field)
+            .map(|f| f.kind.head.name.clone()),
+        _ => None,
+    })?;
+    let is_log = match kind.as_str() {
+        "Log" => true,
+        "Map" => false,
+        _ => return None,
+    };
+    let take_last = terminal == "collect" && stages.first() == Some(&"take");
+    if terminal == "collect" && !(is_log && take_last) {
+        return None;
+    }
+    let rest = if take_last { &stages[1..] } else { &stages[..] };
+    let blocker = rest.iter().find(|s| match **s {
+        "filter" | "map" | "flatMap" => false,
+        "skip" => !is_log,
+        _ => true,
+    });
+    let order_free = matches!(terminal, "any" | "all");
+    let note = if let Some(stage) = blocker {
+        format!("`{stage}` needs the whole input, so this reads every entry of `{field}`.")
+    } else if !order_free && !is_log {
+        format!(
+            "A `Map` is scanned in insertion order, which only reading every entry recovers, so \
+             `{terminal}` reads every entry of `{field}`. `any` and `all` stop early."
+        )
+    } else {
+        format!("Stops reading `{field}` a page at a time as soon as the answer is known.")
+    };
+    Some(format!("**Reads:** {note}"))
+}
+
 /// The identifier token covering `offset` — its text and span — if the cursor is
 /// on one.
 fn ident_at<'a>(
@@ -4658,6 +4770,23 @@ mod tests {
         // reference scope, both fall through to the other hover paths.
         assert!(describe_agent_state_at(src, at("next = lastSeq")).is_none());
         assert!(describe_agent_state_at(src, at("Effect.pure")).is_none());
+    }
+
+    /// #4036: a `Map`/`Log` terminal says whether its pipeline reads every entry.
+    #[test]
+    fn a_scan_terminal_hovers_with_what_it_reads() {
+        let src = "context demo.m\n\nagent A {\n  key id: String\n  store seen: Map[String, Int]\n  store trail: Log[Int] @retain(30.days)\n\n  on call a() -> Effect[Bool] {\n    seen.filter((n) => n > 1).any((n) => n == 2)\n  }\n  on call b() -> Effect[Option[Int]] {\n    trail.filter((n) => n > 1).first()\n  }\n  on call c() -> Effect[Option[Int]] {\n    trail.sortBy((n) => n).first()\n  }\n  on call d() -> Effect[Option[Int]] {\n    seen.first()\n  }\n}\n";
+        let hover = |needle: &str| {
+            describe_scan_reads_at(src, src.find(needle).unwrap() + 1, &[]).expect(needle)
+        };
+        assert!(hover("any((n) => n == 2)").contains("Stops reading `seen`"));
+        assert!(hover("first()\n  }\n  on call c").contains("Stops reading `trail`"));
+        assert!(hover("first()\n  }\n  on call d").contains("`sortBy` needs the whole input"));
+        assert!(hover("first()\n  }\n}").contains("insertion order"));
+        // Not a terminal, and not a store field.
+        assert!(describe_scan_reads_at(src, src.find("filter(").unwrap() + 1, &[]).is_none());
+        let other = src.replace("seen.filter", "xs.filter");
+        assert!(describe_scan_reads_at(&other, other.find("any(").unwrap() + 1, &[]).is_none());
     }
 
     /// #611 (gap C): hover on a `store` field's operation renders the registry
