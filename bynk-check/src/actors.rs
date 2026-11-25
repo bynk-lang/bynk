@@ -329,6 +329,14 @@ pub struct SignedCookieSeam {
     pub identity_type: String,
     /// The cookie's `SameSite`: `Lax` (the default), `Strict` or `Unrestricted`.
     pub same_site: String,
+    /// #3938: `sessions = true`: the cookie carries a session id the seam checks against the
+    /// generated `<Actor>Sessions` agent.
+    pub sessions: bool,
+}
+
+/// The name of the compiler-generated session agent of `SignedCookie` actor `actor` (#3938).
+pub fn sessions_agent_name(actor: &str) -> String {
+    format!("{actor}Sessions")
 }
 
 /// Resolve a handler's `SignedCookie` seam, if its `by` clause names a single
@@ -379,6 +387,10 @@ pub fn signed_cookie_seam_of(
             .and_then(|a| a.value.as_ident())
             .unwrap_or("Lax")
             .to_string(),
+        sessions: actor
+            .scheme_arg("sessions")
+            .and_then(|a| a.value.as_ident())
+            == Some("true"),
     })
 }
 

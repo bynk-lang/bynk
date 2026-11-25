@@ -49,6 +49,7 @@ pub mod parse_cache;
 pub mod paths;
 pub mod roots;
 pub mod schema_registry;
+pub mod session_agents;
 pub mod snapshots;
 pub mod vars;
 pub mod vectorize;

@@ -2447,7 +2447,9 @@ fn check_scheme_arg_kinds(actor: &ActorDecl, errors: &mut Vec<CompileError>) {
 }
 
 /// The keys a `SignedCookie` actor's config admits (#3386).
-const SIGNED_COOKIE_KEYS: &[&str] = &["cookie", "secret", "previous", "ttl", "sameSite"];
+const SIGNED_COOKIE_KEYS: &[&str] = &[
+    "cookie", "secret", "previous", "ttl", "sameSite", "sessions",
+];
 
 /// A `ttl` above this many seconds draws `signed_cookie_ttl_long` (30 days).
 const SIGNED_COOKIE_LONG_TTL_SECS: i64 = 30 * 24 * 60 * 60;
@@ -2478,7 +2480,7 @@ fn check_signed_cookie_actor(
                 format!("a `SignedCookie` actor's `{key}` must be {want}"),
             )
             .with_note(
-                "write `auth = SignedCookie(secret = \"<ENV_NAME>\", ttl = 12.hours)`; the optional keys are `cookie`, `previous` and `sameSite`",
+                "write `auth = SignedCookie(secret = \"<ENV_NAME>\", ttl = 12.hours)`; the optional keys are `cookie`, `previous`, `sameSite` and `sessions`",
             ),
         );
     };
@@ -2490,7 +2492,9 @@ fn check_signed_cookie_actor(
                     arg.key.span,
                     format!("unknown `SignedCookie` config key `{}`", arg.key.name),
                 )
-                .with_note("the keys are `secret`, `ttl`, `cookie`, `previous` and `sameSite`"),
+                .with_note(
+                    "the keys are `secret`, `ttl`, `cookie`, `previous`, `sameSite` and `sessions`",
+                ),
             );
         }
     }
@@ -2648,6 +2652,11 @@ fn check_signed_cookie_actor(
             ),
             Some(_) => {}
         }
+    }
+    if let Some(arg) = actor.scheme_arg("sessions")
+        && !matches!(arg.value.as_ident(), Some("true" | "false"))
+    {
+        bad_arg(arg.span, "sessions", "`true` or `false`", errors);
     }
     if let Some(arg) = actor.scheme_arg("sameSite")
         && !matches!(

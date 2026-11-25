@@ -1,0 +1,3 @@
+# #3938: a `sessions = true` SignedCookie actor: the seam checks the session agent, `issue` records a
+# session and `expire` ends it, end to end through the real Worker.
+passed=31 failed=0

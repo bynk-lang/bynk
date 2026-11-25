@@ -545,6 +545,7 @@ pub(super) fn emit_system_http_support(
             // #3386: a `SignedCookie` route's drivers send a session cookie, and by default the
             // `Sec-Fetch-Site: same-origin` a browser's own page would (a case's headers win).
             let (session, typed_cookie, raw_cookie, csrf_default) = session_route(
+                &ns,
                 h,
                 &table.actors,
                 &secret_read_of,
@@ -1750,9 +1751,73 @@ struct SessionDriver {
     cookie: String,
     /// How long an issued cookie is valid, in seconds.
     ttl_secs: i64,
+    /// #3938: for a `sessions = true` actor, where its session agent is built from: the
+    /// participant's handlers namespace, its `env` binding and the agent's factory name. The
+    /// acting principal's session is recorded there, as `issue` records one, so the seam
+    /// finds it live.
+    sessions: Option<SessionAgentRef>,
+    /// The cookie's `SameSite`, which `issue` takes.
+    same_site: String,
+}
+
+/// #3938: how a driver reaches a `sessions = true` actor's session agent.
+struct SessionAgentRef {
+    handlers_ns: String,
+    env: String,
+    factory: String,
 }
 
 impl SessionDriver {
+    /// #3938: the `name=value` pair of a session that is also recorded in the actor's session agent,
+    /// by the same `issueSessionCookie` the handlers' `Actor.issue` runs.
+    fn pair_registered(&self, agent: &SessionAgentRef, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
+        use crate::ts_build::{
+            arrow_with, as_expr, await_expr, binary, call, member, method_call, num_lit, paren,
+            str_lit,
+        };
+        let register = arrow_with(
+            vec![
+                TsParam::new("__sid".to_string(), Some(TsType::named("string"))),
+                TsParam::new("__exp".to_string(), Some(TsType::named("number"))),
+                TsParam::new("__now".to_string(), Some(TsType::named("number"))),
+            ],
+            true,
+            method_call(
+                call(
+                    member(ident(agent.handlers_ns.clone()), agent.factory.clone()),
+                    vec![
+                        as_expr(sub.clone(), TsType::named("any")),
+                        member(ident("__h"), agent.env.clone()),
+                    ],
+                ),
+                "add",
+                vec![
+                    ident("__sid"),
+                    ident("__exp"),
+                    ident("__now"),
+                    TsExpr::object(Vec::new()),
+                ],
+            ),
+        );
+        let issued = await_expr(call(
+            ident("__issueSessionCookie"),
+            vec![
+                self.keys.clone(),
+                str_lit(self.actor.clone()),
+                str_lit(self.cookie.clone()),
+                str_lit(self.same_site.clone()),
+                sub,
+                num_lit(self.ttl_secs),
+                binary(TsBinaryOp::Mul, paren(issued_secs), num_lit(1000)),
+                register,
+            ],
+        ));
+        TsExpr::template_lit(
+            vec![format!("{}=", self.cookie), String::new()],
+            vec![member(paren(issued), "value")],
+        )
+    }
+
     /// The `name=value` template literal for `sub` signed with `keys` and issued `issued_secs`
     /// (an expression, in seconds) after the epoch.
     fn pair(&self, keys: &TsExpr, sub: TsExpr, issued_secs: TsExpr) -> TsExpr {
@@ -1778,6 +1843,7 @@ impl SessionDriver {
 /// header texts its typed and raw drivers send (the session cookie joined to any `cookies`
 /// param's), and the default `Sec-Fetch-Site` header.
 fn session_route(
+    ns: &str,
     h: &bynk_syntax::ast::Handler,
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secret_read_of: &dyn Fn(&str) -> TsExpr,
@@ -1795,11 +1861,22 @@ fn session_route(
     session_secrets.insert(seam.secret.clone());
     let session = SessionDriver {
         keys: TsExpr::object(vec![("secret".to_string(), secret_read_of(&seam.secret))]),
-        actor: seam.actor,
+        actor: seam.actor.clone(),
         cookie: seam.cookie,
         ttl_secs: seam.ttl_secs,
+        sessions: seam.sessions.then(|| SessionAgentRef {
+            handlers_ns: ns.to_string(),
+            env: env_binding(ns),
+            factory: crate::emitter::agent_factory_name(&bynk_check::actors::sessions_agent_name(
+                &seam.actor,
+            )),
+        }),
+        same_site: seam.same_site,
     };
-    let pair = session.pair(&session.keys, ident("__sub"), now_secs());
+    let pair = match &session.sessions {
+        Some(agent) => session.pair_registered(agent, ident("__sub"), now_secs()),
+        None => session.pair(&session.keys, ident("__sub"), now_secs()),
+    };
     (
         Some(session),
         typed_cookie.render(Some(&pair)),
@@ -1998,6 +2075,8 @@ mod tests {
             actor: "User".to_string(),
             cookie: "__Host-session".to_string(),
             ttl_secs: 43200,
+            sessions: None,
+            same_site: "Lax".to_string(),
         }
     }
 
