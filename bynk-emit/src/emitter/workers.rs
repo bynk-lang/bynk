@@ -1447,9 +1447,10 @@ fn emit_http_signed_cookie_wrapper(
         return_(Some(member(ident("HttpResult"), "Unauthorized"))),
     ));
     let mut call_args = param_args;
-    if seam.binder.is_some() {
+    if seam.binder.is_some() || seam.sessions {
         // Capture the identity: construct the declared type from the verified `sub`
-        // (fail-closed on a refinement violation) and thread it into deps.
+        // (fail-closed on a refinement violation) and thread it into deps. A `sessions = true`
+        // actor needs it even without a binder: it keys the session agent.
         stmts.push(const_(
             "__id",
             method_call(
@@ -1462,10 +1463,32 @@ fn emit_http_signed_cookie_wrapper(
             strict_eq(member(ident("__id"), "tag"), str_lit("Err")),
             return_(Some(member(ident("HttpResult"), "Unauthorized"))),
         ));
-        call_args.push(TsExpr::object_entries(vec![
-            TsObjectEntry::Spread(ident("deps")),
-            TsObjectEntry::prop("identity".to_string(), member(ident("__id"), "value")),
-        ]));
+        let mut deps_entries = vec![TsObjectEntry::Spread(ident("deps"))];
+        if seam.sessions {
+            push_session_check(&mut stmts, seam);
+            // The verified session, for `Actor.expire()` to end. Spread from its own object so the
+            // handler's exact `deps` type does not flag it as an excess property.
+            deps_entries.push(TsObjectEntry::Spread(TsExpr::object(vec![(
+                "__sessionOf".to_string(),
+                TsExpr::object(vec![
+                    (
+                        "sid".to_string(),
+                        member(member(ident("__session"), "value"), "sid"),
+                    ),
+                    (
+                        "sub".to_string(),
+                        member(member(ident("__session"), "value"), "sub"),
+                    ),
+                ]),
+            )])));
+        }
+        if seam.binder.is_some() {
+            deps_entries.push(TsObjectEntry::prop(
+                "identity".to_string(),
+                member(ident("__id"), "value"),
+            ));
+        }
+        call_args.push(TsExpr::object_entries(deps_entries));
     } else {
         call_args.push(ident("deps"));
     }
@@ -1484,6 +1507,41 @@ fn emit_http_signed_cookie_wrapper(
         body: stmts,
         span: None,
     }
+}
+
+/// #3938: the seam's session check, after the signature, `kid`, audience and expiry have passed
+/// and the identity is minted: the cookie must carry a session id (a `sessions = true` actor refuses
+/// one that does not, so a cookie from before the option was set fails closed) and the identity's
+/// session agent must still hold it live. A forged cookie never reaches here, so costs no agent
+/// call. A revoked, expired or unknown session is `Unauthorized`; an agent that cannot answer
+/// faults the request, which also refuses it.
+fn push_session_check(stmts: &mut Vec<TsStmt>, seam: &bynk_check::actors::SignedCookieSeam) {
+    let sid = member(member(ident("__session"), "value"), "sid");
+    stmts.push(if_(
+        strict_eq(sid.clone(), ident("undefined")),
+        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+    ));
+    let agent = bynk_check::actors::sessions_agent_name(&seam.actor);
+    let factory = member(
+        ident("handlers"),
+        crate::emitter::agent_factory_name(&agent),
+    );
+    stmts.push(const_(
+        "__live",
+        await_expr(method_call(
+            call(factory, vec![member(ident("__id"), "value"), ident("env")]),
+            "isLive",
+            vec![
+                sid,
+                method_call(member(ident("globalThis"), "Date"), "now", vec![]),
+                ident("deps"),
+            ],
+        )),
+    ));
+    stmts.push(if_(
+        not_expr(ident("__live")),
+        return_(Some(member(ident("HttpResult"), "Unauthorized"))),
+    ));
 }
 
 /// Source a string secret from the same env the `Secrets` capability reads
