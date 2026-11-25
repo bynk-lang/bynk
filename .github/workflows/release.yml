@@ -276,8 +276,9 @@ jobs:
             exit 1
           fi
 
-  # Build native binaries on each host (no cross-compilation). fail-fast off so
-  # one platform's failure doesn't abandon the others' artifacts.
+  # Build native binaries on each host, except `aarch64-apple-darwin`, which is
+  # cross-compiled on the Intel macOS runner (#4263). fail-fast off so one
+  # platform's failure doesn't abandon the others' artifacts.
   binaries:
     name: Build ${{ matrix.target }}
     needs: [verify, tests-passed]
