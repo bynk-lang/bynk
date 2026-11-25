@@ -192,7 +192,7 @@ test("enterTrace: a signed call's trace replaces the one the entry started, for 
   const headers = await signedHeaders(ENV, "shop.orders", "shop.payment", "/_bynk/call/svc", "", "1", "{}", "test");
   const req = new Request("http://internal/_bynk/call/svc", {
     method: "POST",
-    headers: { ...headers, [TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` },
+    headers: { ...headers, [W3C_TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` },
     body: "{}",
   });
   const [before, after] = await enterTrace(async () => {
@@ -206,7 +206,7 @@ test("enterTrace: a signed call's trace replaces the one the entry started, for 
 });
 
 test("enterTrace: a public request's traceparent is not read, so the trace is the entry's own", async () => {
-  const claimed = new Request("http://localhost/", { headers: { [TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` } });
+  const claimed = new Request("http://localhost/", { headers: { [W3C_TRACEPARENT_HEADER]: `00-${TRACE}-${SPAN}-01` } });
   const seen = await enterTrace(async () => {
     // A public route never reaches `verifyCall`, so nothing admits the header.
     assert.equal(admittedTrace(claimed), undefined);
