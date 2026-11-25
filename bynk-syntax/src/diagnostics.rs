@@ -5464,10 +5464,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                 Declare `sessions = true` on the actor, or test the cookie's \
                 signature and expiry with `by Forged` and `by Expired`.",
         example: "// demo/api.bynk\n\
-                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }   // ✗ stateless\n\
-                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }   // ✓\n\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
                   // tests/api.test.bynk\n\
-                  let r <- api.GET(\"/me\") by Revoked   // refused once the actor keeps sessions",
+                  let r <- api.GET(\"/me\") by Revoked   // ✗ without `sessions = true` there is no session to revoke\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✓ once the actor keeps sessions",
     },
     Explain {
         code: "bynk.test.service_bad_address",

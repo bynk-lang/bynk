@@ -6,7 +6,7 @@
   "constructs": [
     "case"
   ],
-  "example": "// demo/api.bynk\nactor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }   // ✗ stateless\nactor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }   // ✓\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by Revoked   // refused once the actor keeps sessions",
+  "example": "// demo/api.bynk\nactor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\nactor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n// tests/api.test.bynk\nlet r <- api.GET(\"/me\") by Revoked   // ✗ without `sessions = true` there is no session to revoke\nlet r <- api.GET(\"/me\") by Revoked   // ✓ once the actor keeps sessions",
   "severity": "error",
   "summary": "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it."
 }
