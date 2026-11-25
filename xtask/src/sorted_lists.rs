@@ -59,9 +59,13 @@ fn is_close_marker(line: &str) -> bool {
     line.trim() == "<!-- /sorted -->"
 }
 
-fn is_fence(line: &str) -> bool {
+/// A code fence's marker character and run length when `line` starts one (```` ``` ```` or `~~~`,
+/// three or more), whatever follows (an info string, on an opening fence).
+fn fence_run(line: &str) -> Option<(char, usize, &str)> {
     let t = line.trim_start();
-    t.starts_with("```") || t.starts_with("~~~")
+    let c = t.chars().next().filter(|c| *c == '`' || *c == '~')?;
+    let len = t.chars().take_while(|x| *x == c).count();
+    (len >= 3).then(|| (c, len, &t[len..]))
 }
 
 /// The regions of a page, and each line's innermost region (an index into the regions).
@@ -74,49 +78,60 @@ fn regions(file: &str, lines: &[&str]) -> Result<Regions, Vec<String>> {
     let mut innermost: Vec<Option<usize>> = vec![None; lines.len()];
     let mut stack: Vec<usize> = Vec::new();
     let mut errors = Vec::new();
-    let mut fenced = false;
+    // The open code fence, as its character and run length: a closing fence is the same character,
+    // at least as long, with nothing after it. Everything inside a fence, and the fence lines
+    // themselves, belong to no region, so a `#` comment in a shell example is not a heading.
+    let mut fence: Option<(char, usize)> = None;
     for (i, line) in lines.iter().enumerate() {
-        if is_fence(line) {
-            fenced = !fenced;
-        }
-        if !fenced {
-            match open_marker(line) {
-                Some(Ok(kind)) => {
-                    if let Some(parent) = stack.last().filter(|r| regions[**r].kind == Kind::Table)
-                    {
-                        errors.push(format!(
-                            "{file}:{}: a `table` region cannot hold another region (the one opened at line {})",
-                            i + 1,
-                            regions[*parent].open + 1
-                        ));
-                    }
-                    regions.push(Region {
-                        kind,
-                        open: i,
-                        close: i,
-                    });
-                    stack.push(regions.len() - 1);
-                    continue;
-                }
-                Some(Err(word)) => {
-                    errors.push(format!(
-                        "{file}:{}: `<!-- sorted: {word} -->` is not a region kind (use `table` or `headings`)",
-                        i + 1
-                    ));
-                    continue;
-                }
-                None => {}
+        if let Some((c, len)) = fence {
+            if let Some((fc, flen, rest)) = fence_run(line)
+                && fc == c
+                && flen >= len
+                && rest.trim().is_empty()
+            {
+                fence = None;
             }
-            if is_close_marker(line) {
-                match stack.pop() {
-                    Some(r) => regions[r].close = i,
-                    None => errors.push(format!(
-                        "{file}:{}: `<!-- /sorted -->` closes no region",
-                        i + 1
-                    )),
+            continue;
+        }
+        if let Some((c, len, _)) = fence_run(line) {
+            fence = Some((c, len));
+            continue;
+        }
+        match open_marker(line) {
+            Some(Ok(kind)) => {
+                if let Some(parent) = stack.last().filter(|r| regions[**r].kind == Kind::Table) {
+                    errors.push(format!(
+                        "{file}:{}: a `table` region cannot hold another region (the one opened at line {})",
+                        i + 1,
+                        regions[*parent].open + 1
+                    ));
                 }
+                regions.push(Region {
+                    kind,
+                    open: i,
+                    close: i,
+                });
+                stack.push(regions.len() - 1);
                 continue;
             }
+            Some(Err(word)) => {
+                errors.push(format!(
+                    "{file}:{}: `<!-- sorted: {word} -->` is not a region kind (use `table` or `headings`)",
+                    i + 1
+                ));
+                continue;
+            }
+            None => {}
+        }
+        if is_close_marker(line) {
+            match stack.pop() {
+                Some(r) => regions[r].close = i,
+                None => errors.push(format!(
+                    "{file}:{}: `<!-- /sorted -->` closes no region",
+                    i + 1
+                )),
+            }
+            continue;
         }
         innermost[i] = stack.last().copied();
     }
@@ -403,6 +418,37 @@ mod tests {
     #[test]
     fn an_unmarked_list_is_ignored() {
         assert!(check_text("u.md", "| T |\n|---|\n| `Z` |\n| `A` |\n\n## Z\n\n## A\n").is_empty());
+    }
+
+    #[test]
+    fn a_comment_in_a_code_fence_is_not_a_heading() {
+        // A `# comment` in a shell example must not become the region's top heading level and drop
+        // the real sections: the two `##` sections below are misordered and must still be found.
+        let text = "<!-- sorted: headings -->\n\n## Banana\n\n```sh\n# install\n## step\n```\n\n## Apple\n\n<!-- /sorted -->\n";
+        let problems = check_text("f.md", text);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].contains("`Apple` is out of order"),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn table_rows_in_a_code_fence_are_not_rows() {
+        let text = "<!-- sorted: table -->\n\n| T |\n|---|\n| `a` |\n\n```\n| `z` |\n| `b` |\n```\n\n| `b` |\n\n<!-- /sorted -->\n";
+        // The fence's rows are ignored; the in-order rows around it are all there is.
+        assert!(check_text("f.md", text).is_empty());
+    }
+
+    #[test]
+    fn a_fence_closes_only_on_its_own_character_and_length() {
+        // A ```` fence holding a ``` line, then a ~~~ fence holding a ``` line: neither inner line closes.
+        let text = "<!-- sorted: headings -->\n\n## B\n\n````\n```\n## A\n````\n\n~~~\n```\n## A\n~~~\n\n## C\n\n<!-- /sorted -->\n";
+        assert!(
+            check_text("f.md", text).is_empty(),
+            "{:?}",
+            check_text("f.md", text)
+        );
     }
 
     #[test]

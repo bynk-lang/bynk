@@ -417,10 +417,10 @@ fn sorted_lists() -> ExitCode {
         eprintln!("{p}");
     }
     eprintln!(
-        "sorted-lists: {} entr{} out of order. Move each whole entry (a table row, or a heading \
-         with its section) to the place named; do not rewrite its text.",
-        problems.len(),
-        if problems.len() == 1 { "y" } else { "ies" }
+        "sorted-lists: {} problem(s). For an entry out of order, move the whole entry (a table row, \
+         or a heading with its section) to the place named, and do not rewrite its text; for a \
+         marker problem, fix the `<!-- sorted -->` marker the message names.",
+        problems.len()
     );
     ExitCode::FAILURE
 }
