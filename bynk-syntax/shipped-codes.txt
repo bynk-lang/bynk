@@ -731,6 +731,7 @@ bynk.test.remote_unsupported_env
 bynk.test.remote_unsupported_peek
 bynk.test.remote_unsupported_queue
 bynk.test.remote_unsupported_schedule
+bynk.test.revoked_needs_sessions_route
 bynk.test.service_bad_address
 bynk.test.service_call_arity
 bynk.test.service_no_call_handler

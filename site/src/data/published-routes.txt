@@ -2098,6 +2098,7 @@
 /reference/diagnostics/bynk.test.remote_unsupported_peek/
 /reference/diagnostics/bynk.test.remote_unsupported_queue/
 /reference/diagnostics/bynk.test.remote_unsupported_schedule/
+/reference/diagnostics/bynk.test.revoked_needs_sessions_route/
 /reference/diagnostics/bynk.test.service_bad_address/
 /reference/diagnostics/bynk.test.service_call_arity/
 /reference/diagnostics/bynk.test.service_no_call_handler/

@@ -5468,6 +5468,22 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   let r <- api.GET(\"/items\") by User(\"ada\")   // ✓",
     },
     Explain {
+        code: "bynk.test.revoked_needs_sessions_route",
+        blurb: "`by Revoked` sends a cookie for a session that was issued and then \
+                revoked in the session agent, so it needs a route whose seam \
+                checks one: a `SignedCookie` actor declared with `sessions = true`. \
+                A stateless cookie keeps no session to revoke, a route guarded by \
+                another scheme has no cookie, and a public route has no seam. \
+                Declare `sessions = true` on the actor, or test the cookie's \
+                signature and expiry with `by Forged` and `by Expired`.",
+        example: "// demo/api.bynk\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours), identity = UserId }\n\
+                  actor User { auth = SignedCookie(secret = \"S\", ttl = 12.hours, sessions = true), identity = UserId }\n\n\
+                  // tests/api.test.bynk\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✗ without `sessions = true` there is no session to revoke\n\
+                  let r <- api.GET(\"/me\") by Revoked   // ✓ once the actor keeps sessions",
+    },
+    Explain {
         code: "bynk.test.service_bad_address",
         blurb: "A test addresses an http route by method and route pattern, as in \
                 `api.POST(\"/items\", body)`. The first argument must be that \
@@ -10605,6 +10621,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.test.remote_unsupported_schedule",
         "A `system` case runs a cron handler with `svc.schedule(…)`, which a run against a real runtime (`bynk test --against`) can't honour: no public wire reaches a cron handler.",
+        &["case"],
+    ),
+    dg(
+        "bynk.test.revoked_needs_sessions_route",
+        "A case drives `by Revoked` at an address that is not an http route guarded by a single `SignedCookie` actor with `sessions = true`; it sends a correctly signed cookie for a session that was revoked, so only a session-keeping seam can refuse it.",
         &["case"],
     ),
     dg(

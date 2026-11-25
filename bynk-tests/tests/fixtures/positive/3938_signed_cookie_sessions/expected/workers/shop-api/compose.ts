@@ -94,6 +94,19 @@ export function compose(env: Env) {
       if (!__live) return HttpResult.Unauthorized;
       return handlers.api.http_POST_logout({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
     },
+    async http_POST_password(request: globalThis.Request) {
+      if (!__csrfAllowed(request, ["https://app.example.com"])) return HttpResult.Forbidden;
+      const __cookie = __sessionCookieOf(request, "__Host-session");
+      if (__cookie === null) return HttpResult.Unauthorized;
+      const __session = await __verifySignedCookie(__cookie, { secret: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY"], previous: (env as unknown as globalThis.Record<string, unknown>)["SESSION_KEY_PREV"] ?? (globalThis as { process?: { env?: globalThis.Record<string, unknown> } }).process?.env?.["SESSION_KEY_PREV"] }, "User", 43200);
+      if (__session.tag === "Err") return HttpResult.Unauthorized;
+      const __id = handlers.UserId.of(__session.value.sub);
+      if (__id.tag === "Err") return HttpResult.Unauthorized;
+      if (__session.value.sid === undefined) return HttpResult.Unauthorized;
+      const __live = await handlers.__makeUserSessions(__id.value, env).isLive(__session.value.sid, globalThis.Date.now(), deps);
+      if (!__live) return HttpResult.Unauthorized;
+      return handlers.api.http_POST_password({ ...deps, ...{ __sessionOf: { sid: __session.value.sid, sub: __session.value.sub } }, identity: __id.value });
+    },
     async http_DELETE_session(request: globalThis.Request) {
       if (!__csrfAllowed(request, ["https://app.example.com"])) return HttpResult.Forbidden;
       const __cookie = __sessionCookieOf(request, "__Host-session");

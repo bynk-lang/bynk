@@ -267,6 +267,7 @@ fn self_call_args<'e>(
         | Callee::Unsafe(_)
         | Callee::Kernel { .. }
         | Callee::SignedCookie { .. }
+        | Callee::SessionRevokeAll { .. }
         | Callee::CookieField { .. }
         | Callee::Intrinsic { .. }
         | Callee::Fault { .. }
