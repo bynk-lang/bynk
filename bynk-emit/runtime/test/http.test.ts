@@ -121,6 +121,21 @@ test("matchPath: malformed percent-encoding is reported, not thrown (#3908)", ()
 
 const id = (v: number): JsonValue => v;
 
+test("httpResultToResponse: 412 and 428 render as problem details with their reason phrase", async () => {
+  for (const [variant, status, title] of [
+    [HttpResult.PreconditionFailed("stale"), 412, "Precondition Failed"],
+    [HttpResult.PreconditionRequired("send If-Match"), 428, "Precondition Required"],
+  ] as const) {
+    const r = httpResultToResponse(variant, id, { problem: true });
+    assert.equal(r.status, status);
+    assert.equal(r.headers.get("content-type"), "application/problem+json");
+    const body = (await r.json()) as { title: string; status: number; detail: string };
+    assert.equal(body.title, title);
+    assert.equal(body.status, status);
+    assert.ok(body.detail.length > 0);
+  }
+});
+
 test("httpResultToResponse: status codes map per variant", async () => {
   // 2xx success.
   assert.equal(httpResultToResponse(HttpResult.Ok(1), id).status, 200);

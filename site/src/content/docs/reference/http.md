@@ -1065,6 +1065,11 @@ record, looks up the resource's current validator and answers. The router does n
 `If-Match` for you, because it would have to know the resource's current validator before the handler
 has looked it up; naming a validator source for the router to check is a later design.
 
+The comparison above handles one strong entity tag. `If-Match` may also be `*` (any current
+representation) or a comma-separated list such as `"v1", "v2"`, and a client that echoes a weak tag
+(`W/"v1"`) is rightly refused under strong comparison. A handler that accepts those splits the header
+on commas, trims each part and accepts `*` or any part equal to the current validator.
+
 The automatic `ETag` on a `GET` is **weak** (`W/"…"`), and `If-Match` uses **strong** comparison
 (RFC 9110 §13.1.1), so a validator the router derived cannot guard a write. It exists to revalidate
 `GET`s only. For writes, serve a strong validator from the `GET`, with

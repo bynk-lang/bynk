@@ -410,6 +410,10 @@ on PUT("/docs/:id") (id: DocId, headers: DocHeaders, body: DocUpdate) -> Effect[
 }
 ```
 
+This compares one strong tag. `If-Match` may also be `*` or a comma-separated list, and a weak tag
+(`W/"…"`) is refused under strong comparison; to accept `*` or a list, split the header on commas, trim
+each part and accept `*` or any part equal to the current validator.
+
 The `ETag` the router adds to a `GET` is weak, and `If-Match` compares strongly, so serve the version the
 client will send back yourself, with `RawTagged` or a version field. See
 [HTTP → Conditional writes](/reference/http/#conditional-writes).
