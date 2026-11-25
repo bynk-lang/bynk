@@ -2300,6 +2300,10 @@ pub(crate) fn check_variant_construction(
         if !ok {
             return None;
         }
+        // #3958: an inferred instantiation holds the type's declared bounds.
+        if !super::applied_bounds::check_applied_ty_bounds(owner, &inferred, span, ctx) {
+            return None;
+        }
         return Some(named_ty_with_args(owner, inferred, tys));
     }
 
@@ -3771,6 +3775,13 @@ pub(crate) fn check_record_construction(
         }
     }
 
+    // #3958: an inferred instantiation holds the type's declared bounds.
+    if !prelude
+        && !decl.type_params.is_empty()
+        && !super::applied_bounds::check_applied_ty_bounds(&decl, &args, span, ctx)
+    {
+        return None;
+    }
     Some(named_ty_with_args(&decl, args, tys))
 }
 

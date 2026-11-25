@@ -136,3 +136,43 @@ fn missing_bound(
     }
     err
 }
+
+/// #3958: an instantiation the checker formed itself (a record or variant
+/// literal whose type arguments were inferred) is checked against the type's
+/// declared bounds as a written argument would be: a concrete argument must
+/// satisfy each bound, and a type parameter must carry it. Reports the codes
+/// the function-bound rules use, and returns `false` after the first violation.
+pub(crate) fn check_applied_ty_bounds(
+    decl: &TypeDecl,
+    args: &[super::TyId],
+    span: bynk_syntax::span::Span,
+    ctx: &mut super::Ctx,
+) -> bool {
+    use super::codable::{CodableSite, check_codable};
+    use super::keying::{KeySite, check_key};
+    use super::ordering::{OrdSite, check_ord};
+
+    let callee = decl.name.name.as_str();
+    for (tp, &arg) in decl.type_params.iter().zip(args) {
+        let param = tp.name.name.as_str();
+        let has = |c: &str| tp.bounds.iter().any(|b| b.name == c);
+        if has("Ord") && !check_ord(ctx, arg, span, &OrdSite::Call { callee, param }) {
+            return false;
+        }
+        if has("Key") && !check_key(ctx, arg, span, &KeySite::Call { callee, param }) {
+            return false;
+        }
+        if has("Codable") && !check_codable(ctx, arg, span, &CodableSite::Call { callee, param }) {
+            return false;
+        }
+        // `Ord` and `Key` imply `Eq`, and their checks above cover it.
+        if has("Eq") && !has("Ord") && !has("Key") {
+            let eq = [(param.to_string(), Some(tp.span))];
+            let subst = HashMap::from([(param.to_string(), arg)]);
+            if !super::equality::check_declared_eq_args(callee, span, &eq, &subst, ctx) {
+                return false;
+            }
+        }
+    }
+    true
+}
