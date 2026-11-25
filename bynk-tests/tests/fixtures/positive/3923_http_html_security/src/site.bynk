@@ -1,0 +1,73 @@
+context site
+
+// #3923: a response whose `Content-Type` is `text/html` gets `frame-ancestors 'none'`
+// and `Referrer-Policy: strict-origin-when-cross-origin` by default; `security { }`
+// can name the framing sources, the referrer policy and a whole `csp`. A JSON
+// response is unchanged. Drives the `http_html_security` behaviour test.
+
+// No `security { }`: the defaults.
+service pages from http {
+  on GET("/") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>hi</p>"), "text/html")
+  }
+
+  on GET("/utf8") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>hi</p>"), "text/html; charset=utf-8")
+  }
+
+  on GET("/missing") () -> Effect[HttpResult[()]] by Visitor {
+    RawError(NotFound, Bytes.fromUtf8("<p>gone</p>"), "text/html")
+  }
+
+  on GET("/json") () -> Effect[HttpResult[String]] by Visitor {
+    Ok("data")
+  }
+}
+
+// Named framing sources and referrer policy.
+service embed from http {
+  security {
+    frameAncestors: ["self", "https://partner.example"],
+    referrerPolicy: noReferrer,
+  }
+
+  on GET("/embed") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>embed</p>"), "text/html")
+  }
+}
+
+// A `csp` without `frame-ancestors`: the framing default is appended.
+service policy from http {
+  security {
+    csp: "default-src 'self'; img-src 'self' https://cdn.example",
+  }
+
+  on GET("/policy") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>policy</p>"), "text/html")
+  }
+}
+
+// A `csp` that names its own `frame-ancestors` is sent verbatim.
+service own from http {
+  security {
+    csp: "default-src 'self'; frame-ancestors https://own.example",
+  }
+
+  on GET("/own") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>own</p>"), "text/html")
+  }
+}
+
+// Framing opened to every site, which needs an explicit `csp`; `nosniff: false`
+// does not turn the HTML headers off, and each field is independent.
+service open from http {
+  security {
+    nosniff: false,
+    frameAncestors: ["*"],
+    csp: "default-src 'self'",
+  }
+
+  on GET("/open") () -> Effect[HttpResult[()]] by Visitor {
+    Raw(Bytes.fromUtf8("<p>open</p>"), "text/html")
+  }
+}

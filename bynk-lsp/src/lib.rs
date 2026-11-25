@@ -5408,9 +5408,20 @@ fn cors_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem
 
 /// v0.141 (ADR 0164): the security-headers completion cells. Inside a
 /// `security { }` block at a field-name position, offer the closed field set
-/// (`nosniff`/`hsts`); at a service-body item start, offer the `security` section
+/// (`nosniff`/`hsts`/`frameAncestors`/`referrerPolicy`/`csp`), and the values of `referrerPolicy`; at a service-body item start, offer the `security` section
 /// keyword. Both are lexical (offset-based), mirroring `cors_completions`.
 fn security_completions(text: &str, offset: usize, line: &str) -> Vec<CompletionItem> {
+    if completion::in_security_referrer_policy_value_position(text, offset) {
+        return completion::referrer_policy_values()
+            .into_iter()
+            .map(|(name, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::ENUM_MEMBER),
+                detail: Some(doc),
+                ..Default::default()
+            })
+            .collect();
+    }
     if completion::in_security_field_position(text, offset) {
         return completion::SECURITY_FIELDS
             .iter()

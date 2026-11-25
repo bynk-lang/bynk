@@ -17,6 +17,14 @@ here broke nothing, or its author did not say so: please
 
 <!-- stamp:breaking-entries -->
 
+## v0.692.0
+
+A response with `Content-Type: text/html` now carries `Content-Security-Policy: frame-ancestors 'none'` and `Referrer-Policy: strict-origin-when-cross-origin`, so a page meant to be embedded in another site's frame stops rendering there; name the embedder with `security { frameAncestors: ["https://embedder.example"] }`.
+
+## v0.688.0
+
+`QueueSend.delay` is an `Option[QueueDelay]` instead of an `Option[Duration]`, so a computed `Duration` is refused with `bynk.types.some_value_mismatch` until it goes through `QueueDelay.of(d)`
+
 ## v0.687.0
 
 A route guarded by a `Bearer`, `Oidc`, `SignedCookie` or `Signature` actor now sends `Cache-Control: private` on every response that has no `@cache` of its own, and `@cache(scope: public)` on such a route is refused with `bynk.http.cache_public_authenticated`; move a response that is the same for everyone to a `Visitor` route, or use `scope: private`.

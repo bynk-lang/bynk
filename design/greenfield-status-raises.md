@@ -5,6 +5,7 @@
 
 | Probe | From | To | Version | PR | Reason |
 |---|---|---|---|---|---|
+| ts_writes | 471 | 473 | v0.692.0 |  | the security policy literal carries two more typed string fields, the HTML CSP and referrer policy (#3923) |
 | ts_writes | 470 | 471 | v0.674.0 | #4249 | the typed headers decoder is built as typed nodes in the entry emitter (#3911) |
 | ts_writes | 467 | 470 | v0.670.0 | #4241 | the typed path-parameter decoder and the enum segment of the system driver URL are built as typed nodes in the entry and driver emitters (#3910) |
 | ts_writes | 462 | 467 | v0.662.1 |  | the route's `applyChallenge` wrap and the upgrade's challenge array are built as typed nodes in the entry emitter (#3914) |
