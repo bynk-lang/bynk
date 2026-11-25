@@ -7,6 +7,7 @@ the next one. Each increment's row is added here when it merges.
 
 | Version | Highlights |
 |---|---|
+| **v0.695.0** | A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) warns with `bynk.match.refined_pattern_is_range` and a fix to the range pattern that counts towards exhaustiveness |
 | **v0.694.0** | A `sendValue`, `sendValueWith` or `sendValueBatch` to a queue the project consumes is now checked against the consumer's message type (`bynk.queue.message_type_mismatch`), and the untyped `send`, `sendWith` and `sendBatch` to such a queue warn (`bynk.queue.untyped_send`) |
 | **v0.693.1** | Releases build both macOS binaries again, `aarch64-apple-darwin` cross-compiled on the Intel runner, and `install.sh` installs on macOS |
 | **v0.693.0** | `MapEntry` is a nameable prelude record, so `Map.of([MapEntry { key: k, value: v }])` builds a map from entries written in source |

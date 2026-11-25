@@ -1,12 +1,6 @@
----
-level: minor
-changelog: A refined pattern on an `Int` (`_ where InRange(a, b)`, `Positive`, `NonNegative`) warns with `bynk.match.refined_pattern_is_range` and a fix to the range pattern that counts towards exhaustiveness
-probes: explained_codes, diagnostic_coverage, emit_diagnostics
----
+# 0957 — A refined pattern on an Int warns, with a fix to the equivalent range pattern
 
-## ADR: refined-pattern-is-range
-title: A refined pattern on an Int warns, with a fix to the equivalent range pattern
-summary: `_ where InRange(a, b)`, `Positive` and `NonNegative` on an `Int` warn with a quick fix to `a..b`, `1..` and `0..`
+- **Status:** Accepted (v0.695)
 
 **Context.** Refined patterns (`_ where InRange(200, 299)`) predate range patterns (#2699). On an `Int` they are strictly weaker than the equivalent range: a refined pattern is a guard and never counts towards exhaustiveness, a range does and reports the intervals a match is missing, and a reversed range has a fix where the refined form relies on `bynk.types.inverted_range` with none.
 
