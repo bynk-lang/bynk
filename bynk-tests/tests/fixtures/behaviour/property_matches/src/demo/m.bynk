@@ -1,0 +1,7 @@
+commons demo.m
+
+type Sku = String where Matches("[A-Z]{3}-[0-9]{4}")
+type Slug = String where Matches("[a-z0-9]+(-[a-z0-9]+)*") && MaxLength(12)
+type Code = String where Matches("[a-z]{3,8}")
+type Day = String where IsoDate
+type Line = { sku: Sku, note: String where Matches("[a-z]{0,4}") }

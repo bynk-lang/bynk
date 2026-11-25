@@ -1,0 +1,6 @@
+{
+  "code": "bynk.http.multipart_body_unbounded",
+  "lastRelease": "0.661.1",
+  "replacement": "the default body cap (#3921), reported as `bynk.http.body_cap_defaulted`",
+  "why": "Every body-taking route now has a default 1 MiB body cap (#3921), so a multipart body can no longer be unbounded."
+}

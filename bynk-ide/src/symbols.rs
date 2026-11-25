@@ -1591,6 +1591,13 @@ pub fn constraint_token_spans(source: &str) -> Vec<Span> {
 /// `None` when `maxAge` is missing or not a whole-second `Duration` literal
 /// (the checker flags those).
 fn cache_control_of(ann: &Annotation) -> Option<String> {
+    // #3922: `noStore: true` is `Cache-Control: no-store`, whatever else it carries.
+    if ann.args.iter().any(|arg| {
+        arg.label.as_ref().is_some_and(|l| l.name == "noStore")
+            && matches!(arg.value.kind, ExprKind::BoolLit(true))
+    }) {
+        return Some("no-store".to_string());
+    }
     let mut max_age_secs = None;
     let mut scope = "private";
     let mut immutable = false;
@@ -1637,7 +1644,12 @@ fn render_handler_annotation_hover(
              - **`scope`** — `public` or `private` (default `private`; a shared cache stores the \
              response only when `public`).\n\
              - **`immutable`** — `true` promises the response at this URL never changes, so \
-             caches do not revalidate it within `maxAge` (default `false`).{emitted}"
+             caches do not revalidate it within `maxAge` (default `false`).\n\
+             - **`noStore`** — `true` sends `Cache-Control: no-store` and no `ETag`, for data that \
+             must never be stored. It is allowed on any route and excludes the three above.\n\n\
+             A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, \
+             `SignedCookie`, `Signature`) sends `Cache-Control: private` on every response when it \
+             has no `@cache`, and refuses `scope: public`.{emitted}"
         );
     }
     // v0.142 (ADR 0165): `@limit` caps the request body size on a write route.

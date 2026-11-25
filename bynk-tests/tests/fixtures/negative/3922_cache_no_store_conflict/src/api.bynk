@@ -1,0 +1,8 @@
+context api
+
+service api from http {
+    @cache(noStore: true, maxAge: 5.minutes)
+    on GET("/me/tokens") () -> Effect[HttpResult[String]] by v: Visitor {
+        Ok("x")
+    }
+}

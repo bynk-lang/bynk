@@ -2,7 +2,7 @@
 // Worker entry point for context `api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __jsonMediaTypeMatches } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 
@@ -46,7 +46,7 @@ export default {
             return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify({ kind: "PayloadTooLarge", details: "request body exceeds 1048576 bytes; `@limit(maxBody: …)` raises it" }), { status: 413, headers: { "content-type": "application/json" } }), __security_api);
           }
           const result = await surface.http_POST_ingest(request);
-          return __applySecurityHeaders(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"api\"", "Bynk-Signature realm=\"api\", header=\"X-Signature\""]), __security_api);
+          return __applySecurityHeaders(__privateByDefault(__applyChallenge(__httpResultToResponse(result, (__v: string) => __v as __JsonValue), request, ["Bearer realm=\"api\"", "Bynk-Signature realm=\"api\", header=\"X-Signature\""])), __security_api);
         }
       }
       if (__matchPath("/ingest", path) !== null) {
