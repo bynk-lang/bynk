@@ -782,8 +782,15 @@ type parameter is `bynk.generics.bound_on_capability_op` (only `Key` and `Codabl
 are accepted there), and a `where` entry
 that names no type parameter of the method or its receiver type is
 `bynk.generics.unknown_where_param`. A bound on a type declaration is checked
-where the type is applied to a written type argument: `type Set2[T: Eq]` rejects
-`Set2[(Int) -> Int]` with the equality diagnostics below. An `Eq` bound adds nothing to emission. An
+where the type is applied, at **every** application: a written type argument
+(`type Set2[T: Eq]` rejects `Set2[(Int) -> Int]` with the equality diagnostics
+below), a type parameter standing for the argument (`Set2[U]` MUST be in the scope
+of a `U` that carries the bound, else `bynk.generics.missing_{eq,ord,key,codable}_bound`
+with the same machine-applicable fix as a function's), and an instantiation the
+checker infers from a record or variant literal (`Set2 { items: [f] }` is checked
+as a written argument would be). The bounds a type needs are declared on it, never
+inferred from its fields, and a method of a bounded type holds its receiver type's
+bounds without repeating them. An `Eq` bound adds nothing to emission. An
 `Ord` bound adds one hidden trailing comparator parameter to the emitted
 function (the receiver type's parameters first, then the method's own, in
 declaration order), which the caller builds from the concrete type; it is

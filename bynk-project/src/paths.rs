@@ -175,6 +175,8 @@ pub enum ProjectPathsError {
     /// that breaks a rule across groups. The reason may lead with the
     /// `bynk.deploy.*` code it is.
     BadWorkerGroup { key: String, reason: String },
+    /// #3941: a `[vars]` or `[env.<name>.vars]` table that is not well formed.
+    BadVars { reason: String },
     /// #4127: a `[workers.observability]` table that is not well formed.
     BadObservability { reason: String },
     /// #3478: a `[dev]` acknowledgement (`ai = "allow"`) holding anything but
@@ -279,6 +281,11 @@ pub const MANIFEST_TABLES: &[(&str, &[&str])] = &[
     ("unstable", &["allow"]),
     ("test", &["targets", "mutate", "postgres"]),
     ("workspace", &["members", "exclude"]),
+    // #3941: the build-time variables of `env(NAME)` constants. Their keys are
+    // the user's own names, so the key lists are empty (unchecked here) and
+    // `vars::vars_from` checks the shape.
+    ("vars", &[]),
+    ("env", &[]),
 ];
 
 /// #3054: the named build profiles, each a `[profile.<name>]` table. The set is
@@ -444,6 +451,7 @@ impl std::fmt::Display for ProjectPathsError {
             } => {
                 write!(f, "`[{table}.{capability}]` {reason}")
             }
+            ProjectPathsError::BadVars { reason } => write!(f, "{reason}"),
             ProjectPathsError::BadObservability { reason } => {
                 write!(f, "`[workers.observability]` {reason}")
             }
@@ -654,6 +662,9 @@ pub fn check_manifest_str(content: &str) -> Result<(), ProjectPathsError> {
             _ => {}
         }
     }
+    // #3941: `[vars]` and `[env.<name>.vars]` take user-chosen names, so their
+    // shape is checked here, not by a key list.
+    drop(crate::vars::vars_from(&doc)?);
     // #2207: the rules across tables.
     if declared.contains(&"project") && declared.contains(&"package") {
         return Err(ProjectPathsError::ProjectAndPackage);

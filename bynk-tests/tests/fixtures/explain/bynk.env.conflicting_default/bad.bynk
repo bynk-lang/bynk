@@ -1,0 +1,4 @@
+context shop.config
+
+const Origin: String = env(APP_ORIGIN, "https://a.example")
+const Callback: String = env(APP_ORIGIN, "https://b.example")

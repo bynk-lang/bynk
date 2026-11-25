@@ -254,9 +254,13 @@ by <binder>: <A> | <B> | …      // an ordered sum of peer actors, first-wins
   inserts it, and a service-header `by` covers every handler without its own.
   An `on message` handler writes at least `by Producer`, the explicit "anyone on the
   account" (`bynk.actor.missing_by_on_queue`); `bynk check --fix=bynk.actor.missing_by_on_queue`
-  inserts it. An email `on message` handler writes at least `by Sender`, the explicit
+  inserts it. A refinement of `Producer` (`actor Shop = Producer where IsContext(shop)`)
+  and a `Foreign` actor are valid declarations, but naming one on an `on message`
+  handler is `bynk.actor.queue_actor_not_enforced` until queue delivery verifies the
+  sender. An email `on message` handler writes at least `by Sender`, the explicit
   "any mail" (`bynk.actor.missing_by_on_email`); `bynk check --fix=bynk.actor.missing_by_on_email`
-  inserts it. The platform-only protocol defaults: cron → `Scheduler`. An agent's `on call` operations are reached only from inside
+  inserts it. The platform-only protocol defaults: cron → `Scheduler`. An agent's
+  `on call` operations are reached only from inside
   their own context, so they name no caller.
 - **Multi-actor sums** resolve first-wins; the body `match`es the resolved actor.
   Peers are distinguished by scheme (no duplicates), a `None` catch-all is last,

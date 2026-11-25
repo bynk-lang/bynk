@@ -144,3 +144,53 @@ after the module's types and before its functions. A unit-tier `suite` case can
 name its target's constants, private ones included, and the public constants of
 the commons the target `uses`. `private` changes nothing in the emitted module:
 it is a naming rule only.
+
+## Values that differ per environment
+
+A constant's initialiser may be `env(NAME)` or `env(NAME, default)`. The value is
+read from `bynk.toml` when the project is built, and the constant is an ordinary
+one from then on: everything that accepts a constant accepts it.
+
+```bynk,fragment
+const AppOrigin: String = env(APP_ORIGIN)                              // required
+const BillingWorker: String = env(BILLING_WORKER, "legacy-billing")   // a default
+```
+
+```toml
+# bynk.toml
+[vars]                                   # every environment, `default` included
+APP_ORIGIN = "https://app.shop.example"
+
+[env.staging.vars]                       # this environment, over `[vars]`
+BILLING_WORKER = "legacy-billing-staging"
+```
+
+These are build-time values, read from the committed `bynk.toml` and from
+nothing else, never from the Worker's run-time environment or the build
+machine's, so a deploy depends only on committed configuration. They are not
+Wrangler's run-time `[vars]`, and a suite's `env { … }` (run-time, per suite or
+case) keeps its own name and meaning.
+
+- The value for the environment being built is its own `[env.<name>.vars]`,
+  then `[vars]`, then the constant's default. With no default, every
+  environment must give one (`bynk.env.missing`).
+- `env(…)` is only ever a constant's whole initialiser, so a per-environment
+  value is always a named constant (`bynk.env.not_initialiser`). `NAME` is
+  written bare, capital letters, digits and `_` (`bynk.env.malformed_call`).
+- The supported types are `String`, `Int`, `Bool`, `List[String]` and refinements
+  over the first two declared in the same unit (`bynk.env.unsupported_type`). A
+  value of another kind is `bynk.env.bad_value`; one that breaks the refinement
+  is refused where the literal it resolves to is checked.
+- A variable in `bynk.toml` that no constant reads is an error
+  (`bynk.env.unknown_variable`), so a typo cannot leave a default in force; two
+  constants reading one variable must give it the same default
+  (`bynk.env.conflicting_default`).
+- A package consumed as a dependency cannot declare an `env(…)` constant
+  (`bynk.env.in_dependency`): reading deployment configuration is the
+  application's business, and a library takes values as parameters.
+- `bynk.toml` is committed, so a variable named `*_KEY`, `*_SECRET`, `*_TOKEN` or
+  `*_PASSWORD` warns (`bynk.env.secret_like_name`): keep secrets in `Secrets`.
+
+A plain build, `bynk check`, `bynk test` and `bynk dev` use the `default`
+environment's values. Building another environment's values (`--env`) and the
+deploy plan's listing of them come in a following increment.
