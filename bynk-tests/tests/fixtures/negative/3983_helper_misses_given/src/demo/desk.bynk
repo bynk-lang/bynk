@@ -1,0 +1,25 @@
+context demo.desk
+
+capability Meter {
+  fn read() -> Effect[Int]
+}
+
+capability Gauge {
+  fn level() -> Effect[Int]
+}
+
+provides Meter = Fixed {
+  fn read() -> Effect[Int] { Effect.pure(1) }
+}
+
+provides Gauge = Steady {
+  fn level() -> Effect[Int] { Effect.pure(2) }
+}
+
+service local {
+  on call(n: Int) -> Effect[Int] by Caller given Meter, Gauge {
+    let m <- Meter.read()
+    let g <- Gauge.level()
+    Effect.pure(n + m + g)
+  }
+}

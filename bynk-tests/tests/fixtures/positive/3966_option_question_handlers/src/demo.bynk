@@ -1,0 +1,19 @@
+context demo
+
+type Order = { code: Option[String], qty: Option[Int] }
+
+service svc {
+	on call(o: Order) -> Effect[Option[String]] by Caller {
+		let c = o.code?
+		Effect.pure(Some(c))
+	}
+}
+
+agent A {
+	key id: String
+	store n: Map[String, Int]
+	on call pick(o: Order) -> Effect[Option[Int]] {
+		let q = o.qty?
+		Effect.pure(Some(q))
+	}
+}

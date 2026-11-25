@@ -8,3 +8,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 binding = "RT_PROVIDER"
 service = "rt-provider"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
