@@ -29,5 +29,7 @@ service support from email("support@shop.example") {
           (generic_type_ref
             (builtin_type)
             (identifier))
+          (by_clause
+            (identifier))
           (block
             (identifier)))))))
