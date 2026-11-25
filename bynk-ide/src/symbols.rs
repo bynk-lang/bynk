@@ -1668,6 +1668,12 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         SourceUnit::Suite(_) => &[],
     };
     let mut spans: Vec<Span> = items.iter().filter_map(CommonsItem::private_span).collect();
+    // #3984: and a test-only commons' `for tests` marker.
+    if let SourceUnit::Commons(c) = &unit
+        && c.test_only
+    {
+        spans.extend(test_only_marker_spans(source, &tokens, c.name.span.end));
+    }
     // #2841: and each suite `fixture` keyword — contextual as well.
     if let SourceUnit::Suite(s) = &unit {
         spans.extend(
@@ -1677,6 +1683,48 @@ pub fn private_modifier_token_spans(source: &str) -> Vec<Span> {
         );
     }
     spans
+}
+
+/// #3984: the spans of the `for` and `tests` words of a `commons x.y for tests` header, after the
+/// name that ends at `name_end`.
+fn test_only_marker_spans(
+    source: &str,
+    tokens: &[bynk_syntax::lexer::Token],
+    name_end: usize,
+) -> Vec<Span> {
+    let Some(idx) = tokens.iter().position(|t| t.span.start >= name_end) else {
+        return Vec::new();
+    };
+    tokens[idx..]
+        .iter()
+        .take(2)
+        .filter(|t| matches!(&source[t.span.start..t.span.end], "for" | "tests"))
+        .map(|t| t.span)
+        .collect()
+}
+
+/// #3984: a hover for the `tests` of a `commons x.y for tests` header: the word after `for` after a
+/// `commons` name. `None` anywhere else, where `tests` is an ordinary name.
+pub fn describe_test_only_at(source: &str, offset: usize) -> Option<String> {
+    use bynk_syntax::lexer::TokenKind;
+    let tokens = tokenize(source).ok()?;
+    let idx = tokens
+        .iter()
+        .position(|t| t.span.start <= offset && offset < t.span.end)?;
+    let text = |i: usize| tokens.get(i).map(|t| &source[t.span.start..t.span.end]);
+    if text(idx)? != "tests"
+        || text(idx.checked_sub(1)?)? != "for"
+        || tokens.get(idx)?.kind != TokenKind::Ident
+        || !tokens[..idx].iter().any(|t| t.kind == TokenKind::Commons)
+    {
+        return None;
+    }
+    let doc = bynk_syntax::keywords::CONTEXTUAL_KEYWORDS
+        .iter()
+        .find(|k| k.word == "tests")
+        .map(|k| k.meaning)
+        .unwrap_or_default();
+    Some(format!("```bynk\nfor tests\n```\n\n{doc}"))
 }
 
 /// #2837: the span of every reserved word written as a name, with whether it
@@ -2098,9 +2146,9 @@ pub fn describe_effect_method_at(
 }
 
 /// #2839: hover on the `?` of an `Option` value. An `Option` is only liftable
-/// by `?` inside a handler returning `HttpResult` (ADR 0177), so an `Option`
-/// operand means `None` answers `404 NotFound`: the hover says so, and points
-/// at `let … else` for any other status. A `?` on a `Result` is not described.
+/// by `?` inside a handler returning `HttpResult` (ADR 0177), where `None` answers
+/// `404 NotFound`, or (#3966) in a body returning `Option`, where `None` returns early. The
+/// hover names both and points at `let … else` for any other status. A `?` on a `Result` is not described.
 pub fn describe_question_at(
     text: &str,
     offset: usize,
@@ -2118,10 +2166,12 @@ pub fn describe_question_at(
         return None;
     }
     Some(
-        "```bynk\n? : None → 404 NotFound\n```\n\n\
-         On an `Option` in an `HttpResult` handler, `?` yields the value for `Some` and \
-         answers `404 NotFound` for `None`. That is right for \"the thing you asked for is not \
-         there\", but a missing or malformed request input is a `400`: write \
+        "```bynk\n? : None returns early\n```\n\n\
+         On an `Option`, `?` yields the value for `Some` and returns early for `None`. In a \
+         function or lambda returning `Option` (or `Effect[Option]`), the `None` is returned as \
+         it is; `Option` and `Result` never convert. In an `HttpResult` handler, `None` answers \
+         `404 NotFound`, which is right for \"the thing you asked for is not there\", but a \
+         missing or malformed request input is a `400`: write \
          `let Some(x) = e else { BadRequest(\"…\") }` to answer another status."
             .to_string(),
     )

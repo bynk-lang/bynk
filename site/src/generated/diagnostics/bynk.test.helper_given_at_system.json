@@ -1,0 +1,10 @@
+{
+  "blurb": "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
+  "category": "Tests",
+  "categoryAnchor": "tests",
+  "code": "bynk.test.helper_given_at_system",
+  "constructs": [],
+  "example": "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
+  "severity": "error",
+  "summary": "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given."
+}

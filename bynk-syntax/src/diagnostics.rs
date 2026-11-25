@@ -4967,13 +4967,14 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.suite.fn_effectful",
-        blurb: "A suite helper is a pure function that builds a value for a \
-                case: a request, a fixture, an expected result. Returning an \
-                `Effect` would hide a step of the test inside a helper. Build \
-                the value in the helper and run the effect in the `case`, \
+        blurb: "A suite helper that returns an `Effect` must say which capabilities it \
+                uses, with `given`, so a case's dependency on it is visible where it \
+                is called: `fn seed() -> Effect[()] given Stock { … }`. Without \
+                `given` it is a pure function that builds a value for a case, so \
+                build the value in the helper and run the effect in the `case`, \
                 where each step is visible with `<-`.",
         example: "// tests/desk.test.bynk\n\
-                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`\n\
+                  fn bump(n: Int) -> Effect[Int] { local.call(n) }   // ✗ returns an `Effect`, with no `given`\n\
                   fn start() -> Int { 1 }                            // ✓ build the value\n\
                   let n <- local.call(start())                       // ✓ run it in the case",
     },
@@ -5232,6 +5233,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   \x20\x20\x20\x20let r <- api.GET(\"/a\") by Forged\n\
                   \x20\x20\x20\x20expect r is Rejected(Unauthorized)\n\
                   }",
+    },
+    Explain {
+        code: "bynk.test.helper_given_at_system",
+        blurb: "A suite helper that declares `given` runs with the capabilities of its target, which a case gets at the `unit` and `integration` tiers. A `system` case cannot name a capability: each context runs as the Worker it deploys as, and the case reaches it only through its addresses. Move the helper to a suite below `system`.",
+        example: "suite demo.desk as system {\n    fn seed() -> Effect[()] given Meter { … }   // ✗ a `system` case names no capability\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    fn seed() -> Effect[()] given Meter { … }   // ✓ below `system` the case has the target's capabilities\n\n    case \"the desk checks\" { … }\n}",
     },
     Explain {
         code: "bynk.test.no_subject_needs_oidc_route",
@@ -6404,8 +6410,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.types.question_option_outside_http",
-        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a handler that returns an `HttpResult`, `None` becomes a `NotFound` response. Elsewhere an `Option` has no error to carry, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
-        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ no `HttpResult` to answer `NotFound`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
+        blurb: "`?` on an `Option` turns `None` into an early return, which needs somewhere to return it to. In a function returning an `Option` (or an `Effect` of one) the `None` is the result, and in a handler returning an `HttpResult` it becomes a `NotFound` response. Elsewhere there is nowhere to return it, and an `Option` never converts to a `Result` implicitly, so `?` is refused. Say what absence means with `.okOr(err)`, which makes a `Result`, and put `?` after that.",
+        example: "fn lookup(id: Int) -> Option[Int] { … }\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id)?                    // ✗ `double` returns a `Result`, not an `Option`\n    Ok(n * 2)\n}\n\nfn double(id: Int) -> Result[Int, String] {\n    let n = lookup(id).okOr(\"missing\")?    // ✓ `None` becomes an `Err`\n    Ok(n * 2)\n}",
     },
     Explain {
         code: "bynk.types.question_outside_result",
@@ -6647,6 +6653,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
         code: "bynk.uses.target_is_context",
         blurb: "`uses` is for shared types and functions, and those live in a commons. A context is something to depend on: it has services to call and capabilities to use, and that is `consumes`. Replace `uses` with `consumes`. The mirror of this is `bynk.consumes.target_is_commons`.",
         example: "// pay.bynk\ncontext pay\n\n// shop.bynk\ncontext shop\n\nuses pay                         // ✗ `pay` is a context\nconsumes pay                     // ✓ depend on a context with `consumes`",
+    },
+    Explain {
+        code: "bynk.uses.test_only_commons",
+        blurb: "A commons declared `for tests` holds what suites share (helpers, types, constants and test-only values) and is left out of every deployable. Only a suite or another test-only commons may `uses` it, so production code cannot depend on code that is not there. Move what the unit needs into a commons that is not marked `for tests`.",
+        example: "// kit.bynk\ncommons kit for tests\n\nconst Start: Int = 1\n\n// shop.bynk\ncontext shop\n\nuses kit                         // ✗ `kit` is test-only\n\n// tests/shop.test.bynk\nsuite shop\n\nuses kit                         // ✓ a suite may use it",
     },
     Explain {
         code: "bynk.uses.unknown_commons",
@@ -10266,6 +10277,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A case drives `by Forged`, `by Stale`, `by Expired`, `by WrongIssuer`, `by WrongAudience`, `by WrongAlgorithm` or `by NoSubject` outside a `system`-tier case; only the `system` driver signs a request or mints a token, so only there does the real `Signature`, `Bearer` or `Oidc` seam see the bad credential.",
         &["case"],
     ),
+    d(
+        "bynk.test.helper_given_at_system",
+        "A suite helper declares `given` in a `system`-tier suite; a `system` case names no capability for it to be given.",
+    ),
     dg(
         "bynk.test.no_subject_needs_oidc_route",
         "A case drives `by NoSubject` at an address that is not an http route with an `Oidc` actor; it sends correctly signed tokens whose `sub` is empty and whose `sub` is missing, so only an `Oidc` seam can refuse them.",
@@ -10971,7 +10986,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     dg(
         "bynk.types.question_option_outside_http",
-        "`?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
+        "`?` on an `Option` needs a function returning `Option` (`None` returns early) or `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`.",
         &["question_expr"],
     ),
     dg(
@@ -11129,6 +11144,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     dg(
         "bynk.uses.target_is_context",
         "`uses` targets a context instead of a commons.",
+        &["uses_decl"],
+    ),
+    dg(
+        "bynk.uses.test_only_commons",
+        "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`.",
         &["uses_decl"],
     ),
     dg(

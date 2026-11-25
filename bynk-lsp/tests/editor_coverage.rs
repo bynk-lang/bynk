@@ -112,6 +112,15 @@ fn every_contextual_keyword_has_a_hover_path() {
             "fixture: no hover path — describe_fixture_at returned None"
         );
     }
+    // #3984: `tests` is a keyword only after `for` in a commons header.
+    let marker = "commons Scaffold for tests\n\nconst Start: Int = 1\n";
+    for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| k.word == "tests") {
+        let offset = marker.find(kw.word).expect("`tests` is in the fixture");
+        assert!(
+            symbols::describe_test_only_at(marker, offset).is_some(),
+            "tests: no hover path — describe_test_only_at returned None"
+        );
+    }
     // Constrained generics slice 1: `derives` is a keyword only in a type
     // declaration's trailing `derives Ord` clause.
     let derives = "context Scaffold\n\ntype Priority = enum { Low, High } derives Ord\n";
@@ -125,7 +134,7 @@ fn every_contextual_keyword_has_a_hover_path() {
     for kw in CONTEXTUAL_KEYWORDS.iter().filter(|k| {
         !matches!(
             k.word,
-            "advance" | "by" | "par" | "derives" | "private" | "fixture"
+            "advance" | "by" | "par" | "derives" | "private" | "fixture" | "tests"
         )
     }) {
         let offset = source

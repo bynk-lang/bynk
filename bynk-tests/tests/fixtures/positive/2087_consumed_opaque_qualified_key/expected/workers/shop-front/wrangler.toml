@@ -12,3 +12,7 @@ service = "shop-ledger"
 binding = "SHOP_ORDER"
 service = "shop-order"
 
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+

@@ -1499,7 +1499,7 @@
     },
     {
       "code": "bynk.types.question_option_outside_http",
-      "summary": "`?` lifts an `Option` only inside a handler returning `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`."
+      "summary": "`?` on an `Option` needs a function returning `Option` (`None` returns early) or `HttpResult` (`None` becomes `NotFound`); elsewhere use `.okOr(err)`."
     },
     {
       "code": "bynk.types.question_outside_result",
@@ -1982,6 +1982,10 @@
     {
       "code": "bynk.uses.target_is_context",
       "summary": "`uses` targets a context instead of a commons."
+    },
+    {
+      "code": "bynk.uses.test_only_commons",
+      "summary": "A unit that is not a suite or a test-only commons `uses` a commons declared `for tests`."
     },
     {
       "code": "bynk.uses.unknown_commons",

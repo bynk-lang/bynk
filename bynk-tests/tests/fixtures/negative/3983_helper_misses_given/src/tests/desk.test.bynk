@@ -1,0 +1,16 @@
+suite demo.desk {
+  fn level() -> Effect[Int] given Gauge {
+    Gauge.level()
+  }
+
+  fn both() -> Effect[Int] given Meter {
+    let m <- Meter.read()
+    let g <- level()
+    Effect.pure(m + g)
+  }
+
+  case "a helper that calls one with another given declares it" {
+    let n <- both()
+    expect n == 3
+  }
+}

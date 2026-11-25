@@ -1,0 +1,8 @@
+suite shop
+
+uses kit
+
+case "a suite may use it" {
+  let n <- ping.call()
+  expect n == 1
+}

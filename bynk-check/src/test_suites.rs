@@ -1052,13 +1052,13 @@ pub fn phase_integration_bodies(
                 &mut LocalsSink::new(),
                 tys,
             );
-            check_suite_fns(
-                &d.fns,
+            check_harness_suite_fns(
+                d,
                 &mut helper_view,
-                participants.first().and_then(|p| unit_tables.get(p)),
+                &participants,
+                unit_tables,
                 &mut body_errs,
                 refs,
-                &mut LocalsSink::new(),
                 tys,
             );
             // #2906: a suite mixing `system` with lower tiers is already
@@ -1454,6 +1454,7 @@ pub fn integration_resolved(
     } = view.clone();
 
     let synthetic_commons = Commons {
+        test_only: false,
         name: QualifiedName {
             parts: vec![Ident {
                 name: "integration".to_string(),
@@ -1803,6 +1804,56 @@ pub fn check_suite_decls(
     checker::check_suite_decls(&ok_types, &ok_consts, resolved, tys, errors, refs, locals)
 }
 
+/// #2834/#3983: a `system`-tier or multi-participant suite's helpers, checked in the harness view:
+/// no capability for a `given` to name.
+fn check_harness_suite_fns(
+    d: &bynk_syntax::ast::SuiteDecl,
+    helper_view: &mut ResolvedCommons,
+    participants: &[String],
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    tys: &Arc<Types>,
+) {
+    check_suite_fns(
+        &d.fns,
+        helper_view,
+        participants.first().and_then(|p| unit_tables.get(p)),
+        None,
+        errors,
+        refs,
+        &mut LocalsSink::new(),
+        tys,
+    );
+}
+
+/// #2834/#3983: a unit suite's helpers, checked in the target's view. A `system` suite's cases
+/// name no capability, so its helpers cannot declare `given`.
+#[allow(clippy::too_many_arguments)]
+fn unit_fns(
+    test_decl: &bynk_syntax::ast::SuiteDecl,
+    mut helper_view: ResolvedCommons,
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    errors: &mut Vec<CompileError>,
+    refs: &mut RefSink,
+    locals: &mut LocalsSink,
+    tys: &Arc<Types>,
+) {
+    let caps = (test_decl.tier != Some(bynk_syntax::ast::TestTier::System))
+        .then(|| target_capability_map(target_name, unit_tables, &helper_view, tys));
+    check_suite_fns(
+        &test_decl.fns,
+        &mut helper_view,
+        unit_tables.get(target_name),
+        caps.as_ref(),
+        errors,
+        refs,
+        locals,
+        tys,
+    );
+}
+
 /// #2834: check a suite's helper `fn`s. Each must be a free, pure function
 /// whose name no value in the case scope already uses and no sibling repeats;
 /// the helpers are then added to `resolved` (the suite's view) and their
@@ -1814,6 +1865,8 @@ pub fn check_suite_fns(
     suite_fns: &[FnDecl],
     resolved: &mut ResolvedCommons,
     target: Option<&UnitTable>,
+    // #3983: the target's capabilities, which a helper's `given` names.
+    caps: Option<&HashMap<String, checker::CapabilityInfo>>,
     errors: &mut Vec<CompileError>,
     refs: &mut RefSink,
     locals: &mut LocalsSink,
@@ -1876,20 +1929,21 @@ pub fn check_suite_fns(
             );
             continue;
         }
-        if matches!(f.return_type, TypeRef::Effect(..)) {
+        if f.given.is_empty() && matches!(f.return_type, TypeRef::Effect(..)) {
             errors.push(
                 CompileError::new(
                     "bynk.suite.fn_effectful",
                     f.return_type.span(),
                     format!("the suite helper `{}` returns an `Effect`", name.name),
                 )
-                .with_note("a suite helper is a pure function; build the value in the helper and run the effect in the `case`"),
+                .with_note("an effectful suite helper declares the capabilities it uses, `fn seed() -> Effect[()] given Stock { … }`; otherwise build the value in the helper and run the effect in the `case`"),
             );
             continue;
         }
         refs.set_owner(f.name.display());
         checker::check_suite_fn(
             f,
+            caps,
             resolved,
             &mut expr_types,
             &mut callees,
@@ -2153,8 +2207,7 @@ fn check_test_bodies(
         );
         // #2517: and so do the case and property locals.
         locals.enter_file(&parsed[i].identity_path(), parsed[i].is_synthetic());
-        // #2834/#2841: the suite's fixtures and helpers, checked once in the
-        // target's view.
+        // #2834/#2841: the suite's fixtures and helpers, checked once in the target's view.
         if !SuiteItems::of(test_decl).is_empty()
             && let Some((mut helper_view, _)) = build_privileged_resolved(
                 target_name,
@@ -2190,10 +2243,11 @@ fn check_test_bodies(
                 locals,
                 tys,
             );
-            check_suite_fns(
-                &test_decl.fns,
-                &mut helper_view,
-                unit_tables.get(target_name),
+            unit_fns(
+                test_decl,
+                helper_view,
+                target_name,
+                unit_tables,
                 &mut errors,
                 refs,
                 locals,
@@ -2431,6 +2485,35 @@ pub fn value_block(e: &Expr) -> Block {
     }
 }
 
+/// #3983: a `stub … returns` value supplies a value and never runs logic, so it cannot call a
+/// suite helper that declares `given`: such a helper runs effects with a case's capabilities.
+fn stub_value_given_calls(e: &Expr, resolved: &ResolvedCommons, errors: &mut Vec<CompileError>) {
+    if let ExprKind::Call { name, .. } = &e.kind
+        && let Some(f) = resolved.fns.get(&name.name).filter(|f| !f.given.is_empty())
+    {
+        let list = f
+            .given
+            .iter()
+            .map(|c| c.display_name())
+            .collect::<Vec<_>>()
+            .join(", ");
+        errors.push(
+            CompileError::new(
+                "bynk.given.missing_for_call",
+                name.span,
+                format!(
+                    "`{}` needs `given {list}`, which a `stub` value does not have",
+                    name.name
+                ),
+            )
+            .with_note("a `stub … returns` value supplies a value, never runs logic: call the helper in the `case` and stub the value it returns"),
+        );
+    }
+    for child in bynk_syntax::ast::expr_children(e) {
+        stub_value_given_calls(child, resolved, errors);
+    }
+}
+
 /// #2907: a name a `stub` value cannot resolve is that, not a mismatch with
 /// the operation's return type. #3344: nor is a variant name several sums
 /// declare that the operation's type does not settle.
@@ -2442,6 +2525,7 @@ fn stub_name_errors(errs: Vec<CompileError>) -> Vec<CompileError> {
                 "bynk.resolve.unknown_name"
                     | "bynk.resolve.unknown_function"
                     | "bynk.resolve.ambiguous_variant"
+                    | "bynk.given.missing_for_call"
             )
         })
         .collect()
@@ -2457,7 +2541,9 @@ fn stub_value_errors(
     resolved: &ResolvedCommons,
     tys: &Arc<Types>,
 ) -> Vec<CompileError> {
-    value_errors(e, &op.return_type, &op.params, resolved, tys)
+    let mut errs = value_errors(e, &op.return_type, &op.params, resolved, tys);
+    stub_value_given_calls(e, resolved, &mut errs);
+    errs
 }
 
 /// #2683: whether a `stub … after <d>` duration is a `Duration`.
@@ -4227,6 +4313,40 @@ pub fn typecheck_case_body(
     )
 }
 
+/// The capabilities of `target_name`: its own, and its consumed adapters'. A case has them in
+/// scope, and (#3983) a suite helper's `given` names them; a consumed service's seam, which a case
+/// stubs and observes but never calls as a capability, is not one.
+pub fn target_capability_map(
+    target_name: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    resolved: &ResolvedCommons,
+    tys: &Arc<Types>,
+) -> HashMap<String, checker::CapabilityInfo> {
+    let mut capability_info_map: HashMap<String, checker::CapabilityInfo> = HashMap::new();
+    if let Some(table) = unit_tables.get(target_name) {
+        for (name, decl) in &table.capabilities {
+            let ops = decl
+                .ops
+                .iter()
+                .map(|op| build_capability_op_info(op, &resolved.types, tys))
+                .collect();
+            capability_info_map.insert(
+                name.clone(),
+                checker::CapabilityInfo {
+                    name: name.clone(),
+                    ops,
+                    derived_from: crate::context_checks::derived_from(
+                        decl,
+                        &resolved.cross_context.flattened_caps,
+                    ),
+                },
+            );
+        }
+    }
+    add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, resolved, tys);
+    capability_info_map
+}
+
 /// [`typecheck_case_body`], recording the body's local bindings into `locals`
 /// (#2517) so the language server can offer inline values inside a test.
 #[allow(clippy::too_many_arguments)]
@@ -4261,28 +4381,7 @@ fn typecheck_case_body_recording(
 
     // Capabilities of the target context, if any (so the test body can
     // call capabilities directly when targeting a context).
-    let mut capability_info_map: HashMap<String, checker::CapabilityInfo> = HashMap::new();
-    if let Some(table) = unit_tables.get(target_name) {
-        for (name, decl) in &table.capabilities {
-            let ops = decl
-                .ops
-                .iter()
-                .map(|op| build_capability_op_info(op, &resolved.types, tys))
-                .collect();
-            capability_info_map.insert(
-                name.clone(),
-                checker::CapabilityInfo {
-                    name: name.clone(),
-                    ops,
-                    derived_from: crate::context_checks::derived_from(
-                        decl,
-                        &resolved.cross_context.flattened_caps,
-                    ),
-                },
-            );
-        }
-    }
-    add_consumed_adapter_capabilities(&mut capability_info_map, unit_tables, resolved, tys);
+    let mut capability_info_map = target_capability_map(target_name, unit_tables, resolved, tys);
     add_consumed_service_seams(&mut capability_info_map, resolved, unit_tables, tys);
 
     // All declared capabilities are implicitly "given" inside a test body;
@@ -6074,6 +6173,7 @@ pub fn build_privileged_resolved(
         unit_tables,
     );
     let synthetic_commons = Commons {
+        test_only: false,
         name: QualifiedName {
             parts: owning_unit
                 .split('.')

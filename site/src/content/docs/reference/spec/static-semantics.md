@@ -653,6 +653,15 @@ instead of requiring a manual `.mapErr`. The conversion is **one level**: `E`
 must match a declared embedding of `F` directly. When neither the types match
 nor an embedding applies, it is `bynk.types.question_error_mismatch`.
 
+**`?` on an `Option`** (#3966). `?` on an `Option[T]` has type `T` and returns early on `None`
+where the enclosing body returns an `Option[_]` or an `Effect[Option[_]]`: the `None` is the
+result, so `Option` never converts to `Result` or the reverse. Where the body returns an
+`HttpResult[_]` (or an `Effect` of one) the `None` answers `NotFound` instead (v0.153, ADR 0177).
+Anywhere else, a `Result`-returning body included, it is
+`bynk.types.question_option_outside_http`, with a quick fix that applies `.okOr(todo("…"))`, to be completed with the error. A lambda is
+its own return scope, as for `Result`, and `bynk.par.question_in_join` applies to an `Option`
+as to a `Result`.
+
 **`Json.encodePlain`** (ADR for #2991). `Json.encodePlain(v) -> String` has `Json.encode`'s
 rules and the same domain, and writes an `Option[U]` as `u` / `null` (the form of a plain
 route, [§5.7.5](/reference/spec/static-semantics/#response-json)). It is refused when the type
@@ -2760,8 +2769,13 @@ name already in scope there (`bynk.fixture.duplicate`, `bynk.resolve.name_confli
 The text follows an `embed`'s (§5.12a): a leading byte-order mark dropped, line
 endings normalised to `\n`. A fixture is emitted into test output only.
 
+A commons declared `commons x.y for tests` (#3984) is a test-only commons: only a suite or another test-only commons MAY `uses` it (`bynk.uses.test_only_commons`), and a deployable build omits it.
+
 A suite MAY declare helper `fn`s (#2834). A helper MUST be a free function
-that does not return an `Effect` (`bynk.suite.fn_method`, `bynk.suite.fn_effectful`),
+(`bynk.suite.fn_method`) that either does not return an `Effect` or declares `given`,
+naming capabilities of the suite's target (`bynk.suite.fn_effectful`; a `given` helper
+in a `system` suite is `bynk.test.helper_given_at_system`, and a `stub` value MUST NOT
+call one),
 MUST NOT repeat the name of another helper of its suite or of any value in scope in
 its cases (`bynk.suite.duplicate_fn`, `bynk.suite.fn_name_clash`), and is visible to
 the `case`s, `property` bodies and other helpers of the suite that declares it,

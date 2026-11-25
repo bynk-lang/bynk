@@ -880,6 +880,7 @@
 /book/reference/diagnostics/bynk.test.faults_needs_in_process/
 /book/reference/diagnostics/bynk.test.forged_needs_signature_route/
 /book/reference/diagnostics/bynk.test.forged_needs_system/
+/book/reference/diagnostics/bynk.test.helper_given_at_system/
 /book/reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /book/reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /book/reference/diagnostics/bynk.test.peek_not_a_database/
@@ -1059,6 +1060,7 @@
 /book/reference/diagnostics/bynk.uses.name_conflict/
 /book/reference/diagnostics/bynk.uses.self_reference/
 /book/reference/diagnostics/bynk.uses.target_is_context/
+/book/reference/diagnostics/bynk.uses.test_only_commons/
 /book/reference/diagnostics/bynk.uses.unknown_commons/
 /book/reference/diagnostics/bynk.val.agent_not_generable/
 /book/reference/diagnostics/bynk.val.arity/
@@ -2048,6 +2050,7 @@
 /reference/diagnostics/bynk.test.faults_needs_in_process/
 /reference/diagnostics/bynk.test.forged_needs_signature_route/
 /reference/diagnostics/bynk.test.forged_needs_system/
+/reference/diagnostics/bynk.test.helper_given_at_system/
 /reference/diagnostics/bynk.test.no_subject_needs_oidc_route/
 /reference/diagnostics/bynk.test.nobody_needs_secured_route/
 /reference/diagnostics/bynk.test.peek_not_a_database/
@@ -2231,6 +2234,7 @@
 /reference/diagnostics/bynk.uses.name_conflict/
 /reference/diagnostics/bynk.uses.self_reference/
 /reference/diagnostics/bynk.uses.target_is_context/
+/reference/diagnostics/bynk.uses.test_only_commons/
 /reference/diagnostics/bynk.uses.unknown_commons/
 /reference/diagnostics/bynk.val.agent_not_generable/
 /reference/diagnostics/bynk.val.arity/
