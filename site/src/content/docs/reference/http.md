@@ -622,16 +622,17 @@ In a function returning an `Option`, `?` returns the `None` as it is; here, wher
 enclosing return is an `HttpResult`, it becomes a `404`. In a `Result`-returning function
 the checker rejects it with `bynk.types.question_option_outside_http` (use `.okOr(err)` to
 turn an `Option` into a `Result`). A `Result`
-under `?` is unchanged: its `Err` propagates as before. Mapping a **domain
-error** into an `HttpResult` — the `Result → HttpResult` direction — is a
-separate, later capability, tracked with the declared-embedding design
-([#543](https://github.com/bynk-lang/bynk/issues/543)); see
-[Answering another status](#answering-another-status) for what to write today.
+under `?` is unchanged: its `Err` propagates as before. `?` on a `Result` never picks a status:
+mapping a **domain error** into an `HttpResult` is handler policy (ADR 0178, decision F), made in
+the handler where the call is, so a status decision is not hidden in a table elsewhere. To reuse
+a mapping, write it once as a function returning `HttpResult[T]` and call it at each site (see
+[Map a domain error to a status once](/book/guides/entry-points/map-a-domain-error-to-a-status/));
+[Answering another status](#answering-another-status) has the pieces.
 
-`?` on an `Option` **always means `404`**. That is right for "the thing you asked
+In an `HttpResult` handler, `?` on an `Option` **always means `404`**. That is right for "the thing you asked
 for is not there" (a lookup that misses), and wrong for a missing or malformed
-request input, which is a `400`. Hovering the `?` in an editor says so
-(`None → 404 NotFound`), and `RequestHeaders.get(…)?` is flagged by
+request input, which is a `400`. Hovering the `?` in an editor names both of its meanings, and
+`RequestHeaders.get(…)?` is flagged by
 `bynk.http.header_question_not_found` (below).
 
 ### Answering another status
@@ -1119,7 +1120,7 @@ A streamed handler returns `Effect[HttpResult[()]]` — the JSON body parameter
 `T` is unused, since the body is the stream. **A response commits its status and
 headers before the first chunk**, so streaming is **200-only**: handle a
 pre-stream failure by returning an ordinary variant *instead* of `Streaming`
-(`NotFound`, `Unauthorized(…)`, …), which share `HttpResult[()]` and so sit in
+(`NotFound`, `Unauthorized`, …), which share `HttpResult[()]` and so sit in
 the same handler with no type conflict:
 
 ```bynk,fragment
@@ -1154,9 +1155,9 @@ on GET("/sitemap.xml") () -> Effect[HttpResult[()]] by v: Visitor {
 
 Like `Streaming`, `Raw` returns `Effect[HttpResult[()]]` — the JSON body
 parameter `T` is unused — and is **200-only**: it serves service-tier bodies,
-which are overwhelmingly `200`. A custom-status raw body (a `404` with an HTML
-error page) is a presentation concern held out of scope; a `Raw` branch and an
-ordinary pre-body variant share `HttpResult[()]`, so they coexist in one handler.
+which are overwhelmingly `200`. A custom-status raw body, such as a `404` with an HTML
+error page, is `RawError(NotFound, html, "text/html")` (see [Error bodies](#error-bodies)); a `Raw` branch, a
+`RawError` and an ordinary pre-body variant share `HttpResult[()]`, so they coexist in one handler.
 
 The `content-type` is an opaque `String`, unvalidated — you own it. If you write
 `Bytes.fromUtf8(s)`, the body is UTF-8, so a `content-type` claiming a different

@@ -351,6 +351,10 @@ fn complete_base(
     if is_caller_refinement_where(line_prefix) {
         return vec![Completion::snippet("IsContext", "IsContext(${1:context})")];
     }
+    // 4g''. #3888: `actor A = Sender where <cursor>` — the `Sender` predicate.
+    if is_sender_refinement_where(line_prefix) {
+        return vec![Completion::snippet("Dmarc", "Dmarc(${1:DmarcPass})")];
+    }
     // 4g. `where <cursor>` — the closed refinement-predicate vocabulary.
     // Shared by a type declaration's `type X = Base where <cursor>` and
     // (#472) a match arm's `_ where <cursor>`; both reuse the same closed
@@ -2006,6 +2010,13 @@ pub fn in_raw_arg_position(text: &str, offset: usize) -> bool {
 fn is_caller_refinement_where(line_prefix: &str) -> bool {
     let t = line_prefix.trim_start();
     t.starts_with("actor ") && t.contains("= Caller where")
+}
+
+/// #3888: the cursor follows `where` in an `actor <Name> = Sender where …`
+/// refinement, whose predicate is `Dmarc(…)` over the `DmarcVerdict` variants.
+fn is_sender_refinement_where(line_prefix: &str) -> bool {
+    let t = line_prefix.trim_start();
+    t.starts_with("actor ") && t.contains("= Sender where")
 }
 
 /// v0.124 (slice 3): the cursor is completing the argument to a leading clause
@@ -6339,6 +6350,17 @@ mod snapshot_completion_tests {
             .into_iter()
             .map(|c| c.label)
             .collect()
+    }
+
+    /// #3888: a refinement over `Sender` offers `Dmarc`, and a refinement over
+    /// `Caller` still offers only `IsContext`.
+    #[test]
+    fn a_sender_refinement_offers_dmarc() {
+        assert_eq!(labels("actor A = Sender where "), vec!["Dmarc".to_string()]);
+        assert_eq!(
+            labels("actor A = Caller where "),
+            vec!["IsContext".to_string()]
+        );
     }
 
     /// #2842: `matches snapshot` is offered after the value of an `expect`, while
