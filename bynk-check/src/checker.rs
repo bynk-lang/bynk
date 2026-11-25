@@ -49,6 +49,7 @@ use bynk_syntax::span::Span;
 /// public-dependency-already-exists shape as `Ty`/`TyId` below.
 pub use bynk_syntax::ast::ExprId;
 
+pub(crate) mod applied_bounds;
 mod call_outcome;
 mod calls;
 pub mod codable;

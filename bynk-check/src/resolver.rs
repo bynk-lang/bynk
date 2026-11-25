@@ -1768,6 +1768,9 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
         };
         check_key_bounds(field_refs.into_iter(), &t.type_params, errors);
     }
+    // #3958: the bounds this type's own parameters carry, for the bounded types
+    // its fields apply to them.
+    let type_scope = crate::checker::equality::EqScope::for_type(t);
     match &t.body {
         TypeBody::Refined { .. } => {
             // Refined-type bodies only reference base types directly.
@@ -1833,6 +1836,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     }
                 }
                 check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
+                check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
             }
         }
         TypeBody::Sum(s) => {
@@ -1889,6 +1893,7 @@ fn check_type_decl_refs(t: &TypeDecl, types: &HashMap<String, Arc<TypeDecl>>, er
                     // in its variant payloads, resolving as rigid vars (empty set
                     // for a non-generic sum — the same reference walk as before).
                     check_type_ref_resolves_in(&f.type_ref, types, &type_params, errors);
+                check_applied_bounds_at(&f.type_ref, &type_params, &type_scope, types, errors);
                 }
             }
             // v0.154 (ADR 0178): the `embeds E as V` clauses' source types must
@@ -2037,9 +2042,12 @@ fn check_fn_refs_with(
             errors.push(w);
         }
     }
+    // #3958: the bounds this signature's own parameters carry.
+    let fn_scope = crate::checker::equality::EqScope::for_fn_in(f, types);
     let mut seen_params: HashMap<&str, &Ident> = HashMap::new();
     for p in &f.params {
         check_type_ref_resolves_in(&p.type_ref, types, &type_params, errors);
+        check_applied_bounds_at(&p.type_ref, &type_params, &fn_scope, types, errors);
         if let Some(prev) = seen_params.get(p.name.name.as_str()) {
             errors.push(
                 CompileError::new(
@@ -2054,6 +2062,7 @@ fn check_fn_refs_with(
         }
     }
     check_type_ref_resolves_in(&f.return_type, types, &type_params, errors);
+    check_applied_bounds_at(&f.return_type, &type_params, &fn_scope, types, errors);
 
     // Build the initial scope: parameters plus `self` (for instance methods).
     let mut params: HashMap<String, ()> =
@@ -3233,6 +3242,20 @@ fn bare_generic_type_error(id: &Ident, arity: usize) -> CompileError {
         ),
     )
     .with_note("a generic type is used only through a concrete instantiation")
+}
+
+/// #3958: report a bounded type applied to one of `type_params` that lacks a
+/// bound the type declares.
+fn check_applied_bounds_at(
+    r: &TypeRef,
+    type_params: &HashSet<String>,
+    scope: &crate::checker::equality::EqScope,
+    types: &HashMap<String, Arc<TypeDecl>>,
+    errors: &mut Sinks,
+) {
+    for e in crate::checker::applied_bounds::applied_bound_errors(r, type_params, scope, types) {
+        errors.push(e);
+    }
 }
 
 /// Recursively check that every type reference resolves.
