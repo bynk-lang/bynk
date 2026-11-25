@@ -188,6 +188,7 @@
 /book/reference/diagnostics/bynk.actor.oidc_missing_audience/
 /book/reference/diagnostics/bynk.actor.oidc_missing_issuer/
 /book/reference/diagnostics/bynk.actor.oidc_missing_jwks/
+/book/reference/diagnostics/bynk.actor.oidc_not_in_sum/
 /book/reference/diagnostics/bynk.actor.oidc_trust_from_is_secret/
 /book/reference/diagnostics/bynk.actor.oidc_trust_from_not_string/
 /book/reference/diagnostics/bynk.actor.outside_context/
@@ -210,6 +211,7 @@
 /book/reference/diagnostics/bynk.actor.signed_cookie_issue_outside_handler/
 /book/reference/diagnostics/bynk.actor.signed_cookie_missing_secret/
 /book/reference/diagnostics/bynk.actor.signed_cookie_missing_ttl/
+/book/reference/diagnostics/bynk.actor.signed_cookie_not_in_sum/
 /book/reference/diagnostics/bynk.actor.signed_cookie_public_cache/
 /book/reference/diagnostics/bynk.actor.signed_cookie_read_directly/
 /book/reference/diagnostics/bynk.actor.signed_cookie_secret_shared/
@@ -1326,6 +1328,7 @@
 /reference/diagnostics/bynk.actor.oidc_missing_audience/
 /reference/diagnostics/bynk.actor.oidc_missing_issuer/
 /reference/diagnostics/bynk.actor.oidc_missing_jwks/
+/reference/diagnostics/bynk.actor.oidc_not_in_sum/
 /reference/diagnostics/bynk.actor.oidc_trust_from_is_secret/
 /reference/diagnostics/bynk.actor.oidc_trust_from_not_string/
 /reference/diagnostics/bynk.actor.outside_context/
@@ -1349,6 +1352,7 @@
 /reference/diagnostics/bynk.actor.signed_cookie_issue_outside_handler/
 /reference/diagnostics/bynk.actor.signed_cookie_missing_secret/
 /reference/diagnostics/bynk.actor.signed_cookie_missing_ttl/
+/reference/diagnostics/bynk.actor.signed_cookie_not_in_sum/
 /reference/diagnostics/bynk.actor.signed_cookie_public_cache/
 /reference/diagnostics/bynk.actor.signed_cookie_read_directly/
 /reference/diagnostics/bynk.actor.signed_cookie_secret_shared/
