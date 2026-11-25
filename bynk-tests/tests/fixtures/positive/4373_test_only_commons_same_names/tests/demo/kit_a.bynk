@@ -1,0 +1,7 @@
+commons demo.kit_a for tests
+
+const Base: Int = 1
+
+type Row = { n: Int }
+
+fn helper() -> Int { 10 }

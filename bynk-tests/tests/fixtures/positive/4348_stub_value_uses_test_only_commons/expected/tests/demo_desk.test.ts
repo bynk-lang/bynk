@@ -7,9 +7,11 @@ import * as __ns_demo_kit from "./../demo/kit.js";
 <<bynk-shared: testing/expectation>>
 class __Stub_Meter {
   async read(): globalThis.Promise<number> {
-    const { Reading, reading } = __ns_demo_kit;
-    if (true) {
-      return reading();
+    {
+      const { Reading, reading } = __ns_demo_kit;
+      if (true) {
+        return reading();
+      }
     }
     throw new globalThis.Error("bynk: no stub clause matched for Meter.read");
   }
