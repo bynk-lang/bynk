@@ -4761,6 +4761,11 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
                   stub Meter.read() returns 7 after 3.seconds   // ✓",
     },
     Explain {
+        code: "bynk.stub.agent_stub",
+        blurb: "An agent operation can be stubbed with `stub <Agent>.<op>(<args>) faulted` or `unreachable`, which make every matching call to it, whatever the key, end as `Faulted` or `Unreachable(None)` in `Agent(key).op.outcome(…)`, and make a plain call fault. It is limited to what the unit-test runtime can stand in for: an agent the context under test declares (another context's agents are reached through its services, which can be stubbed), in a `unit` suite or case (an `integration` case runs the real agent), and only those two words. There is no `returns <value>`, since a stubbed value would bypass the agent's state and invariants; test those through the real agent.",
+        example: "// demo/basket.bynk\nagent Basket { … on call add(n: Int) -> Effect[Int] { … } }\n\n// tests/basket.test.bynk\nstub Basket.add(_) returns 5    // ✗ an agent is stubbed `faulted` or `unreachable`\n\nstub Basket.add(_) unreachable  // ✓ `Basket(k).add.outcome(x)` is `Unreachable(None)`",
+    },
+    Explain {
         code: "bynk.stub.at_system",
         blurb: "At the `system` tier each context runs as the Worker it deploys as, and that Worker builds its own capability providers, so there is no seam for a `stub` to override. A `stub` there would be accepted and then ignored, so it is refused. Move the case to a suite below `system`, where a `stub` replaces the seam, or remove the stub and test the real provider.",
         example: "suite demo.desk as system {\n    stub Meter.read() returns 7   // ✗ a `system` suite has no seam to stub\n\n    case \"the desk checks\" { … }\n}\n\nsuite demo.desk {\n    stub Meter.read() returns 7   // ✓ below `system` the seam can be stubbed\n\n    case \"the desk checks\" { … }\n}",
@@ -9945,6 +9950,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     d(
         "bynk.stub.after_type",
         "A test `stub … returns <value> after <d>` latency is not a `Duration`.",
+    ),
+    dg(
+        "bynk.stub.agent_stub",
+        "A test `stub` on an agent operation is not `faulted` or `unreachable`, is in an `integration`-tier case or suite, or names an agent of another context than the one under test.",
+        &["stub_clause"],
     ),
     dg(
         "bynk.stub.at_system",

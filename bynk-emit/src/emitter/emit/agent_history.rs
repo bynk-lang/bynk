@@ -67,7 +67,14 @@ pub(super) fn emit_agent_history_driver(
             ])],
         );
         let mut body = vec![
-            bynk_ts::TsStmt::expr_stmt(call(member(ident(registry), "reset"), vec![]), None),
+            // `true`: the driven sequence is no case boundary, so it keeps the case's agent stubs (#4215).
+            bynk_ts::TsStmt::expr_stmt(
+                call(
+                    member(ident(registry), "reset"),
+                    vec![bynk_ts::TsExpr::Lit(bynk_ts::TsLit::Bool(true))],
+                ),
+                None,
+            ),
             history_inst_stmt(a, commons),
             const_("__load", history_load_arrow(a, fns, &state_ty)),
             const_("__rej", history_rejected_arrow()),

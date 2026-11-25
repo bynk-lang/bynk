@@ -1,0 +1,2 @@
+bynk.stub.agent_stub `Ledger` is an agent of `shop.ledger`, and a `stub` can replace only an agent of the context under test, `shop.basket`
+# exact

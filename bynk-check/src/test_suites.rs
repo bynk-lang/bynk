@@ -119,6 +119,12 @@ pub struct ResolvedStub {
     /// return type those of the service's `on call` handler), so the stub
     /// machinery treats a service as an operation.
     pub service_context: Option<String>,
+    /// #4215: when the seam is an agent the target context declares rather than a capability,
+    /// `cap_decl` is a synthetic capability with one operation per stubbed agent handler (its
+    /// parameters and return type those of the handler), and the clauses end `faulted` or
+    /// `unreachable` alone. An agent stub is not a `deps` entry: the test runtime intercepts
+    /// the agent's own calls (`stubAgents`).
+    pub agent: bool,
     /// The `stub` clauses for this capability, in match order (case-scoped
     /// first so they take precedence over suite-scoped in the emitted if-chain).
     pub clauses: Vec<StubClause>,
@@ -257,6 +263,13 @@ pub fn phase_test_bodies(
             unit_tables,
             unit_consumes,
             unit_consumes_aliases,
+            errors,
+        );
+
+        crate::stub_agent::refuse_agent_stubs_above_unit(
+            unit_tables.get(target_name),
+            indices,
+            parsed,
             errors,
         );
 
@@ -451,6 +464,30 @@ fn resolve_stubs(
             );
             continue;
         }
+        // #4215: an agent the target declares is a seam too, stubbed at the agent's own calls.
+        if resolve_cap(&cap_name).is_none() {
+            if let Some(agent) = crate::stub_agent::target_agent(target_table, &cap_name) {
+                crate::stub_agent::resolve_agent_stub(
+                    agent,
+                    pc,
+                    scope,
+                    identity_path,
+                    fixtures,
+                    fns,
+                    types,
+                    consts,
+                    &mut out,
+                    errors,
+                );
+                continue;
+            }
+            if let Some(e) =
+                crate::stub_agent::other_context_agent_error(&pc, target_name, unit_tables)
+            {
+                errors.push(e);
+                continue;
+            }
+        }
         let Some(cap_decl) = resolve_cap(&cap_name) else {
             // Commons have no seams at all; contexts may still name a
             // non-existent capability. Either way it is not a seam.
@@ -520,6 +557,7 @@ fn resolve_stubs(
             cap: cap_name.clone(),
             cap_decl: cap_decl.clone(),
             service_context: None,
+            agent: false,
             clauses: Vec::new(),
             clause_scopes: Vec::new(),
             clause_fixtures: Vec::new(),
@@ -607,6 +645,7 @@ fn resolve_service_stub(
             trivia: Default::default(),
         },
         service_context: Some(ctx.to_string()),
+        agent: false,
         clauses: Vec::new(),
         clause_scopes: Vec::new(),
         clause_fixtures: Vec::new(),

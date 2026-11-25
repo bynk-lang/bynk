@@ -1,0 +1,45 @@
+context shop.basket
+
+consumes bynk { CallOutcome }
+
+agent Basket {
+	key id: String
+
+	store total: Cell[Int]
+
+	on call add(n: Int) -> Effect[Int] {
+		let _ <- total.update((t) => t + n)
+		total
+	}
+
+	on call count() -> Effect[Int] {
+		total
+	}
+}
+
+// A service undoes a step on every way the agent call can fail (#3933). A stub drives the failing
+// arms at `unit`, where nothing else can make an agent busy (#4215).
+service place {
+	on call(id: String, n: Int) -> Effect[Result[Int, String]] by Caller {
+		let o <- Basket(id).add.outcome(n)
+		match o {
+			Handled(t) => Effect.pure(Ok(t))
+			Rejected(_) => Effect.pure(Err("rejected"))
+			Faulted => Effect.pure(Err("faulted"))
+			Unreachable(_) => Effect.pure(Err("busy"))
+		}
+	}
+}
+
+// The same call, written plainly: a stubbed operation faults it, as a busy agent would.
+service placePlain {
+	on call(id: String, n: Int) -> Effect[Int] by Caller {
+		Basket(id).add(n)
+	}
+}
+
+service total {
+	on call(id: String) -> Effect[Int] by Caller {
+		Basket(id).count()
+	}
+}
