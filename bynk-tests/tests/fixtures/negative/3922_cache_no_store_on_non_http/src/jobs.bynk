@@ -1,0 +1,8 @@
+context jobs
+
+service sweeper from cron {
+  @cache(noStore: true)
+  on schedule("0 0 * * *") () -> Effect[Result[(), String]] {
+    Ok(())
+  }
+}

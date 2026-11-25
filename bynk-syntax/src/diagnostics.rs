@@ -2348,6 +2348,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "@cache(maxAge: 3600)      // ✗ a bare number, not a `Duration`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 1.hour)   // ✓\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\nconst Fresh: Duration = 1.hour\n@cache(maxAge: Fresh)   // ✓ a `Duration` constant bound to a literal\non GET(\"/docs\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
     },
     Explain {
+        code: "bynk.http.cache_bad_no_store",
+        blurb: "`noStore` on `@cache` forbids any cache from keeping the response, which is a yes or a no, so the value must be the literal `true` or `false`; a bare word, a string or a number is refused. Write `noStore: true` for data that must never be stored, such as a one-time token. See also `bynk.http.cache_no_store_conflict`.",
+        example: "@cache(noStore: yes)    // ✗ `true` or `false`\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)   // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.cache_bad_scope",
         blurb: "`scope` says who may store a cached response: `private` means the user's own browser only, and `public` also lets a shared cache, such as a CDN, keep it. Those are the only two values, written bare rather than as strings, so `shared` or `\"public\"` is refused. Choose one, or omit `scope` for `private`. Use `public` only for a response that is the same for everyone: `bynk.http.cache_public_reads_cookies`.",
         example: "@cache(maxAge: 5.minutes, scope: shared)   // ✗ `public` or `private`\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes, scope: public)   // ✓",
@@ -2363,9 +2368,19 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "@cache(maxAge: 1500.milliseconds)   // ✗ not a whole number of seconds\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 2.seconds)           // ✓",
     },
     Explain {
+        code: "bynk.http.cache_no_store_conflict",
+        blurb: "`@cache(noStore: true)` sends `Cache-Control: no-store`, which tells every cache to keep nothing, and drops the automatic `ETag`, because nothing is stored to revalidate. `maxAge`, `scope` and `immutable` describe how a stored response may be reused, so they contradict it and are refused. Keep `noStore: true` alone to forbid storing, or drop it and declare the freshness you want.",
+        example: "@cache(noStore: true, maxAge: 5.minutes)   // ✗ no-store and a freshness window\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)                          // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
         code: "bynk.http.cache_on_non_get",
-        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all.",
+        blurb: "`@cache` declares how long the response to a read may be reused, so it is legal only on an `on GET` handler. Conditional caching applies to safe, idempotent reads, and a `POST`, `PUT`, `PATCH` or `DELETE` is neither. Remove the annotation, or, if the route only reads, make it a `GET`. A `GET` is revalidated by its `ETag` with no annotation at all. The one form that is not for reads is `@cache(noStore: true)`, which sends `Cache-Control: no-store` and is legal on a route of any HTTP method; it is still refused on a handler that is not HTTP, and on an agent.",
         example: "@cache(maxAge: 5.minutes)   // ✗ a `POST` changes something\non POST(\"/refresh\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(maxAge: 5.minutes)   // ✓ a read\non GET(\"/links\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+    },
+    Explain {
+        code: "bynk.http.cache_public_authenticated",
+        blurb: "A route guarded by an actor that carries a credential (`Bearer`, `Oidc`, `SignedCookie` or `Signature`, or a sum with one) answers for whoever authenticated, and `scope: public` lets a shared cache, such as a CDN or a corporate proxy, store that response and serve it to anyone who asks for the URL. So it is refused, as `bynk.http.cache_public_reads_cookies` refuses it for a handler that reads `cookies`. Such a route sends `Cache-Control: private` by default; use `scope: private`, or move a response that is really the same for everyone to a `Visitor` route.",
+        example: "type MemberId = opaque String\n\nactor Member { auth = Bearer(secret = \"AUTH_SECRET\"), identity = MemberId }\n\n@cache(maxAge: 5.minutes, scope: public)    // ✗ one member's answer, stored for everyone\non GET(\"/me\") () -> Effect[HttpResult[String]] by m: Member { … }\n\n@cache(maxAge: 5.minutes, scope: private)   // ✓",
     },
     Explain {
         code: "bynk.http.cache_public_reads_cookies",
@@ -8174,6 +8189,10 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@cache` annotation's `maxAge` is missing or not a positive `Duration` literal.",
     ),
     d(
+        "bynk.http.cache_bad_no_store",
+        "A `@cache` annotation's `noStore` is not a `Bool` literal.",
+    ),
+    d(
         "bynk.http.cache_bad_scope",
         "A `@cache` annotation's `scope` is not `public` or `private`.",
     ),
@@ -8186,8 +8205,16 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         "A `@cache` annotation's `maxAge` is positive but does not resolve to a whole number of seconds.",
     ),
     d(
+        "bynk.http.cache_no_store_conflict",
+        "A `@cache(noStore: true)` annotation also declares `maxAge`, `scope` or `immutable`.",
+    ),
+    d(
         "bynk.http.cache_on_non_get",
-        "A `@cache` annotation is placed on a handler that is not `on http GET`.",
+        "A `@cache` annotation is placed on a handler that is not `on http GET` (`@cache(noStore: true)` is also legal on any other HTTP route).",
+    ),
+    d(
+        "bynk.http.cache_public_authenticated",
+        "A `@cache(scope: public)` route is guarded by an actor that carries a credential, so a shared cache could replay one caller's response to another.",
     ),
     dg(
         "bynk.http.cache_public_reads_cookies",

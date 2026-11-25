@@ -1,0 +1,10 @@
+{
+  "blurb": "`noStore` on `@cache` forbids any cache from keeping the response, which is a yes or a no, so the value must be the literal `true` or `false`; a bare word, a string or a number is refused. Write `noStore: true` for data that must never be stored, such as a one-time token. See also `bynk.http.cache_no_store_conflict`.",
+  "category": "HTTP",
+  "categoryAnchor": "http",
+  "code": "bynk.http.cache_bad_no_store",
+  "constructs": [],
+  "example": "@cache(noStore: yes)    // ✗ `true` or `false`\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }\n\n@cache(noStore: true)   // ✓\non GET(\"/me/tokens\") () -> Effect[HttpResult[String]] by v: Visitor { … }",
+  "severity": "error",
+  "summary": "A `@cache` annotation's `noStore` is not a `Bool` literal."
+}

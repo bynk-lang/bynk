@@ -2,7 +2,7 @@
 // Worker entry point for context `shop.api`.
 
 import { type __JsonValue, __verifyCall, __faultResponse, __wireRefusal } from "../../__bynk_runtime/boundary.js";
-import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, type __SecurityPolicy, __applySecurityHeaders, __headersObject } from "../../__bynk_runtime/http.js";
+import { __matchPath, __httpResultToResponse, __headResponse, __notModifiedIfMatch, __applyChallenge, __privateByDefault, type __SecurityPolicy, __applySecurityHeaders, __headersObject } from "../../__bynk_runtime/http.js";
 import { __agentBusyResponse } from "../../__bynk_runtime/agent.js";
 import { compose, type Env } from "./compose.js";
 import * as handlers from "./handlers.js";
@@ -45,7 +45,7 @@ export default {
           if (__r_headers.tag === "Err") return __applySecurityHeaders(new globalThis.Response(globalThis.JSON.stringify(__wireRefusal(__r_headers.error)), { status: 400, headers: { "content-type": "application/json" } }), __security_api);
           const headers = __r_headers.value;
           const result = await surface.http_GET_probe(request, headers);
-          const __response = __applySecurityHeaders(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.api\""]), __security_api);
+          const __response = __applySecurityHeaders(__privateByDefault(__applyChallenge(__notModifiedIfMatch(__httpResultToResponse(result, (__v: string) => __v as __JsonValue, { weakEtag: true }), request), request, ["Bearer realm=\"shop.api\""])), __security_api);
           return method === "HEAD" ? __headResponse(__response) : __response;
         }
       }
