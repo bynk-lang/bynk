@@ -575,6 +575,20 @@ pub struct UnitTable {
     /// [`UnitTable::capabilities`], with its base's operations, so `given`,
     /// calls and test views treat it as an ordinary capability.
     pub derived: HashMap<String, DerivedInstance>,
+    /// #4045: for each commons this unit `uses` through a braced list, an alias,
+    /// a qualified name or a name another used commons also declares, the table
+    /// as this unit sees it: public names only, selected and renamed as the
+    /// clauses say, and each type's references renamed to match
+    /// ([`crate::uses_view`]). A commons not listed is seen as its own table.
+    /// Filled by [`crate::uses_view::attach_use_views`].
+    pub use_views: std::collections::BTreeMap<String, UnitTable>,
+    /// #4045: a bare name two used commons both bring in, with the qualified
+    /// spelling of each, for `bynk.uses.ambiguous_name` where it is referenced.
+    pub ambiguous_uses: std::collections::BTreeMap<String, Vec<String>>,
+    /// #4045: on a [`UnitTable::use_views`] entry, each name the view files
+    /// under a spelling other than the declared one, by its declared name, for
+    /// the emitter's import.
+    pub use_origin: HashMap<String, String>,
 }
 
 /// One type's methods: its name, then its instance and static methods in key order.
@@ -604,6 +618,14 @@ pub(crate) fn sorted_methods(
 }
 
 impl UnitTable {
+    /// #4045: the table of used commons `target` as this unit sees it: its
+    /// [`UnitTable::use_views`] entry when the clauses select, rename or qualify
+    /// its names, else `plain` (the commons' own table, whose `private`
+    /// declarations the caller still leaves out).
+    pub fn seen_through<'a>(&'a self, target: &str, plain: &'a UnitTable) -> &'a UnitTable {
+        self.use_views.get(target).unwrap_or(plain)
+    }
+
     /// #3536: [`UnitTable::unselected_consumed_types`] as a set.
     pub fn unselected_names(&self) -> std::collections::HashSet<String> {
         self.unselected_consumed_types.iter().cloned().collect()
@@ -666,6 +688,9 @@ impl UnitTable {
             unselected_consumed_types,
             unlisted_consumed_types,
             derived,
+            use_views,
+            ambiguous_uses,
+            use_origin: _,
         } = self;
         (
             *kind,
@@ -674,6 +699,13 @@ impl UnitTable {
             unselected_consumed_types,
             unlisted_consumed_types,
             sorted(derived),
+            // A view is a function of the used commons' public surface and of
+            // this unit's clauses: its names are what a change to either shows.
+            use_views
+                .iter()
+                .map(|(t, v)| (t, v.types.keys().collect::<std::collections::BTreeSet<_>>()))
+                .collect::<Vec<_>>(),
+            ambiguous_uses,
         )
     }
 

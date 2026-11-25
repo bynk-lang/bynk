@@ -483,16 +483,20 @@ impl<'a> Parser<'a> {
     /// #4045: hand each qualified name the unit read to the `uses` clause that
     /// introduced its qualifier, then clear the parser's record for the next unit.
     fn distribute_qualified_refs(&mut self, uses: &mut [UsesDecl]) {
-        for full in std::mem::take(&mut self.qualified_refs) {
+        for (full, span) in std::mem::take(&mut self.qualified_refs) {
             let Some((prefix, name)) = full.rsplit_once('.') else {
                 continue;
             };
             for u in uses.iter_mut() {
                 let by_alias = u.alias.as_ref().is_some_and(|a| a.name == prefix);
                 if (by_alias || u.target.joined() == prefix)
-                    && !u.qualified_refs.iter().any(|n| n == name)
+                    && !u.qualified_refs.iter().any(|r| r.text == full)
                 {
-                    u.qualified_refs.push(name.to_string());
+                    u.qualified_refs.push(QualifiedRef {
+                        text: full.clone(),
+                        name: name.to_string(),
+                        span,
+                    });
                 }
             }
         }

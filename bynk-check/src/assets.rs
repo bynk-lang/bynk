@@ -947,8 +947,9 @@ pub fn compose_unit_assets(
             continue;
         };
         // #2618: a used commons' `private` assets stay in it.
-        for (asset_name, decl) in used_info
+        for (asset_name, decl) in info
             .table
+            .seen_through(used, &used_info.table)
             .assets
             .iter()
             .filter(|(_, d)| d.private.is_none())

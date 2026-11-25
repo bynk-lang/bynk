@@ -996,7 +996,10 @@ impl<'a> Parser<'a> {
             | TokenKind::Suite => {
                 // #4045: `Y.f` / `lib.y.f` — a name qualified by a `uses` clause
                 // is one identifier, written as it is.
-                let ident = match self.qualified_name_len().filter(|_| t.kind == TokenKind::Ident) {
+                let ident = match self
+                    .qualified_name_len()
+                    .filter(|_| t.kind == TokenKind::Ident)
+                {
                     Some(len) => self.bump_qualified_name(len),
                     None => {
                         self.bump();

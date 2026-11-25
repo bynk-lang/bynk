@@ -166,6 +166,17 @@ pub enum CommonsForm {
 }
 
 /// A `uses other.commons` declaration (v0.3 §3.3).
+/// #4045: one qualified name a unit reads through a `uses` clause.
+#[derive(Debug, Clone)]
+pub struct QualifiedRef {
+    /// The qualifier and the name as written, `Y.Status` or `lib.y.Status`.
+    pub text: String,
+    /// The name's own part, `Status`.
+    pub name: String,
+    /// Where it is first written.
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct UsesDecl {
     pub target: QualifiedName,
@@ -178,11 +189,11 @@ pub struct UsesDecl {
     /// renaming a type leaves its variants' names as they are. `None` for the
     /// whole-commons forms; `Some` (possibly empty) for the braced form.
     pub selected: Option<Vec<ConsumesItem>>,
-    /// #4045: the names the unit reads through this clause qualified — the
-    /// `Status` of `Y.Status` (alias `Y`) or of `lib.y.Status` — sorted, each
-    /// once. Set by the parser at the end of the unit, so the compiler knows
-    /// which of the commons' names to bring in under their qualified spelling.
-    pub qualified_refs: Vec<String>,
+    /// #4045: the names the unit reads through this clause qualified (`Y.Status`
+    /// by alias `Y`, or `lib.y.Status`), sorted, each spelling once at its first
+    /// use. Set by the parser at the end of the unit, so the compiler knows which
+    /// of the commons' names to bring in under their qualified spelling.
+    pub qualified_refs: Vec<QualifiedRef>,
     pub span: Span,
     pub trivia: Trivia,
     /// A blank line separated this header line's leading comment from the

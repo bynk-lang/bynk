@@ -710,7 +710,7 @@ struct Parser<'a> {
     /// #4045: every qualified name (`Y.Status`, `lib.y.describe`) read so far,
     /// as written; handed to the matching `uses` clauses at the end of the unit
     /// by `distribute_qualified_refs`.
-    qualified_refs: std::collections::BTreeSet<String>,
+    qualified_refs: std::collections::BTreeMap<String, Span>,
 }
 
 impl<'a> Parser<'a> {
@@ -741,7 +741,7 @@ impl<'a> Parser<'a> {
             doc_errors,
             doc_probe: false,
             use_prefixes: Vec::new(),
-            qualified_refs: std::collections::BTreeSet::new(),
+            qualified_refs: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1144,7 +1144,7 @@ impl<'a> Parser<'a> {
             name.push_str(self.slice(seg.span));
             span = span.merge(seg.span);
         }
-        self.qualified_refs.insert(name.clone());
+        self.qualified_refs.entry(name.clone()).or_insert(span);
         Ident { name, span }
     }
 
@@ -4870,6 +4870,10 @@ mod qualified_uses_4045 {
         parse(&toks, src).unwrap_or_else(|e| panic!("{src}\n{e:?}"))
     }
 
+    fn names(u: &UsesDecl) -> Vec<&str> {
+        u.qualified_refs.iter().map(|r| r.name.as_str()).collect()
+    }
+
     /// #4045: a name qualified by a `uses` alias or a full commons name is one
     /// identifier, and the clause records which names it was read for.
     #[test]
@@ -4879,9 +4883,9 @@ mod qualified_uses_4045 {
              fn f(s: Y.Status, t: lib.x.Status) -> String {\n  Y.describe(s) + lib.x.describe(t)\n}\n",
         );
         let by_alias = c.uses.iter().find(|u| u.alias.is_some()).unwrap();
-        assert_eq!(by_alias.qualified_refs, vec!["Status", "describe"]);
+        assert_eq!(names(by_alias), vec!["Status", "describe"]);
         let whole = c.uses.iter().find(|u| u.alias.is_none()).unwrap();
-        assert_eq!(whole.qualified_refs, vec!["Status", "describe"]);
+        assert_eq!(names(whole), vec!["Status", "describe"]);
     }
 
     /// Without a `uses` clause introducing the qualifier, a dotted name is the

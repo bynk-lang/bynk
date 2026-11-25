@@ -3563,163 +3563,6 @@ pub fn phase_private_in_public(
     }
 }
 
-/// Phase 6: for each unit, detect when two `uses`-imported commons declare the
-/// same (non-shadowed) type or function name — an unrenamable conflict at the use
-/// site. Diagnostics go into `errors`.
-pub fn phase_uses_name_conflicts(
-    unit_uses: &HashMap<String, Vec<String>>,
-    unit_tables: &HashMap<String, UnitTable>,
-    parsed: &[ParsedFile],
-    groups: &BTreeMap<String, Vec<usize>>,
-    errors: &mut ErrorSink,
-) {
-    for (name, targets) in unit_uses {
-        let local = unit_tables.get(name).expect("unit table present");
-        let mut imported: HashMap<String, String> = HashMap::new();
-        for t in targets {
-            // #2618: `private` declarations never come in, so never conflict.
-            let used = unit_tables
-                .get(t)
-                .expect("used unit table present")
-                .importable();
-            for type_name in used.types.keys() {
-                // Unlike the fn and asset loops below, a local service, agent,
-                // provider or asset does not skip this (#1927, review of
-                // #1933). It hides an imported type from naming, but the type
-                // stays composed so its values resolve, and with two used
-                // commons declaring it, which one the unit's values carry is
-                // still ambiguous.
-                if local.types.contains_key(type_name) || local.fns.contains_key(type_name) {
-                    continue;
-                }
-                if let Some(prev) = imported.get(type_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{type_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(type_name.clone(), t.clone());
-                }
-            }
-            for fn_name in used.fns.keys() {
-                // #1925: any local value hides the import (`shadowed_imports`),
-                // so two used commons declaring it leave nothing ambiguous.
-                if crate::symbols::local_value_kind(local, fn_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(fn_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{fn_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(fn_name.clone(), t.clone());
-                }
-            }
-            // #1883, slice 1a ([DECISION G]): a commons' assets come in
-            // through `uses` like its functions, and share their namespace.
-            for asset_name in used.assets.keys() {
-                // #1925: any local value hides the import, as above.
-                if crate::symbols::local_value_kind(local, asset_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(asset_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{asset_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(asset_name.clone(), t.clone());
-                }
-            }
-            // #2387, slice 1: a commons' embeds come in through `uses` the
-            // same way, in the same namespace.
-            for embed_name in used.embeds.keys() {
-                if crate::symbols::local_value_kind(local, embed_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(embed_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{embed_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(embed_name.clone(), t.clone());
-                }
-            }
-            // #2617: and its constants, the same way.
-            for const_name in used.consts.keys() {
-                if crate::symbols::local_value_kind(local, const_name).is_some() {
-                    continue;
-                }
-                if let Some(prev) = imported.get(const_name) {
-                    let site = uses_span_of(parsed, &groups[name], t);
-                    let span = site.map(|(_, s)| s).unwrap_or_default();
-                    let file = site.map(|(i, _)| parsed[i].identity_path());
-                    errors.push_for(file.as_deref(),
-                        CompileError::new(
-                            "bynk.uses.name_conflict",
-                            span,
-                            format!(
-                                "`{name}` uses two commons that both declare `{const_name}`: `{prev}` and `{t}`",
-                            ),
-                        )
-                        .with_note(
-                            "name conflicts at the use site are not yet renamable; remove or restructure one of the imports",
-                        ),
-                    );
-                } else {
-                    imported.insert(const_name.clone(), t.clone());
-                }
-            }
-        }
-    }
-}
-
 /// message-bundles slice 1 (#859): messages-block legality, `@reference`
 /// cardinality, within-block duplicate codes, and the `uses bynk.locale`
 /// dependency. Runs here (not in `phase_group`) because it needs `unit_uses`,
@@ -7273,6 +7116,7 @@ pub fn compose_unit_symbols(
             .expect("used unit present")
             .table
             .importable();
+        let used = local_table.seen_through(t, &used);
         for (type_name, decl) in &used.types {
             if !combined_types.contains_key(type_name) {
                 combined_types.insert(type_name.clone(), decl.clone());
@@ -7374,12 +7218,16 @@ pub fn shadowed_imports(
     let Some(info) = unit_info.get(name) else {
         return HashMap::new();
     };
-    shadowed_imports_in(
+    let mut out = shadowed_imports_in(
         &info.table,
-        info.uses
-            .iter()
-            .filter_map(|t| unit_info.get(t).map(|u| (t, &u.table))),
-    )
+        info.uses.iter().filter_map(|t| {
+            unit_info
+                .get(t)
+                .map(|u| (t, info.table.seen_through(t, &u.table)))
+        }),
+    );
+    crate::uses_view::add_ambiguous_imports(&info.table, &mut out);
+    out
 }
 
 /// [`shadowed_imports`] over a unit's own table and its `uses` targets'
@@ -7411,6 +7259,7 @@ pub fn shadowed_imports_in<'a>(
                     imported,
                     local: kind,
                     local_span,
+                    ambiguous: Vec::new(),
                 };
                 // The first `uses` target to declare a name decides, except
                 // that a type replaces a function or asset (review of #1933).
@@ -7585,6 +7434,9 @@ mod native_platform_closure_tests {
             embeds: StdHashMap::new(),
             consts: StdHashMap::new(),
             derived: StdHashMap::new(),
+            use_views: Default::default(),
+            ambiguous_uses: Default::default(),
+            use_origin: Default::default(),
         }
     }
 
