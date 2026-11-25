@@ -119,12 +119,12 @@ service ChatGateway from websocket(in: ClientFrame, out: ServerFrame) {
 
 ```bynk,fragment
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 ```
 
-`parTraverse` sends to every connection **in parallel** (so one slow client cannot
+`parForEach` sends to every connection **in parallel** (so one slow client cannot
 stall the room, and it waits for every send to settle before it raises a fault); `forEach` is the sequential sibling. In the broadcast closure each
 `c` is **borrowed** — you may `send` to it, but closing or transferring it is
 `bynk.held.consume_on_borrow`. To broadcast to everyone *but* the sender, filter on
@@ -221,9 +221,9 @@ agent Room {
 	}
 
 	on call post(sender: UserId, text: String) -> Effect[()] {
-		let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame {
-			text: text,
-		}))
+		let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(
+			ServerFrame { text: text }
+		))
 	}
 }
 ```

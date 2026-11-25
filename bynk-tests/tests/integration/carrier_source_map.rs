@@ -149,7 +149,7 @@ agent Room {
   }
 
   on call post(sender: UserId, text: String) -> Effect[()] {
-    let _ <- conns.parTraverse((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
+    let _ <- conns.parForEach((c: Connection[ServerFrame]) => c.send(ServerFrame { text: text }))
     ()
   }
 }

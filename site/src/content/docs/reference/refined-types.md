@@ -15,6 +15,15 @@ is no `.unsafe` escape hatch (that is opaque-only).
 
 ## Predicates
 
+Every argument below is a literal of the type it names, or a constant under one
+rule ([ADR 0826](/reference/constants/)): the constant is declared exactly that type
+(not a refined one), is bound to a literal or to another such constant, and may
+come from a commons the unit `uses`. The compiler replaces it with its literal
+before the refinement is read, so `InRange(1, MaxQty)` with `const MaxQty: Int = 100`
+checks, admits and rejects as `InRange(1, 100)` does. A constant that does not meet
+the rule is `bynk.refine.bound_not_literal`. A computed bound (`MaxQty + 1`) is not
+supported.
+
 ### Int
 
 | Predicate | Holds when |

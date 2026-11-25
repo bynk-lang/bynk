@@ -48,7 +48,12 @@ fn analysed(rel: &str, file: &str) -> String {
         .iter()
         .find(|f| f.source_path.to_string_lossy().ends_with(file))
         .unwrap_or_else(|| panic!("{file} analysed"));
-    let errors: Vec<_> = f.diagnostics.iter().map(|d| d.error.category).collect();
+    let errors: Vec<_> = f
+        .diagnostics
+        .iter()
+        .filter(|d| bynk_syntax::Severity::for_error(&d.error) != bynk_syntax::Severity::Hint)
+        .map(|d| d.error.category)
+        .collect();
     assert!(errors.is_empty(), "{file} has diagnostics: {errors:?}");
     f.text.clone()
 }

@@ -17,6 +17,12 @@ or a row links to no file. Summaries and statuses are curated by hand; the
 
 | # | Decision | Status |
 |---|---|---|
+| [0946](0946-default-body-cap.md) | **Every body-taking HTTP route has a 1 MiB request-body cap by default** (v0.684) — A route that takes a body is capped at 1,048,576 bytes unless it or its service says otherwise, with no unlimited setting and a build hint for routes on the default | Accepted (v0.684) |
+| [0945](0945-const-refinement-bounds.md) | **A constant stands as a refinement predicate's argument under ADR 0826's rule** (v0.683) — A predicate argument may name a constant; the checker substitutes its literal before the refinement is read | Accepted (v0.683) |
+| [0944](0944-agent-call-outcome.md) | **`Agent(key).op.outcome(…)` returns a `CallOutcome`, as cross-context calls do** (v0.682) — One outcome type for every call that might not reach its handler, with the agent mapping fixed | Accepted (v0.682) |
+| [0943](0943-integration-stub-wire.md) | **At integration a service stub's values cross the consumed context's wire codecs** (v0.681) — Where the codecs come from, what is wired, and how a failure shows | Accepted (v0.681) |
+| [0942](0942-query-par-for-each.md) | **Query.parTraverse becomes parForEach, matching List** (v0.680) — Renames the concurrent unit-returning step on a store or held Map query to parForEach, with an error and a fix for the old name | Accepted (v0.680) |
+| [0941](0941-queue-retry-after.md) | **A queue handler retries a message after a delay with RetryAfter(reason, delay)** (v0.679) — A new built-in QueueResult variant carries a delay, checked at compile time when written as a literal and clamped at run time when computed | Accepted (v0.679) |
 | [0940](0940-diagnostics-one-file-per-code.md) | **The diagnostic reference is one generated file per code, with the index assembled at site build time** (v0.678.2) — Per-code JSON committed, the index page built and not committed | Accepted (v0.678.2) |
 | [0939](0939-test-main-shared-delimiters.md) | **The emitter delimits the shared part of `tests/main.ts` for the snapshot harness** (v0.678.1) — Inert begin and end comments around the fixed part of `main()`, with a variant name | Accepted (v0.678.1) |
 | [0938](0938-ord-order-lock.md) | **The order of a `derives Ord` type is recorded in `bynk.schema.lock`** (v0.678) — a new `[orders]` section records each project-owned `derives Ord` type's member order; a reorder is `bynk.types.ord_order_changed` until `bynk lock accept-order` rewrites the entry | Accepted (v0.678) |

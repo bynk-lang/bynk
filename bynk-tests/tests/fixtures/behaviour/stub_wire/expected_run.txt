@@ -1,0 +1,5 @@
+# #4190: run by bynk-tests/tests/system/behaviour_fixtures.rs; see that file for the format.
+passed=4 failed=3
+fail a value the wire cannot carry fails at integration
+fail a bare Float result the wire cannot carry fails at integration
+fail a bare Float argument the wire cannot carry fails at integration

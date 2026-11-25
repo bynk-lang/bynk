@@ -6,15 +6,19 @@ import {
   AGENT_QUEUE_WAIT_MS,
   AGENT_BUSY_HEADER,
   AgentQueue,
+  agentBusy,
   agentBusyAfter,
   agentBusyResponse,
+  callAgentOutcome,
   callDurableObjectMethod,
+  reentrantAgentCall,
   serialiseAgentClass,
   serialiseBundleAgent,
   type DurableObjectNamespace,
 } from "../src/agent.ts";
 import { makeTestState, type DurableObjectState } from "../src/storage.ts";
 import { makeIntegrationDoNamespace } from "../src/testing/bindings.ts";
+import { boundaryError, rehydrationViolation } from "../src/boundary.ts";
 
 // #3202: an agent instance runs one handler at a time.
 
@@ -549,4 +553,128 @@ test("the caller reads a busy instance back as AgentBusy, which an entry answers
   assert.equal(agentBusyResponse(new Error("boom"), "POST /x"), null);
   const reentrant = Object.assign(new Error("r"), { agentFault: { kind: "ReentrantAgentCall", agent: "A" } });
   assert.equal(agentBusyResponse(reentrant, "POST /x"), null);
+});
+
+// #3933: `Agent(key).op.outcome(args)` reports an agent call's failure as a `CallOutcome`.
+test("callAgentOutcome: an answer is Handled, nothing logged", async () => {
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    assert.deepEqual(await callAgentOutcome(Promise.resolve(3), "Basket.add"), { tag: "Handled", result: 3 });
+  } finally {
+    globalThis.console.error = log;
+  }
+  assert.deepEqual(logged, []);
+});
+
+test("callAgentOutcome: AgentBusy is Unreachable(None), a handler fault is Faulted and logged once", async () => {
+  class Slow {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async hold(): Promise<string> {
+      await sleep(200);
+      return "done";
+    }
+  }
+  const state = makeTestState("k");
+  const make = (): Slow => serialiseBundleAgent(state, new Slow(state), 20);
+  const first = make().hold();
+  const busy = await quiet(() => callAgentOutcome(make().hold(), "Slow.hold"));
+  assert.deepEqual(busy, { tag: "Unreachable", status: { tag: "None" } });
+  assert.equal(await first, "done");
+
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    assert.deepEqual(await callAgentOutcome(Promise.reject(new Error("boom")), "Basket.add"), { tag: "Faulted" });
+    // A stored state that no longer loads, and an invariant violation, are faults of the handler.
+    const rehydration = rehydrationViolation("Basket", { kind: "MalformedJson", details: "x" });
+    assert.deepEqual(await callAgentOutcome(Promise.reject(rehydration), "Basket.add"), { tag: "Faulted" });
+  } finally {
+    globalThis.console.error = log;
+  }
+  assert.ok(logged.some((l) => l[0] === "AgentFaulted Basket.add"));
+});
+
+test("callAgentOutcome: only the called agent's own busy queue is Unreachable, a nested agent's is Faulted", async () => {
+  const logged: unknown[][] = [];
+  const log = globalThis.console.error;
+  globalThis.console.error = (...a: unknown[]) => void logged.push(a);
+  try {
+    // `A.op` was busy itself: it never started.
+    assert.deepEqual(await callAgentOutcome(Promise.reject(agentBusy("A", 30_000, 1)), "A.op"), {
+      tag: "Unreachable",
+      status: { tag: "None" },
+    });
+    // `A.op` ran and called a busy `B`: the handler started, so a retry could repeat its effects.
+    assert.deepEqual(await callAgentOutcome(Promise.reject(agentBusy("B", 30_000, 1)), "A.op"), { tag: "Faulted" });
+  } finally {
+    globalThis.console.error = log;
+  }
+  // The fault is logged with its error, so a handler fault stays diagnosable (#3933).
+  const faulted = logged.find((l) => l[0] === "AgentFaulted A.op");
+  assert.ok(faulted !== undefined);
+  assert.match(String(faulted[1]), /AgentBusy: agent B busy/);
+});
+
+test("callAgentOutcome: ReentrantAgentCall and a codec failure stay faults", async () => {
+  const quietly = <T>(f: () => Promise<T>): Promise<T> => quiet(f);
+  await quietly(async () => {
+    await assert.rejects(
+      () => callAgentOutcome(Promise.reject(reentrantAgentCall("Basket")), "Basket.add"),
+      /ReentrantAgentCall/,
+    );
+    await assert.rejects(
+      () => callAgentOutcome(Promise.reject(boundaryError({ kind: "MalformedJson", details: "x" })), "Basket.add"),
+      /BoundaryError/,
+    );
+  });
+});
+
+test("callAgentOutcome: across a Durable Object boundary, a busy instance is Unreachable and a re-entrant one still faults", async () => {
+  class Slow {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(): Promise<Response> {
+      await sleep(200);
+      return new Response(JSON.stringify("done"));
+    }
+  }
+  const ns = makeIntegrationDoNamespace(Slow as never, undefined, 20);
+  const stub = ns.get(ns.idFromName("k"));
+  const first = callDurableObjectMethod(stub, "m", [], {});
+  const busy = await quiet(() => callAgentOutcome(callDurableObjectMethod(stub, "m", [], {}), "Slow.m"));
+  assert.deepEqual(busy, { tag: "Unreachable", status: { tag: "None" } });
+  assert.equal(await first, "done");
+  // The same instance asked to re-enter itself answers a `500` naming `ReentrantAgentCall`.
+  const loop = callDurableObjectMethod(
+    { fetch: (u: string, init?: unknown) => stub.fetch(u, { ...(init as object), headers: { [AGENT_CHAIN_HEADER]: "Slow:k" } }) } as never,
+    "m",
+    [],
+    {},
+  );
+  await quiet(async () => {
+    await assert.rejects(() => callAgentOutcome(loop, "Slow.m"), /ReentrantAgentCall/);
+  });
+  // A `500` from a handler that faulted is Faulted.
+  class Broken {
+    state: DurableObjectState;
+    constructor(state: DurableObjectState) {
+      this.state = state;
+    }
+    async fetch(): Promise<Response> {
+      return new Response("Internal Server Error", { status: 500 });
+    }
+  }
+  const broken = makeIntegrationDoNamespace(Broken as never);
+  const faulted = await quiet(() =>
+    callAgentOutcome(callDurableObjectMethod(broken.get(broken.idFromName("k")), "m", [], {}), "Broken.m"),
+  );
+  assert.deepEqual(faulted, { tag: "Faulted" });
 });

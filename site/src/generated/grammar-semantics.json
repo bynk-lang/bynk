@@ -1340,6 +1340,10 @@
       "summary": "A method was called on a built-in type that has no methods."
     },
     {
+      "code": "bynk.types.regex_duplicate_group_name",
+      "summary": "`findRegexNamed`'s pattern names a capture group more than once, which the runtimes refuse when the pattern is built."
+    },
+    {
       "code": "bynk.types.regex_no_named_groups",
       "summary": "`findRegexNamed`'s pattern has no named capture group, so there is nothing to key its result by."
     },
@@ -1637,6 +1641,10 @@
     }
   ],
   "refined_type": [
+    {
+      "code": "bynk.refine.bound_not_literal",
+      "summary": "A constant in a refinement predicate's argument is not a literal of the argument's type."
+    },
     {
       "code": "bynk.refine.literal_violates",
       "summary": "A literal does not satisfy the refined type's predicate."
