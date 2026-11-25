@@ -1726,6 +1726,7 @@
 /reference/diagnostics/bynk.list.par_traverse_unit/
 /reference/diagnostics/bynk.locale.multiple_message_bundles/
 /reference/diagnostics/bynk.map.deprecated_function/
+/reference/diagnostics/bynk.match.refined_pattern_is_range/
 /reference/diagnostics/bynk.messages.format_mismatch/
 /reference/diagnostics/bynk.messages.incomplete/
 /reference/diagnostics/bynk.messages.invalid_locale_tag/
