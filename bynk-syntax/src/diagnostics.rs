@@ -4166,6 +4166,11 @@ fn wait() -> Duration { 5.hours }     // ✓",
         example: "type Line = { sku: String, qty: Int }\n\nfn total(lines: List[Line]) -> Int {\n    let t = lines.sum((l) => l.sku)   // ✗ a `String` cannot be summed\n    0\n}\n\nfn total(lines: List[Line]) -> Int {\n    lines.sum((l) => l.qty)           // ✓ a numeric key\n}",
     },
     Explain {
+        code: "bynk.query.while_needs_order",
+        blurb: "`takeWhile` and `skipWhile` stop where the predicate first fails, so what they keep depends on the order the elements come in. A `Query` gives them one only when the order is declared: an explicit `sortBy` or `sortByDescending` before them (with only `filter`, `map`, `filterMap`, `skip`, `take` or another `…While` between), or a `store Log`, which is read oldest first, or a window of one (`since`, `before`, `between`, `recent`, `reversed`). A `flatMap` loses the order, because each inner query is joined in its own. A `store Map` scan, a join, a grouping and a query held in a `let` have no order the author can see, so Bynk will not guess one. Say which order with a `sortBy`. A `List` has its own order, so `takeWhile` and `skipWhile` take no such condition there. The elements are read whole and then cut, so a store backend that cannot push the cut down pays the same read as the rest of the query.",
+        example: "type Event = { at: Int, kind: String }\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.takeWhile((e) => e.at > 100).collect()    // ✗ a `Map` scan has no declared order\n    }\n}\n\nagent Feed {\n    key id: String\n    store events: Map[String, Event]\n\n    on call recent() -> Effect[List[Event]] {\n        events.values.sortBy((e) => e.at).takeWhile((e) => e.at > 100).collect()    // ✓ ordered by `at`\n    }\n}",
+    },
+    Explain {
         code: "bynk.queue.bad_params",
         blurb: "A queue consumer is invoked once per message, so `on message` takes the message, of any type that can be decoded from the queue body, and optionally one more parameter of type `QueueDelivery` (from `bynk.cloudflare`), the message's attempt count and send time, in either order. Any other second parameter has nothing to supply it, a second `QueueDelivery` is one too many, and a handler whose only parameter is the `QueueDelivery` has no message. Put what you need into the message type itself: a record with those fields is one parameter. Name the parameter `message` by convention.",
         example: "type Msg = { a: String }\n\non message(message: Msg, extra: String) -> Effect[QueueResult] by Producer { … }   // ✗ two parameters\n\non message(message: Msg) -> Effect[QueueResult] by Producer { … }   // ✓ one message",
@@ -4841,8 +4846,8 @@ bynk revert --accept-secret-changes   # only after a `bynk migrate sweep`",
     },
     Explain {
         code: "bynk.stub.generic_op",
-        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names, and a fixed value cannot be that. Such an operation cannot be stubbed. Test through the capability's real provider, and stub the other, non-generic operations of the capability if you need to.",
-        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None   // ✗ `dedup` has its own type parameter\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()   // ✓ the real provider answers\n    expect result is None\n}",
+        blurb: "A `stub` gives an operation a fixed answer, but an operation with its own type parameter, `fn dedup[T](…)`, answers in whatever type the caller names. A `stub` of it names the type argument, as the call site does, so its answer has a concrete type, and it answers only the calls made at that type: `stub Idempotency.dedup[Int](_) returns None`. Without the type argument the clause could not be typed, and is refused.",
+        example: "// tests/orders.test.bynk\nstub Idempotency.dedup(_) returns None        // ✗ `dedup` has its own type parameter\nstub Idempotency.dedup[Int](_) returns None   // ✓ the type argument, as the call writes it\n\ncase \"reserve returns the cached value\" {\n    let result <- reserve.call()\n    expect result is None\n}",
     },
     Explain {
         code: "bynk.stub.not_a_seam",
@@ -9550,6 +9555,11 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
         &[],
     ),
     dg(
+        "bynk.query.while_needs_order",
+        "`takeWhile`/`skipWhile` on a `Query` with no declared order: put a `sortBy` before it, or read a `store Log`.",
+        &["method_call"],
+    ),
+    dg(
         "bynk.queue.bad_params",
         "An `on message` handler does not take exactly one `message` parameter.",
         &["queue_handler"],
@@ -10085,7 +10095,7 @@ pub const REGISTRY: &[DiagnosticInfo] = &[
     ),
     d(
         "bynk.stub.generic_op",
-        "A test `stub` targets a capability operation that declares its own type parameter — not supported at v1.",
+        "A test `stub` targets a capability operation that declares its own type parameter without naming its type argument (`stub Cap.op[T](…)`).",
     ),
     d(
         "bynk.stub.not_a_seam",

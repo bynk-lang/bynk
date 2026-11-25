@@ -346,6 +346,7 @@ fn single_file_ctx() -> EmitProjectCtx {
         contracts: false,
         trace: None,
         inspect_agents: false,
+        typed_capability_calls: false,
         source_path: PathBuf::new(),
         identity_path: String::new(),
         commons_name: String::new(),

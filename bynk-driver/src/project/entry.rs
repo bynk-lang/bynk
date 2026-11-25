@@ -152,6 +152,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.contracts,
         options.trace_requests,
         options.inspect_agents,
+        options.typed_capability_calls,
         options.tests,
         &options.schema_registry,
         options.remote_tests.as_ref(),
@@ -293,6 +294,7 @@ pub fn check_project(options: &CompileOptions) -> ProjectCheck {
         options.contracts,
         options.trace_requests,
         options.inspect_agents,
+        options.typed_capability_calls,
         options.tests,
         // #2078: `bynk check` reconciles against the committed
         // `bynk.schema.lock` whenever the caller pre-read it

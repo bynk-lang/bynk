@@ -547,7 +547,12 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             None => format!("{} faults", expr_with_prec(&f.call, 0)),
         },
         ExprKind::Observation(o) => {
-            let subject = format!("{}.{}", o.cap.name, o.op.name);
+            let subject = format!(
+                "{}.{}{}",
+                o.cap.name,
+                o.op.name,
+                type_args_src(&o.type_args)
+            );
             match &o.matcher {
                 ObservationMatcher::NeverCalled => format!("{subject} never called"),
                 ObservationMatcher::Before { cap, op } => {
@@ -570,6 +575,15 @@ pub fn expr_with_prec(e: &Expr, parent_prec: u8) -> String {
             }
         }
     }
+}
+
+/// #3945: `[T, U]` after a stub or observation target's operation, or nothing.
+pub fn type_args_src(type_args: &[TypeRef]) -> String {
+    if type_args.is_empty() {
+        return String::new();
+    }
+    let list: Vec<String> = type_args.iter().map(type_ref_to_string).collect();
+    ["[", &list.join(", "), "]"].concat()
 }
 
 /// #2891: the `if` an `else if` desugars to. The parser wraps it in a

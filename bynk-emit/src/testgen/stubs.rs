@@ -21,6 +21,94 @@ use bynk_ts::{
 };
 use std::sync::Arc;
 
+/// The namespace each type name in the stubbed capability's *signature* resolves to.
+fn signature_type_ns(
+    rp: &ResolvedStub,
+    owning_unit: &str,
+    type_ns: &HashMap<String, String>,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+) -> HashMap<String, String> {
+    // #2887: the stubbed capability's signature names its own unit's types by
+    // the names that unit declares, which this target may have renamed
+    // (`consumes U { T as Alias }`) to keep them off a type of its own: those
+    // names are `U`'s whatever else the target binds them to.
+    let mut sig_type_ns = type_ns.clone();
+    add_service_sig_types(rp, unit_tables, &mut sig_type_ns);
+    if let Some(owner) = unit_tables
+        .get(owning_unit)
+        .and_then(|t| t.flattened_caps.get(&rp.cap))
+    {
+        for a in unit_tables[owning_unit]
+            .consumed_type_aliases
+            .values()
+            .filter(|a| a.target == *owner)
+        {
+            sig_type_ns.insert(a.original.clone(), test_ns(owner));
+        }
+        // #2994: the signature's other names are the declaring unit's own, or a
+        // commons it `uses` (`bynk`'s `Locale.current` returns the `uses`d
+        // `bynk.locale.types`' `LocaleTag`) — whether or not the target uses that
+        // commons. Qualify them by the namespace that declares them, over
+        // the target's own view, which is not the one the signature was written
+        // in. The unit's own types win over a used commons', as they do there.
+        let mut declared: HashMap<String, String> = HashMap::new();
+        for used in unit_uses.get(owner).into_iter().flatten() {
+            if let Some(table) = unit_tables.get(used) {
+                for n in public_types(table) {
+                    declared.entry(n.clone()).or_insert_with(|| test_ns(used));
+                }
+            }
+        }
+        if let Some(table) = unit_tables.get(owner) {
+            for n in table.types.keys() {
+                declared.insert(n.clone(), test_ns(owner));
+            }
+        }
+        for (n, ns) in declared {
+            sig_type_ns.insert(n, ns);
+        }
+    }
+    sig_type_ns
+}
+
+/// #3945: the types a clause's explicit type arguments resolve in, for its call key.
+fn clause_key_types(
+    owning_unit: &str,
+    unit_tables: &HashMap<String, UnitTable>,
+    unit_uses: &HashMap<String, Vec<String>>,
+    unit_consumes: &HashMap<String, Vec<String>>,
+    unit_consumes_aliases: &HashMap<String, HashMap<String, String>>,
+) -> HashMap<String, Arc<bynk_syntax::ast::TypeDecl>> {
+    test_suites::build_privileged_resolved(
+        owning_unit,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_consumes_aliases,
+    )
+    .map(|(r, _)| r.types)
+    .unwrap_or_default()
+}
+
+/// #3945: `__tk && __tk.__bynkTypeKey === "<key>"`: the clause answers the call made at its type
+/// arguments.
+fn type_key_cond(
+    type_args: &[bynk_syntax::ast::TypeRef],
+    key_types: &HashMap<String, Arc<bynk_syntax::ast::TypeDecl>>,
+    tys: &Arc<Types>,
+) -> TsExpr {
+    and_expr(
+        ident("__tk"),
+        strict_eq(
+            member(ident("__tk"), "__bynkTypeKey"),
+            str_lit(bynk_check::checker::capability_type_key(
+                type_args, key_types, tys,
+            )),
+        ),
+    )
+}
+
 /// v0.118: emit the `__Stub_<Cap>` stub class for a capability seam
 /// overridden by `stub` clauses (testing track slice 6). One async method
 /// per overridden operation renders its clauses as a first-match-wins if-chain
@@ -95,46 +183,14 @@ pub(super) fn emit_stub_class(
             type_ns.entry(n.clone()).or_insert_with(|| uns.clone());
         }
     }
-    // #2887: the stubbed capability's signature names its own unit's types by
-    // the names that unit declares, which this target may have renamed
-    // (`consumes U { T as Alias }`) to keep them off a type of its own: those
-    // names are `U`'s whatever else the target binds them to.
-    let mut sig_type_ns = type_ns.clone();
-    add_service_sig_types(rp, unit_tables, &mut sig_type_ns);
-    if let Some(owner) = unit_tables
-        .get(&owning_unit)
-        .and_then(|t| t.flattened_caps.get(&rp.cap))
-    {
-        for a in unit_tables[&owning_unit]
-            .consumed_type_aliases
-            .values()
-            .filter(|a| a.target == *owner)
-        {
-            sig_type_ns.insert(a.original.clone(), test_ns(owner));
-        }
-        // #2994: the signature's other names are the declaring unit's own, or a
-        // commons it `uses` (`bynk`'s `Locale.current` returns the `uses`d
-        // `bynk.locale.types`' `LocaleTag`) — whether or not the target uses that
-        // commons. Qualify them by the namespace that declares them, over
-        // the target's own view, which is not the one the signature was written
-        // in. The unit's own types win over a used commons', as they do there.
-        let mut declared: HashMap<String, String> = HashMap::new();
-        for used in unit_uses.get(owner).into_iter().flatten() {
-            if let Some(table) = unit_tables.get(used) {
-                for n in public_types(table) {
-                    declared.entry(n.clone()).or_insert_with(|| test_ns(used));
-                }
-            }
-        }
-        if let Some(table) = unit_tables.get(owner) {
-            for n in table.types.keys() {
-                declared.insert(n.clone(), test_ns(owner));
-            }
-        }
-        for (n, ns) in declared {
-            sig_type_ns.insert(n, ns);
-        }
-    }
+    let sig_type_ns = signature_type_ns(rp, &owning_unit, &type_ns, unit_tables, unit_uses);
+    let key_types = clause_key_types(
+        &owning_unit,
+        unit_tables,
+        unit_uses,
+        unit_consumes,
+        unit_consumes_aliases,
+    );
     let scope_names: Vec<String> = if let Some(table) = unit_tables.get(&owning_unit) {
         let mut v: Vec<String> = table
             .types
@@ -225,20 +281,37 @@ pub(super) fn emit_stub_class(
         let Some(op) = rp.cap_decl.ops.iter().find(|o| &o.name.name == method) else {
             continue;
         };
-        let params: Vec<TsParam> = op
+        // #3945: a generic operation's signature names its own type parameters, which a class
+        // method cannot spell, so its parameters and reply are `unknown`; each clause is typed
+        // against its own substituted operation, and the call's trailing type-key argument
+        // (`__tk`) picks which clauses answer.
+        let generic = !op.type_params.is_empty();
+        let mut params: Vec<TsParam> = op
             .params
             .iter()
             .map(|p| {
-                TsParam::new(
-                    p.name.name.clone(),
-                    Some(ts_type_ref_qualified_multi_ts_type(
-                        &p.type_ref,
-                        &sig_type_ns,
-                    )),
-                )
+                let ty = if generic {
+                    TsType::named("unknown")
+                } else {
+                    ts_type_ref_qualified_multi_ts_type(&p.type_ref, &sig_type_ns)
+                };
+                TsParam::new(p.name.name.clone(), Some(ty))
             })
             .collect();
-        let return_ty = ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns);
+        let return_ty = if generic {
+            TsType::named("Promise<unknown>")
+        } else {
+            ts_type_ref_qualified_multi_ts_type(&op.return_type, &sig_type_ns)
+        };
+        if generic {
+            params.push(TsParam {
+                optional: true,
+                ..TsParam::new(
+                    "__tk",
+                    Some(TsType::named("{ __bynkTypeKey?: string } | undefined")),
+                )
+            });
+        }
 
         let (mut body, mut taken) =
             method_scope(rp, unit_tables, &scope_ns, &scope_names, &scope_type_names);
@@ -289,6 +362,8 @@ pub(super) fn emit_stub_class(
         }
         for &idx in clause_idxs {
             let clause = &rp.clauses[idx];
+            let clause_op = rp.op_for_clause(idx).unwrap_or_else(|| op.clone());
+            let op = &clause_op;
             // Argument-pattern consts: a `Value(e)` pattern lowers to a const the
             // condition compares structurally; an `Any` pattern contributes none.
             let mut cond_parts: Vec<TsExpr> = Vec::new();
@@ -321,6 +396,9 @@ pub(super) fn emit_stub_class(
             let scope = &rp.clause_scopes[idx];
             if *scope != StubScope::Every {
                 cond_parts.insert(0, scopes_test(&[scope]));
+            }
+            if generic {
+                cond_parts.push(type_key_cond(&clause.type_args, &key_types, tys));
             }
             let cond = cond_parts
                 .into_iter()

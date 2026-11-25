@@ -1,0 +1,11 @@
+context demo
+
+agent Feed {
+  key id: String
+  store points: Map[String, Int]
+  store other: Map[String, Int]
+
+  on call run() -> Effect[List[Int]] {
+    points.values.sortBy((n) => n).flatMap((n) => other.values).takeWhile((n) => n > 0).collect()
+  }
+}
