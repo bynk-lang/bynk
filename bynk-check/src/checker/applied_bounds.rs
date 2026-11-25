@@ -176,3 +176,100 @@ pub(crate) fn check_applied_ty_bounds(
     }
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::testkit::analyse;
+
+    fn body(src: &str) -> crate::testkit::Analysed {
+        analyse(&[("app/a.bynk", src)])
+    }
+
+    /// The bound each of `Eq`, `Ord`, `Key` and `Codable` requires is checked
+    /// where a bounded type is applied to a type parameter, in a signature.
+    #[test]
+    fn a_signature_applying_a_bounded_type_to_a_parameter_requires_the_bound() {
+        for (bound, code) in [
+            ("Eq", "bynk.generics.missing_eq_bound"),
+            ("Ord", "bynk.generics.missing_ord_bound"),
+            ("Key", "bynk.generics.missing_key_bound"),
+            ("Codable", "bynk.generics.missing_codable_bound"),
+        ] {
+            let src = format!(
+                "commons app.a\n\ntype Box[T: {bound}] = {{ items: List[T] }}\n\n\
+                 fn wrap[U](xs: List[U]) -> Box[U] {{\n  Box {{ items: xs }}\n}}\n"
+            );
+            body(&src).assert_reports(code);
+            let ok = format!(
+                "commons app.a\n\ntype Box[T: {bound}] = {{ items: List[T] }}\n\n\
+                 fn wrap[U: {bound}](xs: List[U]) -> Box[U] {{\n  Box {{ items: xs }}\n}}\n"
+            );
+            assert!(
+                !body(&ok).categories().contains(&code),
+                "`U: {bound}` satisfies the bound"
+            );
+        }
+    }
+
+    /// A field of a generic type applying a bounded type to the type's own
+    /// parameter needs the bound declared there (Decision D: declared, not
+    /// inferred from the field).
+    #[test]
+    fn a_field_applying_a_bounded_type_to_a_parameter_requires_the_bound() {
+        let src = "commons app.a\n\ntype Index[K: Key, V] = { m: Map[K, V] }\n\n\
+                   type Wrap[U] = { i: Index[U, Int] }\n";
+        body(src).assert_reports("bynk.generics.missing_key_bound");
+        let ok = "commons app.a\n\ntype Index[K: Key, V] = { m: Map[K, V] }\n\n\
+                  type Wrap[U: Key] = { i: Index[U, Int] }\n";
+        assert!(
+            !body(ok)
+                .categories()
+                .contains(&"bynk.generics.missing_key_bound")
+        );
+    }
+
+    /// An inferred instantiation, a record literal whose element type comes
+    /// from its value, is checked as a written argument would be.
+    #[test]
+    fn an_inferred_instantiation_holds_the_declared_bound() {
+        let src = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\n\
+                   fn direct() -> Int {\n  let s = Sorted { items: [true] }\n  s.items.length()\n}\n";
+        body(src).assert_reports("bynk.types.not_orderable");
+        let ok = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\n\
+                  fn direct() -> Int {\n  let s = Sorted { items: [1, 2] }\n  s.items.length()\n}\n";
+        body(ok).assert_clean();
+    }
+
+    /// The `Key` and `Codable` bounds are checked on an inferred instantiation
+    /// too, and a type parameter standing for the argument must carry them.
+    #[test]
+    fn an_inferred_instantiation_through_a_parameter_requires_the_bound() {
+        let src = "commons app.a\n\ntype Index[K: Key] = { ks: List[K] }\n\n\
+                   fn build[U](xs: List[U]) -> Int {\n  let i = Index { ks: xs }\n  i.ks.length()\n}\n";
+        body(src).assert_reports("bynk.generics.missing_key_bound");
+    }
+
+    /// A bound a method's receiver type declares is already held inside the
+    /// method (Decision C): no declaration is repeated.
+    #[test]
+    fn a_method_of_a_bounded_type_holds_its_receivers_bounds() {
+        let src = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\n\
+                   fn Sorted.rewrap(self) -> Sorted[T] {\n  Sorted { items: self.items }\n}\n";
+        let a = body(src);
+        assert!(
+            !a.categories().contains(&"bynk.generics.missing_ord_bound"),
+            "{}",
+            a.render()
+        );
+    }
+
+    /// A static or generic call that makes the argument a type the bound
+    /// refuses is reported at the call, as for any bounded parameter.
+    #[test]
+    fn a_call_through_a_bounded_type_checks_the_argument() {
+        let src = "commons app.a\n\ntype Sorted[T: Ord] = { items: List[T] }\n\n\
+                   fn mk[U: Ord](xs: List[U]) -> Sorted[U] {\n  Sorted { items: xs }\n}\n\n\
+                   fn use() -> Int {\n  let s = mk([true])\n  s.items.length()\n}\n";
+        body(src).assert_reports("bynk.types.not_orderable");
+    }
+}

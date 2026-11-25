@@ -2087,6 +2087,7 @@ fn check_fn_refs_with(
         given: &f.given,
         cap_advice: &cap_advice,
         declared_caps,
+        eq_scope: Some(&fn_scope),
         scopes: Vec::new(),
         errors,
     };
@@ -2159,6 +2160,7 @@ fn check_const_refs_with(
         given: &[],
         cap_advice: "",
         declared_caps: &HashSet::new(),
+        eq_scope: None,
         scopes: Vec::new(),
         errors,
     };
@@ -3878,6 +3880,9 @@ struct RefCheckCtx<'a, 'b> {
     /// #2868: every capability the context declares or consumes, for the note
     /// on a use the function's `given` does not cover.
     declared_caps: &'a HashSet<String>,
+    /// #3958: the bounds the enclosing function's parameters carry, for the
+    /// bounded types an annotation applies to them; none for a constant.
+    eq_scope: Option<&'a crate::checker::equality::EqScope>,
     scopes: Vec<HashMap<String, ()>>,
     errors: &'a mut Sinks<'b>,
 }
@@ -3897,6 +3902,9 @@ fn check_statement_references(stmt: &Statement, cx: &mut RefCheckCtx) {
             check_expr_references(&l.value, cx);
             if let Some(annot) = &l.type_annot {
                 check_type_ref_resolves_in(annot, cx.types, cx.type_params, cx.errors);
+                if let Some(scope) = cx.eq_scope {
+                    check_applied_bounds_at(annot, cx.type_params, scope, cx.types, cx.errors);
+                }
             }
             if let Some(prev) = cx.types.get(&l.name.name) {
                 cx.errors.push(
@@ -4057,6 +4065,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             for p in &lambda.params {
                 if let Some(tr) = &p.type_ref {
                     check_type_ref_resolves_in(tr, cx.types, cx.type_params, cx.errors);
+                    if let Some(scope) = cx.eq_scope {
+                        check_applied_bounds_at(tr, cx.type_params, scope, cx.types, cx.errors);
+                    }
                 }
             }
             let mut frame: HashMap<String, ()> = HashMap::new();
@@ -4254,6 +4265,9 @@ fn check_expr_references(expr: &Expr, cx: &mut RefCheckCtx) {
             // bodies (which never reach this walk).
             for ta in type_args {
                 check_type_ref_resolves_in(ta, cx.types, cx.type_params, cx.errors);
+                if let Some(scope) = cx.eq_scope {
+                    check_applied_bounds_at(ta, cx.type_params, scope, cx.types, cx.errors);
+                }
             }
             match cx.fns.get(&name.name) {
                 Some(decl) => {
