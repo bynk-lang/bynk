@@ -1,7 +1,7 @@
 ---
 level: minor
 probes: emit_diagnostics, diagnostic_coverage, explained_codes
-changelog: A test stubs an agent operation at `unit`: `stub Basket.add(_) faulted` or `unreachable` makes the calls it matches, whatever the key, end as `Faulted` or `Unreachable(None)` in `Basket(k).add(x).outcome`, and fault a plain call; only an agent of the context under test, only at `unit`, and only those two words (`bynk.stub.agent_stub`)
+changelog: A test stubs an agent operation at `unit`: `stub Basket.add(_) faulted` or `unreachable` makes the calls it matches, whatever the key, end as `Faulted` or `Unreachable(None)` in `Basket(k).add.outcome(x)`, and fault a plain call; only an agent of the context under test, only at `unit`, and only those two words (`bynk.stub.agent_stub`)
 ---
 
 ## ADR: agent-operation-stubs
@@ -44,5 +44,8 @@ A registry reset ends the stubs with the case.
 empty unless a unit suite stubs an agent, and the emitted agent modules and the
 Worker entries do not change. An agent stub is by operation, never by key, so a
 test cannot make one instance busy and leave another working; a key-specific form is
-the extension if it is wanted. The runtime's bundle-agent wrapper gains an `async`
-hop before the queue, at every tier.
+the extension if it is wanted. The runtime's bundle-agent wrapper awaits the
+stub check only while a stub is registered, so with none (production, and any suite
+that stubs no agent) a call still enqueues synchronously, at call time, in the order
+it was made, as before; a call made while a stub is registered waits one microtask
+first, which can reorder it against an unstubbed call made in the same tick.

@@ -664,7 +664,7 @@ export function serialiseBundleAgent<C>(
       const v = Reflect.get(target, prop, receiver) as unknown;
       if (typeof v !== "function" || typeof prop !== "string") return v;
       return async (...args: unknown[]): Promise<unknown> => {
-        await applyAgentStub(agent, prop, args);
+        if (agentStubs.size > 0) await applyAgentStub(agent, prop, args);
         return q.run(agent, waitMs, async () => Reflect.apply(v, target, args));
       };
     },
