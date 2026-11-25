@@ -428,8 +428,28 @@ on GET("/config") () -> Effect[HttpResult[String]] by v: Visitor {
 
 The default is `private` — a per-user cache, never a shared one — because that is
 the safe choice for anything that might vary by caller. A duration's unit agrees with
-its number (`5.minutes`, `1.hour`), and `@cache` is only valid on a `GET` returning `Ok`;
-the compiler flags a bare number or a misplaced annotation.
+its number (`5.minutes`, `1.hour`), and `@cache` is only valid on a `GET` returning `Ok`
+(the one exception is `noStore`, below); the compiler flags a bare number or a misplaced
+annotation.
+
+**A route guarded by a credential is private without asking.** If the route's actor is a
+`Bearer`, `Oidc`, `SignedCookie` or `Signature` one, its responses are one caller's, so they
+carry `Cache-Control: private` whether or not you write `@cache` — a `200`, but also a `404`
+or the actor's own `401`. The caller's browser can still keep and revalidate them; only a
+shared cache is told not to store them. `scope: public` on such a route is refused, because
+a CDN would replay one caller's answer to another.
+
+For data that must never be stored at all, such as a one-time token, say so with `noStore`.
+It works on a route of any HTTP method, and it takes no `maxAge`:
+
+```bynk,fragment
+@cache(noStore: true)
+on GET("/me/tokens") () -> Effect[HttpResult[String]] by v: Visitor {
+  Ok("…")
+}
+```
+
+That sends `Cache-Control: no-store` and no `ETag`, since nothing is stored to revalidate.
 
 See [HTTP → Caching](/reference/http/#caching) for the eligibility rules and
 the full field table.

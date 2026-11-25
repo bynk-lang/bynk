@@ -1,6 +1,6 @@
 commons demo.d
 
 type Order = {
-  code: String where Matches("[A-Z]+"),
+  code: String where Matches("(?=[A-Z])[A-Z]+"),
   qty: Int,
 }
