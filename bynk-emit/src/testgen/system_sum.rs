@@ -105,7 +105,7 @@ impl SumAuth {
 
 /// #2155: the credentials an actor-sum route's members present, each read against its own secret.
 pub(super) fn sum_auth_for(
-    h: &bynk_syntax::ast::Handler,
+    (h, ns): (&bynk_syntax::ast::Handler, &str),
     actors: &HashMap<String, bynk_syntax::ast::ActorDecl>,
     secrets: &mut std::collections::BTreeSet<String>,
     secret_read_of: &dyn Fn(&str) -> TsExpr,
@@ -147,9 +147,10 @@ pub(super) fn sum_auth_for(
                             "secret".to_string(),
                             secret_read_of(&seam.secret),
                         )]),
-                        actor: seam.actor,
-                        cookie: seam.cookie,
+                        actor: seam.actor.clone(),
+                        cookie: seam.cookie.clone(),
                         ttl_secs: seam.ttl_secs,
+                        sessions: super::session_driver::SessionAgentRef::of(&seam, ns),
                     })
                 }
             };

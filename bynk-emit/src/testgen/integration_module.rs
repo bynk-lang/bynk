@@ -360,6 +360,16 @@ pub(super) fn emit_integration_module(
     } else {
         participants.first().cloned().into_iter().collect()
     };
+    // #3938: a `sessions = true` actor's drivers record the acting principal's session in the agent
+    // through the participant's `env`, so the harness hands it back.
+    if unit_tables.get(suite).is_some_and(|t| {
+        t.actors
+            .values()
+            .any(|a| bynk_check::actors::signed_cookie_seam_of(a, None).is_some_and(|s| s.sessions))
+    }) && !exposed.contains(&suite.to_string())
+    {
+        exposed.push(suite.to_string());
+    }
     if peeks {
         for p in harness_participants {
             let has_d1 = bindings_of(p)

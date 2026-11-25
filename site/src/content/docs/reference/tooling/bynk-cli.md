@@ -601,7 +601,7 @@ CI](/book/guides/projects-build-and-deployment/deploy-from-ci/) to run it from
 GitHub Actions.
 
 ```text
-bynk deploy [PATH] [--context NAME | --worker NAME] [--dry-run] [--no-install] [--format short|json] [--yes]
+bynk deploy [PATH] [--context NAME | --worker NAME] [--dry-run] [--no-install] [--strict-environments] [--format short|json] [--yes]
             [--secrets-file PATH] [--secret NAME]... [--force] [-- <wrangler args>]
 ```
 
@@ -616,6 +616,7 @@ run it inside a member. Each member keeps its own deploy state.
 | `--worker NAME` | every Worker | Deploy one Worker by its directory name under `workers/`: a [`[deploy.workers.<key>]`](/reference/tooling/manifest/#worker-groups) group's key, or a context's worker-directory form (`a-b`). A group is one Worker, so it deploys as a unit; naming one of its members with `--context` is refused, with the Worker that holds it. Like `--context`, it assumes the Workers it binds to are already live. Not with `--context`. |
 | `--dry-run`, `--plan` | off | Print the per-context plan and resolved order, then exit without changing Cloudflare or `bynk.deploy.lock`. With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` set it reads the account to check what it would create (see below); without them it works offline. |
 | `--no-install` | off | Do not install the build's npm packages; stop, naming the detected install command, when one is missing. Also `BYNK_NO_INSTALL=1`. See [Installing npm packages](#installing-npm-packages). |
+| `--strict-environments` | off | Refuse a deploy to a named `--env` when an `env(…)` constant takes a `[vars]` or default value instead of that environment's own (`[env.<name>.vars]`): the Worker would use another environment's setting. The plan always lists each `env(…)` constant with its value and where it came from. |
 | `--format FORMAT` | `short` | Plan output: line-oriented `short` or machine-readable `json`. |
 | `--yes` | off | Skip the confirmation required before a resource is created or a Worker is published. Required for non-interactive calls. |
 | `--secrets-file PATH` | — | Read secret **names and values** from a dotenv-style `NAME=value` file. Never committed, never persisted: values move to `wrangler secret put` and are dropped. |

@@ -3022,3 +3022,76 @@ mod classified {
         assert!(!refusal.contains("breaking") && !refusal.contains("compatible"));
     }
 }
+
+/// #3941 decision H: the plan's note about a named environment that takes
+/// another environment's `env(…)` values, and what `--strict-environments` does
+/// with it.
+mod env_constants {
+    use super::super::run::{EnvVerdict, env_constant_report};
+    use bynk_project::vars::{ResolvedConst, ValueSource};
+
+    fn fact(constant: &str, source: ValueSource) -> ResolvedConst {
+        ResolvedConst {
+            constant: constant.to_string(),
+            variable: constant.to_uppercase(),
+            value: "\"v\"".to_string(),
+            source,
+        }
+    }
+
+    #[test]
+    fn no_constants_say_nothing() {
+        assert_eq!(env_constant_report(&[], "staging", true), None);
+    }
+
+    #[test]
+    fn the_default_environment_never_gets_the_note() {
+        let facts = [
+            fact("Origin", ValueSource::Vars),
+            fact("Lines", ValueSource::Default),
+        ];
+        for strict in [false, true] {
+            let report = env_constant_report(&facts, "default", strict).unwrap();
+            assert_eq!(report.verdict, EnvVerdict::Fine);
+            assert_eq!(report.lines.len(), 3, "a header and one line each");
+        }
+        // The empty name `DeployOptions::default()` carries is `default` too.
+        let report = env_constant_report(&facts, "", true).unwrap();
+        assert_eq!(report.verdict, EnvVerdict::Fine);
+        assert!(report.lines[0].contains("`default`"), "{:?}", report.lines);
+    }
+
+    #[test]
+    fn a_named_environment_with_its_own_values_is_fine() {
+        let facts = [fact("Origin", ValueSource::EnvVars("staging".into()))];
+        let report = env_constant_report(&facts, "staging", true).unwrap();
+        assert_eq!(report.verdict, EnvVerdict::Fine);
+    }
+
+    #[test]
+    fn a_named_environment_that_falls_back_is_noted_and_strict_refuses() {
+        let facts = [
+            fact("Origin", ValueSource::EnvVars("staging".into())),
+            fact("Billing", ValueSource::Vars),
+            fact("Lines", ValueSource::Default),
+            // Another environment's own table is not staging's.
+            fact("Region", ValueSource::EnvVars("prod".into())),
+        ];
+        let EnvVerdict::Note(note) = env_constant_report(&facts, "staging", false)
+            .unwrap()
+            .verdict
+        else {
+            panic!("a note");
+        };
+        assert!(note.contains("Billing, Lines, Region"), "{note}");
+        assert!(!note.contains("Origin"), "{note}");
+        let EnvVerdict::Refuse(error) = env_constant_report(&facts, "staging", true)
+            .unwrap()
+            .verdict
+        else {
+            panic!("a refusal");
+        };
+        assert!(error.starts_with("bynk: error:"), "{error}");
+        assert!(error.contains("Billing, Lines, Region"), "{error}");
+    }
+}
