@@ -76,6 +76,7 @@ pub fn project_options(input: &Path) -> Result<CompileOptions, discovery::Discov
         Ok(options_for_split(input, paths)?
             .compatibility_flags(workers.compatibility_flags)
             .workers_dev(workers.workers_dev)
+            .observability(workers.observability)
             .asset_files(discovery::list_asset_folder(input)?)
             .embed_files(discovery::list_embed_folder(input)?)
             .fixture_files(discovery::list_fixture_folder(input)?)
@@ -128,6 +129,7 @@ pub fn try_project_options(input: &Path) -> Result<CompileOptions, ProjectOption
                 .sources(sources)
                 .compatibility_flags(workers.compatibility_flags)
                 .workers_dev(workers.workers_dev)
+                .observability(workers.observability)
                 .asset_files(asset_files)
                 .embed_files(embed_files)
                 .fixture_files(fixture_files)

@@ -66,6 +66,8 @@ pub struct WorkersEmit<'a> {
     pub unit_tables: &'a HashMap<String, UnitTable>,
     pub unit_uses: &'a HashMap<String, Vec<String>>,
     pub workers_dev: Option<bool>,
+    /// #4127: the project's Workers Logs settings, before a group's override.
+    pub observability: bynk_project::observability::Observability,
 }
 
 impl WorkersEmit<'_> {
@@ -420,6 +422,7 @@ impl WorkersEmit<'_> {
             d1_migrations,
             layout,
             workers_dev,
+            observability,
             ..
         } = *self;
         let first = members[0].0.context.as_str();
@@ -460,6 +463,10 @@ impl WorkersEmit<'_> {
             .iter()
             .map(|(parts, table)| (parts.context.as_str(), *table))
             .collect();
+        // #4127: Workers Logs, with this Worker's group override laid over the project's.
+        wrangler_doc.push_block(emitter::observability_block(
+            layout.observability(first, observability),
+        ));
         self.stage_worker_extras(&tables, &mut wrangler_doc, staged_assets);
         // #3477: the Durable Object classes of this Worker's containers.
         if let Some(program) = emitter::emit_containers_ts(bindings) {

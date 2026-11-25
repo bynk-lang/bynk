@@ -105,7 +105,7 @@ pub use workers_entry::{
     table_has_plain_json,
 };
 pub use workers_group::{GroupEntry, GroupMember, emit_group_entry};
-pub use wrangler::{ClassTombstones, emit_wrangler_toml};
+pub use wrangler::{ClassTombstones, emit_wrangler_toml, observability_block};
 
 mod boundary;
 mod claim_predicate;

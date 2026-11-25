@@ -180,6 +180,7 @@ pub fn compile_project(options: &CompileOptions) -> Result<ProjectOutput, Projec
         options.roots.project_root(),
         &options.compatibility_flags,
         options.workers_dev,
+        options.observability,
         options.out_dir.as_deref(),
         options.contracts_lock.as_deref(),
     )

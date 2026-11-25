@@ -173,6 +173,9 @@ impl TomlEntry {
 pub(crate) enum TomlValue {
     Str(String),
     Int(i64),
+    /// #4127: `head_sampling_rate = 0.1`. Always written with a decimal point,
+    /// so it reads back as a float.
+    Float(f64),
     /// #1883, slice 1b: `[assets] run_worker_first = false`.
     Bool(bool),
     Array(Vec<TomlValue>),
@@ -245,6 +248,7 @@ fn render_value(value: &TomlValue) -> String {
     match value {
         TomlValue::Str(s) => format!("\"{}\"", escape_toml_basic_string(s)),
         TomlValue::Int(n) => n.to_string(),
+        TomlValue::Float(x) => format!("{x:?}"),
         TomlValue::Bool(b) => b.to_string(),
         TomlValue::Array(items) => {
             let rendered: Vec<String> = items.iter().map(render_value).collect();
